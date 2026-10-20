@@ -283,7 +283,7 @@ export async function buildZedSessionAgent(
       },
     });
   } catch (error) {
-    await settleFailedSession(error, agent, terminalSetup, disposeConfig);
+    await settleFailedZedSession(error, agent, terminalSetup, disposeConfig);
     throw error;
   }
   return {
@@ -352,15 +352,15 @@ async function disposeSessionInfrastructure(
       'ACP session infrastructure cleanup failed',
     );
 }
-async function settleFailedSession(
+export async function settleFailedZedSession(
   error: unknown,
   agent: Agent | undefined,
-  terminalSetup: ReturnType<typeof buildZedTerminalSetup> | undefined,
+  terminalSetup: { readonly terminals: TerminalManager | null } | undefined,
   disposeConfig: () => Promise<void>,
 ): Promise<void> {
   const clients = await Promise.allSettled([
     agent?.dispose(),
-    terminalSetup?.terminals.settleAll(),
+    terminalSetup?.terminals?.settleAll(),
   ]);
   const infrastructure = await Promise.allSettled([disposeConfig()]);
   const failures = [...clients, ...infrastructure].flatMap((result) =>
@@ -370,6 +370,7 @@ async function settleFailedSession(
     throw new AggregateError(
       [error, ...failures],
       'ACP session startup and cleanup failed',
+      { cause: error },
     );
 }
 

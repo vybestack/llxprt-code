@@ -59,6 +59,7 @@ import {
   type ZedHostInputs,
   disposeZedSession,
   disposeFailedZedSession,
+  settleFailedZedSession,
 } from './zed-session-agent.js';
 import { deliverHistoryUpdates } from './zed-session-replay.js';
 import {
@@ -382,11 +383,11 @@ export class ZedAgent {
       );
       return { session, history };
     } catch (error) {
-      await agent.dispose().catch(() => undefined);
-      await terminals?.settleAll().catch(() => undefined);
-      await disposeConfig();
+      const primary = toLoadRequestError(sessionId, error);
+      const setup = { terminals };
+      await settleFailedZedSession(primary, agent, setup, disposeConfig);
       this.logger.debug(() => `loadSession - build/resume failed: ${error}`);
-      throw toLoadRequestError(sessionId, error);
+      throw primary;
     }
   }
   private async buildSessionAgent(
