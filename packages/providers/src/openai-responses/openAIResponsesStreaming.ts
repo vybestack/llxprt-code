@@ -27,22 +27,42 @@ import {
 } from './openAIResponsesHttpStream.js';
 import {
   isStatefulConnectionRenewalError,
+  DEFAULT_WEBSOCKET_JSON_ENVELOPE_BYTES,
   streamOverWebSocketOrFallback,
   type StreamResponseOptions,
   type WebSocketTransport,
 } from './openAIResponsesWebSocketTransport.js';
 import type { ResponsesExecutorDeps } from './openAIResponsesExecutor.js';
 import { reportRequestSize } from '../logging/requestSizeReport.js';
+import {
+  DEFAULT_HTTP_JSON_ENVELOPE_BYTES,
+  envelopeTooLargeError,
+} from '../utils/boundedJsonBody.js';
+import { jsonValueByteLength } from '../utils/progressive-json-body.js';
+
+async function planResponsesRequest(
+  params: StreamResponsesParams,
+  websocket: boolean,
+): Promise<void> {
+  const bodyLength = await params.streamRequestBodyLength();
+  const envelopeLength = websocket
+    ? bodyLength + jsonValueByteLength({ type: 'response.create' }) - 1
+    : bodyLength;
+  const limit = websocket
+    ? DEFAULT_WEBSOCKET_JSON_ENVELOPE_BYTES
+    : DEFAULT_HTTP_JSON_ENVELOPE_BYTES;
+  if (envelopeLength > limit) {
+    throw envelopeTooLargeError(limit, envelopeLength);
+  }
+  reportRequestSize(params.normalizedOptions.metadata, bodyLength);
+}
 
 export async function* streamResponses(
   params: StreamResponsesParams,
   deps: ResponsesExecutorDeps,
 ): AsyncIterableIterator<IContent> {
-  reportRequestSize(
-    params.normalizedOptions.metadata,
-    await params.streamRequestBodyLength(),
-  );
   const transport = deps.getWebSocketTransport?.();
+  await planResponsesRequest(params, params.isCodex && transport !== undefined);
   if (params.isCodex && transport !== undefined) {
     yield* streamOverWebSocketWithRenewal(params, deps, transport);
     return;
@@ -97,6 +117,7 @@ async function* streamOverWebSocketWithRenewal(
     const rebuilt = await params.rebuildStateless();
     let outcome: MediaRequestOutcome = { status: 'succeeded' };
     try {
+      await planResponsesRequest(rebuilt, true);
       const { requestFrameBytes: _stale, ...baseOptions } = streamOptions;
       yield* streamOverWebSocketOrFallback(
         transport,
@@ -161,6 +182,7 @@ async function* streamOverHttpWithoutStatefulness(
   const rebuilt = await params.rebuildStateless();
   let outcome: MediaRequestOutcome = { status: 'succeeded' };
   try {
+    await planResponsesRequest(rebuilt, false);
     yield* streamOverHttp(rebuilt, deps);
   } catch (error) {
     outcome = { status: 'failed', error };
