@@ -1,2 +1,2 @@
 family	state	path	pid	source_sha256	batch	pass	fail	skip
-runner-summary-accounting	unverified	packages/agents/test-bun/run-bun-tests.issue3253.bun.ts	62524	58f62818ec172ea2fe97745f5369046e30fe8e1b8dc7fb96756750434a72a3f5	package-resume-g-0600	7	0	0
+native-counterpart-mapping	mapping-open-tests-green	packages/agents/src/core/client-array-route.test.ts	34350	e9a475826f5748b6c7ecc0ecc7dae848850830bcf035d0695c54ebc712420554	package-resume-g-0350	5	0	0

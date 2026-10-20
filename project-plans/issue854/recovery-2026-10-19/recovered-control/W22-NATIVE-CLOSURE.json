@@ -1,0 +1,491 @@
+{
+  "rows": [
+    {
+      "path": "packages/agents/src/api/__tests__/session.spec.ts",
+      "sourceHash": "99d4aa14efcce760efab45c26451095dae2f0f4ccfd4d83213598d0d29749b11",
+      "evidence": "W17-AGENTS-PROOF.md:Exact original-to-native mapping; withIsolatedAgent -> withHistoryBackend(old); withNativeRecordingFixture -> independent nativeRows",
+      "cases": [
+        {
+          "classname": "Session control @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010: recording checkpoints",
+          "name": "creates and lists recording-native checkpoints without legacy checkpoint files @plan:2026-07-28-issue-2625",
+          "classification": "explicit-old",
+          "nativeCounterparts": [
+            {
+              "batch": "package-resume-f-0000",
+              "path": "packages/agents/src/api/__tests__/session.spec.ts",
+              "sourceHash": "99d4aa14efcce760efab45c26451095dae2f0f4ccfd4d83213598d0d29749b11",
+              "classname": "native public session controls",
+              "name": "creates durable checkpoint facts and forks a self-contained child without changing the parent"
+            }
+          ]
+        },
+        {
+          "classname": "Session control @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010: recording checkpoints",
+          "name": "forks from a checkpoint into a self-contained child while preserving resume history @plan:2026-07-28-issue-2625",
+          "classification": "explicit-old",
+          "nativeCounterparts": [
+            {
+              "batch": "package-resume-f-0000",
+              "path": "packages/agents/src/api/__tests__/session.spec.ts",
+              "sourceHash": "99d4aa14efcce760efab45c26451095dae2f0f4ccfd4d83213598d0d29749b11",
+              "classname": "native public session controls",
+              "name": "creates durable checkpoint facts and forks a self-contained child without changing the parent"
+            }
+          ]
+        },
+        {
+          "classname": "Session control @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010: recorded history reset",
+          "name": "durably clears recorded history without re-recording restored entries @plan:2026-07-28-issue-2625",
+          "classification": "explicit-old",
+          "nativeCounterparts": [
+            {
+              "batch": "package-resume-f-0000",
+              "path": "packages/agents/src/api/__tests__/session.spec.ts",
+              "sourceHash": "99d4aa14efcce760efab45c26451095dae2f0f4ccfd4d83213598d0d29749b11",
+              "classname": "native public session controls",
+              "name": "durably clears a suffix, continues a turn and resumes only the kept prefix"
+            }
+          ]
+        },
+        {
+          "classname": "Session control @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010: recorded history reset",
+          "name": "keeps the cleared prefix when the next turn starts",
+          "classification": "explicit-old",
+          "nativeCounterparts": [
+            {
+              "batch": "package-resume-f-0000",
+              "path": "packages/agents/src/api/__tests__/session.spec.ts",
+              "sourceHash": "99d4aa14efcce760efab45c26451095dae2f0f4ccfd4d83213598d0d29749b11",
+              "classname": "native public session controls",
+              "name": "durably clears a suffix, continues a turn and resumes only the kept prefix"
+            }
+          ]
+        },
+        {
+          "classname": "Session control @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010: recorded history reset",
+          "name": "resets an already-empty chat while recording is enabled",
+          "classification": "explicit-old",
+          "nativeCounterparts": [
+            {
+              "batch": "package-resume-f-0000",
+              "path": "packages/agents/src/api/__tests__/session.spec.ts",
+              "sourceHash": "99d4aa14efcce760efab45c26451095dae2f0f4ccfd4d83213598d0d29749b11",
+              "classname": "native public session controls",
+              "name": "keeps repeated empty resets durable without writing another group"
+            }
+          ]
+        },
+        {
+          "classname": "Session control @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010: recording activation and missing sessions",
+          "name": "setRecording(enabled:true) activates a recording with a defined path; setRecording(enabled:false) deactivates it @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010",
+          "classification": "explicit-old",
+          "nativeCounterparts": [
+            {
+              "batch": "package-resume-f-0000",
+              "path": "packages/agents/src/api/__tests__/session.spec.ts",
+              "sourceHash": "99d4aa14efcce760efab45c26451095dae2f0f4ccfd4d83213598d0d29749b11",
+              "classname": "native public session controls",
+              "name": "activates a materialized journal and rejects missing resume targets"
+            }
+          ]
+        },
+        {
+          "classname": "Session control @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010: recording activation and missing sessions",
+          "name": "resume(target) with no saved sessions throws a clear, non not-implemented error @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010",
+          "classification": "explicit-old",
+          "nativeCounterparts": [
+            {
+              "batch": "package-resume-f-0000",
+              "path": "packages/agents/src/api/__tests__/session.spec.ts",
+              "sourceHash": "99d4aa14efcce760efab45c26451095dae2f0f4ccfd4d83213598d0d29749b11",
+              "classname": "native public session controls",
+              "name": "activates a materialized journal and rejects missing resume targets"
+            }
+          ]
+        },
+        {
+          "classname": "Session control @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010: recording activation and missing sessions",
+          "name": "setRecording(enabled:true) materializes a real JSONL session file containing the seeded content @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010",
+          "classification": "explicit-old",
+          "nativeCounterparts": [
+            {
+              "batch": "package-resume-f-0000",
+              "path": "packages/agents/src/api/__tests__/session.spec.ts",
+              "sourceHash": "99d4aa14efcce760efab45c26451095dae2f0f4ccfd4d83213598d0d29749b11",
+              "classname": "native public session controls",
+              "name": "activates a materialized journal and rejects missing resume targets"
+            }
+          ]
+        },
+        {
+          "classname": "Session control @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010: latest history restoration",
+          "name": "resume(\"latest\") restores the live history from a previously recorded session on disk @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010",
+          "classification": "explicit-old",
+          "nativeCounterparts": [
+            {
+              "batch": "package-resume-f-0000",
+              "path": "packages/agents/src/api/__tests__/session.spec.ts",
+              "sourceHash": "99d4aa14efcce760efab45c26451095dae2f0f4ccfd4d83213598d0d29749b11",
+              "classname": "native public session controls",
+              "name": "publishes latest adopted identity before startup and preserves it through a later turn and detached stop"
+            }
+          ]
+        },
+        {
+          "classname": "Session control @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010: checkpoint and session lifecycle",
+          "name": "exposes checkpoint rename/delete, session naming/listing, and safe deletion through the public API",
+          "classification": "explicit-old",
+          "nativeCounterparts": [
+            {
+              "batch": "package-resume-f-0000",
+              "path": "packages/agents/src/api/__tests__/session.spec.ts",
+              "sourceHash": "99d4aa14efcce760efab45c26451095dae2f0f4ccfd4d83213598d0d29749b11",
+              "classname": "native public session controls",
+              "name": "renames and deletes checkpoints, names sessions and refuses deletion of the active session"
+            }
+          ]
+        },
+        {
+          "classname": "Session control @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010: named history restoration",
+          "name": "resumes a named session by explicit public API reference",
+          "classification": "explicit-old",
+          "nativeCounterparts": [
+            {
+              "batch": "package-resume-f-0000",
+              "path": "packages/agents/src/api/__tests__/session.spec.ts",
+              "sourceHash": "99d4aa14efcce760efab45c26451095dae2f0f4ccfd4d83213598d0d29749b11",
+              "classname": "native public session controls",
+              "name": "publishes named adopted identity before startup and preserves it through a later turn and detached stop"
+            }
+          ]
+        },
+        {
+          "classname": "Session control @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010: resume publication before startup",
+          "name": "publishes latest resume to getHistory before chat startup and carries it into the next turn",
+          "classification": "explicit-old",
+          "nativeCounterparts": [
+            {
+              "batch": "package-resume-f-0000",
+              "path": "packages/agents/src/api/__tests__/session.spec.ts",
+              "sourceHash": "99d4aa14efcce760efab45c26451095dae2f0f4ccfd4d83213598d0d29749b11",
+              "classname": "native public session controls",
+              "name": "publishes latest adopted identity before startup and preserves it through a later turn and detached stop"
+            }
+          ]
+        },
+        {
+          "classname": "Session control @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010: resume publication before startup",
+          "name": "publishes named resume to getHistory before chat startup and carries it into the next turn",
+          "classification": "explicit-old",
+          "nativeCounterparts": [
+            {
+              "batch": "package-resume-f-0000",
+              "path": "packages/agents/src/api/__tests__/session.spec.ts",
+              "sourceHash": "99d4aa14efcce760efab45c26451095dae2f0f4ccfd4d83213598d0d29749b11",
+              "classname": "native public session controls",
+              "name": "publishes named adopted identity before startup and preserves it through a later turn and detached stop"
+            }
+          ]
+        },
+        {
+          "classname": "Session control @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010: failed adoption recovery",
+          "name": "keeps the deferred live history and next turn after a failed journal adoption",
+          "classification": "explicit-old",
+          "nativeCounterparts": [
+            {
+              "batch": "package-resume-f-0000",
+              "path": "packages/agents/src/api/__tests__/session.spec.ts",
+              "sourceHash": "99d4aa14efcce760efab45c26451095dae2f0f4ccfd4d83213598d0d29749b11",
+              "classname": "native public session controls",
+              "name": "rolls back failed adoption publication and carries the deferred live history into the next turn"
+            }
+          ]
+        },
+        {
+          "classname": "native public session controls",
+          "name": "creates durable checkpoint facts and forks a self-contained child without changing the parent",
+          "classification": "native-history"
+        },
+        {
+          "classname": "native public session controls",
+          "name": "durably clears a suffix, continues a turn and resumes only the kept prefix",
+          "classification": "native-history"
+        },
+        {
+          "classname": "native public session controls",
+          "name": "keeps repeated empty resets durable without writing another group",
+          "classification": "native-history"
+        },
+        {
+          "classname": "native public session controls",
+          "name": "activates a materialized journal and rejects missing resume targets",
+          "classification": "native-history"
+        },
+        {
+          "classname": "native public session controls",
+          "name": "renames and deletes checkpoints, names sessions and refuses deletion of the active session",
+          "classification": "native-history"
+        },
+        {
+          "classname": "native public session controls",
+          "name": "publishes latest adopted identity before startup and preserves it through a later turn and detached stop",
+          "classification": "native-history"
+        },
+        {
+          "classname": "native public session controls",
+          "name": "publishes named adopted identity before startup and preserves it through a later turn and detached stop",
+          "classification": "native-history"
+        },
+        {
+          "classname": "native public session controls",
+          "name": "rolls back failed adoption publication and carries the deferred live history into the next turn",
+          "classification": "native-history"
+        }
+      ]
+    },
+    {
+      "path": "packages/agents/src/api/__tests__/recording-instance-resume.behavior.test.ts",
+      "sourceHash": "e51a3e8e507d302969bb5c04b7bbed7b273b79ee690462f3ad43e511457ab71a",
+      "evidence": "W22-INSTANCE-PROOF.json; original old beforeEach pin and native withHistoryBackend(journal), nativeRows/readJournalFileFacts",
+      "cases": [
+        {
+          "classname": "old adopted recording instance path",
+          "name": "restarts an adopted recording on its original path with one header and monotonic replacement history across different timestamps",
+          "classification": "explicit-old",
+          "nativeCounterparts": [
+            {
+              "batch": "package-resume-g-0100",
+              "path": "packages/agents/src/api/__tests__/recording-instance-resume.behavior.test.ts",
+              "sourceHash": "e51a3e8e507d302969bb5c04b7bbed7b273b79ee690462f3ad43e511457ab71a",
+              "classname": "native adopted recording instance path",
+              "name": "retains source identity and creation time across stopped replacement, public continuation and independent reopen"
+            }
+          ]
+        },
+        {
+          "classname": "native adopted recording instance path",
+          "name": "retains source identity and creation time across stopped replacement, public continuation and independent reopen",
+          "classification": "native-history"
+        }
+      ]
+    },
+    {
+      "path": "packages/agents/src/api/__tests__/recording-shared-history-origin.behavior.test.ts",
+      "sourceHash": "b3911ad6640673832a23ce33a8a9869cb51901bda0307cab2364bc07fb8e9c6b",
+      "evidence": "W22-SHARED-RECORDING-PROOF.json; first eight selected public withRecordingLifetimeFixture; original failure withOldRecordingFixture; native withNativeRecordingFixture and reopened nativeRows",
+      "cases": [
+        {
+          "classname": "shared history recording origin",
+          "name": "two recording facades on the same history append only their own turns",
+          "classification": "journal-selected-shared-public"
+        },
+        {
+          "classname": "shared history recording origin",
+          "name": "a facade starting after an owned turn does not seed the other owner turn",
+          "classification": "journal-selected-shared-public"
+        },
+        {
+          "classname": "shared history recording origin",
+          "name": "profile adoption keeps owner provenance on the same live history for late recording",
+          "classification": "journal-selected-shared-public"
+        },
+        {
+          "classname": "shared history recording origin",
+          "name": "cleared owner content reintroduced by an unbound producer is seeded by a new recording",
+          "classification": "journal-selected-shared-public"
+        },
+        {
+          "classname": "shared history recording origin",
+          "name": "external unbound history additions remain visible to both recording facades",
+          "classification": "journal-selected-shared-public"
+        },
+        {
+          "classname": "shared history recording origin",
+          "name": "stopping and restarting A keeps B turns out of A and A turns out of B",
+          "classification": "journal-selected-shared-public"
+        },
+        {
+          "classname": "shared history recording origin",
+          "name": "resuming A while B records keeps resumed turns out of B",
+          "classification": "journal-selected-shared-public"
+        },
+        {
+          "classname": "shared history recording origin",
+          "name": "disposing A leaves B able to record its next turn",
+          "classification": "journal-selected-shared-public"
+        },
+        {
+          "classname": "shared history recording origin",
+          "name": "failed shared history publication rolls back both prepared recording effects",
+          "classification": "explicit-old",
+          "nativeCounterparts": [
+            {
+              "batch": "package-resume-g-0100",
+              "path": "packages/agents/src/api/__tests__/recording-shared-history-origin.behavior.test.ts",
+              "sourceHash": "b3911ad6640673832a23ce33a8a9869cb51901bda0307cab2364bc07fb8e9c6b",
+              "classname": "native shared history recording rollback",
+              "name": "restores both committed recording views after shared and owned rejection, then records continued public turns"
+            }
+          ]
+        },
+        {
+          "classname": "native shared history recording rollback",
+          "name": "restores both committed recording views after shared and owned rejection, then records continued public turns",
+          "classification": "native-history"
+        }
+      ]
+    },
+    {
+      "path": "packages/agents/src/compression/__tests__/journal-detached-owners.test.ts",
+      "sourceHash": "66aa789b1f37c40ef081c26ab72dfb2e03084cab08c73afc7ead4536051f1912",
+      "evidence": "journal-detached-owners.test.ts:ownedHistory/persistedOrigins -> openOwnedJournal/JournalSession.open/OwnerDictionary.load; support/journal-detached-history.ts -> actual owned.store whole-operation methods. Native compression/store route proof, not full public Agent parity.",
+      "cases": [
+        {
+          "classname": "compression modules on the journal store keep the owner of every row they retain",
+          "name": "provider fallback over 3 rows drops a head and keeps the owners of the rest",
+          "classification": "native-history"
+        },
+        {
+          "classname": "compression modules on the journal store keep the owner of every row they retain",
+          "name": "provider fallback over 64 rows drops a head and keeps the owners of the rest",
+          "classification": "native-history"
+        },
+        {
+          "classname": "compression modules on the journal store keep the owner of every row they retain",
+          "name": "provider fallback over 65 rows drops a head and keeps the owners of the rest",
+          "classification": "native-history"
+        },
+        {
+          "classname": "compression modules on the journal store keep the owner of every row they retain",
+          "name": "writes a candidate row that comes from no history row unowned",
+          "classification": "native-history"
+        },
+        {
+          "classname": "compression modules on the journal store keep the owner of every row they retain",
+          "name": "top-down truncation over 3 rows keeps the owners of the retained tail",
+          "classification": "native-history"
+        },
+        {
+          "classname": "compression modules on the journal store keep the owner of every row they retain",
+          "name": "top-down truncation over 64 rows keeps the owners of the retained tail",
+          "classification": "native-history"
+        },
+        {
+          "classname": "compression modules on the journal store keep the owner of every row they retain",
+          "name": "top-down truncation over 65 rows keeps the owners of the retained tail",
+          "classification": "native-history"
+        },
+        {
+          "classname": "compression modules on the journal store keep the owner of every row they retain",
+          "name": "top-down truncation over 3 rows writes its summary under the origin the operation names",
+          "classification": "native-history"
+        },
+        {
+          "classname": "compression modules on the journal store keep the owner of every row they retain",
+          "name": "top-down truncation over 64 rows writes its summary under the origin the operation names",
+          "classification": "native-history"
+        },
+        {
+          "classname": "compression modules on the journal store keep the owner of every row they retain",
+          "name": "top-down truncation over 65 rows writes its summary under the origin the operation names",
+          "classification": "native-history"
+        },
+        {
+          "classname": "compression modules on the journal store keep the owner of every row they retain",
+          "name": "keeps the owners of the rows after a non-curated row the candidate leaves out",
+          "classification": "native-history"
+        },
+        {
+          "classname": "compression modules on the journal store keep the owner of every row they retain",
+          "name": "publishing the selected tool responses of 3 rows keeps every owner, across empty rows",
+          "classification": "native-history"
+        },
+        {
+          "classname": "compression modules on the journal store keep the owner of every row they retain",
+          "name": "publishing the selected tool responses of 64 rows keeps every owner, across empty rows",
+          "classification": "native-history"
+        },
+        {
+          "classname": "compression modules on the journal store keep the owner of every row they retain",
+          "name": "publishing the selected tool responses of 65 rows keeps every owner, across empty rows",
+          "classification": "native-history"
+        },
+        {
+          "classname": "compression modules on the journal store keep the owner of every row they retain",
+          "name": "replacing one tool response in 3 rows keeps every owner, across empty rows",
+          "classification": "native-history"
+        },
+        {
+          "classname": "compression modules on the journal store keep the owner of every row they retain",
+          "name": "replacing one tool response in 64 rows keeps every owner, across empty rows",
+          "classification": "native-history"
+        },
+        {
+          "classname": "compression modules on the journal store keep the owner of every row they retain",
+          "name": "replacing one tool response in 65 rows keeps every owner, across empty rows",
+          "classification": "native-history"
+        },
+        {
+          "classname": "compression modules on the journal store keep the owner of every row they retain",
+          "name": "a candidate built from 3 curated rows keeps their owners through the cache-anchor publication",
+          "classification": "native-history"
+        },
+        {
+          "classname": "compression modules on the journal store keep the owner of every row they retain",
+          "name": "a candidate built from 64 curated rows keeps their owners through the cache-anchor publication",
+          "classification": "native-history"
+        },
+        {
+          "classname": "compression modules on the journal store keep the owner of every row they retain",
+          "name": "a candidate built from 65 curated rows keeps their owners through the cache-anchor publication",
+          "classification": "native-history"
+        },
+        {
+          "classname": "compression modules on the journal store keep the owner of every row they retain",
+          "name": "high-density over 3 rows drops a head and keeps the owners of the rest, summarized tool rows included",
+          "classification": "native-history"
+        },
+        {
+          "classname": "compression modules on the journal store keep the owner of every row they retain",
+          "name": "high-density over 64 rows drops a head and keeps the owners of the rest, summarized tool rows included",
+          "classification": "native-history"
+        },
+        {
+          "classname": "compression modules on the journal store keep the owner of every row they retain",
+          "name": "high-density over 65 rows drops a head and keeps the owners of the rest, summarized tool rows included",
+          "classification": "native-history"
+        },
+        {
+          "classname": "middle-out &gt; compression modules on the journal store keep the owner of every row they retain",
+          "name": "over 12 rows keeps the owners of the head and tail it retains and writes the summary under the origin",
+          "classification": "native-history"
+        },
+        {
+          "classname": "middle-out &gt; compression modules on the journal store keep the owner of every row they retain",
+          "name": "over 64 rows keeps the owners of the head and tail it retains and writes the summary under the origin",
+          "classification": "native-history"
+        },
+        {
+          "classname": "middle-out &gt; compression modules on the journal store keep the owner of every row they retain",
+          "name": "over 65 rows keeps the owners of the head and tail it retains and writes the summary under the origin",
+          "classification": "native-history"
+        },
+        {
+          "classname": "one-shot &gt; compression modules on the journal store keep the owner of every row they retain",
+          "name": "over 12 rows keeps the owners of the head and tail it retains and writes the summary under the origin",
+          "classification": "native-history"
+        },
+        {
+          "classname": "one-shot &gt; compression modules on the journal store keep the owner of every row they retain",
+          "name": "over 64 rows keeps the owners of the head and tail it retains and writes the summary under the origin",
+          "classification": "native-history"
+        },
+        {
+          "classname": "one-shot &gt; compression modules on the journal store keep the owner of every row they retain",
+          "name": "over 65 rows keeps the owners of the head and tail it retains and writes the summary under the origin",
+          "classification": "native-history"
+        }
+      ]
+    }
+  ]
+}

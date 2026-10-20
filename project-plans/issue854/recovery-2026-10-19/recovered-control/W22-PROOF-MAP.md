@@ -1,5 +1,13 @@
 # W22 first agents batch proof map, 2026-10-19
 
+## Runner accounting and classification, 2026-10-20
+
+Accounting repair `c32abf6bc` closes the runner inconsistency without modifying its original seven cases. Complete terminal Bun summary plus exact saved/XML/raw parent cases and successful own exit establish seven accepted passes, not the nested child's one. Supplemental unchanged-file runs pass seven each under outer journal and old. All **806 files are green, 6575 passes/zero failures/skips**; cumulative source boundaries remain explicit.
+
+`W22-RUNNER-CLASSIFICATION-PROOF.md` describes root cause, rejecting controls, actual fixture paths and remaining native mapping. `W22-CASE-RULES.tsv` binds one conservative rule per file to source and complete case-set digests. `W22-NATIVE-CLOSURE.json` binds four manually traced files to exact native case/counterpart executions. Distribution: **440 native, 367 selected shared/public, 60 explicit-old, 370 history-independent, 5338 shared/public without native claim**. Zero pending labels does not close backend parity. Five confirmed old-store client-array-route contracts still need counterpart mapping; do not declare W22 native closure or start W23 on the basis of this classification count.
+
+Seven isolated census suites pass 19 tests/215 expectations, strict types/lint/format/audit pass, API/declaration check passed with accounting repair. Frozen generation `35129a92-0ea7-49c2-98f5-0cbfc02399b8`; 26 historical missing and zero latest missing remain. Scanner ledger has 1355 primary-run receipts plus 188 synthetic fixtures, separated in raw ledger-partition.json. Full evidence is under runner-closure-p and continuation-run-c. Old default and W23-W26/scratch scope unchanged. Review skipped per Andrew 2026-10-09. No raw recovery bulk staging, deletion, `.llxprt` edit/staging, OCR, push, merge or weaker check.
+
 ## W22 child ownership and transport, 2026-10-20T03:47:22.276Z
 
 **The three child suites are green and committed; W22 remains incomplete.** Base `e8319c766` verified. Five test/fixture paths committed first at `77fa25a02346870fb7e1323c24a3ff642212a6fa`; exact-source census acceptance at `38e0696f0d552d16b19ab6694aef1285c99198b6`. Production and backend default unchanged.

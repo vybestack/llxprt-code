@@ -1,5 +1,15 @@
 # Recovered decision guidance
 
+## W22 runner and classification decisions, 2026-10-20
+
+Parse only the complete terminal Bun summary. Preserve incorrect historical saved aggregates, correcting interpretation only when complete XML, exact saved/raw parent case identities, terminal counts and own successful exit agree. Do not change the seven runner cases or trust XML alone. Keep missing/partial/mismatched inputs rejecting.
+
+Separate source-bound native proof, explicit-old proof with executed native counterparts, history-independent tests and conservative shared/public tests with no native claim. Package membership and outer journal environment do not prove the backend used by an injected history. Use one file rule and complete source/case digest rather than thousands of prose case rows; file rules cannot grant native labels. The one-pass graph is an overapproximation, and broad/dynamic/unresolved dependencies remain conservative. Do not port unrelated auth/MCP suites merely because their import graph reaches history.
+
+Reuse W17/W22 executed native public session, adopted-instance and shared-rollback counterparts, plus actual native owned-journal compression routing. Preserve exact source/case/counterpart checks and fail-first controls. Explicitly keep five client-array-route old-store contracts unmapped until their existing native counterparts can be identified. Zero pending labels is not authorization to declare W22 native closure. Do not start W23, flip defaults or infer a fresh whole-package final-source run.
+
+Keep the scanner ledger intact but distinguish its 188 synthetic census-fixture entries from 1355 primary-run receipts. Move only the four exact ignored closed classification fixtures intact to the recorded unique held directory; create subsequent fixtures inside the existing fixture-excluded root. No cleanup or raw recovery bulk staging. Review skipped per Andrew 2026-10-09.
+
 ## W22 retained/read-cost finalization, 2026-10-20
 
 Commit green product source first at `888461db478884b0d29b69694e9b5a496d51255e`; preserve recorder-fixture `c69b1c85b`. Reuse completed memory runs and source-matched gates. Move current-turn lookup behind the async store port because original production demonstrably reads history twice. Preserve old streaming behavior and native metadata-only suffix lookup; do not claim constant metadata work for arbitrary unmarked tails.

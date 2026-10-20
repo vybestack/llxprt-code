@@ -11,6 +11,11 @@ import {
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { z } from 'zod';
 import {
+  applyFileRule,
+  applyNativeClosure,
+  parseFileRules,
+} from './w22-case-rules.ts';
+import {
   attemptSchema,
   inspectEvidence,
   reconcile,
@@ -571,6 +576,16 @@ export function runCensus(root: string): ReturnType<typeof reconcile> & {
   const evidence = [...deduplicated.values()].map(({ input, provenance }) =>
     inspectEvidence(input, provenance, text(input.junit), text(input.log)),
   );
+  const fileRulesPath = join(
+    root,
+    'project-plans/issue854/recovery-2026-10-19/recovered-control/W22-CASE-RULES.tsv',
+  );
+  const fileRules = existsSync(fileRulesPath)
+    ? parseFileRules(readFileSync(fileRulesPath, 'utf8'))
+    : new Map();
+  const closureContracts = classificationContracts(root, [
+    'project-plans/issue854/recovery-2026-10-19/recovered-control/W22-NATIVE-CLOSURE.json',
+  ]);
   const attempts = evidence
     .filter((row) => inventorySet.has(row.path))
     .map((row) =>
@@ -584,7 +599,9 @@ export function runCensus(root: string): ReturnType<typeof reconcile> & {
         w22,
         evidence,
       ),
-    );
+    )
+    .map((row) => applyNativeClosure(row, closureContracts, evidence))
+    .map((row) => applyFileRule(row, fileRules));
   const census = reconcile(inventory, attempts);
   const supervisorPath = join(run, 'sweep-supervisor.json');
   const supervisor = existsSync(supervisorPath) ? json(supervisorPath) : null;

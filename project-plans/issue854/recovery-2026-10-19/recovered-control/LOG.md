@@ -1,5 +1,13 @@
 # Recovery chronology, reconstructed
 
+## W22 runner accounting and classification, 2026-10-20
+
+Verified starting HEAD 223d05612. Committed accounting repair/tests early at c32abf6bc after fail-first nested-output evidence, unchanged seven-case runner passes under both outer backends, scoped census/types/lint/format/API/declaration/audit gates. No product or backend-default change. The saved first-child aggregate remains preserved; complete terminal summary, exact XML/saved/raw parent cases and own exit support its explicit correction.
+
+Final accepted file census is 806 green, 6575 passes, zero failures/skips. Seven current census suites pass 19 tests/215 expectations. Source/case-bound file rules and exact manually traced native contracts give 440 native, 367 selected shared/public, 60 explicit-old, 370 history-independent and 5338 shared/public without native claim. Do not treat zero pending labels as native parity. Five old-store client-array-route contracts have a confirmed missing counterpart mapping, so native W22 closure remains open. W23 was not started.
+
+Raw artifacts retain failed authoring/format/parser attempts and RED controls. Scanner ledger partition is 1355 primary-run receipts plus 188 synthetic fixtures, not 1543 product executions; 26 historical missing attempts/zero latest missing remain. Four exact ignored closed synthetic directories were moved intact to the unique documented held directory, with no deletion. Full compact proof: W22-RUNNER-CLASSIFICATION-PROOF.md, W22-CASE-RULES.tsv and W22-NATIVE-CLOSURE.json. No active mutation/worker, `.llxprt` edit/staging, raw recovery bulk staging, weaker enforcement, OCR, push or merge. Review skipped per Andrew 2026-10-09.
+
 ## W22 retained/read-cost finalization, 2026-10-20
 
 Product `888461db478884b0d29b69694e9b5a496d51255e` follows fixture `c69b1c85b`. Existing serial journal/old collection finished without duplicate memory runs. Effective matrix: 55 passes each; native marker correction ran only the affected supplemental check. Original production control PID 39290 fails both read-cost cases; byte-restored PID 39331 passes. Final census suites pass fourteen cases/183 expectations; all scoped gates pass.
