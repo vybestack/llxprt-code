@@ -1,0 +1,1999 @@
+{
+  "startingHead": "42f0cfe0b7eacb02ceac9653fb187e3e1c452126",
+  "firstCommit": "9bb87b7c1",
+  "sourceCommit": "d7afc4777b86bff0b331de90c4f32ff75dde59fb",
+  "counts": {
+    "executions": 28,
+    "passes": 191,
+    "failures": 0,
+    "skips": 0,
+    "assertions": 1705
+  },
+  "acceptedTests": [
+    {
+      "name": "cli-journal-services/__tests__/performResume.journal.test.ts",
+      "cwd": "packages/cli",
+      "command": "bun test ./src/services/__tests__/performResume.journal.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/4.xml",
+      "backend": "journal",
+      "index": 4,
+      "total": 37,
+      "pid": 94520,
+      "driverPid": 94272,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/4.log",
+      "started": "2026-10-20T11:19:04.489Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "30c9ece249bcb6d566ec45ba2c568b1e8079669467a040f381a842236f6e8af6",
+      "summary": "3 pass\n 0 fail\n 17 expect() calls\nRan 3 tests across 1 file. [1020.00ms]",
+      "finished": "2026-10-20T11:19:05.871Z",
+      "junit": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/4.xml",
+      "junitSha256": "a68615e60c3238b5decc74d33136383c8bcc960dfba1eb7f533eecbffe18af19",
+      "passes": 3,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 17,
+      "cases": [
+        {
+          "class": "performResume on the journal backend with the live recorder bound",
+          "name": "swaps to the resumed session, retires the live recording and keeps the resumed rows"
+        },
+        {
+          "class": "performResume on the journal backend with the live recorder bound",
+          "name": "keeps recording to the resumed file after the swap"
+        },
+        {
+          "class": "performResume on the journal backend with the live recorder bound",
+          "name": "releases the resumed lock and keeps the live session when publication fails"
+        }
+      ]
+    },
+    {
+      "name": "cli-journal-services/performResume.rollback.test.ts",
+      "cwd": "packages/cli",
+      "command": "bun test ./src/services/performResume.rollback.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/5.xml",
+      "backend": "journal",
+      "index": 5,
+      "total": 37,
+      "pid": 94532,
+      "driverPid": 94272,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/5.log",
+      "started": "2026-10-20T11:19:05.872Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "36ca832c9e0e88c5c70e37d734b4361a831e646ff6a2f797b66599c6baa2080a",
+      "summary": "2 pass\n 0 fail\n 12 expect() calls\nRan 2 tests across 1 file. [882.00ms]",
+      "finished": "2026-10-20T11:19:07.140Z",
+      "junit": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/5.xml",
+      "junitSha256": "3dccfb6caf2e047295679d8f31b3738feed7b548e5073b27ffa7ca09d3911d35",
+      "passes": 2,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 12,
+      "cases": [
+        {
+          "class": "performResume rollback after the new recording was published",
+          "name": "restores the previous recording, integration, lock and metadata"
+        },
+        {
+          "class": "performResume rollback after the new recording was published",
+          "name": "reports a restore that itself fails instead of swallowing it"
+        }
+      ]
+    },
+    {
+      "name": "cli-journal-services/__tests__/performResume.checkpoint.test.ts",
+      "cwd": "packages/cli",
+      "command": "bun test ./src/services/__tests__/performResume.checkpoint.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/6.xml",
+      "backend": "journal",
+      "index": 6,
+      "total": 37,
+      "pid": 94558,
+      "driverPid": 94272,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/6.log",
+      "started": "2026-10-20T11:19:07.141Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "5f78640ac315ece7509b7bc3e74eb4abce7bcf3df27c909445998011066731d8",
+      "summary": "2 pass\n 0 fail\n 9 expect() calls\nRan 2 tests across 1 file. [858.00ms]",
+      "finished": "2026-10-20T11:19:08.374Z",
+      "junit": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/6.xml",
+      "junitSha256": "88b45733f2c2784c6180a42a0772c572d2f3b0f5a22e1746ee4e0ce9e0b1967d",
+      "passes": 2,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 9,
+      "cases": [
+        {
+          "class": "checkpoint resume adoption",
+          "name": "adopts the child journal without eager history and appends exactly once"
+        },
+        {
+          "class": "checkpoint resume adoption",
+          "name": "restores prior history and removes the prepared child when publication fails"
+        }
+      ]
+    },
+    {
+      "name": "cli-journal-services/__tests__/performResume.swap.spec.ts",
+      "cwd": "packages/cli",
+      "command": "bun test ./src/services/__tests__/performResume.swap.spec.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/7.xml",
+      "backend": "journal",
+      "index": 7,
+      "total": 37,
+      "pid": 94570,
+      "driverPid": 94272,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/7.log",
+      "started": "2026-10-20T11:19:08.375Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "dab2c92d23ad352776db0be2a02dc5849d6c9e84643dbeaa730e6a643c59984a",
+      "summary": "13 pass\n 0 fail\n 36 expect() calls\nRan 13 tests across 1 file. [948.00ms]",
+      "finished": "2026-10-20T11:19:09.747Z",
+      "junit": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/7.xml",
+      "junitSha256": "204dc74f32e8824fbac989bf060cdfaa8eac8d7df19fbcd0566d0bf05e55f83d",
+      "passes": 13,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 36,
+      "cases": [
+        {
+          "class": "Two-Phase Swap @requirement:REQ-SW-001,REQ-SW-002 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "Phase 1 failure preserves old session - can still write to old file"
+        },
+        {
+          "class": "Two-Phase Swap @requirement:REQ-SW-001,REQ-SW-002 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "after resume, old session file is closed"
+        },
+        {
+          "class": "Two-Phase Swap @requirement:REQ-SW-001,REQ-SW-002 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "after resume, new events go to new file"
+        },
+        {
+          "class": "Two-Phase Swap @requirement:REQ-SW-001,REQ-SW-002 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "after resume, old lock file is released"
+        },
+        {
+          "class": "Two-Phase Swap @requirement:REQ-SW-001,REQ-SW-002 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "skips null lock gracefully during Phase 2"
+        },
+        {
+          "class": "Two-Phase Swap @requirement:REQ-SW-001,REQ-SW-002 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "after resume, old file event count unchanged"
+        },
+        {
+          "class": "Two-Phase Swap @requirement:REQ-SW-001,REQ-SW-002 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "tolerates lock release failure"
+        },
+        {
+          "class": "Two-Phase Swap @requirement:REQ-SW-001,REQ-SW-002 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "restores exact prior history when a replacement listener throws"
+        },
+        {
+          "class": "Two-Phase Swap @requirement:REQ-SW-001,REQ-SW-002 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "continues rollback when prepared disposal and session ID restoration fail"
+        },
+        {
+          "class": "Two-Phase Swap @requirement:REQ-SW-001,REQ-SW-002 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "cleans the prepared recording when rollback history restoration throws"
+        },
+        {
+          "class": "&quot;latest&quot; Resolution Edge Cases @requirement:REQ-PR-003 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "\"latest\" returns error when all sessions are locked"
+        },
+        {
+          "class": "&quot;latest&quot; Resolution Edge Cases @requirement:REQ-PR-003 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "\"latest\" returns error when all sessions are empty"
+        },
+        {
+          "class": "&quot;latest&quot; Resolution Edge Cases @requirement:REQ-PR-003 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "\"latest\" skips current session"
+        }
+      ]
+    },
+    {
+      "name": "cli-journal-services/__tests__/performResume.property.spec.ts",
+      "cwd": "packages/cli",
+      "command": "bun test ./src/services/__tests__/performResume.property.spec.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/8.xml",
+      "backend": "journal",
+      "index": 8,
+      "total": 37,
+      "pid": 94585,
+      "driverPid": 94272,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/8.log",
+      "started": "2026-10-20T11:19:09.748Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "099d69b20657e9871c294fee1fc9e1e135c4e6fb28947b19ea3458c3038996ad",
+      "summary": "15 pass\n 0 fail\n 270 expect() calls\nRan 15 tests across 1 file. [1.56s]",
+      "finished": "2026-10-20T11:19:11.680Z",
+      "junit": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/8.xml",
+      "junitSha256": "ecfcdae8d334a2e3c640babc1d5c3841f8dd24a5feb47b668320fa06818887b8",
+      "passes": 15,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 270,
+      "cases": [
+        {
+          "class": "Result Validation @requirement:REQ-PR-002 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume validation and property tests @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "history contains original messages"
+        },
+        {
+          "class": "Result Validation @requirement:REQ-PR-002 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume validation and property tests @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "metadata has correct sessionId"
+        },
+        {
+          "class": "Result Validation @requirement:REQ-PR-002 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume validation and property tests @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "warnings array is present on success"
+        },
+        {
+          "class": "Result Validation @requirement:REQ-PR-002 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume validation and property tests @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "propagates warnings from resume (REQ-RS-012)"
+        },
+        {
+          "class": "Result Validation @requirement:REQ-PR-002 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume validation and property tests @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "empty warnings for clean session"
+        },
+        {
+          "class": "Result Validation @requirement:REQ-PR-002 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume validation and property tests @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "new recording from result writes to new session file"
+        },
+        {
+          "class": "Result Validation @requirement:REQ-PR-002 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume validation and property tests @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "new lock holds target session"
+        },
+        {
+          "class": "Property-Based Tests @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume validation and property tests @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "result is always a discriminated union"
+        },
+        {
+          "class": "Property-Based Tests @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume validation and property tests @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "failures always have non-empty error string"
+        },
+        {
+          "class": "Property-Based Tests @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume validation and property tests @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "successes always have all required fields"
+        },
+        {
+          "class": "Property-Based Tests @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume validation and property tests @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "same-session always fails"
+        },
+        {
+          "class": "Property-Based Tests @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume validation and property tests @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "history roundtrip preserves content"
+        },
+        {
+          "class": "Property-Based Tests @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume validation and property tests @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "valid index within bounds succeeds"
+        },
+        {
+          "class": "Property-Based Tests @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume validation and property tests @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "metadata.sessionId always matches target"
+        },
+        {
+          "class": "Property-Based Tests @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume validation and property tests @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "locked sessions are always rejected"
+        }
+      ]
+    },
+    {
+      "name": "agents-journal-api/__tests__/session-owner-restore-checkpoint.behavior.test.ts",
+      "cwd": "packages/agents",
+      "command": "bun test ./src/api/__tests__/session-owner-restore-checkpoint.behavior.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/9.xml",
+      "backend": "journal",
+      "index": 9,
+      "total": 37,
+      "pid": 94606,
+      "driverPid": 94272,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/9.log",
+      "started": "2026-10-20T11:19:11.681Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "f3df93d8005eb9a65cdd0101d8cd50e8d2c2052a252814a4c8caffe1cb841ac7",
+      "summary": "18 pass\n 0 fail\n 119 expect() calls\nRan 18 tests across 1 file. [2.96s]",
+      "finished": "2026-10-20T11:19:14.976Z",
+      "junit": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/9.xml",
+      "junitSha256": "34ce3ce1f15ea9121ff75e9a915426bf3db0019a2aae74eb42f6be9f833f5e21",
+      "passes": 18,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 119,
+      "cases": [
+        {
+          "class": "Agent session owner history restore and checkpoint names",
+          "name": "uses the agent-captured media store for recording and checkpoint replay after Config media access is disabled"
+        },
+        {
+          "class": "Agent session owner history restore and checkpoint names",
+          "name": "hands back the remaining history as a stream over the journal, not an array"
+        },
+        {
+          "class": "Agent session owner history restore and checkpoint names",
+          "name": "restores recorded human turns, persists the rewind and continues recording on the same lock"
+        },
+        {
+          "class": "Agent session owner history restore and checkpoint names",
+          "name": "serializes restore before a queued checkpoint and rejects mutations after disposal"
+        },
+        {
+          "class": "Agent session owner history restore and checkpoint names",
+          "name": "rejects invalid turns and restores live and durable history if client restoration fails"
+        },
+        {
+          "class": "Agent session owner history restore and checkpoint names",
+          "name": "denies collisions without UI confirmation and atomically overwrites on create, rename and session naming"
+        },
+        {
+          "class": "Agent session owner history restore and checkpoint names",
+          "name": "preserves the colliding name when a confirmed checkpoint write fails"
+        },
+        {
+          "class": "Agent session owner history restore and checkpoint names",
+          "name": "keeps a borrowed sibling recording and its lock isolated while restoring and renaming a closed checkpoint"
+        },
+        {
+          "class": "native agent owner restore and checkpoint names",
+          "name": "uses captured media for durable recording, checkpoint fork and resume without Config media access"
+        },
+        {
+          "class": "native agent owner restore and checkpoint names",
+          "name": "streams restored rows, durably cuts human turns and continues on the same recording lock"
+        },
+        {
+          "class": "native agent owner restore and checkpoint names",
+          "name": "serializes restore before checkpoint, forks the restored version and rejects mutation after disposal"
+        },
+        {
+          "class": "native agent owner restore and checkpoint names",
+          "name": "rejects invalid turns and restores live and durable owners when client restoration fails"
+        },
+        {
+          "class": "native agent owner restore and checkpoint names",
+          "name": "denies collisions and atomically overwrites create, rename and session names"
+        },
+        {
+          "class": "native agent owner restore and checkpoint names",
+          "name": "preserves colliding checkpoint names after a native write failure and actual reopen"
+        },
+        {
+          "class": "native agent owner restore and checkpoint names",
+          "name": "preserves colliding checkpoint names after a native flush failure and actual reopen"
+        },
+        {
+          "class": "native agent owner restore and checkpoint names",
+          "name": "isolates two borrowed owners while restoring and renaming a closed checkpoint"
+        },
+        {
+          "class": "public restore media reservation failure",
+          "name": "keeps live and durable rows atomic when the second media reservation fails (withOldRecordingFixture)"
+        },
+        {
+          "class": "public restore media reservation failure",
+          "name": "keeps live and durable rows atomic when the second media reservation fails (withNativeRecordingFixture)"
+        }
+      ]
+    },
+    {
+      "name": "agents-journal-api/__tests__/sessionControl.concurrency.behavior.test.ts",
+      "cwd": "packages/agents",
+      "command": "bun test ./src/api/__tests__/sessionControl.concurrency.behavior.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/10.xml",
+      "backend": "journal",
+      "index": 10,
+      "total": 37,
+      "pid": 94750,
+      "driverPid": 94272,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/10.log",
+      "started": "2026-10-20T11:19:14.978Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "0c9348ae0d19de4fa170f8329800c9a8789823c0c4efd320a9d184765f94c700",
+      "summary": "13 pass\n 0 fail\n 58 expect() calls\nRan 13 tests across 1 file. [1217.00ms]",
+      "finished": "2026-10-20T11:19:16.557Z",
+      "junit": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/10.xml",
+      "junitSha256": "2469da8a6bb646aa1bfb9400a84c7972b78c270a6074e3b307a36a7c92051e73",
+      "passes": 13,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 58,
+      "cases": [
+        {
+          "class": "Agent session persistence ownership",
+          "name": "gives simultaneous same-label journals distinct paths when their timestamps match"
+        },
+        {
+          "class": "Agent session persistence ownership",
+          "name": "keeps same-label simultaneous journals isolated and leaves the surviving owner usable"
+        },
+        {
+          "class": "Agent session persistence ownership",
+          "name": "records through its injected owner even when Config has no persistence factory"
+        },
+        {
+          "class": "SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010",
+          "name": "starts recording from the live journal without requesting an eager seed"
+        },
+        {
+          "class": "SessionControl concurrency: resume and stop",
+          "name": "keeps same-label controllers bound to their own media stores after Config getters change"
+        },
+        {
+          "class": "SessionControl concurrency: resume and stop",
+          "name": "A1: serializes resume() racing stopRecording so the teardown cannot dispose the resource resume is adopting \u2014 the LAST-submitted op wins with a clean, consistent final state and no orphaned lock @requirement:REQ-010"
+        },
+        {
+          "class": "SessionControl concurrency: dual resume",
+          "name": "A1b: serializes two concurrent resume() calls for the same latest session \u2014 both settle, no orphaned lock, exactly one lock survives with the winning recording @requirement:REQ-010"
+        },
+        {
+          "class": "SessionControl atomic resume",
+          "name": "A2: a post-restore subscribe failure rejects resume without adopting recording or leaking a lock @requirement:REQ-010"
+        },
+        {
+          "class": "SessionControl checkpoints",
+          "name": "resumes a checkpoint through journal adoption and appends without eager client history"
+        },
+        {
+          "class": "SessionControl checkpoints",
+          "name": "flushes pending recording and persistence before creating a checkpoint"
+        },
+        {
+          "class": "SessionControl clear rollback",
+          "name": "reports both a live clear failure and rollback failure"
+        },
+        {
+          "class": "SessionControl clear rollback",
+          "name": "restores the original history when the cleared-history restore fails"
+        },
+        {
+          "class": "SessionControl recording reattachment",
+          "name": "A3: an integration left unsubscribed (HistoryService unavailable at enable) is re-attached by the next operation, so later content events reach the recording @requirement:REQ-010"
+        }
+      ]
+    },
+    {
+      "name": "cli-old-services/__tests__/performResume.journal.test.ts",
+      "cwd": "packages/cli",
+      "command": "bun test ./src/services/__tests__/performResume.journal.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/15.xml",
+      "backend": "old",
+      "index": 15,
+      "total": 37,
+      "pid": 95030,
+      "driverPid": 94272,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/15.log",
+      "started": "2026-10-20T11:19:25.795Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "a2ab4ba4c0f38182f2af83be2062e35f6aea13d9a25298a9398dc50cf8d4e135",
+      "summary": "3 pass\n 0 fail\n 17 expect() calls\nRan 3 tests across 1 file. [1031.00ms]",
+      "finished": "2026-10-20T11:19:27.192Z",
+      "junit": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/15.xml",
+      "junitSha256": "8c772d94350e52f0c4aa3b0b78bc188b43008dc84e1f27acc399a68354fac270",
+      "passes": 3,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 17,
+      "cases": [
+        {
+          "class": "performResume on the journal backend with the live recorder bound",
+          "name": "swaps to the resumed session, retires the live recording and keeps the resumed rows"
+        },
+        {
+          "class": "performResume on the journal backend with the live recorder bound",
+          "name": "keeps recording to the resumed file after the swap"
+        },
+        {
+          "class": "performResume on the journal backend with the live recorder bound",
+          "name": "releases the resumed lock and keeps the live session when publication fails"
+        }
+      ]
+    },
+    {
+      "name": "cli-old-services/performResume.rollback.test.ts",
+      "cwd": "packages/cli",
+      "command": "bun test ./src/services/performResume.rollback.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/16.xml",
+      "backend": "old",
+      "index": 16,
+      "total": 37,
+      "pid": 95057,
+      "driverPid": 94272,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/16.log",
+      "started": "2026-10-20T11:19:27.193Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "57147785875ecd5df25adbdb306b0db640745002f53ee9de5271876cf9f8e663",
+      "summary": "2 pass\n 0 fail\n 12 expect() calls\nRan 2 tests across 1 file. [855.00ms]",
+      "finished": "2026-10-20T11:19:28.415Z",
+      "junit": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/16.xml",
+      "junitSha256": "e1f022be888c679f9f62a648de1b9b7a38104c909de2240e745fb10636e6d4d9",
+      "passes": 2,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 12,
+      "cases": [
+        {
+          "class": "performResume rollback after the new recording was published",
+          "name": "restores the previous recording, integration, lock and metadata"
+        },
+        {
+          "class": "performResume rollback after the new recording was published",
+          "name": "reports a restore that itself fails instead of swallowing it"
+        }
+      ]
+    },
+    {
+      "name": "cli-old-services/__tests__/performResume.checkpoint.test.ts",
+      "cwd": "packages/cli",
+      "command": "bun test ./src/services/__tests__/performResume.checkpoint.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/17.xml",
+      "backend": "old",
+      "index": 17,
+      "total": 37,
+      "pid": 95083,
+      "driverPid": 94272,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/17.log",
+      "started": "2026-10-20T11:19:28.416Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "a0be6a0f69b882a7e4970840b3d864083e4bad7b544614be188022e5e49eaf2d",
+      "summary": "2 pass\n 0 fail\n 9 expect() calls\nRan 2 tests across 1 file. [863.00ms]",
+      "finished": "2026-10-20T11:19:29.645Z",
+      "junit": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/17.xml",
+      "junitSha256": "0f5ae2ca299b5437752e36a5cd0bfd3fe69c174aaf4754d5519d06cad36171c6",
+      "passes": 2,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 9,
+      "cases": [
+        {
+          "class": "checkpoint resume adoption",
+          "name": "adopts the child journal without eager history and appends exactly once"
+        },
+        {
+          "class": "checkpoint resume adoption",
+          "name": "restores prior history and removes the prepared child when publication fails"
+        }
+      ]
+    },
+    {
+      "name": "cli-old-services/__tests__/performResume.swap.spec.ts",
+      "cwd": "packages/cli",
+      "command": "bun test ./src/services/__tests__/performResume.swap.spec.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/18.xml",
+      "backend": "old",
+      "index": 18,
+      "total": 37,
+      "pid": 95104,
+      "driverPid": 94272,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/18.log",
+      "started": "2026-10-20T11:19:29.646Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "12c6506f16004a1573f676d5158379ea5fad834d93a375dceab9b2cff66a0e2b",
+      "summary": "13 pass\n 0 fail\n 36 expect() calls\nRan 13 tests across 1 file. [965.00ms]",
+      "finished": "2026-10-20T11:19:30.990Z",
+      "junit": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/18.xml",
+      "junitSha256": "37fccf8d57f33f3e3d7bb34b5c091ea6338b2c7768c44a4c92f047002c40a91a",
+      "passes": 13,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 36,
+      "cases": [
+        {
+          "class": "Two-Phase Swap @requirement:REQ-SW-001,REQ-SW-002 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "Phase 1 failure preserves old session - can still write to old file"
+        },
+        {
+          "class": "Two-Phase Swap @requirement:REQ-SW-001,REQ-SW-002 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "after resume, old session file is closed"
+        },
+        {
+          "class": "Two-Phase Swap @requirement:REQ-SW-001,REQ-SW-002 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "after resume, new events go to new file"
+        },
+        {
+          "class": "Two-Phase Swap @requirement:REQ-SW-001,REQ-SW-002 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "after resume, old lock file is released"
+        },
+        {
+          "class": "Two-Phase Swap @requirement:REQ-SW-001,REQ-SW-002 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "skips null lock gracefully during Phase 2"
+        },
+        {
+          "class": "Two-Phase Swap @requirement:REQ-SW-001,REQ-SW-002 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "after resume, old file event count unchanged"
+        },
+        {
+          "class": "Two-Phase Swap @requirement:REQ-SW-001,REQ-SW-002 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "tolerates lock release failure"
+        },
+        {
+          "class": "Two-Phase Swap @requirement:REQ-SW-001,REQ-SW-002 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "restores exact prior history when a replacement listener throws"
+        },
+        {
+          "class": "Two-Phase Swap @requirement:REQ-SW-001,REQ-SW-002 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "continues rollback when prepared disposal and session ID restoration fail"
+        },
+        {
+          "class": "Two-Phase Swap @requirement:REQ-SW-001,REQ-SW-002 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "cleans the prepared recording when rollback history restoration throws"
+        },
+        {
+          "class": "&quot;latest&quot; Resolution Edge Cases @requirement:REQ-PR-003 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "\"latest\" returns error when all sessions are locked"
+        },
+        {
+          "class": "&quot;latest&quot; Resolution Edge Cases @requirement:REQ-PR-003 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "\"latest\" returns error when all sessions are empty"
+        },
+        {
+          "class": "&quot;latest&quot; Resolution Edge Cases @requirement:REQ-PR-003 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume swap and latest @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "\"latest\" skips current session"
+        }
+      ]
+    },
+    {
+      "name": "cli-old-services/__tests__/performResume.property.spec.ts",
+      "cwd": "packages/cli",
+      "command": "bun test ./src/services/__tests__/performResume.property.spec.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/19.xml",
+      "backend": "old",
+      "index": 19,
+      "total": 37,
+      "pid": 95132,
+      "driverPid": 94272,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/19.log",
+      "started": "2026-10-20T11:19:30.991Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "c42ffae8ccda2d332a6f8902eb168c828c447c4558afd33be4e1edb9887ae8b8",
+      "summary": "15 pass\n 0 fail\n 264 expect() calls\nRan 15 tests across 1 file. [1499.00ms]",
+      "finished": "2026-10-20T11:19:32.854Z",
+      "junit": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/19.xml",
+      "junitSha256": "36829bdd03af7532c5ae5a8f30efc5b27cff309df02aeccbc55f7e4c5ed2e74b",
+      "passes": 15,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 264,
+      "cases": [
+        {
+          "class": "Result Validation @requirement:REQ-PR-002 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume validation and property tests @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "history contains original messages"
+        },
+        {
+          "class": "Result Validation @requirement:REQ-PR-002 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume validation and property tests @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "metadata has correct sessionId"
+        },
+        {
+          "class": "Result Validation @requirement:REQ-PR-002 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume validation and property tests @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "warnings array is present on success"
+        },
+        {
+          "class": "Result Validation @requirement:REQ-PR-002 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume validation and property tests @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "propagates warnings from resume (REQ-RS-012)"
+        },
+        {
+          "class": "Result Validation @requirement:REQ-PR-002 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume validation and property tests @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "empty warnings for clean session"
+        },
+        {
+          "class": "Result Validation @requirement:REQ-PR-002 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume validation and property tests @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "new recording from result writes to new session file"
+        },
+        {
+          "class": "Result Validation @requirement:REQ-PR-002 @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume validation and property tests @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "new lock holds target session"
+        },
+        {
+          "class": "Property-Based Tests @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume validation and property tests @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "result is always a discriminated union"
+        },
+        {
+          "class": "Property-Based Tests @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume validation and property tests @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "failures always have non-empty error string"
+        },
+        {
+          "class": "Property-Based Tests @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume validation and property tests @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "successes always have all required fields"
+        },
+        {
+          "class": "Property-Based Tests @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume validation and property tests @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "same-session always fails"
+        },
+        {
+          "class": "Property-Based Tests @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume validation and property tests @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "history roundtrip preserves content"
+        },
+        {
+          "class": "Property-Based Tests @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume validation and property tests @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "valid index within bounds succeeds"
+        },
+        {
+          "class": "Property-Based Tests @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume validation and property tests @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "metadata.sessionId always matches target"
+        },
+        {
+          "class": "Property-Based Tests @plan:PLAN-20260214-SESSIONBROWSER.P10 &gt; performResume validation and property tests @plan:PLAN-20260214-SESSIONBROWSER.P10",
+          "name": "locked sessions are always rejected"
+        }
+      ]
+    },
+    {
+      "name": "agents-old-api/__tests__/session-owner-restore-checkpoint.behavior.test.ts",
+      "cwd": "packages/agents",
+      "command": "bun test ./src/api/__tests__/session-owner-restore-checkpoint.behavior.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/20.xml",
+      "backend": "old",
+      "index": 20,
+      "total": 37,
+      "pid": 95154,
+      "driverPid": 94272,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/20.log",
+      "started": "2026-10-20T11:19:32.855Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "91ec70d272fbea1fab5c0a4859e0637273cbf3930c15c71dbb1391a391d82f20",
+      "summary": "18 pass\n 0 fail\n 119 expect() calls\nRan 18 tests across 1 file. [2.98s]",
+      "finished": "2026-10-20T11:19:36.201Z",
+      "junit": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/20.xml",
+      "junitSha256": "0a227153085123509664f601d959d9ac976d7ceed521bd152fa0180161e59dab",
+      "passes": 18,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 119,
+      "cases": [
+        {
+          "class": "Agent session owner history restore and checkpoint names",
+          "name": "uses the agent-captured media store for recording and checkpoint replay after Config media access is disabled"
+        },
+        {
+          "class": "Agent session owner history restore and checkpoint names",
+          "name": "hands back the remaining history as a stream over the journal, not an array"
+        },
+        {
+          "class": "Agent session owner history restore and checkpoint names",
+          "name": "restores recorded human turns, persists the rewind and continues recording on the same lock"
+        },
+        {
+          "class": "Agent session owner history restore and checkpoint names",
+          "name": "serializes restore before a queued checkpoint and rejects mutations after disposal"
+        },
+        {
+          "class": "Agent session owner history restore and checkpoint names",
+          "name": "rejects invalid turns and restores live and durable history if client restoration fails"
+        },
+        {
+          "class": "Agent session owner history restore and checkpoint names",
+          "name": "denies collisions without UI confirmation and atomically overwrites on create, rename and session naming"
+        },
+        {
+          "class": "Agent session owner history restore and checkpoint names",
+          "name": "preserves the colliding name when a confirmed checkpoint write fails"
+        },
+        {
+          "class": "Agent session owner history restore and checkpoint names",
+          "name": "keeps a borrowed sibling recording and its lock isolated while restoring and renaming a closed checkpoint"
+        },
+        {
+          "class": "native agent owner restore and checkpoint names",
+          "name": "uses captured media for durable recording, checkpoint fork and resume without Config media access"
+        },
+        {
+          "class": "native agent owner restore and checkpoint names",
+          "name": "streams restored rows, durably cuts human turns and continues on the same recording lock"
+        },
+        {
+          "class": "native agent owner restore and checkpoint names",
+          "name": "serializes restore before checkpoint, forks the restored version and rejects mutation after disposal"
+        },
+        {
+          "class": "native agent owner restore and checkpoint names",
+          "name": "rejects invalid turns and restores live and durable owners when client restoration fails"
+        },
+        {
+          "class": "native agent owner restore and checkpoint names",
+          "name": "denies collisions and atomically overwrites create, rename and session names"
+        },
+        {
+          "class": "native agent owner restore and checkpoint names",
+          "name": "preserves colliding checkpoint names after a native write failure and actual reopen"
+        },
+        {
+          "class": "native agent owner restore and checkpoint names",
+          "name": "preserves colliding checkpoint names after a native flush failure and actual reopen"
+        },
+        {
+          "class": "native agent owner restore and checkpoint names",
+          "name": "isolates two borrowed owners while restoring and renaming a closed checkpoint"
+        },
+        {
+          "class": "public restore media reservation failure",
+          "name": "keeps live and durable rows atomic when the second media reservation fails (withOldRecordingFixture)"
+        },
+        {
+          "class": "public restore media reservation failure",
+          "name": "keeps live and durable rows atomic when the second media reservation fails (withNativeRecordingFixture)"
+        }
+      ]
+    },
+    {
+      "name": "agents-old-api/__tests__/sessionControl.concurrency.behavior.test.ts",
+      "cwd": "packages/agents",
+      "command": "bun test ./src/api/__tests__/sessionControl.concurrency.behavior.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/21.xml",
+      "backend": "old",
+      "index": 21,
+      "total": 37,
+      "pid": 95286,
+      "driverPid": 94272,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/21.log",
+      "started": "2026-10-20T11:19:36.202Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "0a24d5da9d5521d7d5633f36996bffee58c309b0feeab421c96233b021ef9fb1",
+      "summary": "13 pass\n 0 fail\n 57 expect() calls\nRan 13 tests across 1 file. [846.00ms]",
+      "finished": "2026-10-20T11:19:37.407Z",
+      "junit": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/21.xml",
+      "junitSha256": "63ec6ad6a42965b3852ba0b4f4946a08ed3e8efbad32134e171d1ea5975e6816",
+      "passes": 13,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 57,
+      "cases": [
+        {
+          "class": "Agent session persistence ownership",
+          "name": "gives simultaneous same-label journals distinct paths when their timestamps match"
+        },
+        {
+          "class": "Agent session persistence ownership",
+          "name": "keeps same-label simultaneous journals isolated and leaves the surviving owner usable"
+        },
+        {
+          "class": "Agent session persistence ownership",
+          "name": "records through its injected owner even when Config has no persistence factory"
+        },
+        {
+          "class": "SessionControl concurrency + atomicity (issue #1604 A1/A2/A3) @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010",
+          "name": "starts recording from the live journal without requesting an eager seed"
+        },
+        {
+          "class": "SessionControl concurrency: resume and stop",
+          "name": "keeps same-label controllers bound to their own media stores after Config getters change"
+        },
+        {
+          "class": "SessionControl concurrency: resume and stop",
+          "name": "A1: serializes resume() racing stopRecording so the teardown cannot dispose the resource resume is adopting \u2014 the LAST-submitted op wins with a clean, consistent final state and no orphaned lock @requirement:REQ-010"
+        },
+        {
+          "class": "SessionControl concurrency: dual resume",
+          "name": "A1b: serializes two concurrent resume() calls for the same latest session \u2014 both settle, no orphaned lock, exactly one lock survives with the winning recording @requirement:REQ-010"
+        },
+        {
+          "class": "SessionControl atomic resume",
+          "name": "A2: a post-restore subscribe failure rejects resume without adopting recording or leaking a lock @requirement:REQ-010"
+        },
+        {
+          "class": "SessionControl checkpoints",
+          "name": "resumes a checkpoint through journal adoption and appends without eager client history"
+        },
+        {
+          "class": "SessionControl checkpoints",
+          "name": "flushes pending recording and persistence before creating a checkpoint"
+        },
+        {
+          "class": "SessionControl clear rollback",
+          "name": "reports both a live clear failure and rollback failure"
+        },
+        {
+          "class": "SessionControl clear rollback",
+          "name": "restores the original history when the cleared-history restore fails"
+        },
+        {
+          "class": "SessionControl recording reattachment",
+          "name": "A3: an integration left unsubscribed (HistoryService unavailable at enable) is re-attached by the next operation, so later content events reach the recording @requirement:REQ-010"
+        }
+      ]
+    },
+    {
+      "name": "core-journal-recording/journalResume.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/journalResume.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/22.xml",
+      "backend": "journal",
+      "index": 22,
+      "total": 37,
+      "pid": 95311,
+      "driverPid": 94272,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/22.log",
+      "started": "2026-10-20T11:19:37.407Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "6e9c94a6951d9bc45858815bd7b4cb913eae155fd6d8a337fb414e28b038d120",
+      "summary": "12 pass\n 0 fail\n 29 expect() calls\nRan 12 tests across 1 file. [333.00ms]",
+      "finished": "2026-10-20T11:19:38.096Z",
+      "junit": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/22.xml",
+      "junitSha256": "36aeec3122149781c5b6897e22001747072298a4a230b3092b82c196c760bb68",
+      "passes": 12,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 29,
+      "cases": [
+        {
+          "class": "resuming a session on the journal",
+          "name": "resumes the newest session with its facts and its rows, holding the session lock"
+        },
+        {
+          "class": "resuming a session on the journal",
+          "name": "keeps writing to the resumed file"
+        },
+        {
+          "class": "resuming a session on the journal",
+          "name": "resolves a session by id prefix and by list index"
+        },
+        {
+          "class": "resuming a session on the journal",
+          "name": "drops the stored Responses chain marker of rows an earlier process wrote, not of rows written after the resume"
+        },
+        {
+          "class": "resuming a session on the journal",
+          "name": "refuses a named retired JSONL file with the single message, never opens it, holds no lock"
+        },
+        {
+          "class": "resuming a session on the journal",
+          "name": "reports a project with only retired files without throwing, naming each file"
+        },
+        {
+          "class": "resuming a session on the journal",
+          "name": "resumes the readable session and reports the retired file it passed over"
+        },
+        {
+          "class": "resuming a session on the journal",
+          "name": "releases the lock and reports the reason when a journal cannot be opened for its owner"
+        },
+        {
+          "class": "resuming a session on the journal",
+          "name": "skips a session another process holds, and says so when it is the only one"
+        },
+        {
+          "class": "resuming a session on the journal",
+          "name": "records a provider change the way the JSONL resume did"
+        },
+        {
+          "class": "resuming a session on the journal",
+          "name": "takes the resume point after the facts the resume itself records"
+        },
+        {
+          "class": "resuming a session on the journal",
+          "name": "opens to the previous version when the last group was cut short"
+        }
+      ]
+    },
+    {
+      "name": "core-journal-recording/journalFork.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/journalFork.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/23.xml",
+      "backend": "journal",
+      "index": 23,
+      "total": 37,
+      "pid": 95319,
+      "driverPid": 94272,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/23.log",
+      "started": "2026-10-20T11:19:38.097Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "edbaf0711909a1087c493ab1be43b944f9a4900a3b5641d6fc06afb602da8de7",
+      "summary": "4 pass\n 0 fail\n 18 expect() calls\nRan 4 tests across 1 file. [320.00ms]",
+      "finished": "2026-10-20T11:19:38.753Z",
+      "junit": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/23.xml",
+      "junitSha256": "a8d1398b1d6f180e255b03ded8743192dc89839bdaa02cad8d3779492bd137b4",
+      "passes": 4,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 18,
+      "cases": [
+        {
+          "class": "fork from a checkpoint on the journal (design 4.9)",
+          "name": "clones the saved version into a child file and leaves the source file as it was"
+        },
+        {
+          "class": "fork from a checkpoint on the journal (design 4.9)",
+          "name": "hands the child over as a resume point and a boot that streams the cloned rows"
+        },
+        {
+          "class": "fork from a checkpoint on the journal (design 4.9)",
+          "name": "refuses a deleted checkpoint and leaves no child file or lock"
+        },
+        {
+          "class": "fork from a checkpoint on the journal (design 4.9)",
+          "name": "reports a source session that another holder has locked"
+        }
+      ]
+    },
+    {
+      "name": "core-journal-recording/journalResumeAdoption.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/journalResumeAdoption.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/24.xml",
+      "backend": "journal",
+      "index": 24,
+      "total": 37,
+      "pid": 95323,
+      "driverPid": 94272,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/24.log",
+      "started": "2026-10-20T11:19:38.754Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "e39c5bd91bfd96ddd27647851c36947c5d2eecf8b46c686e4b896f7e2c80af30",
+      "summary": "8 pass\n 0 fail\n 32 expect() calls\nRan 8 tests across 1 file. [484.00ms]",
+      "finished": "2026-10-20T11:19:39.595Z",
+      "junit": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/24.xml",
+      "junitSha256": "c4de62cd5b5d71d8f4b3401b92a7368dae5d46550ab42e6090b09960fd8bfed5",
+      "passes": 8,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 32,
+      "cases": [
+        {
+          "class": "adopting a resumed journal on the history store",
+          "name": "makes the resumed file the history, derives the state from its rows and keeps writing to it"
+        },
+        {
+          "class": "adopting a resumed journal on the history store",
+          "name": "holds waitForDurable until the preview write to the adopted file has landed"
+        },
+        {
+          "class": "adopting a resumed journal on the history store",
+          "name": "reads the resumed history through resumedRows, so the Responses chain marker of earlier rows is gone"
+        },
+        {
+          "class": "adopting a resumed journal on the history store",
+          "name": "keeps the prior store when a step after the swap fails, and reports the error"
+        },
+        {
+          "class": "adopting a resumed journal on the history store",
+          "name": "refuses a file that moved since the resume was read (a row was appended), leaving the prior store in place"
+        },
+        {
+          "class": "adopting a resumed journal on the history store",
+          "name": "refuses a file that moved since the resume was read (only a session fact was written), leaving the prior store in place"
+        },
+        {
+          "class": "adopting a resumed journal on the history store",
+          "name": "refuses a history that has recorders bound"
+        },
+        {
+          "class": "adopting a resumed journal on the history store",
+          "name": "a settled adoption cannot be settled again"
+        }
+      ]
+    },
+    {
+      "name": "core-journal-recording/recording-exact-media-replay.test.ts",
+      "cwd": "packages/core",
+      "command": "bun test ./src/recording/recording-exact-media-replay.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/25.xml",
+      "backend": "journal",
+      "index": 25,
+      "total": 37,
+      "pid": 95335,
+      "driverPid": 94272,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/25.log",
+      "started": "2026-10-20T11:19:39.596Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "1d1a0a9ceae071ea3f96b88a22abde672559c0ffa7e6ac4193236b499bffb0ed",
+      "summary": "5 pass\n 0 fail\n 101 expect() calls\nRan 5 tests across 1 file. [825.00ms]",
+      "finished": "2026-10-20T11:19:40.775Z",
+      "junit": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/25.xml",
+      "junitSha256": "693cd21197e69ce7b8cea276c85dff3423fd27946459f8c14e6f0422ec960f1b",
+      "passes": 5,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 101,
+      "cases": [
+        {
+          "class": "public native reference-media resume and adoption",
+          "name": "verifies real referenced bytes without a replay reservation and transfers ownership only on adoption"
+        },
+        {
+          "class": "public native reference-media resume and adoption",
+          "name": "preserves prior rows, accounting, recorder and reservations through pending adoption"
+        },
+        {
+          "class": "public native reference-media resume and adoption",
+          "name": "preserves prior rows, accounting, recorder and reservations through reservation adoption"
+        },
+        {
+          "class": "public native reference-media resume and adoption",
+          "name": "preserves prior rows, accounting, recorder and reservations through listener adoption"
+        },
+        {
+          "class": "public native reference-media resume and adoption",
+          "name": "preserves prior rows, accounting, recorder and reservations through after-publication adoption"
+        }
+      ]
+    },
+    {
+      "name": "cli-journal-ui/hooks/native-command-rollback.test.ts",
+      "cwd": "packages/cli",
+      "command": "bun test ./src/ui/hooks/native-command-rollback.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/0.xml",
+      "backend": "journal",
+      "index": 0,
+      "total": 17,
+      "pid": 412,
+      "driverPid": 407,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/0.log",
+      "started": "2026-10-20T11:25:22.438Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "673d40321cbbd2531837bda474553ae0ee337c15e6046522bda15a978dee95b2",
+      "summary": "1 pass\n 0 fail\n 23 expect() calls\nRan 1 test across 1 file. [2.30s]",
+      "finished": "2026-10-20T11:25:25.121Z",
+      "junit": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/0.xml",
+      "junitSha256": "e76ef70e5d9ee031bf605da5d6f5c0141ce6c103c9371ec9dba47bf702ec87ca",
+      "passes": 1,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 23,
+      "cases": [
+        {
+          "class": "native CLI resume rollback",
+          "name": "restores the owning recorder after a post-publication consumer rejects and records the next turn only there"
+        }
+      ]
+    },
+    {
+      "name": "cli-journal-ui/hooks/native-command-resume-faults.test.ts",
+      "cwd": "packages/cli",
+      "command": "bun test ./src/ui/hooks/native-command-resume-faults.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/1.xml",
+      "backend": "journal",
+      "index": 1,
+      "total": 17,
+      "pid": 463,
+      "driverPid": 407,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/1.log",
+      "started": "2026-10-20T11:25:25.122Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "63efae06f52b1f777ec5e81ab1ebd1576addee0cac98221dffcea23d159f32f2",
+      "summary": "4 pass\n 0 fail\n 83 expect() calls\nRan 4 tests across 1 file. [2.21s]",
+      "finished": "2026-10-20T11:25:27.696Z",
+      "junit": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/1.xml",
+      "junitSha256": "fc9f840331455f4a4e6dec1e5d815af9b543cfcdcc5343d450b560ba662ac1a1",
+      "passes": 4,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 83,
+      "cases": [
+        {
+          "class": "native CLI resume failure branches",
+          "name": "preserves prior readable recording and releases prepared ownership after listener failure"
+        },
+        {
+          "class": "native CLI resume failure branches",
+          "name": "preserves prior readable recording and releases prepared ownership after checkpoint-child failure"
+        },
+        {
+          "class": "native CLI resume failure branches",
+          "name": "preserves prior readable recording and releases prepared ownership after cleanup failure"
+        },
+        {
+          "class": "native CLI resume failure branches",
+          "name": "preserves prior readable recording and releases prepared ownership after restoration failure"
+        }
+      ]
+    },
+    {
+      "name": "cli-journal-ui/hooks/native-command-selection.test.ts",
+      "cwd": "packages/cli",
+      "command": "bun test ./src/ui/hooks/native-command-selection.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/2.xml",
+      "backend": "journal",
+      "index": 2,
+      "total": 17,
+      "pid": 544,
+      "driverPid": 407,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/2.log",
+      "started": "2026-10-20T11:25:27.697Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "e9ff2f7f10552dcf49ba639c7fcdd5774f86f3c055d66cf72909bf6ac9b5854d",
+      "summary": "4 pass\n 0 fail\n 60 expect() calls\nRan 4 tests across 1 file. [2.37s]",
+      "finished": "2026-10-20T11:25:30.434Z",
+      "junit": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/2.xml",
+      "junitSha256": "ffce50bcf744114adbf527610cba484f0abd275d180fba654bdfce201a9b1bff",
+      "passes": 4,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 60,
+      "cases": [
+        {
+          "class": "native CLI continue reference selection",
+          "name": "selects the listed native id despite corrupt and retired siblings without decoding listing history"
+        },
+        {
+          "class": "native CLI continue reference selection",
+          "name": "selects the listed native prefix despite corrupt and retired siblings without decoding listing history"
+        },
+        {
+          "class": "native CLI continue reference selection",
+          "name": "selects the listed native index despite corrupt and retired siblings without decoding listing history"
+        },
+        {
+          "class": "native CLI continue reference selection",
+          "name": "latest excludes current, empty and locked recordings while locked and same-session attempts preserve prior writes"
+        }
+      ]
+    },
+    {
+      "name": "cli-journal-ui/hooks/native-command-checkpoint-io.test.ts",
+      "cwd": "packages/cli",
+      "command": "bun test ./src/ui/hooks/native-command-checkpoint-io.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/3.xml",
+      "backend": "journal",
+      "index": 3,
+      "total": 17,
+      "pid": 642,
+      "driverPid": 407,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/3.log",
+      "started": "2026-10-20T11:25:30.435Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "6231ff1b354b28077c63ced15003f2333c17e83fcb052fb27f10e1e56639784d",
+      "summary": "3 pass\n 0 fail\n 36 expect() calls\nRan 3 tests across 1 file. [1.62s]",
+      "finished": "2026-10-20T11:25:32.420Z",
+      "junit": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/3.xml",
+      "junitSha256": "68f8f483d05b255d579646b1461987ddceebdc75f48407e5686227701163ca83",
+      "passes": 3,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 36,
+      "cases": [
+        {
+          "class": "native CLI checkpoint child file failures",
+          "name": "releases a prepared child after native write failure and continues the original recording"
+        },
+        {
+          "class": "native CLI checkpoint child file failures",
+          "name": "releases a prepared child after native pre-trailer-flush failure and continues the original recording"
+        },
+        {
+          "class": "native CLI checkpoint child file failures",
+          "name": "releases a prepared child after native trailer-write failure and continues the original recording"
+        }
+      ]
+    },
+    {
+      "name": "cli-journal-ui/hooks/native-command-swap-callbacks.test.ts",
+      "cwd": "packages/cli",
+      "command": "bun test ./src/ui/hooks/native-command-swap-callbacks.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/4.xml",
+      "backend": "journal",
+      "index": 4,
+      "total": 17,
+      "pid": 687,
+      "driverPid": 407,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/4.log",
+      "started": "2026-10-20T11:25:32.421Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "61094fb673ea36e0dd84a044db6892cb3e3301d9c451322aa293e8115b8d0201",
+      "summary": "3 pass\n 0 fail\n 43 expect() calls\nRan 3 tests across 1 file. [1.99s]",
+      "finished": "2026-10-20T11:25:34.776Z",
+      "junit": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/4.xml",
+      "junitSha256": "3f68fc49b7ab8565acd0300667672ea77341ddf7fa53ff08cd24ad3d0e186abb",
+      "passes": 3,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 43,
+      "cases": [
+        {
+          "class": "native CLI recording swap callbacks",
+          "name": "preserves the CLI swap contract through swap with an actual Agent history"
+        },
+        {
+          "class": "native CLI recording swap callbacks",
+          "name": "preserves the CLI swap contract through restore-callback with an actual Agent history"
+        },
+        {
+          "class": "native CLI recording swap callbacks",
+          "name": "preserves the CLI swap contract through prior-cleanup with an actual Agent history"
+        }
+      ]
+    },
+    {
+      "name": "cli-old-ui/hooks/native-command-rollback.test.ts",
+      "cwd": "packages/cli",
+      "command": "bun test ./src/ui/hooks/native-command-rollback.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/5.xml",
+      "backend": "old",
+      "index": 5,
+      "total": 17,
+      "pid": 747,
+      "driverPid": 407,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/5.log",
+      "started": "2026-10-20T11:25:34.776Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "829421101b682a356e7d329e00a3cb7fe9c51af6ad8e088cfc7be030eaa1cd8e",
+      "summary": "1 pass\n 0 fail\n 23 expect() calls\nRan 1 test across 1 file. [1.54s]",
+      "finished": "2026-10-20T11:25:36.679Z",
+      "junit": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/5.xml",
+      "junitSha256": "519ab29471c539bbe0908c74560c5d0287764cbec0bbc72f69625a69fd402649",
+      "passes": 1,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 23,
+      "cases": [
+        {
+          "class": "native CLI resume rollback",
+          "name": "restores the owning recorder after a post-publication consumer rejects and records the next turn only there"
+        }
+      ]
+    },
+    {
+      "name": "cli-old-ui/hooks/native-command-resume-faults.test.ts",
+      "cwd": "packages/cli",
+      "command": "bun test ./src/ui/hooks/native-command-resume-faults.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/6.xml",
+      "backend": "old",
+      "index": 6,
+      "total": 17,
+      "pid": 775,
+      "driverPid": 407,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/6.log",
+      "started": "2026-10-20T11:25:36.680Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "5a508bd367d52fc83408a9b9cd3a4623b78316b16ce2796f2372fd25dcae5ef6",
+      "summary": "4 pass\n 0 fail\n 83 expect() calls\nRan 4 tests across 1 file. [2.26s]",
+      "finished": "2026-10-20T11:25:39.312Z",
+      "junit": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/6.xml",
+      "junitSha256": "5c73c8107ad8ac715d7fc576c33c811cca6eec0b053b00729b77e6831f07e5e4",
+      "passes": 4,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 83,
+      "cases": [
+        {
+          "class": "native CLI resume failure branches",
+          "name": "preserves prior readable recording and releases prepared ownership after listener failure"
+        },
+        {
+          "class": "native CLI resume failure branches",
+          "name": "preserves prior readable recording and releases prepared ownership after checkpoint-child failure"
+        },
+        {
+          "class": "native CLI resume failure branches",
+          "name": "preserves prior readable recording and releases prepared ownership after cleanup failure"
+        },
+        {
+          "class": "native CLI resume failure branches",
+          "name": "preserves prior readable recording and releases prepared ownership after restoration failure"
+        }
+      ]
+    },
+    {
+      "name": "cli-old-ui/hooks/native-command-selection.test.ts",
+      "cwd": "packages/cli",
+      "command": "bun test ./src/ui/hooks/native-command-selection.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/7.xml",
+      "backend": "old",
+      "index": 7,
+      "total": 17,
+      "pid": 849,
+      "driverPid": 407,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/7.log",
+      "started": "2026-10-20T11:25:39.312Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "10c76a730cf44fde389453245f625cd9506587045d4e0202a8cf87a3387db7f0",
+      "summary": "4 pass\n 0 fail\n 60 expect() calls\nRan 4 tests across 1 file. [2.37s]",
+      "finished": "2026-10-20T11:25:42.035Z",
+      "junit": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/7.xml",
+      "junitSha256": "741c7781f50d48c5f9c743d5064cc6eb656409fc22bbbee854d590e5ff4762b9",
+      "passes": 4,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 60,
+      "cases": [
+        {
+          "class": "native CLI continue reference selection",
+          "name": "selects the listed native id despite corrupt and retired siblings without decoding listing history"
+        },
+        {
+          "class": "native CLI continue reference selection",
+          "name": "selects the listed native prefix despite corrupt and retired siblings without decoding listing history"
+        },
+        {
+          "class": "native CLI continue reference selection",
+          "name": "selects the listed native index despite corrupt and retired siblings without decoding listing history"
+        },
+        {
+          "class": "native CLI continue reference selection",
+          "name": "latest excludes current, empty and locked recordings while locked and same-session attempts preserve prior writes"
+        }
+      ]
+    },
+    {
+      "name": "cli-old-ui/hooks/native-command-checkpoint-io.test.ts",
+      "cwd": "packages/cli",
+      "command": "bun test ./src/ui/hooks/native-command-checkpoint-io.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/8.xml",
+      "backend": "old",
+      "index": 8,
+      "total": 17,
+      "pid": 939,
+      "driverPid": 407,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/8.log",
+      "started": "2026-10-20T11:25:42.036Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "081e3824f154e0eb19ff35c0119710298b0506f56491b1c5c37c5142a3636d65",
+      "summary": "3 pass\n 0 fail\n 36 expect() calls\nRan 3 tests across 1 file. [1.66s]",
+      "finished": "2026-10-20T11:25:44.060Z",
+      "junit": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/8.xml",
+      "junitSha256": "e5ceb88a95043a9be237cf6de9f33d125e2a18a935b513bf0060c99523106db6",
+      "passes": 3,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 36,
+      "cases": [
+        {
+          "class": "native CLI checkpoint child file failures",
+          "name": "releases a prepared child after native write failure and continues the original recording"
+        },
+        {
+          "class": "native CLI checkpoint child file failures",
+          "name": "releases a prepared child after native pre-trailer-flush failure and continues the original recording"
+        },
+        {
+          "class": "native CLI checkpoint child file failures",
+          "name": "releases a prepared child after native trailer-write failure and continues the original recording"
+        }
+      ]
+    },
+    {
+      "name": "cli-old-ui/hooks/native-command-swap-callbacks.test.ts",
+      "cwd": "packages/cli",
+      "command": "bun test ./src/ui/hooks/native-command-swap-callbacks.test.ts --reporter=junit --reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/9.xml",
+      "backend": "old",
+      "index": 9,
+      "total": 17,
+      "pid": 1002,
+      "driverPid": 407,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/9.log",
+      "started": "2026-10-20T11:25:44.060Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "87f924bdd8fde9e2b206837c5d7a86654f5640530c7c763b3983468d5d43663f",
+      "summary": "3 pass\n 0 fail\n 43 expect() calls\nRan 3 tests across 1 file. [1.97s]",
+      "finished": "2026-10-20T11:25:46.409Z",
+      "junit": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/9.xml",
+      "junitSha256": "01d44dfd9800a134bdc8949fb02bb71544683f7e46021197f36d18dde6ef2bb6",
+      "passes": 3,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 43,
+      "cases": [
+        {
+          "class": "native CLI recording swap callbacks",
+          "name": "preserves the CLI swap contract through swap with an actual Agent history"
+        },
+        {
+          "class": "native CLI recording swap callbacks",
+          "name": "preserves the CLI swap contract through restore-callback with an actual Agent history"
+        },
+        {
+          "class": "native CLI recording swap callbacks",
+          "name": "preserves the CLI swap contract through prior-cleanup with an actual Agent history"
+        }
+      ]
+    }
+  ],
+  "acceptedGates": [
+    {
+      "name": "declarations-core",
+      "cwd": "packages/core",
+      "command": "LLXPRT_EMIT_DECLARATIONS_ONLY=1 bun run build",
+      "backend": "old",
+      "index": 26,
+      "total": 37,
+      "pid": 95349,
+      "driverPid": 94272,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/26.log",
+      "started": "2026-10-20T11:19:40.776Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "4b2d051d6f9abf3a27f6bed43659d0fecde0f2719ef0866135341be4425853f4",
+      "finished": "2026-10-20T11:19:44.581Z"
+    },
+    {
+      "name": "declarations-agents",
+      "cwd": "packages/agents",
+      "command": "LLXPRT_EMIT_DECLARATIONS_ONLY=1 bun run build",
+      "backend": "old",
+      "index": 27,
+      "total": 37,
+      "pid": 95394,
+      "driverPid": 94272,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/27.log",
+      "started": "2026-10-20T11:19:44.582Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "4b2d051d6f9abf3a27f6bed43659d0fecde0f2719ef0866135341be4425853f4",
+      "finished": "2026-10-20T11:19:46.725Z"
+    },
+    {
+      "name": "strict-types-core",
+      "cwd": "packages/core",
+      "command": "../../node_modules/.bin/tsc --noEmit -p tsconfig.noemit.json --types node,bun-types,bun-types/test,bun-types/test-globals",
+      "backend": "old",
+      "index": 29,
+      "total": 37,
+      "pid": 95473,
+      "driverPid": 94272,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/29.log",
+      "started": "2026-10-20T11:19:50.578Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "finished": "2026-10-20T11:19:56.859Z"
+    },
+    {
+      "name": "strict-types-agents",
+      "cwd": "packages/agents",
+      "command": "../../node_modules/.bin/tsc --noEmit -p tsconfig.noemit.json --types node,bun-types,bun-types/test,bun-types/test-globals && ../../node_modules/.bin/tsc --noEmit -p tsconfig.test-bun.json --types node,bun-types,bun-types/test,bun-types/test-globals",
+      "backend": "old",
+      "index": 30,
+      "total": 37,
+      "pid": 95578,
+      "driverPid": 94272,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-a/30.log",
+      "started": "2026-10-20T11:19:56.860Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "finished": "2026-10-20T11:20:11.363Z"
+    },
+    {
+      "name": "declarations-cli",
+      "cwd": "packages/cli",
+      "command": "LLXPRT_EMIT_DECLARATIONS_ONLY=1 bun run build",
+      "backend": "old",
+      "index": 10,
+      "total": 17,
+      "pid": 1096,
+      "driverPid": 407,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/10.log",
+      "started": "2026-10-20T11:25:46.410Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "a69b141ea33fe7711b5f8ba329bd421f4215c05989bfd0232e6b2dbd099e8213",
+      "finished": "2026-10-20T11:25:50.667Z"
+    },
+    {
+      "name": "strict-types-cli",
+      "cwd": "packages/cli",
+      "command": "../../node_modules/.bin/tsc --noEmit -p tsconfig.noemit.json --types node,bun-types,bun-types/test,bun-types/test-globals && ../../node_modules/.bin/tsc --noEmit -p tsconfig.test-bun.json --types node,bun-types,bun-types/test,bun-types/test-globals",
+      "backend": "old",
+      "index": 11,
+      "total": 17,
+      "pid": 1170,
+      "driverPid": 407,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/11.log",
+      "started": "2026-10-20T11:25:50.668Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "finished": "2026-10-20T11:26:10.225Z"
+    },
+    {
+      "name": "lint",
+      "cwd": ".",
+      "command": "node_modules/.bin/eslint --max-warnings 0 packages/agents/src/api/control/sessionControl.ts packages/agents/src/api/control/sessionResumeAdoption.ts packages/core/src/recording/journalResume.ts packages/cli/src/ui/hooks/slashCommandHandlers.ts packages/cli/src/__tests__/native-command-fixture.ts packages/cli/src/ui/hooks/native-command-rollback.test.ts packages/cli/src/ui/hooks/native-command-resume-faults.test.ts packages/cli/src/ui/hooks/native-command-selection.test.ts packages/cli/src/ui/hooks/native-command-checkpoint-io.test.ts packages/cli/src/ui/hooks/native-command-swap-callbacks.test.ts",
+      "backend": "old",
+      "index": 12,
+      "total": 17,
+      "pid": 1459,
+      "driverPid": 407,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/12.log",
+      "started": "2026-10-20T11:26:10.226Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "finished": "2026-10-20T11:26:23.877Z"
+    },
+    {
+      "name": "format",
+      "cwd": ".",
+      "command": "node_modules/.bin/prettier --check packages/agents/src/api/control/sessionControl.ts packages/agents/src/api/control/sessionResumeAdoption.ts packages/core/src/recording/journalResume.ts packages/cli/src/ui/hooks/slashCommandHandlers.ts packages/cli/src/__tests__/native-command-fixture.ts packages/cli/src/ui/hooks/native-command-rollback.test.ts packages/cli/src/ui/hooks/native-command-resume-faults.test.ts packages/cli/src/ui/hooks/native-command-selection.test.ts packages/cli/src/ui/hooks/native-command-checkpoint-io.test.ts packages/cli/src/ui/hooks/native-command-swap-callbacks.test.ts",
+      "backend": "old",
+      "index": 13,
+      "total": 17,
+      "pid": 1629,
+      "driverPid": 407,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/13.log",
+      "started": "2026-10-20T11:26:23.878Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+      "finished": "2026-10-20T11:26:24.225Z"
+    },
+    {
+      "name": "affected-graph",
+      "cwd": ".",
+      "command": "bun scripts/check-affected-test-shards.ts",
+      "backend": "old",
+      "index": 14,
+      "total": 17,
+      "pid": 1635,
+      "driverPid": 407,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/14.log",
+      "started": "2026-10-20T11:26:24.226Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67",
+      "finished": "2026-10-20T11:26:26.439Z"
+    },
+    {
+      "name": "audit",
+      "cwd": ".",
+      "command": "bun scripts/test-audit/scan.ts tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/audit",
+      "backend": "old",
+      "index": 15,
+      "total": 17,
+      "pid": 1675,
+      "driverPid": 407,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/15.log",
+      "started": "2026-10-20T11:26:26.440Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "ed701275825f8a0f1809a539f40c8c97bfa425c61bb7feb76f3060211ef864fa",
+      "finished": "2026-10-20T11:26:29.706Z"
+    },
+    {
+      "name": "cli-boundary",
+      "cwd": ".",
+      "command": "bun scripts/check-cli-import-boundary.ts",
+      "backend": "old",
+      "index": 16,
+      "total": 17,
+      "pid": 1729,
+      "driverPid": 407,
+      "log": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/16.log",
+      "started": "2026-10-20T11:26:29.707Z",
+      "code": 0,
+      "signal": null,
+      "sourceMismatches": [],
+      "logHash": "287fd904766c02a9b7ae56f29e7439b4e1cb6e210695351cf80a40d0fc85963c",
+      "finished": "2026-10-20T11:26:30.683Z"
+    }
+  ],
+  "currentSources": {
+    "packages/agents/src/api/control/sessionControl.ts": "26bec1c30dab51001df5c56537633e489a340c43b5a763383400b7f6031ba59c",
+    "packages/agents/src/api/control/sessionResumeAdoption.ts": "4e7b4e935c22ffbc1a765c177ea9e4a6759e332d8e80206f0fe028c5b61a09f8",
+    "packages/core/src/recording/journalResume.ts": "c0e57aea2329566beede06b8df60225c57032c28f1b1d4066d47ccf3a334fe2b",
+    "packages/cli/src/ui/hooks/slashCommandHandlers.ts": "94273c8916e8978d31cf65186664dac4fa077d037d56c7d8e4c89c6668074722",
+    "packages/cli/src/__tests__/native-command-fixture.ts": "d48f1e4e60195dfd5129216ded8f9b6be0b82736091b8588eaf6a13d9216c7fb",
+    "packages/cli/src/ui/hooks/native-command-rollback.test.ts": "3badf397cd1a6898caef88d731aef9f03d547e2997a9202c0a3a31d10570b913",
+    "packages/cli/src/ui/hooks/native-command-resume-faults.test.ts": "96fa343e12b662c32fe3901420f9561be45490c3e9d095c02eeadcb6ca8fc02b",
+    "packages/cli/src/ui/hooks/native-command-selection.test.ts": "635b87bb59c42111eb354ac470b50d379b35b1dbbcbd76e299f1e6caf3812797",
+    "packages/cli/src/ui/hooks/native-command-checkpoint-io.test.ts": "fe51478a0afa8b48725c3e3879c66519a0bcb6302eee13dc9f60f6380769667d",
+    "packages/cli/src/ui/hooks/native-command-swap-callbacks.test.ts": "56d1875291d53805b4465780a5eb615acd2cdbcf5b8a1fe1f823f7354e261a1e"
+  },
+  "fullSourceManifest": {
+    "path": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/sources.json",
+    "sha256": "4402b4ceefa4ad1dd5c9000a680159d0c5120f37538a24d7207a58f5d39c9ac3",
+    "entries": 7740,
+    "allMatchWorktree": true
+  },
+  "reuseBoundary": {
+    "changedSinceFirstAcceptance": [
+      "packages/cli/src/__tests__/native-command-fixture.ts",
+      "packages/cli/src/ui/hooks/native-command-rollback.test.ts",
+      "packages/cli/src/ui/hooks/native-command-resume-faults.test.ts",
+      "packages/cli/src/ui/hooks/native-command-selection.test.ts",
+      "packages/cli/src/ui/hooks/native-command-checkpoint-io.test.ts"
+    ],
+    "otherFirstAcceptanceSourcesMatch": true,
+    "newRawCallbackFileAcceptedInFinal": true
+  },
+  "immutableInputs": [
+    {
+      "path": "packages/providers/src/__tests__/fixtures/anthropic-send/dump-anthropic-cache-1h.json",
+      "sha256": "ceed31a20b50feb0fd25bf3ae1726f69b1248802432795bb398fe599f8bdad87",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/anthropic-send/dump-anthropic-cache-off.json",
+      "sha256": "274c319fb23914bea14a3806d8acdca52b5a5d3ffb66582c5ee7c534e1370d23",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/anthropic-send/image-recovery-anthropic-cache-1h.json",
+      "sha256": "38dbc0b0daaa0fd16e7b589d8a5a2ae6e365d4bb0014a1944568fa386e8d207f",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/anthropic-send/image-recovery-anthropic-cache-off.json",
+      "sha256": "5be2d77a54cdaa489a1aba441f88cc58b28f6905539b7f06082d8d521dfdc840",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/anthropic-send/image-recovery-dump-anthropic-cache-1h.json",
+      "sha256": "e69f3be468d24b9be21778a8142761819af0faa0ac2dc9b92e9773b9978057ee",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/anthropic-send/image-recovery-dump-anthropic-cache-off.json",
+      "sha256": "67c9437d8711e5bb201c90e1472538f328964a23a55dbe539c3f8c2986a53a67",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/chat-send/continuation-openai-chat-kimi.json",
+      "sha256": "8ac917d1c4d4803cedc7896fe9f3afae7f1cdf4b67edbebc7c58545fd7d29bf9",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/chat-send/continuation-openai-chat-mistral.json",
+      "sha256": "3de886d562a80070557f83e1858b94781ad13a895e5560c041e3f46b12c15ac3",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/chat-send/continuation-openai-chat-plain.json",
+      "sha256": "d5f64153ebcb85143d495150719589ca2d886191c53b1623193c56adc022d1e5",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/chat-send/dump-openai-chat-kimi.json",
+      "sha256": "c97e1e62d158cbe2b2c3d67fc09d0bc1bbfb2122d1842fb637784e1063accbd0",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/chat-send/dump-openai-chat-mistral.json",
+      "sha256": "965370db4216bf93ddf140e56cf878b660fcadbb012dfe02400bfb940c89859c",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/chat-send/dump-openai-chat-plain.json",
+      "sha256": "65759b2bad98265971339cd2ee80279b68a9aa9a26f243cb6418ebe6a04b75c9",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/anthropic-cache-1h.cases.tsv",
+      "sha256": "c0f7eb328c2674e4e1882fd1394abe3d40f70bdf54db6df88f2b7cdbcd96b320",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/anthropic-cache-1h.json",
+      "sha256": "65e9d112e7eef5fa4513b4b0954f0d15af0c38680f90f7cba7e5304f5f33df5d",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/anthropic-cache-5m.cases.tsv",
+      "sha256": "cd4c2cf0b222e74ad2e62653dab56df636872d01494e05ed4ca9db38de46901d",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/anthropic-cache-5m.json",
+      "sha256": "49319a3e7780a0f1c6ae09a0c7d9b64528f66a7ad31213d06b2bdadc39ebae70",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/anthropic-cache-off.cases.tsv",
+      "sha256": "7a481b2d0046e10d249a8adfe43bd7e5c965d40bfa8d016ded2dfcdcd40fd668",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/anthropic-cache-off.json",
+      "sha256": "bec4f5c50c9b11205a452cb93cee688d65a6125168118fb661a9163a587eac7e",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/anthropic-purge-boundary.cases.tsv",
+      "sha256": "d9eb669c0a89538c0de3533a028b06f0ca17aa926490d90bf35fd696b157b111",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/anthropic-purge-boundary.json",
+      "sha256": "06a4b8fc1c90120e3e57ca82cf494a8453c38ca3811954fb9c3b98b684d9d6fe",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/counterexamples-anthropic.json",
+      "sha256": "95b9290eb0e3969a840bfad71ba64207955c909a2f7082c6e361b5961f9b7255",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/counterexamples-chat.json",
+      "sha256": "7bcd27c4e69e3bd76c10c9634b844983e1ab5adcdea6b06c3b7a362eb8b80851",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/counterexamples-keys.json",
+      "sha256": "541b0100bd0c5b4a2d13184887b171e2ae5b1ac4e22b5b1cd49483f715298304",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/counterexamples-normalizer.json",
+      "sha256": "9aea39bc452f53f78dc840344ee7b7e096462c493405ccc25fb3c0278aeb0582",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/counterexamples-purge-boundary.json",
+      "sha256": "595f092541a975981d92003a1e6d246c2ada271f6016b70d8db732d002b62c26",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/counterexamples-responses.json",
+      "sha256": "6b73517d7d19113addbcd5f18db6d8b7fbf67be7c5f5aa89415de5134e277cc9",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/openai-chat-kimi.cases.tsv",
+      "sha256": "ca7f948bd5ce9920287f97fd2b302269153f86dd14a1a615a63a82219066b322",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/openai-chat-kimi.json",
+      "sha256": "1152ee3d5e32613853f5e88385a7a16ffd9f3deee75b1fe2d774cfe2097203b9",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/openai-chat-mistral.cases.tsv",
+      "sha256": "92363bcc9fcf6cd11e8c6947ed6a5e4da7ade994bae1d8d4d51eea3655af2616",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/openai-chat-mistral.json",
+      "sha256": "5e47044b9b6f7058ab8bcb72772e2c32a300b29183504bd554cae8184cea118f",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/openai-chat-plain.cases.tsv",
+      "sha256": "366a5c69d14de71c50d503c3ad54c38130bf5e741bf1bd4fc0ae7037cf43de4d",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/openai-chat-plain.json",
+      "sha256": "813df737b814d410ca81bff09fa475549f450973e96afdc1637f0c024bcd9b28",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/openai-responses-via-openai.cases.tsv",
+      "sha256": "86ad0b2a5810c43a3343845769803e8cb60eae33b327aaf48b8791c9cd69545e",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/openai-responses-via-openai.json",
+      "sha256": "8aa52ab1c96a57750a8c97bad93023f40fe2e923e47626c98421e167a09790bc",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/openai-responses.cases.tsv",
+      "sha256": "d25536f85ebf8555eec729d5c9ccb734ec77e8051960bb816ed14b600398d10f",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/frozen-wire/openai-responses.json",
+      "sha256": "c7d88001b8ae59262466a26870c3592499366c8d31959fa8027353aa948ee15a",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/wire-bodies/anthropic-cache-1h.json",
+      "sha256": "99b01112ca2f7830d06bfb25bb82ca0b09e7a7454b7edd6b3fea342b4c6c0b68",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/wire-bodies/anthropic-cache-off.json",
+      "sha256": "7cda7370720faa06f56296ec165d3a15bfad5514119390d63a5145f3f6eed2f1",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/wire-bodies/manifest.json",
+      "sha256": "a99bee172395334748380e09d3bd752d80f241e220622cb9ed3d1c04c655944d",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/wire-bodies/openai-chat-kimi.json",
+      "sha256": "be18c57678116411f75360a3c41c1824ffaa976f00c2209069c2657de5937d2d",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/wire-bodies/openai-chat-mistral.json",
+      "sha256": "d84f0a8fd2a2200532f2604a2a271d8a04bb6aa55351296cbdfa4517d5a2b535",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/wire-bodies/openai-chat-plain.json",
+      "sha256": "30177379705713bb461fef5d389a587c90a762ad2ca3857f6f196af5b3090764",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/wire-bodies/openai-responses-via-openai.json",
+      "sha256": "421c17fe7fdc20acf73e667f8a84aefea1273564be0f18d39ba517a918f08b46",
+      "matches": true
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/wire-bodies/openai-responses.json",
+      "sha256": "0b9d625e8be45652cd1ddde29ba421d80e98c759a5ebdf42e712cb18dea6a93b",
+      "matches": true
+    }
+  ],
+  "redControls": [
+    {
+      "path": "tmp/854-notes/p4/w23/cli-fault-run-k/red-owner.log",
+      "sha256": "2479bf9c3eafb99da3707400a24e3b7cb29e8062f7fb45d41a83d8a664e0abc3",
+      "meaning": "Owning recorder remains the failed target after post-publication rejection; primary owner assertion fails before cleanup EBADF."
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/cli-fault-run-k/red-cleanup.log",
+      "sha256": "364ddaf4a31e193622d9e5d837eb8edce8434c87ce1d4c196f08719a319b6ff9",
+      "meaning": "CLI exposes only aggregate heading; primary consumer detail assertion fails."
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/cli-fault-run-k/selection-first.log",
+      "sha256": "c6c648ffcf6a8b4e1cfce34076065637ac6eec4812725f92a1490145aae7ae96",
+      "meaning": "Latest chooses empty-native-target instead of eligible-native-target."
+    }
+  ],
+  "authoringFailures": [
+    "first raw callback attempt bound no Agent origin, producing a zero-row recorder; repeated disposed-recorder cleanup gave EBADF",
+    "initial I/O seam wrapped unused create entrypoint; real child commit uses JournalSession.open; corrected zero-based indices",
+    "initial lint/style/type-ambient errors retained in their logs"
+  ],
+  "audit": {
+    "path": "tmp/854-notes/p4/w23/cli-fault-run-k/accept-final/audit/findings.tsv",
+    "sha256": "1e0644aa271d2323e24cd330d2bd69afabda6dbc3b151dab57db8055afc65f57",
+    "highRiskTouchedFindings": 0,
+    "remaining": [
+      "packages/cli/src/ui/hooks/native-command-rollback.test.ts\t15\tnative CLI resume rollback > restores the owning recorder after a post-publication consumer rejects and records the next turn only there\tDUP_ASSERT\t2x identical assertion: expect(await durable(targetPath)).toStrictEqual(before.target)\tcli",
+      "packages/cli/src/ui/hooks/native-command-resume-faults.test.ts\t31\tnative CLI resume failure branches > (unnamed)\tDUP_ASSERT\t2x identical assertion: expect(await durable(targetPath)).toStrictEqual(before.target)\tcli"
+    ],
+    "interpretation": "Two unchanged-target equalities occur at distinct lifecycle boundaries: immediately after failed transition and after a real subsequent turn."
+  },
+  "pids": {
+    "checked": [
+      407, 412, 463, 544, 642, 687, 747, 775, 849, 939, 1002, 1096, 1170, 1459,
+      1629, 1635, 1675, 1729, 83469, 83780, 84271, 84991, 85919, 87245, 88085,
+      88819, 90371, 90862, 91253, 92319, 94272, 94279, 94326, 94400, 94482,
+      94520, 94532, 94558, 94570, 94585, 94606, 94750, 94783, 94821, 94905,
+      94988, 95030, 95057, 95083, 95104, 95132, 95154, 95286, 95311, 95319,
+      95323, 95335, 95349, 95394, 95427, 95473, 95578, 95803, 96040, 96249,
+      96257, 96300, 96352, 97957, 98510, 98724
+    ],
+    "active": []
+  },
+  "limits": [
+    "Five CLI files explicitly choose native under both outer environments; they are not old-native duplicates. Original old layout tests remain explicitly old.",
+    "Browser selection locates the actual file path in discovered metadata, then invokes supported ID/prefix/display-index references. No direct absolute-path resume feature was added.",
+    "Graph validation is not affected-shard execution; no whole-package/full-product closure.",
+    "ACP live replacement/reattach/replay-delivery/concurrency variants remain pending.",
+    "Original ChatSession retention positive/retaining/release and marker/read-cost rebind remain pending; historical 33/35 reuse only.",
+    "Eight original zero-decode planning/header RED assertions remain assigned to phases 5/6 through 7.",
+    "No W24 work, W25 default change, W26/seam/spool closure or OCR review. Review skipped per Andrew 2026-10-09."
+  ]
+}
