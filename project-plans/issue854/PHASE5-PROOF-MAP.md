@@ -1,5 +1,17 @@
 # Phase 5 response proof map
 
+## Current reconstruction/tail increment
+
+Starting HEAD `29bcdd89f`; first green R1 `57d30e894`; tail/range implementation `abfd39888d71a069f8dbc89182e833138328b028`. [PHASE5-TAIL-PROOF.json](PHASE5-TAIL-PROOF.json) supersedes the response-only coverage counts below while preserving those receipts as historical evidence. Current acceptance: **80 isolated serial processes, 40 files, both outer backends, 588 passes, 205292 assertions, no failures/skips; six scoped gates; zero touched audit findings**. All 22 source paths match their actual implementation blobs. All 189 recorded job PIDs are absent.
+
+`normalization-unit-oracle.test.ts` now compares all 5000 immutable output hashes, counts, pending flags and first pending ordinals, with no unsupported branch. These are twelve repeated structural families, not 5000 independent random structures. `journal-reconstruction-units.test.ts` adds seven named reconstruction differentials; `journal-tail-units.test.ts` adds nine tail/pending/metadata differentials. `journal-tail-resources.test.ts` checks copied pending ownership, closed-pin rejection and selection before a 2000-row prefix, still under 100 positional reads.
+
+`journal-block-ranges.test.ts` rejects the whole-row read fallback using more than 2 MiB of unrelated text. `journal-lazy-units.test.ts` checks three relocated response payloads and stored media references without payload reads during plan creation, then exact single-block consumption and invalid-reference rejection. `journal-response-fact-errors.test.ts` rejects a real response missing best. Controls for wrong reconstructed unit, whole-history tail copying and dropped responses fail and restore with cmp. Raw evidence: `tmp/854-notes/p5/tail-run-c/`.
+
+Pending membership is streamed, not an indexed first-output/count API. Normalized occurrences/contributions, persistent unit aggregates, full native mutation/heap proof and provider/settings integration remain open. Range reads do not verify whole-body CRC. No production routing/default change. See [PHASE5-STATUS.md](PHASE5-STATUS.md) for the exact boundary.
+
+## Historical response-only increment
+
 Starting HEAD: `46b13bc9bf105d9df0d6e48fffbf5c78a43248f1`. First response group: `270ad3e81`. Final implementation: `ad629b507a009f745e168081dd4e5947317b5e26`. This proves existing-call response units, not full phase 5 or provider routing. [PHASE5-STATUS.md](PHASE5-STATUS.md) states the implemented and missing fields. [PHASE5-RESPONSES-PROOF.json](PHASE5-RESPONSES-PROOF.json) records current source counterparts and receipts. The earlier source-fact/orphan proof remains in [PHASE5-PROOF.json](PHASE5-PROOF.json).
 
 ## Accepted boundary

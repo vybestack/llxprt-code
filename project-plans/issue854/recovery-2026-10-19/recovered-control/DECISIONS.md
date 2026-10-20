@@ -1,3 +1,15 @@
+## Phase 5 R1 and tail/range decisions, 2026-10-20
+
+Distinguish a reconstructed call unit from the real source part even when their row/part coordinates coincide. Preserve all unseen duplicate response blocks in its reconstructed call unit, but attach one slot per nonempty ID. Use the stored empty-call fact plus one empty-reconstruction scalar; collecting unmatched history IDs would violate the row-sized-state goal.
+
+Encode only pending payloads into owned blocks before yielding. Merge facts only for pending IDs, at virtual positions following journal labels; a strictly higher score replaces best, and ties preserve the earlier pointer. Preserve shared input block identity as small pending-origin numbers, without retaining the caller's payload objects. Cached overlay hits must still require a live native pin.
+
+Emit provider-independent headers and lazy block references rather than decoded relocated-row arrays. Block resolution validates source coordinates, type and call ID, and a real response without best must fail instead of becoming an orphan. Retained metadata reads only metadata pieces. Range reads validate frame/header/directory/range, while whole-body CRC checking remains exclusive to full-body reads; do not claim corruption parity from range tests.
+
+Pending flags follow selected block origins, not a tail suffix or the target call position. Preserve the 5000-case fixture and compare every emitted count, flag and first pending ordinal. Indexed prefix counts/firstOutputIndex require persistent unit contributions and remain a separate unfinished dependency, as do normalized namespaces, mapping/settings integration and full heap/mutation proof. Do not introduce another whole-history pass to imitate that API. Keep the old send path and default until those dependencies are proved.
+
+Retain all RED and initial gate/deadline receipts. No deadline, assertion, bound, format key or enforcement change was made to obtain acceptance. PHASE5-TAIL-PROOF.json binds the final 80 isolated processes, six gates and three byte-restored controls to actual implementation blobs. Review skipped per Andrew 2026-10-09.
+
 ## Phase 5 existing-call response boundary, 2026-10-20
 
 Implement and commit the existing-call response rule group before expanding into R1 reconstruction or tails. Read source facts, row labels and split-part block indices from one VersionSnapshot; hold that version through async consumption. Use the existing IContent generator interface, capped id-node cache and row-sized codec, with per-current-unit slots and media references. Do not key response ownership by owner/source ordinal, collect duplicate chains, introduce an operation index file or switch production sends. Keep the row-sized reference-reader limitation explicit until range-only reads are implemented.
