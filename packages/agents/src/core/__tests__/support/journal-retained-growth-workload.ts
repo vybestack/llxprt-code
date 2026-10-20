@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import { basename, join } from 'node:path';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
+import { createLockedSessionRecorder } from '@vybestack/llxprt-code-core/recording/sessionRecorderFactory.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
@@ -283,7 +283,7 @@ export async function createWorkload(
     contextLimit,
   );
   const settingsOwner = new SessionSettingsOwner(settings);
-  const recording = await SessionRecordingService.createLocked({
+  const recording = await createLockedSessionRecorder({
     sessionId: config.getSessionId(),
     projectHash: basename(root),
     chatsDir: join(root, 'chats'),

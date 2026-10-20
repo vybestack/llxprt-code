@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { closeSync, openSync, readFileSync, rmSync } from 'node:fs';
+import { closeSync, mkdtempSync, openSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect } from 'bun:test';
 import { z } from 'zod';
@@ -40,7 +40,11 @@ export type RetainedGrowthResult = z.infer<typeof resultSchema>;
 export async function runWorker(
   mode: RetainedGrowthResult['mode'],
 ): Promise<RetainedGrowthResult> {
-  const root = createScratchDirSync('journal-retained-growth-');
+  const evidenceRoot = process.env['LLXPRT_RETAINED_EVIDENCE_ROOT'];
+  const root = evidenceRoot
+    ? mkdtempSync(join(evidenceRoot, `${mode}-`))
+    : createScratchDirSync('journal-retained-growth-');
+  process.stdout.write(`retained worker artifacts: ${root}\n`);
   const log = join(root, 'worker.log');
   const fd = openSync(log, 'w');
   const child = Bun.spawn(
@@ -65,6 +69,7 @@ export async function runWorker(
       stderr: fd,
     },
   );
+  process.stdout.write(`retained worker pid: ${child.pid}\n`);
   const exit = await child.exited;
   closeSync(fd);
   if (exit !== 0)
@@ -74,7 +79,6 @@ export async function runWorker(
   const result = resultSchema.parse(
     JSON.parse(readFileSync(join(root, 'result.json'), 'utf8')),
   );
-  rmSync(root, { recursive: true, force: true });
   return result;
 }
 
