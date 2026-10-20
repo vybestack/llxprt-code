@@ -1,6 +1,16 @@
 # Phase 5 proof map
 
-## Current native Kimi eligible-count increment
+## Current native Kimi emitted mapping/correction increment
+
+Starting HEAD `4e119cb2c`; first coherent implementation `4d88b25211a7d1b4ac5999afaf88797dbafc05f3`; written-use/converter follow-up `95ac306c970c52bdae6009c72e9acf64040ca13d`. [PHASE5-KIMI-CORRECTIONS-PROOF.json](PHASE5-KIMI-CORRECTIONS-PROOF.json) binds 17 committed paths, 8856 package/script hashes and 617 raw receipt hashes. Acceptance: **122 isolated serial processes over 61 files, 896 passes, 940226 assertions, zero failures/skips**, both outer backends, unchanged timeout and seven passing scoped gates. All 342 recorded child/driver PIDs are absent; none live.
+
+The production writer maintains separate emitted namespace-4 call/response lists, last-eligible references and counters, plus namespace-5 sparse exception admission. Snapshot APIs provide mappings, per-ID written/consumed counts, sparse consumed totals, mapped digit corrections and raw-ID holder streams. Source fields retain their original meaning. Native lifecycle/copy/poison tests and independent old-mapper/actual-converter differentials cover duplicates, unnamed calls, reconstructed/default names, human-target and fallback output drops, raw normalized collisions and ordinal digit boundaries. The 5000-case corpus and frozen goldens remain unchanged.
+
+Measured 4000-row reads: mapping 31, clean corrections 0, unique append 60, response append 72, duplicate append 99, one exception correction 40. Five wrong-last/name/order/written/retaining controls fail intended assertions. Retaining every ID takes 4603 reads against `<50`. All targets restore with cmp and SHA-256 before final acceptance. This is read-budget proof, not retained-heap proof. Older-pin duplicate assertions span actual mutations. No prohibited touched audit finding is accepted.
+
+Request-only tail continuation, row-prefix unmapped aggregates, conversion-order fallback digit ranks/dropped-use subtraction, format/settings summaries and LENS, stored holder name/token/byte remeasurement, full heap/range CRC and W26/W23/W25/default dependencies remain open. Provider routing/default and Mistral continuation are unchanged. See [PHASE5-STATUS.md](PHASE5-STATUS.md), [PHASE5-KIMI-DECISIONS.md](PHASE5-KIMI-DECISIONS.md) and [LOGDECISIONS.md](LOGDECISIONS.md). Review skipped per Andrew 2026-10-09.
+
+## Historical native Kimi eligible-count increment
 
 Starting HEAD `a797ffe5a`; implementation `4dd919d4e8607e8ad304af6f770f3baacc908fb5`; independent mapper oracle `440dc3cf996960869833397b5bd283ace52ab081`. [PHASE5-KIMI-PROOF.json](PHASE5-KIMI-PROOF.json) binds 13 committed paths, 8849 package/script hashes and 591 raw receipt hashes. All 320 recorded Kimi PIDs are absent; none live. Acceptance: **114 isolated serial processes over 57 files, 872 passes, 938784 assertions, zero failures or skips**, both outer backends, unchanged timeout and eight passing scoped gates.
 
