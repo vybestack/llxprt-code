@@ -23,12 +23,6 @@ oneshot-request-publication	red	packages/agents/src/compression/__tests__/onesho
 oneshot-request-publication	red	packages/agents/src/compression/__tests__/oneshot-disk-retry.test.ts	88981	614fc163a2c4f373114687b1c408da4e48f6703caddc8d4a1544a613184204c4	package-resume-g-0050	4	2	0
 oneshot-request-publication	red	packages/agents/src/compression/__tests__/oneshot-disk-splits.test.ts	91694	a53cf4d5158f1bce072cee78690718798db42d0644639471ef4269f8ea3cb5b3	package-resume-g-0050	1	2	0
 oneshot-request-publication	red	packages/agents/src/compression/__tests__/oneshot-disk.test.ts	92714	ff77962a4b2978b6bf929a364bc0a21697f13ba560684b2f6b5dd38e2f7e9e51	package-resume-g-0050	0	2	0
-provider-fallback-hardlimit	red	packages/agents/src/compression/__tests__/provider-fallback-diagnostics.test.ts	94436	15390d9bcb820e9cdfd30687dc05383d3836f63fdec49c512537adc03d0b36c9	package-resume-g-0050	0	1	0
-provider-fallback-hardlimit	red	packages/agents/src/compression/__tests__/provider-fallback-disk.test.ts	94445	57ad998bf239f740d847ee801b831acdad48d665da04ddece7e0e681d75229a0	package-resume-g-0050	0	13	0
-provider-fallback-hardlimit	red	packages/agents/src/compression/__tests__/provider-fallback-owner-controls.test.ts	94501	91297c448e4152d02af66598e4889622d91320d0440fb203ac52d8d7bdb1e75f	package-resume-g-0050	0	4	0
-provider-fallback-hardlimit	red	packages/agents/src/compression/__tests__/provider-hardlimit-disk-invariants.test.ts	94662	f04f619a406bbac3f0c3a3380aef7e186fb202f63933d40d1fb2298ea6f38043	package-resume-g-0050	0	2	0
-provider-fallback-hardlimit	red	packages/agents/src/compression/__tests__/provider-hardlimit-disk-owners.test.ts	94667	5b3cb381db55b32914d5069ef76d69882d1cb0f93e2dc509f0be5a6e0b33a66a	package-resume-g-0050	0	2	0
-provider-fallback-hardlimit	red	packages/agents/src/compression/__tests__/provider-hardlimit-disk-rollback.test.ts	95273	7febb231b36ee23c50b1735dd01b101ba95408e9d221042a7b02ef0da25fb789	package-resume-g-0050	0	10	0
 strategy-type-contract	red	packages/agents/src/compression/__tests__/types-highdensity.test.ts	47205	22199d2b1fc82de3130dbea2a49ac4d78c7cdc071a2c2d63ab1c6b15a3775467	package-resume-g-0150	30	1	0
 conversation-observation	red	packages/agents/src/core/ConversationManager.modelStamp.test.ts	52855	5f8df711b4dcdd17d92570fcc0533ebd5b3e206b26ce9aa9a89d73dbfcf27ca6	package-resume-g-0150	6	2	0
 child-ownership-transport	red	packages/agents/src/core/__tests__/childaccept-body.test.ts	25704	1dc75e3b20a43ac52d295b49bf45f276cb0d6073128594fa762f09279d54bc3c	package-resume-g-0250	1	3	0

@@ -1,0 +1,3521 @@
+{
+  "timestamp": "2026-10-20T00:11:32.306Z",
+  "sourceParent": "613b3ae746e9c40e5f5301dc6694de409d99fc92",
+  "sourceCommit": "0ed5b4e327317856fe724fe7b142ed7b5f698c01",
+  "scope": "Six provider fallback/hardlimit fixture suites; no production change or backend default change",
+  "rawRoot": "tmp/854-notes/p4/w22/provider-fallback-run-h",
+  "hashes": {
+    "packages/agents/src/compression/__tests__/provider-fallback-diagnostics.test.ts": "9533475ccf00aa61d4da307a4d60316bcb55d8dce7bda67aa3c9a90052de93e6",
+    "packages/agents/src/compression/__tests__/provider-fallback-disk.test.ts": "57ad998bf239f740d847ee801b831acdad48d665da04ddece7e0e681d75229a0",
+    "packages/agents/src/compression/__tests__/provider-fallback-owner-controls.test.ts": "91297c448e4152d02af66598e4889622d91320d0440fb203ac52d8d7bdb1e75f",
+    "packages/agents/src/compression/__tests__/provider-hardlimit-disk-invariants.test.ts": "f04f619a406bbac3f0c3a3380aef7e186fb202f63933d40d1fb2298ea6f38043",
+    "packages/agents/src/compression/__tests__/provider-hardlimit-disk-owners.test.ts": "84280b2f045e4f6c87ea8d70c58f56e86d144ae626c6086c15fb4d15075b17c3",
+    "packages/agents/src/compression/__tests__/provider-hardlimit-disk-rollback.test.ts": "7febb231b36ee23c50b1735dd01b101ba95408e9d221042a7b02ef0da25fb789",
+    "packages/agents/src/compression/__tests__/fallback-values.journal.test.ts": "bd05f95216a1750d138b4a446196140a6efa938b0f18d22ca085378b23ff9cd5",
+    "packages/agents/src/compression/__tests__/fallback-values-contracts.journal.test.ts": "859103de9b870f82913d559c913d325dba53e787413087e91efd8d97592430c7",
+    "packages/agents/src/compression/__tests__/fallback-values-live.journal.test.ts": "dae38da4c26f8d57ef813345168206f4f81976e84e35e8748f16a95c344fc800",
+    "packages/agents/src/compression/__tests__/fallback-values-media.journal.test.ts": "226098d6d8f6f88f770db79a607271a38a71fe85b633ddba9d8599ccb6fa712f",
+    "packages/agents/src/compression/__tests__/fallback-source-partial.journal.test.ts": "c533c983f16dc1461283fddd3e1022fc214338f69ed08014111d4abc359dbfba",
+    "packages/agents/src/compression/__tests__/provider-hardlimit-disk-retry.test.ts": "8edabb875035fa7554f867523998e28b4904deb1f83a1c06f6b33af8acabef3e",
+    "packages/agents/src/compression/__tests__/provider-fallback-disk-helpers.ts": "a6eb33098a50f2dabfe3225f0ad3c43b9c9c0d249c1ee93ec02c58c0fd46ae48",
+    "packages/agents/src/compression/__tests__/support/fallback-recording-fault.ts": "ebab1dd846eb6b1a248fca536a37e0ab1132004e1e7ceb330f5c5d7994aca125",
+    "packages/agents/src/compression/__tests__/support/fallback-publication-owner.ts": "9482eba43d88677bca20fc15b4030a91708f309aace351fda3cca06afc0976b7",
+    "packages/agents/src/compression/__tests__/support/native-fallback-fixture.ts": "e7db9ddc4018be47577d566638b85d1d796de8da9652b9bc94d995ce13278a7f",
+    "packages/agents/src/compression/__tests__/support/selected-fallback-fixture.ts": "ad2b738a1f0f64de4ce69ffa5bed73fde62fda91d3dd578186405fed10cc5941"
+  },
+  "original": [
+    {
+      "path": "packages/agents/src/compression/__tests__/provider-fallback-diagnostics.test.ts",
+      "pid": 94436,
+      "backend": "journal",
+      "sourceHash": "15390d9bcb820e9cdfd30687dc05383d3836f63fdec49c512537adc03d0b36c9",
+      "pass": 0,
+      "fail": 1,
+      "skip": 0,
+      "code": 1,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0335-provider-fallback-diagnostics.test.ts.log",
+      "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0335-provider-fallback-diagnostics.test.ts.xml",
+      "cases": [
+        {
+          "classname": "provider fallback rejection diagnostics",
+          "name": "reports both provider rejection and failed compensation without resetting the baseline",
+          "time": "0.001817",
+          "status": "failed",
+          "failureMessage": null
+        }
+      ]
+    },
+    {
+      "path": "packages/agents/src/compression/__tests__/provider-fallback-disk.test.ts",
+      "pid": 94445,
+      "backend": "journal",
+      "sourceHash": "57ad998bf239f740d847ee801b831acdad48d665da04ddece7e0e681d75229a0",
+      "pass": 0,
+      "fail": 13,
+      "skip": 0,
+      "code": 1,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0336-provider-fallback-disk.test.ts.log",
+      "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0336-provider-fallback-disk.test.ts.xml",
+      "cases": [
+        {
+          "classname": "provider fallback durable snapshot and compensation",
+          "name": "restores 512 mixed rows after throw rejection",
+          "time": "0.001746",
+          "status": "failed",
+          "failureMessage": null
+        },
+        {
+          "classname": "provider fallback durable snapshot and compensation",
+          "name": "restores 512 mixed rows after false rejection",
+          "time": "0.000491",
+          "status": "failed",
+          "failureMessage": null
+        },
+        {
+          "classname": "provider fallback durable snapshot and compensation",
+          "name": "restores 512 mixed rows after baseline rejection",
+          "time": "0.000337",
+          "status": "failed",
+          "failureMessage": null
+        },
+        {
+          "classname": "provider fallback durable snapshot and compensation",
+          "name": "restores 512 mixed rows after partial rejection",
+          "time": "0.000299",
+          "status": "failed",
+          "failureMessage": null
+        },
+        {
+          "classname": "provider fallback durable snapshot and compensation",
+          "name": "restores 512 mixed rows after cancel rejection",
+          "time": "0.005721",
+          "status": "failed",
+          "failureMessage": null
+        },
+        {
+          "classname": "provider fallback durable snapshot and compensation",
+          "name": "restores 8192 mixed rows after throw rejection",
+          "time": "0.000334",
+          "status": "failed",
+          "failureMessage": null
+        },
+        {
+          "classname": "provider fallback durable snapshot and compensation",
+          "name": "restores 8192 mixed rows after false rejection",
+          "time": "0.000261",
+          "status": "failed",
+          "failureMessage": null
+        },
+        {
+          "classname": "provider fallback durable snapshot and compensation",
+          "name": "restores 8192 mixed rows after baseline rejection",
+          "time": "0.000236",
+          "status": "failed",
+          "failureMessage": null
+        },
+        {
+          "classname": "provider fallback durable snapshot and compensation",
+          "name": "restores 8192 mixed rows after partial rejection",
+          "time": "0.000239",
+          "status": "failed",
+          "failureMessage": null
+        },
+        {
+          "classname": "provider fallback durable snapshot and compensation",
+          "name": "restores 8192 mixed rows after cancel rejection",
+          "time": "0.000226",
+          "status": "failed",
+          "failureMessage": null
+        },
+        {
+          "classname": "provider fallback successful installation",
+          "name": "accepts a successful candidate over $size rows without an eager snapshot",
+          "time": "0.000315",
+          "status": "failed",
+          "failureMessage": null
+        },
+        {
+          "classname": "provider fallback successful installation",
+          "name": "accepts a successful candidate over $size rows without an eager snapshot",
+          "time": "0.000222",
+          "status": "failed",
+          "failureMessage": null
+        },
+        {
+          "classname": "provider fallback successful installation",
+          "name": "accepts a valid candidate row larger than eight MiB",
+          "time": "0.000255",
+          "status": "failed",
+          "failureMessage": null
+        }
+      ]
+    },
+    {
+      "path": "packages/agents/src/compression/__tests__/provider-fallback-owner-controls.test.ts",
+      "pid": 94501,
+      "backend": "journal",
+      "sourceHash": "91297c448e4152d02af66598e4889622d91320d0440fb203ac52d8d7bdb1e75f",
+      "pass": 0,
+      "fail": 4,
+      "skip": 0,
+      "code": 1,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0338-provider-fallback-owner-controls.test.ts.log",
+      "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0338-provider-fallback-owner-controls.test.ts.xml",
+      "cases": [
+        {
+          "classname": "fallback snapshot retaining controls",
+          "name": "detects all 512 retained rows copy=false",
+          "time": "0.001642",
+          "status": "failed",
+          "failureMessage": null
+        },
+        {
+          "classname": "fallback snapshot retaining controls",
+          "name": "detects all 512 retained rows copy=true",
+          "time": "0.000318",
+          "status": "failed",
+          "failureMessage": null
+        },
+        {
+          "classname": "fallback snapshot retaining controls",
+          "name": "detects all 8192 retained rows copy=false",
+          "time": "0.000277",
+          "status": "failed",
+          "failureMessage": null
+        },
+        {
+          "classname": "fallback snapshot retaining controls",
+          "name": "detects all 8192 retained rows copy=true",
+          "time": "0.000293",
+          "status": "failed",
+          "failureMessage": null
+        }
+      ]
+    },
+    {
+      "path": "packages/agents/src/compression/__tests__/provider-hardlimit-disk-invariants.test.ts",
+      "pid": 94662,
+      "backend": "journal",
+      "sourceHash": "f04f619a406bbac3f0c3a3380aef7e186fb202f63933d40d1fb2298ea6f38043",
+      "pass": 0,
+      "fail": 2,
+      "skip": 0,
+      "code": 1,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0340-provider-hardlimit-disk-invariants.test.ts.log",
+      "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0340-provider-hardlimit-disk-invariants.test.ts.xml",
+      "cases": [
+        {
+          "classname": "provider disk callback invariants",
+          "name": "reports missing publication as failure and retains the original state",
+          "time": "0.001736",
+          "status": "failed",
+          "failureMessage": null
+        },
+        {
+          "classname": "provider disk callback invariants",
+          "name": "reports duplicate publication as failure and retains the original state",
+          "time": "0.000421",
+          "status": "failed",
+          "failureMessage": null
+        }
+      ]
+    },
+    {
+      "path": "packages/agents/src/compression/__tests__/provider-hardlimit-disk-owners.test.ts",
+      "pid": 94667,
+      "backend": "journal",
+      "sourceHash": "5b3cb381db55b32914d5069ef76d69882d1cb0f93e2dc509f0be5a6e0b33a66a",
+      "pass": 0,
+      "fail": 2,
+      "skip": 0,
+      "code": 1,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0341-provider-hardlimit-disk-owners.test.ts.log",
+      "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0341-provider-hardlimit-disk-owners.test.ts.xml",
+      "cases": [
+        {
+          "classname": "actual provider disk transaction owners",
+          "name": "keeps paused 512-row installation within the original owner gate and compensates",
+          "time": "0.001632",
+          "status": "failed",
+          "failureMessage": null
+        },
+        {
+          "classname": "actual provider disk transaction owners",
+          "name": "keeps paused 8192-row installation within the original owner gate and compensates",
+          "time": "0.000348",
+          "status": "failed",
+          "failureMessage": null
+        }
+      ]
+    },
+    {
+      "path": "packages/agents/src/compression/__tests__/provider-hardlimit-disk-rollback.test.ts",
+      "pid": 95273,
+      "backend": "journal",
+      "sourceHash": "7febb231b36ee23c50b1735dd01b101ba95408e9d221042a7b02ef0da25fb789",
+      "pass": 0,
+      "fail": 10,
+      "skip": 0,
+      "code": 1,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0344-provider-hardlimit-disk-rollback.test.ts.log",
+      "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0344-provider-hardlimit-disk-rollback.test.ts.xml",
+      "cases": [
+        {
+          "classname": "actual disk provider candidate compensation",
+          "name": "restores 512 rows after throw using the invoked disk runner",
+          "time": "0.001765",
+          "status": "failed",
+          "failureMessage": null
+        },
+        {
+          "classname": "actual disk provider candidate compensation",
+          "name": "restores 512 rows after false using the invoked disk runner",
+          "time": "0.00036",
+          "status": "failed",
+          "failureMessage": null
+        },
+        {
+          "classname": "actual disk provider candidate compensation",
+          "name": "restores 512 rows after baseline using the invoked disk runner",
+          "time": "0.00026",
+          "status": "failed",
+          "failureMessage": null
+        },
+        {
+          "classname": "actual disk provider candidate compensation",
+          "name": "restores 512 rows after partial using the invoked disk runner",
+          "time": "0.00024",
+          "status": "failed",
+          "failureMessage": null
+        },
+        {
+          "classname": "actual disk provider candidate compensation",
+          "name": "restores 512 rows after cancel using the invoked disk runner",
+          "time": "0.00025",
+          "status": "failed",
+          "failureMessage": null
+        },
+        {
+          "classname": "actual disk provider candidate compensation",
+          "name": "restores 8192 rows after throw using the invoked disk runner",
+          "time": "0.005182",
+          "status": "failed",
+          "failureMessage": null
+        },
+        {
+          "classname": "actual disk provider candidate compensation",
+          "name": "restores 8192 rows after false using the invoked disk runner",
+          "time": "0.000322",
+          "status": "failed",
+          "failureMessage": null
+        },
+        {
+          "classname": "actual disk provider candidate compensation",
+          "name": "restores 8192 rows after baseline using the invoked disk runner",
+          "time": "0.000237",
+          "status": "failed",
+          "failureMessage": null
+        },
+        {
+          "classname": "actual disk provider candidate compensation",
+          "name": "restores 8192 rows after partial using the invoked disk runner",
+          "time": "0.000222",
+          "status": "failed",
+          "failureMessage": null
+        },
+        {
+          "classname": "actual disk provider candidate compensation",
+          "name": "restores 8192 rows after cancel using the invoked disk runner",
+          "time": "0.000201",
+          "status": "failed",
+          "failureMessage": null
+        }
+      ]
+    }
+  ],
+  "matrix": {
+    "journal": [
+      {
+        "path": "packages/agents/src/compression/__tests__/provider-fallback-diagnostics.test.ts",
+        "pid": 92251,
+        "backend": "journal",
+        "sourceHash": "9533475ccf00aa61d4da307a4d60316bcb55d8dce7bda67aa3c9a90052de93e6",
+        "pass": 1,
+        "fail": 0,
+        "skip": 0,
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-journal-h-a/0335-provider-fallback-diagnostics.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-journal-h-a/0335-provider-fallback-diagnostics.test.ts.xml",
+        "cases": [
+          {
+            "classname": "provider fallback rejection diagnostics",
+            "name": "reports both provider rejection and failed compensation without resetting the baseline",
+            "time": "0.42879",
+            "status": "passed",
+            "failureMessage": null
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/provider-fallback-disk.test.ts",
+        "pid": 92274,
+        "backend": "journal",
+        "sourceHash": "57ad998bf239f740d847ee801b831acdad48d665da04ddece7e0e681d75229a0",
+        "pass": 13,
+        "fail": 0,
+        "skip": 0,
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-journal-h-a/0336-provider-fallback-disk.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-journal-h-a/0336-provider-fallback-disk.test.ts.xml",
+        "cases": [
+          {
+            "classname": "provider fallback durable snapshot and compensation",
+            "name": "restores 512 mixed rows after throw rejection",
+            "time": "0.682646",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "provider fallback durable snapshot and compensation",
+            "name": "restores 512 mixed rows after false rejection",
+            "time": "0.650812",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "provider fallback durable snapshot and compensation",
+            "name": "restores 512 mixed rows after baseline rejection",
+            "time": "0.633775",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "provider fallback durable snapshot and compensation",
+            "name": "restores 512 mixed rows after partial rejection",
+            "time": "0.455354",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "provider fallback durable snapshot and compensation",
+            "name": "restores 512 mixed rows after cancel rejection",
+            "time": "0.593375",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "provider fallback durable snapshot and compensation",
+            "name": "restores 8192 mixed rows after throw rejection",
+            "time": "11.374144",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "provider fallback durable snapshot and compensation",
+            "name": "restores 8192 mixed rows after false rejection",
+            "time": "11.29294",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "provider fallback durable snapshot and compensation",
+            "name": "restores 8192 mixed rows after baseline rejection",
+            "time": "11.353828",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "provider fallback durable snapshot and compensation",
+            "name": "restores 8192 mixed rows after partial rejection",
+            "time": "8.42721",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "provider fallback durable snapshot and compensation",
+            "name": "restores 8192 mixed rows after cancel rejection",
+            "time": "11.34789",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "provider fallback successful installation",
+            "name": "accepts a successful candidate over $size rows without an eager snapshot",
+            "time": "0.324459",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "provider fallback successful installation",
+            "name": "accepts a successful candidate over $size rows without an eager snapshot",
+            "time": "6.306592",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "provider fallback successful installation",
+            "name": "accepts a valid candidate row larger than eight MiB",
+            "time": "0.137699",
+            "status": "passed",
+            "failureMessage": null
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/provider-fallback-owner-controls.test.ts",
+        "pid": 93156,
+        "backend": "journal",
+        "sourceHash": "91297c448e4152d02af66598e4889622d91320d0440fb203ac52d8d7bdb1e75f",
+        "pass": 4,
+        "fail": 0,
+        "skip": 0,
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-journal-h-a/0338-provider-fallback-owner-controls.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-journal-h-a/0338-provider-fallback-owner-controls.test.ts.xml",
+        "cases": [
+          {
+            "classname": "fallback snapshot retaining controls",
+            "name": "detects all 512 retained rows copy=false",
+            "time": "0.581478",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "fallback snapshot retaining controls",
+            "name": "detects all 512 retained rows copy=true",
+            "time": "0.483557",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "fallback snapshot retaining controls",
+            "name": "detects all 8192 retained rows copy=false",
+            "time": "8.533666",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "fallback snapshot retaining controls",
+            "name": "detects all 8192 retained rows copy=true",
+            "time": "8.814367",
+            "status": "passed",
+            "failureMessage": null
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/provider-hardlimit-disk-invariants.test.ts",
+        "pid": 93514,
+        "backend": "journal",
+        "sourceHash": "f04f619a406bbac3f0c3a3380aef7e186fb202f63933d40d1fb2298ea6f38043",
+        "pass": 2,
+        "fail": 0,
+        "skip": 0,
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-journal-h-a/0340-provider-hardlimit-disk-invariants.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-journal-h-a/0340-provider-hardlimit-disk-invariants.test.ts.xml",
+        "cases": [
+          {
+            "classname": "provider disk callback invariants",
+            "name": "reports missing publication as failure and retains the original state",
+            "time": "0.525473",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "provider disk callback invariants",
+            "name": "reports duplicate publication as failure and retains the original state",
+            "time": "0.614833",
+            "status": "passed",
+            "failureMessage": null
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/provider-hardlimit-disk-owners.test.ts",
+        "pid": 93542,
+        "backend": "journal",
+        "sourceHash": "84280b2f045e4f6c87ea8d70c58f56e86d144ae626c6086c15fb4d15075b17c3",
+        "pass": 2,
+        "fail": 0,
+        "skip": 0,
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-journal-h-a/0341-provider-hardlimit-disk-owners.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-journal-h-a/0341-provider-hardlimit-disk-owners.test.ts.xml",
+        "cases": [
+          {
+            "classname": "actual provider disk transaction owners",
+            "name": "keeps paused 512-row installation within the original owner gate and compensates",
+            "time": "0.620511",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "actual provider disk transaction owners",
+            "name": "keeps paused 8192-row installation within the original owner gate and compensates",
+            "time": "10.084228",
+            "status": "passed",
+            "failureMessage": null
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/provider-hardlimit-disk-rollback.test.ts",
+        "pid": 93688,
+        "backend": "journal",
+        "sourceHash": "7febb231b36ee23c50b1735dd01b101ba95408e9d221042a7b02ef0da25fb789",
+        "pass": 10,
+        "fail": 0,
+        "skip": 0,
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-journal-h-a/0344-provider-hardlimit-disk-rollback.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-journal-h-a/0344-provider-hardlimit-disk-rollback.test.ts.xml",
+        "cases": [
+          {
+            "classname": "actual disk provider candidate compensation",
+            "name": "restores 512 rows after throw using the invoked disk runner",
+            "time": "0.888482",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "actual disk provider candidate compensation",
+            "name": "restores 512 rows after false using the invoked disk runner",
+            "time": "0.704702",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "actual disk provider candidate compensation",
+            "name": "restores 512 rows after baseline using the invoked disk runner",
+            "time": "0.847643",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "actual disk provider candidate compensation",
+            "name": "restores 512 rows after partial using the invoked disk runner",
+            "time": "0.488771",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "actual disk provider candidate compensation",
+            "name": "restores 512 rows after cancel using the invoked disk runner",
+            "time": "0.627544",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "actual disk provider candidate compensation",
+            "name": "restores 8192 rows after throw using the invoked disk runner",
+            "time": "13.520037",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "actual disk provider candidate compensation",
+            "name": "restores 8192 rows after false using the invoked disk runner",
+            "time": "13.444718",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "actual disk provider candidate compensation",
+            "name": "restores 8192 rows after baseline using the invoked disk runner",
+            "time": "13.576069",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "actual disk provider candidate compensation",
+            "name": "restores 8192 rows after partial using the invoked disk runner",
+            "time": "8.986543",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "actual disk provider candidate compensation",
+            "name": "restores 8192 rows after cancel using the invoked disk runner",
+            "time": "13.680144",
+            "status": "passed",
+            "failureMessage": null
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/fallback-values.journal.test.ts",
+        "pid": 94670,
+        "backend": "journal",
+        "sourceHash": "bd05f95216a1750d138b4a446196140a6efa938b0f18d22ca085378b23ff9cd5",
+        "pass": 13,
+        "fail": 0,
+        "skip": 0,
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-journal-h-a/0280-fallback-values.journal.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-journal-h-a/0280-fallback-values.journal.test.ts.xml",
+        "cases": [
+          {
+            "classname": "native persisted fallback value compensation",
+            "name": "restores 512 complete media/tool/provider rows after reject",
+            "time": "0.677649",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native persisted fallback value compensation",
+            "name": "restores 512 complete media/tool/provider rows after false",
+            "time": "0.581859",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native persisted fallback value compensation",
+            "name": "restores 512 complete media/tool/provider rows after cancel",
+            "time": "0.572043",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native persisted fallback value compensation",
+            "name": "restores 512 complete media/tool/provider rows after baseline",
+            "time": "0.600024",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native persisted fallback value compensation",
+            "name": "restores 512 complete media/tool/provider rows after duplicate",
+            "time": "0.622106",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native persisted fallback value compensation",
+            "name": "restores 512 complete media/tool/provider rows after missing",
+            "time": "0.384666",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native persisted fallback value compensation",
+            "name": "restores 8192 complete media/tool/provider rows after reject",
+            "time": "12.569353",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native persisted fallback value compensation",
+            "name": "restores 8192 complete media/tool/provider rows after false",
+            "time": "12.335206",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native persisted fallback value compensation",
+            "name": "restores 8192 complete media/tool/provider rows after cancel",
+            "time": "12.328561",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native persisted fallback value compensation",
+            "name": "restores 8192 complete media/tool/provider rows after baseline",
+            "time": "12.282836",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native persisted fallback value compensation",
+            "name": "restores 8192 complete media/tool/provider rows after duplicate",
+            "time": "12.403093",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native persisted fallback value compensation",
+            "name": "restores 8192 complete media/tool/provider rows after missing",
+            "time": "8.50223",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native persisted fallback value compensation",
+            "name": "persists a complete candidate larger than nine MiB without a row-size fallback",
+            "time": "0.085098",
+            "status": "passed",
+            "failureMessage": null
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/fallback-values-contracts.journal.test.ts",
+        "pid": 95710,
+        "backend": "journal",
+        "sourceHash": "859103de9b870f82913d559c913d325dba53e787413087e91efd8d97592430c7",
+        "pass": 4,
+        "fail": 0,
+        "skip": 0,
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-journal-h-a/0274-fallback-values-contracts.journal.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-journal-h-a/0274-fallback-values-contracts.journal.test.ts.xml",
+        "cases": [
+          {
+            "classname": "native fallback partial admission and queued chronology",
+            "name": "restores 512 complete rows after one admitted row fails, then retries",
+            "time": "0.53771",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native fallback partial admission and queued chronology",
+            "name": "preserves pending and queued chronology through cancellation over 512 rows",
+            "time": "0.660758",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native fallback partial admission and queued chronology",
+            "name": "restores 8192 complete rows after one admitted row fails, then retries",
+            "time": "8.65103",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native fallback partial admission and queued chronology",
+            "name": "preserves pending and queued chronology through cancellation over 8192 rows",
+            "time": "12.607723",
+            "status": "passed",
+            "failureMessage": null
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/fallback-values-live.journal.test.ts",
+        "pid": 95997,
+        "backend": "journal",
+        "sourceHash": "dae38da4c26f8d57ef813345168206f4f81976e84e35e8748f16a95c344fc800",
+        "pass": 8,
+        "fail": 0,
+        "skip": 0,
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-journal-h-a/0276-fallback-values-live.journal.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-journal-h-a/0276-fallback-values-live.journal.test.ts.xml",
+        "cases": [
+          {
+            "classname": "native fallback disk value ownership phases",
+            "name": "publishes complete candidate at 512, rollback=false",
+            "time": "0.443142",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native fallback disk value ownership phases",
+            "name": "publishes actual pending fallback at 512, rollback=false",
+            "time": "0.3139",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native fallback disk value ownership phases",
+            "name": "publishes complete candidate at 512, rollback=true",
+            "time": "0.407732",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native fallback disk value ownership phases",
+            "name": "publishes actual pending fallback at 512, rollback=true",
+            "time": "0.502374",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native fallback disk value ownership phases",
+            "name": "publishes complete candidate at 8192, rollback=false",
+            "time": "3.684701",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native fallback disk value ownership phases",
+            "name": "publishes actual pending fallback at 8192, rollback=false",
+            "time": "2.172372",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native fallback disk value ownership phases",
+            "name": "publishes complete candidate at 8192, rollback=true",
+            "time": "3.563746",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native fallback disk value ownership phases",
+            "name": "publishes actual pending fallback at 8192, rollback=true",
+            "time": "4.262881",
+            "status": "passed",
+            "failureMessage": null
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/fallback-values-media.journal.test.ts",
+        "pid": 96271,
+        "backend": "journal",
+        "sourceHash": "226098d6d8f6f88f770db79a607271a38a71fe85b633ddba9d8599ccb6fa712f",
+        "pass": 4,
+        "fail": 0,
+        "skip": 0,
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-journal-h-a/0277-fallback-values-media.journal.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-journal-h-a/0277-fallback-values-media.journal.test.ts.xml",
+        "cases": [
+          {
+            "classname": "native fallback retained media and owner controls",
+            "name": "keeps actual media through acknowledged rollback and releases it on retry over 512 rows",
+            "time": "0.324293",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native fallback retained media and owner controls",
+            "name": "rejects retained native reader values at the original bounds over 512 rows",
+            "time": "0.115655",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native fallback retained media and owner controls",
+            "name": "keeps actual media through acknowledged rollback and releases it on retry over 8192 rows",
+            "time": "3.081438",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native fallback retained media and owner controls",
+            "name": "rejects retained native reader values at the original bounds over 8192 rows",
+            "time": "1.000957",
+            "status": "passed",
+            "failureMessage": null
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/fallback-source-partial.journal.test.ts",
+        "pid": 96353,
+        "backend": "journal",
+        "sourceHash": "c533c983f16dc1461283fddd3e1022fc214338f69ed08014111d4abc359dbfba",
+        "pass": 2,
+        "fail": 0,
+        "skip": 0,
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-journal-h-a/0273-fallback-source-partial.journal.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-journal-h-a/0273-fallback-source-partial.journal.test.ts.xml",
+        "cases": [
+          {
+            "classname": "native source enforcement partial fallback admission",
+            "name": "restores 512 complete rows and baseline after partial admission with the post-truncation cause intact",
+            "time": "0.478975",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native source enforcement partial fallback admission",
+            "name": "restores 8192 complete rows and baseline after partial admission with the post-truncation cause intact",
+            "time": "8.661496",
+            "status": "passed",
+            "failureMessage": null
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/provider-hardlimit-disk-retry.test.ts",
+        "pid": 96467,
+        "backend": "journal",
+        "sourceHash": "8edabb875035fa7554f867523998e28b4904deb1f83a1c06f6b33af8acabef3e",
+        "pass": 2,
+        "fail": 0,
+        "skip": 0,
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-journal-h-a/0343-provider-hardlimit-disk-retry.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-journal-h-a/0343-provider-hardlimit-disk-retry.test.ts.xml",
+        "cases": [
+          {
+            "classname": "provider hard-limit disk retry ordering",
+            "name": "restores accounting after installed rejection before the next 512-row request retries the primary ladder",
+            "time": "1.262108",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "provider hard-limit disk retry ordering",
+            "name": "restores accounting after installed rejection before the next 8192-row request retries the primary ladder",
+            "time": "18.921737",
+            "status": "passed",
+            "failureMessage": null
+          }
+        ]
+      }
+    ],
+    "outerOld": [
+      {
+        "path": "packages/agents/src/compression/__tests__/provider-fallback-diagnostics.test.ts",
+        "pid": 96754,
+        "backend": "old",
+        "sourceHash": "9533475ccf00aa61d4da307a4d60316bcb55d8dce7bda67aa3c9a90052de93e6",
+        "pass": 1,
+        "fail": 0,
+        "skip": 0,
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-old-h-a/0335-provider-fallback-diagnostics.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-old-h-a/0335-provider-fallback-diagnostics.test.ts.xml",
+        "cases": [
+          {
+            "classname": "provider fallback rejection diagnostics",
+            "name": "reports both provider rejection and failed compensation without resetting the baseline",
+            "time": "0.223135",
+            "status": "passed",
+            "failureMessage": null
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/provider-fallback-disk.test.ts",
+        "pid": 96769,
+        "backend": "old",
+        "sourceHash": "57ad998bf239f740d847ee801b831acdad48d665da04ddece7e0e681d75229a0",
+        "pass": 13,
+        "fail": 0,
+        "skip": 0,
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-old-h-a/0336-provider-fallback-disk.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-old-h-a/0336-provider-fallback-disk.test.ts.xml",
+        "cases": [
+          {
+            "classname": "provider fallback durable snapshot and compensation",
+            "name": "restores 512 mixed rows after throw rejection",
+            "time": "0.368562",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "provider fallback durable snapshot and compensation",
+            "name": "restores 512 mixed rows after false rejection",
+            "time": "0.281934",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "provider fallback durable snapshot and compensation",
+            "name": "restores 512 mixed rows after baseline rejection",
+            "time": "0.274491",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "provider fallback durable snapshot and compensation",
+            "name": "restores 512 mixed rows after partial rejection",
+            "time": "0.274543",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "provider fallback durable snapshot and compensation",
+            "name": "restores 512 mixed rows after cancel rejection",
+            "time": "0.275283",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "provider fallback durable snapshot and compensation",
+            "name": "restores 8192 mixed rows after throw rejection",
+            "time": "4.184505",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "provider fallback durable snapshot and compensation",
+            "name": "restores 8192 mixed rows after false rejection",
+            "time": "4.158604",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "provider fallback durable snapshot and compensation",
+            "name": "restores 8192 mixed rows after baseline rejection",
+            "time": "4.110707",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "provider fallback durable snapshot and compensation",
+            "name": "restores 8192 mixed rows after partial rejection",
+            "time": "4.00883",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "provider fallback durable snapshot and compensation",
+            "name": "restores 8192 mixed rows after cancel rejection",
+            "time": "4.179101",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "provider fallback successful installation",
+            "name": "accepts a successful candidate over $size rows without an eager snapshot",
+            "time": "0.173558",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "provider fallback successful installation",
+            "name": "accepts a successful candidate over $size rows without an eager snapshot",
+            "time": "2.42186",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "provider fallback successful installation",
+            "name": "accepts a valid candidate row larger than eight MiB",
+            "time": "0.205723",
+            "status": "passed",
+            "failureMessage": null
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/provider-fallback-owner-controls.test.ts",
+        "pid": 97106,
+        "backend": "old",
+        "sourceHash": "91297c448e4152d02af66598e4889622d91320d0440fb203ac52d8d7bdb1e75f",
+        "pass": 4,
+        "fail": 0,
+        "skip": 0,
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-old-h-a/0338-provider-fallback-owner-controls.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-old-h-a/0338-provider-fallback-owner-controls.test.ts.xml",
+        "cases": [
+          {
+            "classname": "fallback snapshot retaining controls",
+            "name": "detects all 512 retained rows copy=false",
+            "time": "0.213174",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "fallback snapshot retaining controls",
+            "name": "detects all 512 retained rows copy=true",
+            "time": "0.180993",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "fallback snapshot retaining controls",
+            "name": "detects all 8192 retained rows copy=false",
+            "time": "2.874605",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "fallback snapshot retaining controls",
+            "name": "detects all 8192 retained rows copy=true",
+            "time": "2.584058",
+            "status": "passed",
+            "failureMessage": null
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/provider-hardlimit-disk-invariants.test.ts",
+        "pid": 97182,
+        "backend": "old",
+        "sourceHash": "f04f619a406bbac3f0c3a3380aef7e186fb202f63933d40d1fb2298ea6f38043",
+        "pass": 2,
+        "fail": 0,
+        "skip": 0,
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-old-h-a/0340-provider-hardlimit-disk-invariants.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-old-h-a/0340-provider-hardlimit-disk-invariants.test.ts.xml",
+        "cases": [
+          {
+            "classname": "provider disk callback invariants",
+            "name": "reports missing publication as failure and retains the original state",
+            "time": "0.206694",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "provider disk callback invariants",
+            "name": "reports duplicate publication as failure and retains the original state",
+            "time": "0.293436",
+            "status": "passed",
+            "failureMessage": null
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/provider-hardlimit-disk-owners.test.ts",
+        "pid": 97200,
+        "backend": "old",
+        "sourceHash": "84280b2f045e4f6c87ea8d70c58f56e86d144ae626c6086c15fb4d15075b17c3",
+        "pass": 2,
+        "fail": 0,
+        "skip": 0,
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-old-h-a/0341-provider-hardlimit-disk-owners.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-old-h-a/0341-provider-hardlimit-disk-owners.test.ts.xml",
+        "cases": [
+          {
+            "classname": "actual provider disk transaction owners",
+            "name": "keeps paused 512-row installation within the original owner gate and compensates",
+            "time": "0.266498",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "actual provider disk transaction owners",
+            "name": "keeps paused 8192-row installation within the original owner gate and compensates",
+            "time": "3.277958",
+            "status": "passed",
+            "failureMessage": null
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/provider-hardlimit-disk-rollback.test.ts",
+        "pid": 97279,
+        "backend": "old",
+        "sourceHash": "7febb231b36ee23c50b1735dd01b101ba95408e9d221042a7b02ef0da25fb789",
+        "pass": 10,
+        "fail": 0,
+        "skip": 0,
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-old-h-a/0344-provider-hardlimit-disk-rollback.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-old-h-a/0344-provider-hardlimit-disk-rollback.test.ts.xml",
+        "cases": [
+          {
+            "classname": "actual disk provider candidate compensation",
+            "name": "restores 512 rows after throw using the invoked disk runner",
+            "time": "0.352837",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "actual disk provider candidate compensation",
+            "name": "restores 512 rows after false using the invoked disk runner",
+            "time": "0.293581",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "actual disk provider candidate compensation",
+            "name": "restores 512 rows after baseline using the invoked disk runner",
+            "time": "0.292707",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "actual disk provider candidate compensation",
+            "name": "restores 512 rows after partial using the invoked disk runner",
+            "time": "0.198846",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "actual disk provider candidate compensation",
+            "name": "restores 512 rows after cancel using the invoked disk runner",
+            "time": "0.301992",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "actual disk provider candidate compensation",
+            "name": "restores 8192 rows after throw using the invoked disk runner",
+            "time": "4.917753",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "actual disk provider candidate compensation",
+            "name": "restores 8192 rows after false using the invoked disk runner",
+            "time": "4.896501",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "actual disk provider candidate compensation",
+            "name": "restores 8192 rows after baseline using the invoked disk runner",
+            "time": "4.783142",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "actual disk provider candidate compensation",
+            "name": "restores 8192 rows after partial using the invoked disk runner",
+            "time": "2.832673",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "actual disk provider candidate compensation",
+            "name": "restores 8192 rows after cancel using the invoked disk runner",
+            "time": "4.941556",
+            "status": "passed",
+            "failureMessage": null
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/fallback-values.journal.test.ts",
+        "pid": 97617,
+        "backend": "old",
+        "sourceHash": "bd05f95216a1750d138b4a446196140a6efa938b0f18d22ca085378b23ff9cd5",
+        "pass": 13,
+        "fail": 0,
+        "skip": 0,
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-old-h-a/0280-fallback-values.journal.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-old-h-a/0280-fallback-values.journal.test.ts.xml",
+        "cases": [
+          {
+            "classname": "native persisted fallback value compensation",
+            "name": "restores 512 complete media/tool/provider rows after reject",
+            "time": "0.662848",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native persisted fallback value compensation",
+            "name": "restores 512 complete media/tool/provider rows after false",
+            "time": "0.607154",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native persisted fallback value compensation",
+            "name": "restores 512 complete media/tool/provider rows after cancel",
+            "time": "0.618243",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native persisted fallback value compensation",
+            "name": "restores 512 complete media/tool/provider rows after baseline",
+            "time": "0.575341",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native persisted fallback value compensation",
+            "name": "restores 512 complete media/tool/provider rows after duplicate",
+            "time": "0.585115",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native persisted fallback value compensation",
+            "name": "restores 512 complete media/tool/provider rows after missing",
+            "time": "0.374786",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native persisted fallback value compensation",
+            "name": "restores 8192 complete media/tool/provider rows after reject",
+            "time": "12.399378",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native persisted fallback value compensation",
+            "name": "restores 8192 complete media/tool/provider rows after false",
+            "time": "12.327175",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native persisted fallback value compensation",
+            "name": "restores 8192 complete media/tool/provider rows after cancel",
+            "time": "12.31788",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native persisted fallback value compensation",
+            "name": "restores 8192 complete media/tool/provider rows after baseline",
+            "time": "12.375522",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native persisted fallback value compensation",
+            "name": "restores 8192 complete media/tool/provider rows after duplicate",
+            "time": "12.386215",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native persisted fallback value compensation",
+            "name": "restores 8192 complete media/tool/provider rows after missing",
+            "time": "8.360261",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native persisted fallback value compensation",
+            "name": "persists a complete candidate larger than nine MiB without a row-size fallback",
+            "time": "0.080564",
+            "status": "passed",
+            "failureMessage": null
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/fallback-values-contracts.journal.test.ts",
+        "pid": 98741,
+        "backend": "old",
+        "sourceHash": "859103de9b870f82913d559c913d325dba53e787413087e91efd8d97592430c7",
+        "pass": 4,
+        "fail": 0,
+        "skip": 0,
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-old-h-a/0274-fallback-values-contracts.journal.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-old-h-a/0274-fallback-values-contracts.journal.test.ts.xml",
+        "cases": [
+          {
+            "classname": "native fallback partial admission and queued chronology",
+            "name": "restores 512 complete rows after one admitted row fails, then retries",
+            "time": "0.482717",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native fallback partial admission and queued chronology",
+            "name": "preserves pending and queued chronology through cancellation over 512 rows",
+            "time": "0.650863",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native fallback partial admission and queued chronology",
+            "name": "restores 8192 complete rows after one admitted row fails, then retries",
+            "time": "8.750783",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native fallback partial admission and queued chronology",
+            "name": "preserves pending and queued chronology through cancellation over 8192 rows",
+            "time": "12.74834",
+            "status": "passed",
+            "failureMessage": null
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/fallback-values-live.journal.test.ts",
+        "pid": 99071,
+        "backend": "old",
+        "sourceHash": "dae38da4c26f8d57ef813345168206f4f81976e84e35e8748f16a95c344fc800",
+        "pass": 8,
+        "fail": 0,
+        "skip": 0,
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-old-h-a/0276-fallback-values-live.journal.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-old-h-a/0276-fallback-values-live.journal.test.ts.xml",
+        "cases": [
+          {
+            "classname": "native fallback disk value ownership phases",
+            "name": "publishes complete candidate at 512, rollback=false",
+            "time": "0.470454",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native fallback disk value ownership phases",
+            "name": "publishes actual pending fallback at 512, rollback=false",
+            "time": "0.326589",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native fallback disk value ownership phases",
+            "name": "publishes complete candidate at 512, rollback=true",
+            "time": "0.386471",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native fallback disk value ownership phases",
+            "name": "publishes actual pending fallback at 512, rollback=true",
+            "time": "0.464213",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native fallback disk value ownership phases",
+            "name": "publishes complete candidate at 8192, rollback=false",
+            "time": "3.626239",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native fallback disk value ownership phases",
+            "name": "publishes actual pending fallback at 8192, rollback=false",
+            "time": "2.196976",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native fallback disk value ownership phases",
+            "name": "publishes complete candidate at 8192, rollback=true",
+            "time": "3.533058",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native fallback disk value ownership phases",
+            "name": "publishes actual pending fallback at 8192, rollback=true",
+            "time": "4.327958",
+            "status": "passed",
+            "failureMessage": null
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/fallback-values-media.journal.test.ts",
+        "pid": 99307,
+        "backend": "old",
+        "sourceHash": "226098d6d8f6f88f770db79a607271a38a71fe85b633ddba9d8599ccb6fa712f",
+        "pass": 4,
+        "fail": 0,
+        "skip": 0,
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-old-h-a/0277-fallback-values-media.journal.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-old-h-a/0277-fallback-values-media.journal.test.ts.xml",
+        "cases": [
+          {
+            "classname": "native fallback retained media and owner controls",
+            "name": "keeps actual media through acknowledged rollback and releases it on retry over 512 rows",
+            "time": "0.305096",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native fallback retained media and owner controls",
+            "name": "rejects retained native reader values at the original bounds over 512 rows",
+            "time": "0.09293",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native fallback retained media and owner controls",
+            "name": "keeps actual media through acknowledged rollback and releases it on retry over 8192 rows",
+            "time": "3.134238",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native fallback retained media and owner controls",
+            "name": "rejects retained native reader values at the original bounds over 8192 rows",
+            "time": "0.966386",
+            "status": "passed",
+            "failureMessage": null
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/fallback-source-partial.journal.test.ts",
+        "pid": 99357,
+        "backend": "old",
+        "sourceHash": "c533c983f16dc1461283fddd3e1022fc214338f69ed08014111d4abc359dbfba",
+        "pass": 2,
+        "fail": 0,
+        "skip": 0,
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-old-h-a/0273-fallback-source-partial.journal.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-old-h-a/0273-fallback-source-partial.journal.test.ts.xml",
+        "cases": [
+          {
+            "classname": "native source enforcement partial fallback admission",
+            "name": "restores 512 complete rows and baseline after partial admission with the post-truncation cause intact",
+            "time": "0.501196",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "native source enforcement partial fallback admission",
+            "name": "restores 8192 complete rows and baseline after partial admission with the post-truncation cause intact",
+            "time": "8.734129",
+            "status": "passed",
+            "failureMessage": null
+          }
+        ]
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/provider-hardlimit-disk-retry.test.ts",
+        "pid": 99501,
+        "backend": "old",
+        "sourceHash": "8edabb875035fa7554f867523998e28b4904deb1f83a1c06f6b33af8acabef3e",
+        "pass": 2,
+        "fail": 0,
+        "skip": 0,
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-old-h-a/0343-provider-hardlimit-disk-retry.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-final-old-h-a/0343-provider-hardlimit-disk-retry.test.ts.xml",
+        "cases": [
+          {
+            "classname": "provider hard-limit disk retry ordering",
+            "name": "restores accounting after installed rejection before the next 512-row request retries the primary ladder",
+            "time": "0.662691",
+            "status": "passed",
+            "failureMessage": null
+          },
+          {
+            "classname": "provider hard-limit disk retry ordering",
+            "name": "restores accounting after installed rejection before the next 8192-row request retries the primary ladder",
+            "time": "8.927097",
+            "status": "passed",
+            "failureMessage": null
+          }
+        ]
+      }
+    ],
+    "passes": 130,
+    "failures": 0,
+    "skips": 0,
+    "outerOldClassification": {
+      "selectedOld": 34,
+      "explicitNative": 31
+    }
+  },
+  "trap": [
+    {
+      "path": "packages/agents/src/compression/__tests__/provider-fallback-owner-controls.test.ts",
+      "pid": 99689,
+      "backend": "journal",
+      "sourceHash": "91297c448e4152d02af66598e4889622d91320d0440fb203ac52d8d7bdb1e75f",
+      "pass": 0,
+      "fail": 4,
+      "skip": 0,
+      "code": 1,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-retaining-control-h-a/0338-provider-fallback-owner-controls.test.ts.log",
+      "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/provider-retaining-control-h-a/0338-provider-fallback-owner-controls.test.ts.xml",
+      "cases": [
+        {
+          "classname": "fallback snapshot retaining controls",
+          "name": "detects all 512 retained rows copy=false",
+          "time": "0.438009",
+          "status": "failed",
+          "failureMessage": null
+        },
+        {
+          "classname": "fallback snapshot retaining controls",
+          "name": "detects all 512 retained rows copy=true",
+          "time": "0.385173",
+          "status": "failed",
+          "failureMessage": null
+        },
+        {
+          "classname": "fallback snapshot retaining controls",
+          "name": "detects all 8192 retained rows copy=false",
+          "time": "6.871876",
+          "status": "failed",
+          "failureMessage": null
+        },
+        {
+          "classname": "fallback snapshot retaining controls",
+          "name": "detects all 8192 retained rows copy=true",
+          "time": "6.698083",
+          "status": "failed",
+          "failureMessage": null
+        }
+      ]
+    }
+  ],
+  "gates": [
+    {
+      "name": "api-surface",
+      "command": ["bun", "scripts/check-agents-api-surface.ts"],
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/provider-fallback-run-h/api-surface.log",
+      "pid": 99872,
+      "driverPid": 92247,
+      "started": "2026-10-20T00:09:31.784Z",
+      "code": 0,
+      "ended": "2026-10-20T00:09:41.481Z"
+    },
+    {
+      "name": "build-types",
+      "command": ["bun", "run", "build:types"],
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/provider-fallback-run-h/build-types.log",
+      "pid": 99983,
+      "driverPid": 92247,
+      "started": "2026-10-20T00:09:41.482Z",
+      "code": 0,
+      "ended": "2026-10-20T00:10:07.801Z"
+    },
+    {
+      "name": "core-tsc",
+      "command": [
+        "bunx",
+        "tsc",
+        "--noEmit",
+        "-p",
+        "packages/core/tsconfig.noemit.json"
+      ],
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/provider-fallback-run-h/core-tsc.log",
+      "pid": 1262,
+      "driverPid": 92247,
+      "started": "2026-10-20T00:10:07.802Z",
+      "code": 0,
+      "ended": "2026-10-20T00:10:14.331Z"
+    },
+    {
+      "name": "agents-tsc",
+      "command": [
+        "bunx",
+        "tsc",
+        "--noEmit",
+        "-p",
+        "packages/agents/tsconfig.noemit.json"
+      ],
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/provider-fallback-run-h/agents-tsc.log",
+      "pid": 1332,
+      "driverPid": 92247,
+      "started": "2026-10-20T00:10:14.332Z",
+      "code": 0,
+      "ended": "2026-10-20T00:10:23.693Z"
+    },
+    {
+      "name": "agents-bun-tsc",
+      "command": [
+        "bunx",
+        "tsc",
+        "--noEmit",
+        "-p",
+        "packages/agents/tsconfig.test-bun.json",
+        "--types",
+        "node,bun-types/test,bun-types/test-globals,bun-types"
+      ],
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/provider-fallback-run-h/agents-bun-tsc.log",
+      "pid": 1469,
+      "driverPid": 92247,
+      "started": "2026-10-20T00:10:23.694Z",
+      "code": 0,
+      "ended": "2026-10-20T00:10:28.953Z"
+    },
+    {
+      "name": "touched-tsc",
+      "command": [
+        "bunx",
+        "tsc",
+        "--noEmit",
+        "-p",
+        "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/provider-fallback-run-h/tsconfig.touched.json"
+      ],
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/provider-fallback-run-h/touched-tsc.log",
+      "pid": 1568,
+      "driverPid": 92247,
+      "started": "2026-10-20T00:10:28.953Z",
+      "code": 0,
+      "ended": "2026-10-20T00:10:33.469Z"
+    },
+    {
+      "name": "eslint",
+      "command": [
+        "bunx",
+        "eslint",
+        "--max-warnings",
+        "0",
+        "packages/agents/src/compression/__tests__/provider-fallback-diagnostics.test.ts",
+        "packages/agents/src/compression/__tests__/provider-fallback-disk.test.ts",
+        "packages/agents/src/compression/__tests__/provider-fallback-owner-controls.test.ts",
+        "packages/agents/src/compression/__tests__/provider-hardlimit-disk-invariants.test.ts",
+        "packages/agents/src/compression/__tests__/provider-hardlimit-disk-owners.test.ts",
+        "packages/agents/src/compression/__tests__/provider-hardlimit-disk-rollback.test.ts",
+        "packages/agents/src/compression/__tests__/fallback-values.journal.test.ts",
+        "packages/agents/src/compression/__tests__/fallback-values-contracts.journal.test.ts",
+        "packages/agents/src/compression/__tests__/fallback-values-live.journal.test.ts",
+        "packages/agents/src/compression/__tests__/fallback-values-media.journal.test.ts",
+        "packages/agents/src/compression/__tests__/fallback-source-partial.journal.test.ts",
+        "packages/agents/src/compression/__tests__/provider-hardlimit-disk-retry.test.ts",
+        "packages/agents/src/compression/__tests__/provider-fallback-disk-helpers.ts",
+        "packages/agents/src/compression/__tests__/support/fallback-recording-fault.ts",
+        "packages/agents/src/compression/__tests__/support/fallback-publication-owner.ts",
+        "packages/agents/src/compression/__tests__/support/native-fallback-fixture.ts",
+        "packages/agents/src/compression/__tests__/support/selected-fallback-fixture.ts"
+      ],
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/provider-fallback-run-h/eslint.log",
+      "pid": 1639,
+      "driverPid": 92247,
+      "started": "2026-10-20T00:10:33.470Z",
+      "code": 0,
+      "ended": "2026-10-20T00:10:38.448Z"
+    },
+    {
+      "name": "prettier",
+      "command": [
+        "bunx",
+        "prettier",
+        "--check",
+        "packages/agents/src/compression/__tests__/provider-fallback-diagnostics.test.ts",
+        "packages/agents/src/compression/__tests__/provider-fallback-disk.test.ts",
+        "packages/agents/src/compression/__tests__/provider-fallback-owner-controls.test.ts",
+        "packages/agents/src/compression/__tests__/provider-hardlimit-disk-invariants.test.ts",
+        "packages/agents/src/compression/__tests__/provider-hardlimit-disk-owners.test.ts",
+        "packages/agents/src/compression/__tests__/provider-hardlimit-disk-rollback.test.ts",
+        "packages/agents/src/compression/__tests__/fallback-values.journal.test.ts",
+        "packages/agents/src/compression/__tests__/fallback-values-contracts.journal.test.ts",
+        "packages/agents/src/compression/__tests__/fallback-values-live.journal.test.ts",
+        "packages/agents/src/compression/__tests__/fallback-values-media.journal.test.ts",
+        "packages/agents/src/compression/__tests__/fallback-source-partial.journal.test.ts",
+        "packages/agents/src/compression/__tests__/provider-hardlimit-disk-retry.test.ts",
+        "packages/agents/src/compression/__tests__/provider-fallback-disk-helpers.ts",
+        "packages/agents/src/compression/__tests__/support/fallback-recording-fault.ts",
+        "packages/agents/src/compression/__tests__/support/fallback-publication-owner.ts",
+        "packages/agents/src/compression/__tests__/support/native-fallback-fixture.ts",
+        "packages/agents/src/compression/__tests__/support/selected-fallback-fixture.ts"
+      ],
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/provider-fallback-run-h/prettier.log",
+      "pid": 1713,
+      "driverPid": 92247,
+      "started": "2026-10-20T00:10:38.449Z",
+      "code": 0,
+      "ended": "2026-10-20T00:10:38.666Z"
+    },
+    {
+      "name": "affected-graph",
+      "command": ["bun", "scripts/check-affected-test-shards.ts"],
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/provider-fallback-run-h/affected-graph.log",
+      "pid": 1714,
+      "driverPid": 92247,
+      "started": "2026-10-20T00:10:38.666Z",
+      "code": 0,
+      "ended": "2026-10-20T00:10:41.547Z"
+    },
+    {
+      "name": "audit",
+      "command": [
+        "bun",
+        "scripts/test-audit/scan.ts",
+        "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/provider-fallback-run-h/audit"
+      ],
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/provider-fallback-run-h/audit.log",
+      "pid": 1746,
+      "driverPid": 92247,
+      "started": "2026-10-20T00:10:41.548Z",
+      "code": 0,
+      "ended": "2026-10-20T00:10:44.501Z"
+    }
+  ],
+  "audit": {
+    "before": [],
+    "after": []
+  },
+  "preservation": {
+    "sourceParent": "613b3ae746e9c40e5f5301dc6694de409d99fc92",
+    "rows": [
+      {
+        "path": "packages/agents/src/compression/__tests__/provider-fallback-diagnostics.test.ts",
+        "originalAssertions": 5,
+        "finalAssertions": 8,
+        "allOriginalAssertionsPreserved": true,
+        "domainsAndTimeoutsIdentical": true,
+        "originalDomains": [],
+        "normalization": "AggregateError type assertion replaced by checked narrowing"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/provider-fallback-disk.test.ts",
+        "originalAssertions": 15,
+        "finalAssertions": 15,
+        "allOriginalAssertionsPreserved": true,
+        "domainsAndTimeoutsIdentical": true,
+        "originalDomains": [
+          "[512,8192].flatMap((size)=>['throw','false','baseline','partial','cancel'].map((failure)=>({size,failure})))",
+          "cases",
+          "[512,8192]"
+        ],
+        "normalization": null
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/provider-fallback-owner-controls.test.ts",
+        "originalAssertions": 4,
+        "finalAssertions": 4,
+        "allOriginalAssertionsPreserved": true,
+        "domainsAndTimeoutsIdentical": true,
+        "originalDomains": [
+          "[512,8192].flatMap((size)=>[false,true].map((copy)=>({size,copy})))",
+          "180000",
+          "cases"
+        ],
+        "normalization": null
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/provider-hardlimit-disk-invariants.test.ts",
+        "originalAssertions": 5,
+        "finalAssertions": 5,
+        "allOriginalAssertionsPreserved": true,
+        "domainsAndTimeoutsIdentical": true,
+        "originalDomains": ["['missing','duplicate']"],
+        "normalization": null
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/provider-hardlimit-disk-owners.test.ts",
+        "originalAssertions": 9,
+        "finalAssertions": 9,
+        "allOriginalAssertionsPreserved": true,
+        "domainsAndTimeoutsIdentical": true,
+        "originalDomains": ["180000", "[512,8192]"],
+        "normalization": null
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/provider-hardlimit-disk-rollback.test.ts",
+        "originalAssertions": 10,
+        "finalAssertions": 10,
+        "allOriginalAssertionsPreserved": true,
+        "domainsAndTimeoutsIdentical": true,
+        "originalDomains": [
+          "[512,8192].flatMap((size)=>['throw','false','baseline','partial','cancel'].map((failure)=>({size,failure})))",
+          "180000",
+          "cases"
+        ],
+        "normalization": null
+      }
+    ]
+  },
+  "rootCause": "JSONL-only AdmissionFailureRecorder was paired with journal history. Factory-selected recorder, async commit boundaries and real positional-write admission now match the selected backend. Compensation diagnostics use the original old enqueue fault and native real media replacement rejection; native restore failure is observed without poisoning its reader. The media owner is registered before checkpoint capture. Paused publication uses a real owner supporting both replacement protocols and closes the held snapshot on release/rejection.",
+  "nativeProof": "All 32 selected journal target cases independently compare complete public rows with reopened primary and mirror row trees. Existing 31 W11 native cases and two selected retry cases actually ran under both outer settings. Serialized digest bytes measure JSON row values, not physical native file size. Original 512/8192 scales, 440-row/8MiB limits and oversized-row case are unchanged.",
+  "intermediate": {
+    "firstSelected": "provider-initial-journal-h-a: 29 pass/one diagnostics failure; injected writer failure prevented later normal reads",
+    "publication": "provider-target-journal-h-b: two owner passes/one diagnostics failure; registering the owner after checkpoint capture did not put it into the captured transaction host",
+    "finalTarget": "provider-target-journal-h-c: three passes after registering before checkpoint capture",
+    "lint": "Initial max-lines-per-function failure fixed by extracting committed observation; no enforcement changes"
+  },
+  "census": {
+    "generation": "d82e0cba-473d-4643-9ec2-b191aa05245c",
+    "timestamp": "2026-10-20T00:12:22.513Z",
+    "inventory": 806,
+    "partition": {
+      "green": 762,
+      "red": 39,
+      "unverified": 5,
+      "unrun": 0
+    },
+    "verifiedPasses": 6460,
+    "recordedPasses": 6467,
+    "unverifiedRunnerXmlPasses": 7,
+    "fail": 94,
+    "skip": 0,
+    "classifications": {
+      "native-history": 179,
+      "journal-selected-shared-public": 260,
+      "explicit-old": 27,
+      "classification-pending": 5994,
+      "unclassified": 0
+    },
+    "attempts": 1052,
+    "historicalMissingAttempts": 22,
+    "latestMissingFiles": 4,
+    "frozenRoot": "tmp/854-notes/p4/w22/provider-fallback-run-h/frozen-final",
+    "acceptance": "Only provider-final-journal-h-a is accepted after pending-final-journal-g-a; diagnostics, trap and outer-old are retained but unaccepted",
+    "remaining": [
+      {
+        "path": "packages/agents/src/compression/__tests__/compression-attempt-estimation.test.ts",
+        "state": "red",
+        "pid": 71899,
+        "sourceHash": "113518dca442e44f4e3f9ea59fd024fa253177a78c4ed0b91df251433c6428a5",
+        "batch": "package-resume-f-0050",
+        "counts": {
+          "pass": 1,
+          "fail": 1,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "compression hook token estimation",
+            "name": "estimates the borrowed 8192-row cursor without requiring array collection",
+            "time": "34.820609",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-f-0050/0240-compression-attempt-estimation.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-f-0050/0240-compression-attempt-estimation.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/compression-attempt-lifecycle.test.ts",
+        "state": "red",
+        "pid": 72984,
+        "sourceHash": "04da2fb80b979f077a6bbd9f6d847092adbcfb33803bb2baec6492cfe6e46fcf",
+        "batch": "package-resume-f-0050",
+        "counts": {
+          "pass": 3,
+          "fail": 2,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "compression attempt row-size and retaining controls",
+            "name": "accepts a valid single hook row larger than 8 MiB",
+            "time": "0.120406",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "compression attempt row-size and retaining controls",
+            "name": "fails both fixture bounds when an external hook deliberately retains every row",
+            "time": "35.706481",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-f-0050/0241-compression-attempt-lifecycle.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-f-0050/0241-compression-attempt-lifecycle.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/compression-attempt-stream.test.ts",
+        "state": "red",
+        "pid": 74633,
+        "sourceHash": "5ec2b40c53540dfe7e9a699fdff094196f99a57841419cf2b8ffc8847b007a7e",
+        "batch": "package-resume-f-0050",
+        "counts": {
+          "pass": 4,
+          "fail": 4,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "pinned mixed fixtures &gt; compression attempt curated cursors",
+            "name": "closes an abandoned 512-row hook cursor on success",
+            "time": "2.111134",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "pinned mixed fixtures &gt; compression attempt curated cursors",
+            "name": "closes an abandoned 512-row hook cursor on failure",
+            "time": "2.104607",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "pinned mixed fixtures &gt; compression attempt curated cursors",
+            "name": "closes an abandoned 8192-row hook cursor on success",
+            "time": "33.812443",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "pinned mixed fixtures &gt; compression attempt curated cursors",
+            "name": "closes an abandoned 8192-row hook cursor on failure",
+            "time": "33.125521",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-f-0050/0243-compression-attempt-stream.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-f-0050/0243-compression-attempt-stream.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/compression-value-lifetime.test.ts",
+        "state": "red",
+        "pid": 94666,
+        "sourceHash": "d67f4a79db38b6e289146303f1c103fd712828dac57a116de054bef18db841c8",
+        "batch": "package-resume-g-0000",
+        "counts": {
+          "pass": 0,
+          "fail": 3,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "production compression value source and publication lifetime",
+            "name": "releases 512-row upstream source frames and submission shells during real acknowledged publication failure and retries under the real lock",
+            "time": "1.903473",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "production compression value source and publication lifetime",
+            "name": "releases 8192-row upstream source frames and submission shells during real acknowledged publication failure and retries under the real lock",
+            "time": "29.102144",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "production compression value source and publication lifetime",
+            "name": "keeps a valid complete nine-MiB row through acknowledged failure, rollback and real caller retry",
+            "time": "0.160491",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0000/0256-compression-value-lifetime.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0000/0256-compression-value-lifetime.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/compression-value-recorder.test.ts",
+        "state": "red",
+        "pid": 95480,
+        "sourceHash": "e7c0a6ba51bad95771449fc3b0267da96dbcde0f58a656ec234e6b51bc954fad",
+        "batch": "package-resume-g-0000",
+        "counts": {
+          "pass": 0,
+          "fail": 4,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "production compression value recorder admissions",
+            "name": "charges complete rows before actual 512-row publication acknowledgment and releases them only when its blocked writer commits",
+            "time": "0.002017",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "production compression value recorder admissions",
+            "name": "charges complete rows before actual 8192-row publication acknowledgment and releases them only when its blocked writer commits",
+            "time": "0.000477",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "production compression value recorder compensation",
+            "name": "restores durable 512-row values after partial admission failure and retries without old publication",
+            "time": "0.005256",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "production compression value recorder compensation",
+            "name": "restores durable 8192-row values after partial admission failure and retries without old publication",
+            "time": "0.000314",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0000/0257-compression-value-recorder.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0000/0257-compression-value-recorder.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/density-disk-capture-owners.test.ts",
+        "state": "red",
+        "pid": 95950,
+        "sourceHash": "a8f9961911a87d9c79690374a14e06641f97768ad000f4ee9e54074763806eb5",
+        "batch": "package-resume-g-0000",
+        "counts": {
+          "pass": 0,
+          "fail": 1,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "density candidate source ownership",
+            "name": "charges the actual decoded original throughout each addressed decision",
+            "time": "0.572532",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0000/0264-density-disk-capture-owners.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0000/0264-density-disk-capture-owners.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/density-disk-lifecycle.test.ts",
+        "state": "red",
+        "pid": 96014,
+        "sourceHash": "1cbf3108e563ed279eca30f8b1bab7a8494227830a2208327a1895868d9a61b2",
+        "batch": "package-resume-g-0000",
+        "counts": {
+          "pass": 4,
+          "fail": 1,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "disk density publication and lifetime",
+            "name": "retries a transient candidate token estimate over the same pinned disk rows",
+            "time": "0.330668",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0000/0267-density-disk-lifecycle.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0000/0267-density-disk-lifecycle.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/density-disk-span-order.test.ts",
+        "state": "red",
+        "pid": 97194,
+        "sourceHash": "869338ce01babcd784c1f97c76444f784c4fd71386debc698534567daf0019f4",
+        "batch": "package-resume-g-0000",
+        "counts": {
+          "pass": 0,
+          "fail": 1,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "density span equal-position precedence",
+            "name": "keeps removals before replacements when chronology positions overlap",
+            "time": "0.08301",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0000/0270-density-disk-span-order.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0000/0270-density-disk-span-order.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/effective-token-count-stream.test.ts",
+        "state": "red",
+        "pid": 98322,
+        "sourceHash": "62098ab83e19da41e4f8e4a8fb8a4d73b61899b3f27d8b7dfce8d2084d8cb46a",
+        "batch": "package-resume-g-0000",
+        "counts": {
+          "pass": 1,
+          "fail": 8,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "reasoning token accounting over the real curated journal",
+            "name": "discounts all thinking at 512 rows without eager history",
+            "time": "0.270214",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "reasoning token accounting over the real curated journal",
+            "name": "discounts allButLast thinking at 512 rows without eager history",
+            "time": "0.204257",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "reasoning token accounting over the real curated journal",
+            "name": "discounts none thinking at 512 rows without eager history",
+            "time": "0.22065",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "reasoning token accounting over the real curated journal",
+            "name": "discounts all thinking at 8192 rows without eager history",
+            "time": "3.535159",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "reasoning token accounting over the real curated journal",
+            "name": "discounts allButLast thinking at 8192 rows without eager history",
+            "time": "3.493157",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "reasoning token accounting over the real curated journal",
+            "name": "discounts none thinking at 8192 rows without eager history",
+            "time": "3.49244",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "reasoning accounting policy boundaries",
+            "name": "does not open history when reasoning stays in context",
+            "time": "0.16572",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "reasoning accounting policy boundaries",
+            "name": "never discounts more than the available token count",
+            "time": "0.026226",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0000/0272-effective-token-count-stream.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0000/0272-effective-token-count-stream.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/highdensity-disk-fallback-rollback.test.ts",
+        "state": "red",
+        "pid": 5824,
+        "sourceHash": "12d603c3f26f75ccda805c02a60723d3822c31178f67ab772386bed98db8c8d1",
+        "batch": "package-resume-g-0000",
+        "counts": {
+          "pass": 0,
+          "fail": 4,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "high-density disk fallback outcomes and compensation",
+            "name": "restores 512 rows and caller markers after partial fallback admission",
+            "time": "0.001582",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "high-density disk fallback outcomes and compensation",
+            "name": "restores 8192 rows and caller markers after partial fallback admission",
+            "time": "0.000337",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "high-density disk fallback outcomes and compensation",
+            "name": "keeps 512 rows unchanged on fallback no-op and failed estimation",
+            "time": "7.20081",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "high-density disk fallback outcomes and compensation",
+            "name": "keeps 8192 rows unchanged on fallback no-op and failed estimation",
+            "time": "34.291051",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0000/0291-highdensity-disk-fallback-rollback.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0000/0291-highdensity-disk-fallback-rollback.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/middleout-disk-large-request.test.ts",
+        "state": "unverified",
+        "pid": 25163,
+        "sourceHash": "13778dd2a39ed266e8ab37c11b6bb128eb2ccbd7c660d9f86a90022eda47ef02",
+        "batch": "package-resume-g-0050",
+        "counts": null,
+        "failedCases": [],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0306-middleout-disk-large-request.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0306-middleout-disk-large-request.test.ts.xml",
+        "evidenceStatus": "missing-record-unverified"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/middleout-disk-lifecycle.test.ts",
+        "state": "red",
+        "pid": 45204,
+        "sourceHash": "cf7f4ff016f9e47c0b2784bbd1a31e8cc5c7082299f5cf6953ae32bf555a2a04",
+        "batch": "package-resume-g-0050",
+        "counts": {
+          "pass": 7,
+          "fail": 1,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "disk middle-out summary and publication lifetimes",
+            "name": "routes a structural middle-out no-op into disk one-shot without eager preparation",
+            "time": "0.046012",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0307-middleout-disk-lifecycle.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0307-middleout-disk-lifecycle.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/middleout-disk-owners.test.ts",
+        "state": "red",
+        "pid": 48284,
+        "sourceHash": "08f88ef14da78c782c1366847e7efaf7275102deb5b1fb26eb995edc3716f92f",
+        "batch": "package-resume-g-0050",
+        "counts": {
+          "pass": 2,
+          "fail": 4,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "disk middle-out registered owners",
+            "name": "detects deliberately retained 512-row borrowed owners with unchanged bounds",
+            "time": "1.889579",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "disk middle-out registered owners",
+            "name": "detects deliberately retained 512-row copy owners with unchanged bounds",
+            "time": "1.826388",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "disk middle-out registered owners",
+            "name": "detects deliberately retained 8192-row borrowed owners with unchanged bounds",
+            "time": "32.220376",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "disk middle-out registered owners",
+            "name": "detects deliberately retained 8192-row copy owners with unchanged bounds",
+            "time": "32.70391",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0308-middleout-disk-owners.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0308-middleout-disk-owners.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/middleout-disk-publication-owners.test.ts",
+        "state": "unverified",
+        "pid": 52096,
+        "sourceHash": "4a3db0530a0bb8bacf96a9ae94daa65cb42873930367f7a2ae761fe82906e614",
+        "batch": "package-resume-g-0050",
+        "counts": null,
+        "failedCases": [],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0309-middleout-disk-publication-owners.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0309-middleout-disk-publication-owners.test.ts.xml",
+        "evidenceStatus": "missing-record-unverified"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/middleout-disk-retry.test.ts",
+        "state": "red",
+        "pid": 66482,
+        "sourceHash": "b58c7a3ecdb2d930acc0b879ad1b87140e4a7d011c3f48c527e7f7e1a114e0f7",
+        "batch": "package-resume-g-0050",
+        "counts": {
+          "pass": 2,
+          "fail": 2,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "invoked disk middle-out retry and fallback",
+            "name": "retries the identical pinned 512-row summary request",
+            "time": "5.430051",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "invoked disk middle-out retry and fallback",
+            "name": "retries the identical pinned 8192-row summary request",
+            "time": "35.342392",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0310-middleout-disk-retry.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0310-middleout-disk-retry.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/middleout-disk-splits.test.ts",
+        "state": "red",
+        "pid": 71801,
+        "sourceHash": "889046e147227e9ddd02d4c6b7b5336af99832d5046a9b041f722be3a7ab3d58",
+        "batch": "package-resume-g-0050",
+        "counts": {
+          "pass": 0,
+          "fail": 6,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "disk middle-out split and last-user semantics",
+            "name": "matches independent 512-row pair split, anchor floor and summary injections",
+            "time": "0.75542",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "disk middle-out split and last-user semantics",
+            "name": "matches independent 512-row small split, anchor floor and summary injections",
+            "time": "0.730507",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "disk middle-out split and last-user semantics",
+            "name": "matches independent 512-row large split, anchor floor and summary injections",
+            "time": "0.605841",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "disk middle-out split and last-user semantics",
+            "name": "matches independent 8192-row pair split, anchor floor and summary injections",
+            "time": "8.083418",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "disk middle-out split and last-user semantics",
+            "name": "matches independent 8192-row small split, anchor floor and summary injections",
+            "time": "8.198905",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "disk middle-out split and last-user semantics",
+            "name": "matches independent 8192-row large split, anchor floor and summary injections",
+            "time": "7.934743",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0312-middleout-disk-splits.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0312-middleout-disk-splits.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/middleout-disk.test.ts",
+        "state": "red",
+        "pid": 72473,
+        "sourceHash": "1d3f9bfe53a649c9644cbdc1f1914cbcb02f7364c5590c212e5e96e766732d98",
+        "batch": "package-resume-g-0050",
+        "counts": {
+          "pass": 0,
+          "fail": 2,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "invoked disk middle-out",
+            "name": "preserves exact split, summary request and rejoin for 512 mixed rows",
+            "time": "2.620059",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "invoked disk middle-out",
+            "name": "preserves exact split, summary request and rejoin for 8192 mixed rows",
+            "time": "32.671323",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0313-middleout-disk.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0313-middleout-disk.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/oneshot-disk-large-request.test.ts",
+        "state": "unverified",
+        "pid": 73487,
+        "sourceHash": "803821a70588accdb2d1aa66c16c993473702a292249532d6515107a06e1b2b1",
+        "batch": "package-resume-g-0050",
+        "counts": null,
+        "failedCases": [],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0316-oneshot-disk-large-request.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0316-oneshot-disk-large-request.test.ts.xml",
+        "evidenceStatus": "missing-record-unverified"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/oneshot-disk-owners.test.ts",
+        "state": "red",
+        "pid": 82387,
+        "sourceHash": "a1c2ffdfc4a535f9ff4de45086c72afc9fcac1fd21972f1fcca4d93f5e7d97d2",
+        "batch": "package-resume-g-0050",
+        "counts": {
+          "pass": 2,
+          "fail": 4,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "disk one-shot registered owners",
+            "name": "detects deliberately retained 512-row borrowed owners with unchanged bounds",
+            "time": "1.79751",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "disk one-shot registered owners",
+            "name": "detects deliberately retained 512-row copy owners with unchanged bounds",
+            "time": "1.768406",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "disk one-shot registered owners",
+            "name": "detects deliberately retained 8192-row borrowed owners with unchanged bounds",
+            "time": "29.889575",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "disk one-shot registered owners",
+            "name": "detects deliberately retained 8192-row copy owners with unchanged bounds",
+            "time": "29.578881",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0318-oneshot-disk-owners.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0318-oneshot-disk-owners.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/oneshot-disk-publication-owners.test.ts",
+        "state": "unverified",
+        "pid": 84145,
+        "sourceHash": "9e6f52aa026961e49951bc3977d35143b7b3997b4057b2e1187037a729d7ba2d",
+        "batch": "package-resume-g-0050",
+        "counts": null,
+        "failedCases": [],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0319-oneshot-disk-publication-owners.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0319-oneshot-disk-publication-owners.test.ts.xml",
+        "evidenceStatus": "missing-record-unverified"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/oneshot-disk-request-charge.test.ts",
+        "state": "red",
+        "pid": 88532,
+        "sourceHash": "5eff774e732045a833dc759483f11d3d050b9ed9ae2a9544f084fc059939e10c",
+        "batch": "package-resume-g-0050",
+        "counts": {
+          "pass": 0,
+          "fail": 2,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "complete one-shot disk summary request charge",
+            "name": "streams the independent 512-row oracle request one owned row at a time and releases cancellation and success",
+            "time": "2.764497",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "complete one-shot disk summary request charge",
+            "name": "streams the independent 8192-row oracle request one owned row at a time and releases cancellation and success",
+            "time": "28.506505",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0320-oneshot-disk-request-charge.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0320-oneshot-disk-request-charge.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/oneshot-disk-retry.test.ts",
+        "state": "red",
+        "pid": 88981,
+        "sourceHash": "614fc163a2c4f373114687b1c408da4e48f6703caddc8d4a1544a613184204c4",
+        "batch": "package-resume-g-0050",
+        "counts": {
+          "pass": 4,
+          "fail": 2,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "invoked disk one-shot retry and fallback",
+            "name": "retries the identical pinned 512-row summary request",
+            "time": "5.515024",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "invoked disk one-shot retry and fallback",
+            "name": "retries the identical pinned 8192-row summary request",
+            "time": "33.831032",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0321-oneshot-disk-retry.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0321-oneshot-disk-retry.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/oneshot-disk-splits.test.ts",
+        "state": "red",
+        "pid": 91694,
+        "sourceHash": "a53cf4d5158f1bce072cee78690718798db42d0644639471ef4269f8ea3cb5b3",
+        "batch": "package-resume-g-0050",
+        "counts": {
+          "pass": 1,
+          "fail": 2,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "one-shot disk tool boundary and snapshot recording",
+            "name": "summarizes old pairs and preserves the protected boundary in 512 rows",
+            "time": "0.873889",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "one-shot disk tool boundary and snapshot recording",
+            "name": "summarizes old pairs and preserves the protected boundary in 8192 rows",
+            "time": "6.916551",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0323-oneshot-disk-splits.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0323-oneshot-disk-splits.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/oneshot-disk.test.ts",
+        "state": "red",
+        "pid": 92714,
+        "sourceHash": "ff77962a4b2978b6bf929a364bc0a21697f13ba560684b2f6b5dd38e2f7e9e51",
+        "batch": "package-resume-g-0050",
+        "counts": {
+          "pass": 0,
+          "fail": 2,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "invoked disk one-shot",
+            "name": "preserves exact split, summary request and rejoin for 512 mixed rows",
+            "time": "2.932778",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "invoked disk one-shot",
+            "name": "preserves exact split, summary request and rejoin for 8192 mixed rows",
+            "time": "31.198518",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0325-oneshot-disk.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0050/0325-oneshot-disk.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/types-highdensity.test.ts",
+        "state": "red",
+        "pid": 47205,
+        "sourceHash": "22199d2b1fc82de3130dbea2a49ac4d78c7cdc071a2c2d63ab1c6b15a3775467",
+        "batch": "package-resume-g-0150",
+        "counts": {
+          "pass": 30,
+          "fail": 1,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "Existing strategy compress compatibility @plan PLAN-20260211-HIGHDENSITY.P04",
+            "name": "MiddleOutStrategy.compress is a function",
+            "time": "0.002051",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0150/0381-types-highdensity.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0150/0381-types-highdensity.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/core/ConversationManager.modelStamp.test.ts",
+        "state": "red",
+        "pid": 52855,
+        "sourceHash": "5f8df711b4dcdd17d92570fcc0533ebd5b3e206b26ce9aa9a89d73dbfcf27ca6",
+        "batch": "package-resume-g-0150",
+        "counts": {
+          "pass": 6,
+          "fail": 2,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "ConversationManager import/restore paths do NOT stamp (issue #2335)",
+            "name": "importInitialHistory does NOT stamp metadata.model on imported AI turns",
+            "time": "0.001621",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "ConversationManager import/restore paths do NOT stamp (issue #2335)",
+            "name": "addHistory does NOT stamp metadata.model on externally-supplied turns",
+            "time": "0.001545",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0150/0399-ConversationManager.modelStamp.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0150/0399-ConversationManager.modelStamp.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/core/__tests__/childaccept-body.test.ts",
+        "state": "red",
+        "pid": 25704,
+        "sourceHash": "1dc75e3b20a43ac52d295b49bf45f276cb0d6073128594fa762f09279d54bc3c",
+        "batch": "package-resume-g-0250",
+        "counts": {
+          "pass": 1,
+          "fail": 3,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "child facade transport equivalence",
+            "name": "child transport bytes match an independent eager mutation fold, seed 854",
+            "time": "0.009714",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "child facade transport equivalence",
+            "name": "child transport bytes match an independent eager mutation fold, seed 11259375",
+            "time": "0.004606",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "child facade resume markers",
+            "name": "preserves live response parents and strips them through the real resume boot",
+            "time": "0.215187",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0250/0442-childaccept-body.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0250/0442-childaccept-body.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/core/__tests__/childaccept.test.ts",
+        "state": "red",
+        "pid": 25736,
+        "sourceHash": "cb39afefcf176222a7e71a2e551e66300e03f17c786f0c0e3658f60a7e2a2a1a",
+        "batch": "package-resume-g-0250",
+        "counts": {
+          "pass": 2,
+          "fail": 1,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "child facade real launch",
+            "name": "launches a real scope and runtime over its own mandatory journal",
+            "time": "0.139158",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0250/0443-childaccept.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0250/0443-childaccept.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/core/__tests__/directMessage.characterization.test.ts",
+        "state": "red",
+        "pid": 25999,
+        "sourceHash": "06d60ae81ac93bec782b921e6ed6f230844ec338b5e1f0db1a767e5455d451ba",
+        "batch": "package-resume-g-0250",
+        "counts": {
+          "pass": 11,
+          "fail": 1,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "P12: blocking BeforeModel hook (characterization)",
+            "name": "committed history reflects the request was processed",
+            "time": "0.001148",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0250/0451-directMessage.characterization.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0250/0451-directMessage.characterization.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/core/__tests__/journal-retained-growth-release-trap.test.ts",
+        "state": "red",
+        "pid": 26066,
+        "sourceHash": "0aea393b993901d1d7724f6bd2840e9c227002cf0b12b3a858af0675dbbbda72",
+        "batch": "package-resume-g-0250",
+        "counts": {
+          "pass": 0,
+          "fail": 1,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "retained growth trap: context held between compressions then released",
+            "name": "context retained between compressions and released before the last checkpoint fails",
+            "time": "0.525566",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0250/0455-journal-retained-growth-release-trap.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0250/0455-journal-retained-growth-release-trap.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/core/__tests__/journal-retained-growth-retaining-trap.test.ts",
+        "state": "red",
+        "pid": 26089,
+        "sourceHash": "9afc3a22e17a278a2e9d373968a41c2ffab000088b575a60b3760b23e494cdc3",
+        "batch": "package-resume-g-0300",
+        "counts": {
+          "pass": 0,
+          "fail": 1,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "retained growth trap: a request-row-keeping observer",
+            "name": "a test-installed observer keeping every request row fails the same predicate",
+            "time": "0.513614",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0300/0456-journal-retained-growth-retaining-trap.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0300/0456-journal-retained-growth-retaining-trap.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/core/__tests__/journal-retained-growth.test.ts",
+        "state": "red",
+        "pid": 26096,
+        "sourceHash": "d9d29de20226d5416a4968c35d90e095b44a98d21e176907645437a888504d72",
+        "batch": "package-resume-g-0300",
+        "counts": {
+          "pass": 14,
+          "fail": 1,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "repeated-turn retained growth over the real journal-backed send path",
+            "name": "stays inside the allowance and does not accumulate with turn count",
+            "time": "0.522077",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0300/0457-journal-retained-growth.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0300/0457-journal-retained-growth.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/core/__tests__/send-journal-opens.test.ts",
+        "state": "red",
+        "pid": 26139,
+        "sourceHash": "700ab6548a4731503980ccad48298a4030de9a686d4b3145bb1ed32e1c52f579",
+        "batch": "package-resume-g-0300",
+        "counts": {
+          "pass": 0,
+          "fail": 2,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "journal snapshots per send",
+            "name": "opens one curated snapshot and three journal captures per send under the limit, at any history size",
+            "time": "0.080771",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "journal snapshots per send",
+            "name": "rebuilds the snapshot once per ladder mutation, with a fixed number of captures per rebuild",
+            "time": "0.003319",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0300/0460-send-journal-opens.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0300/0460-send-journal-opens.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/core/__tests__/stream-structural-access.characterization.test.ts",
+        "state": "red",
+        "pid": 26198,
+        "sourceHash": "013bb916b8a7d1b5a426dcb6748b784cb0ae54d4089bca8c449ae200dc6167c0",
+        "batch": "package-resume-g-0300",
+        "counts": {
+          "pass": 16,
+          "fail": 2,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "REQ-005.3: recordHistoryWithUsage accumulation",
+            "name": "records accumulated text blocks to history",
+            "time": "0.022157",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "REQ-005.3: recordHistoryWithUsage accumulation",
+            "name": "filters thinking blocks from history when includeThoughts=false",
+            "time": "0.008356",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0300/0463-stream-structural-access.characterization.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0300/0463-stream-structural-access.characterization.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/core/__tests__/structuralAccess.characterization.test.ts",
+        "state": "red",
+        "pid": 26211,
+        "sourceHash": "d6467cd30a7e33db708af25d2b8e3a03f3eaf97612009f9e636f66e9933ba1fd",
+        "batch": "package-resume-g-0300",
+        "counts": {
+          "pass": 6,
+          "fail": 8,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "REQ-005.1: ConversationManager text consolidation + thought filtering",
+            "name": "consolidates adjacent text model outputs into single merged text",
+            "time": "0.024388",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "REQ-005.1: ConversationManager text consolidation + thought filtering",
+            "name": "consolidates three adjacent text chunks into one continuous string",
+            "time": "0.006742",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "REQ-005.1: ConversationManager text consolidation + thought filtering",
+            "name": "filters thoughts from recorded text when includeThoughts=false",
+            "time": "0.009157",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "REQ-005.1: ConversationManager text consolidation + thought filtering",
+            "name": "drops thinking blocks and their signatures from history when includeThoughts=false",
+            "time": "0.007955",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "REQ-005.1: ConversationManager text consolidation + thought filtering",
+            "name": "includes thinking blocks in history when includeThoughts=true",
+            "time": "0.006537",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "REQ-005.1: consolidation + thought filtering (property)",
+            "name": "consolidating N adjacent text chunks yields their concatenation (property)",
+            "time": "0.042905",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "REQ-005.1: consolidation + thought filtering (property)",
+            "name": "thought text never appears in recorded history when includeThoughts=false (property)",
+            "time": "0.048262",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "REQ-005.1: consolidation + thought filtering (property)",
+            "name": "recorded AI text is never empty when model output has visible text (property)",
+            "time": "0.063476",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0300/0465-structuralAccess.characterization.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0300/0465-structuralAccess.characterization.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/core/__tests__/subagent-child-config-journal-integration.test.ts",
+        "state": "red",
+        "pid": 26229,
+        "sourceHash": "0ae76833ac5131283e438033a192a8f4d510a69fb0dd76aafd147b313de204bc",
+        "batch": "package-resume-g-0300",
+        "counts": {
+          "pass": 0,
+          "fail": 2,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "child Config and journal ownership",
+            "name": "disposes the isolated Config while the journal is still open (scope failure: %s)",
+            "time": "0.057909",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "child Config and journal ownership",
+            "name": "disposes the isolated Config while the journal is still open (scope failure: %s)",
+            "time": "0.024376",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0300/0466-subagent-child-config-journal-integration.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0300/0466-subagent-child-config-journal-integration.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/core/chatSession.runtime.test.ts",
+        "state": "red",
+        "pid": 28190,
+        "sourceHash": "7831d38e96b2158ebed4db82a8aae0a4744593b2606c89701b508b1d12847c3f",
+        "batch": "package-resume-g-0350",
+        "counts": {
+          "pass": 2,
+          "fail": 1,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "ChatSession runtime context",
+            "name": "filters hook-disallowed provider function calls from non-stream responses and history",
+            "time": "0.012453",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0350/0519-chatSession.runtime.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0350/0519-chatSession.runtime.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/core/deferred-history-source.test.ts",
+        "state": "red",
+        "pid": 40285,
+        "sourceHash": "42736e4c5bdc53633266439b8da05f49f4c716fdd6fec525bb6d235f9ae98671",
+        "batch": "package-resume-g-0450",
+        "counts": {
+          "pass": 6,
+          "fail": 1,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "deferred disk commit acknowledgement",
+            "name": "does not complete or expose admission before the final durable write acknowledgement and rolls back write failure",
+            "time": "180.000003",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0450/0608-deferred-history-source.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0450/0608-deferred-history-source.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/core/semantic-purge-array-seam.test.ts",
+        "state": "red",
+        "pid": 53105,
+        "sourceHash": "d2e12850ff052e042b76a4c98133a48c4d199c5af789ad7470857788eb241704",
+        "batch": "package-resume-g-0450",
+        "counts": {
+          "pass": 0,
+          "fail": 3,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "journal materialization guard",
+            "name": "StreamOnlyHistory rejects journal eager materialization",
+            "time": "0.007682",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "production semantic purge no-materialization contract",
+            "name": "prepares the production 512-row media/tool transaction without getAll",
+            "time": "0.000659",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "production semantic purge no-materialization contract",
+            "name": "prepares the production 8192-row media/tool transaction without getAll",
+            "time": "0.000144",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0450/0654-semantic-purge-array-seam.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0450/0654-semantic-purge-array-seam.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/core/semantic-purge-production.test.ts",
+        "state": "red",
+        "pid": 53112,
+        "sourceHash": "000d8449f48f193aff44b3f0e2cbc0179f11394f06138fec5ece692b3181b59b",
+        "batch": "package-resume-g-0450",
+        "counts": {
+          "pass": 2,
+          "fail": 3,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "journal materialization guard",
+            "name": "StreamOnlyHistory rejects journal eager materialization",
+            "time": "0.006367",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "invoked production streaming semantic purge session: persisted membership",
+            "name": "commits and rolls back real 512-row history without eager access and releases its next lease",
+            "time": "0.000637",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "invoked production streaming semantic purge session: persisted membership",
+            "name": "commits and rolls back real 8192-row history without eager access and releases its next lease",
+            "time": "0.00014",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0450/0655-semantic-purge-production.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0450/0655-semantic-purge-production.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/core/stream-request-body-demand.test.ts",
+        "state": "red",
+        "pid": 55328,
+        "sourceHash": "2f03aad4c842bae51b14b88e8f4a5f5f0962ed5edcd014bdb782c24b0c4afa25",
+        "batch": "package-resume-g-0500",
+        "counts": {
+          "pass": 0,
+          "fail": 3,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "issue854 real StreamProcessor Responses BODY demand",
+            "name": "preserves exact BODY and estimation without holding a journal reader across the provider call",
+            "time": "0.001618",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "issue854 real StreamProcessor Responses BODY demand",
+            "name": "delivers the complete BeforeModel input to the configured external hook",
+            "time": "0.000358",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          },
+          {
+            "classname": "issue854 real StreamProcessor Responses BODY demand",
+            "name": "closes the disk reader when an actual agent request aborts during curation",
+            "time": "0.000313",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0500/0683-stream-request-body-demand.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0500/0683-stream-request-body-demand.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/core/streamRequestHelpers.test.ts",
+        "state": "red",
+        "pid": 55355,
+        "sourceHash": "4ea5ae3f308aed41fcb15db61d04db73607850beb1a0c9f1be0a13ce9b1a6628",
+        "batch": "package-resume-g-0500",
+        "counts": {
+          "pass": 3,
+          "fail": 1,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "scoped repeatable request snapshot",
+            "name": "reopens estimation and body readers over disk history with reordered pending membership and releases on close or cancel",
+            "time": "0.079235",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0500/0686-streamRequestHelpers.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0500/0686-streamRequestHelpers.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/src/core/turnMediaAdmission.lifecycle.test.ts",
+        "state": "red",
+        "pid": 62183,
+        "sourceHash": "e2677195e243c739da2d9033091afef2230676b712d8d954b96113f617145965",
+        "batch": "package-resume-g-0600",
+        "counts": {
+          "pass": 14,
+          "fail": 1,
+          "skip": 0
+        },
+        "failedCases": [
+          {
+            "classname": "rolls back published history when temporary media settlement fails &gt; turn media admission terminal lifecycle",
+            "name": "rolls back published history when temporary media settlement fails",
+            "time": "0.046638",
+            "status": "failed",
+            "failureMessage": null,
+            "classification": "classification-pending",
+            "classificationProvenance": "no-exact-case-contract"
+          }
+        ],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0600/0772-turnMediaAdmission.lifecycle.test.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0600/0772-turnMediaAdmission.lifecycle.test.ts.xml",
+        "evidenceStatus": "verified-red"
+      },
+      {
+        "path": "packages/agents/test-bun/run-bun-tests.issue3253.bun.ts",
+        "state": "unverified",
+        "pid": 62524,
+        "sourceHash": "58f62818ec172ea2fe97745f5369046e30fe8e1b8dc7fb96756750434a72a3f5",
+        "batch": "package-resume-g-0600",
+        "counts": {
+          "pass": 7,
+          "fail": 0,
+          "skip": 0
+        },
+        "failedCases": [],
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0600/0800-run-bun-tests.issue3253.bun.ts.log",
+        "junit": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w22/run-20261019-a/package-resume-g-0600/0800-run-bun-tests.issue3253.bun.ts.xml",
+        "evidenceStatus": "inconsistent-record-unverified"
+      }
+    ],
+    "gates": {
+      "red": "census-red.log: selected prior PID 80 instead of 100",
+      "green": "census-final-test.log: seven passes, 68 assertions",
+      "types": "census-types-final-formatted.log: strict plus unused-symbol checks; allowImportingTsExtensions matches existing Bun imports",
+      "lint": "census-lint-final.log: explicit no-ignore, max warnings zero",
+      "format": "final-proof-format-explicit.log: explicit empty ignore path"
+    }
+  },
+  "review": "review skipped per Andrew 2026-10-09",
+  "safety": "No project cleanup/deletion, generated obstruction move, .llxprt modification/staging, raw recovery bulk staging, push, merge, default flip, test skip or weaker bounds/timeouts/checks",
+  "processes": {
+    "observed": "2026-10-20T00:12:53.171Z",
+    "pids": [
+      92247, 88190, 90670, 91701, 92249, 1332, 99983, 99688, 99872, 1714, 1568,
+      1469, 1713, 1262, 96753, 1746, 1639, 88193, 88215, 88872, 89106, 89113,
+      90673, 90684, 91704, 91726, 92251, 92274, 93156, 93514, 93542, 93688,
+      94670, 95710, 95997, 96271, 96353, 96467, 96754, 96769, 97106, 97182,
+      97200, 97279, 97617, 98741, 99071, 99307, 99357, 99501, 99689
+    ],
+    "present": [],
+    "receipt": "tmp/854-notes/p4/w22/provider-fallback-run-h/final-owned-processes.log"
+  }
+}

@@ -117,6 +117,10 @@ function acceptedBatches(
       reference: 'pending-window-run-g/verify-current.json',
       batches: ['pending-final-journal-g-a'],
     },
+    {
+      reference: 'provider-fallback-run-h/verify-current.json',
+      batches: ['provider-final-journal-h-a'],
+    },
   ];
   return layers.flatMap((layer) =>
     layer.batches.map((batch) => ({ batch, reference: layer.reference })),
@@ -197,6 +201,7 @@ function classificationContracts(
     'finalizer-run-20261019-a/classification.json',
     'finalizer-run-20261019-a/hook-classification.json',
     'pending-window-run-g/classification.json',
+    'provider-fallback-run-h/classification.json',
   ]) {
     const path = join(w22, name);
     if (!existsSync(path)) continue;

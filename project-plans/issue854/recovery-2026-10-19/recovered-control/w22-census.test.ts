@@ -430,6 +430,59 @@ describe('W22 shared runner', () => {
     expect(completed.attempts.find((row) => row.pid === 90)?.accepted).toBe(
       false,
     );
+    batch(
+      'provider-final-journal-h-a',
+      { ...base, pid: 100, sourceHash: 'provider-final' },
+      xml('passed', 'provider works'),
+    );
+    batch(
+      'provider-final-old-h-a',
+      { ...base, pid: 110, backend: 'old' },
+      xml(),
+    );
+    batch(
+      'provider-retaining-control-h-a',
+      { ...base, pid: 120, code: 1, pass: 0, fail: 1 },
+      xml('failed'),
+    );
+    const provider = join(w22, 'provider-fallback-run-h');
+    mkdirSync(provider, { recursive: true });
+    writeFileSync(
+      join(provider, 'classification.json'),
+      JSON.stringify({
+        rows: [
+          {
+            path: base.path,
+            cases: [
+              {
+                classname: 'suite',
+                name: 'provider works',
+                classification: 'native-history',
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    const acceptedProvider = runCensus(root);
+    const selectedProvider = acceptedProvider.rows.find(
+      (row) => row.path === base.path,
+    );
+    expect(selectedProvider?.pid).toBe(100);
+    expect(selectedProvider?.sourceHash).toBe('provider-final');
+    expect(selectedProvider?.supersedes).toHaveLength(3);
+    expect(selectedProvider?.cases[0]?.classification).toBe('native-history');
+    expect(selectedProvider?.cases[0]?.classificationProvenance).toContain(
+      'provider-fallback-run-h/classification.json',
+    );
+    expect(acceptedProvider.historicalMissingAttempts).toHaveLength(1);
+    expect(acceptedProvider.attempts).toHaveLength(
+      completed.attempts.length + 3,
+    );
+    for (const pid of [110, 120])
+      expect(
+        acceptedProvider.attempts.find((row) => row.pid === pid)?.accepted,
+      ).toBe(false);
     writeFileSync(
       join(run, 'package-resume-g-0000/results.json'),
       JSON.stringify([{ ...base, pid: 'invalid' }]),

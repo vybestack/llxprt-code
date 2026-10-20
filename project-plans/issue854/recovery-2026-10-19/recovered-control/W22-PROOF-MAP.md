@@ -1,19 +1,44 @@
 # W22 first agents batch proof map, 2026-10-19
 
+## Provider fallback/hardlimit committed, 2026-10-20T00:12:53Z
+
+**All six provider fallback/hardlimit suites are green at `0ed5b4e327317856fe724fe7b142ed7b5f698c01`; W22 remains incomplete.** Parent: `613b3ae746e9c40e5f5301dc6694de409d99fc92`. Five test/support paths were committed after the final matrix and ten gates, before census acceptance. Production and the old default are unchanged. Structured evidence: `W22-PROVIDER-FALLBACK-PROOF.json`; raw evidence: `tmp/854-notes/p4/w22/provider-fallback-run-h/`.
+
+| Contract                                                                                                       | Actual final proof                                                                                                                                                                                                                                                                                                         |
+| -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Provider rejection and failed compensation diagnostics                                                         | One selected-native case retains the exact aggregate message, ordered error identities, baseline state and installed blocks. Native uses real media replacement rejection; old retains the original enqueue fault. Released row/serialized-byte ownership is zero. The owner must be registered before checkpoint capture. |
+| Failed installation, false result, throw, cancel and baseline reset                                            | Provider-fallback-disk runs thirteen cases, including both 512/8192 scales, successful installation chronology and a row over eight MiB. Provider-hardlimit-disk-rollback runs ten through the real invoked disk runner.                                                                                                   |
+| Missing/duplicate installation and bounded paused ownership                                                    | Two invariant cases and two owner cases preserve original rejection, unchanged complete history, anchor/baseline, positive paused owners and zero released owners. The real owner supports both replacement protocols and closes its held pre-publication snapshot.                                                        |
+| Retention sensitivity                                                                                          | Four ordinary reference/copy controls pass. Trap PID 99689 exits one with zero passes/four failures at the unchanged within-bounds predicate, both scales, without timeout. Controls are separate from positive bounded-memory proof.                                                                                      |
+| Complete values, partial admission/retry, queued chronology, publication phases, media and source-stage causes | Five existing W11 native suites actually ran: 31 cases per outer setting. Two selected retry cases also ran. No duplicate native test matrix was added.                                                                                                                                                                    |
+| Durable equality                                                                                               | Every selected-native target case also compares complete public-row digests against independently reopened primary and mirror row trees. Digest bytes measure serialized JSON row values, not physical native bytes.                                                                                                       |
+
+The original six files had **zero passes/32 failures**, all at the JSONL-only recorder/backend mismatch before test bodies. The shared fixture now uses the real matching recorder factory, streaming seeding and async commit observation. Native failed admissions reject actual positional writes, forwarding accepted I/O unchanged. Intermediate diagnostics failures are retained: a rejected native writer prevented later normal reads; registering a media owner inside the fallback callback missed the owner already captured by the transaction host. The final fixture registers it before capture and injects the diagnostic's compensation failure through the real media participant. No production wrapper or relaxed exception assertion was introduced.
+
+Final matrix: **24 serial isolated Bun processes, 130 passes/zero failures/skips**, 65 per outer setting. The journal run has 32 target cases, 31 reused W11 cases and two retry cases. The outer-old comparison has 34 selected-old cases and 31 cases that explicitly select native internally. All **48 original assertion expressions**, parameter domains, timeouts, 512/8192 scales, 440-row/8 MiB bounds and oversized-row scope remain; three diagnostic assertions were added. Checked AggregateError narrowing replaces the original cast.
+
+All ten saved source-bound gates pass: API surface, declaration build, core/agents/Bun/touched types, zero-warning ESLint, Prettier, affected graph and AST audit. No touched audit finding before or after. Seventeen final matrix/helper hashes match both worktree and committed blobs. Graph validation does not claim shard-test execution. Verification finished at 00:10:44Z; no completed product run was repeated for accounting.
+
+Accepted census generation `d82e0cba-473d-4643-9ec2-b191aa05245c`: **806 attempted = 762 green + 39 red + five unverified**, zero unattempted. Verified cases: **6460 pass/94 fail/zero skip**. The recorded pass aggregate 6467 includes seven unverified XML passes from the inconsistent runner meta-suite. Classifications: **179 native-history/260 shared-public/27 explicit-old/5994 pending**, separate unclassified zero. This remains cumulative per-file evidence, not a final-source whole-package pass. Exactly provider-final-journal-h-a is newly accepted; the 1052-attempt ledger retains diagnostics, outer-old and trap attempts without selecting them. Accounting acceptance was red at prior PID 80, then seven tests/68 assertions and strict types/lint/format passed.
+
+Frozen full ledger/checksums/missing records: `provider-fallback-run-h/frozen-final/`. Four latest missing-XML files remain unknown, separate from 22 historical missing attempts and the fifth inconsistent runner file. `W22-REMAINING-FAMILIES.tsv` lists exactly 44 remaining paths. Next is the compression-attempt estimation/lifecycle/stream cluster, after inspecting its own errors; no new family repair began here. Driver 92247 and all recorded matrix/trap/gate PIDs are absent. W23-W26 remain open. Review skipped per Andrew 2026-10-09. No cleanup/deletion, generated obstruction move, `.llxprt/` edit/staging, raw recovery bulk staging, push, merge or backend default flip.
+
+The following sections are historical checkpoints at their stated times.
+
 ## Pending-window final source and complete census, 2026-10-19T23:50:37Z
 
 **Pending-window is green at `7ab90bd22e38c6dc4ca685b8269369ac6419637f`; W22 remains incomplete.** This is WIP finalization, not review. Source parent: `31d15cd428cdf5ee1d7763da5528fd87b97a0ad6`. The eight intended test/support paths were committed before accounting work. Production and the backend default are unchanged.
 
 `W22-PENDING-WINDOW-PROOF.json` is the structured source/gate/case/control/census record. All sixteen final matrix/helper hashes match committed blobs and the worktree. Ten saved scoped gates passed, and the audit comparison has no touched findings. The six pending-window suites retain all 72 original assertions, original test domains/timeouts, 512/8192 scales, 440-row/8 MiB limits and oversized-row proof. Five assertions were added. No completed product test/gate was rerun for finalization.
 
-| Contract | Final evidence |
-| --- | --- |
-| Pending-window membership, compensation, no-op, reference/copy ownership and publication phases | Six backend-selected real-service suites: 27 journal cases, 27 supplemental outer-old cases; independent committed primary/mirror/public-row digest comparisons, real positional writer barriers and real media replacement ownership |
-| Actual delivery of installed caller rows | addbatch-pending-window additionally invokes real DirectMessageProcessor; transport consumes replayable contents and preserves caller blocks/chronology, response and final history |
-| Existing fallback rejection, partial admission/retry, queued chronology, live publication, media and source-stage compensation | Five native fallback suites actually ran, 31 cases per outer setting; they remain explicitly native even under outer-old |
-| Facade removal and direct-message regression | Two shared/public cases per outer setting |
-| Retention sensitivity | Trap PID 79899 exits one, zero passes/four failures at the unchanged within-bounds predicate, reference/copy at both scales; no timeout or unrelated exception |
-| Original backend completion | Driver 77055 completed normally at 23:46:14Z; final verification finished at 23:46:25Z, no hang, retry or timeout change |
+| Contract                                                                                                                       | Final evidence                                                                                                                                                                                                                        |
+| ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pending-window membership, compensation, no-op, reference/copy ownership and publication phases                                | Six backend-selected real-service suites: 27 journal cases, 27 supplemental outer-old cases; independent committed primary/mirror/public-row digest comparisons, real positional writer barriers and real media replacement ownership |
+| Actual delivery of installed caller rows                                                                                       | addbatch-pending-window additionally invokes real DirectMessageProcessor; transport consumes replayable contents and preserves caller blocks/chronology, response and final history                                                   |
+| Existing fallback rejection, partial admission/retry, queued chronology, live publication, media and source-stage compensation | Five native fallback suites actually ran, 31 cases per outer setting; they remain explicitly native even under outer-old                                                                                                              |
+| Facade removal and direct-message regression                                                                                   | Two shared/public cases per outer setting                                                                                                                                                                                             |
+| Retention sensitivity                                                                                                          | Trap PID 79899 exits one, zero passes/four failures at the unchanged within-bounds predicate, reference/copy at both scales; no timeout or unrelated exception                                                                        |
+| Original backend completion                                                                                                    | Driver 77055 completed normally at 23:46:14Z; final verification finished at 23:46:25Z, no hang, retry or timeout change                                                                                                              |
 
 Matrix total: **26 serial isolated processes, 120 passes, zero failures/skips**. Original failures came from JSONL-only recorder construction under journal selection. Intermediate empty-metadata and old media-participant assumptions are preserved separately. Native fixture seeding, selected writer/admission seams, committed observation boundaries and real replacement ownership fix the inputs without pinning the suites to old or changing production. Detailed locations: pending-window-disk-helpers.ts:83-219 and 230-285; support/pending-publication-owner.ts:7-57; addbatch-pending-window.test.ts:67-115.
 
@@ -47,12 +72,12 @@ Latest published evidence: **806 = 334 green + 33 red + four unverified + 435 un
 
 `W22-SHARED-RECORDING-PROOF.json` is the new structured evidence. Base `3da8460d8`; source commit `d13e565c5a52307ecbc81d32e83c7d0a1a006594`. Only the shared-origin test changes. All nine original test calls/assertions/timeouts match their original AST after the single old-fixture normalization. Reused native-session-fixture.ts was already tracked. Production is unchanged.
 
-| Contract | Old and native evidence |
-| --- | --- |
-| Rejected shared and facade-owned publication leaves both recordings unchanged | Original raw-marker absence assertions remain explicitly old. New native case rejects both origins, checks unchanged public chronology/full rows and independently reopened committed row trees in both mirrors |
-| Recording remains usable and origins stay isolated | New native case records a shared row and separate public facade turns after rollback; exact four-row count, seed equality, shared visibility and foreign-origin exclusion; stop preserves complete independently reopened rows |
-| Adoption, owner lifetime and public finalization | Existing instance-resume, owner-lifetime and finalizer-join suites actually ran, without duplicate counterparts |
-| Regression sensitivity | Disabled native restore: PID 3292, nine passes/one native failure, exit one, at the live unchanged-row assertion; original production SHA-256 restored to `2b5bd891135395147be04091c342298fe71c45d95364a736d84b7b0789751010` |
+| Contract                                                                      | Old and native evidence                                                                                                                                                                                                        |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Rejected shared and facade-owned publication leaves both recordings unchanged | Original raw-marker absence assertions remain explicitly old. New native case rejects both origins, checks unchanged public chronology/full rows and independently reopened committed row trees in both mirrors                |
+| Recording remains usable and origins stay isolated                            | New native case records a shared row and separate public facade turns after rollback; exact four-row count, seed equality, shared visibility and foreign-origin exclusion; stop preserves complete independently reopened rows |
+| Adoption, owner lifetime and public finalization                              | Existing instance-resume, owner-lifetime and finalizer-join suites actually ran, without duplicate counterparts                                                                                                                |
+| Regression sensitivity                                                        | Disabled native restore: PID 3292, nine passes/one native failure, exit one, at the live unchanged-row assertion; original production SHA-256 restored to `2b5bd891135395147be04091c342298fe71c45d95364a736d84b7b0789751010`   |
 
 Final matrix: journal PIDs **3726/3814/3862/3990**, old PIDs **4460/4541/4595/4719**. Per-setting file counts are **11/2/18/10**, total **82 passes/zero failures/skips**. Every saved JUnit is nonempty/all-passing and agrees with recorded counts; each tested source hash matches worktree and committed blob. All 3321 captured package source entries were checked, with only the intended test differing from the prior manifest.
 
@@ -98,25 +123,25 @@ The repaired checkpoint is 256 executed files, 251 green/five red, 1970 passes/t
 
 Commit `ac0fa98d08591c9482c3f4b1bb02e4bbf8868a55` changes tests/fixtures only. All three original finalizer cases remain explicitly old; AST comparison preserves both complete `it` calls, the two-value failure domain and their 30000 ms limits. Eight native cases run in the same inventory file under both outer environments. Neither the original JSONL append barrier nor the `.json` rename barrier is used as native evidence.
 
-| Original finalizer contract | Native public proof |
-| --- | --- |
-| Final public-turn append must finish before the session lock releases | Real Agent.stream reaches the response-row positional write; disposal remains pending with its lock while that write is gated; shutdown resolves only after the stream settles and writer handles close; independently reopened rows contain the seed, prompt and response |
-| Accepted persistence success/failure joins finalization | Six native cases cross stop/dispose with success, rejected trailer and rejected platform flush. Real history mutation reaches the selected recorder handle; committed rows remain the previous version while the gate is held; accepting public flush settles before stop/dispose completes. Success commits the extra row; failed write/flush preserves the exact prior rows and keeps the original error on the accepting flush, without duplicate teardown failure |
-| Recording ownership ends with shutdown | Empty public recording acquires a lock without allocating `.llxj`; disposal releases it and rejects later recording admission without creating a file |
+| Original finalizer contract                                           | Native public proof                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Final public-turn append must finish before the session lock releases | Real Agent.stream reaches the response-row positional write; disposal remains pending with its lock while that write is gated; shutdown resolves only after the stream settles and writer handles close; independently reopened rows contain the seed, prompt and response                                                                                                                                                                                            |
+| Accepted persistence success/failure joins finalization               | Six native cases cross stop/dispose with success, rejected trailer and rejected platform flush. Real history mutation reaches the selected recorder handle; committed rows remain the previous version while the gate is held; accepting public flush settles before stop/dispose completes. Success commits the extra row; failed write/flush preserves the exact prior rows and keeps the original error on the accepting flush, without duplicate teardown failure |
+| Recording ownership ends with shutdown                                | Empty public recording acquires a lock without allocating `.llxj`; disposal releases it and rejects later recording admission without creating a file                                                                                                                                                                                                                                                                                                                 |
 
 Native file wrappers forward the real positional read/write/writev, close and platform flush. The decoded-row observation forwards the real counter function and release, recording positive acquisitions and zero live rows/serialized bytes after terminal completion. No decoder, history algorithm, recorder or integration is replaced. Native row proof uses independently opened committed row trees. Late history mutations leave stopped files byte-identical; disposal rejects late recording admission. Repeated public dispose calls share the same terminal promise. There is no timeout increase, skip, default change, production guard or production change.
 
 Existing W21 public lifetime proof was reused and actually RUN rather than duplicated. The final-source seven-file matrix ran each file alone in Bun, serially under both outer backends:
 
-| File under `packages/agents/src/api/__tests__/` | Journal PID | Old PID | Cases per environment and scope |
-| --- | ---: | ---: | --- |
-| `boundary.adequacy.test.ts` | 19195 | 20077 | Five shared/public boundary cases |
-| `profile-session-admission.behavior.test.ts` | 19211 | 20087 | Three shared/public retirement/admission cases |
-| `recorded-history-persistence.test.ts` | 19348 | 20145 | Two native committed mutation/rollback cases |
-| `recording-facade-chat-channel.behavior.test.ts` | 19374 | 20164 | Four native/four old routing and profile-binding cases |
-| `recording-finalizer-join.behavior.test.ts` | 19578 | 20359 | Eight native/three original old cases described above |
-| `recording-owner-lifetime.behavior.test.ts` | 19710 | 20496 | Eight native/ten old startup, admission, subscription and owner-lifetime cases |
-| `session-owner-restore-checkpoint.behavior.test.ts` | 19884 | 20669 | Nine native/nine old checkpoint rollback, borrowed-owner, reopen and media-reservation cases |
+| File under `packages/agents/src/api/__tests__/`     | Journal PID | Old PID | Cases per environment and scope                                                              |
+| --------------------------------------------------- | ----------: | ------: | -------------------------------------------------------------------------------------------- |
+| `boundary.adequacy.test.ts`                         |       19195 |   20077 | Five shared/public boundary cases                                                            |
+| `profile-session-admission.behavior.test.ts`        |       19211 |   20087 | Three shared/public retirement/admission cases                                               |
+| `recorded-history-persistence.test.ts`              |       19348 |   20145 | Two native committed mutation/rollback cases                                                 |
+| `recording-facade-chat-channel.behavior.test.ts`    |       19374 |   20164 | Four native/four old routing and profile-binding cases                                       |
+| `recording-finalizer-join.behavior.test.ts`         |       19578 |   20359 | Eight native/three original old cases described above                                        |
+| `recording-owner-lifetime.behavior.test.ts`         |       19710 |   20496 | Eight native/ten old startup, admission, subscription and owner-lifetime cases               |
+| `session-owner-restore-checkpoint.behavior.test.ts` |       19884 |   20669 | Nine native/nine old checkpoint rollback, borrowed-owner, reopen and media-reservation cases |
 
 Matrix result: **65 passes per environment, 130 total, zero failures/skips**. Each environment contains 31 native, 26 explicit old and eight shared/public cases. Supplemental outer-old executions do not add package coverage. A full-file control that makes SessionControl finalization resolve without joining or teardown produced **three passes/eight failures**, five of them native, PID **23895**. The three stop cases still pass because that control only removes disposal. Production is restored byte-identically; post-control target runs **24041** and **24189** have eleven passes each. These 22 post-control passes are separate from the 130-pass matrix and are not added again to package totals.
 
@@ -130,12 +155,12 @@ Current W22 census is **156 executed files: 155 green/one red, 1252 passing case
 
 Commit `70fdd3e2110fec4466ae47a9ae835b1afb1431c1` adds four native cases alongside four explicit-old cases. `facade-run-20261019-a/old-contract-proof.json` proves all four original complete `it` calls AST-identical, including their 30000 ms bounds. Original JSONL marker checks remain in those old bodies. The native cases use real public Agents, session controls, HistoryService, recorder integration, and independently opened committed row trees through `nativeRows`. Compression's provider summary is injected at the existing strategy seam; persistence and ownership remain real.
 
-| Original contract | Native counterpart and durable observation |
-| --- | --- |
+| Original contract                                                          | Native counterpart and durable observation                                                                                                                                                                                                |
+| -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Manual compression routes through each executing facade across stop/resume | Native compression rows appear only in the executing recording; stopped compression sees no transcript path; the closed file is byte-identical after sibling work; explicit original session resume writes its summary into the same path |
-| Purge event belongs to the executing facade | The initial media row is unowned and shared, so its media mutation reaches both native mirrors; only the executing facade's turn appears in its own file; B reseeding/purge and stopped-file reopening establish both directions |
-| Non-recording facade does not write a sibling purge | The public stream reports `No active recording`; initial live media remains identical, the recording sibling's complete committed rows remain identical, and B's turn is absent |
-| Profile candidate uses the executing recorder | Borrowed-client profile replacement creates separate candidate history; A's committed file and live stream contain the purged row and A's new turn, while B's complete committed rows remain identical to its pre-profile state |
+| Purge event belongs to the executing facade                                | The initial media row is unowned and shared, so its media mutation reaches both native mirrors; only the executing facade's turn appears in its own file; B reseeding/purge and stopped-file reopening establish both directions          |
+| Non-recording facade does not write a sibling purge                        | The public stream reports `No active recording`; initial live media remains identical, the recording sibling's complete committed rows remain identical, and B's turn is absent                                                           |
+| Profile candidate uses the executing recorder                              | Borrowed-client profile replacement creates separate candidate history; A's committed file and live stream contain the purged row and A's new turn, while B's complete committed rows remain identical to its pre-profile state           |
 
 The last case was product RED after adding real mirror flush boundaries: candidate live history changed, but independently reopened A still held the pre-purge media. `SessionClientOwner` intentionally does not adopt the borrowed client's shared history into the candidate. RecordingIntegration was left subscribed to that prior history. The three-file fix runs `SessionControl.rebindRecording` after profile publication/retirement and uses the integration's existing detach/attach path. It does not add a history array, operation spool, repeated whole-file read, fallback or default change. Attaching from inside purge was rejected because it waits on the mutation queue holding that purge; its timeout attempts remain separate evidence.
 
@@ -143,18 +168,18 @@ Final source matrix uses `facade-run-final-{journal,old}-b` and `facade-run-prof
 
 Reuse, rather than duplicate, the existing contracts that actually ran:
 
-| File | Final journal PID | Cases and classification |
-| --- | ---: | --- |
-| `boundary.adequacy.test.ts` | 62903 | Five shared/public; export guard unchanged |
-| `profile-session-admission.behavior.test.ts` | 62923 | Three shared/public admission/concurrency contracts |
-| `recorded-history-persistence.test.ts` | 63003 | Two native committed purge/rollback contracts |
-| `recording-facade-chat-channel.behavior.test.ts` | 63040 | Four native above, four explicit old |
-| `recording-owner-lifetime.behavior.test.ts` | 63374 | Eight native startup write/flush failure, admitted-write shutdown, borrowed identity, subscription cleanup and late admission; ten explicit old |
-| `session-owner-restore-checkpoint.behavior.test.ts` | 63574 | Nine native, including failed client restoration with complete live/durable rollback, borrowed owners, actual reopen, and failed second media reservation with later release; nine explicit old |
-| `profile-atomicity-owner.test.ts` | 65125 | Three shared/public profile transaction cases |
-| `profile-postcommit-lifetime.test.ts` | 65269 | Five shared/public retirement/continuation cases |
-| `profile-postcommit-siblings.test.ts` | 65492 | One shared/public sibling isolation case |
-| `profile-preparation-cancellation.test.ts` | 65589 | Two shared/public candidate cancellation cases |
+| File                                                | Final journal PID | Cases and classification                                                                                                                                                                        |
+| --------------------------------------------------- | ----------------: | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `boundary.adequacy.test.ts`                         |             62903 | Five shared/public; export guard unchanged                                                                                                                                                      |
+| `profile-session-admission.behavior.test.ts`        |             62923 | Three shared/public admission/concurrency contracts                                                                                                                                             |
+| `recorded-history-persistence.test.ts`              |             63003 | Two native committed purge/rollback contracts                                                                                                                                                   |
+| `recording-facade-chat-channel.behavior.test.ts`    |             63040 | Four native above, four explicit old                                                                                                                                                            |
+| `recording-owner-lifetime.behavior.test.ts`         |             63374 | Eight native startup write/flush failure, admitted-write shutdown, borrowed identity, subscription cleanup and late admission; ten explicit old                                                 |
+| `session-owner-restore-checkpoint.behavior.test.ts` |             63574 | Nine native, including failed client restoration with complete live/durable rollback, borrowed owners, actual reopen, and failed second media reservation with later release; nine explicit old |
+| `profile-atomicity-owner.test.ts`                   |             65125 | Three shared/public profile transaction cases                                                                                                                                                   |
+| `profile-postcommit-lifetime.test.ts`               |             65269 | Five shared/public retirement/continuation cases                                                                                                                                                |
+| `profile-postcommit-siblings.test.ts`               |             65492 | One shared/public sibling isolation case                                                                                                                                                        |
+| `profile-preparation-cancellation.test.ts`          |             65589 | Two shared/public candidate cancellation cases                                                                                                                                                  |
 
 The main matrix contributes 23 classified native contracts, 23 explicit old and eight shared/public; profile regressions contribute eleven shared/public. Supplemental outer-old executions are not added again to package totals. Exact case names, source hashes and second-environment PIDs are in durable `W22-FACADE-PROOF.json` and raw `facade-run-20261019-a/classification.json`. All eight final gates pass; four committed source hashes and the final 3318-path boundary match. Two DUP_ASSERT notices concern independent before/after compression phases; no final high-risk finding or policy suppression. Affected-graph validation is not affected-shard execution.
 
@@ -176,15 +201,15 @@ No production code changes. No row arrays, scratch fallback, retry, skip, timeou
 
 ## Evidence boundaries
 
-| Batch | Files/processes | Pass | Fail | Meaning |
-| --- | ---: | ---: | ---: | --- |
-| `initial-20` | 20 | 0 | 20 | Generated MCP declaration loader failures, before test bodies |
-| `unobstructed-20` | 20 | 143 | 4 | Actual untouched journal baseline |
-| `fixed-carry-journal` | 2 | 4 | 0 | First corrected fault fixture, before adding consumed-row assertions |
-| `final-carry-journal` | 2 | 0 | 3 | ENOSPC during seeding; one file did not finish all cases, not fault proof |
-| `final-system-carry-journal` | 2 | 4 | 0 | Final changed tests on journal |
-| `final-system-carry-old` | 2 | 4 | 0 | Same final tests, explicitly old comparison; not native proof |
-| `retaining-system-trap-journal` | 1 | 0 | 4 | Expected rejection with the unchanged retaining trap enabled |
+| Batch                           | Files/processes | Pass | Fail | Meaning                                                                   |
+| ------------------------------- | --------------: | ---: | ---: | ------------------------------------------------------------------------- |
+| `initial-20`                    |              20 |    0 |   20 | Generated MCP declaration loader failures, before test bodies             |
+| `unobstructed-20`               |              20 |  143 |    4 | Actual untouched journal baseline                                         |
+| `fixed-carry-journal`           |               2 |    4 |    0 | First corrected fault fixture, before adding consumed-row assertions      |
+| `final-carry-journal`           |               2 |    0 |    3 | ENOSPC during seeding; one file did not finish all cases, not fault proof |
+| `final-system-carry-journal`    |               2 |    4 |    0 | Final changed tests on journal                                            |
+| `final-system-carry-old`        |               2 |    4 |    0 | Same final tests, explicitly old comparison; not native proof             |
+| `retaining-system-trap-journal` |               1 |    0 |    4 | Expected rejection with the unchanged retaining trap enabled              |
 
 No skips in completed case runs. The old/trap launches immediately after ENOSPC failed to create their output directories and spawned no test child; they are not counted as executed tests. The first nested-background shell launch also exited before a driver started; it contributes no test execution.
 
@@ -198,28 +223,28 @@ Of 147 passes, **26 are native history contracts** in the carry and public-reade
 
 All table paths are relative to `packages/agents/src/api/__tests__/`.
 
-| File | Native history | Shared/public | Final journal PID |
-| --- | ---: | ---: | ---: |
-| `activation-media-owner-lifetime.behavior.test.ts` | 0 | 2 | 2017 |
-| `activation-preflight-cleanup-failure.behavior.test.ts` | 0 | 2 | 2115 |
-| `activationPreflightState.behavior.test.ts` | 0 | 22 | 2271 |
-| `adoption-binding-failure.behavior.test.ts` | 0 | 1 | 2574 |
-| `adoption-scheduler-owner.test.ts` | 0 | 2 | 2692 |
-| `agent-bootstrap.spec.ts` | 0 | 37 | 2959 |
-| `agent-carry-durability.test.ts` | 2 | 0 | 32713 |
-| `agent-carry-faults.test.ts` | 6 | 0 | 3965 |
-| `agent-carry-media.test.ts` | 1 | 0 | 7232 |
-| `agent-carry-owner-controls.test.ts` | 4 | 0 | 7301 |
-| `agent-carry-stream.test.ts` | 5 | 0 | 9326 |
-| `agent-carry-tokens.test.ts` | 2 | 0 | 10408 |
-| `agent-carry-transaction.test.ts` | 2 | 0 | 33156 |
-| `agent-history-reader.test.ts` | 4 | 0 | 13830 |
-| `agent-safe-boundary-coordinator.behavior.test.ts` | 0 | 7 | 15061 |
-| `agent.approvalMode.behavior.test.ts` | 0 | 5 | 15227 |
-| `agent.sequenceModel.behavior.test.ts` | 0 | 7 | 16446 |
-| `agent.settings.behavior.test.ts` | 0 | 16 | 16648 |
-| `agentAdmission.owner.behavior.test.ts` | 0 | 16 | 19769 |
-| `agentMessageBus.behavior.test.ts` | 0 | 4 | 20058 |
+| File                                                    | Native history | Shared/public | Final journal PID |
+| ------------------------------------------------------- | -------------: | ------------: | ----------------: |
+| `activation-media-owner-lifetime.behavior.test.ts`      |              0 |             2 |              2017 |
+| `activation-preflight-cleanup-failure.behavior.test.ts` |              0 |             2 |              2115 |
+| `activationPreflightState.behavior.test.ts`             |              0 |            22 |              2271 |
+| `adoption-binding-failure.behavior.test.ts`             |              0 |             1 |              2574 |
+| `adoption-scheduler-owner.test.ts`                      |              0 |             2 |              2692 |
+| `agent-bootstrap.spec.ts`                               |              0 |            37 |              2959 |
+| `agent-carry-durability.test.ts`                        |              2 |             0 |             32713 |
+| `agent-carry-faults.test.ts`                            |              6 |             0 |              3965 |
+| `agent-carry-media.test.ts`                             |              1 |             0 |              7232 |
+| `agent-carry-owner-controls.test.ts`                    |              4 |             0 |              7301 |
+| `agent-carry-stream.test.ts`                            |              5 |             0 |              9326 |
+| `agent-carry-tokens.test.ts`                            |              2 |             0 |             10408 |
+| `agent-carry-transaction.test.ts`                       |              2 |             0 |             33156 |
+| `agent-history-reader.test.ts`                          |              4 |             0 |             13830 |
+| `agent-safe-boundary-coordinator.behavior.test.ts`      |              0 |             7 |             15061 |
+| `agent.approvalMode.behavior.test.ts`                   |              0 |             5 |             15227 |
+| `agent.sequenceModel.behavior.test.ts`                  |              0 |             7 |             16446 |
+| `agent.settings.behavior.test.ts`                       |              0 |            16 |             16648 |
+| `agentAdmission.owner.behavior.test.ts`                 |              0 |            16 |             19769 |
+| `agentMessageBus.behavior.test.ts`                      |              0 |             4 |             20058 |
 
 The 26 native cases cover: failed final acknowledgement and conserved prior tokens/rows at both scales; source/abort/startup faults and retry; referenced-media/signature/cache/provider metadata; reference/copy retaining controls; bounded streaming, paused source/output snapshots and a 9 MiB single row; mixed-block token counts; unchanged durable source and successful retry; scoped public readers at both scales with active/deferred histories. Existing 180000 ms bounds, 512/8192 inputs, owner limits and negative controls are unchanged.
 
@@ -245,11 +270,11 @@ Commit `883720445` changes two test/fixture files only. Native selection uses `J
 
 `helpers/recording-disposal-target.ts:7-14` returns the actual selected prototype. `profile-session-admission.behavior.test.ts:44-69` gates its real disposal, forwards the original call and witnesses the retiring session ID. Lines 70-82 retain every original admission/state/success assertion. All six original assertion ASTs and the three-case parameter domain match; one witness was added. The 180000 ms Bun and 300000 ms driver limits are unchanged.
 
-| Final-source proof | PID | Pass | Fail | Classification |
-| --- | ---: | ---: | ---: | --- |
-| `final-profile-disposal-journal`, boundary guard | 30501 | 5 | 0 | Shared/public; guard unchanged |
-| Same batch, profile admission | 30512 | 3 | 0 | Journal-selected shared/public concurrency |
-| `final-profile-disposal-old`, profile comparison | 30727 | 3 | 0 | Supplemental old, outside package totals |
+| Final-source proof                               |   PID | Pass | Fail | Classification                             |
+| ------------------------------------------------ | ----: | ---: | ---: | ------------------------------------------ |
+| `final-profile-disposal-journal`, boundary guard | 30501 |    5 |    0 | Shared/public; guard unchanged             |
+| Same batch, profile admission                    | 30512 |    3 |    0 | Journal-selected shared/public concurrency |
+| `final-profile-disposal-old`, profile comparison | 30727 |    3 |    0 | Supplemental old, outside package totals   |
 
 Raw increment: `tmp/854-notes/p4/w22/next-run-20261019-b/`. `assertion-proof.json`, `audit-comparison.json`, `commit-proof.json`, `classification-b.json` and `interrupted-profile-observation.json` retain the bounded evidence. All eight final-source gates passed in `gates-d/`; the earlier formatting failure stays in `gates-c/`. All 3318 captured source hashes match. One baseline SELF_CONFIRMING notice is unchanged, with no policy change or new finding.
 
@@ -261,13 +286,13 @@ The repaired checkpoint is 125 green package files/1015 passes; 681 paths remain
 
 The first resumed batch completed all twenty files. Five unchanged public-history files contribute 29 additional native-history contracts, with every executed case name, source hash and PID in `next-run-20261019-b/classification-b.json`:
 
-| File under `src/api/__tests__/` | PID | Pass | Native behavior |
-| --- | ---: | ---: | --- |
-| `public-history-deferred.test.ts` | 33010 | 2 | 512/8192 pinned snapshots survive replacement without original object retention |
-| `public-history-faults.test.ts` | 33154 | 4 | Source fault propagation and early-break iterator closure at both scales |
-| `public-history-owner-controls.test.ts` | 33651 | 4 | Borrowed/copy consumer retention exceeds unchanged bounds and releases all owners |
-| `public-history-pause.test.ts` | 34214 | 4 | Stored/active clear while paused retains only the returned row and reads indexed boundaries |
-| `public-history-stream.test.ts` | 34868 | 15 | Exact mixed-row digests, membership pins, backpressure, consumer fault/abort, unused readers, 9 MiB row and deferred replacement |
+| File under `src/api/__tests__/`         |   PID | Pass | Native behavior                                                                                                                  |
+| --------------------------------------- | ----: | ---: | -------------------------------------------------------------------------------------------------------------------------------- |
+| `public-history-deferred.test.ts`       | 33010 |    2 | 512/8192 pinned snapshots survive replacement without original object retention                                                  |
+| `public-history-faults.test.ts`         | 33154 |    4 | Source fault propagation and early-break iterator closure at both scales                                                         |
+| `public-history-owner-controls.test.ts` | 33651 |    4 | Borrowed/copy consumer retention exceeds unchanged bounds and releases all owners                                                |
+| `public-history-pause.test.ts`          | 34214 |    4 | Stored/active clear while paused retains only the returned row and reads indexed boundaries                                      |
+| `public-history-stream.test.ts`         | 34868 |   15 | Exact mixed-row digests, membership pins, backpressure, consumer fault/abort, unused readers, 9 MiB row and deferred replacement |
 
 Reachability is through the real selected recorder and HistoryService in `history-suffix-test-helpers.ts:155-195`. `public-history-fixture.ts` forwards `super.streamRawHistory`, instruments actual row ownership/decodes and injects that service into a real public Agent. Deferred cases use real Agent history directly. No history decoder is replaced. The 512/8192 scales, 440-row/8 MiB bounds, 9 MiB row, active/stored variants and timeouts remain unchanged. The four owner controls are classified as controls, not bounded-production positive proof. A separate `PUBLIC_HISTORY_RETAINING_TRAP=1` launch has not run in this increment and is not claimed here.
 
