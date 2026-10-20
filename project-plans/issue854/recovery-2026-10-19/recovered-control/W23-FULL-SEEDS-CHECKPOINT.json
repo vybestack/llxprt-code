@@ -1,5 +1,5 @@
 {
-  "snapshotAt": "2026-10-20T10:16:19.729Z",
+  "snapshotAt": "2026-10-20T10:28:45.024184+00:00",
   "startingHead": "7dac24157730c6c5b80172ddd448c75cb77cea32",
   "sourceHead": "8f55eba7bec0ece04492b87c5b1d6128958c187b",
   "commits": {
@@ -238,143 +238,149 @@
   },
   "nativeSnapshot": {
     "checkpoint": {
-      "path": "tmp/854-notes/p4/w23/full-seeds-run-j/checkpoint.json",
-      "sha256": "484d472ca353d29ba1b4f82271b80e3b4c3dd4f7f7a064c95393b41b9c1b8047"
+      "path": "tmp/854-notes/p4/w23/monitor-reconcile-20261020-43130/native-checkpoint.json",
+      "sha256": "b8d67825d307fee8af1bc7cd95e29794662da8ddce14ee9e18389053b10f1abe"
     },
+    "liveAuthority": "tmp/854-notes/p4/w23/full-seeds-run-j/checkpoint.json",
     "state": {
       "pid": 36257,
-      "childPid": 41117,
+      "childPid": 51333,
       "status": "running",
-      "index": 6,
+      "index": 18,
       "range": {
-        "first": 600,
-        "last": 699,
-        "path": "packages/providers/src/__tests__/journal-full-seeds-06.test.ts"
+        "first": 1800,
+        "last": 1899,
+        "path": "packages/providers/src/__tests__/journal-full-seeds-18.test.ts"
       },
-      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/full-seeds-run-j/006.log",
-      "xml": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/full-seeds-run-j/006.xml",
-      "receipts": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/full-seeds-run-j/006.cases.jsonl",
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/full-seeds-run-j/018.log",
+      "xml": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/full-seeds-run-j/018.xml",
+      "receipts": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/full-seeds-run-j/018.cases.jsonl",
       "head": "8f55eba7bec0ece04492b87c5b1d6128958c187b"
     },
-    "acceptedFiles": 6,
-    "passes": 60,
-    "assertions": 52396,
+    "acceptedFiles": 18,
+    "passes": 180,
+    "assertions": 157100,
     "counts": {
       "openai-chat-plain": {
-        "checked": 600,
+        "checked": 1800,
         "first": 0,
-        "last": 599,
+        "last": 1799,
         "boundaries": {
-          "invalid-ai-excluded-before-normalization": 336,
-          "raw-provider-versus-service-normalization": 159,
-          "same-provider-and-service": 105
+          "invalid-ai-excluded-before-normalization": 1000,
+          "raw-provider-versus-service-normalization": 489,
+          "same-provider-and-service": 311
         },
-        "rawFrozenMatches": 600,
-        "serviceReferenceMatches": 600
+        "rawFrozenMatches": 1800,
+        "serviceReferenceMatches": 1800
       },
       "openai-chat-kimi": {
-        "checked": 600,
+        "checked": 1800,
         "first": 0,
-        "last": 599,
+        "last": 1799,
         "boundaries": {
-          "invalid-ai-excluded-before-normalization": 336,
-          "raw-provider-versus-service-normalization": 159,
-          "same-provider-and-service": 105
+          "invalid-ai-excluded-before-normalization": 1000,
+          "raw-provider-versus-service-normalization": 489,
+          "same-provider-and-service": 311
         },
-        "rawFrozenMatches": 600,
-        "serviceReferenceMatches": 600
+        "rawFrozenMatches": 1800,
+        "serviceReferenceMatches": 1800
       },
       "openai-chat-mistral": {
-        "checked": 600,
+        "checked": 1800,
         "first": 0,
-        "last": 599,
+        "last": 1799,
         "boundaries": {
-          "invalid-ai-excluded-before-normalization": 336,
-          "raw-provider-versus-service-normalization": 159,
-          "same-provider-and-service": 105
+          "invalid-ai-excluded-before-normalization": 1000,
+          "raw-provider-versus-service-normalization": 489,
+          "same-provider-and-service": 311
         },
-        "rawFrozenMatches": 600,
-        "serviceReferenceMatches": 600
+        "rawFrozenMatches": 1800,
+        "serviceReferenceMatches": 1800
       },
       "openai-responses-via-openai": {
-        "checked": 600,
+        "checked": 1800,
         "first": 0,
-        "last": 599,
+        "last": 1799,
         "boundaries": {
-          "invalid-ai-excluded-before-normalization": 336,
-          "raw-provider-versus-service-normalization": 159,
-          "same-provider-and-service": 105
+          "invalid-ai-excluded-before-normalization": 1000,
+          "raw-provider-versus-service-normalization": 489,
+          "same-provider-and-service": 311
         },
-        "rawFrozenMatches": 600,
-        "serviceReferenceMatches": 600
+        "rawFrozenMatches": 1800,
+        "serviceReferenceMatches": 1800
       },
       "openai-responses": {
-        "checked": 600,
+        "checked": 1800,
         "first": 0,
-        "last": 599,
+        "last": 1799,
         "boundaries": {
-          "invalid-ai-excluded-before-normalization": 336,
-          "raw-provider-versus-service-normalization": 159,
-          "same-provider-and-service": 105
+          "invalid-ai-excluded-before-normalization": 1000,
+          "raw-provider-versus-service-normalization": 489,
+          "same-provider-and-service": 311
         },
-        "rawFrozenMatches": 600,
-        "serviceReferenceMatches": 600
+        "rawFrozenMatches": 1800,
+        "serviceReferenceMatches": 1800
       },
       "anthropic-cache-off": {
-        "checked": 600,
+        "checked": 1800,
         "first": 0,
-        "last": 599,
+        "last": 1799,
         "boundaries": {
-          "raw-provider-versus-service-normalization": 184,
-          "invalid-ai-excluded-before-normalization": 302,
-          "same-provider-and-service": 114
+          "raw-provider-versus-service-normalization": 570,
+          "invalid-ai-excluded-before-normalization": 904,
+          "same-provider-and-service": 326
         },
-        "rawFrozenMatches": 600,
-        "serviceReferenceMatches": 600
+        "rawFrozenMatches": 1800,
+        "serviceReferenceMatches": 1800
       },
       "anthropic-cache-5m": {
-        "checked": 600,
+        "checked": 1800,
         "first": 0,
-        "last": 599,
+        "last": 1799,
         "boundaries": {
-          "raw-provider-versus-service-normalization": 184,
-          "invalid-ai-excluded-before-normalization": 302,
-          "same-provider-and-service": 114
+          "raw-provider-versus-service-normalization": 570,
+          "invalid-ai-excluded-before-normalization": 904,
+          "same-provider-and-service": 326
         },
-        "rawFrozenMatches": 600,
-        "serviceReferenceMatches": 600
+        "rawFrozenMatches": 1800,
+        "serviceReferenceMatches": 1800
       },
       "anthropic-cache-1h": {
-        "checked": 600,
+        "checked": 1800,
         "first": 0,
-        "last": 599,
+        "last": 1799,
         "boundaries": {
-          "raw-provider-versus-service-normalization": 184,
-          "invalid-ai-excluded-before-normalization": 302,
-          "same-provider-and-service": 114
+          "raw-provider-versus-service-normalization": 570,
+          "invalid-ai-excluded-before-normalization": 904,
+          "same-provider-and-service": 326
         },
-        "rawFrozenMatches": 600,
-        "serviceReferenceMatches": 600
+        "rawFrozenMatches": 1800,
+        "serviceReferenceMatches": 1800
       },
       "anthropic-purge-boundary": {
-        "checked": 600,
+        "checked": 1800,
         "first": 0,
-        "last": 599,
+        "last": 1799,
         "boundaries": {
-          "raw-provider-versus-service-normalization": 136,
-          "invalid-ai-excluded-before-normalization": 445,
-          "same-provider-and-service": 19
+          "raw-provider-versus-service-normalization": 416,
+          "invalid-ai-excluded-before-normalization": 1347,
+          "same-provider-and-service": 37
         },
-        "rawFrozenMatches": 600,
-        "serviceReferenceMatches": 600
+        "rawFrozenMatches": 1800,
+        "serviceReferenceMatches": 1800
       }
     },
     "randomPurge": {
-      "checked": 600,
+      "checked": 1800,
       "first": 0,
-      "last": 599
+      "last": 1799
     },
-    "fullNativeComplete": false
+    "fullNativeComplete": false,
+    "validation": {
+      "path": "tmp/854-notes/p4/w23/monitor-reconcile-20261020-43130/native-validation.json",
+      "sha256": "030012a28328bfce1e7e40dbdaa501a28b8773f6618a5b069c12936eafcdb5c5"
+    },
+    "acceptedJunitSeconds": 1049.479927
   },
   "frozen": {
     "files": 44,
@@ -393,5 +399,36 @@
     "Live driver checkpoint supersedes this dated snapshot. Do not edit package source or overlap heavy gates while it runs.",
     "Eight planning/header RED cases remain phases 5/6 through 7 dependencies. W23 partial, W24-W26 and old default unchanged."
   ],
-  "review": "review skipped per Andrew 2026-10-09"
+  "review": "review skipped per Andrew 2026-10-09",
+  "reconciliation": {
+    "requirements": "W23-REMAINING-REQUIREMENTS.md",
+    "historicalValidation": {
+      "path": "tmp/854-notes/p4/w23/monitor-reconcile-20261020-43130/historical-validation.json",
+      "sha256": "cd0bb12b2776f44608fc1228f709455a75d57ebd7be4e6726099bacbc898b3df"
+    },
+    "receiptHashChecks": 414,
+    "sourceManifestEntries": 7734,
+    "sourceMismatches": 0,
+    "retentionReuse": {
+      "matching": 33,
+      "checks": 35,
+      "changed": [
+        "packages/core/src/services/history/journalScalars.ts",
+        "packages/core/src/services/history/journalHistoryStore.scalars.test.ts"
+      ],
+      "notClaimed": "No fresh current-source retention measurement; prior 845/850-request receipts remain historical."
+    },
+    "packageEdits": false,
+    "testsOrHeavyGatesRun": false,
+    "nativePrefix": {
+      "first": 0,
+      "last": 1799,
+      "rawMatchesPerFormat": 1800,
+      "curatedMatchesPerFormat": 1800,
+      "formats": 9,
+      "nativeFormatCases": 16200,
+      "randomPurgeCases": 1800
+    },
+    "remaining": "Full native suffix through 4999; existing frontend variant/native-counterpart accounting; bounded regression of changed common read/commit paths; eight existing header RED assertions depend on phases 5/6 through 7. Original five sendPeak trap mechanisms and four-route WeakRef controls have actual positive-assertion rejection receipts."
+  }
 }

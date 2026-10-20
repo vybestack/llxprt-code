@@ -1,3 +1,17 @@
+## Verified native prefix and original-requirement map, 2026-10-20T10:28:45Z
+
+| Claim | Checked evidence | Boundary |
+| --- | --- | --- |
+| Final-source native prefix | Run-j `000..017` source/log/JUnit/case hashes; immutable monitor `native-checkpoint.json` and `native-validation.json` | Seeds 0..1799, 1800 raw frozen and 1800 curated matches per each of nine formats; 16,200 format cases, 1800 randomized purge; 180 passes/157,100 assertions; zero failures/skips. No active-file acceptance. |
+| Complete reference comparison | Run-j `reference-sweep.jsonl` and done marker, 50 contiguous ranges per format | 45,000 expected-side cases, not native completion. |
+| Package/input identity | Run-j source-manifest SHA `c76dab6ba1852d5d6dfbe1c2b388416e6397685e6c71bbc83a7197e4ec27794e` | All 7734 tracked TS/TSX/JSON package entries and all 44 immutable inputs match; package source HEAD `8f55eba7b`, docs HEAD `00cdb5ae9`. |
+| Existing original traps | `limits-memory-run-c/final-memory-b/022..026`, `027..028`, after-archive `media-archive-run-f/047` | Five positive memory assertions reject; four-route WeakRef positive/control retains original bound nine, forty 1 MiB stored-reference rows, fixed peak two. No exhaustive route/trap expansion. |
+| Existing frontend/provider/curation proof | `monitor-reconcile-20261020-43130/historical-validation.json`, 414 hashes checked | Saved JUnit agrees with seven W23 proof documents. Executions overlap; do not sum as unique coverage. Twelve curation paths already accounted for. |
+| Current reuse limit | `W23-REMAINING-REQUIREMENTS.md`, historical validation source drift | Retention list matches 33/35; changed `journalScalars.ts` and scalar test invalidate blanket unchanged-source promotion. Preserve historical measurements and use bounded affected-boundary regression after the driver. |
+| Actual remaining scope | Original `seq-450.txt:29-35`, `seq-258.txt:1-4`; new requirements map | Native suffix through 4999; existing frontend variant/counterpart accounting; bounded source rebind; eight existing zero-decode header failures on phases 5/6 through 7. Independent W24 evidence may proceed after this lane without claiming W23/W24 closure. |
+
+Snapshot driver **36257**, child **51333**, seeds **1800..1899**. Current run-j state/checkpoint overrides dated PIDs. Summed accepted JUnit time is 1049.479927 seconds. `W23-FULL-SEEDS-CHECKPOINT.json` binds immutable snapshot SHA `b8d67825d307fee8af1bc7cd95e29794662da8ddce14ee9e18389053b10f1abe`, native validation and historical validation. W23 is partial; no package edit/heavy lane/default change. Review skipped per Andrew 2026-10-09.
+
 ## Full seeded-corpus checkpoint, 2026-10-20T10:16:19Z
 
 | Claim | Executed evidence | Boundary |

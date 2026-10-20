@@ -1,3 +1,15 @@
+## W23 continuation and original-scope accounting, 2026-10-20
+
+Keep the existing run-j native corpus serial and immutable until it completes or stops on its first failure. Current state/checkpoint is the live authority; accept only complete 100-seed partitions with source/log/JUnit/case hashes and contiguous receipts. Preserve raw frozen and independently curated comparisons separately. Nine formats times 5000 is 45,000 format cases; randomized purge is 5000 total rotating eight formats, not 5000 per format. Complete expected-side references do not complete native coverage.
+
+Use `W23-REMAINING-REQUIREMENTS.md` to reconcile the original W23 contracts, rather than treating discovery candidates or vague wider-variant prose as new exhaustive requirements. The original five sendPeak trap mechanisms already have real positive-assertion failures, and stored-reference row liveness has fixed positives plus rejecting controls. The twelve curation paths are already accounted for. Frontend rollback/cleanup/reattach/replay-failure/concurrency/cancellation variants must map to actual existing tests and native/shared/old evidence; do not invent a task-restoration product feature from A2A's workspace-restore test.
+
+Do not claim all historical retention source checks still match: 33/35 match now, with journalScalars and its test changed by the accounted curation fixes. Preserve old measurements, inspect actual reachability, and rebind the affected existing read/lease/send-memory boundaries after the native driver instead of repeating every old worker or arbitrary trap combination. A matching test hash alone does not establish unchanged dependencies. Archive-aware publication is separately proved by the real CLI cold-reopen and media fault/owner cases; no archive publication is entered by native send fixtures that have no recorder media store.
+
+Retain all eight zero-decoded-row header RED assertions and their explicit phase-5 normalization, phase-6 converter/filter and phase-7 append/fill-summary dependencies. Do not weaken them into zero-HTTP checks or add a new whole-history measurement. Original W24 closure depends on W23, but independent lifecycle/write measurement may follow the active serial lane while those later-phase dependencies remain explicit. Such work cannot close W23/W24, flip W25 or waive any requirement. No approval gate is introduced.
+
+This increment is documentation and read-only receipt verification only. No product changes, overlapping heavy lane, cleanup, `.llxprt` staging, skips, weaker checks, OCR, push or merge. Review skipped per Andrew 2026-10-09.
+
 ## W23 expected-side boundary decisions, 2026-10-20
 
 Use frozen provider bodies at their captured provider-only input boundary, and derive service expectations from existing eager HistoryService curation followed by an independent request reference. Invalid-AI exclusion, synthesized/reconstructed responses, orphan handling and media representation can make those bodies differ. Report both matches and case classifications; never replace service expectations with the observed native output.
