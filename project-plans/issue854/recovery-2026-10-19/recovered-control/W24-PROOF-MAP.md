@@ -1,5 +1,53 @@
 # W24 lifecycle proof map
 
+## Heap/I/O checkpoint, 2026-10-20
+
+Root fix `264e9995d03e2a7931b59f2c23eb6b243576cd32` is accepted independently. The whole-product heap positive remains RED and the eight CLI fixture/support/test paths remain uncommitted WIP. Raw root for this section: `tmp/854-notes/p4/w24/heap-io-run-b/`; all short paths below are relative to it. This section supersedes earlier unmeasured/no-topology-decision statements, without closing W24.
+
+| Claim | Actual evidence and limit |
+| --- | --- |
+| Original retention root | `late-census-06-{350,400}-string-owners.json` and `late-census-06-string-delta.log`: `detectedTasks` strings 5,130,711 to 5,874,851 bytes over 50 real turns. Original analyzer SHA `2ef661d11acae78713c236b031f23e11a672d982b401cf2c30780190bff53980`; `root-before-07.sha256` binds its test context. `analysisHistory` owns results with task strings/reminders; the result-ownership regression is RED, three WeakRefs alive, in `complexity-red-07.log`. |
+| Green bounded fix | Core `complexity-analyzer.ts:609-639` stores counts/score sum only; `complexity-analyzer-retention.test.ts:31-57` observes released results, exact stats and reset. `complexity-{retention,existing,client}-final-12.log`: 2/8/21 passes, zero failures, 45 assertions total. Existing scoring/extraction/client tests stay unchanged. No text cache, hash-based classification, regex-match ownership or whole-history copy. |
+| Normal 50-turn result | `fixtures/whole-product-Jklv6N/normal-heap-io.json`, `positive-07.log`: exit one, warmup 530, baseline 347,458,928, checkpoint deltas 1,784,599 / 244,728 / 205,788 / 934,721 / 1,726,550 bytes. Peak 1,784,599, late fit 1,552,319.7 and endpoint 1,481,822. Original 1,048,576-byte allowance and 262,144-byte late checks reject. Alive/observed rows 0/165; prepared/closed 55/55. This is not accepted positive proof. |
+| Retaining control | `fixtures/whole-product-tJmodT/trap-heap-io.json`, `trap-10.log`, `trap-10-classification.json`: exit one at `verdict.failures` assertion, all five checkpoint allowance failures plus late failures; peak/final 198,017,948, late fit 129,556,854.9, endpoint 129,374,088. Strong rows 8,085; alive/observed 165/165; prepared/closed 55/55. No timeout/loader failure qualifies as this control. |
+| Input comparison | `positive-control-10-summary.json`: same measured text SHA `3ef650853d3f50dd65389bc59726784cfec34752154d4546afb49d21efe99bdc`; each has 50 measured turns, 60 requests and five tool rounds. Warmup is 530 versus 570, so complete process inputs are not identical. Both use the same production Agent/HTTP transport, 65,536-byte mixed text, actual write-file tool, checkpoint/save/compress and recording flush. |
+| Measurement method | WIP `whole-product-heap-turn.ts` warms up until the existing convergence predicate accepts, bounded by 650 turns; readings begin after 350 and acceptance cannot occur before 500. Baseline and checkpoints use nine same-ten-turn-phase settled samples, omitting the first sample of each cycle. These authoring changes attempted to handle settling without widening limits; they are not accepted calibration. No cache-size subtraction or normalized heap is used. Before-fix retained strings still grew during warmup; post-fix normal remains RED. Original shared growth predicate/tests and their bounds/timeouts are unchanged. `after-fix-census-08.log` timed out at 290000 ms and is excluded from acceptance. |
+| Hash boundary | `accepted-07-tracked-before.sha256`: all 8,773 tracked package paths match in `tracked-13-vs-inherited.log`. Nine of ten touched hashes in `positive-07-source-before.sha256` match current files. The sole difference is transport `findLast` replaced by a backwards last-user lookup for the configured TypeScript library; `transport-compatibility-13.test.ts` reconstructs the inherited byte hash and exercises six real HTTP inputs, 1 pass/21 assertions. Historical measurements retain the inherited transport hash, not an invented final-source rerun. All ten current hashes match `source-13-before.sha256` in `source-check-13-final.log`. |
+| Scoped gates | `gates-11-results.json`: bare/mirror cost runs, declaration build, core/agents noemit pass; CLI noemit initially rejects unsupported `findLast`. `gates-12-results.json`: CLI/test types pass, optional-chain lint failure retained. `gates-13-results.json`: all 17 entries exit zero, including corrected CLI/test types, ten-file lint/format, graph/audit, eight isolated old/journal regressions, lunahigh smoke and final source hashes. No touched-file audit finding. Graph validation is not shard execution; no full-monorepo claim. |
+| Process closure | `recorded-pids-final-13.json`: 39 enumerated PIDs absent, including 86703/86710/86711, 99529/99533 and 2815/2817; `ps` exit one with header only. No new positive/trap/warmup run during finalization. Root tests plus compatibility, eight regressions and two inherited cost executions total 62 passes/780 assertions across 14 test processes; red measurements remain separate. |
+
+### Paired foreground cost and D-ORCH-7
+
+`paired-cost-09-{bare,mirror}.json` were produced by gates 11, PIDs 86715/87959, not the module-resolution failure in `paired-cost-bare-10.log`. Each uses 50 warmup and 50 measured turns, 60 provider requests/five tool rounds, and the same measured text SHA above. CPU totals are summed process user+system microseconds converted to milliseconds; I/O counts wrap actual journal handle operations, not physical-device traffic. Read totals depend on caches and are not an isolated per-recorder CPU attribution.
+
+| Mode | Primary writes / bytes / flushes | Mirror writes / bytes / flushes | Primary reads / bytes | Mirror reads / bytes | Process CPU ms | Turn wall ms |
+| --- | --- | --- | --- | --- | --- | --- |
+| Bare | 240 / 9,245,079 / 60 | 0 / 0 / 0 | 16,975 / 111,206,357 | 0 / 0 | 21,457.818 | 20,642.358 |
+| Recording mirror | 240 / 9,245,079 / 60 | 240 / 9,257,160 / 60 | 18,864 / 127,789,842 | 390 / 2,380,684 | 22,568.066 | 22,158.535 |
+
+Both primary streams contain 558 records/60 groups and 7,989,824 row bytes; the mirror repeats those row bytes in 738 records/60 groups. Recording writes 18,502,239 total bytes, about 2.0013 times bare, with 5.2% more process CPU in this pair. `paired-cost-09-owner-archive.json` has one owner and 38 published active rows; the cost test independently streams/digests matching primary and mirror rows. This does not measure multiple-owner isolation. **Choose recording-as-primary for the recording owner; implementation is pending as the next topology slice.** Preserve separate owners' recording filtering, borrowed-facade lifecycle, locks, checkpoints, media and failure settlement. The single-owner evidence provides no isolation justification for permanent foreground duplication. No owner-approval gate is added.
+
+### Source and receipt bindings
+
+`evidence-final-13.sha256` binds 24 raw source manifests, checks, test logs, receipts and summaries; its SHA is `d3e85dd12129617d87018d35e31e2f4afdcd74f0048371e60f2ae9c212092bf2`. Verification: `shasum -a 256 -c tmp/854-notes/p4/w24/heap-io-run-b/evidence-final-13.sha256`. Selected direct bindings:
+
+| Path | SHA-256 |
+| --- | --- |
+| `positive-control-10-summary.json` | `678ff236e16d0fc23b058145d6a2871b1987fb7052d6192f44bf93fc4d3c0577` |
+| `fixtures/whole-product-Jklv6N/normal-heap-io.json` | `b69830ba15363620cb7958d03f26c15165c439d260734025af10cd4c9d1dac17` |
+| `fixtures/whole-product-tJmodT/trap-heap-io.json` | `59f5925210cdc7f3d72645a9f79cabafc1659e675eece541283b56085eb920c7` |
+| `paired-cost-09-bare.json` | `7a2177469ec7ce698073252cd46816b35d933f9389489804828b73ac56842e89` |
+| `paired-cost-09-mirror.json` | `2326326b300348dd36efc7c574391648a9bec0e8da6b517a4ebc55932a9654fb` |
+| `paired-cost-09-owner-archive.json` | `70eb7c22327dafe84c56d530723a06967d03e0f1a715c3bb359182f8054a343c` |
+| `gates-13-results.json` | `1420354c6273cccb3304a1f4a3d49c571be647d71d49fa02a1dca5a341620c73` |
+| `source-13-before.sha256` | `2ac22b46e911e92e6fc44ca971c315351337a5599d07c2e4e7a2aa836cdf60a6` |
+| `accepted-07-tracked-before.sha256` | `1f21f61ce1f3715aecefbb738d0882da9c4e83020573841d1b3262d8f9e876df` |
+| `recorded-pids-final-13.json` | `fd440e33c784a7db3b0b7d8dfadc84af0b2ee4eb12f8aac5364643517fb745bf` |
+
+Committed core source/test SHA-256 values: `3c46fdbec14a270ed07620cb91db58968047441eb94a6b03990c09e3faad3e45` / `e487aeca68a2478cc3d9372ac0c6efaf042b3cb890db6742c76619732c3bc21a`. Both committed blobs equal the tested files. Inherited/final transport SHA values: `227ff45a1b5607b57823aa6c0add4eeaa164d324583bb57b03e4ff861e2fc5e0` / `51286c3e2f560b9f76a87a6512d3cd8ee754d076953956834528a99ef832c56f`. Other final WIP sources are individually bound in the ten-entry manifest; these hashes do not imply those files were committed or their heap test passed.
+
+Remaining: explain the post-fix positive's heap growth, then obtain unchanged-bound positive/control acceptance and implement the selected topology. Eight W23 planning/header RED dependencies and later W25/W26 work remain. Review skipped per Andrew 2026-10-09. Earlier lifecycle evidence below remains separate.
+
 ## Accepted common lifecycle, 2026-10-20
 
 `W24-LIFECYCLE-PROOF.json` binds the final sources, nineteen serial test/gate processes, raw logs, typed fixture receipts and absent PIDs. W24 remains partial for the performance obligations below. Test entry: `packages/cli/src/ui/hooks/whole-product-lifecycle.test.ts:16-36`. Support paths below are relative to `packages/cli/src/__tests__/support/`.
