@@ -41,4 +41,11 @@ BeforeModel array hooks are an opt-in design exception, not the default tested p
 
 ## Explicit remaining obligations
 
-The first green lifecycle piece is to be committed before extending the performance lane. W24 remains partial until the complete common lifecycle, 50-turn retained-heap proof with the original 1 MiB allowance and rejecting retaining control, primary-plus-mirror measured write bytes/CPU and resulting recorder-as-primary decision, and journal smoke are accepted. W23's eight existing RED assertions remain unchanged. No W25/default flip, W26 scratch closure or later-phase closure follows. Review skipped per Andrew 2026-10-09.
+The common lifecycle extension is committed at `e3cdf3ec74d7d60c4e57df27d8e1c6f0b2fb4e46`. Its journal lunahigh smoke is accepted at that unchanged source boundary. W24 still owns these subsequent steps, in order:
+
+1. Run 50-turn whole-product retained-heap acceptance with the unchanged 1 MiB allowance and a retaining trap that rejects at the intended memory predicate.
+2. Measure write bytes and CPU for both primary and mirror, then make the recorder-as-primary decision from those measurements under D-ORCH-7. No owner approval gate is added.
+
+The common scenario covers text/tool history. Its media boundary is separate native-package regression evidence, including media validation and rollback. Existing W23 controls are separately recorded; no W24 mutation or heap-trap result is claimed. Windows real rename refusal and compaction read/pin behavior are existing design obligations, not newly completed W24 work (design Sections 4.11, 4.12, 13.6 and risk 9). This lane ran on Darwin.
+
+W23's eight existing planning/header RED assertions remain unchanged on phases 5/6 through 7. No W24 closure, W25/default flip, W26 scratch closure or later-phase closure follows. Review skipped per Andrew 2026-10-09.

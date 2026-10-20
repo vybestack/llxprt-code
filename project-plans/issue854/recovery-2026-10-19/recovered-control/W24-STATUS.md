@@ -1,5 +1,15 @@
 # W24 status
 
+## Committed lifecycle handoff, 2026-10-20
+
+Lifecycle extension and bound proof committed as `e3cdf3ec74d7d60c4e57df27d8e1c6f0b2fb4e46`, after first green `75883b724`. Finalization reused the completed acceptance lane, verified every bound source/log/receipt hash and recounted its 28 passes/484 assertions. The 7376 tracked package-source hashes and new child helper still match. All 38 recorded PIDs are absent; managed tasks report zero running. No test, measurement or mutation was restarted for handoff.
+
+Proof SHA-256: `0121dc5f4d93ad0dc2cd79a86d219c8ab15ab550019309aac64d1c8cc5cef855` (`W24-LIFECYCLE-PROOF.json`). Journal smoke ran `bun scripts/start.ts --profile-load lunahigh "write me a haiku and nothing else"`, exited zero, identified `[lunahigh:gpt-6-luna]` and returned the three-line haiku in `final-smoke-journal-child-final.log`. No paid Zai fallback was used.
+
+The common scenario exercises text/tool rows. Media import validation, corrupt/undeclared media rejection and publication rollback are separate executed native-package cases, not a claim that this common scenario sends media. No new W24 fault mutation or retaining trap ran. Existing W23 memory controls reject retention at 77877575 bytes and release-after-peak retention at 36050588 bytes (`W23-SOURCE-REBIND-PROOF.json`); they do not establish the outstanding 50-turn whole-product proof. W23's earlier source controls and byte-exact restorations remain in their own proofs. Final package hashes match accepted restored source. The saved `final-memory.diff` contains only the pre-existing `.llxprt/LLXPRT.md` change, not a test change; it remains untouched and unstaged. No original memory test, allowance, late-growth bound, workload or timeout changed.
+
+Next owned W24 steps are the 50-turn retained-heap positive plus rejecting retaining trap at the original 1 MiB allowance, then primary-plus-mirror write-byte/CPU measurements and the D-ORCH-7 topology decision. Actual Windows rename refusal and compaction read/pin coverage were not executed in this Darwin lifecycle lane; retain them as existing design obligations (Sections 4.11, 4.12, 13.6 and 15.2 risk 9), without assigning them a new W24 completion claim or approval gate. W25 remains blocked by its existing prerequisites, including eight W23 planning/header RED assertions on phases 5/6 through 7. Keep the old default. Provider-spool/compression-candidate removal remains W26/phase-6 work.
+
 ## Common lifecycle accepted, 2026-10-20
 
 **The first common lifecycle slice is green. W24 remains partial.** First green commit: `75883b724`; the extension adds actual task/subagent execution, pre-send locked-recorder observation, metadata checks and exact final artifact inventory. Production sources and the old default are unchanged.
