@@ -20,6 +20,9 @@ import { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRunti
 import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
 import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
+import { childJournalExtension } from './childaccept-fixture.js';
+import { readJournalFileFacts } from '@vybestack/llxprt-code-core/recording/journalSessionListing.js';
+import { SessionLockManager } from '@vybestack/llxprt-code-core/recording/SessionLockManager.js';
 import {
   createScopeFactory,
   fixtureToolSelection,
@@ -30,6 +33,35 @@ const fixturePaths = installTestWorkspacePaths({
   targetDir: process.cwd(),
   isTrusted: () => true,
 });
+
+async function verifyNativeConfigFacts(
+  path: string,
+  sessionId: string,
+  parentSessionId: string,
+): Promise<void> {
+  if (childJournalExtension() !== '.llxj') return;
+  const found = await readJournalFileFacts(path);
+  expect(found?.facts).toMatchObject({
+    sessionId,
+    provider: 'anthropic',
+    model: 'claude-sonnet-4',
+    start: { kind: 'subagent', parentSessionId },
+  });
+}
+
+async function verifyNativeDisposal(chatsDir: string): Promise<void> {
+  expect(await readdir(chatsDir)).toStrictEqual([]);
+}
+
+async function verifyJournalDisposal(chatsDir: string): Promise<void> {
+  if (childJournalExtension() === '.llxj') {
+    await verifyNativeDisposal(chatsDir);
+    return;
+  }
+  expect(
+    (await readdir(chatsDir)).filter((p) => p.endsWith('.jsonl')),
+  ).toStrictEqual([]);
+}
 
 describe('child Config and journal ownership', () => {
   it.each([false, true])(
@@ -80,14 +112,36 @@ describe('child Config and journal ownership', () => {
           if (!history)
             throw new Error('Child must use the real journal-backed history');
           const childConfig = options.profile.config;
+          expect(childConfig).not.toBe(foreground);
+          expect(options.profile.state.sessionId).not.toBe(
+            foreground.getSessionId(),
+          );
           expect(
             coreEvents.listenerCount(CoreEvent.ModelChanged),
           ).toBeGreaterThan(priorSubscriptions);
           const dispose = childConfig.dispose.bind(childConfig);
           childConfig.dispose = async (): Promise<void> => {
+            childConfig.dispose = dispose;
             const paths = await readdir(chatsDir);
+            const path = history.journalPath();
+            if (path === null)
+              throw new Error('Child journal missing during Config disposal');
             journalExistedDuringConfigDispose ||= paths.some(
-              (p) => p.endsWith('.jsonl') && existsSync(join(chatsDir, p)),
+              (p) =>
+                p.endsWith(childJournalExtension()) &&
+                existsSync(join(chatsDir, p)),
+            );
+            expect(existsSync(path)).toBe(true);
+            expect(
+              await SessionLockManager.isLocked(
+                chatsDir,
+                options.profile.state.sessionId,
+              ),
+            ).toBe(true);
+            await verifyNativeConfigFacts(
+              path,
+              options.profile.state.sessionId,
+              foreground.getSessionId(),
             );
             await dispose();
           };
@@ -110,9 +164,7 @@ describe('child Config and journal ownership', () => {
         expect(coreEvents.listenerCount(CoreEvent.ModelChanged)).toBe(
           priorSubscriptions,
         );
-        expect(
-          (await readdir(chatsDir)).filter((p) => p.endsWith('.jsonl')),
-        ).toStrictEqual([]);
+        await verifyJournalDisposal(chatsDir);
       } finally {
         await rm(dir, { recursive: true, force: true });
       }

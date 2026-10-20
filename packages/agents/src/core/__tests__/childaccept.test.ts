@@ -5,11 +5,51 @@ import { randomUUID } from 'node:crypto';
 import { readFile, readdir, rm, stat } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { readJournalFileFacts } from '@vybestack/llxprt-code-core/recording/journalSessionListing.js';
+import { nativeFileRows } from '../../compression/__tests__/support/native-file-rows.js';
 import {
   acceptanceDirectory,
+  childJournalExtension,
   launchAcceptanceChild,
 } from './childaccept-fixture.js';
 import { localTransport, sendChildHistory } from './childaccept-transport.js';
+
+async function verifyNativeLaunch(
+  path: string,
+  directory: string,
+  fixture: Awaited<ReturnType<typeof launchAcceptanceChild>>,
+): Promise<void> {
+  const found = await readJournalFileFacts(path);
+  expect(found?.facts).toMatchObject({
+    sessionId: fixture.child.runtime.runtimeContext.state.sessionId,
+    provider: 'openai-responses',
+    model: 'gpt-5.2',
+    start: {
+      kind: 'subagent',
+      parentSessionId: 'childaccept-parent',
+      workspaceDirs: [directory],
+    },
+  });
+  expect(await Array.fromAsync(nativeFileRows(path))).toMatchObject([
+    { speaker: 'human', blocks: [{ type: 'text', text: 'child-only' }] },
+  ]);
+  expect(found?.rows).toBe(1);
+}
+
+async function verifyLaunchJournal(
+  path: string,
+  directory: string,
+  fixture: Awaited<ReturnType<typeof launchAcceptanceChild>>,
+): Promise<void> {
+  if (childJournalExtension() === '.llxj') {
+    await verifyNativeLaunch(path, directory, fixture);
+    return;
+  }
+  const bytes = await readFile(path, 'utf8');
+  expect(bytes).toContain('"kind":"subagent"');
+  expect(bytes).toContain('"parentSessionId":"childaccept-parent"');
+  expect(bytes).toContain('child-only');
+}
 
 describe('child facade real launch', () => {
   it('creates a fixture directory when its parent is absent', async () => {
@@ -40,12 +80,13 @@ describe('child facade real launch', () => {
       await history.waitForCommit();
       const files = await readdir(chats);
       expect(files.filter((file) => file.endsWith('.lock'))).toHaveLength(1);
-      const journals = files.filter((file) => file.endsWith('.jsonl'));
+      const journals = files.filter((file) =>
+        file.endsWith(childJournalExtension()),
+      );
       expect(journals).toHaveLength(1);
-      const bytes = await readFile(resolve(chats, journals[0]), 'utf8');
-      expect(bytes).toContain('"kind":"subagent"');
-      expect(bytes).toContain('"parentSessionId":"childaccept-parent"');
-      expect(bytes).toContain('child-only');
+      const path = resolve(chats, journals[0]);
+      expect(history.journalPath()).toBe(path);
+      await verifyLaunchJournal(path, directory, fixture);
     } finally {
       await fixture.close();
     }

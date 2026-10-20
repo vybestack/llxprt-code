@@ -1,14 +1,18 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { copyFile, readFile, stat, writeFile } from 'node:fs/promises';
+import { copyFile, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 import { openParent } from './childaccept-parent.js';
-import { ResumeCursorBoot } from '@vybestack/llxprt-code-core/recording/resumeCursorBoot.js';
+import { nativeFileRows } from '../../compression/__tests__/support/native-file-rows.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
 import {
   acceptanceDirectory,
+  childJournalExtension,
   launchAcceptanceChild,
+  openChildResumeBoot,
 } from './childaccept-fixture.js';
 import { localTransport, sendChildHistory } from './childaccept-transport.js';
 import {
@@ -18,6 +22,43 @@ import {
   seededOperations,
   textRow,
 } from './childaccept-operations.js';
+
+async function verifyNativeRows(
+  path: string,
+  rows: readonly IContent[],
+): Promise<IContent[]> {
+  const persisted = await Array.fromAsync(nativeFileRows(path));
+  expect(
+    persisted.map(({ speaker, blocks }) => ({ speaker, blocks })),
+  ).toStrictEqual(rows.map(({ speaker, blocks }) => ({ speaker, blocks })));
+  return persisted;
+}
+
+async function verifyCommittedMutation(
+  history: HistoryService,
+  rows: readonly IContent[],
+): Promise<void> {
+  if (childJournalExtension() !== '.llxj') return;
+  const path = history.journalPath();
+  if (path === null) throw new Error('Child journal absent');
+  const persisted = await verifyNativeRows(path, rows);
+  expect(persisted).toStrictEqual(
+    await Array.fromAsync(history.streamRawHistory()),
+  );
+}
+
+async function verifyChildJournal(
+  childPath: string,
+  rows: readonly IContent[],
+): Promise<void> {
+  if (childJournalExtension() === '.llxj') {
+    await verifyNativeRows(childPath, rows);
+    return;
+  }
+  const journal = await readFile(childPath, 'utf8');
+  for (const type of ['content', 'rewind', 'compressed', 'density_mutation'])
+    expect(journal).toContain(`"type":"${type}"`);
+}
 
 describe('child facade transport equivalence', () => {
   it.each([854, 0xabcdef])(
@@ -40,6 +81,7 @@ describe('child facade transport equivalence', () => {
         for (const operation of operations) {
           rows = eagerFold(rows, operation);
           await applyChildOperation(fixture.child.runtime.history, operation);
+          await verifyCommittedMutation(fixture.child.runtime.history, rows);
           await sendChildHistory(fixture.child);
           const reference = referenceBody(rows);
           await writeFile(
@@ -52,20 +94,19 @@ describe('child facade transport equivalence', () => {
               'utf8',
             ),
           ).toBe(reference);
+          expect(transport.digest()).toBe(
+            createHash('sha256').update(reference).digest('hex'),
+          );
           expect(activeRequestBodyCount()).toBe(0);
         }
         expect(await readFile(parent.path)).toStrictEqual(parent.before);
         const childPath = fixture.child.runtime.history.journalPath();
         if (childPath === null) throw new Error('Child journal absent');
-        await copyFile(childPath, join(directory, 'child.jsonl'));
-        const journal = await readFile(childPath, 'utf8');
-        for (const type of [
-          'content',
-          'rewind',
-          'compressed',
-          'density_mutation',
-        ])
-          expect(journal).toContain(`"type":"${type}"`);
+        await copyFile(
+          childPath,
+          join(directory, `child${childJournalExtension()}`),
+        );
+        await verifyChildJournal(childPath, rows);
       } finally {
         await parent.close();
         await fixture.close();
@@ -105,12 +146,8 @@ describe('child facade resume markers', () => {
       );
       const path = fixture.child.runtime.history.journalPath();
       if (path === null) throw new Error('Child journal absent');
-      await copyFile(path, join(directory, 'child.jsonl'));
-      const boot = await ResumeCursorBoot.open(
-        path,
-        10000,
-        (await stat(path)).size,
-      );
+      await copyFile(path, join(directory, `child${childJournalExtension()}`));
+      const boot = await openChildResumeBoot(path);
       try {
         await sendChildHistory(fixture.child, boot.streamRows());
         expect(await readFile(join(directory, 'request-2.json'), 'utf8')).toBe(
