@@ -1,3 +1,16 @@
+## Full seeded-corpus checkpoint, 2026-10-20T10:16:19Z
+
+| Claim | Executed evidence | Boundary |
+|---|---|---|
+| Responses seed179 reference | `72fd1649f`, h `reference-alias-red.log`, j `native-seed-reference` and `journal-seed-regressions` logs/XML | Original alias responses qualify empty IDs; inserted cancellations do not. Six literal cases and eight native regressions. Main array handler's undefined-parameter error is preserved separately. |
+| Anthropic seed238 reference | `8f55eba7b`, i `anthropic-reference-red.log`, j `native-anthropic-seed-reference.log/.xml` | Legacy positional double-removal loses later assistant call; literal duplicate-result/media contract rejects it. Phase-0 array machine supplies independent expected output. Twenty-five final tests cover literal plus neighboring raw/service cases and metadata-order chain regression. |
+| Complete expected-side frozen comparison | j `reference-sweep.jsonl`, `reference-sweep.done` | 45,000 reference cases: nine formats x 5000 seeds. Not native-service completion. |
+| Final-source native prefix | j checkpoint/results and `000..005` logs/XML/case receipts | Seeds 0..599; 600 raw frozen and 600 curated-service matches per format, 5400 native cases plus 600 randomized purge cases. Six complete files, 60 passes/52,396 assertions. No partial-file acceptance. |
+| Scoped checks | j declarations/noemit/test-types/lint/format/graph/audit logs | All green. Graph validation does not establish affected-shard execution. Targeted files: 105 passes/738 assertions; zero failures/skips or touched audit findings. |
+| Immutable inputs/source | j `inventory.json`, `source-manifest.json`; `W23-FULL-SEEDS-CHECKPOINT.json` | 44 frozen/golden files unchanged, prior twenty-golden digest unchanged. Test/reference-only package commits; no production change. |
+
+Live driver **36257**, child **41117** at snapshot, range **600..699**. Read j `state.json`/`checkpoint.json` before continuation. Preserve no-source-edit/no-overlapping-heavy-lane discipline until the driver stops. Full native range remains planned through 4999 with the existing 180000 timeout. W23 is partial; eight planning/header RED dependencies, wider frontend/trap variants, phase-4 spools, W24-W26 and old default remain unchanged. Review skipped per Andrew 2026-10-09. No cleanup, `.llxprt` edit/staging, raw recovery bulk staging, OCR, push or merge.
+
 ## Suffix, curation, borrowed and recomposition case proof, 2026-10-20
 
 Bounded twelve-path queue: **238 original-path passes plus 22 supplemental passes, 28 isolated executions, zero failures/skips**. Green WIP commit `2d1514862`; prior production fixes `9341be42c`/`ef6930515` unchanged. `W23-CURATION-PROOF.md` maps every path and actual backend; `.json` records each classname/name, accepted source/log/JUnit hash and all 22 old-borrowed/native-counterpart links. Explicit native suites stay native under both outer environments; recomposition executes both internally. Shared static, scratch and pending-input cases do not become native-history claims.

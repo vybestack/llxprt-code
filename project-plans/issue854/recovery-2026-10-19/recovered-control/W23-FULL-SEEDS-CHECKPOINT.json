@@ -1,0 +1,397 @@
+{
+  "snapshotAt": "2026-10-20T10:16:19.729Z",
+  "startingHead": "7dac24157730c6c5b80172ddd448c75cb77cea32",
+  "sourceHead": "8f55eba7bec0ece04492b87c5b1d6128958c187b",
+  "commits": {
+    "responsesReference": "72fd1649f3697b7ef927fa1589a9eae4a781836a",
+    "anthropicReference": "8f55eba7bec0ece04492b87c5b1d6128958c187b"
+  },
+  "sources": {
+    "manifest": {
+      "path": "tmp/854-notes/p4/w23/full-seeds-run-j/source-manifest.json",
+      "sha256": "c76dab6ba1852d5d6dfbe1c2b388416e6397685e6c71bbc83a7197e4ec27794e"
+    },
+    "selected": [
+      {
+        "path": "packages/providers/src/__tests__/support/native-seed-reference.ts",
+        "sha256": "f9b9a3a8948258534866ae902e7e9d151a7e118fc17413faeb82d043cea1a45d"
+      },
+      {
+        "path": "packages/providers/src/__tests__/native-seed-reference.test.ts",
+        "sha256": "4731df7858ffc545d10cbef73cb0c89040b716369e39bc76422749f617f24b1b"
+      },
+      {
+        "path": "packages/providers/src/__tests__/journal-seed-regressions.test.ts",
+        "sha256": "74a6a28553f464cc72206e3c6ffafb61004ab30d51d1f9a3609a78f2072f4fcb"
+      },
+      {
+        "path": "packages/providers/src/__tests__/native-anthropic-seed-reference.test.ts",
+        "sha256": "3bb4d7adb86264b411ef93df57247cf3955005330aab8e3b2af6c6d3f67602fe"
+      },
+      {
+        "path": "packages/providers/src/anthropic/message-table/__tests__/support/lengthModel/unitFacts.ts",
+        "sha256": "c95b685d3fa5a28834c6bda901b4d2eb90f3ab9f0f2793d7d02022a7f3615407"
+      }
+    ],
+    "productionChanged": false
+  },
+  "roots": {
+    "responses179": {
+      "cause": "Original empty-ID calls were incorrectly qualified by the cancellation inserted for a literal call_ alias. Only responses already present at the provider boundary may qualify an empty call.",
+      "correction": "Filter empty calls only when their normalized response is absent from the original input, before inserting cancellations. Service curation supplies its own original synthetic responses, so both boundaries remain separate.",
+      "control": {
+        "path": "tmp/854-notes/p4/w23/full-seeds-run-h/reference-alias-red.log",
+        "sha256": "4dbae9af461472fb2c7248a55cc062f13e6a12fbbd0934ef494823564d51d2a1"
+      },
+      "controlPasses": 4,
+      "controlFailures": 2,
+      "inputDiagnostics": {
+        "path": "tmp/854-notes/p4/w23/full-seeds-run-h/seed-179.json",
+        "sha256": "c738fe4e8a1416a05701d847a942ada2b309fb5d918015e599fe3f3f1b5fb18c"
+      },
+      "neighbors": [
+        178,
+        179,
+        180
+      ],
+      "mainArrayDiagnostic": "The unchanged main SyntheticToolResponseHandler throws when deep-copying undefined parameters in seed179. This is not the frozen source-route contract; no main-array parity claim is made for that malformed raw input."
+    },
+    "anthropic238": {
+      "cause": "The legacy array validator queues a moved result once per duplicate call, then deletes by stale positions twice. After the result message vanishes, the second deletion can remove the next assistant tool-use block.",
+      "baseline": "Frozen source-route seed238 preserves the following duplicate id_c call; legacy array conversion deletes it. Curated service input has a different representation and agrees in the saved diagnostics.",
+      "expectedBody": {
+        "length": 3106,
+        "sha256": "7b08714f544c0b35f39e5e89b272449a60607ae695f4ff2bd33af5fa11b5b6a4"
+      },
+      "legacyArrayBody": {
+        "length": 2925,
+        "sha256": "dbc90d3f5cd4f971f1ab0d6d542319fa05f0c6b2ce93803b79a0b1853f6f70ea"
+      },
+      "correction": "Use the unchanged phase-zero array reference from 2645717cc; its result locations are removed once by identity, independently of the production disk table.",
+      "control": {
+        "path": "tmp/854-notes/p4/w23/full-seeds-run-i/anthropic-reference-red.log",
+        "sha256": "8e9ca7c2711bf9e578fb266704225713208c15fe27fba47c6a4b6b340b3ccf65"
+      },
+      "controlPasses": 9,
+      "controlFailures": 4,
+      "diagnostics": {
+        "path": "tmp/854-notes/p4/w23/full-seeds-run-h/root-anthropic-cache-off-238.json",
+        "sha256": "cd2b6dd977f98d5c73ccaceb993e5d897af805ca26faf11f683d721fe7c68580"
+      }
+    },
+    "mixedChain80": {
+      "cause": "The phase-zero length harness deliberately refuses thinking chains carrying tool responses. Reprojection of a merged chain also applies the final row metadata to earlier thinking blocks.",
+      "correction": "Group those chains after each row is projected, then call the existing unit constructor without projecting again. No out-of-domain skip or fallback; all original assertions stay.",
+      "authoringRed": {
+        "path": "tmp/854-notes/p4/w23/full-seeds-run-i/anthropic-mixed-chain-red.log",
+        "sha256": "522f5669d6e32c8e149696c74584317e7af1359ad271ad00788dd5344be4690b"
+      },
+      "reprojectionFailure": {
+        "path": "tmp/854-notes/p4/w23/full-seeds-run-i/anthropic-mixed-chain-green.log",
+        "sha256": "47d63bac5296c60d12a9d4074d7036acb809949c117a514b87883b5a85c9ab87"
+      },
+      "neighbors": [
+        79,
+        80,
+        81
+      ]
+    }
+  },
+  "independentBaseline": {
+    "captureCommit": "24e2c7e5d",
+    "referenceMachineCommit": "2645717cc",
+    "formats": [
+      "openai-chat-plain",
+      "openai-chat-kimi",
+      "openai-chat-mistral",
+      "openai-responses-via-openai",
+      "openai-responses",
+      "anthropic-cache-off",
+      "anthropic-cache-5m",
+      "anthropic-cache-1h",
+      "anthropic-purge-boundary"
+    ],
+    "first": 0,
+    "last": 4999,
+    "perFormat": 5000,
+    "checked": 45000,
+    "nativeCases": 0,
+    "receipt": {
+      "path": "tmp/854-notes/p4/w23/full-seeds-run-j/reference-sweep.jsonl",
+      "sha256": "4ffe9a900f3e8e523cf480a2beff13a21dfbbe63877f99cf56940b07ecb4cbec"
+    },
+    "done": {
+      "path": "tmp/854-notes/p4/w23/full-seeds-run-j/reference-sweep.done",
+      "sha256": "71bf9920d434467c94a46be5e476dc85f1c74b108d345b4ba69e78b7d2103e2f"
+    }
+  },
+  "targeted": {
+    "files": [
+      {
+        "name": "native-seed-reference",
+        "passes": 6,
+        "assertions": 12,
+        "log": {
+          "path": "tmp/854-notes/p4/w23/full-seeds-run-j/native-seed-reference.log",
+          "sha256": "7088ee14a8e9c46fb68670a9e6e4f90dccf5b30873ab55e48aa7a1415adc5350"
+        },
+        "xml": {
+          "path": "tmp/854-notes/p4/w23/full-seeds-run-j/native-seed-reference.xml",
+          "sha256": "457eb912f6c8202e703006ff30126b2305a5ba8d9e4a28e19633894351702032"
+        }
+      },
+      {
+        "name": "native-anthropic-seed-reference",
+        "passes": 25,
+        "assertions": 217,
+        "log": {
+          "path": "tmp/854-notes/p4/w23/full-seeds-run-j/native-anthropic-seed-reference.log",
+          "sha256": "2a353a878b6b1a179e64b265a521fc942d2535b85f11eadec7ea4865735af973"
+        },
+        "xml": {
+          "path": "tmp/854-notes/p4/w23/full-seeds-run-j/native-anthropic-seed-reference.xml",
+          "sha256": "5b092a2e9fd212b7af17b418ceb8604d12a32f8e7e536d644f19a8b981171638"
+        }
+      },
+      {
+        "name": "journal-seed-regressions",
+        "passes": 8,
+        "assertions": 72,
+        "log": {
+          "path": "tmp/854-notes/p4/w23/full-seeds-run-j/journal-seed-regressions.log",
+          "sha256": "1db5539514af9894f4bb00a72849524dd305eef7d8e3bd9560387cee1557de13"
+        },
+        "xml": {
+          "path": "tmp/854-notes/p4/w23/full-seeds-run-j/journal-seed-regressions.xml",
+          "sha256": "00af21b194e0031b91665fa9adbc18860a100bcf7bf477aa22e45dc1c26701ed"
+        }
+      },
+      {
+        "name": "journal-random-purge-controls",
+        "passes": 1,
+        "assertions": 15,
+        "log": {
+          "path": "tmp/854-notes/p4/w23/full-seeds-run-j/journal-random-purge-controls.log",
+          "sha256": "8ad0ab52ccf0077cde47d8548edb7a51cb692ef47eb8f658aef82d5c65f7630a"
+        },
+        "xml": {
+          "path": "tmp/854-notes/p4/w23/full-seeds-run-j/journal-random-purge-controls.xml",
+          "sha256": "170b733b713275ec5ff9e9c730dc4d88f4baac9e8e2a274d76610d0ffe03c4cb"
+        }
+      },
+      {
+        "name": "journal-seeded-provider-parity",
+        "passes": 65,
+        "assertions": 422,
+        "log": {
+          "path": "tmp/854-notes/p4/w23/full-seeds-run-j/journal-seeded-provider-parity.log",
+          "sha256": "f35a2c53d9c98aa0676165659bc5d979cd8aa264595e0510e3fce81a65a0d93b"
+        },
+        "xml": {
+          "path": "tmp/854-notes/p4/w23/full-seeds-run-j/journal-seeded-provider-parity.xml",
+          "sha256": "a86c10fcd10f6a7f9792adad9e052afab6476277b144a077c221ac337a32bc92"
+        }
+      }
+    ],
+    "passes": 105,
+    "assertions": 738,
+    "failures": 0,
+    "skips": 0
+  },
+  "gates": [
+    {
+      "path": "tmp/854-notes/p4/w23/full-seeds-run-j/declarations.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/full-seeds-run-j/noemit.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/full-seeds-run-j/test-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/full-seeds-run-j/lint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/full-seeds-run-j/format-check.log",
+      "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/full-seeds-run-j/graph.log",
+      "sha256": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/full-seeds-run-j/audit.log",
+      "sha256": "fe7a2f8b3709ab33610f9e480863cf9e811468a9f2fded136c1b603530cfefc5"
+    },
+    {
+      "path": "tmp/854-notes/p4/w23/full-seeds-run-j/gates.done",
+      "sha256": "d13c7905901311aa987dfaefbb2eb72d6328d00f251c22a4450ac479405ced0d"
+    }
+  ],
+  "priorAttempts": {
+    "h": "Original stopped run: only 0..99 fully accepted; failed at raw Responses reference seed179.",
+    "i": "At Responses fix 72fd1649f: 0..199 accepted in all nine formats and randomized purge; 200..299 rejected at Anthropic raw reference seed238. Do not pool partial failed files into final-source acceptance."
+  },
+  "nativeSnapshot": {
+    "checkpoint": {
+      "path": "tmp/854-notes/p4/w23/full-seeds-run-j/checkpoint.json",
+      "sha256": "484d472ca353d29ba1b4f82271b80e3b4c3dd4f7f7a064c95393b41b9c1b8047"
+    },
+    "state": {
+      "pid": 36257,
+      "childPid": 41117,
+      "status": "running",
+      "index": 6,
+      "range": {
+        "first": 600,
+        "last": 699,
+        "path": "packages/providers/src/__tests__/journal-full-seeds-06.test.ts"
+      },
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/full-seeds-run-j/006.log",
+      "xml": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/full-seeds-run-j/006.xml",
+      "receipts": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p4/w23/full-seeds-run-j/006.cases.jsonl",
+      "head": "8f55eba7bec0ece04492b87c5b1d6128958c187b"
+    },
+    "acceptedFiles": 6,
+    "passes": 60,
+    "assertions": 52396,
+    "counts": {
+      "openai-chat-plain": {
+        "checked": 600,
+        "first": 0,
+        "last": 599,
+        "boundaries": {
+          "invalid-ai-excluded-before-normalization": 336,
+          "raw-provider-versus-service-normalization": 159,
+          "same-provider-and-service": 105
+        },
+        "rawFrozenMatches": 600,
+        "serviceReferenceMatches": 600
+      },
+      "openai-chat-kimi": {
+        "checked": 600,
+        "first": 0,
+        "last": 599,
+        "boundaries": {
+          "invalid-ai-excluded-before-normalization": 336,
+          "raw-provider-versus-service-normalization": 159,
+          "same-provider-and-service": 105
+        },
+        "rawFrozenMatches": 600,
+        "serviceReferenceMatches": 600
+      },
+      "openai-chat-mistral": {
+        "checked": 600,
+        "first": 0,
+        "last": 599,
+        "boundaries": {
+          "invalid-ai-excluded-before-normalization": 336,
+          "raw-provider-versus-service-normalization": 159,
+          "same-provider-and-service": 105
+        },
+        "rawFrozenMatches": 600,
+        "serviceReferenceMatches": 600
+      },
+      "openai-responses-via-openai": {
+        "checked": 600,
+        "first": 0,
+        "last": 599,
+        "boundaries": {
+          "invalid-ai-excluded-before-normalization": 336,
+          "raw-provider-versus-service-normalization": 159,
+          "same-provider-and-service": 105
+        },
+        "rawFrozenMatches": 600,
+        "serviceReferenceMatches": 600
+      },
+      "openai-responses": {
+        "checked": 600,
+        "first": 0,
+        "last": 599,
+        "boundaries": {
+          "invalid-ai-excluded-before-normalization": 336,
+          "raw-provider-versus-service-normalization": 159,
+          "same-provider-and-service": 105
+        },
+        "rawFrozenMatches": 600,
+        "serviceReferenceMatches": 600
+      },
+      "anthropic-cache-off": {
+        "checked": 600,
+        "first": 0,
+        "last": 599,
+        "boundaries": {
+          "raw-provider-versus-service-normalization": 184,
+          "invalid-ai-excluded-before-normalization": 302,
+          "same-provider-and-service": 114
+        },
+        "rawFrozenMatches": 600,
+        "serviceReferenceMatches": 600
+      },
+      "anthropic-cache-5m": {
+        "checked": 600,
+        "first": 0,
+        "last": 599,
+        "boundaries": {
+          "raw-provider-versus-service-normalization": 184,
+          "invalid-ai-excluded-before-normalization": 302,
+          "same-provider-and-service": 114
+        },
+        "rawFrozenMatches": 600,
+        "serviceReferenceMatches": 600
+      },
+      "anthropic-cache-1h": {
+        "checked": 600,
+        "first": 0,
+        "last": 599,
+        "boundaries": {
+          "raw-provider-versus-service-normalization": 184,
+          "invalid-ai-excluded-before-normalization": 302,
+          "same-provider-and-service": 114
+        },
+        "rawFrozenMatches": 600,
+        "serviceReferenceMatches": 600
+      },
+      "anthropic-purge-boundary": {
+        "checked": 600,
+        "first": 0,
+        "last": 599,
+        "boundaries": {
+          "raw-provider-versus-service-normalization": 136,
+          "invalid-ai-excluded-before-normalization": 445,
+          "same-provider-and-service": 19
+        },
+        "rawFrozenMatches": 600,
+        "serviceReferenceMatches": 600
+      }
+    },
+    "randomPurge": {
+      "checked": 600,
+      "first": 0,
+      "last": 599
+    },
+    "fullNativeComplete": false
+  },
+  "frozen": {
+    "files": 44,
+    "allUnchanged": true,
+    "originalTwentyGoldenDigest": "38fa22ebf2246c18ed6e1f71811ed3cf68084844ef06c2e50e9f5b350c8570da",
+    "inventory": {
+      "path": "tmp/854-notes/p4/w23/full-seeds-run-j/inventory.json",
+      "sha256": "2b5dbe3d3572bddef7e23cc0f8c3dd98f7483cc2f6b008165bc5a3f0fb694b89"
+    }
+  },
+  "constraints": [
+    "Real committed NativeJournalHistoryStore -> HistoryService curation -> actual request builders -> consumed-body hashes. No new production adapter.",
+    "Current-case oracle arrays only; original decoded-row ownership, release and exact bytes checks remain.",
+    "Nine frozen formats include eight standard formats and anthropic-purge-boundary. Randomized purge is 5000 total, rotating eight formats.",
+    "Fifty consecutive 100-seed files; all 5000 seeds remain planned in each format. Test timeout remains 180000.",
+    "Live driver checkpoint supersedes this dated snapshot. Do not edit package source or overlap heavy gates while it runs.",
+    "Eight planning/header RED cases remain phases 5/6 through 7 dependencies. W23 partial, W24-W26 and old default unchanged."
+  ],
+  "review": "review skipped per Andrew 2026-10-09"
+}
