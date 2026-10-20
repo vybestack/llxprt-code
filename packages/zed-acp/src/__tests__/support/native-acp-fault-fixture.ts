@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { vi } from 'bun:test';
 import type * as acp from '@agentclientprotocol/sdk';
-import { mkdtemp, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -12,6 +12,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
 import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+import { JournalHistoryStore } from '@vybestack/llxprt-code-core/services/history/journalHistoryStore.js';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ZedAgent } from '../../zedIntegration.js';
@@ -106,11 +107,17 @@ async function fixtureConfig(): Promise<{ root: string; config: Config }> {
     trustedFolder: true,
     coreTools: [],
   });
+  await mkdir(config.projectChatsDir, { recursive: true });
   return { root, config };
 }
 
 function observeRecordings() {
   const recordings: JournalRecordingService[] = [];
+  const eager = vi
+    .spyOn(JournalHistoryStore.prototype, 'materialize')
+    .mockRejectedValue(
+      new Error('Native ACP history materialization forbidden'),
+    );
   const create = JournalRecordingService.createLocked;
   const open = JournalRecordingService.open;
   const createSpy = vi
@@ -132,6 +139,7 @@ function observeRecordings() {
     restore(): void {
       createSpy.mockRestore();
       openSpy.mockRestore();
+      eager.mockRestore();
     },
   };
 }
@@ -184,10 +192,10 @@ export async function nativeAcpFixture(listFiles?: ChatSessionFileLister) {
     },
     async finish(): Promise<void> {
       consume = async () => {};
-      observed.restore();
       try {
         await zed.disposeAll();
       } finally {
+        observed.restore();
         await peer.finish();
         manager.dispose();
         await config.dispose();

@@ -416,21 +416,18 @@ export async function disposeZedSession(
   agent: Pick<Agent, 'dispose'>,
   disposeConfig: () => Promise<void>,
 ): Promise<void> {
-  try {
-    detach();
-    await terminals
-      ?.settleAll()
-      .catch((error) =>
-        logger.debug(() => `Terminal cleanup failed: ${error}`),
-      );
-    abortPrompt();
-  } finally {
-    try {
-      await agent.dispose();
-    } finally {
-      await disposeConfig();
-    }
-  }
+  await retireSessionWorkspace([
+    detach,
+    () =>
+      terminals
+        ?.settleAll()
+        .catch((error) =>
+          logger.debug(() => `Terminal cleanup failed: ${error}`),
+        ),
+    abortPrompt,
+    () => agent.dispose(),
+    disposeConfig,
+  ]);
 }
 
 function sessionWorkspaceDisposer(

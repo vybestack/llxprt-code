@@ -30,6 +30,8 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import type * as acp from '@agentclientprotocol/sdk';
 import { Config, type IContent } from '@vybestack/llxprt-code-core';
+import { selectBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
+import { sessionFileExtension } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { installZedDefinitionFixture } from './__tests__/definition-fixture.js';
@@ -65,7 +67,7 @@ export const emptyChatsLister: ChatSessionFileLister = async () => [];
  * Honest readdir-like lister that reports a recorded session file on disk for
  * each given session id, driving loadSession down the DISK-RESUME path (the file
  * "exists"). Returns real directory ENTRY NAMES matching the
- * `session-<timestamp>-<first-12-of-id>.jsonl` shape SessionRecordingService
+ * `session-<timestamp>-<first-12-of-id><extension>` shape the selected recorder
  * writes, so the production findMatchingSessionFile logic (not a result-shaped
  * mock) decides the branch.
  */
@@ -73,7 +75,8 @@ export function recordedFilesLister(
   ...sessionIds: string[]
 ): ChatSessionFileLister {
   const names = sessionIds.map(
-    (id) => `session-2026-07-11T10-00-00-${id.substring(0, 12)}.jsonl`,
+    (id) =>
+      `session-2026-07-11T10-00-00-${id.substring(0, 12)}${sessionFileExtension(selectBackend())}`,
   );
   return async () => names;
 }
