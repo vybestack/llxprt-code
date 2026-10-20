@@ -196,6 +196,24 @@ export class IdFactBatch {
     this.pendingBytes = 0;
   }
 
+  async setEntry(
+    namespace: number,
+    key: Uint8Array,
+    value: Uint8Array,
+  ): Promise<void> {
+    this.put(namespace, key, value);
+    await this.spillWhenFull();
+  }
+
+  appendKimiException(identity: Uint8Array): void {
+    this.put(
+      ID_NS.kimiException,
+      kimiExceptionKey(this.exceptions),
+      encodeHashValue(identity),
+    );
+    this.exceptions++;
+  }
+
   /**
    * Applies the update rule of design 3.3 to one block: the fact of the raw id,
    * the next entry of its occurrence chain, the lists of the normalized ids,

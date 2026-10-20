@@ -32,6 +32,7 @@ export async function rebuildContributions(
         facts.ids,
         ctx,
         { appender, readGroup: ctx.readGroup },
+        facts,
       );
       yield facts.kimi ? { ...updated, callBlocks } : updated;
     }

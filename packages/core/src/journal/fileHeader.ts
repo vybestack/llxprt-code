@@ -25,7 +25,7 @@ export const JOURNAL_MAGIC: Uint8Array = Uint8Array.of(
   0x00,
 );
 /** The JSONL journals were versions 1 and 2. */
-export const JOURNAL_FORMAT_VERSION = 5;
+export const JOURNAL_FORMAT_VERSION = 6;
 export const JOURNAL_HEADER_BYTES = 64;
 
 const HEADER_LAYOUT = {

@@ -79,6 +79,7 @@ export async function updateContributions(
           groupFacts.facts.ids,
           ctx,
           { appender: groupFacts.appender, readGroup: ctx.readGroup },
+          groupFacts.facts,
         );
         list[index] = groupFacts.facts.kimi
           ? { ...list[index], callBlocks }

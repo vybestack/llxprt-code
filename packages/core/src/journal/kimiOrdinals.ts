@@ -16,7 +16,7 @@ export function kimiEnabled(value: Uint8Array | undefined): boolean {
 }
 
 export class KimiOrdinalQueries {
-  private readonly meta: KeyedMapReader;
+  readonly meta: KeyedMapReader;
 
   constructor(
     private readonly read: PinnedRead,

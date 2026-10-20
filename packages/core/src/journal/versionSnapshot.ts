@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalFormatError } from './errors.js';
 import { KimiOrdinalQueries } from './kimiOrdinals.js';
+import { KimiFactQueries, type KimiIdFact } from './kimiFactQueries.js';
 import { readMistralMapping, type MistralMapping } from './mistralMapping.js';
 import { nextCuratedEntry } from './curatedQueries.js';
 import { IdFactQueries, type IdFactDeps } from './idFactQueries.js';
@@ -39,6 +40,7 @@ import type { SourceRow, VersionEdit } from './groupEdits.js';
 export class VersionSnapshot {
   readonly facts: IdFactQueries;
   private readonly kimi: KimiOrdinalQueries;
+  private readonly kimiFacts: KimiFactQueries;
 
   constructor(
     private readonly read: PinnedRead,
@@ -61,6 +63,23 @@ export class VersionSnapshot {
       },
       idDeps,
     );
+    this.kimiFacts = new KimiFactQueries(this, idDeps, this.kimi.meta);
+  }
+
+  kimiMappedId(rawId: string): Promise<string | undefined> {
+    return this.kimiFacts.mappedId(rawId);
+  }
+
+  kimiIdFact(rawId: string): Promise<KimiIdFact | undefined> {
+    return this.kimiFacts.idFact(rawId);
+  }
+
+  kimiExceptions(): AsyncGenerator<KimiIdFact> {
+    return this.kimiFacts.exceptions();
+  }
+
+  kimiDigitCorrection(): Promise<number> {
+    return this.kimiFacts.digitCorrection();
   }
 
   kimiEligibleCount(): Promise<number> {

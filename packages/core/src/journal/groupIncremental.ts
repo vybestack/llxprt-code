@@ -107,7 +107,7 @@ async function incrementalFacts(
     { appender, readGroup: ctx.readGroup },
   );
   if (
-    facts.mistralSlots !== 0 &&
+    (facts.mistralSlots !== 0 || facts.kimi) &&
     adds.some((segment) => segment.role === 'insert')
   )
     return undefined;
@@ -271,7 +271,7 @@ export async function buildIncremental(
       : { facts: collected.facts, appender },
   );
   const { idRoot, metaRoot } = await commitFacts(
-    collected.facts,
+    collected.facts === undefined ? undefined : finishFacts(collected.facts),
     plan,
     appender,
   );

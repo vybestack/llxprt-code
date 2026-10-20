@@ -52,7 +52,7 @@ export class IdFactQueries {
     private readonly deps: IdFactDeps,
   ) {}
 
-  private get(
+  getEntry(
     namespace: number,
     key: Uint8Array,
   ): Promise<Uint8Array | undefined> {
@@ -62,7 +62,7 @@ export class IdFactQueries {
 
   /** The fact for a raw id (namespace 0), or undefined when the id has never occurred. */
   async fact(rawId: string): Promise<IdFact | undefined> {
-    const bytes = await this.get(ID_NS.fact, fact0Key(rawId));
+    const bytes = await this.getEntry(ID_NS.fact, fact0Key(rawId));
     return bytes === undefined ? undefined : decodeIdFact(bytes);
   }
 
@@ -72,7 +72,7 @@ export class IdFactQueries {
     kind: OccurrenceKind,
     ordinal: number,
   ): Promise<OccurrenceEntry | undefined> {
-    const bytes = await this.get(
+    const bytes = await this.getEntry(
       ID_NS.occurrence,
       occurrenceKey(kind, ordinal, rawId),
     );
@@ -94,7 +94,10 @@ export class IdFactQueries {
     normalizedId: string,
   ): Promise<number> {
     this.requireNormalized();
-    const bytes = await this.get(family, normalizedKey(kind, 0, normalizedId));
+    const bytes = await this.getEntry(
+      family,
+      normalizedKey(kind, 0, normalizedId),
+    );
     return bytes === undefined ? 0 : decodeCountValue(bytes);
   }
 
@@ -106,7 +109,7 @@ export class IdFactQueries {
     ordinal: number,
   ): Promise<UnitPosition | undefined> {
     this.requireNormalized();
-    const bytes = await this.get(
+    const bytes = await this.getEntry(
       family,
       normalizedKey(kind, ordinal, normalizedId),
     );
@@ -168,7 +171,7 @@ export class IdFactQueries {
 
   /** The hash of the fact of the `k`-th Kimi exception id, `k` from 0 (namespace 5). */
   async exceptionHash(ordinal: number): Promise<Uint8Array | undefined> {
-    const bytes = await this.get(
+    const bytes = await this.getEntry(
       ID_NS.kimiException,
       kimiExceptionKey(ordinal),
     );
@@ -180,7 +183,7 @@ export class IdFactQueries {
     slot: number,
     mappedId: string,
   ): Promise<Uint8Array | undefined> {
-    const bytes = await this.get(
+    const bytes = await this.getEntry(
       ID_NS.mistralUsed,
       mistralUsedKey(slot, mappedId),
     );
@@ -189,7 +192,10 @@ export class IdFactQueries {
 
   /** Where compaction put the record that was at `oldOffset` (namespace 6). */
   async relocation(oldOffset: number): Promise<number | undefined> {
-    const bytes = await this.get(ID_NS.relocation, relocationKey(oldOffset));
+    const bytes = await this.getEntry(
+      ID_NS.relocation,
+      relocationKey(oldOffset),
+    );
     return bytes === undefined ? undefined : decodeRelocationValue(bytes);
   }
 }
