@@ -59,6 +59,14 @@ Second CI run: all seven test shards, full typechecking, and both Linux E2E mode
 
 Remote OCR was attempted automatically but its model connectivity preflight returned HTTP 401; the workflow's success status does not mean OCR actually reviewed the patch. Fixing that credential requires repository infrastructure access and is not a code change in this issue.
 
+## Final results and bounded follow-ups
+
+Source revision `be1869d1a7f45465f15f6969d166fe731e433f4e`: remote CI is green, including all seven test shards, lint/typecheck/build, both Linux E2E modes, SecureStore keyring/fallback, and smoke jobs. The agents shard initially failed a shell-process fixture with `process ID out of range`; rerunning failed remote jobs passed without source changes. No assertion is made that this failure also reproduces on main.
+
+The actionable CodeRabbit thread is fixed and resolved. The later test nit suggesting forced lock failure was evaluated against the actual shared-store setup: `acquireLock` immediately refuses a same-store held lock before its retry loop; the gated owner is entered first. Both failed-owner regressions were demonstrated RED against the previous implementation. No forced-lock mock was added.
+
+The outside-diff minor cancellation finding is valid and tracked in **#3916** (Bug, 0.12.0): extending the TokenStore/KeyringTokenStore cancellation and deadline contract requires safe handling of a late successful acquisition. Simply racing and abandoning that promise can leak a lock. This bounded follow-up is deferred after the capped review rounds; current code checks cancellation before/after I/O and releases acquired probes in `finally`. Already-started filesystem/keyring I/O is not forcibly canceled. OCR subsequently suspended automatic review after its credential failures; its status must not be presented as a completed review.
+
 ## GitHub tracking
 
 Issue #3908: type Bug, milestone 0.12.0, labels `codex / GPT`, `oauth`, `linux`; branch `issue3908`. Adding the issue to LLxprt roadmap is blocked by the configured GitHub token's missing project scope. Do not assign the issue to the user without an explicit request. Do not merge the PR without explicit approval.
