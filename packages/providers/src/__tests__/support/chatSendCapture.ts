@@ -13,12 +13,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SettingsService, Storage } from '@vybestack/llxprt-code-settings';
 import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
+import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import {
   WIRE_ROUTES,
-  buildRouteCallOptions,
+  buildHistoryCallOptions,
   installFakeTransport,
   recordOf,
-  rowsSelection,
   type CapturedWireRequest,
   type MediaBinding,
   type RowSource,
@@ -26,7 +26,6 @@ import {
   type WireRoute,
 } from './wireBodyCapture.js';
 import type { HistoryCase } from './wireBodyHistories.js';
-import type { GenerateChatOptions } from '../../IProvider.js';
 
 /** The three OpenAI chat routes (plain, Kimi ids, Mistral ids). */
 export const CHAT_ROUTES: readonly WireRoute[] = WIRE_ROUTES.filter((route) =>
@@ -85,25 +84,6 @@ function continuationResponder(): () => Response {
   };
 }
 
-function callOptions(
-  route: WireRoute,
-  history: HistoryCase,
-  source: RowSource,
-): GenerateChatOptions {
-  const options = buildRouteCallOptions(
-    route,
-    history,
-    history.rows.map((row) => structuredClone(row)),
-    new SettingsService(),
-  );
-  if (source === 'stream') return options;
-  return {
-    ...options,
-    requestRows: rowsSelection(history.rows),
-    contentCount: history.rows.length,
-  };
-}
-
 /**
  * Sends the history through the real provider. With `projected` the call is
  * projected first and the send carries the projection's transport token, the
@@ -116,6 +96,7 @@ async function send(
   media: MediaBinding | undefined,
   captured: CapturedWireRequest[],
   projected = false,
+  selection?: ProviderRequestSelection,
 ): Promise<void> {
   const restore = installFakeTransport(route, captured);
   try {
@@ -124,7 +105,13 @@ async function send(
       media === undefined || history.usesMediaReferences !== true
         ? created
         : bindProviderMedia(created, media.resolver, media.budgetBytes);
-    const options = callOptions(route, history, source);
+    const options = buildHistoryCallOptions(
+      route,
+      history,
+      source,
+      new SettingsService(),
+      selection,
+    );
     const projection = projected
       ? await provider.projectPromptEnvelope?.(options)
       : undefined;
@@ -157,6 +144,7 @@ export async function captureContinuation(
   history: HistoryCase,
   source: RowSource,
   media: MediaBinding | undefined,
+  selection?: ProviderRequestSelection,
 ): Promise<ContinuationRecords> {
   const streaming: WireRoute = {
     ...route,
@@ -164,7 +152,7 @@ export async function captureContinuation(
     respond: continuationResponder(),
   };
   const captured: CapturedWireRequest[] = [];
-  await send(streaming, history, source, media, captured);
+  await send(streaming, history, source, media, captured, false, selection);
   const requests = captured.filter((request) =>
     new URL(request.url).pathname.endsWith(route.endpoint),
   );
@@ -203,6 +191,7 @@ export async function captureRequestDump(
   mode: 'on' | 'error',
   respond: () => Response = route.respond,
   projected = false,
+  selection?: ProviderRequestSelection,
 ): Promise<string> {
   const home = await mkdtemp(join(tmpdir(), 'chat-dump-golden-'));
   const saved = {
@@ -220,10 +209,18 @@ export async function captureRequestDump(
     const captured: CapturedWireRequest[] = [];
     if (mode === 'error') {
       await expect(
-        send(dumping, history, source, media, captured, projected),
+        send(dumping, history, source, media, captured, projected, selection),
       ).rejects.toBeDefined();
     } else {
-      await send(dumping, history, source, media, captured, projected);
+      await send(
+        dumping,
+        history,
+        source,
+        media,
+        captured,
+        projected,
+        selection,
+      );
     }
     const dumpDir = join(Storage.getGlobalCacheDir(), 'dumps');
     const requestFiles = (await readdir(dumpDir)).filter((name) =>

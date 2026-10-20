@@ -7,6 +7,22 @@ import type { ProviderRequestSnapshot } from '@vybestack/llxprt-code-core/servic
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { HistoryCase } from './wireBodyHistories.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { buildCuratedHistory } from '@vybestack/llxprt-code-core/services/history/historyCuration.js';
+import { buildProviderContent } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
+import { prepareProviderContentSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-curated-stream.js';
+
+export function eagerProviderOracle(input: HistoryCase): HistoryCase {
+  const logger = new DebugLogger('native-provider-eager-oracle');
+  return {
+    ...input,
+    rows: buildProviderContent(
+      buildCuratedHistory(logger, structuredClone([...input.rows]), false),
+      [],
+      logger,
+    ),
+  };
+}
 
 function guardedHistory(
   options?: ConstructorParameters<typeof HistoryService>[0],
@@ -25,6 +41,7 @@ export async function withJournalProviderSelection<T>(
     selection: ProviderRequestSnapshot,
     history: HistoryService,
   ) => Promise<T>,
+  curation: 'history' | 'provider-only' = 'history',
 ): Promise<T> {
   return withCoreSuffixFixture(
     input.rows.length,
@@ -36,11 +53,20 @@ export async function withJournalProviderSelection<T>(
         explicitCacheWriteRequired: true,
       });
       const transaction = await coordinator.begin({ mode: 'remove' });
-      const selection = await history.prepareCuratedForProviderSnapshot(
-        [],
-        { ownership },
-        transaction?.requestRows(true),
-      );
+      const source = transaction?.requestRows(true);
+      const selection =
+        curation === 'history'
+          ? await history.prepareCuratedForProviderSnapshot(
+              [],
+              { ownership },
+              source,
+            )
+          : await prepareProviderContentSnapshot(
+              source ?? history.streamRawHistory(),
+              [],
+              new DebugLogger('native-provider-normalized-fixture'),
+              { ownership },
+            );
       try {
         const result = await action(selection, history);
         if (selection.count > 0)

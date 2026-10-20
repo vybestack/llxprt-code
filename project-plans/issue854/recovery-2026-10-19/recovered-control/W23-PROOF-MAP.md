@@ -1,5 +1,35 @@
 # W23 proof map
 
+## Provider parity cluster, 2026-10-20T05:47Z
+
+Starting HEAD verified as `b7aadac42552f858a1a1256886ab6ebd3027994b`; first selected subset committed as `72d3328e4`. Final proof: `W23-PROVIDER-PARITY-PROOF.json`. Raw authority: `tmp/854-notes/p4/w23/provider-parity-run-b/`. This section supersedes the earlier open selected/dump/retry entries for the bounded cases below, without closing W23.
+
+| Native boundary | Passes per environment | Executed scope |
+| --- | ---: | --- |
+| Selected requests | 163 | 154 route/history full-byte/length comparisons against old eager curation, seven frozen text-only checks, committed-row and settings rejection controls. |
+| Request dumps | 256 | 220 projected/nonprojected sends across five routes, twenty error-mode comparisons, fifteen untouched dump-oracle checks and one settings rejection. Dump and wire oracles remain distinct. |
+| Continuation and image recovery | 139 | 66 independent old-curated continuation comparisons, three frozen two-request checks, 36 frozen image-retry comparisons, eighteen recovery dump checks, sixteen later outer-attempt media checks. |
+| Responses rejected parent | 7 | Both Responses routes: older-parent fallback, no-surviving-parent full-history replay, state clear; standalone frozen multi-source oracle. A post-pin committed row never reaches any request. Exact bodies and declared lengths are checked. |
+| Seeded boundaries | 65 | Eight formats, four seeds each: 32 provider-normalized native frozen comparisons and 32 full history-curated native/eager comparisons, plus a wrong-boundary rejecting control. Full 5000 native cases and randomized purge remain open. |
+
+The native path is committed journal rows through existing HistoryService/provider normalization and the existing builders. Arrays occur only in fixture seeding and the expected-side old oracle. Guards reject eager history and `contents` fallback; the selection stays readable until its owner closes it, then refuses another reader. Raw native wire proof remains separately green at 155 tests per environment.
+
+Final serial matrix `final-tests/000..027`: **3264 passes, zero failures/skips**. Twelve files run under each outer backend; native fixtures explicitly choose journal. Four original frozen suites additionally execute 20,000 generated array-builder cases inside 32 Bun tests. Do not count these as native-service cases. Final gates `final-gates-b/000..005`: declarations, provider noemit/test types, zero-warning lint, format, graph validation, audit; all pass. No touched audit finding. Graph validation is not affected-shard execution. Core source did not change.
+
+### RED evidence and corrections
+
+`paths-a/000` has three passes/two failures. Only the via-OpenAI route reused `resp_dead` on recovery. `OpenAIProvider.buildResponsesExecutorDeps` omitted the two rejected-parent callbacks already wired in the standalone provider; seven production lines add the set, callbacks and state clear. The final retry suite proves retirement, later-source behavior and reset. No guard, fallback or retry count was added.
+
+`seed-a/000` has sixteen passes/sixteen failures from comparing unlike input boundaries. Diagnostics `seed-diagnose.log` and `seed-*.json` compare raw, frozen-normalized, old-curated and native-curated rows. History curation excludes invalid AI content before provider normalization, whereas the frozen normalized generator does not. Seeds 3/6/8 differ; seed 4 matches. Both boundaries now have independent positive tests and a rejecting cross-boundary control. No expected frozen hash was recomputed from an actual send. Initial lint and test-type errors remain in `first-gates/002` and `final-gates-a/001`; fixes preserve enforcement.
+
+### Frozen inputs, memory receipts and remaining scope
+
+All twenty wire/chat/Anthropic golden files and twenty-four frozen-corpus files match starting HEAD; the twenty-file digest remains `38fa22ebf2246c18ed6e1f71811ed3cf68084844ef06c2e50e9f5b350c8570da`. The proof records final source hashes, raw/JUnit agreement and seventy absent task PIDs. No outstanding restoration or live task PID remains.
+
+The fourteen-file sendPeak collection completed with 29 passes and no failures/skips. The JSON proof carries all measured body lengths, growth values and predicate outcomes. Positive heap growth spans -167,279..656,750 bytes, ArrayBuffer growth 0..8304, retained growth 0..408,445. Dedicated array/estimate/fill traps reject heap growth; retaining trap rejects 80,627,707.5 bytes. These are disk-row, pre-OpenAI-fix measurements, not native-source or fresh final-source OpenAI memory proof. Actual positive assertions under trap environments remain unrun. Repeated-turn native retention remains reusable: thirty-five source/receipt checks still match, zero mismatch, no worker rerun.
+
+Open: those positive-assertion traps, remaining suffix/curated/borrowed and CLI/zed/a2a contracts, full native seeded/randomized purge coverage, planning-time over-limit refusal, actual 40 MiB send, and later spool removal. No W24, default flip, W26 or phases 5-9 closure. Review skipped per Andrew 2026-10-09. No cleanup, `.llxprt` edit/staging, fixture regeneration, weaker checks, OCR, push or merge.
+
 ## Provider selected subset, 2026-10-20T05:35Z
 
 The sendPeak collection has finished all fourteen files with 29 passes and no failures/skips; the refreshed checkpoint replaces the active snapshot below. No memory input was repeated. The selected subset runs 22 histories on seven routes through native HistoryService curation snapshots and the existing provider builders. Its independent expected side uses old eager curation, not the native snapshot. All 154 byte/length comparisons, seven frozen text-only checks, and two rejecting controls pass in each outer environment. Selection read/close and decoded-row ownership checks run in the shared fixture. These are explicitly journal sources even under the old outer environment.

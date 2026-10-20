@@ -147,6 +147,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   private readonly textToolParser = new GemmaToolCallParser();
   private readonly toolCallPipeline = new ToolCallPipeline();
   private readonly preparedPromptEnvelopes = new OpenAIPromptEnvelopeStore();
+  private readonly rejectedStatefulParents = new Set<string>();
   private readonly getUnallowedModelParameters: ReturnType<typeof makeResolver>;
 
   protected getLogger(): DebugLogger {
@@ -237,6 +238,11 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           ? declaredMediaTransportCapabilities('openai-responses')
           : this.getMediaTransportCapabilities(),
       getUnallowedModelParameters: this.getUnallowedModelParameters,
+      isRejectedStatefulParent: (responseId) =>
+        this.rejectedStatefulParents.has(responseId),
+      markStatefulParentRejected: (responseId) => {
+        this.rejectedStatefulParents.add(responseId);
+      },
     };
   }
 
@@ -491,6 +497,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     this.clearClientCache();
     // Clear auth token cache from BaseProvider
     this.clearAuthCache();
+    this.rejectedStatefulParents.clear();
   }
 
   /**

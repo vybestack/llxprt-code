@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SettingsService, Storage } from '@vybestack/llxprt-code-settings';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { RetryOrchestrator } from '../../RetryOrchestrator.js';
 import {
   RETRY_REQUEST_CONTEXT_KEY,
@@ -19,10 +20,9 @@ import {
 } from '../../transportAttemptBudget.js';
 import type { GenerateChatOptions, IProvider } from '../../IProvider.js';
 import {
-  buildRouteCallOptions,
+  buildHistoryCallOptions,
   installFakeTransport,
   recordOf,
-  rowsSelection,
   type CapturedWireRequest,
   type RowSource,
   type WireBodyRecord,
@@ -103,6 +103,7 @@ function optionsFor(
   history: HistoryCase,
   source: RowSource,
   retries: number | undefined,
+  selection?: ProviderRequestSelection,
 ): GenerateChatOptions {
   const shape = {
     ...history,
@@ -111,18 +112,13 @@ function optionsFor(
       ...(retries === undefined ? {} : { retries, retrywait: 0 }),
     },
   };
-  const options = buildRouteCallOptions(
+  return buildHistoryCallOptions(
     route,
     shape,
-    history.rows.map((row) => structuredClone(row)),
+    source,
     new SettingsService(),
+    selection,
   );
-  if (source === 'stream') return options;
-  return {
-    ...options,
-    requestRows: rowsSelection(history.rows),
-    contentCount: history.rows.length,
-  };
 }
 
 /**
@@ -137,6 +133,7 @@ export async function sendWithScript(
   script: ReadonlyArray<() => Response>,
   orchestrated?: number,
   projected = false,
+  selection?: ProviderRequestSelection,
 ): Promise<RecoverySend> {
   let calls = 0;
   const scripted: WireRoute = {
@@ -159,7 +156,7 @@ export async function sendWithScript(
             maxAttempts: orchestrated,
             initialDelayMs: 0,
           });
-    const options = optionsFor(route, history, source, orchestrated);
+    const options = optionsFor(route, history, source, orchestrated, selection);
     const projection = projected
       ? await provider.projectPromptEnvelope?.(options)
       : undefined;
@@ -205,6 +202,7 @@ export async function recoveryRequestDumps(
   route: WireRoute,
   history: HistoryCase,
   script: ReadonlyArray<() => Response>,
+  selection?: ProviderRequestSelection,
 ): Promise<readonly string[]> {
   const home = await mkdtemp(join(tmpdir(), 'recovery-dump-golden-'));
   const saved = {
@@ -218,7 +216,15 @@ export async function recoveryRequestDumps(
       ...route,
       ephemerals: { ...route.ephemerals, dumpcontext: 'on' },
     };
-    await sendWithScript(dumping, history, 'rows', script);
+    await sendWithScript(
+      dumping,
+      history,
+      'rows',
+      script,
+      undefined,
+      false,
+      selection,
+    );
     const dumpDir = join(Storage.getGlobalCacheDir(), 'dumps');
     const files = (await readdir(dumpDir)).filter((name) =>
       name.endsWith('-request.json'),
