@@ -67,6 +67,13 @@ export class VersionSnapshot {
     this.kimiFacts = new KimiFactQueries(this, idDeps, this.kimi.meta);
   }
 
+  normalizedId(family: 1 | 2, rawId: string): string {
+    this.read.requireOpen();
+    return family === 1
+      ? this.idDeps.normalizers.openai(rawId)
+      : this.idDeps.normalizers.anthropic(rawId);
+  }
+
   kimiMappedId(rawId: string): Promise<string | undefined> {
     return this.kimiFacts.mappedId(rawId);
   }

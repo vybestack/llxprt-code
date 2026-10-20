@@ -1,5 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalFormatError } from '../../journal/errors.js';
+import type { NormalizedFamily, OccurrenceKind } from '../../journal/idKeys.js';
+import {
+  JournalRequestOccurrences,
+  type RequestUnitRange,
+} from './journal-request-occurrences.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { IndexedUnit } from '../../journal/rowTreeQueries.js';
 import type { IContent } from './IContent.js';
@@ -12,6 +17,17 @@ import { journalEntryPlans } from './journal-entry-plans.js';
 import type { JournalResponsePlan } from './journal-response-plan.js';
 import { assertRowIndex } from './provider-request-snapshot.js';
 import { streamResponsePlans } from './journal-response-units.js';
+
+async function releaseQueryHold(
+  release: () => void | Promise<void>,
+  failed: boolean,
+): Promise<void> {
+  try {
+    await release();
+  } catch (cleanup) {
+    if (!failed) throw cleanup;
+  }
+}
 
 export class IndexedJournalRequestSnapshot {
   private closed = false;
@@ -48,7 +64,7 @@ export class IndexedJournalRequestSnapshot {
         release,
       );
     } catch (error) {
-      await release();
+      await releaseQueryHold(release, true);
       throw error;
     }
   }
@@ -120,6 +136,136 @@ export class IndexedJournalRequestSnapshot {
         blocks.push(block);
       }
       yield { ...plan.header, blocks };
+    }
+  }
+
+  private occurrences(
+    family: NormalizedFamily,
+    kind: OccurrenceKind,
+    id: string,
+    range?: RequestUnitRange,
+  ): Promise<JournalRequestOccurrences> {
+    return JournalRequestOccurrences.create(
+      this.snapshot,
+      this.source,
+      this.rows,
+      family,
+      kind,
+      id,
+      this.count,
+      range,
+    );
+  }
+
+  async withNormalized<T>(
+    family: NormalizedFamily,
+    kind: OccurrenceKind,
+    id: string,
+    consume: (view: JournalRequestOccurrences) => T | Promise<T>,
+    range?: RequestUnitRange,
+    signal?: AbortSignal,
+  ): Promise<T> {
+    this.requireOpen();
+    signal?.throwIfAborted();
+    const release = this.snapshot.hold();
+    let failed = false;
+    try {
+      const view = await this.occurrences(family, kind, id, range);
+      signal?.throwIfAborted();
+      const result = await consume(view);
+      signal?.throwIfAborted();
+      return result;
+    } catch (error) {
+      failed = true;
+      throw error;
+    } finally {
+      await releaseQueryHold(release, failed);
+    }
+  }
+
+  normalizedCount(
+    family: NormalizedFamily,
+    kind: OccurrenceKind,
+    id: string,
+    range?: RequestUnitRange,
+  ): Promise<number> {
+    return this.withNormalized(family, kind, id, (view) => view.count, range);
+  }
+
+  normalizedPosition(
+    family: NormalizedFamily,
+    kind: OccurrenceKind,
+    id: string,
+    ordinal: number,
+    range?: RequestUnitRange,
+  ): Promise<number | undefined> {
+    return this.withNormalized(
+      family,
+      kind,
+      id,
+      (view) => view.position(ordinal),
+      range,
+    );
+  }
+
+  firstAfter(
+    family: NormalizedFamily,
+    kind: OccurrenceKind,
+    id: string,
+    after: number,
+    range?: RequestUnitRange,
+  ): Promise<number | undefined> {
+    return this.withNormalized(
+      family,
+      kind,
+      id,
+      (view) => view.firstAfter(after),
+      range,
+    );
+  }
+
+  lastAtOrAfter(
+    family: NormalizedFamily,
+    kind: OccurrenceKind,
+    id: string,
+    from: number,
+    range?: RequestUnitRange,
+  ): Promise<boolean> {
+    return this.withNormalized(
+      family,
+      kind,
+      id,
+      (view) => view.lastAtOrAfter(from),
+      range,
+    );
+  }
+
+  async *normalizedRange(
+    family: NormalizedFamily,
+    kind: OccurrenceKind,
+    id: string,
+    range?: RequestUnitRange,
+    signal?: AbortSignal,
+  ): AsyncGenerator<number> {
+    this.requireOpen();
+    signal?.throwIfAborted();
+    const release = this.snapshot.hold();
+    let failed = false;
+    try {
+      const view = await this.occurrences(family, kind, id, range);
+      for (let ordinal = 1; ordinal <= view.count; ordinal++) {
+        signal?.throwIfAborted();
+        const position = await view.position(ordinal);
+        if (position === undefined)
+          throw new JournalFormatError('Missing request occurrence');
+        signal?.throwIfAborted();
+        yield position;
+      }
+    } catch (error) {
+      failed = true;
+      throw error;
+    } finally {
+      await releaseQueryHold(release, failed);
     }
   }
 

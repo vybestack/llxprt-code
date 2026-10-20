@@ -2,6 +2,7 @@
 import { JournalFormatError } from './errors.js';
 import type { PlannedRow } from './groupEdits.js';
 import type { FactDeps, GroupFacts } from './groupFacts.js';
+import type { IdFactQueries } from './idFactQueries.js';
 import { KIMI_FLAG } from './kimiFactCodec.js';
 import { replaceKimiRow, type KimiRowId } from './kimiFactWriter.js';
 import { fact0Key } from './idKeys.js';
@@ -85,14 +86,17 @@ class RowOccurrences {
 
   constructor(
     private readonly row: PlannedRow,
-    private readonly deps: FactDeps,
-    private readonly kimi: boolean,
+    private readonly normalize: (
+      family: NormalizedFamily,
+      rawId: string,
+    ) => string,
+    private readonly kimiIdentity?: (rawId: string) => Uint8Array,
   ) {}
 
   private initializeLists(rawId: string): void {
     for (const family of [ID_NS.openai, ID_NS.anthropic]) {
       for (const kind of [OCCURRENCE_KIND.call, OCCURRENCE_KIND.response]) {
-        const id = normalizedIdOf(this.deps.idDeps.normalizers, family, rawId);
+        const id = this.normalize(family, rawId);
         const key = JSON.stringify([family, kind, id]);
         if (!this.lists.has(key))
           this.lists.set(key, { family, kind, id, positions: [] });
@@ -102,21 +106,18 @@ class RowOccurrences {
 
   async initialize(
     source: readonly IdOccurrence[],
-    ids: IdFactBatch,
+    facts: Pick<IdFactQueries, 'fact'>,
   ): Promise<void> {
     for (const occurrence of source) {
       if (this.facts.has(occurrence.rawId)) continue;
-      const fact = await ids.queries.fact(occurrence.rawId);
+      const fact = await facts.fact(occurrence.rawId);
       if (fact === undefined)
         throw new JournalFormatError('Normalized row has no source fact');
       this.facts.set(occurrence.rawId, fact);
       this.initializeLists(occurrence.rawId);
-      if (this.kimi)
+      if (this.kimiIdentity !== undefined)
         this.kimiRows.set(occurrence.rawId, {
-          identity: this.deps.idDeps.hasher(
-            ID_NS.fact,
-            fact0Key(occurrence.rawId),
-          ),
+          identity: this.kimiIdentity(occurrence.rawId),
           calls: [],
           responses: [],
         });
@@ -184,7 +185,7 @@ class RowOccurrences {
         kind === OCCURRENCE_KIND.call &&
         occurrence.rawId !== '' &&
         (reconstructed || occurrence.nameLen > 0);
-      if (this.kimi)
+      if (this.kimiIdentity !== undefined)
         this.recordKimi(
           occurrence,
           kind,
@@ -200,11 +201,7 @@ class RowOccurrences {
     if (kind === OCCURRENCE_KIND.call && speaker !== ROW_SPEAKER.ai) return;
     for (const occurrence of occurrences) {
       for (const family of [ID_NS.openai, ID_NS.anthropic]) {
-        const id = normalizedIdOf(
-          this.deps.idDeps.normalizers,
-          family,
-          occurrence.rawId,
-        );
+        const id = this.normalize(family, occurrence.rawId);
         const list = this.lists.get(JSON.stringify([family, kind, id]));
         if (list === undefined)
           throw new JournalFormatError('Missing current-row normalized list');
@@ -274,6 +271,19 @@ class RowOccurrences {
   }
 }
 
+export async function normalizedRowLists(
+  row: PlannedRow,
+  entry: RowEntry,
+  source: readonly IdOccurrence[],
+  facts: Pick<IdFactQueries, 'fact'>,
+  normalize: (family: NormalizedFamily, rawId: string) => string,
+): Promise<readonly RowList[]> {
+  const occurrences = new RowOccurrences(row, normalize);
+  await occurrences.initialize(source, facts);
+  for (const part of [0, 1]) occurrences.part(source, entry, part);
+  return [...occurrences.lists.values()];
+}
+
 export async function writeNormalizedRowOccurrences(
   row: PlannedRow,
   entry: RowEntry,
@@ -288,8 +298,14 @@ export async function writeNormalizedRowOccurrences(
   )
     return 0;
   const source = await deps.planOccurrences(row, ids.queries);
-  const occurrences = new RowOccurrences(row, deps, kimiFacts?.kimi === true);
-  await occurrences.initialize(source, ids);
+  const occurrences = new RowOccurrences(
+    row,
+    (family, rawId) => normalizedIdOf(deps.idDeps.normalizers, family, rawId),
+    kimiFacts?.kimi === true
+      ? (rawId) => deps.idDeps.hasher(ID_NS.fact, fact0Key(rawId))
+      : undefined,
+  );
+  await occurrences.initialize(source, ids.queries);
   for (const part of [0, 1]) occurrences.part(source, entry, part);
   for (const list of occurrences.lists.values()) {
     await ids.replaceNormalizedRow(

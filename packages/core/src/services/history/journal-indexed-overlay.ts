@@ -40,7 +40,7 @@ async function overlayRow(
     throw new JournalFormatError(
       `Indexed overlay contribution ${count} disagrees with ${emitted} plans`,
     );
-  return { entry, start, count, oldCount, pendingMask };
+  return { entry: updated, start, count, oldCount, pendingMask };
 }
 
 export async function indexedOverlay(

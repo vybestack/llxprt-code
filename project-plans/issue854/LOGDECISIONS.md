@@ -1,5 +1,23 @@
 # Issue 854 decision log, 2026-10-20
 
+## Phase 5 normalized pending-input queries
+
+Extend `IndexedJournalRequestSnapshot`, rather than introducing another unit adapter. The request uses the same pinned `VersionSnapshot`, `JournalTailSource`, affected-row overlay, count and `readAt` coordinates. Namespace 1/2 queries now expose counts, one-based occurrence selection, last-at-or-after, strict successor and streamed half-open unit ranges. `withNormalized` prepares one selected-ID view for several queries under one callback hold.
+
+Reuse `RowOccurrences` for both persisted and virtual emission. Inject the source-fact reader and pure normalizer; do not import provider implementations. Recompute only each affected journal row and tail row from ID metadata, discard its temporary current-row lists, and retain only the selected normalized ID's replacement positions. The existing raw-ID overlay still contains only IDs present in pending input. No prefix enumeration, whole-history map, payload decode or operation file is introduced.
+
+Replace an affected row's persisted occurrence contribution completely, rather than mixing old local positions with updated units. Locate its old list interval by binary search. Keep untouched list intervals in the persisted trie. Project every selected position through the same affected-row count deltas and part offsets that unit selection uses. This covers a tail AI call creating an earlier human-target response and shifting later journal ordinals. Duplicate blocks retain multiplicity, including empty IDs and normalized prefix collisions. Range bounds use projected request unit indices, so responses before a stateful cursor do not answer calls after it.
+
+Callbacks and occurrence iterators take their own hold on the current pin. Closing the opener or request object cannot release a suspended consumer's pin. Release failures remain observable when no primary failure exists; preparation, callback and abort failures retain their original identity when final release also fails.
+
+The oracle recomputes complete old-normalizer output for every unchanged 5000-case input with its request-only tail. It checks counts, selection, last, strict successor and ranges at every unit boundary, as well as unchanged pending membership and first-output ordinals. Named cases cover tail best/tie behavior, cross-speaker shifts, R1 duplicates, empty/prefix collisions, split parts and stateful duplicate calls. Wrong tail precedence, omitted coordinate shifts and retained history copying must fail actual assertions and restore with cmp before acceptance. Read budgets at 40/4000/100000 rows do not establish retained heap.
+
+Keep the broader verification failure visible. The unchanged codec property test generated an own `__proto__` key and failed because `sanitizeParams` assigns entries into `{}`, losing that key. Seed `609796497` and the minimized payload reproduce the loss deterministically; codec, sanitizer and property-test hashes match starting HEAD. Recorded as [#3917](https://github.com/vybestack/llxprt-code/issues/3917), with no fix in this query group. Continue only previously unexecuted files under the same source inventory. Do not retry the failing test, narrow its input domain, skip it or call the broader matrix green.
+
+This increment is not full tail Kimi. Tail duplicates do not yet override native Kimi mappings through this view, and Mistral tail used-ID continuation is not wired. Its later implementation must use persisted namespace 3 plus a tail-bounded overlay, never a used-ID map over history or process-global state. Provider sends and the backend default remain unchanged. Full format/settings generations, summaries/LENS, holder remeasurement, complete fallback digit ranks, range CRC, 10k/100k/1M heap and W26/W23/W25 dependencies remain open.
+
+Review skipped per Andrew 2026-10-09. No cleanup, obstruction move, .llxprt edit/staging, unrelated declaration/recovery staging, OCR, push or merge.
+
 ## Phase 5 Kimi correction facts
 
 Implement the persisted mapping boundary before request-tail and summary integration. The first green group is `4d88b25211a7d1b4ac5999afaf88797dbafc05f3`. The production native writer owns emitted positions, counts, last-eligible pointers and exception admission under the existing acknowledgement/poison contract.
