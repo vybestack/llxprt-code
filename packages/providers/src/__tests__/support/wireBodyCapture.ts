@@ -31,6 +31,7 @@ import type { GenerateChatOptions, IProvider } from '../../IProvider.js';
 import { TEST_PROVIDER_CONFIG } from '../providerTestConfig.js';
 import { streamCallOptions } from '../streamCallOptions.js';
 import type { HistoryCase } from './wireBodyHistories.js';
+import { forbiddenProviderContents } from './journal-provider-fixture.js';
 
 /**
  * `stream`: the provider reads `options.contents` (a one-shot row stream).
@@ -315,18 +316,28 @@ export function buildRouteCallOptions(
   });
 }
 
-function buildOptions(
+export function buildHistoryCallOptions(
   route: WireRoute,
   history: HistoryCase,
   source: RowSource,
   settings: SettingsService,
+  selection?: ProviderRequestSelection,
 ): GenerateChatOptions {
   const options = buildRouteCallOptions(
     route,
     history,
-    history.rows.map((row) => structuredClone(row)),
+    selection === undefined
+      ? history.rows.map((row) => structuredClone(row))
+      : forbiddenProviderContents,
     settings,
   );
+  if (selection !== undefined) {
+    return {
+      ...options,
+      requestRows: selection,
+      contentCount: selection.count,
+    };
+  }
   if (source === 'stream') return options;
   return {
     ...options,
@@ -374,6 +385,7 @@ export async function sendThroughRoute(
   history: HistoryCase,
   source: RowSource,
   media?: MediaBinding,
+  selection?: ProviderRequestSelection,
 ): Promise<CapturedWireRequest> {
   const captured: CapturedWireRequest[] = [];
   const restore = installFakeTransport(route, captured);
@@ -384,7 +396,13 @@ export async function sendThroughRoute(
       media === undefined
         ? created
         : bindProviderMedia(created, media.resolver, media.budgetBytes);
-    const options = buildOptions(route, history, source, settings);
+    const options = buildHistoryCallOptions(
+      route,
+      history,
+      source,
+      settings,
+      selection,
+    );
     for await (const chunk of provider.generateChatCompletion(options)) {
       void chunk;
     }

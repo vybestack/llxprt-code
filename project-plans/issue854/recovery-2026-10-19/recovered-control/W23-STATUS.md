@@ -1,5 +1,13 @@
 # W23 bounded integration and provider parity
 
+## Provider selected subset, 2026-10-20T05:35Z
+
+The fourteen-file sendPeak driver completed: **29 passes, zero failures/skips**. Driver 88231 and final child 96076 are absent. The refreshed `W23-SEND-PEAK-CHECKPOINT.json` supersedes the running snapshot below. Measurements and dedicated trap receipts remain in run-a; actual positive tests under trap environments remain open.
+
+Native selected parity is green: **163 passes per outer environment**, including 154 route/history comparisons against independent old eager curation and real builders, seven untouched frozen text-only checks, and committed-row/settings rejection controls. The fixture uses committed journal rows, actual curation snapshots, forbidden eager/contents fallbacks, and live/closed selection checks. No production source changed. The unchanged wire golden adds 315 passes per environment, for **956 passes, zero failures/skips** in this subset matrix.
+
+Six scoped gates pass: provider declarations, provider noemit/test types, zero-warning lint, formatting, affected graph validation and audit. Touched audit findings are zero. An authoring lint failure was the throw-only async generator in the contents trap; its iterator now throws directly. No rule changed. Receipts and design: `tmp/854-notes/p4/w23/provider-parity-run-b/`. Dump, retry, continuation and seeded native boundaries are next; W23 remains open.
+
 ## SendPeak collection handoff, 2026-10-20T05:23:55Z
 
 First green cluster committed as `2f20ada0c50e65e127b89c07957872e26e72b18f`. A separate fourteen-file sendPeak batch is running serially, with no package source edits or overlapping heavy gates. At this timestamp, two files have complete agreeing raw/JUnit results: OpenAI chat text-only and tool-heavy, **four passes, zero failures/skips**. Both complete byte/Content-Length and unchanged memory predicates pass. Twelve paths remain, including the currently running file.

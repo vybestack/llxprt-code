@@ -1,5 +1,11 @@
 # W23 proof map
 
+## Provider selected subset, 2026-10-20T05:35Z
+
+The sendPeak collection has finished all fourteen files with 29 passes and no failures/skips; the refreshed checkpoint replaces the active snapshot below. No memory input was repeated. The selected subset runs 22 histories on seven routes through native HistoryService curation snapshots and the existing provider builders. Its independent expected side uses old eager curation, not the native snapshot. All 154 byte/length comparisons, seven frozen text-only checks, and two rejecting controls pass in each outer environment. Selection read/close and decoded-row ownership checks run in the shared fixture. These are explicitly journal sources even under the old outer environment.
+
+Serial final subset logs: `provider-parity-run-b/first-final/000..003`, 956 passes total including unchanged 315-case wire suites in both environments. Gates: `first-gates-fixed/000..005`, all green, touched audit findings zero. The earlier `first-gates/002` lint failure and correction remain recorded. No production code changed; dump/retry/continuation/seeded native proof remains open at this checkpoint. Raw output root: `tmp/854-notes/p4/w23/`.
+
 ## Active sendPeak checkpoint
 
 First cluster source commit: `2f20ada0c50e65e127b89c07957872e26e72b18f`. `W23-SEND-PEAK-CHECKPOINT.json` binds the two completed OpenAI chat measurements, four passes and zero failures/skips, at 2026-10-20T05:23:55Z. Complete bytes/Content-Length and unchanged heap/ArrayBuffer/retained predicates pass. This is separate from frozen corpus parity: the existing sendPeak oracle is computed outside measurement, and its source is disk rows rather than HistoryService.
