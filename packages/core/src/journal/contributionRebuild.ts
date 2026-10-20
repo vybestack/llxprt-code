@@ -2,6 +2,7 @@
 import type { BuildContext } from './groupBuildShared.js';
 import type { RecordAppender } from './groupAppender.js';
 import type { GroupFacts } from './groupFacts.js';
+import { writeNormalizedRowOccurrences } from './normalizedRowOccurrences.js';
 import { readRowIds } from './rowReads.js';
 import type { RowEntry } from './rowEntry.js';
 import { bulkBuildRowTree, type RowTreeAlgebra } from './rowTreeBuilder.js';
@@ -19,11 +20,17 @@ export async function rebuildContributions(
   const access = ctx.readGroup(appender.nextOffset);
   async function* entries(): AsyncGenerator<RowEntry> {
     for await (const entry of iterateRowEntries(access, root)) {
-      yield await withUnitContributions(
+      const row = plannedFromIds(await readRowIds(access, entry));
+      const updated = await withUnitContributions(
         entry,
-        plannedFromIds(await readRowIds(access, entry)),
+        row,
         facts.ids.queries,
       );
+      await writeNormalizedRowOccurrences(row, updated, facts.ids, ctx, {
+        appender,
+        readGroup: ctx.readGroup,
+      });
+      yield updated;
     }
   }
   return bulkBuildRowTree(appender, algebra, entries());

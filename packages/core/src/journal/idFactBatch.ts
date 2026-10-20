@@ -39,6 +39,7 @@ import { BoundedIdNodeCache } from './idTrieCache.js';
 import { mergeIdTrie } from './idTrieMerge.js';
 import { compareIdHashes, type IdEntry } from './idTrieNode.js';
 import { IdTrieReader } from './idTrieReader.js';
+import { replaceNormalizedRow } from './normalizedListEdit.js';
 import type { RecordAccess } from './recordAccess.js';
 
 const FAMILIES: readonly NormalizedFamily[] = [ID_NS.openai, ID_NS.anthropic];
@@ -174,6 +175,10 @@ export class IdFactBatch {
     const { spill } = this;
     if (spill === undefined) return;
     if (this.pendingBytes <= (spill.capBytes ?? ID_BATCH_CAP_BYTES)) return;
+    await this.flush(spill);
+  }
+
+  private async flush(spill: BatchSpill): Promise<void> {
     const { appender } = spill;
     this.workingRoot = await mergeIdTrie(
       appender,
@@ -268,6 +273,47 @@ export class IdFactBatch {
       ID_NS.mistralUsed,
       mistralUsedKey(slot, mappedId),
       encodeHashValue(this.deps.hasher(ID_NS.fact, fact0Key(rawId))),
+    );
+  }
+
+  async replaceNormalizedRow(
+    family: NormalizedFamily,
+    kind: OccurrenceKind,
+    id: string,
+    label: bigint,
+    positions: readonly UnitPosition[],
+    spill: BatchSpill,
+  ): Promise<void> {
+    await replaceNormalizedRow(
+      this.queries,
+      { family, kind, id, label, positions },
+      {
+        freeze: async () => {
+          await this.flush(spill);
+          const reader = this.workingReader;
+          const root = this.workingRoot;
+          return new IdFactQueries(
+            {
+              get: (hash) =>
+                reader === undefined
+                  ? Promise.resolve(undefined)
+                  : reader.lookup(root, hash),
+            },
+            this.deps,
+          );
+        },
+        position: async (ordinal, at) => {
+          this.put(
+            family,
+            normalizedKey(kind, ordinal, id),
+            encodeUnitPositionValue(at),
+          );
+          if (this.pendingBytes > (spill.capBytes ?? ID_BATCH_CAP_BYTES))
+            await this.flush(spill);
+        },
+        count: (count) =>
+          this.put(family, normalizedKey(kind, 0, id), encodeCountValue(count)),
+      },
     );
   }
 

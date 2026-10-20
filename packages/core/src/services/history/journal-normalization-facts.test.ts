@@ -104,9 +104,8 @@ describe('native source normalization facts', () => {
       expect((await facts.fact('a'))?.firstResponse?.label).toBe(3145728n);
       expect((await facts.fact('a'))?.best?.label).toBe(4194304n);
       expect(await facts.fact('excluded')).toBeUndefined();
-      await expect(facts.normalizedCount(1, 0, 'call_a')).rejects.toThrow(
-        'Normalized unit occurrences are not available',
-      );
+      expect(await facts.normalizedCount(1, 0, 'call_a')).toBe(1);
+      expect(await facts.normalizedCount(1, 1, 'call_a')).toBe(1);
       await facts.close();
     } finally {
       await session.close();

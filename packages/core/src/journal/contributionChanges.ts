@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { BuildContext } from './groupBuildShared.js';
+import type { RecordAppender } from './groupAppender.js';
 import type { PlannedRow } from './groupEdits.js';
 import { plannedFromDraft } from './groupFacts.js';
 import type { GroupPlan, Segment } from './groupPlanTypes.js';
@@ -8,6 +9,8 @@ import { JournalFormatError } from './errors.js';
 import type { RowEntry } from './rowEntry.js';
 import { readRowIds } from './rowReads.js';
 import { entryByLabel } from './rowTreeQueries.js';
+import { writeNormalizedRowOccurrences } from './normalizedRowOccurrences.js';
+import type { GroupFacts } from './groupFacts.js';
 import { rootRef } from './groupSegments.js';
 import { plannedFromIds, withUnitContributions } from './unitContributions.js';
 
@@ -39,6 +42,10 @@ export async function updateContributions(
   affected: ReadonlySet<bigint>,
   changes: ContributionChanges,
   facts: IdFactQueries,
+  groupFacts?: {
+    readonly facts: GroupFacts;
+    readonly appender: RecordAppender;
+  },
 ): Promise<void> {
   const changed = new Set(
     [...changes.replace, ...changes.insert].map((entry) => entry.label),
@@ -65,6 +72,15 @@ export async function updateContributions(
       const entry = list[index];
       const row = await sourceRow(ctx, entry, sources.get(entry.label));
       list[index] = await withUnitContributions(entry, row, facts);
+      if (groupFacts !== undefined) {
+        await writeNormalizedRowOccurrences(
+          row,
+          list[index],
+          groupFacts.facts.ids,
+          ctx,
+          { appender: groupFacts.appender, readGroup: ctx.readGroup },
+        );
+      }
     }
   }
 }

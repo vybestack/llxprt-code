@@ -220,7 +220,7 @@ export async function buildRebuilt(
   const pass = new RebuildPass(ctx, plan.nextLabel, segments, appender, facts);
   const algebra = ctx.algebra(slotKindsOf(plan.base.slots));
   let tree = await bulkBuildRowTree(appender, algebra, pass.entries());
-  const roots =
+  let roots =
     tree === undefined
       ? { idRoot: 0, metaRoot: 0 }
       : await commitRebuiltFacts(finishFacts(facts), appender);
@@ -234,6 +234,7 @@ export async function buildRebuilt(
     );
     if (tree === undefined)
       throw new JournalFormatError('Contribution rebuild lost its rows');
+    roots = await commitRebuiltFacts(finishFacts(facts), appender);
   }
   const stateRoot = await commitState(ctx, plan, appender);
   const { first, last } = pass;

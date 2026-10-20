@@ -33,7 +33,7 @@ export interface IdEntryView {
 export interface IdFactDeps {
   readonly hasher: IdKeyHasher;
   readonly normalizers: IdNormalizers;
-  readonly occurrenceSpace: 'source' | 'normalized';
+  readonly occurrenceSpace: 'source' | 'normalized' | 'source-with-normalized';
 }
 
 /**
@@ -78,7 +78,7 @@ export class IdFactQueries {
   }
 
   private requireNormalized(): void {
-    if (this.deps.occurrenceSpace !== 'normalized') {
+    if (this.deps.occurrenceSpace === 'source') {
       throw new JournalFormatError(
         'Normalized unit occurrences are not available',
       );

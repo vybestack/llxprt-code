@@ -16,6 +16,7 @@ import { encodeContentRow } from './journalRowCodec.js';
 import { call, response } from './__tests__/support/normalization-cases.js';
 import { digest, oldUnits } from './__tests__/support/normalization-oracle.js';
 import type { IContent } from './IContent.js';
+import { assertPersistedOccurrences } from './__tests__/support/persisted-occurrence-oracle.js';
 
 async function measured(session: JournalSession): Promise<{
   readonly snapshot: VersionSnapshot;
@@ -62,6 +63,7 @@ async function verifyCurrent(
   session: JournalSession,
   tail: readonly IContent[] = [],
 ): Promise<void> {
+  await assertPersistedOccurrences(session);
   const rows: IContent[] = [];
   for await (const row of session.rows()) rows.push(row.content);
   const expected = await oldUnits({ id: 'mutation', rows, tail });

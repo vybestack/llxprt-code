@@ -38,7 +38,7 @@ async function storeDependencies(
     journal: await resolveJournalDependencies(options.journal),
     idDeps: {
       hasher: sha256KeyHash,
-      occurrenceSpace: 'source',
+      occurrenceSpace: 'source-with-normalized',
       normalizers: {
         openai: normalizeToOpenAIToolId,
         anthropic: normalizeToAnthropicToolId,

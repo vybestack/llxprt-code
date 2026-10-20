@@ -254,6 +254,9 @@ export async function buildIncremental(
     collected.affected,
     changes,
     queries,
+    collected.facts === undefined
+      ? undefined
+      : { facts: collected.facts, appender },
   );
   const { idRoot, metaRoot } = await commitFacts(
     collected.facts,
