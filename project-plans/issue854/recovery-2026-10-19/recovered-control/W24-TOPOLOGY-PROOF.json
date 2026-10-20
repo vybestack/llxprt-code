@@ -1,7 +1,25 @@
 {
+  "finalQualifiedRebind": {
+    "file": "W24-FINAL-REBIND-PROOF.json",
+    "sha256": "2e06b07504267d720c61cc170c8ecee748ec434e47bb133b03d9f6f495f97403",
+    "sourceHead": "b5b2ff081dad100dcf3405856d93d59de6b6f0e7",
+    "rawRoot": "tmp/854-notes/p4/w24/final-rebind-run-h/",
+    "qualification": "All code and code/profile-referenced data remain charged; compiler-code liveness is strengthened only in the named measurement workers. Original default full-window RED is unchanged. W23 planning/header dependencies, W25/old default and W26 remain open.",
+    "positiveRetainedBytes": 272508,
+    "positiveLateFittedBytes": 172574.4,
+    "positiveLateEndpointBytes": 177925,
+    "trapRetainedBytes": 196776454,
+    "trapMemoryFailures": 7,
+    "postHeapLifecyclePasses": 34,
+    "ordinaryW23MemoryPasses": 17,
+    "reusedAcceptancePasses": 336,
+    "reusedGates": 12,
+    "sourcePaths": 8182,
+    "absentRecordedPids": 18
+  },
   "date": "2026-10-20",
-  "verdict": "The active-reader descriptor regression is repaired and scoped topology lifecycle acceptance passes. W24 remains partial pending a matched qualified 50-turn positive and retaining-trap rebind to the repaired sources.",
-  "scope": "Reader-lifetime implementation and scoped acceptance. readerLifetime is the current source boundary. Other run-f cost, coverage, source, gate and binding entries retain their historical boundaries. No review, default change, cleanup, push or merge.",
+  "verdict": "W24 owned topology/lifecycle/cost/history-retention proof complete under pinned-code-v1. Final-source matched positive and retaining trap pass their intended contracts. Ordinary default-JSC full-window total heap remains unaccepted.",
+  "scope": "finalQualifiedRebind is the current proof boundary. readerLifetime and prior run-f entries preserve their original implementation, execution and cost boundaries. No product/test source or default change, review, cleanup, push or merge.",
   "commits": {
     "eligibleForegroundPrimary": "8870c287760e70c4c9b90777c8926dde4d62c78d",
     "failedOwnerSettlement": "3af0c0ccaab8706559d42d00b0b007c99e05e08f",

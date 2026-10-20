@@ -1,3 +1,30 @@
+# W24 owned proof is complete under pinned-code-v1, 2026-10-20
+
+**The final topology passes the qualified history-retention contract and preserves single-copy recording. Ordinary default-JSC full-window total heap is not accepted.** This closes W24's owned lifecycle, topology, cost and named-method proof, with that qualification. It supersedes the pending-rebind statements below, without converting historical default-runtime failures into passes.
+
+Verified source HEAD: `b5b2ff081dad100dcf3405856d93d59de6b6f0e7`; product root fix remains `c560476fa0fc9c9491655aff6bf76f1d3022deae`. Authority: `W24-FINAL-REBIND-PROOF.json`, raw root `tmp/854-notes/p4/w24/final-rebind-run-h/`. No product or test source changed. All 8,182 package/script hashes match before and after eleven serial task executions and final validation.
+
+The required launcher ran once positively and once with `W24_RETAINING_TRAP=1`. Each fresh worker used only `forceCodeBlockLiveness=true` plus option-dump logging, fixed 530 warmup/ten baseline/50 measured turns, 60 measured HTTP requests/five tools, nine phase-matched readings and the unchanged 290000-ms timeout. Complete prompt/transport hashes match; transport totals are 708 requests/59 tools. All code and code/profile-referenced data remain charged to the unfiltered heap. This measures bounded history retention under stronger compiler-code liveness, not default compiler-cache stability.
+
+| Final-source result    | Checkpoint deltas, bytes                                          | Late fitted / endpoint, bytes |
+| ---------------------- | ----------------------------------------------------------------- | ----------------------------- |
+| Positive, exit 0       | 36,765 / 94,583 / 207,161 / 248,634 / 272,508                     | 172,574.4 / 177,925           |
+| Retaining trap, exit 1 | 24,811,608 / 67,836,261 / 110,922,493 / 153,965,183 / 196,776,454 | 128,958,980.7 / 128,940,193   |
+
+The positive meets the original 1,048,576-byte allowance and 262,144-byte late bounds. The trap fails all seven memory predicates, not loading or timeout. Sampled rows alive are 0/165 versus 165/165; strong held rows are 0 versus 8,085. Both release all 1,782 observed warmup rows and close 55/55 snapshots. Both write measured rows only to the adopted recording file. The longer heap fixture includes checkpoint saves and is not the separate 50-warmup cost benchmark.
+
+After heap idle, six targeted native/public/common lifecycle executions pass **34 tests/426 assertions**, including active readers across stop/reload and late-owner divergence. Reuse of the unchanged **336-pass/8,218-assertion**, 48-execution acceptance and **twelve gates** is validated against 22 bound artifacts and 120 log hashes. No full-monorepo or affected-shard execution claim. The original ten meter release/retain pairs remain valid: eight dependency sources and 41 artifacts match, with the same Bun 1.3.14 revision. The historical shorter default Agent row census remains supplemental at its earlier product-source boundary; backing-store omissions prevent treating it as a complete byte meter.
+
+The original three ordinary-JSC ChatSession memory files were also executed once each because shared reader/commit reachability changed: **17 passes/58 assertions**. Normal peaks at 224,004 bytes and ends at -83,713, with late fitted/endpoint -210,150.3/-245,053; unchanged convergence chooses baseline turn 545, 845 requests/89 compressions. The retaining control rejects at 77,588,714 bytes. The release control rejects its 36,036,651-byte intermediate peak despite ending at 218,369 with zero rows held. Both controls send 850 requests/90 compressions. This ordinary W23 workload remains distinct from the qualified public-Agent W24 window.
+
+Cost receipts retain their actual same-input 50-warmup/50-measured comparison: **9,245,079 bare / 18,502,236 separate mirror / 9,245,079 adopted-primary bytes**. Eight emission/acknowledgement function hashes are unchanged by reader retirement; existing row-digest equality assertions and owned-file counters pass. Original process CPU observations are 21,213.776/21,242.066/21,149.176 ms, not remeasured final-source CPU or a percentage guarantee. No new benchmark was needed. Origin dictionaries hold IDs/strings per registered origin, not rows; ID/meta/state node caches remain capped at 64 KiB each. Reader/mirror/checkpoint lifetime state has no growing row or per-checkpoint closure map. No claim is made for arbitrarily growing distinct-owner cardinality.
+
+Driver `43209`, launchers `43253/47966`, workers `43269/47974` and all other recorded lane processes are absent: **18 checked PIDs, zero live**. Managed job `shell_3727b2b732e4` completed with exit zero. A proof-validator schema initially read a stripped binding rather than its full raw receipt; the failure is retained and corrected without a measurement retry. No source edit occurred while heavy work ran.
+
+The original ordinary default full-window RED remains unchanged: 1,784,599-byte peak and 1,552,319.7/1,481,822 late growth. Its executable diagnostic and receipt hashes still match. W23's eight planning/header assertions through phases 5/6/7 remain open; W25 is blocked and the old default stays. Real Windows rename refusal remains an existing final obligation, not a Darwin claim. W26 scratch/provider-spool/compression-candidate work is independent and next. No global no-scratch or real-Agent media-conversion claim. Review skipped per Andrew 2026-10-09. No cleanup, obstruction move, `.llxprt` edit/staging, emitted-declaration/raw recovery bulk staging, OCR, push or merge.
+
+Earlier sections retain their historical source boundaries.
+
 # Reader lifetime is repaired; W24 heap rebinding remains open, 2026-10-20
 
 Root-fix commit: `c560476fa0fc9c9491655aff6bf76f1d3022deae`, from verified HEAD `50b028af8909875d39a2bff06807afb9bff86f45`. This section supersedes the four lifecycle blockers below. Current evidence is `W24-TOPOLOGY-PROOF.json`'s `readerLifetime` section, under `tmp/854-notes/p4/w24/topology-reader-run-g/`.
