@@ -42,36 +42,53 @@ export async function handleRefreshLockMiss(
     () =>
       `[FLOW] Failed to acquire refresh lock for ${providerName}, waiting for refreshed token...`,
   );
-  for (let attempt = 0; attempt < 1400; attempt += 1) {
+  const readFreshToken = async (): Promise<OAuthToken | null> => {
     signal?.throwIfAborted();
-    const reloadedToken = await tokenStore.getToken(providerName, bucketToUse);
+    const token = await tokenStore.getToken(providerName, bucketToUse);
     signal?.throwIfAborted();
     if (
-      reloadedToken &&
-      reloadedToken.expiry >
+      !token ||
+      token.expiry <=
         Math.max(thirtySecondsFromNow, Math.floor(Date.now() / 1000) + 30)
     ) {
-      logger.debug(
-        () =>
-          `[FLOW] Token was refreshed by another process for ${providerName}`,
-      );
-      proactiveRenewalManager.scheduleProactiveRenewal(
-        providerName,
-        bucketToUse,
-        reloadedToken,
-      );
-      return reloadedToken;
+      return null;
     }
-    if (attempt < 1399) {
+    proactiveRenewalManager.scheduleProactiveRenewal(
+      providerName,
+      bucketToUse,
+      token,
+    );
+    return token;
+  };
+  const deadline = performance.now() + 35_000;
+  let pollDelayMs = 25;
+  while (true) {
+    const token = await readFreshToken();
+    if (token) return token;
+
+    signal?.throwIfAborted();
+    const acquired = await tokenStore.acquireRefreshLock(providerName, {
+      waitMs: 0,
+      bucket: bucketToUse,
+    });
+    if (acquired) {
       try {
-        await sleep(25, undefined, { signal });
-      } catch (error) {
-        signal?.throwIfAborted();
-        throw error;
+        return await readFreshToken();
+      } finally {
+        await tokenStore.releaseRefreshLock(providerName, bucketToUse);
       }
     }
+
+    const remainingMs = deadline - performance.now();
+    if (remainingMs <= 0) return null;
+    try {
+      await sleep(Math.min(pollDelayMs, remainingMs), undefined, { signal });
+    } catch (error) {
+      signal?.throwIfAborted();
+      throw error;
+    }
+    pollDelayMs = Math.min(pollDelayMs * 2, 1000);
   }
-  return null;
 }
 
 // --------------------------------------------------------------------------

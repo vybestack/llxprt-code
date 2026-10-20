@@ -25,6 +25,17 @@ function isFulfilledOAuthToken(
   return result.status === 'fulfilled' && result.value !== null;
 }
 
+function createRefreshGate(): {
+  promise: Promise<void>;
+  resolve: () => void;
+} {
+  let release: (() => void) | undefined;
+  const promise = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { promise, resolve: (): void => release?.() };
+}
+
 function createMockKeyring(): KeyringAdapter & { store: Map<string, string> } {
   const store = new Map<string, string>();
   return {
@@ -217,8 +228,8 @@ describe('OAuthManager - Token Refresh Race Condition (Issue #1159)', () => {
       async (ownerType) => {
         const expiredToken = createToken('expired-token', -10);
         await tokenStore.saveToken('test-provider', expiredToken);
-        const refreshStarted = Promise.withResolvers<void>();
-        const refreshGate = Promise.withResolvers<void>();
+        const refreshStarted = createRefreshGate();
+        const refreshGate = createRefreshGate();
         mockProvider.refreshToken = async (token): Promise<OAuthToken> => {
           refreshStarted.resolve();
           await refreshGate.promise;
@@ -246,6 +257,53 @@ describe('OAuthManager - Token Refresh Race Condition (Issue #1159)', () => {
         } finally {
           refreshGate.resolve();
           await Promise.allSettled([owner, ...contenders]);
+        }
+      },
+    );
+    it.each(['empty result', 'error'])(
+      'stops waiting when the refresh owner releases its lock after an %s',
+      async (failure) => {
+        await tokenStore.saveToken(
+          'test-provider',
+          createToken('expired-token', -10),
+        );
+        const refreshStarted = createRefreshGate();
+        const refreshGate = createRefreshGate();
+        mockProvider.refreshToken = async (): Promise<OAuthToken | null> => {
+          refreshStarted.resolve();
+          await refreshGate.promise;
+          if (failure === 'error') throw new Error('Refresh unavailable');
+          return null;
+        };
+        const controller = new AbortController();
+        const work = oauthManager.createProfileOAuthWork(controller.signal);
+        const owner = oauthManager.getOAuthToken('test-provider', 'default');
+        const contender = refreshStarted.promise.then(() =>
+          work.getToken({
+            providerName: 'test-provider',
+            buckets: ['default'],
+            signal: controller.signal,
+          }),
+        );
+        let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          await refreshStarted.promise;
+          await new Promise<void>((resolve) => setTimeout(resolve, 50));
+          refreshGate.resolve();
+          await owner;
+          const result = await Promise.race([
+            contender,
+            new Promise<'still waiting'>((resolve) => {
+              deadlineTimer = setTimeout(() => resolve('still waiting'), 500);
+            }),
+          ]);
+          expect(result).toBeNull();
+        } finally {
+          clearTimeout(deadlineTimer);
+          refreshGate.resolve();
+          controller.abort();
+          await Promise.allSettled([owner, contender]);
+          await work.cancelAndJoin();
         }
       },
     );

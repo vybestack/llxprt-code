@@ -20,7 +20,7 @@ On Linux, Codex occasionally asks the user to enable OAuth even though it is ena
 2. Wait for fresh stored credentials after lock contention, without stealing the owner's lock or replaying a rotating refresh token.
 3. Independently review and strengthen coverage; remediate findings once, then perform final review.
 
-The initial 475 ms polling fix was rejected in review because ordinary successful refreshes could exceed that window. The final implementation allows approximately 35 seconds of polling sleeps, accommodating Codex's 30-second HTTP refresh timeout. Storage-read latency is additional; this is not a hard wall-clock bound on credential I/O.
+The initial 475 ms polling fix was rejected in review because ordinary successful refreshes could exceed that window. The final implementation uses a 35-second monotonic polling deadline, accommodating Codex's 30-second HTTP refresh timeout, and exponential delays from 25 ms to 1 second rather than 1,400 fixed-cadence reads. Already-started storage I/O is not forcibly canceled, so this is not a hard wall-clock bound on credential I/O. A nonblocking refresh-lock probe detects when the owner has finished; after acquiring that lock, the waiter rechecks storage and returns fresh credentials or `null`, releasing the lock in `finally`. It does not replay a refresh token when the previous owner failed.
 
 The waiter checks cancellation before and after every read, uses abort-aware sleeps, and preserves the original abort reason. Freshness uses the current 30-second safety margin, not only the timestamp captured before waiting. Exhaustion still returns `null`.
 
@@ -46,6 +46,16 @@ Independent review round 2: **PASS**, static-only, no remaining high-severity fi
 After repeated session/system interruptions, the user explicitly requested focused checks, no subagent-run tests, and broad/memory-heavy suites last, sliced where possible. There are no queued broad local test jobs. All resumed executable checks use a systemd cgroup hard memory cap and zero swap; targeted tests use 512 MiB and a short process timeout.
 
 Broad test/lint/typecheck/build validation is deferred to CI rather than risking further local memory exhaustion. Local full-cycle verification is incomplete and must not be represented as green. The `ocr` executable is unavailable on PATH, so external open-code review could not run; independent review was completed instead.
+
+## Remote CI and review remediation
+
+First CI run: all seven test shards passed (providers, agents, core, three CLI slices, and rest), along with the runtime-plugin build/typecheck/test job and smoke jobs. The typecheck step found that this target library does not declare `Promise.withResolvers`; the test gates now use ordinary typed Promise constructors without changing project compiler configuration.
+
+CodeRabbit identified continued polling after a failed owner released its lock and excessive fixed-rate credential reads. Both points were verified against source and addressed with a nonblocking lock probe, protected final storage recheck, monotonic deadline, and capped exponential backoff. New real-manager/store regressions for an owner returning no token or throwing both failed before the correction and passed afterward; failures now settle promptly without another refresh attempt.
+
+Final remediation focused suite: **14 passed, 0 failed**, 37 assertions, approximately 4.8 seconds, pinned Bun 1.3.14 under 512 MiB/no swap. Log: `/tmp/issue3908-remediation-focused.log`. Remote CI will validate typechecking and the broad suites on the revised commit.
+
+Remote OCR was attempted automatically but its model connectivity preflight returned HTTP 401; the workflow's success status does not mean OCR actually reviewed the patch. Fixing that credential requires repository infrastructure access and is not a code change in this issue.
 
 ## GitHub tracking
 
