@@ -1,5 +1,26 @@
 # W23 proof map
 
+## Exact known-length refusal, 2026-10-20
+
+Implementation `f1236a8dc`; proof `W23-PLANNING-REFUSAL-PROOF.json`; raw root `tmp/854-notes/p4/w23/planning-run-d/`. `accept/000..027` has 1,258 passes across 28 isolated file executions, zero failures/skips. `accept-gates/000..005` has six green scoped gates, zero touched audit findings. Raw/JUnit totals and final source hashes agree. There is no whole-package or affected-shard execution claim.
+
+| Boundary | Executed evidence | Scope |
+| --- | --- | --- |
+| Native over-limit initial HTTP | `accept/000`, four passes | Chat, both Responses routes and Anthropic reject before HTTP with size/limit RangeError, zero request-size/liveness reports and closed source. |
+| Provider-effective exact edge | `accept/001`, eight passes | Four exact 134,217,728-byte Unicode/escaped/media bodies accepted with whole-body SHA-256 and Content-Length; four limit+1 bodies refused without transport. Chat reads two rows, each other route one, including valid and invalid cases. |
+| Rejected parent | `accept/002`, two passes | Both Responses routes send only the initial small delta, matching independent oracle; full-history rebuild refuses without second HTTP. |
+| Native WebSocket initial | `accept/003`, four passes | Bodies at/over 32 MiB and 128 MiB are checked with complete `response.create` framing before socket creation, using the unchanged 32 MiB route cap. No HTTP fallback on refusal. |
+| Native WebSocket rebuild | `accept/004`, two passes | Initial small stateful frame only; full-history renewal/fallback refused before fresh socket or HTTP, with media owner released. |
+| Gateway controls | `accept/005`, four passes | Tiny committed Unicode requests accepted by the same local HTTP gateway and match independent expected hashes/headers. |
+| Prior 40 MiB behavior | `accept/006`, eight passes | Actual four-route text/media sends repeated on final source; every complete receipt equals the prior native proof. |
+| Existing regressions | `accept/007..027`, 1,226 passes | Native wire/selection/dump/recovery/seed boundaries, frozen wire, body equivalence/backpressure, content lengths, executor recovery/WebSocket/abort/error/PDF/liveness, chat/Anthropic transport and JSON/spool behavior. |
+
+`original-control/000..003` restores the original shared Streaming module and produces two passes/eight behavioral failures; exact original/accepted copies and restoration hashes remain recorded. `ws-limit-red` preserves four additional failures against the initial HTTP-cap-only implementation: the existing WebSocket limit had to move before socket creation too. Final implementation changes no limit. Early loader/setup, lint and missing-close type errors remain recorded, not counted as behavioral controls.
+
+`header/000..001` is eight remaining deliberate RED assertions from unchanged copies of the prior four-case planner and four-case declared-header diagnostic. Every route now has zero HTTP entries and bytes, but rows are still decoded. `native-metadata.json` records actual committed unassigned format slots, zero summaries/LENS/stamps and `missingBase=[1,1,1]`. Source evidence: `rowDraft.ts:125-156`, `rowAlgebra.ts:26-83`, `version.ts:87-101`, `provider-request-snapshot.ts:9-35`, `journalHistoryStore.ts:381-389`; design Sections 8.2-8.5 and phase 7 explicitly define the missing normalization/converter measurer plumbing. The shared fix is `openAIResponsesStreaming.ts:43-71` and its two rebuilt-attempt calls. Do not close decoded-row-free planning from these green transport checks.
+
+Thirty-five retained/read-cost source and receipt hashes and all 85 unchanged prior frozen inputs match. Memory workers were not rerun. All recorded task PIDs are absent and original-source mutations are restored. Existing phase-4 spools, whole-frame WebSocket assembly, remaining W23 contracts and later phases remain open. No default flip, cleanup, weakened checks, OCR, push or merge. Review skipped per Andrew 2026-10-09.
+
 ## Native memory and live-row boundary, 2026-10-20T06:40Z
 
 `W23-NATIVE-MEMORY-PROOF.json` binds the final 44-file run, six green gates, original/fixed live-object receipts, raw measurement hashes and frozen-source checks. Parent `3b617814b` contains the actual eight 40 MiB sends; final index 29 repeats those eight sends against the retention fix. Text-only / stored-image body byte counts remain: chat 41,943,164 / 41,943,259; Responses-via-OpenAI 41,943,148 / 41,943,243; standalone Responses 41,943,148 / 41,943,243; Anthropic 41,943,171 / 41,943,279. Whole-body SHA-256 and Content-Length match the unchanged separate oracle.
