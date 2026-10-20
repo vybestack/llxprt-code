@@ -50,6 +50,10 @@ export async function validateKeyFile(path: string): Promise<ValidationResult> {
   const expandedPath = expandTilde(path);
 
   try {
+    const stats = await fs.stat(expandedPath);
+    if (!stats.isFile()) {
+      return { valid: false, error: `Not a file: ${path}` };
+    }
     await fs.access(expandedPath, fs.constants.R_OK);
     return { valid: true };
   } catch (error) {
