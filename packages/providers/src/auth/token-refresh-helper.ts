@@ -15,6 +15,7 @@
 import { type OAuthTokenWithExtras } from '@vybestack/llxprt-code-auth';
 import { mergeRefreshedToken } from '@vybestack/llxprt-code-auth/token-merge.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { setTimeout as sleep } from 'node:timers/promises';
 import type { OAuthToken, TokenStore } from './types.js';
 import type { ProviderRegistry } from './provider-registry.js';
 import type { ProactiveRenewalManager } from './proactive-renewal-manager.js';
@@ -39,21 +40,56 @@ export async function handleRefreshLockMiss(
 ): Promise<OAuthToken | null> {
   logger.debug(
     () =>
-      `[FLOW] Failed to acquire refresh lock for ${providerName}, checking disk...`,
+      `[FLOW] Failed to acquire refresh lock for ${providerName}, waiting for refreshed token...`,
   );
-  const reloadedToken = await tokenStore.getToken(providerName, bucketToUse);
-  signal?.throwIfAborted();
-  if (reloadedToken && reloadedToken.expiry > thirtySecondsFromNow) {
-    logger.debug(
-      () => `[FLOW] Token was refreshed by another process for ${providerName}`,
-    );
+  const readFreshToken = async (): Promise<OAuthToken | null> => {
+    signal?.throwIfAborted();
+    const token = await tokenStore.getToken(providerName, bucketToUse);
+    signal?.throwIfAborted();
+    if (
+      !token ||
+      token.expiry <=
+        Math.max(thirtySecondsFromNow, Math.floor(Date.now() / 1000) + 30)
+    ) {
+      return null;
+    }
     proactiveRenewalManager.scheduleProactiveRenewal(
       providerName,
       bucketToUse,
-      reloadedToken,
+      token,
     );
-    return reloadedToken;
+    return token;
+  };
+  const deadline = performance.now() + 35_000;
+  let pollDelayMs = 25;
+  while (performance.now() < deadline) {
+    const token = await readFreshToken();
+    if (token) return token;
+
+    signal?.throwIfAborted();
+    const acquired = await tokenStore.acquireRefreshLock(providerName, {
+      waitMs: 0,
+      bucket: bucketToUse,
+    });
+    if (acquired) {
+      try {
+        return await readFreshToken();
+      } finally {
+        await tokenStore.releaseRefreshLock(providerName, bucketToUse);
+      }
+    }
+
+    const remainingMs = deadline - performance.now();
+    if (remainingMs <= 0) return null;
+    try {
+      await sleep(Math.min(pollDelayMs, remainingMs), undefined, { signal });
+    } catch (error) {
+      signal?.throwIfAborted();
+      throw error;
+    }
+    pollDelayMs = Math.min(pollDelayMs * 2, 1000);
   }
+  signal?.throwIfAborted();
   return null;
 }
 

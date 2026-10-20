@@ -403,11 +403,11 @@ describe('installNativeLaunchers graceful error contract', () => {
 });
 
 describe('Bun install layout support boundary', () => {
-  it('CLI package.json declares a postinstall that Bun will run', () => {
+  it('CLI package.json does not require a consumer postinstall', () => {
     const cliPkg = JSON.parse(
       readFileSync(join(repoRoot, 'packages', 'cli', 'package.json'), 'utf8'),
     ) as { scripts: Record<string, string> };
-    expect(cliPkg.scripts.postinstall).toMatch(/install-native-launchers/);
+    expect(cliPkg.scripts.postinstall).toBeUndefined();
   });
 
   it('root trustedDependencies includes bun so Bun runs its lifecycle', () => {
