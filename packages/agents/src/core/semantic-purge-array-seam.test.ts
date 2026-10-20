@@ -8,8 +8,12 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { ownerFixtureRow } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-owner-test-helpers.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
-import type { RecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
-import { requireJsonlRecorder } from '@vybestack/llxprt-code-core/services/history/recorderBackend.js';
+import type { SessionRecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
+import {
+  observeNativeMaterializationGuard,
+  persistPurgeFixture,
+  verifyNativePurgeDurability,
+} from './__tests__/support/semantic-purge-fault-test-helpers.js';
 import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
 import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
 
@@ -25,10 +29,21 @@ class StreamOnlyHistory extends HistoryService {
 
 describe('journal materialization guard', () => {
   it('StreamOnlyHistory rejects journal eager materialization', async () => {
-    const history = new StreamOnlyHistory();
+    const history = new StreamOnlyHistory({ backend: 'old' });
 
     try {
       expect(() => observeHistorySynchronouslyForTest(history)).toThrow(
+        'production materializer array seam',
+      );
+    } finally {
+      await history.dispose();
+    }
+  });
+
+  it('rejects native eager materialization through the guarded journal', async () => {
+    const history = new StreamOnlyHistory({ backend: 'journal' });
+    try {
+      await expect(observeNativeMaterializationGuard(history)).rejects.toThrow(
         'production materializer array seam',
       );
     } finally {
@@ -110,7 +125,7 @@ async function verifyCandidate(
 }
 
 async function verifyProduction(size: number): Promise<number> {
-  let recording: RecordingPort | undefined;
+  let recording: SessionRecordingPort | undefined;
   const ownership = new RowOwnership();
   await withSuffixFixture(
     size,
@@ -121,14 +136,7 @@ async function verifyProduction(size: number): Promise<number> {
         ownership,
         mode: () => 'remove',
         persist: async (rows, frontier) => {
-          if (!recording) throw new Error('Missing shared recorder');
-          await recording.recordSemanticMediaPurgeRows(
-            rows.streamRows(),
-            frontier,
-            {
-              requireLiveFold: true,
-            },
-          );
+          await persistPurgeFixture(recording, rows, frontier);
           writes++;
         },
       });
@@ -161,11 +169,13 @@ async function verifyProduction(size: number): Promise<number> {
         count++;
       }
       expect(count).toBe(size);
+      await verifyNativePurgeDurability(history, recording);
       await attempt.rollbackCommitted();
       count = 0;
       for await (const row of history.streamRawHistory())
         expect(row).toStrictEqual(imageRow(count++, 2048));
       expect(count).toBe(size);
+      await verifyNativePurgeDurability(history, recording);
       expect(writes).toBe(2);
       await expect(attempt.complete(success)).rejects.toThrow(
         'already complete',
@@ -182,10 +192,7 @@ async function verifyProduction(size: number): Promise<number> {
     imageRow,
     ownership,
     (options) => {
-      recording =
-        options.recording === undefined
-          ? undefined
-          : requireJsonlRecorder(options.recording);
+      recording = options.recording;
       return new StreamOnlyHistory(options);
     },
   );

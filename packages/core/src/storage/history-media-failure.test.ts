@@ -64,9 +64,10 @@ describe('bounded media ownership', () => {
     await rm(directory, { recursive: true, force: true });
   });
 
-  for (const kind of ['addition', 'replacement']) {
-    for (const afterRemoval of [false, true]) {
-      it(`settles every ${kind} rollback release after removal=${afterRemoval} failure and retains failed reservations for disposal`, async () => {
+  describe.each(['addition', 'replacement'])('%s rollback releases', (kind) => {
+    it.each([false, true])(
+      'settles every release after removal=%s failure and retains failed reservations for disposal',
+      async (afterRemoval) => {
         const prior = await admit(1);
         const first = await admit(2);
         const second = await admit(3);
@@ -116,9 +117,9 @@ describe('bounded media ownership', () => {
         } finally {
           store.releaseRejectedIds = new Set();
         }
-      });
-    }
-  }
+      },
+    );
+  });
 
   it('finishes borrowing candidate rows before media publication and restores the previous reservation', async () => {
     const previous = await admit(1);

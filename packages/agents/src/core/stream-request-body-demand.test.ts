@@ -6,11 +6,13 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
+import { createRecorderForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderCuratedStreamOptions } from '@vybestack/llxprt-code-core/services/history/provider-curated-stream.js';
 import type { ProviderRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
+import type { HistoryStorePort } from '@vybestack/llxprt-code-core/services/history/historyStorePort.js';
 import {
   HookEventName,
   HookType,
@@ -63,32 +65,51 @@ class ObservedDiskHistory extends HistoryService {
   closedReaders = 0;
   abortDuringRead: AbortController | undefined;
 
-  private async *observedRows(signal?: AbortSignal): AsyncGenerator<IContent> {
-    this.activeReaders += 1;
+  private preparing = false;
+
+  constructor(options: ConstructorParameters<typeof HistoryService>[0]) {
+    super(options);
+    const stream = this.journal.streamRows.bind(this.journal);
+    this.journal.streamRows = (...args) => this.observedRows(stream, args);
+  }
+
+  private async *observedRows(
+    stream: HistoryStorePort['streamRows'],
+    args: Parameters<HistoryStorePort['streamRows']>,
+  ): AsyncGenerator<IContent, void, unknown> {
+    const observed = this.preparing;
+    if (observed) this.activeReaders += 1;
     try {
-      for await (const row of super.streamRawHistory(signal)) {
-        this.pulled += 1;
-        this.abortDuringRead?.abort(new Error('disk request aborted'));
+      for await (const row of stream(...args)) {
+        if (observed) {
+          this.pulled += 1;
+          this.abortDuringRead?.abort(new Error('disk request aborted'));
+        }
         yield row;
       }
     } finally {
-      this.activeReaders -= 1;
-      this.closedReaders += 1;
+      if (observed) {
+        this.activeReaders -= 1;
+        this.closedReaders += 1;
+      }
     }
   }
 
-  // The source request path opens its snapshot here, not through
-  // getCuratedForProviderStream, so this is where curation reads the journal.
-  override prepareCuratedForProviderSnapshot(
+  override async prepareCuratedForProviderSnapshot(
     tailContents: readonly IContent[] = [],
     options: ProviderCuratedStreamOptions = {},
     historyOverride?: Iterable<IContent> | AsyncIterable<IContent>,
   ): Promise<ProviderRequestSnapshot> {
-    return super.prepareCuratedForProviderSnapshot(
-      tailContents,
-      options,
-      historyOverride ?? this.observedRows(options.signal),
-    );
+    this.preparing = true;
+    try {
+      return await super.prepareCuratedForProviderSnapshot(
+        tailContents,
+        options,
+        historyOverride,
+      );
+    } finally {
+      this.preparing = false;
+    }
   }
 }
 
@@ -284,7 +305,7 @@ async function captureProviderBody(
 async function createFixture(): Promise<Fixture> {
   const root = mkdtempSync(join(tmpdir(), 'issue854-agent-body-'));
   const receipt = join(root, 'hook-receipt.json');
-  const recording = new SessionRecordingService({
+  const recording = createRecorderForTest({
     sessionId: randomUUID(),
     projectHash: 'issue854-agent-body',
     chatsDir: root,
@@ -407,6 +428,43 @@ function readHookReceipt(path: string): {
 }
 
 describe('issue854 real StreamProcessor Responses BODY demand', () => {
+  it('keeps replay readers cold until demand and releases the yielded row on cancellation', async () => {
+    const fixture = await createFixture();
+    const ownership = new RowOwnership();
+    try {
+      const snapshot = await fixture.history.prepareCuratedForProviderSnapshot(
+        [],
+        { ownership },
+      );
+      try {
+        expect(snapshot.count).toBe(rowCount);
+        expect(fixture.history.pulled).toBe(rowCount);
+        expect(ownership.snapshot().acquisitions).toBe(0);
+        const reader = snapshot.openReader();
+        expect(ownership.snapshot().acquisitions).toBe(0);
+        const first = await reader.next();
+        if (first.done === true) throw new Error('Missing demanded row');
+        expect(first.value.blocks).toStrictEqual(historyRow(0).blocks);
+        expect(ownership.snapshot().liveRows).toBe(1);
+        expect(ownership.snapshot().acquisitions).toBe(1);
+        await reader.return();
+        expect(ownership.snapshot().liveRows).toBe(0);
+        expect(fixture.history.pulled).toBe(rowCount);
+        const replay = snapshot.openReader();
+        const next = await replay.next();
+        if (next.done === true) throw new Error('Missing replay row');
+        expect(next.value).toStrictEqual(first.value);
+        expect(next.value).not.toBe(first.value);
+        await replay.return();
+        expect(ownership.snapshot().liveRows).toBe(0);
+      } finally {
+        snapshot.close();
+      }
+    } finally {
+      await fixture.dispose();
+    }
+  });
+
   it('preserves exact BODY and estimation without holding a journal reader across the provider call', async () => {
     const fixture = await createFixture();
     try {

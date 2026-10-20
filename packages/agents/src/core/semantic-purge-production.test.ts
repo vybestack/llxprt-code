@@ -8,8 +8,12 @@ import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/histor
 import { ownerFixtureRow } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-owner-test-helpers.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
-import type { RecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
-import { requireJsonlRecorder } from '@vybestack/llxprt-code-core/services/history/recorderBackend.js';
+import type { SessionRecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
+import {
+  observeNativeMaterializationGuard,
+  persistPurgeFixture,
+  verifyNativePurgeDurability,
+} from './__tests__/support/semantic-purge-fault-test-helpers.js';
 import type { SemanticPurgeRowSource } from '@vybestack/llxprt-code-core/services/history/semantic-purge-disk-rows.js';
 import type { SemanticMediaPurgeFrontier } from '@vybestack/llxprt-code-core/services/history/semantic-media-purge.js';
 
@@ -22,10 +26,21 @@ class StreamOnlyHistory extends HistoryService {
 
 describe('journal materialization guard', () => {
   it('StreamOnlyHistory rejects journal eager materialization', async () => {
-    const history = new StreamOnlyHistory();
+    const history = new StreamOnlyHistory({ backend: 'old' });
 
     try {
       expect(() => observeHistorySynchronouslyForTest(history)).toThrow(
+        'production materializer trap',
+      );
+    } finally {
+      await history.dispose();
+    }
+  });
+
+  it('rejects native eager materialization through the guarded journal', async () => {
+    const history = new StreamOnlyHistory({ backend: 'journal' });
+    try {
+      await expect(observeNativeMaterializationGuard(history)).rejects.toThrow(
         'production materializer trap',
       );
     } finally {
@@ -59,7 +74,7 @@ async function persistCheckedRows(
   rows: SemanticPurgeRowSource,
   frontier: SemanticMediaPurgeFrontier,
   size: number,
-  recording: RecordingPort | undefined,
+  recording: SessionRecordingPort | undefined,
 ): Promise<void> {
   let count = 0;
   for await (const row of rows.streamRows()) {
@@ -67,15 +82,12 @@ async function persistCheckedRows(
     count++;
   }
   expect(count).toBe(size);
-  if (!recording) throw new Error('Missing real recording');
-  await recording.recordSemanticMediaPurgeRows(rows.streamRows(), frontier, {
-    requireLiveFold: true,
-  });
+  await persistPurgeFixture(recording, rows, frontier);
 }
 
 async function verifyProduction(size: number): Promise<number> {
   const ownership = new RowOwnership();
-  let recording: RecordingPort | undefined;
+  let recording: SessionRecordingPort | undefined;
   await withSuffixFixture(
     size,
     async (history) => {
@@ -102,6 +114,7 @@ async function verifyProduction(size: number): Promise<number> {
       }
       expect(count).toBe(size);
       expect(await attempt.complete(success)).toBe(true);
+      await verifyNativePurgeDurability(history, recording);
       let nextResolved = false;
       const next = session.begin(false).then((value) => {
         nextResolved = true;
@@ -114,6 +127,7 @@ async function verifyProduction(size: number): Promise<number> {
       for await (const row of history.streamRawHistory())
         expect(row).toStrictEqual(imageRow(count++, 2048));
       expect(count).toBe(size);
+      await verifyNativePurgeDurability(history, recording);
       expect(writes).toBe(2);
       const second = await next;
       if (!second) throw new Error('Missing next attempt');
@@ -130,10 +144,7 @@ async function verifyProduction(size: number): Promise<number> {
     imageRow,
     ownership,
     (options) => {
-      recording =
-        options.recording === undefined
-          ? undefined
-          : requireJsonlRecorder(options.recording);
+      recording = options.recording;
       return new StreamOnlyHistory(options);
     },
   );

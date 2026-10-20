@@ -1,6 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, vi } from 'bun:test';
 import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
+import { selectBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
+import { observeNativeDeferredAcknowledgement } from './__tests__/support/native-deferred-acknowledgement.js';
 import { appendFileSync } from 'node:fs';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import {
@@ -268,6 +270,7 @@ describe('deferred disk commit acknowledgement', () => {
     const { client, cleanup } = await buildDeferredClient();
     async function* source(text: string): AsyncIterable<IContent> {
       yield { speaker: 'human', blocks: [{ type: 'text', text }] };
+      if (text === 'durable row') armed = true;
     }
     await client.storeHistoryForLaterUse(source('previous row'));
     let release: () => void = () => {};
@@ -281,33 +284,55 @@ describe('deferred disk commit acknowledgement', () => {
     let fail = false;
     let armed = false;
     let paused = false;
-    // Mutations await durability through waitForCommitSequence. Pause only the
-    // first acknowledgement after arming so reads made while paused still pass.
+    const pause = async (): Promise<void> => {
+      paused = true;
+      reached();
+      await gate;
+    };
+    const native =
+      selectBackend() === 'journal'
+        ? observeNativeDeferredAcknowledgement({
+            armed: () => armed && !paused,
+            fail: () => fail,
+            pause,
+          })
+        : undefined;
     const wait = SessionRecordingService.prototype.waitForCommitSequence;
-    const acknowledgement = vi
-      .spyOn(SessionRecordingService.prototype, 'waitForCommitSequence')
-      .mockImplementation(async function (
-        this: SessionRecordingService,
-        ...args
-      ) {
-        const committed = await wait.call(this, ...args);
-        if (armed && !paused) {
-          if (fail) throw new Error('final write acknowledgement failed');
-          paused = true;
-          reached();
-          await gate;
-        }
-        return committed;
-      });
+    const acknowledgement =
+      native === undefined
+        ? vi
+            .spyOn(SessionRecordingService.prototype, 'waitForCommitSequence')
+            .mockImplementation(async function (
+              this: SessionRecordingService,
+              ...args
+            ) {
+              const committed = await wait.call(this, ...args);
+              if (armed && !paused) {
+                if (fail) {
+                  armed = false;
+                  throw new Error('final write acknowledgement failed');
+                }
+                await pause();
+              }
+              return committed;
+            })
+        : undefined;
     let completed = false;
-    armed = true;
     const admission = client
       .storeHistoryForLaterUse(source('durable row'))
       .then(() => {
         completed = true;
       });
     try {
-      await entered;
+      await Promise.race([
+        entered,
+        admission.then(() => {
+          throw new Error(
+            'Admission completed without reaching its write acknowledgement',
+          );
+        }),
+      ]);
+      await native?.verifyDurable('previous row');
       expect(completed).toBe(false);
       expect(
         (await Array.fromAsync(client.getHistory())).map((row) => row.blocks),
@@ -315,22 +340,26 @@ describe('deferred disk commit acknowledgement', () => {
       release();
       await admission;
       expect(completed).toBe(true);
+      await native?.verifyDurable('durable row');
       const history = client.getHistoryService();
       if (history === null) throw new Error('Missing admitted journal');
       expect(history.getContextRange().totalEntries).toBe(1);
       paused = false;
+      armed = false;
       fail = true;
       await expect(
         client.storeHistoryForLaterUse(source('durable row')),
       ).rejects.toThrow('final write acknowledgement failed');
       expect(history.getTotalTokens()).toBe('durable row'.length);
+      await native?.verifyDurable('durable row');
       expect(
         (await Array.fromAsync(client.getHistory())).map((row) => row.blocks),
       ).toStrictEqual([[{ type: 'text', text: 'durable row' }]]);
     } finally {
       release();
       await admission.catch(() => {});
-      acknowledgement.mockRestore();
+      acknowledgement?.mockRestore();
+      native?.restore();
       await cleanup();
     }
   });
