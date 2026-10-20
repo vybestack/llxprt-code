@@ -60,13 +60,25 @@ export class JournalMirrors {
   }
 
   async commit(edits: readonly VersionEdit[]): Promise<CommittedGroup> {
+    await this.materializeRecorders();
+    return this.fanout.commitDetailed(edits);
+  }
+
+  isOnlyRecorder(recorder: JournalRecordingService): boolean {
+    return (
+      this.onlyRecorders &&
+      this.recorders.size === 1 &&
+      this.recorders.has(recorder)
+    );
+  }
+
+  async materializeRecorders(): Promise<void> {
     for (const [recorder, held] of this.recorders) {
       if (held.session !== undefined) continue;
       const session = await recorder.session();
       await this.seedAndBind(session, held.origin);
       this.recorders.set(recorder, { session, origin: held.origin });
     }
-    return this.fanout.commitDetailed(edits);
   }
 
   /**

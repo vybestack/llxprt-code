@@ -431,7 +431,12 @@ export class JournalStore {
 
   /** The published version with the reads that reach it, taken together and pinned until `close` (see `VersionSnapshot`). */
   async snapshot(): Promise<VersionSnapshot> {
-    return new VersionSnapshot(await this.openRead());
+    const read = await this.openRead();
+    return new VersionSnapshot(read, this.writer.reader);
+  }
+
+  restorationOf(saved: VersionSnapshot): VersionEdit {
+    return saved.restorationIn(this.writer.reader);
   }
 
   /** The header and raw id strings of the row an entry points at (design 4.6), without its blocks. */

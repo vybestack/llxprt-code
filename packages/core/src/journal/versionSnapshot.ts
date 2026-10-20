@@ -10,6 +10,7 @@ import {
   type RowTreeRootRef,
 } from './rowTreeReader.js';
 import type { Version } from './version.js';
+import type { SourceRow, VersionEdit } from './groupEdits.js';
 
 /**
  * One published version with the reads that reach it. The version and the
@@ -19,7 +20,29 @@ import type { Version } from './version.js';
  * so no compaction moves the records under it; a read after `close` throws.
  */
 export class VersionSnapshot {
-  constructor(private readonly read: PinnedRead) {}
+  constructor(
+    private readonly read: PinnedRead,
+    private readonly file: object = read,
+  ) {}
+
+  restorationIn(file: object): VersionEdit {
+    this.read.requireOpen();
+    const saved = this.version;
+    if (saved === undefined) return { kind: 'clear' };
+    return file === this.file
+      ? { kind: 'restore', saved }
+      : {
+          kind: 'adoptAll',
+          rows: this.sourceRows(),
+          nextLabel: saved.nextLabel,
+        };
+  }
+
+  private async *sourceRows(): AsyncGenerator<SourceRow> {
+    for await (const entry of this.entries()) {
+      yield { source: this.read.access, entry };
+    }
+  }
 
   /** Undefined for a journal with no committed group: no rows. */
   get version(): Version | undefined {

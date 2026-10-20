@@ -56,6 +56,7 @@ import {
   type JournalAdoption,
 } from './journalAdoption.js';
 import { JournalMirrors } from './journalMirrors.js';
+import { RecordingPrimary } from './recording-primary.js';
 import { JournalOwners, type ResolvedOwner } from './journalOwners.js';
 import {
   committedBatchSource,
@@ -170,6 +171,7 @@ export class JournalHistoryStore implements HistoryStorePort {
   private boundary: bigint | undefined;
   private previews = new SessionPreviews();
   private readonly adoptedWrites = new PendingRecorderWrites();
+  private readonly topology = new RecordingPrimary(this.adoptionHost());
 
   constructor(
     source: JournalSession | JournalSessionOpener,
@@ -538,6 +540,9 @@ export class JournalHistoryStore implements HistoryStorePort {
     const recorder = requireJournalRecorder(session);
     return this.opened
       .then(() =>
+        this.exclusive(async () => this.topology.attach(recorder, origin)),
+      )
+      .then(() =>
         this.mirrors.attachRecorder(recorder, replace, onAttached, origin),
       )
       .then(() => this.previews.recordFirstFor(recorder, origin));
@@ -562,7 +567,10 @@ export class JournalHistoryStore implements HistoryStorePort {
   /** Whether the recorder is bound now; a recorder given at construction is bound once the journal is open. */
   isRecorder(recorder: SessionRecordingPort): boolean {
     const journalRecorder = requireJournalRecorder(recorder);
-    return this.journal?.mirrors.isRecorder(journalRecorder) ?? false;
+    return (
+      this.adopted === journalRecorder ||
+      (this.journal?.mirrors.isRecorder(journalRecorder) ?? false)
+    );
   }
 
   /** Resolves when every mirror has applied the groups acked so far; throws every mirror failure. */
@@ -942,7 +950,7 @@ export class JournalHistoryStore implements HistoryStorePort {
     const text = previewOfContent(content);
     if (text === undefined) return;
     this.previews.offer(origin, text);
-    if (this.adopted !== undefined) {
+    if (this.adopted !== undefined && this.topology.acceptsPreview(origin)) {
       this.adopted.recordFirstUserPreview(text);
       this.adoptedWrites.track(this.adopted.flush());
     }
@@ -1011,11 +1019,7 @@ export class JournalHistoryStore implements HistoryStorePort {
 
   /** Puts the version of `saved` back as the current one (design 4.5) and waits for its ack. */
   private async restoreTo(saved: VersionSnapshot): Promise<void> {
-    const version = saved.version;
-    const edit: VersionEdit =
-      version === undefined
-        ? { kind: 'clear' }
-        : { kind: 'restore', saved: version };
+    const edit = this.session.store.restorationOf(saved);
     await this.requireAck(
       this.enqueueTurn(saved.rows, () => Promise.resolve([edit])),
     );
@@ -1042,7 +1046,9 @@ export class JournalHistoryStore implements HistoryStorePort {
   ): Promise<CommitAck> {
     const snapshot = await this.session.store.snapshot();
     try {
-      const group = await this.mirrors.commit(await build(snapshot));
+      const edits = await build(snapshot);
+      const prepared = await this.topology.prepare(edits);
+      const group = await this.mirrors.commit(prepared);
       try {
         if (rowsAfter === undefined) {
           this.tentativeRows = group.after.rows;

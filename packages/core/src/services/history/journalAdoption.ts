@@ -40,6 +40,18 @@ export interface AdoptionHost {
     listeners: Set<() => void>,
   ): JournalMirrors;
 }
+function restorePrimary(
+  host: AdoptionHost,
+  previous: PrimaryState,
+  mirrors: JournalMirrors,
+  moved: readonly BoundRecorder[],
+): () => Promise<void> {
+  return async () => {
+    await mirrors.unbindRecorders();
+    host.install(previous);
+    await previous.mirrors.bindRecorders(moved);
+  };
+}
 
 function assertAtPoint(next: JournalSession, point: ResumePoint): void {
   const published = next.store.published;
@@ -92,11 +104,7 @@ export async function adoptOnto(
     previous.mirrors.retirementListeners,
   );
   mirrors.inheritPrimaryOrigin(primaryOrigin);
-  const restore = async (): Promise<void> => {
-    await mirrors.unbindRecorders();
-    host.install(previous);
-    await previous.mirrors.bindRecorders(moved);
-  };
+  const restore = restorePrimary(host, previous, mirrors, moved);
   host.install({
     session: next,
     owners,
@@ -116,6 +124,38 @@ export async function adoptOnto(
   }
   return settledOnce(previous, replaced, host, restore, retired);
 }
+export async function adoptAttachedRecorder(
+  host: AdoptionHost,
+  recorder: JournalRecordingService,
+): Promise<JournalAdoption> {
+  const previous = host.state();
+  const next = await recorder.session();
+  const moved = await previous.mirrors.unbindRecorders();
+  const owners = new JournalOwners(next.store);
+  const mirrors = host.mirrorsOf(
+    next,
+    owners,
+    previous.mirrors.retirementListeners,
+  );
+  mirrors.inheritPrimaryOrigin(previous.mirrors.primaryOriginId());
+  const restore = restorePrimary(host, previous, mirrors, moved);
+  host.install({
+    ...previous,
+    session: next,
+    owners,
+    mirrors,
+    adopted: recorder,
+  });
+  try {
+    await mirrors.bindRecorders(
+      moved.filter((bound) => bound.recorder !== recorder),
+    );
+  } catch (error) {
+    await restore();
+    throw error;
+  }
+  return settledOnce(previous, [], host, restore, []);
+}
 
 /**
  * Stops the adopted recorder from being the primary (D-ORCH-11), inside one
@@ -125,7 +165,10 @@ export async function adoptOnto(
  * recorders bound to the history move with the primary and stay bound. A
  * failure puts the adopted file back as the primary and closes the clone.
  */
-export async function releaseAdoptedPrimary(host: AdoptionHost): Promise<void> {
+export async function releaseAdoptedPrimary(
+  host: AdoptionHost,
+  retain?: BoundRecorder,
+): Promise<void> {
   const previous = host.state();
   if (previous.adopted === undefined) {
     throw new Error('The primary journal is not an adopted recorder file');
@@ -152,7 +195,9 @@ export async function releaseAdoptedPrimary(host: AdoptionHost): Promise<void> {
     adopted: undefined,
   });
   try {
-    await mirrors.bindRecorders(moved);
+    await mirrors.bindRecorders(
+      retain === undefined ? moved : [...moved, retain],
+    );
   } catch (error) {
     await mirrors.unbindRecorders();
     host.install(previous);

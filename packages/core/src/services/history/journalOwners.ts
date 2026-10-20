@@ -39,6 +39,14 @@ export class JournalOwners {
     return (await this.dictionary).originOf(id);
   }
 
+  async hasOnly(origin: string | undefined): Promise<boolean> {
+    this.dictionary ??= OwnerDictionary.load(this.store);
+    for (const [, registered] of (await this.dictionary).entries()) {
+      if (registered !== origin) return false;
+    }
+    return true;
+  }
+
   invalidate(): void {
     this.dictionary = undefined;
   }
