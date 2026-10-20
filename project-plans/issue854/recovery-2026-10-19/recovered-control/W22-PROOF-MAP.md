@@ -1,5 +1,17 @@
 # W22 first agents batch proof map, 2026-10-19
 
+## W22 request/publication checkpoint, 2026-10-20T02:27:25.284Z
+
+Fourteen targets pass 51 cases per backend. Green source commits are 6a8d4c944/f126215be/ba487149d/95ca77b0d, preserving production d7e78deae. Commit source early, do not begin another family.
+
+Accepted target delta is 773/28/5 to **787 green/18 red/one unverified**, 6528 verified passes/37 failures, seven inconsistent XML passes withheld. Keep 26 historical missing attempts and zero latest missing files distinct from the remaining runner inconsistency. Exactly nineteen names remain in W22-REMAINING-FAMILIES.tsv. Cumulative per-file evidence is not a full-package final-source pass.
+
+Census requires exact-source case coverage and a distinct completed journal counterpart for explicit-old contracts. Two guard removals reject and restore with cmp; ten API tests pass. All 162 original target assertions/domains/timeouts/scales/bounds remain. Native snapshot/publication/admission/media/digest proof actually runs without old blanket pins or changed oracles. Keep physical poisoned-writer retry separate from recoverable media-finalization rejection; initialize prompt files before first request equality.
+
+Known supplemental journal addBatch old-recorder mismatch stays red/outside inventory; native cyclic/checkpoint coverage does not close its exact fixture gap. Remaining positive old comparisons and original-source comparison/restoration/final graph/audit/ledger remain pending at this checkpoint. Hand off owned supervisors **21084, 21362, 22669** with exact state in W22-REQUEST-PUBLICATION-CHECKPOINT.json. Source-control supervisor temporarily replaces two production files only after positives finish, restores in finally and checks cmp. Do not overlap or edit until restoration/completion receipts. No full verification-complete claim.
+
+W22-STATUS.md gives completion commands, source hashes and evidence references. W22/W23-W26/classification/scratch remain open, old default stays. Review skipped per Andrew 2026-10-09. No cleanup, .llxprt edits/staging, broad recovery staging, weaker enforcement, OCR, push or merge.
+
 ## Density/accounting committed, 2026-10-20T01:27:55Z
 
 **All six density/accounting targets are green at `12705c2bd`; W22 remains incomplete.** Production fix: `051b9df521ae50b08ae66bcd99ed61525c32efa4`. The eight fixture/census paths were committed before census publication and documentation. Structured proof: `W22-DENSITY-ACCOUNTING-PROOF.json`; complete retained evidence: `tmp/854-notes/p4/w22/density-run-j/`.
