@@ -1,3 +1,21 @@
+# Reader lifetime is repaired; W24 heap rebinding remains open, 2026-10-20
+
+Root-fix commit: `c560476fa0fc9c9491655aff6bf76f1d3022deae`, from verified HEAD `50b028af8909875d39a2bff06807afb9bff86f45`. This section supersedes the four lifecycle blockers below. Current evidence is `W24-TOPOLOGY-PROOF.json`'s `readerLifetime` section, under `tmp/854-notes/p4/w24/topology-reader-run-g/`.
+
+A store pin now owns one counted reader hold on its writer. Closing rejects new work and drains admitted commits, then retires writes without waiting for consumers. Existing pins retain positional reads on the original descriptor. The final hold closes it and returns the actual close promise; a reader-free close still closes before returning. No descriptor reopen, EBADF catch, history copy or additional journal file was introduced. Compaction remains excluded by pins and cannot restart after retirement. Internal state reads for admitted commits stay on the serialized commit path, so closing does not reject an already-admitted checkpoint deletion.
+
+Snapshot, held-pin, batch, dump, repair and mirror consumers propagate asynchronous release. Raw-stream and callback cleanup preserve operation/abort failure before descriptor-close failure. Mirror release faults reach flush after deliveries settle. Failed physical close remains observable without poisoning every later owner disposal with a cached rejected promise. The original write/close/lock aggregation test passes unchanged.
+
+Only the three physical-mirror failure cases publish their existing baseline before attachment, making the primary genuinely ineligible for adoption. Their assertions and fault scope remain intact. Adopted-primary held acknowledgements and positional write/flush faults still run. The unchanged active-reader assertion passes, as do public Agent readers across stop and stop-then-same-ID reload. Reload follows lock release; active same-ID resume remains correctly rejected while the recorder owns its lock.
+
+Final immutable-source acceptance: **48 isolated executions, 336 passes, zero failures, 8,218 assertions**. Coverage includes ownership/filtering, compensation, resume/detach, compression, pin/compaction identity, media/package paths and common CLI lifecycle/protocol under both outer backends. Twelve gates pass: declaration build; core/agents/CLI noemit; agents/CLI Bun-test types; 25-file lint/format; graph; audit; discovery; journal `lunahigh` smoke. Audit scans 4,473 files without errors and has no findings for the three touched test files; its full corpus is not finding-free. Graph validation is not shard execution.
+
+Premature-close mutation makes the original lifecycle, public Agent and lease suites fail. Restoration compares byte-for-byte. Earlier RED logs also expose discarded batch/dump and mirror close promises, admitted-checkpoint closure and repeated-disposal regression. They remain preserved alongside the initial lint failure. No test assertion, bound, timeout, format, version or group identity was weakened.
+
+All 8,182 frozen package/script hashes match between final test and gate lanes, and all 25 changed sources match the root-fix commit. `final-bindings.json` binds 22 artifacts and 156 absent recorded PIDs; managed tasks have zero running. The 293 untracked emitted declarations and unrelated recovery/memory files remain unstaged.
+
+Next task: rebind the qualified fixed-input 50-turn positive and matched retaining trap to this topology. Earlier heap receipts are not current-source acceptance; ordinary-runtime full-window heap qualification, eight W23 dependencies, W25 prerequisites/old default and W26 scope remain open. W24 is not complete. Review skipped per Andrew 2026-10-09. No cleanup, obstruction move, `.llxprt` edit/staging, raw recovery bulk staging, OCR, push or merge.
+
 # Recording-primary acceptance is incomplete, 2026-10-20
 
 D-ORCH-7 is implemented by `8870c287760e70c4c9b90777c8926dde4d62c78d`, followed by failed-owner settlement at `3af0c0ccaab8706559d42d00b0b007c99e05e08f`. This supersedes earlier statements that selection is unimplemented. Authority: `W24-TOPOLOGY-PROOF.json`, with raw receipts under `tmp/854-notes/p4/w24/topology-run-f/`.

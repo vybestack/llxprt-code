@@ -1,10 +1,11 @@
 {
   "date": "2026-10-20",
-  "verdict": "Topology is implemented and single-copy cost is measured, but lifecycle acceptance is incomplete. The unchanged native lifecycle suite has four failing cases, including an active-reader descriptor regression.",
-  "scope": "Acceptance only. No production or test edits in this continuation. No review, default change, cleanup, push or merge.",
+  "verdict": "The active-reader descriptor regression is repaired and scoped topology lifecycle acceptance passes. W24 remains partial pending a matched qualified 50-turn positive and retaining-trap rebind to the repaired sources.",
+  "scope": "Reader-lifetime implementation and scoped acceptance. readerLifetime is the current source boundary. Other run-f cost, coverage, source, gate and binding entries retain their historical boundaries. No review, default change, cleanup, push or merge.",
   "commits": {
     "eligibleForegroundPrimary": "8870c287760e70c4c9b90777c8926dde4d62c78d",
-    "failedOwnerSettlement": "3af0c0ccaab8706559d42d00b0b007c99e05e08f"
+    "failedOwnerSettlement": "3af0c0ccaab8706559d42d00b0b007c99e05e08f",
+    "readerLifetime": "c560476fa0fc9c9491655aff6bf76f1d3022deae"
   },
   "rawRoot": "tmp/854-notes/p4/w24/topology-run-f/",
   "source": {
@@ -26,7 +27,7 @@
     "Selection preserves the registered owner dictionary, previews and resume boundary. Own and unowned rows remain eligible; a foreign owner separates to an all-row nameless clone before its row is written.",
     "After separation, recorders retain own-plus-unowned filtering in both directions. Single-owner streamed replacement is checked row by row without a preliminary stream scan or retained history map.",
     "Compensation uses direct offsets only in the same file. Across a file swap it streams the pinned encoded rows with adoptAll, preserving labels and owners.",
-    "D-ORCH-11 clones before stopping the adopted recorder. Successful cold reads and later writes pass; an already-open reader does not yet survive recorder close.",
+    "D-ORCH-11 clones before stopping the adopted recorder. A pinned read retains the original descriptor until its final release, even after the writer is retired; cold and active reads both pass.",
     "No new backend, repeated per-turn whole-file pass, per-operation temporary file, relaxed bound, timeout change, skip or enforcement change was introduced."
   ],
   "coverage": {
@@ -70,25 +71,7 @@
     "failedSiblingRedSha256": "8ee2a56e8c8e67cb36d1e18ec62540db2b4c29e1d29355bb0aa9ae40c842d513",
     "restoration": "No production mutation was run in this continuation. Final eleven-file byte comparisons with 3af0c0cca pass; inherited mutation scripts and failed logs remain intact."
   },
-  "acceptanceBlockers": [
-    {
-      "case": "does not close an active history reader when detaching and closing the recorder",
-      "log": "related2-old-10.log",
-      "test": "packages/core/src/recording/recording-integration-native-lifecycle.test.ts:232-253",
-      "mechanism": "streamRows captures a VersionSnapshot on the adopted recording descriptor at journalHistoryStore.ts:618-625. releaseAdoptedPrimary clones and installs a new store at journalAdoption.ts:181-197, but the existing snapshot still reaches the old descriptor. journalRecordingService.ts:265 closes that session, journalStore.ts:355-357 closes its writer without consulting pins, and groupWriter.ts:162-165 closes the handle. The second reader.next() fails with EBADF. A cold post-detach reader passing does not establish active-reader survival.",
-      "next": "Repair descriptor ownership for pre-existing pinned readers without retaining history or weakening this assertion, then rerun the original case and relevant pin/stop contracts. This acceptance-only continuation does not implement a new resource-lifetime design."
-    },
-    {
-      "cases": [
-        "reports an unobserved mirror write failure on disposal while detaching later rows",
-        "reports an unobserved mirror flush failure on disposal while detaching later rows",
-        "refuses a replacement subscription after a failed detach without binding the new history"
-      ],
-      "log": "related2-old-10.log",
-      "mechanism": "The fresh native fixture now adopts the recorder, so injected recorder failure is primary failure and the history queue remains failed. These mirror-specific cases expect a healthy separate primary after recorder failure.",
-      "next": "Make only the fanout-specific fixtures genuinely ineligible for adoption, preserve every durability/continuation assertion, and keep adopted-primary counterparts covering held acknowledgements and actual writer faults. Do not reclassify the active-reader regression as a fixture mismatch. No fixture or assertion was changed here."
-    }
-  ],
+  "acceptanceBlockers": [],
   "writeCost": {
     "method": "Real public Agent, deterministic localhost transport, 50 warmup and 50 measured turns, 60 measured requests and five tool rounds per mode. Same measured prompt SHA in the historical pair and current three-mode comparison. Actual journal handle I/O and summed process user+system CPU are measured, not physical-device traffic or isolated recorder CPU.",
     "inputHash": "3ef650853d3f50dd65389bc59726784cfec34752154d4546afb49d21efe99bdc",
@@ -157,10 +140,97 @@
     "contents": "Summary binds final log bytes, case counts and costs. Final bindings include all eleven source hashes, nineteen result/control artifacts and 100 absent recorded task PIDs. The inherited 83861/83862/83878/83902 processes and continuation drivers are absent. Managed shell_1c2e06772319 completed; no owned lane remains running."
   },
   "remaining": [
-    "Resolve lifecycle blockers before calling the topology accepted. D-ORCH-7 is implemented at its conservative eligible boundary; D-ORCH-11 active-reader survival is incomplete.",
+    "The reader-lifetime repair closes the four recorded lifecycle blockers. Scoped final-source topology acceptance passes; see readerLifetime for its exact source and execution boundary.",
     "Topology changes invalidate promotion of the earlier whole-product heap receipts to current history sources. A matched qualified positive and identical-input retaining trap must be rebound after the final topology repair on immutable source. No full heap lane was rerun here while its source is still unsettled.",
     "Pinned-code-v1 remains a qualified scientific measurement method, not ordinary-runtime full-window total-heap acceptance. The old default-runtime RED receipt and unchanged 1 MiB/256 KiB bounds remain.",
     "The eight W23 planning/header dependencies through phases 5/6/7 remain open. W25 prerequisites and old backend default are unchanged. W26 provider spools/compression candidates and scratch obligations remain open.",
     "The 293 untracked emitted agent-source declarations and unrelated recovery files remain unstaged. No cleanup or obstruction move occurred in this continuation. No .llxprt edit or staging, raw recovery bulk staging, OCR, push or merge. Review skipped per Andrew 2026-10-09."
-  ]
+  ],
+  "resolvedAcceptanceBlockers": [
+    {
+      "case": "does not close an active history reader when detaching and closing the recorder",
+      "log": "related2-old-10.log",
+      "test": "packages/core/src/recording/recording-integration-native-lifecycle.test.ts:232-253",
+      "mechanism": "streamRows captures a VersionSnapshot on the adopted recording descriptor at journalHistoryStore.ts:618-625. releaseAdoptedPrimary clones and installs a new store at journalAdoption.ts:181-197, but the existing snapshot still reaches the old descriptor. journalRecordingService.ts:265 closes that session, journalStore.ts:355-357 closes its writer without consulting pins, and groupWriter.ts:162-165 closes the handle. The second reader.next() fails with EBADF. A cold post-detach reader passing does not establish active-reader survival.",
+      "next": "Repair descriptor ownership for pre-existing pinned readers without retaining history or weakening this assertion, then rerun the original case and relevant pin/stop contracts. This acceptance-only continuation does not implement a new resource-lifetime design."
+    },
+    {
+      "cases": [
+        "reports an unobserved mirror write failure on disposal while detaching later rows",
+        "reports an unobserved mirror flush failure on disposal while detaching later rows",
+        "refuses a replacement subscription after a failed detach without binding the new history"
+      ],
+      "log": "related2-old-10.log",
+      "mechanism": "The fresh native fixture now adopts the recorder, so injected recorder failure is primary failure and the history queue remains failed. These mirror-specific cases expect a healthy separate primary after recorder failure.",
+      "next": "Make only the fanout-specific fixtures genuinely ineligible for adoption, preserve every durability/continuation assertion, and keep adopted-primary counterparts covering held acknowledgements and actual writer faults. Do not reclassify the active-reader regression as a fixture mismatch. No fixture or assertion was changed here."
+    }
+  ],
+  "readerLifetime": {
+    "date": "2026-10-20",
+    "entryHead": "50b028af8909875d39a2bff06807afb9bff86f45",
+    "commit": "c560476fa0fc9c9491655aff6bf76f1d3022deae",
+    "rawRoot": "tmp/854-notes/p4/w24/topology-reader-run-g/",
+    "mechanism": {
+      "originalFailure": "The unchanged native lifecycle suite reproduced EBADF on the second reader.next(). The snapshot pinned the adopted recorder descriptor; cloning installed a different primary, but recorder disposal closed the original descriptor without consulting its pins.",
+      "algorithm": "Each store PinLease owns one writer reader hold. Nested holds share that lease. Store close rejects new admissions and drains admitted commits, then writer close retires writes without waiting for consumer-held pins. The physical descriptor remains reachable only through existing positional read capabilities until the last reader hold releases it. That release returns the real physical-close promise. With no reader holds, writer close awaits physical close directly.",
+      "ownership": "This uses the existing descriptor under a counted old-store reader lease. It does not reopen by path or allocate a descriptor per row or pin. State is scalar per writer plus concurrently active leases; no retained history array, reread/replay fallback, or extra journal copy was added.",
+      "compactionAndShutdown": "Pins still exclude compaction. Retirement suppresses deferred compaction and rejects later explicit compaction. Admitted commit planning and effects use serialized unpinned state reads, so closing does not reject admitted checkpoint deletion. Existing clone, native format, commit sequence and group identity rules are unchanged.",
+      "failures": "The final releasing reader receives deferred descriptor-close failure. Reader-free close returns immediate close failure. Raw-stream and callback failures remain first in AggregateError when release also fails, including the original abort reason. Batch/dump owners await their release; mirror flush joins held releases and reports their failure after delivery. Repair and other scoped consumers propagate close promises. A failed physical close does not permanently cache a rejected promise across later owner disposal; no error is swallowed or automatic retry added.",
+      "closeContract": "close/hold release results permit void or Promise<void>, preserving immediate pin invalidation and duplicate-release errors while exposing asynchronous physical-close settlement. No caller is required to finish an iterator before recording shutdown returns."
+    },
+    "fixtureBoundary": "Only the three lifecycle cases explicitly requiring a separate physical mirror now commit their pre-existing baseline before attachment. A published bare primary is ineligible by the shipped selector. All their durability, failure and continuation assertions remain unchanged. Fresh fixtures elsewhere still adopt; adopted-primary held-ack and actual positional write/flush faults remain executed.",
+    "rootReds": {
+      "original": "original-lifecycle-red.log: 10 passes and four failures, including actual EBADF; the original active-reader test body is unchanged.",
+      "focused": "lease-red.log observes premature close and lost callback error ordering. owned-consumer-red.log exposes discarded batch/dump close promises; fanout-release-red.log exposes an unobserved held-reader close rejection.",
+      "admittedShutdown": "admitted-close-red.log rejects an already-admitted checkpoint deletion because its internal state lookup incorrectly uses new-read admission. Final serialized internal state lookup passes.",
+      "repeatedDisposal": "acceptance-old-11.log.stderr preserves the unchanged write/file-close/lock aggregation suite failure caused by caching a failed close across later disposal. Final original suite passes.",
+      "rootMutation": "control-final/root-control-results.json: forcing close despite live reader holds rejects the original lifecycle, public Agent and lease suites, all exit one. Original/public readers fail at actual descriptor reads. control-final/root-control-restored.json and a direct cmp verify byte-exact groupWriter restoration; that hash also matches the committed source.",
+      "authoring": "The first public reload attempt correctly failed because the current recorder still held the session lock. Final public regression stops recording before same-ID resume. No lock policy changed. gates-lint.log retains the initial strict-equality/message/return/floating-promise failures; corrections strengthen assertions and await release without changing enforcement."
+    },
+    "coverage": {
+      "focusedLease": "acceptance-after-lint-lease.log.stderr: 11 passes, 29 assertions. Includes actual fd liveness until final nested hold, duplicate release, new-read/write refusal, reader-free close, immediate/deferred close faults, operation-plus-cleanup order, abort reason with/without cleanup fault, batch/dump/fanout release, and admitted checkpoint shutdown.",
+      "originalLifecycle": "acceptance-after-lint-old-10.log.stderr: all 14 lifecycle cases pass. Active-reader detach/recording-disposal assertion remains unchanged.",
+      "publicAgent": "acceptance-after-lint-{old,journal}-16.log.stderr: three cases pass per outer backend, including active public reader across stop and stop-then-same-ID reload plus one-copy write topology. The fixture explicitly selects journal.",
+      "sharedInvariants": "The final task list executes recording-primary owner/filtering/compensation, adopted detach with sibling recorder, resume boundaries, writer faults, native cleanup/media/package/fork cases; snapshot pins, named/unlinked compaction and preserved group identity; Agent recording/compression/child behavior and common CLI lifecycle/protocol. Both outer backends run for the Agent/common scenarios; native-focused tests select their own backend.",
+      "executions": 48,
+      "passes": 336,
+      "failures": 0,
+      "assertions": 8218,
+      "results": "acceptance-after-lint-results.json",
+      "summary": "acceptance-after-lint-test-summary.json",
+      "limit": "Scoped isolated suites only, not all package tests or affected-shard execution."
+    },
+    "gates": {
+      "results": "gates-final-results.json",
+      "zeroExitCount": 12,
+      "commands": [
+        "npm run build:types",
+        "core/agents/CLI production noemit",
+        "agents/CLI Bun-test noemit with node,bun",
+        "25-file ESLint max-warnings 0 and Prettier check",
+        "affected-test graph validation",
+        "AST test audit",
+        "CLI discovery",
+        "journal lunahigh smoke"
+      ],
+      "audit": "4,473 files scanned, zero errors. No finding for any of the three touched test files. The full corpus has 2,515 flags, so this is not a finding-free whole-product report. No scanner exception or enforcement change.",
+      "smoke": "gates-final-smoke.log identifies lunahigh:gpt-6-luna and contains a three-line haiku; exit zero."
+    },
+    "binding": {
+      "file": "final-bindings.json",
+      "sha256": "a16f2d13d49d1a26a20574024d4421a78a2f6959adbcaef58fde79d114d002a5",
+      "matchedSourcePaths": 8182,
+      "committedSourcePaths": 25,
+      "boundArtifacts": 22,
+      "absentRecordedPids": 156,
+      "liveRecordedPids": 0,
+      "sourceBoundary": "All frozen package/script hashes match in the final test and gate lanes and again after the root-fix commit. All 25 changed sources match their committed blobs. No production mutation remains active; managed tasks report zero running."
+    },
+    "remaining": [
+      "Rebind the qualified fixed-input 50-turn positive and identical-input retaining trap after this committed topology repair. This task ran no expansive heap measurement; W24 is not complete.",
+      "Ordinary-runtime full-window total-heap acceptance remains unproved; preserve the original 1 MiB allowance, 256 KiB late bounds, workload and timeouts.",
+      "Eight W23 planning/header dependencies, W25 prerequisites and old default, and W26 scratch scope remain open.",
+      "All 293 emitted untracked declarations and unrelated recovery/memory files remain unstaged. No cleanup, obstruction move, .llxprt edit/staging, raw recovery bulk staging, OCR, push or merge. Review skipped per Andrew 2026-10-09."
+    ]
+  }
 }
