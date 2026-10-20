@@ -34,15 +34,8 @@ const fixture = new URL(
   import.meta.url,
 );
 
-function unsupportedReason(
-  seed: number,
-  tailCount: number,
-): string | undefined {
-  if (tailCount !== 0) return 'Tail normalization is not implemented';
-  const family = Math.floor(seed / 5) % 12;
-  return family === 4 || (family === 11 && seed % 5 <= 1)
-    ? 'Reconstructed call units are not implemented'
-    : undefined;
+function unsupportedReason(tailCount: number): string | undefined {
+  return tailCount !== 0 ? 'Tail normalization is not implemented' : undefined;
 }
 
 async function responseOutcome(
@@ -140,7 +133,7 @@ describe('immutable old-normalizer unit oracle', () => {
           { kind: 'replace', rows: input.rows.map((row) => encode(row)) },
         ]);
         const result = await responseOutcome(session, input.tail);
-        const reason = unsupportedReason(seed, input.tail.length);
+        const reason = unsupportedReason(input.tail.length);
         expect(result).toStrictEqual(
           reason === undefined
             ? { hash: frozen.outputHash, count: frozen.count }
@@ -152,8 +145,8 @@ describe('immutable old-normalizer unit oracle', () => {
         tail += reason === 'Tail normalization is not implemented' ? 1 : 0;
       }
       expect({ matched, reconstruction, tail }).toStrictEqual({
-        matched: 3788,
-        reconstruction: 497,
+        matched: 4285,
+        reconstruction: 0,
         tail: 715,
       });
     } finally {

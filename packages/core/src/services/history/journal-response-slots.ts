@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalFormatError } from '../../journal/errors.js';
-import type { BlockPosition, IdFact } from '../../journal/idFactCodec.js';
+import type { BlockPosition } from '../../journal/idFactCodec.js';
 import { comparePositions } from '../../journal/idFactUpdate.js';
 import {
   ROW_BLOCK_TYPE,
@@ -8,6 +8,11 @@ import {
   ROW_SPEAKER,
 } from '../../journal/rowRecord.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
+import {
+  callTarget,
+  targetsPart,
+  type CallTarget,
+} from './journal-reconstruction.js';
 import { sanitizeProviderContentForSerialization } from './historyCloneUtils.js';
 import type {
   ContentMetadata,
@@ -21,7 +26,6 @@ import {
   responsePartAt,
   responsePartContent,
   sameResponsePart,
-  UnsupportedJournalNormalizationError,
   type ResponsePart,
 } from './journal-response-parts.js';
 
@@ -34,47 +38,6 @@ interface ResponseSlot {
 interface SelectedBlock {
   readonly at: BlockPosition;
   readonly orphan: boolean;
-}
-
-function target(fact: IdFact): BlockPosition | undefined {
-  if (
-    fact.firstToolResponse !== undefined &&
-    (fact.firstCall === undefined ||
-      comparePositions(fact.firstToolResponse, fact.firstCall) < 0)
-  ) {
-    throw new UnsupportedJournalNormalizationError(
-      'Reconstructed call units are not implemented',
-    );
-  }
-  return fact.firstCall;
-}
-
-export async function assertResponsePartSupported(
-  snapshot: VersionSnapshot,
-  part: ResponsePart,
-): Promise<void> {
-  for (const tuple of partIds(part)) {
-    const fact = await snapshot.facts.fact(tuple.id);
-    if (fact === undefined)
-      throw new JournalFormatError('Missing response source fact');
-    target(fact);
-    if (
-      part.speaker === ROW_SPEAKER.tool &&
-      tuple.kind === ROW_ID_KIND.response &&
-      (fact.firstCall === undefined || !beforePart(fact.firstCall, part))
-    ) {
-      throw new UnsupportedJournalNormalizationError(
-        'Reconstructed call units are not implemented',
-      );
-    }
-  }
-}
-
-function beforePart(at: BlockPosition, part: ResponsePart): boolean {
-  return (
-    at.label < part.entry.label ||
-    (at.label === part.entry.label && at.part < part.part)
-  );
 }
 
 async function slotsFor(
@@ -94,7 +57,7 @@ async function slotsFor(
     const fact = await snapshot.facts.fact(tuple.id);
     if (fact === undefined)
       throw new JournalFormatError('Missing call source fact');
-    if (sameResponsePart(target(fact), partPosition(part))) {
+    if (targetsPart(callTarget(fact), part)) {
       const first = fact.firstResponse ?? fact.firstAiCall;
       const selected = fact.best ?? fact.firstAiCall;
       if (first !== undefined && selected !== undefined)
@@ -119,7 +82,7 @@ async function slotsFor(
 async function mediaOwner(
   snapshot: VersionSnapshot,
   source: ResponsePart,
-): Promise<BlockPosition | undefined> {
+): Promise<CallTarget | undefined> {
   for (const tuple of partIds(source)) {
     if (tuple.kind !== ROW_ID_KIND.response || tuple.id === '') continue;
     const fact = await snapshot.facts.fact(tuple.id);
@@ -132,7 +95,7 @@ async function mediaOwner(
         partPosition(source, tuple.block),
       ) === 0
     ) {
-      const owner = target(fact);
+      const owner = callTarget(fact);
       if (owner !== undefined) return owner;
     }
   }
@@ -151,7 +114,7 @@ async function mediaFor(
     previous = slot.first;
     const source = await responsePartAt(snapshot, slot.first);
     const owner = await mediaOwner(snapshot, source);
-    if (sameResponsePart(owner, partPosition(part))) {
+    if (targetsPart(owner, part)) {
       media.push(
         ...source.indices.flatMap((index, block) =>
           source.ids.header.blocks[index].type === ROW_BLOCK_TYPE.media
@@ -168,7 +131,7 @@ async function orphanSuccessor(
   snapshot: VersionSnapshot,
   part: ResponsePart,
 ): Promise<readonly SelectedBlock[]> {
-  if (part.speaker !== ROW_SPEAKER.ai) return [];
+  if (part.speaker !== ROW_SPEAKER.ai || part.reconstructed === true) return [];
   const refs: SelectedBlock[] = [];
   for (const tuple of partIds(part)) {
     if (tuple.kind !== ROW_ID_KIND.call || tuple.id === '') continue;
@@ -216,7 +179,6 @@ async function metadataFor(
         comparePositions(ref.at, partPosition(next, index)) === 0,
     )
   ) {
-    await assertResponsePartSupported(snapshot, next);
     return (await responsePartContent(snapshot, next)).metadata;
   }
   return { synthetic: true, reason: 'reordered_tool_responses' };

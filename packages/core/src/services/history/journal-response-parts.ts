@@ -21,6 +21,7 @@ export interface ResponsePart {
   readonly part: number;
   readonly indices: readonly number[];
   readonly speaker: number;
+  readonly reconstructed?: boolean;
 }
 
 export function sameResponsePart(
@@ -84,6 +85,26 @@ export async function responsePartContent(
   part: ResponsePart,
 ): Promise<IContent> {
   const row = decodeStoredRow(await snapshot.readRow(part.entry));
+  if (part.reconstructed === true) {
+    return {
+      speaker: 'ai',
+      blocks: part.indices.map((index) => {
+        const block = row.blocks[index];
+        if (block.type !== 'tool_response')
+          throw new JournalFormatError(
+            'Reconstruction source is not a response',
+          );
+        return {
+          type: 'tool_call',
+          id: block.callId,
+          name: block.toolName || 'unknown_tool',
+          parameters: { reconstructed: true },
+          description: 'Reconstructed tool call after compression',
+        };
+      }),
+      metadata: { synthetic: true, reason: 'reconstructed_tool_call' },
+    };
+  }
   return HistoryToolNormalization.splitToolCallsOutOfToolMessages([row])[
     part.part
   ];
@@ -111,6 +132,12 @@ export function partIds(part: ResponsePart): ReadonlyArray<{
     const block = part.indices.indexOf(tuple.block);
     return block < 0
       ? []
-      : [{ id: part.ids.rawIds[index], block, kind: tuple.kind }];
+      : [
+          {
+            id: part.ids.rawIds[index],
+            block,
+            kind: part.reconstructed === true ? 0 : tuple.kind,
+          },
+        ];
   });
 }

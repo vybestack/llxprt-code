@@ -6,15 +6,12 @@ import { sanitizeProviderContentForSerialization } from './historyCloneUtils.js'
 import { strippedSelf } from './journal-orphan-units.js';
 import { countDecodedRow } from './journalRowCounters.js';
 import {
-  responseParts,
   responsePartContent,
   UnsupportedJournalNormalizationError,
   type ResponsePart,
 } from './journal-response-parts.js';
-import {
-  assertResponsePartSupported,
-  responseAdjacent,
-} from './journal-response-slots.js';
+import { responseAdjacent } from './journal-response-slots.js';
+import { completedResponseParts } from './journal-reconstruction.js';
 
 async function* chargedUnit(
   row: IContent | undefined,
@@ -54,12 +51,11 @@ export async function* streamJournalResponseUnits(
       'Tail normalization is not implemented',
     );
   const release = snapshot.hold();
-  const parts = responseParts(snapshot);
+  const parts = completedResponseParts(snapshot);
   try {
     let current = await parts.next();
     while (current.done !== true) {
       const part = current.value;
-      await assertResponsePartSupported(snapshot, part);
       const next = await parts.next();
       yield* selfUnit(snapshot, part, counters);
       yield* chargedUnit(
