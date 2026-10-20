@@ -5,7 +5,12 @@ import type { IdNodeCache } from './idTrieCache.js';
 import { IdTrieReader } from './idTrieReader.js';
 import type { PinnedRead } from './pinLease.js';
 import type { RowEntry } from './rowEntry.js';
-import { readStoredRow, type StoredRow } from './rowReads.js';
+import {
+  readRowIds,
+  readStoredRow,
+  type RowIds,
+  type StoredRow,
+} from './rowReads.js';
 import { entryByLabel } from './rowTreeQueries.js';
 import {
   entryAt,
@@ -105,6 +110,10 @@ export class VersionSnapshot {
   /** The live row `label`, or undefined when no row has it. */
   entryByLabel(label: bigint): Promise<RowEntry | undefined> {
     return entryByLabel(this.read.access, this.rootRef(), label);
+  }
+
+  readIds(entry: RowEntry): Promise<RowIds> {
+    return readRowIds(this.read.access, entry);
   }
 
   /** The whole row an entry of this snapshot points at. */

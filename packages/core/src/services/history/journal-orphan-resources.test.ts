@@ -12,7 +12,8 @@ import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
 import { planSourceRowOccurrences } from './source-fact-planner.js';
 import { encodeContentRow } from './journalRowCodec.js';
 import { streamJournalOrphanUnits } from './journal-orphan-units.js';
-import { call } from './__tests__/support/normalization-cases.js';
+import { streamJournalResponseUnits } from './journal-response-units.js';
+import { call, response } from './__tests__/support/normalization-cases.js';
 import type { RowDraft } from '../../journal/rowDraft.js';
 
 async function createsDuring(action: () => Promise<void>): Promise<number> {
@@ -66,6 +67,74 @@ describe('indexed orphan unit resources', () => {
       }),
     ).toBe(1);
   });
+
+  it('streams indexed real responses and media without operation files or an unbounded query cache', async () => {
+    const caches: BoundedIdNodeCache[] = [];
+    const deps = storeDeps();
+    const store = await JournalStore.create(`${directory()}/responses.llxj`, {
+      ...deps,
+      idDeps: { ...deps.idDeps, occurrenceSpace: 'source' },
+      planOccurrences: planSourceRowOccurrences,
+      createCache: () => {
+        const cache = new BoundedIdNodeCache();
+        caches.push(cache);
+        return cache;
+      },
+    });
+    function* rows(): Generator<RowDraft> {
+      for (let index = 0; index < 2000; index++) {
+        const id = `response-${index}`;
+        yield encodeContentRow(
+          { speaker: 'ai', blocks: [call(id)] },
+          { owner: 7 },
+        );
+        yield encodeContentRow(
+          {
+            speaker: 'tool',
+            blocks: [
+              response(id),
+              {
+                type: 'media',
+                mimeType: 'image/png',
+                data: 'YWJj',
+                encoding: 'base64',
+              },
+            ],
+          },
+          { owner: 7 },
+        );
+      }
+    }
+    try {
+      await store.commit([{ kind: 'replace', rows: rows() }]);
+      const snapshot = await store.snapshot();
+      try {
+        let count = 0;
+        let media = 0;
+        const creates = await createsDuring(async () => {
+          for await (const unit of streamJournalResponseUnits(snapshot)) {
+            await Promise.resolve();
+            count++;
+            media += unit.blocks.filter(
+              (block) => block.type === 'media',
+            ).length;
+          }
+        });
+        expect({ count, media, creates }).toStrictEqual({
+          count: 4000,
+          media: 2000,
+          creates: 0,
+        });
+        expect(caches.length).toBeGreaterThan(0);
+        for (const cache of caches)
+          expect(cache.bytes).toBeLessThanOrEqual(ID_NODE_CACHE_BYTES);
+      } finally {
+        await snapshot.close();
+      }
+    } finally {
+      await store.close();
+    }
+  }, 120000);
 
   it('streams 4000 native ids with bounded query caches and no operation files', async () => {
     const caches: BoundedIdNodeCache[] = [];
