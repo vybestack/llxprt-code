@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { MistralCandidate } from './mistralMapping.js';
 import { JournalFormatError } from './errors.js';
 import {
   decodeCountValue,
@@ -34,6 +35,7 @@ export interface IdFactDeps {
   readonly hasher: IdKeyHasher;
   readonly normalizers: IdNormalizers;
   readonly occurrenceSpace: 'source' | 'normalized' | 'source-with-normalized';
+  readonly mistralCandidate?: MistralCandidate;
 }
 
 /**

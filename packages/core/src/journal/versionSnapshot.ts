@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalFormatError } from './errors.js';
+import { readMistralMapping, type MistralMapping } from './mistralMapping.js';
 import { nextCuratedEntry } from './curatedQueries.js';
 import { IdFactQueries, type IdFactDeps } from './idFactQueries.js';
 import type { IdNodeCache } from './idTrieCache.js';
@@ -39,7 +40,7 @@ export class VersionSnapshot {
 
   constructor(
     private readonly read: PinnedRead,
-    idDeps: IdFactDeps,
+    private readonly idDeps: IdFactDeps,
     idCache: IdNodeCache,
     private readonly file: object = read,
   ) {
@@ -56,6 +57,21 @@ export class VersionSnapshot {
         },
       },
       idDeps,
+    );
+  }
+
+  async mistralMapping(
+    rawId: string,
+    slot: number,
+  ): Promise<MistralMapping | undefined> {
+    this.read.requireOpen();
+    if (this.version === undefined) return undefined;
+    return readMistralMapping(
+      this.read.access,
+      this.facts,
+      rawId,
+      slot,
+      this.idDeps.hasher,
     );
   }
 

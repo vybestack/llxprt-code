@@ -6,6 +6,7 @@ import {
   parseCheckpointEntry,
 } from './checkpointDescriptor.js';
 import { JournalFormatError } from './errors.js';
+import { assertMistralSlot } from './mistralMapping.js';
 import type { VersionEdit } from './groupEdits.js';
 import type { GroupPlan, PlanContext } from './groupPlanTypes.js';
 import {
@@ -52,6 +53,7 @@ function startNewLineage(plan: GroupPlan): void {
   plan.range = undefined;
   plan.newRows = [];
   plan.segments = undefined;
+  plan.mistralMetaRoot = undefined;
 }
 
 function applyAppend(plan: GroupPlan, rows: readonly RowDraft[]): void {
@@ -95,6 +97,7 @@ function hasPending(plan: GroupPlan): boolean {
 function rebuildFirst(plan: GroupPlan, keep: number): void {
   const source = plan.base;
   startNewLineage(plan);
+  plan.mistralMetaRoot = source.roots.metaRoot;
   plan.base = emptiedVersion(source);
   plan.range = keep > 0 ? { source, from: 0, to: keep } : undefined;
   plan.rebuilt = true;
@@ -224,6 +227,12 @@ async function applyEdit(
     return;
   }
   switch (edit.kind) {
+    case 'mistral':
+      assertMistralSlot(edit.slot);
+      startNewLineage(plan);
+      plan.mistralSlot = edit.slot;
+      plan.rebuilt = true;
+      break;
     case 'append':
       if (plan.segments === undefined) applyAppend(plan, edit.rows);
       else appendSegments(plan, edit.rows);
@@ -278,6 +287,8 @@ function isLineageRewrite(
  */
 function mutationKind(edit: VersionEdit): VersionEdit['kind'] {
   switch (edit.kind) {
+    case 'mistral':
+      return 'fill';
     case 'adopt':
       return edit.placement === 'end' ? 'append' : 'insert';
     case 'adoptAll':
@@ -336,6 +347,10 @@ export async function planGroup(
   edits: readonly VersionEdit[],
 ): Promise<GroupPlan> {
   mutationOf(edits);
+  if (edits.some((edit) => edit.kind === 'mistral') && edits.length !== 1)
+    throw new JournalFormatError(
+      'Mistral mapping activation is a separate fill group',
+    );
   const plan = startPlan(ctx);
   for (const edit of edits) await applyEdit(ctx, plan, edit);
   return plan;

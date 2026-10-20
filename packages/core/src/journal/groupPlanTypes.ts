@@ -115,6 +115,8 @@ export interface GroupPlan {
   args: MutationArgs | undefined;
   rebuilt: boolean;
   segments: Segment[] | undefined;
+  mistralSlot?: number;
+  mistralMetaRoot?: number;
 }
 
 export interface PlanContext {

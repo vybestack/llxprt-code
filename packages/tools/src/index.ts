@@ -83,6 +83,7 @@ export type {
 
 export {
   createInMemoryToolIdStore,
+  generateDeterministicMistralId,
   getToolIdStrategy,
   kimiStrategy,
   standardStrategy,

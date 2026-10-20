@@ -58,6 +58,7 @@ export interface SourceRow {
 
 /** One primitive edit of a commit group (design 4.1). The group applies them in order and commits once. */
 export type VersionEdit =
+  | { readonly kind: 'mistral'; readonly slot: number }
   /** Design 4.2: rows at the next labels, with their id facts. */
   | { readonly kind: 'append'; readonly rows: readonly RowDraft[] }
   /** Design 4.3: remove every live row with `label >= cutLabel`; `expectedRemoved` is checked. */

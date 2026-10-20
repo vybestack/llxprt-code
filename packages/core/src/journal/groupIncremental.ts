@@ -93,6 +93,7 @@ async function incrementalFacts(
   ctx: BuildContext,
   plan: GroupPlan,
   adds: ReadonlyArray<FreshSegment | ForeignSegment>,
+  appender: RecordAppender,
 ): Promise<
   { facts: GroupFacts | undefined; affected: ReadonlySet<bigint> } | undefined
 > {
@@ -103,7 +104,13 @@ async function incrementalFacts(
     plan.base.roots,
     ctx,
     mapReader(ctx, 'meta'),
+    { appender, readGroup: ctx.readGroup },
   );
+  if (
+    facts.mistralSlots !== 0 &&
+    adds.some((segment) => segment.role === 'insert')
+  )
+    return undefined;
   for (const segment of adds) {
     const ids =
       segment.kind === 'fresh'
@@ -239,7 +246,12 @@ export async function buildIncremental(
   mutation: MutationCode,
   appender: RecordAppender,
 ): Promise<BuiltGroup | undefined> {
-  const collected = await incrementalFacts(ctx, plan, addsOf(segments));
+  const collected = await incrementalFacts(
+    ctx,
+    plan,
+    addsOf(segments),
+    appender,
+  );
   if (collected === undefined) return undefined;
   const chainBase = await ctx.chainFor(plan.parent);
   const changes = await writeChanges(appender, segments);

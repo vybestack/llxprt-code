@@ -214,7 +214,10 @@ function base62FromHex(hex: string): string {
   return result;
 }
 
-function generateDeterministicMistralId(seed: string, salt: number): string {
+export function generateDeterministicMistralId(
+  seed: string,
+  salt: number,
+): string {
   const hash = crypto
     .createHash('sha256')
     .update(`${seed}|${salt}`)

@@ -2,6 +2,7 @@
 import { EMPTY_AGGREGATE } from './aggregateComposition.js';
 import { rebuildContributions } from './contributionRebuild.js';
 import { JournalFormatError } from './errors.js';
+import { decodeMistralSlots, MISTRAL_SLOTS_KEY } from './mistralMapping.js';
 import type { RecordAppender } from './groupAppender.js';
 import {
   commitState,
@@ -212,18 +213,33 @@ export async function buildRebuilt(
   appender: RecordAppender,
 ): Promise<BuiltGroup> {
   const metaReader = mapReader(ctx, 'meta');
-  const facts = await startFacts(ctx.access, NO_FACT_ROOTS, ctx, metaReader, {
-    appender,
-    readGroup: ctx.readGroup,
-  });
+  const previousSlots = decodeMistralSlots(
+    await metaReader.get(
+      plan.mistralMetaRoot ?? plan.base.roots.metaRoot,
+      MISTRAL_SLOTS_KEY,
+    ),
+  );
+  const mappingSlots =
+    previousSlots |
+    (plan.mistralSlot === undefined ? 0 : 1 << plan.mistralSlot);
+  if (mappingSlots !== 0 && ctx.idDeps.mistralCandidate === undefined)
+    throw new JournalFormatError('Mistral mapping candidate is not registered');
+  const facts = await startFacts(
+    ctx.access,
+    NO_FACT_ROOTS,
+    ctx,
+    metaReader,
+    {
+      appender,
+      readGroup: ctx.readGroup,
+    },
+    mappingSlots,
+  );
   const chainBase = await ctx.chainFor(plan.parent);
   const pass = new RebuildPass(ctx, plan.nextLabel, segments, appender, facts);
   const algebra = ctx.algebra(slotKindsOf(plan.base.slots));
   let tree = await bulkBuildRowTree(appender, algebra, pass.entries());
-  let roots =
-    tree === undefined
-      ? { idRoot: 0, metaRoot: 0 }
-      : await commitRebuiltFacts(finishFacts(facts), appender);
+  let roots = await commitRebuiltFacts(finishFacts(facts), appender);
   if (tree !== undefined) {
     tree = await rebuildContributions(
       ctx,

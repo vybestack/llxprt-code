@@ -13,6 +13,11 @@ import {
   joinParentList,
 } from './metaFacts.js';
 import type { RecordAccess } from './recordAccess.js';
+import {
+  decodeMistralSlots,
+  MISTRAL_SLOTS_KEY,
+  observeMistralRow,
+} from './mistralMapping.js';
 import type { RowDraft } from './rowDraft.js';
 import type { RowEntry } from './rowEntry.js';
 import { readRowIds, type RowIds } from './rowReads.js';
@@ -31,6 +36,8 @@ export interface GroupFacts {
   readonly ids: IdFactBatch;
   readonly meta: KeyedMapBatch;
   readonly baseExceptionCount: number;
+  readonly mistralSlots: number;
+  readonly spill?: BatchSpill;
 }
 
 export function plannedFromDraft(label: bigint, draft: RowDraft): PlannedRow {
@@ -90,6 +97,22 @@ async function applyRow(
 ): Promise<void> {
   const occurrences = await deps.planOccurrences(row, facts.ids.queries);
   for (const occurrence of occurrences) await facts.ids.apply(occurrence);
+  if (facts.mistralSlots !== 0) {
+    const candidate = deps.idDeps.mistralCandidate;
+    if (candidate === undefined || facts.spill === undefined)
+      throw new JournalFormatError(
+        'Mistral bookkeeping needs a candidate and bounded group writer',
+      );
+    await observeMistralRow(
+      facts,
+      row,
+      occurrences,
+      facts.spill.appender,
+      facts.spill.readGroup,
+      deps.idDeps.hasher,
+      candidate,
+    );
+  }
   await joinParentList(facts.meta, {
     label: row.label,
     flags: parent.flags,
@@ -103,11 +126,18 @@ export async function startFacts(
   deps: FactDeps,
   metaReader: KeyedMapReader,
   spill?: BatchSpill,
+  mappingSlots?: number,
 ): Promise<GroupFacts> {
   const { idRoot, metaRoot } = roots;
   const stored = await metaReader.get(metaRoot, KIMI_EXCEPTION_KEY);
   const baseExceptionCount =
     stored === undefined ? 0 : Number(decodeDecimal(stored));
+  const mistralSlots =
+    mappingSlots ??
+    decodeMistralSlots(await metaReader.get(metaRoot, MISTRAL_SLOTS_KEY));
+  const meta = new KeyedMapBatch(metaReader, metaRoot);
+  if (mistralSlots !== 0)
+    meta.set(MISTRAL_SLOTS_KEY, Uint8Array.of(mistralSlots));
   const idReader =
     access === undefined ? undefined : new IdTrieReader(access, deps.idCache);
   return {
@@ -118,8 +148,10 @@ export async function startFacts(
       baseExceptionCount,
       spill,
     ),
-    meta: new KeyedMapBatch(metaReader, metaRoot),
+    meta,
     baseExceptionCount,
+    mistralSlots,
+    spill,
   };
 }
 
