@@ -41,7 +41,10 @@ export interface AnalysisStats {
 export class ComplexityAnalyzer {
   private readonly complexityThreshold: number;
   private readonly minTasksForSuggestion: number;
-  private analysisHistory: ComplexityAnalysisResult[] = [];
+  private totalAnalyses = 0;
+  private complexRequestCount = 0;
+  private suggestionsGenerated = 0;
+  private totalScore = 0;
 
   // Sequential keywords that indicate multi-step processes
   private readonly sequentialKeywords = [
@@ -136,10 +139,7 @@ export class ComplexityAnalyzer {
         this.generateSuggestionReminder(detectedTasks);
     }
 
-    // Track analysis for statistics
-    this.analysisHistory.push(result);
-
-    return result;
+    return this.recordAnalysis(result);
   }
 
   /**
@@ -594,8 +594,7 @@ export class ComplexityAnalyzer {
       shouldSuggestTodos: false,
     };
 
-    this.analysisHistory.push(result);
-    return result;
+    return this.recordAnalysis(result);
   }
 
   /**
@@ -610,40 +609,32 @@ export class ComplexityAnalyzer {
    * @requirement REQ-005.4
    */
   getAnalysisStats(): AnalysisStats {
-    const totalAnalyses = this.analysisHistory.length;
-
-    if (totalAnalyses === 0) {
-      return {
-        totalAnalyses: 0,
-        complexRequestCount: 0,
-        suggestionsGenerated: 0,
-        averageComplexityScore: 0,
-      };
-    }
-
-    const complexRequestCount = this.analysisHistory.filter(
-      (r) => r.isComplex,
-    ).length;
-    const suggestionsGenerated = this.analysisHistory.filter(
-      (r) => r.shouldSuggestTodos,
-    ).length;
-    const totalScore = this.analysisHistory.reduce(
-      (sum, r) => sum + r.complexityScore,
-      0,
-    );
-
     return {
-      totalAnalyses,
-      complexRequestCount,
-      suggestionsGenerated,
-      averageComplexityScore: totalScore / totalAnalyses,
+      totalAnalyses: this.totalAnalyses,
+      complexRequestCount: this.complexRequestCount,
+      suggestionsGenerated: this.suggestionsGenerated,
+      averageComplexityScore:
+        this.totalAnalyses === 0 ? 0 : this.totalScore / this.totalAnalyses,
     };
   }
 
+  private recordAnalysis(
+    result: ComplexityAnalysisResult,
+  ): ComplexityAnalysisResult {
+    this.totalAnalyses++;
+    if (result.isComplex) this.complexRequestCount++;
+    if (result.shouldSuggestTodos) this.suggestionsGenerated++;
+    this.totalScore += result.complexityScore;
+    return result;
+  }
+
   /**
-   * Resets the analysis history.
+   * Resets analysis statistics.
    */
   reset(): void {
-    this.analysisHistory = [];
+    this.totalAnalyses = 0;
+    this.complexRequestCount = 0;
+    this.suggestionsGenerated = 0;
+    this.totalScore = 0;
   }
 }
