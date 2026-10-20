@@ -34,7 +34,13 @@ export interface GroupFacts {
 }
 
 export function plannedFromDraft(label: bigint, draft: RowDraft): PlannedRow {
-  return { label, speaker: draft.speaker, ids: draft.ids };
+  return {
+    label,
+    speaker: draft.speaker,
+    flags: draft.flags,
+    blockTypes: draft.blocks.map((block) => block.type),
+    ids: draft.ids,
+  };
 }
 
 export async function* rangeEntries(
@@ -143,7 +149,13 @@ export async function applyRowIds(
   await applyRow(
     facts,
     deps,
-    { label: header.label, speaker: header.speaker, ids },
+    {
+      label: header.label,
+      speaker: header.speaker,
+      flags: header.flags,
+      blockTypes: header.blocks.map((block) => block.type),
+      ids,
+    },
     header,
   );
 }

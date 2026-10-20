@@ -33,6 +33,7 @@ export interface IdEntryView {
 export interface IdFactDeps {
   readonly hasher: IdKeyHasher;
   readonly normalizers: IdNormalizers;
+  readonly occurrenceSpace: 'source' | 'normalized';
 }
 
 /**
@@ -76,12 +77,21 @@ export class IdFactQueries {
     return bytes === undefined ? undefined : decodeOccurrenceValue(bytes);
   }
 
+  private requireNormalized(): void {
+    if (this.deps.occurrenceSpace !== 'normalized') {
+      throw new JournalFormatError(
+        'Normalized unit occurrences are not available',
+      );
+    }
+  }
+
   /** The number of entries in the list of a normalized id (namespaces 1 and 2). */
   async normalizedCount(
     family: NormalizedFamily,
     kind: OccurrenceKind,
     normalizedId: string,
   ): Promise<number> {
+    this.requireNormalized();
     const bytes = await this.get(family, normalizedKey(kind, 0, normalizedId));
     return bytes === undefined ? 0 : decodeCountValue(bytes);
   }
@@ -93,6 +103,7 @@ export class IdFactQueries {
     normalizedId: string,
     ordinal: number,
   ): Promise<UnitPosition | undefined> {
+    this.requireNormalized();
     const bytes = await this.get(
       family,
       normalizedKey(kind, ordinal, normalizedId),

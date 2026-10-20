@@ -46,7 +46,11 @@ async function addsInOrder(
     }
   }
   for (const family of FAMILIES) {
-    if (!entersNormalizedList(occurrence, family)) continue;
+    if (
+      deps.idDeps.occurrenceSpace !== 'normalized' ||
+      !entersNormalizedList(occurrence, family)
+    )
+      continue;
     const normalized = normalizedIdOf(
       deps.idDeps.normalizers,
       family,

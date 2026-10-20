@@ -82,7 +82,7 @@ function responseScore(response: ToolResponseBlock): number {
 function idsOf(blocks: readonly ContentBlock[]): DraftId[] {
   const ids: DraftId[] = [];
   blocks.forEach((block, index) => {
-    if (block.type === 'tool_call' && block.id !== '') {
+    if (block.type === 'tool_call') {
       ids.push({
         rawId: block.id,
         kind: ROW_ID_KIND.call,
@@ -90,7 +90,7 @@ function idsOf(blocks: readonly ContentBlock[]): DraftId[] {
         score: 0,
         nameLen: Buffer.byteLength(block.name),
       });
-    } else if (block.type === 'tool_response' && block.callId !== '') {
+    } else if (block.type === 'tool_response') {
       ids.push({
         rawId: block.callId,
         kind: ROW_ID_KIND.response,

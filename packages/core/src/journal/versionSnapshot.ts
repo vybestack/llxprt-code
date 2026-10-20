@@ -1,5 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalFormatError } from './errors.js';
+import { IdFactQueries, type IdFactDeps } from './idFactQueries.js';
+import type { IdNodeCache } from './idTrieCache.js';
+import { IdTrieReader } from './idTrieReader.js';
 import type { PinnedRead } from './pinLease.js';
 import type { RowEntry } from './rowEntry.js';
 import { readStoredRow, type StoredRow } from './rowReads.js';
@@ -20,10 +23,29 @@ import type { SourceRow, VersionEdit } from './groupEdits.js';
  * so no compaction moves the records under it; a read after `close` throws.
  */
 export class VersionSnapshot {
+  readonly facts: IdFactQueries;
+
   constructor(
     private readonly read: PinnedRead,
+    idDeps: IdFactDeps,
+    idCache: IdNodeCache,
     private readonly file: object = read,
-  ) {}
+  ) {
+    const root = read.version?.roots.idRoot ?? 0;
+    const reader =
+      read.version === undefined
+        ? undefined
+        : new IdTrieReader(read.access, idCache);
+    this.facts = new IdFactQueries(
+      {
+        get: async (hash) => {
+          read.requireOpen();
+          return reader === undefined ? undefined : reader.lookup(root, hash);
+        },
+      },
+      idDeps,
+    );
+  }
 
   restorationIn(file: object): VersionEdit {
     this.read.requireOpen();

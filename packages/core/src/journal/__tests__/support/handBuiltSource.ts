@@ -56,7 +56,13 @@ function fixtureRows(
       return {
         label: labels[at],
         draft,
-        planned: { label: labels[at], speaker, ids: draft.ids },
+        planned: {
+          label: labels[at],
+          speaker,
+          ids: draft.ids,
+          flags: draft.flags,
+          blockTypes: draft.blocks.map((block) => block.type),
+        },
       };
     }),
   };

@@ -209,13 +209,21 @@ export class IdFactBatch {
       encodeOccurrenceValue(occurrenceEntryOf(occ)),
     );
     for (const family of FAMILIES) {
-      if (!entersNormalizedList(occ, family)) continue;
+      if (
+        this.deps.occurrenceSpace !== 'normalized' ||
+        !entersNormalizedList(occ, family)
+      )
+        continue;
       const nid = normalizedIdOf(this.deps.normalizers, family, occ.rawId);
       await this.appendToList(family, kind, nid, occ.unit.position);
     }
     const wasException =
       before !== undefined && isKimiException(occ.rawId, before);
-    if (!wasException && isKimiException(occ.rawId, after)) {
+    if (
+      this.deps.occurrenceSpace === 'normalized' &&
+      !wasException &&
+      isKimiException(occ.rawId, after)
+    ) {
       this.addException(occ.rawId);
     }
     await this.spillWhenFull();

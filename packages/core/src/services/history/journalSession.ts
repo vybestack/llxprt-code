@@ -12,7 +12,7 @@ import {
   resolveJournalDependencies,
   type JournalOpenDependencies,
 } from '../../journal/journalWriterOpen.js';
-import { planOwnRowOccurrences } from '../../journal/ownRowPlanner.js';
+import { planSourceRowOccurrences } from './source-fact-planner.js';
 import { rowAlgebra } from '../../journal/rowAlgebra.js';
 import { openUnlinkedFile } from '../../journal/unlinkedFile.js';
 import {
@@ -38,12 +38,13 @@ async function storeDependencies(
     journal: await resolveJournalDependencies(options.journal),
     idDeps: {
       hasher: sha256KeyHash,
+      occurrenceSpace: 'source',
       normalizers: {
         openai: normalizeToOpenAIToolId,
         anthropic: normalizeToAnthropicToolId,
       },
     },
-    planOccurrences: options.planOccurrences ?? planOwnRowOccurrences,
+    planOccurrences: options.planOccurrences ?? planSourceRowOccurrences,
     algebra: rowAlgebra,
   };
 }

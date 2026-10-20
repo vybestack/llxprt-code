@@ -216,6 +216,13 @@ describe('row header fields', () => {
         score: 4,
         nameLen: 3,
       },
+      {
+        rawId: '',
+        kind: ROW_ID_KIND.call,
+        block: 3,
+        score: 0,
+        nameLen: 5,
+      },
     ]);
     expect(draft.blocks.map((block) => block.type)).toStrictEqual([
       BLOCK_TYPE.text,

@@ -156,6 +156,8 @@ export type VersionEdit =
 export interface PlannedRow {
   readonly label: bigint;
   readonly speaker: number;
+  readonly flags: number;
+  readonly blockTypes: readonly number[];
   readonly ids: ReadonlyArray<{
     readonly rawId: string;
     readonly kind: number;

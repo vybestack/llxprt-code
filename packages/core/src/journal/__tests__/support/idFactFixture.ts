@@ -26,7 +26,11 @@ export const REAL_NORMALIZERS = {
 };
 
 export function realDeps(hasher: IdKeyHasher = sha256KeyHash): IdFactDeps {
-  return { hasher, normalizers: REAL_NORMALIZERS };
+  return {
+    hasher,
+    normalizers: REAL_NORMALIZERS,
+    occurrenceSpace: 'normalized',
+  };
 }
 
 export function normalizeFor(

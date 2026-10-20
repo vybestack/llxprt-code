@@ -443,7 +443,12 @@ export class JournalStore {
   /** The published version with the reads that reach it, taken together and pinned until `close` (see `VersionSnapshot`). */
   async snapshot(): Promise<VersionSnapshot> {
     const read = await this.openRead();
-    return new VersionSnapshot(read, this.writer.reader);
+    return new VersionSnapshot(
+      read,
+      this.deps.idDeps,
+      this.idCache,
+      this.writer.reader,
+    );
   }
 
   restorationOf(saved: VersionSnapshot): VersionEdit {
