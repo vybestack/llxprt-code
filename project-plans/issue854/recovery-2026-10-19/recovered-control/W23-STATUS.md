@@ -1,5 +1,13 @@
 # W23 bounded integration and provider parity
 
+## Actual native 40 MiB send subset, 2026-10-20T05:57Z
+
+Starting HEAD `b377f9faa1df1a8ea2e80fe214c1e603702dece5` verified; no W23 jobs active at entry. Eight native sends pass: OpenAI chat, both Responses routes and Anthropic cache-off, each with a single committed 41,943,040-byte text row, separately without media and with an admitted stored-image reference. Real locked recording, HistoryService curation and pinned selections feed production providers. A local HTTP sink hashes chunks without retaining bodies. Each complete body length, SHA-256 and Content-Length matches the separate existing array-backed oracle. Body lengths range 41,943,148..41,943,279 bytes. This is send proof, not a native memory or planning-limit claim.
+
+Initial execution had six passes and two byte failures. Changing the endpoint to localhost made via-OpenAI choose Chat Completions. The supported provider-scoped `apiMode=responses` selector fixes that fixture input; the sink also refuses a wrong endpoint. No production or oracle change. Final test has eight passes, zero failures/skips. All six scoped gates pass: declaration build, provider noemit/test types, zero-warning lint, format, affected graph validation, AST audit with zero touched findings. Earlier lint and NO_ASSERT authoring failures remain recorded; direct test lifecycle assertions resolve the audit without exclusions.
+
+Raw authority: `tmp/854-notes/p4/w23/limits-memory-run-c/`, including `subset-accepted-*`, byte receipts, source hashes and initial failures. No source changed within the accepted lane. Native memory/trap and planning-limit work is still open. Phase 4 still builds/spools bodies; phase 7 specifies refusal from stored totals. Existing .llxprt change and raw recovery files remain untouched and unstaged. No cleanup, fixture regeneration, weaker checks, OCR, push, merge, W24 or default flip. Review skipped per Andrew 2026-10-09.
+
 ## Provider parity cluster green, 2026-10-20T05:47Z
 
 First selected subset committed as `72d3328e4`. The final serial matrix completes **28 file executions, 3264 passes, zero failures/skips**, with both outer environments for the twelve targeted/related files and four additional 5000-seed frozen builder suites. The latter exercise 20,000 array-backed cases inside 32 Bun tests; they are not 20,000 native-service cases. No package source changed during this matrix.

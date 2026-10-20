@@ -1,5 +1,13 @@
 # W23 proof map
 
+## Actual native 40 MiB send subset, 2026-10-20T05:57Z
+
+`journal-large-native-send.test.ts`: **eight passes, zero failures/skips** in `limits-memory-run-c/subset-accepted/000.log` and matching JUnit. Explicit journal HistoryService, locked recorder and pinned curated source feed production OpenAI chat, Responses-via-OpenAI, standalone Responses and Anthropic cache-off. Each route sends exactly 40 MiB of text, both without media and with a native admitted stored-image reference. HTTP server hashes received chunks; full SHA-256/length and Content-Length match the existing independent oracle. Bodies: chat 41,943,164 / 41,943,259; via-OpenAI 41,943,148 / 41,943,243; standalone Responses 41,943,148 / 41,943,243; Anthropic 41,943,171 / 41,943,279 bytes. Oracle arrays are confined to an earlier call returning only the digest. Source rows are generated and released before send. This subset has no memory-bound assertion.
+
+Initial `large-a` is six passes/two failures. Endpoint-only diagnosis isolates custom-URL route selection: local via-OpenAI requires the supported provider setting `apiMode=responses`. `local-wire-hash-sink.ts` uses it and rejects a wrong endpoint. Oracle and production remain unchanged. `subset-accepted/001..006` passes six scoped gates; zero touched audit findings and zero source mismatches. This is graph validation, not affected-shard execution. All raw failures, eight body receipts and source manifests stay under `tmp/854-notes/p4/w23/limits-memory-run-c/`.
+
+Native memory, unchanged positive assertions under traps and planning-time limit refusal remain open. The current build-time/spool limit must not be reported as the phase-7 stored-summary planner. Existing phase-4 spooling remains intermediate. No W24 or default change. Review skipped per Andrew 2026-10-09.
+
 ## Provider parity cluster, 2026-10-20T05:47Z
 
 Starting HEAD verified as `b7aadac42552f858a1a1256886ab6ebd3027994b`; first selected subset committed as `72d3328e4`. Final proof: `W23-PROVIDER-PARITY-PROOF.json`. Raw authority: `tmp/854-notes/p4/w23/provider-parity-run-b/`. This section supersedes the earlier open selected/dump/retry entries for the bounded cases below, without closing W23.
