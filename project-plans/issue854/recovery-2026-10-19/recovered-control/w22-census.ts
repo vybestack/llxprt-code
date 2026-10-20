@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { XMLValidator } from 'fast-xml-parser';
 import { z } from 'zod';
+import { stripAnsi } from '../../../../scripts/lib/junit-report-writer.ts';
 import {
   parseJUnitXml,
   type JUnitTestCase,
@@ -51,6 +52,7 @@ export interface Attempt extends AttemptInput, Provenance {
   missingXml: boolean;
   counts: Counts | null;
   rawSummary: Counts | null;
+  countCorrection: 'terminal-summary-and-exact-case-records' | null;
   rawFailureLines: string[];
   cases: CensusCase[];
   sourceBoundary: {
@@ -69,20 +71,67 @@ function sameCounts(a: Counts, b: Counts): boolean {
 
 function rawCounts(text: string | null): Counts | null {
   if (text === null) return null;
-  const pass = /^\s*(\d+) pass\b/m.exec(text);
-  const fail = /^\s*(\d+) fail\b/m.exec(text);
-  const total = /^Ran (\d+) tests? across 1 file\./m.exec(text);
-  if (!pass || !fail || !total) return null;
-  const counts = {
-    pass: Number(pass[1]),
-    fail: Number(fail[1]),
-    skip:
-      Number(/^\s*(\d+) skip\b/m.exec(text)?.[1] ?? 0) +
-      Number(/^\s*(\d+) todo\b/m.exec(text)?.[1] ?? 0),
+  const terminal =
+    /(?:^|\n)((?:[ \t]*\d+ (?:pass|fail|skip|todo|errors?|expect\(\) calls)\r?\n)+)Ran (\d+) tests? across 1 file\.[^\r\n]*\s*$/.exec(
+      stripAnsi(text),
+    );
+  if (!terminal) return null;
+  const block = terminal[1] ?? '';
+  const read = (label: string): number | null => {
+    const matches = [
+      ...block.matchAll(new RegExp(`^[ \\t]*(\\d+) ${label}\\r?$`, 'gm')),
+    ];
+    return matches.length === 1 ? Number(matches[0]?.[1]) : null;
   };
-  return counts.pass + counts.fail + counts.skip === Number(total[1])
+  const pass = read('pass');
+  const fail = read('fail');
+  if (pass === null || fail === null) return null;
+  const counts = {
+    pass,
+    fail,
+    skip: (read('skip') ?? 0) + (read('todo') ?? 0),
+  };
+  return counts.pass + counts.fail + counts.skip === Number(terminal[2])
     ? counts
     : null;
+}
+
+function exactSavedCases(
+  input: AttemptInput,
+  cases: readonly CensusCase[],
+  rawLog: string | null,
+): boolean {
+  const saved = z
+    .array(
+      z.object({
+        classname: z.string(),
+        name: z.string(),
+        status: z.string(),
+      }),
+    )
+    .safeParse(input.cases);
+  if (!saved.success || saved.data.length !== cases.length || rawLog === null)
+    return false;
+  const key = (test: {
+    classname: string;
+    name: string;
+    status: string;
+  }): string => JSON.stringify([test.classname, test.name, test.status]);
+  const keys = new Set(saved.data.map(key));
+  const lines = stripAnsi(rawLog).split('\n');
+  return (
+    keys.size === cases.length &&
+    cases.every(
+      (test) =>
+        test.status === 'passed' &&
+        keys.has(key(test)) &&
+        lines.some((line) =>
+          line.startsWith(
+            `(pass) ${test.classname ? `${test.classname} > ` : ''}${test.name} [`,
+          ),
+        ),
+    )
+  );
 }
 
 export function inspectEvidence(
@@ -128,14 +177,25 @@ export function inspectEvidence(
       issues.push('junit-root-skip-mismatch');
     validJUnit = issues.length === 0;
   }
-  if (counts && !sameCounts(counts, input))
+  const countCorrection =
+    validJUnit &&
+    counts &&
+    summary &&
+    !sameCounts(counts, input) &&
+    sameCounts(summary, counts) &&
+    input.code === 0 &&
+    !input.signal &&
+    !input.timedOut &&
+    exactSavedCases(input, cases, rawLog)
+      ? 'terminal-summary-and-exact-case-records'
+      : null;
+  if (counts && !sameCounts(counts, input) && countCorrection === null)
     issues.push('result-count-mismatch');
-  if (summary && !sameCounts(summary, input))
+  if (summary && !sameCounts(summary, input) && countCorrection === null)
     issues.push('raw-result-count-mismatch');
   if (summary && counts && !sameCounts(summary, counts))
     issues.push('raw-junit-count-mismatch');
-  if (rawLog !== null && summary === null)
-    issues.push('missing-complete-raw-summary');
+  if (summary === null) issues.push('missing-complete-raw-summary');
   if (!counts && summary && sameCounts(summary, input)) counts = summary;
   const accepted =
     provenance.acceptedOrder !== null && input.backend === 'journal';
@@ -172,6 +232,7 @@ export function inspectEvidence(
     issues,
     counts,
     rawSummary: summary,
+    countCorrection,
     rawFailureLines:
       rawLog
         ?.split('\n')
