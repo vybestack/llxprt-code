@@ -1,3 +1,25 @@
+# Recording-primary acceptance is incomplete, 2026-10-20
+
+D-ORCH-7 is implemented by `8870c287760e70c4c9b90777c8926dde4d62c78d`, followed by failed-owner settlement at `3af0c0ccaab8706559d42d00b0b007c99e05e08f`. This supersedes earlier statements that selection is unimplemented. Authority: `W24-TOPOLOGY-PROOF.json`, with raw receipts under `tmp/854-notes/p4/w24/topology-run-f/`.
+
+Eligible fresh foreground recording writes one native copy. The twelve native topology cases pass, including late-owner separation/filtering, compensation, rejected subscription, clone failure and failed sibling settlement. The public Agent case and common lifecycle also pass. The unchanged native lifecycle suite still has four failures. Three mirror-specific failure cases now run on an adopted primary and need an explicitly ineligible fixture with adopted-primary counterparts preserved. The fourth is a product regression: a reader opened before detach keeps a snapshot on the recorder descriptor, and recorder disposal closes that descriptor before its next row. It fails with `EBADF`. Cold post-detach reads passing do not establish active-reader survival. No assertion or fixture was changed to hide these failures.
+
+Current serial 50-turn costs, using the same measured input, are:
+
+| Mode                      | Total write bytes | Process CPU ms |
+| ------------------------- | ----------------: | -------------: |
+| Bare                      |         9,245,079 |     21,213.776 |
+| Separate mirror           |        18,502,236 |     21,242.066 |
+| Adopted recording primary |         9,245,079 |     21,149.176 |
+
+All modes execute 50 warmup/50 measured turns, 60 measured requests and five tool rounds. Recorded modes independently digest matching live/archive rows. The separate-mirror fixture publishes one state fact before attachment, exercising the shipped ineligible boundary without disabling selection. Named-file counters are still called `mirror` by the observer even when that file is the adopted primary. These CPU figures and the historical 21,457.818/22,568.066 ms pair are individual observations, not a 5% overhead guarantee. The measured duplicate write cost is removed for eligible foreground recording.
+
+The final-source boundary matches 7,398 package paths and 8,181 package/script paths across continuation lanes. All eleven topology files compare byte-for-byte with `3af0c0cca`. Thirty-three selected test/cost executions total 181 passes, four failures and 1,570 assertions. Twelve scoped gates exit zero: declaration build; core/agents/CLI noemit; agents/CLI test types; scoped lint/format; graph; audit; discovery; journal `lunahigh` smoke. Audit reports four before/after-state flags on the topology test, explained in the proof, not an empty findings file. Graph validation is not shard execution, and green gates do not override failing tests.
+
+All 100 recorded task PIDs are absent; the inherited lane stopped after native lifecycle failure and never reached gates. The continuation finished remaining tests, then cost, then gates serially. No owned lane or production mutation remains active. No product/test source changed during this acceptance-only continuation. The 293 emitted untracked declarations and unrelated recovery files remain unstaged.
+
+Next: repair active-reader ownership, preserve mirror-specific contracts in genuine fanout fixtures and bind their adopted-primary counterparts, then obtain final-source lifecycle acceptance. The topology change invalidates blanket promotion of the earlier heap pair: a qualified positive and identical-input retaining trap need rebinding after final repair. The pinned method remains qualified evidence, not ordinary-runtime full-window total-heap acceptance. Eight W23 planning/header dependencies, W25 prerequisites/old default and W26 scratch work remain open. No W24 closure, cleanup, `.llxprt` edit/staging, OCR, push or merge. Review skipped per Andrew 2026-10-09.
+
 # Qualified heap-method WIP, 2026-10-20
 
 Final layout gates pass: declaration build, CLI noemit and Bun-test types, twelve-file ESLint/Prettier, affected graph, audit and discovery. Audit has no whole-product finding; graph validation is not shard execution. The new launcher passes once with 278,581 retained bytes and 189,262.5/192,918 late fitted/endpoint growth. Its final worker-path relocation is separately checked by exact launcher reconstruction, byte-identical workers and identical resolved imports, rather than another full measurement. All 7,767 frozen source hashes match through the two explicit relocations; 98 recorded PIDs are absent.

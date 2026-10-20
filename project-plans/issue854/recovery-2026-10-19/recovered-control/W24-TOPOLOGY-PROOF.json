@@ -1,0 +1,166 @@
+{
+  "date": "2026-10-20",
+  "verdict": "Topology is implemented and single-copy cost is measured, but lifecycle acceptance is incomplete. The unchanged native lifecycle suite has four failing cases, including an active-reader descriptor regression.",
+  "scope": "Acceptance only. No production or test edits in this continuation. No review, default change, cleanup, push or merge.",
+  "commits": {
+    "eligibleForegroundPrimary": "8870c287760e70c4c9b90777c8926dde4d62c78d",
+    "failedOwnerSettlement": "3af0c0ccaab8706559d42d00b0b007c99e05e08f"
+  },
+  "rawRoot": "tmp/854-notes/p4/w24/topology-run-f/",
+  "source": {
+    "packageManifest": "source-3af0c0cca.json",
+    "packageManifestSha256": "c69a077a80fd8235f7e5a16ea0046fb2093bb68b66c2781f2ebe8215ce3dd59b",
+    "packagePathsMatched": 7398,
+    "finalLaneManifests": [
+      "acceptance-source-before.json",
+      "costfinal-source-before.json",
+      "gates-source-before.json"
+    ],
+    "finalLaneManifestSha256": "233f9e6d5f765a62ef78cf6686c8d1b81e5f8031845463b11c2078eb5a84521b",
+    "finalLanePathsMatched": 8181,
+    "laneBinding": "All three package/script manifests are identical. Each continuation driver checks every bound path again after its lane. All eleven topology files also compare byte-for-byte with their 3af0c0cca committed blobs.",
+    "earlierManifestLimit": "source-8870c2877.json differs at six paths changed by 3af0c0cca. Its executions are not blanket final-source acceptance. Some authoring RED logs lack a complete contemporaneous source manifest; retain them as authoring observations, not restored original proof or final-source executions."
+  },
+  "constraints": [
+    "Select only a fresh nameless unpublished primary with its sole accepted recorder; attach stays lazy until append. Existing named or published histories remain separate.",
+    "Selection preserves the registered owner dictionary, previews and resume boundary. Own and unowned rows remain eligible; a foreign owner separates to an all-row nameless clone before its row is written.",
+    "After separation, recorders retain own-plus-unowned filtering in both directions. Single-owner streamed replacement is checked row by row without a preliminary stream scan or retained history map.",
+    "Compensation uses direct offsets only in the same file. Across a file swap it streams the pinned encoded rows with adoptAll, preserving labels and owners.",
+    "D-ORCH-11 clones before stopping the adopted recorder. Successful cold reads and later writes pass; an already-open reader does not yet survive recorder close.",
+    "No new backend, repeated per-turn whole-file pass, per-operation temporary file, relaxed bound, timeout change, skip or enforcement change was introduced."
+  ],
+  "coverage": {
+    "finalNativeTopology": {
+      "log": "related2-old-0.log",
+      "passes": 12,
+      "failures": 0,
+      "assertions": 43,
+      "cases": [
+        "Accepted append writes only the recorder; empty attachment remains unmaterialized.",
+        "Late foreign owner separates; primary preserves every row and both recorders retain only own and unowned rows, including after detach.",
+        "Stop clones before close; later rows leave the recording bytes unchanged.",
+        "Compensation restores the saved boundary after foreign-owner separation.",
+        "Foreign first-user preview cannot contaminate the foreground recorder.",
+        "Single-owner streamed replacement stays on the recording primary.",
+        "Rejected subscription leaves the prior primary usable and recorder unmaterialized.",
+        "Existing foreign-row history is not replaced by its filtered mirror.",
+        "Foreign replacement separates while retaining title and checkpoint facts.",
+        "Actual clone flush failure leaves the adopted recording unchanged.",
+        "Actual failed sibling mirror is settled before a separation clone is allocated; its error remains observable and later mutation fails.",
+        "Real HistoryService and RecordingIntegration attachment advances native commitSeq once for the next accepted row."
+      ]
+    },
+    "publicAgent": "root7-agent-target.log and final acceptance old-16/journal-16 pass. Actual row I/O reaches the recording file with zero bare-primary row bytes.",
+    "nativeWriterFaults": "related2-old-9.log: six passes, 36 assertions, including actual positional write and flush failures, repeated error observation and settled disposal. This fixture now exercises an adopted primary, not a separate mirror.",
+    "resumeStop": "related2-old-7.log: two D-ORCH-11 cases pass, including a second recorder remaining bound after adopted-primary detach.",
+    "continuation": "acceptance-results.json records nineteen further isolated executions: remaining native ownership/package tests, Agent origin/compression/child tests, public Agent topology/common lifecycle/CLI protocol in both outer environments, and five MirrorFanout fault/flush/detach/owner suites. All nineteen exit zero. Direct native suites pin their backend; no second redundant outer-environment run is claimed for them.",
+    "totals": {
+      "executionsIncludingCost": 33,
+      "passes": 181,
+      "failures": 4,
+      "assertions": 1570,
+      "boundary": "related2 plus acceptance plus three cost executions; earlier root runs and RED controls are excluded from these totals."
+    }
+  },
+  "negativeEvidence": {
+    "originalTopology": "initial-red.log rejects duplicate bare-primary flush and missing adoption. agent-original-red.log rejects 503 bare-primary row bytes against zero with three prior production paths restored from 53755f21e by agent-original-control.ts.",
+    "originalAgentRedSha256": "8ec1a0b96c50f696717320188d92433a0ffb52cb0545d0a53b5cbf679cee3094",
+    "crossFileCompensation": "compensation-red.log rejects a foreign-file trailer offset with CRC corruption; final topology compensation passes.",
+    "failedSibling": "mirror-swap-red2.log observes one still-live clone where zero is required after a real mirror flush failure. 3af0c0cca settles prior mirror failure before clone allocation; final native topology suite passes.",
+    "failedSiblingRedSha256": "8ee2a56e8c8e67cb36d1e18ec62540db2b4c29e1d29355bb0aa9ae40c842d513",
+    "restoration": "No production mutation was run in this continuation. Final eleven-file byte comparisons with 3af0c0cca pass; inherited mutation scripts and failed logs remain intact."
+  },
+  "acceptanceBlockers": [
+    {
+      "case": "does not close an active history reader when detaching and closing the recorder",
+      "log": "related2-old-10.log",
+      "test": "packages/core/src/recording/recording-integration-native-lifecycle.test.ts:232-253",
+      "mechanism": "streamRows captures a VersionSnapshot on the adopted recording descriptor at journalHistoryStore.ts:618-625. releaseAdoptedPrimary clones and installs a new store at journalAdoption.ts:181-197, but the existing snapshot still reaches the old descriptor. journalRecordingService.ts:265 closes that session, journalStore.ts:355-357 closes its writer without consulting pins, and groupWriter.ts:162-165 closes the handle. The second reader.next() fails with EBADF. A cold post-detach reader passing does not establish active-reader survival.",
+      "next": "Repair descriptor ownership for pre-existing pinned readers without retaining history or weakening this assertion, then rerun the original case and relevant pin/stop contracts. This acceptance-only continuation does not implement a new resource-lifetime design."
+    },
+    {
+      "cases": [
+        "reports an unobserved mirror write failure on disposal while detaching later rows",
+        "reports an unobserved mirror flush failure on disposal while detaching later rows",
+        "refuses a replacement subscription after a failed detach without binding the new history"
+      ],
+      "log": "related2-old-10.log",
+      "mechanism": "The fresh native fixture now adopts the recorder, so injected recorder failure is primary failure and the history queue remains failed. These mirror-specific cases expect a healthy separate primary after recorder failure.",
+      "next": "Make only the fanout-specific fixtures genuinely ineligible for adoption, preserve every durability/continuation assertion, and keep adopted-primary counterparts covering held acknowledgements and actual writer faults. Do not reclassify the active-reader regression as a fixture mismatch. No fixture or assertion was changed here."
+    }
+  ],
+  "writeCost": {
+    "method": "Real public Agent, deterministic localhost transport, 50 warmup and 50 measured turns, 60 measured requests and five tool rounds per mode. Same measured prompt SHA in the historical pair and current three-mode comparison. Actual journal handle I/O and summed process user+system CPU are measured, not physical-device traffic or isolated recorder CPU.",
+    "inputHash": "3ef650853d3f50dd65389bc59726784cfec34752154d4546afb49d21efe99bdc",
+    "currentMirrorFixture": "The createUnlinked fixture publishes one state fact before attachment, making the primary ineligible by the shipped capability rule. It does not disable selection or change any measured prompt. The fact is outside the measured window.",
+    "historicalBefore": {
+      "source": "heap-io-run-b/paired-cost-09-{bare,mirror}.json, separately bound by W24-PROOF-MAP.md",
+      "bareBytes": 9245079,
+      "recordedBytes": 18502239,
+      "bareCpuMs": 21457.818,
+      "recordedCpuMs": 22568.066
+    },
+    "current": [
+      {
+        "mode": "bare",
+        "receipt": "cost-current-bare.json",
+        "sha256": "542bdcddd4b1ccf5017dba54a0ebdc13a338d1f25aca7437ac337b1532cdbbe7",
+        "primaryBytes": 9245079,
+        "recordingFileBytes": 0,
+        "totalBytes": 9245079,
+        "processCpuMs": 21213.776
+      },
+      {
+        "mode": "separate mirror",
+        "receipt": "cost-current-mirror.json",
+        "sha256": "507271cb1c5e257412e1f8d8b51df77a56c511bff7afff3095b0b0ca91d6ab9c",
+        "primaryBytes": 9245079,
+        "recordingFileBytes": 9257157,
+        "totalBytes": 18502236,
+        "processCpuMs": 21242.066
+      },
+      {
+        "mode": "adopted recording primary",
+        "receipt": "cost-current-adopted.json",
+        "sha256": "d07d365f71e0ede964daad11e91977c02c2a08d8007dc70559af0fc24110b472",
+        "primaryBytes": 0,
+        "recordingFileBytes": 9245079,
+        "totalBytes": 9245079,
+        "processCpuMs": 21149.176
+      }
+    ],
+    "interpretation": "The eligible recorded workload removes the duplicate foreground row copy: adopted writes equal bare bytes, with 60 groups and 7,989,824 row bytes in one file. Separate mirror repeats those row bytes. Recorded modes independently stream and hash matching live/archive rows. The observer retains the name mirror for named-file counters even when that file is the actual primary. CPU figures are single observations, not a 5% overhead guarantee or a general benchmark."
+  },
+  "gates": {
+    "results": "gates-results.json",
+    "resultsSha256": "81ab72aa3118149a64ffc00fd1f6ea9a39273411f458fe2002eabdf386ad91b9",
+    "zeroExitCount": 12,
+    "commands": [
+      "npm run build:types",
+      "core, agents and CLI noemit",
+      "agents and CLI Bun-test types with node,bun",
+      "eleven-file ESLint with max-warnings 0",
+      "eleven-file Prettier check",
+      "affected-test-shards graph validation",
+      "test-audit AST scan",
+      "CLI test discovery",
+      "journal lunahigh smoke: bun scripts/start.ts --profile-load lunahigh write me a haiku and nothing else"
+    ],
+    "audit": "4,472 files scanned with zero scan errors. The new topology test has DUP_ASSERT at line 96 and SELF_CONFIRMING at 151, 206 and 290. They compare state before and after an intervening mutation: unchanged recording after a foreign append/detach, stopped-file bytes, bare-primary flush count and clone-failure file bytes. They can fail on the prohibited side effect; no scanner exception, suppression or enforcement change was added. No new CLI topology-test finding. Do not describe the scanner output as finding-free.",
+    "limits": "Graph consistency is not affected-shard execution. Twelve zero-exit gates do not override the four failing lifecycle tests. No full-monorepo green claim. Smoke identifies lunahigh:gpt-6-luna and returns a haiku."
+  },
+  "bindings": {
+    "summary": "finalize-summary.json",
+    "summarySha256": "948e89a5c0f799f88323d86eeb600a2d3e93e7cd0c27b7a96d11567e61f0163d",
+    "final": "final-bindings.json",
+    "finalSha256": "35582b7550b186052c1e054df60313b21021434ffb6881276ad1ef482cd1dd94",
+    "contents": "Summary binds final log bytes, case counts and costs. Final bindings include all eleven source hashes, nineteen result/control artifacts and 100 absent recorded task PIDs. The inherited 83861/83862/83878/83902 processes and continuation drivers are absent. Managed shell_1c2e06772319 completed; no owned lane remains running."
+  },
+  "remaining": [
+    "Resolve lifecycle blockers before calling the topology accepted. D-ORCH-7 is implemented at its conservative eligible boundary; D-ORCH-11 active-reader survival is incomplete.",
+    "Topology changes invalidate promotion of the earlier whole-product heap receipts to current history sources. A matched qualified positive and identical-input retaining trap must be rebound after the final topology repair on immutable source. No full heap lane was rerun here while its source is still unsettled.",
+    "Pinned-code-v1 remains a qualified scientific measurement method, not ordinary-runtime full-window total-heap acceptance. The old default-runtime RED receipt and unchanged 1 MiB/256 KiB bounds remain.",
+    "The eight W23 planning/header dependencies through phases 5/6/7 remain open. W25 prerequisites and old backend default are unchanged. W26 provider spools/compression candidates and scratch obligations remain open.",
+    "The 293 untracked emitted agent-source declarations and unrelated recovery files remain unstaged. No cleanup or obstruction move occurred in this continuation. No .llxprt edit or staging, raw recovery bulk staging, OCR, push or merge. Review skipped per Andrew 2026-10-09."
+  ]
+}

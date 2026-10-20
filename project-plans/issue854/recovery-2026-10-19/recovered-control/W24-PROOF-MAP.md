@@ -1,3 +1,13 @@
+# Recording-primary topology acceptance, 2026-10-20
+
+**Single-copy foreground writes are measured; lifecycle acceptance remains incomplete.** `W24-TOPOLOGY-PROOF.json` binds production commits `8870c2877` and `3af0c0cca`, final source manifests, accepted native/public cases, preserved RED controls, current bare/mirror/adopted costs, twelve scoped gates and absent PIDs. It also records all four unchanged native lifecycle failures, including the active-reader `EBADF` regression. Do not promote these commits as fully accepted or the earlier heap pair as current-source proof.
+
+Current 50-turn total writes/CPU ms are bare **9,245,079 / 21,213.776**, separate mirror **18,502,236 / 21,242.066**, adopted recording primary **9,245,079 / 21,149.176**. Each mode has 50 warmup turns, identical measured prompt input, 60 requests and five tool rounds. These are process observations, not a statistical CPU guarantee. Native recorded/live row digests match. D-ORCH-7 is now implemented for fresh eligible histories; named/published primaries remain separate. D-ORCH-11 cold clone/stop cases pass, but an existing pinned reader does not survive recorder close.
+
+The final thirty-three test/cost executions contain 181 passes, four failures and 1,570 assertions. Twelve zero-exit gates do not override those failures. All eleven topology files equal committed bytes, all three 8,181-path lane manifests agree, and all 100 recorded task PIDs are absent. Some earlier authoring RED rows lack a complete contemporaneous source manifest; their limits remain explicit. No test assertion, production source or default changed in this acceptance continuation. Qualified positive/trap source rebinding, ordinary-runtime qualification, eight W23 planning/header dependencies and W25/W26 remain pending. Review skipped per Andrew 2026-10-09.
+
+Earlier sections retain their historical source boundaries.
+
 # Qualified pinned-code proof, 2026-10-20
 
 **The named method passes; the original default full-window result remains RED.** Authority: `W24-HEAP-METHOD-E.json`. Raw paths in this section are under `tmp/854-notes/p4/w24/heap-io-run-e/` unless qualified otherwise. Earlier checkpoints retain their own source boundaries.
