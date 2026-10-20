@@ -14,7 +14,7 @@ import { recorderAcceptsRow } from './sessionPreviews.js';
 /** What the mirrors need from the store's operation queue. */
 export interface MirrorQueue {
   /** Runs `task` after everything queued, ahead of anything queued later. */
-  exclusive<T>(task: () => Promise<T>): Promise<T>;
+  exclusive<T>(task: () => Promise<T>, detaching?: boolean): Promise<T>;
   /** Throws when the store is disposed or failed. */
   assertUsable(): void;
 }
@@ -115,7 +115,7 @@ export class JournalMirrors {
 
   /** Unbinds a mirror once it has applied what was delivered; false when it was not bound. */
   detach(mirror: JournalSession): Promise<boolean> {
-    return this.queue.exclusive(() => this.fanout.detach(mirror.store));
+    return this.queue.exclusive(() => this.fanout.detach(mirror.store), true);
   }
 
   /**
@@ -161,7 +161,7 @@ export class JournalMirrors {
       } finally {
         this.recorders.delete(recorder);
       }
-    });
+    }, true);
   }
 
   /** Whether every bound mirror is a recorder, which is what a swap of the primary can move. */
@@ -253,8 +253,11 @@ export class JournalMirrors {
   }
 
   /** Waits for every mirror to apply what was delivered and for the preview writes of the recorders; throws every failure. */
-  async flush(): Promise<void> {
-    await Promise.all([this.fanout.flush(), this.previewWrites.settle()]);
+  async flush(unreportedOnly = false): Promise<void> {
+    await Promise.all([
+      this.fanout.flush(unreportedOnly),
+      this.previewWrites.settle(),
+    ]);
   }
 
   /** Brings every mirror's recorded primary version up to date, then tells the retirement listeners. */

@@ -11,6 +11,8 @@ import {
   recordingAcceptsEdits,
 } from './recording-primary-edits.js';
 
+import type { PendingRecorderWrites } from './pendingRecorderWrites.js';
+
 interface RecordingOwner {
   readonly recorder: JournalRecordingService;
   readonly origin: string | undefined;
@@ -32,6 +34,18 @@ export class RecordingPrimary {
     )
       return;
     this.pending = { recorder, origin };
+  }
+
+  async detach(
+    writes: PendingRecorderWrites,
+    failure: { readonly error: unknown; reported?: boolean } | undefined,
+  ): Promise<void> {
+    await writes.settle();
+    await releaseAdoptedPrimary(this.host);
+    if (failure !== undefined && failure.reported !== true) {
+      failure.reported = true;
+      throw failure.error;
+    }
   }
 
   acceptsPreview(origin: string | undefined): boolean {

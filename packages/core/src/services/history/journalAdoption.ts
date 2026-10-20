@@ -178,6 +178,7 @@ export async function releaseAdoptedPrimary(
       'A history with mirrors that are not recorders cannot leave an adopted journal',
     );
   }
+  await previous.mirrors.flush(true);
   const next = await previous.session.cloneUnlinked();
   const moved = await previous.mirrors.unbindRecorders();
   const owners = new JournalOwners(next.store);

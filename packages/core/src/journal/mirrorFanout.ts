@@ -156,12 +156,16 @@ export class MirrorFanout {
   }
 
   /** Waits for every mirror to apply what was queued, then throws every failure. */
-  async flush(): Promise<void> {
+  async flush(unreportedOnly = false): Promise<void> {
     await this.fifo;
     await Promise.all(this.links.map((link) => link.queue));
     rethrowAll(
       this.links.flatMap((link) => {
-        if (link.failure === undefined) return [];
+        if (
+          link.failure === undefined ||
+          (unreportedOnly && link.failure.reported)
+        )
+          return [];
         link.failure.reported = true;
         return [link.failure.error];
       }),

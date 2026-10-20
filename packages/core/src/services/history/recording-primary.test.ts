@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { afterEach, describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 import { join } from 'node:path';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
 import { testJournalSeams } from '../../journal/__tests__/support/journalFixtures.js';
@@ -31,7 +31,10 @@ describe('recording as the native primary', () => {
     for (const close of cleanup.splice(0).reverse()) await close();
   });
 
-  async function fixture(attach = true): Promise<{
+  async function fixture(
+    attach = true,
+    recordingSeams?: ReturnType<typeof testJournalSeams>,
+  ): Promise<{
     store: JournalHistoryStore;
     recorder: JournalRecordingService;
     primary: JournalSession;
@@ -42,7 +45,7 @@ describe('recording as the native primary', () => {
       journal: seams.dependencies,
     });
     const store = new JournalHistoryStore(primary);
-    const recorder = recording('a');
+    const recorder = recording('a', recordingSeams);
     cleanup.push(
       () => recorder.dispose(),
       () => store.dispose(),
@@ -57,7 +60,10 @@ describe('recording as the native primary', () => {
     };
   }
 
-  function recording(id: string): JournalRecordingService {
+  function recording(
+    id: string,
+    seams?: ReturnType<typeof testJournalSeams>,
+  ): JournalRecordingService {
     return JournalRecordingService.create({
       sessionId: id,
       projectHash: 'project',
@@ -65,6 +71,8 @@ describe('recording as the native primary', () => {
       workspaceDirs: ['/work'],
       provider: 'fake',
       model: 'fake',
+      journal:
+        seams === undefined ? undefined : { journal: seams.dependencies },
     });
   }
 
@@ -260,6 +268,79 @@ describe('recording as the native primary', () => {
     if (saved === undefined)
       throw new Error('Checkpoint lost during separation');
     expect(parseCheckpointEntry(saved)?.name).toBe('before separation');
+  });
+
+  it('leaves the adopted file unchanged when the separation clone fails', async () => {
+    const failures: { failFlushAt?: number } = {};
+    const seams = testJournalSeams(failures);
+    const { store, recorder } = await fixture(true, seams);
+    store.apply({ kind: 'content', content: row('ours'), origin: 'a' });
+    await store.waitForCommit();
+    const file = recorder.getFilePath();
+    if (file === null) throw new Error('missing recording');
+    const before = await Bun.file(file).bytes();
+    failures.failFlushAt = seams.events.filter(
+      (event) => event.type === 'flush',
+    ).length;
+    store.apply({ kind: 'content', content: row('foreign'), origin: 'b' });
+    await expect(store.waitForCommit()).rejects.toThrow(
+      'injected flush failure',
+    );
+    expect(store.isAdoptingRecorder(recorder)).toBe(true);
+    expect(await Bun.file(file).bytes()).toStrictEqual(before);
+    expect(await rows(await recorder.session())).toStrictEqual([row('ours')]);
+    await store.detachJournal(recorder);
+  });
+
+  it('settles a failed sibling mirror before allocating a separation clone', async () => {
+    const { store, recorder } = await fixture();
+    store.apply({ kind: 'content', content: row('ours'), origin: 'a' });
+    await store.waitForCommit();
+    const failures: { failFlushAt?: number } = {};
+    const seams = testJournalSeams(failures);
+    const b = recording('b', seams);
+    cleanup.unshift(() => b.dispose());
+    await store.attachJournal(b, true, undefined, 'b');
+    failures.failFlushAt = seams.events.filter(
+      (event) => event.type === 'flush',
+    ).length;
+    store.apply({ kind: 'content', content: row('shared') });
+    await store.waitForDurable();
+    const active = new Set<JournalSession>();
+    const clone = JournalSession.prototype.cloneUnlinked;
+    const observer = spyOn(
+      JournalSession.prototype,
+      'cloneUnlinked',
+    ).mockImplementation(async function (this: JournalSession, options) {
+      const session = await clone.call(this, options);
+      active.add(session);
+      const close = session.close.bind(session);
+      session.close = async (): Promise<void> => {
+        await close();
+        active.delete(session);
+      };
+      return session;
+    });
+    try {
+      store.apply({ kind: 'content', content: row('foreign'), origin: 'b' });
+      await expect(store.waitForCommit()).rejects.toThrow(
+        'injected flush failure',
+      );
+      expect(store.isAdoptingRecorder(recorder)).toBe(true);
+      expect(active.size).toBe(0);
+      expect(() =>
+        store.apply({ kind: 'content', content: row('must still fail') }),
+      ).toThrow('injected flush failure');
+      expect(await rows(await recorder.session())).toStrictEqual([
+        row('ours'),
+        row('shared'),
+      ]);
+    } finally {
+      observer.mockRestore();
+      for (const session of active) await session.close();
+      await store.detachJournal(b);
+      await store.detachJournal(recorder);
+    }
   });
 
   it('uses real history and integration attachment for foreground selection', async () => {

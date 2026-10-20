@@ -51,7 +51,6 @@ import {
 import type { HistorySuffixQuery } from './historyJournalRows.js';
 import {
   adoptOnto,
-  releaseAdoptedPrimary,
   type AdoptionHost,
   type JournalAdoption,
 } from './journalAdoption.js';
@@ -146,7 +145,7 @@ interface OpenJournal {
 export class JournalHistoryStore implements HistoryStorePort {
   private tentativeRows = 0;
   private queue: Promise<void>;
-  private failure: { readonly error: unknown } | undefined;
+  private failure: { readonly error: unknown; reported?: boolean } | undefined;
   private ack: CommitAck | undefined;
   private disposed = false;
   readonly checkpointLifetime = new JournalCheckpointLifetime();
@@ -244,7 +243,7 @@ export class JournalHistoryStore implements HistoryStorePort {
       session.store,
       owners,
       {
-        exclusive: (task) => this.exclusive(task),
+        exclusive: (task, detaching) => this.exclusive(task, detaching),
         assertUsable: () => this.assertUsable(),
       },
       listeners,
@@ -556,10 +555,10 @@ export class JournalHistoryStore implements HistoryStorePort {
     const journalRecorder = requireJournalRecorder(recorder);
     return this.opened.then(() =>
       this.adopted === journalRecorder
-        ? this.exclusive(async () => {
-            await this.adoptedWrites.settle();
-            await releaseAdoptedPrimary(this.adoptionHost());
-          })
+        ? this.exclusive(
+            () => this.topology.detach(this.adoptedWrites, this.failure),
+            true,
+          )
         : this.mirrors.detachRecorder(journalRecorder),
     );
   }
@@ -598,7 +597,10 @@ export class JournalHistoryStore implements HistoryStorePort {
     await this.startup;
     await this.queue;
     await this.adoptedWrites.settle();
-    if (this.failure !== undefined) throw this.failure.error;
+    if (this.failure !== undefined) {
+      this.failure.reported = true;
+      throw this.failure.error;
+    }
   }
 
   /**
@@ -959,9 +961,9 @@ export class JournalHistoryStore implements HistoryStorePort {
   }
 
   /** Runs `task` after everything queued, ahead of anything queued later; its failure goes to the caller and does not stop the queue. */
-  private exclusive<T>(task: () => Promise<T>): Promise<T> {
+  private exclusive<T>(task: () => Promise<T>, detaching = false): Promise<T> {
     const turn = this.queue.then(() => {
-      if (this.failure !== undefined) throw this.failure.error;
+      if (this.failure !== undefined && !detaching) throw this.failure.error;
       return task();
     });
     this.queue = turn.then(
