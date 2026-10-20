@@ -1,6 +1,16 @@
 # Phase 5 proof map
 
-## Current native Mistral increment
+## Current native Kimi eligible-count increment
+
+Starting HEAD `a797ffe5a`; implementation `4dd919d4e8607e8ad304af6f770f3baacc908fb5`; independent mapper oracle `440dc3cf996960869833397b5bd283ace52ab081`. [PHASE5-KIMI-PROOF.json](PHASE5-KIMI-PROOF.json) binds 13 committed paths, 8849 package/script hashes and 591 raw receipt hashes. All 320 recorded Kimi PIDs are absent; none live. Acceptance: **114 isolated serial processes over 57 files, 872 passes, 938784 assertions, zero failures or skips**, both outer backends, unchanged timeout and eight passing scoped gates.
+
+The production group writer owns the explicit Kimi fill marker, emitted per-row eligible counts and ancestor aggregates. Pinned count/ordinal queries use those roots. Native tests cover inactive/closed pins, all speakers, R1 default names and duplicates, empty/unnamed IDs, append/pop across activation and an empty prefix, clear/refill, removal/rebuild, owner/reopen/clone/compaction, failed-write publication and ordinal boundaries 9/10/99/100. The independent complete-normalizer/tools-mapper oracle covers 120 frozen-source histories and first-row removals, 240 count comparisons per backend. The existing 5000-case normalized corpus and frozen hashes remain unchanged.
+
+AI-only eligibility and narrowed-ordinal controls fail count/rank assertions. A retained-all-row map fails the uncached lookup read bound at 581 versus `<30`; this is read-budget evidence, not heap proof. All control targets restore with cmp and SHA-256 before acceptance. Two repeated assertions span distinct mutation/measurement boundaries. No prohibited touched audit finding is accepted.
+
+This group does not prove emitted last-eligible/name facts, sparse exception entries, unmapped/written-use totals, digit/name token/byte corrections or earlier-holder remeasurement. Tail/normalized request queries, Mistral continuation, format/settings summaries and LENS, full 10k/100k/1M retained heap, range CRC and W26/W23/W25/default dependencies remain open. Provider routing/default remain unchanged. Prior Mistral receipts were revalidated: 540 hashes matched and 302 PIDs absent. See [PHASE5-STATUS.md](PHASE5-STATUS.md) and [PHASE5-KIMI-DECISIONS.md](PHASE5-KIMI-DECISIONS.md). Review skipped per Andrew 2026-10-09.
+
+## Historical native Mistral increment
 
 Starting HEAD `2bba0b8e3`; implementation `819ca78dbeac092dfea8ad4e165ee17ebd4b3a90`. [PHASE5-MISTRAL-PROOF.json](PHASE5-MISTRAL-PROOF.json) binds 16 committed source/test paths and 8846 package/script hashes. Acceptance: **110 isolated serial processes over 55 files, 856 passes, 933836 assertions, zero failures or skips**, both outer backends, unchanged 180000 timeout, eight passing scoped gates. 302 recorded PIDs are absent; none live.
 

@@ -1,0 +1,27 @@
+# Kimi eligible-count and ordinal increment, 2026-10-20
+
+Split the first Kimi group at the emitted eligible-count boundary. This group persists `RowEntry.callBlocks`, composes it through the existing row tree and provides pinned count/ordinal queries. It does not implement the complete Kimi bookkeeping described in design sections 3.3 and 7.2.
+
+## Production writer boundary
+
+`JournalSession` already registers the source planner and the normalized contribution dependencies. A separate `{ kind: 'kimi' }` fill rebuilds the existing native rows and enables eligible counting with the versioned `kimi:eligible` marker. The group writer owns both the marker and row/ancestor updates through the same commit and acknowledgement path. There is no caller-populated fact table. Mixed activation groups fail before consuming a replacement stream. This fill has no format slot because eligible counts do not depend on a format/settings key. It does not register a full format slot, summary or LENS record.
+
+The count is taken inside the existing emitted-row occurrence traversal, before the AI-only restriction used by namespaces 1 and 2. A named, nonempty human call therefore increments it. Each R1 reconstructed call increments it when its raw ID is nonempty, including a response whose empty tool name becomes `unknown_tool`. An unnamed real call and an empty raw ID do not increment it. Duplicate eligible blocks count separately. Namespace-0/4 counters remain source facts and are not relabeled as emitted facts. Namespace numbers and Mistral's slot/namespace-3 policy are unchanged.
+
+`VersionSnapshot.kimiEligibleCount()` requires the marker. `kimiOrdinal(label, eligibleWithinRow)` descends the held version's tree, sums preceding eligible counts and adds the caller's eligible rank within that row's final contribution. It validates row membership and rank. The argument is not a source block index or source occurrence ordinal. The API deliberately does not pretend to find the last eligible call or its name.
+
+Activation starts a lineage so a pop cannot select an unfilled ancestor. Prefix rebuilds retain the activation marker, including an empty prefix. The former Mistral-only saved meta-root field is named `bookkeepingMetaRoot` because it now carries both activations. Clear retains its existing empty-root semantics and requires another explicit fill. Earlier pins keep their own marker and counts. The query helper does not access a file reader when constructing an uncommitted snapshot.
+
+The marker is an ordinary meta-map VALUE with no embedded offsets. Existing meta VALUE relocation and row-entry copying therefore apply without another offset rule. Tests walk the complete copied version with `OffsetAudit`, check clone/compaction ranks and verify that an original live pin still reads while its clone compacts. Compacting a journal with a live pin remains refused.
+
+## Evidence and limits
+
+New native tests compare 120 unchanged frozen-source inputs and their first-row-removed variants with the existing complete normalizer and tools Kimi mapper, 240 count comparisons per backend. After the existing mapper observes the normalized units, the test resolves an empty-ID probe call. Its fallback counter supplies the expected eligible count without duplicating the eligibility predicate. These are repeated structural families from the existing generator, not 240 independent random structures. Named cases cover every speaker, R1 default names, reconstructed duplicate blocks, raw/prefix collisions, empty and unnamed IDs, inactive/closed pins, pop across activation and an empty base, owner changes, reopen, fork and compaction. Ordinals cross 9/10 and 99/100. Write-failure injection proves no activation metadata is published and later writes are poisoned; reopen recovers the previous committed version.
+
+At 4000 rows, tests retain the existing less-than-150 positional-read bounds for unique append and response arrival and require an uncached ordinal lookup below 30 reads. The retaining-map control fails the lookup read budget. This is not retained-heap proof. AI-only eligibility and narrowed-ordinal controls fail their literal count/rank assertions. Restoration is checked with cmp and SHA-256. Initial missing-API, recording-boundary, constructor, test-authoring and lint failures remain in `tmp/854-notes/p5/kimi-run-g/`.
+
+The audit's duplicate assertions span separate mutation or measurement boundaries: an older filled pin before and after pop, and separate unique-append/response-append read counts. Keep those checks. No touched self-confirming or mock-mirror finding is accepted.
+
+Remaining Kimi work is emitted last-eligible/name facts, the disk exception list, written-use and unmapped counters, digit/name corrections and affected-holder remeasurement. A human-call response can be dropped by the existing converter while the human call still increments this eligible count. The group does not claim that eligible totals are wire-use totals or token/byte measurements. Tail overlays, normalized tail queries, Mistral continuation, full format/settings keys and summaries, LENS, full 10k/100k/1M retained-heap acceptance, range CRC closure and W26/W23/W25 dependencies remain open. Provider routing and backend default are unchanged.
+
+Review skipped per Andrew 2026-10-09. No cleanup, obstruction move, .llxprt edit/staging, generated-declaration staging, recovery bulk staging, push or merge.
