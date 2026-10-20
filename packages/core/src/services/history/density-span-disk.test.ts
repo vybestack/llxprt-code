@@ -14,6 +14,36 @@ function span(index: number): RemovedInteriorSpan {
 }
 
 describe('density span disk sort and existing standing window', () => {
+  it('keeps a closed accumulator closed before its first density edit', () => {
+    const disk = new DensitySpanRows();
+    disk.close();
+    expect(() => disk.append(span(0))).toThrow(RangeError);
+  });
+
+  it('projects accumulated and trailing spans without density edits', () => {
+    const disk = new DensitySpanRows();
+    try {
+      expect(
+        disk.project(
+          [
+            { start: 8, end: 10, reason: 'compressed' },
+            { start: 1, end: 3, reason: 'cleared' },
+          ],
+          [{ start: 3, end: 7, reason: 'rewound' }],
+        ),
+      ).toStrictEqual([
+        { start: 1, end: 7, reason: 'cleared' },
+        { start: 8, end: 10, reason: 'compressed' },
+      ]);
+      expect(disk.metrics()).toStrictEqual({
+        diskEntries: 0,
+        peakResidentSpans: 2,
+      });
+    } finally {
+      disk.close();
+    }
+  });
+
   for (const size of [512, 8192])
     it(`preserves exact sorted merge semantics across ${size} nonmonotonic spans`, () => {
       const disk = new DensitySpanRows();

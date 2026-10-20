@@ -2,6 +2,7 @@
 import { ResolverIntervalIndex } from '../../recording/resolverIntervalIndex.js';
 import type { RemovedInteriorSpan } from './historyEventTypes.js';
 import { SPAN_WINDOW_CAPACITY } from './historySpanWindow.js';
+import { mergeRemovedInteriorSpans } from './contextRange.js';
 
 const reasons: ReadonlyArray<RemovedInteriorSpan['reason']> = [
   'density-removed',
@@ -12,10 +13,17 @@ const reasons: ReadonlyArray<RemovedInteriorSpan['reason']> = [
 ];
 
 export class DensitySpanRows {
-  private readonly rows = new ResolverIntervalIndex();
+  private index: ResolverIntervalIndex | undefined;
   private peakResidentSpans = 0;
+  private closed = false;
+
+  private get rows(): ResolverIntervalIndex {
+    this.index ??= new ResolverIntervalIndex();
+    return this.index;
+  }
 
   append(span: RemovedInteriorSpan): void {
+    if (this.closed) throw new RangeError('Invalid interval index write');
     this.rows.push({
       fromSeq: span.start,
       toSeq: span.end,
@@ -33,6 +41,17 @@ export class DensitySpanRows {
     accumulated: readonly RemovedInteriorSpan[],
     trailing: readonly RemovedInteriorSpan[],
   ): RemovedInteriorSpan[] {
+    if (this.index === undefined) {
+      const retained = mergeRemovedInteriorSpans([
+        ...accumulated,
+        ...trailing,
+      ]).slice(-SPAN_WINDOW_CAPACITY);
+      this.peakResidentSpans = Math.max(
+        this.peakResidentSpans,
+        retained.length,
+      );
+      return retained;
+    }
     const sorted = new DensitySpanRows();
     try {
       for (const span of accumulated) sorted.append(span);
@@ -77,11 +96,12 @@ export class DensitySpanRows {
   }
   metrics(): { diskEntries: number; peakResidentSpans: number } {
     return {
-      diskEntries: this.rows.length,
+      diskEntries: this.index?.length ?? 0,
       peakResidentSpans: this.peakResidentSpans,
     };
   }
   close(): void {
-    this.rows.close();
+    this.closed = true;
+    this.index?.close();
   }
 }
