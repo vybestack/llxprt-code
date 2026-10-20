@@ -573,6 +573,66 @@ describe('W22 shared runner', () => {
       runCensus(root).rows.find((row) => row.pid === 130)?.cases[0]
         ?.classification,
     ).toBe('classification-pending');
+    for (const [batchName, pid, backend] of [
+      ['density-final-journal-j-a', 180, 'journal'],
+      ['density-final-old-j-a', 190, 'old'],
+      ['density-initial-journal-j-a', 200, 'journal'],
+      ['density-unknown-j-a', 210, 'unknown'],
+    ] as const)
+      batch(
+        batchName,
+        { ...base, pid, backend, sourceHash: 'density-final' },
+        xml('passed', 'density works'),
+      );
+    batch(
+      'density-retaining-control-j-b',
+      { ...base, pid: 220, code: 1, pass: 0, fail: 1 },
+      xml('failed'),
+    );
+    const density = join(w22, 'density-run-j');
+    mkdirSync(density, { recursive: true });
+    const densityContract = (sourceHash: string): void =>
+      writeFileSync(
+        join(density, 'classification.json'),
+        JSON.stringify({
+          rows: [
+            {
+              path: base.path,
+              sourceHash,
+              cases: [
+                {
+                  classname: 'suite',
+                  name: 'density works',
+                  classification: 'native-history',
+                },
+              ],
+            },
+          ],
+        }),
+      );
+    densityContract('density-final');
+    const acceptedDensity = runCensus(root);
+    expect(
+      acceptedDensity.rows.find((row) => row.path === base.path)?.pid,
+    ).toBe(180);
+    expect(
+      acceptedDensity.rows.find((row) => row.pid === 180)?.cases[0]
+        ?.classification,
+    ).toBe('native-history');
+    for (const pid of [190, 200, 210, 220])
+      expect(
+        acceptedDensity.attempts.find((row) => row.pid === pid)?.accepted,
+      ).toBe(false);
+    for (const pid of [190, 200, 210])
+      expect(
+        acceptedDensity.attempts.find((row) => row.pid === pid)?.cases[0]
+          ?.classification,
+      ).toBe('classification-pending');
+    densityContract('density-source-mismatch');
+    expect(
+      runCensus(root).rows.find((row) => row.pid === 180)?.cases[0]
+        ?.classification,
+    ).toBe('classification-pending');
     writeFileSync(
       join(run, 'package-resume-g-0000/results.json'),
       JSON.stringify([{ ...base, pid: 'invalid' }]),

@@ -1,8 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { AdmissionFailureRecorder } from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
+import { expect } from 'bun:test';
+import { withCompressionValueRecorder } from './support/compression-value-recorder-fixture.js';
+import { compressionValueDigest } from './compression-value-fixture.js';
+import type { CompressionValueRecorderFixture } from './support/compression-value-recorder-fixture.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { HighdensityDiskHistory } from './highdensity-disk-helpers.js';
 
@@ -17,6 +17,9 @@ export function deferred(): { promise: Promise<void>; resolve: () => void } {
 }
 
 export class HighdensityFaultHistory extends HighdensityDiskHistory {
+  get compressionLocked(): boolean {
+    return this.isCompressing;
+  }
   beforeEstimate?: () => Promise<void>;
   estimateFault?: () => Error | undefined;
   attempts = 0;
@@ -34,24 +37,31 @@ export class HighdensityFaultHistory extends HighdensityDiskHistory {
 export async function withFaultRollback<T>(
   action: (
     history: HighdensityFaultHistory,
-    recorder: AdmissionFailureRecorder,
+    recorder: Pick<
+      CompressionValueRecorderFixture,
+      'failure' | 'failAdmissionAfter' | 'durable'
+    > & {
+      flush(): Promise<void>;
+    },
   ) => Promise<T>,
 ): Promise<T> {
-  const root = mkdtempSync(join(tmpdir(), 'highdensity-rollback-'));
-  const recorder = new AdmissionFailureRecorder({
-    sessionId: 'highdensity',
-    projectHash: 'highdensity',
-    chatsDir: root,
-    workspaceDirs: [root],
-    provider: 'test',
-    model: 'test',
-  });
-  const history = new HighdensityFaultHistory({ recording: recorder });
-  try {
-    return await action(history, recorder);
-  } finally {
-    await history.dispose();
-    await recorder.dispose();
-    rmSync(root, { recursive: true, force: true });
-  }
+  return withCompressionValueRecorder(
+    0,
+    async (fixture) => {
+      if (!(fixture.history instanceof HighdensityFaultHistory))
+        throw new Error('Missing high-density fault history');
+      const result = await action(fixture.history, {
+        failure: fixture.failure,
+        failAdmissionAfter: fixture.failAdmissionAfter,
+        durable: fixture.durable,
+        flush: () => fixture.recorder.flush(),
+      });
+      expect(await fixture.durable()).toStrictEqual(
+        await compressionValueDigest(fixture.history.streamRawHistory()),
+      );
+      return result;
+    },
+    undefined,
+    (options) => new HighdensityFaultHistory(options),
+  );
 }

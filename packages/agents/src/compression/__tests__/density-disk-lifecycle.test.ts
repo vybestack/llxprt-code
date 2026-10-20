@@ -1,5 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import {
+  nativeDensityRollback,
+  nativeDensityPublication,
+} from './support/native-density-lifecycle.js';
 function collectGarbage(): void {
   const runtime: unknown = Reflect.get(globalThis, 'Bun');
   if (typeof runtime !== 'object' || runtime === null)
@@ -50,6 +54,15 @@ async function admissionRollback(
 }
 
 describe('disk density publication and lifetime', () => {
+  for (const size of [512, 8192])
+    it(`restores ${size} native rows after partial density admission and permits retry`, async () => {
+      const surviving = await nativeDensityRollback(size);
+      expect(surviving).toBeGreaterThan(0);
+      expect(surviving).toBeLessThan(size);
+    }, 600_000);
+  it('restores native rows and caller chronology after rejected density publication', async () => {
+    expect(await nativeDensityPublication()).toBe(12);
+  });
   for (const size of [512, 8192])
     it(`restores the entire pinned ${size}-row journal after partial admission and permits retry`, async () => {
       const result = await admissionRollback(size);

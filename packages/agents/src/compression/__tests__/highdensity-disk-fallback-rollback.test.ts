@@ -5,7 +5,8 @@ import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.
 import { CompressionExecutionError } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { expectedRange } from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
-import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+import { withCoreSuffixFixture } from '../../../../core/src/services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
+import { compressionValueDigest } from './compression-value-fixture.js';
 import {
   highdensitySetup,
   highdensityRow,
@@ -35,9 +36,12 @@ async function rollback(size: number): Promise<number> {
       admissionRow(index),
     );
     const markers = callers.map((row) => row.metadata?.chronology);
-    for (const row of callers) history.add(row);
+    await history.addBatch(callers);
     await history.waitForTokenUpdates();
     await recorder.flush();
+    const before = await recorder.durable();
+    const tokens = history.getTotalTokens();
+    const offset = history.getBaseTokenOffset();
     history.setCacheAnchorSeq(2);
     let failures = 3;
     history.estimateFault = () =>
@@ -57,6 +61,9 @@ async function rollback(size: number): Promise<number> {
     );
     expect(history.getContextRange()).toStrictEqual(expectedRange(size));
     expect(history.getCacheAnchorSeq()).toBe(2);
+    expect(history.getTotalTokens()).toBe(tokens);
+    expect(history.getBaseTokenOffset()).toBe(offset);
+    expect(await recorder.durable()).toStrictEqual(before);
     gcAndSweep();
     expect(
       callers.every(
@@ -74,7 +81,7 @@ async function rollback(size: number): Promise<number> {
 
 async function failedOrNoop(size: number): Promise<number> {
   let created: HighdensityFaultHistory | undefined;
-  return withSuffixFixture(
+  return withCoreSuffixFixture(
     size,
     async (history) => {
       if (created === undefined) throw new Error('Missing fault participant');
@@ -115,7 +122,56 @@ async function failedOrNoop(size: number): Promise<number> {
       created = new HighdensityFaultHistory(options);
       return created;
     },
+    'old',
   );
+}
+
+async function admittedFallback(size: number): Promise<number> {
+  return withFaultRollback(async (history, recorder) => {
+    const { handler, runtime } = highdensitySetup(history);
+    await history.detachedValues.replace(
+      (function* () {
+        for (let index = 0; index < size; index++) yield admissionRow(index);
+      })(),
+    );
+    const tokens = history.getTotalTokens();
+    runtime.ephemerals.contextLimit = () =>
+      Math.ceil(tokens / (runtime.ephemerals.compressionThreshold() * 0.6)) + 1;
+    const before = await recorder.durable();
+    history.estimateFault = () =>
+      new CompressionExecutionError(
+        'high-density',
+        '503 native primary exhaustion',
+        {
+          isTransient: true,
+        },
+      );
+    expect(await handler.performCompression('admitted-fallback-noop')).toBe(
+      PerformCompressionResult.NOOP,
+    );
+    history.estimateFault = undefined;
+    await history.recalculateTotalTokens();
+    expect(history.getTotalTokens()).toBe(tokens);
+    runtime.ephemerals.contextLimit = () => 1;
+    history.estimateFault = () =>
+      new CompressionExecutionError(
+        'high-density',
+        '503 admitted fallback estimate',
+        {
+          isTransient: true,
+        },
+      );
+    expect(await handler.performCompression('admitted-both-failed')).toBe(
+      PerformCompressionResult.FAILED,
+    );
+    expect(
+      await compressionValueDigest(history.streamRawHistory()),
+    ).toStrictEqual(before);
+    expect(await recorder.durable()).toStrictEqual(before);
+    expect(history.getContextRange()).toStrictEqual(expectedRange(size));
+    expect(handler.wasRecentlyCompressed()).toBe(false);
+    return size;
+  });
 }
 
 describe('high-density disk fallback outcomes and compensation', () => {
@@ -130,6 +186,13 @@ describe('high-density disk fallback outcomes and compensation', () => {
     'keeps %i rows unchanged on fallback no-op and failed estimation',
     async (size) => {
       expect(await failedOrNoop(size)).toBe(size);
+    },
+    180_000,
+  );
+  it.each([512, 8192])(
+    'preserves %i admitted rows across under-budget fallback no-op and over-budget estimation failure',
+    async (size) => {
+      expect(await admittedFallback(size)).toBe(size);
     },
     180_000,
   );

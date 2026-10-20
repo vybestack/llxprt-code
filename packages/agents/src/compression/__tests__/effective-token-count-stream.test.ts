@@ -8,6 +8,8 @@ import {
 } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import { computeEffectiveTokenCount } from '../effectiveTokenCount.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { exactTokenizer } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-test-helpers.js';
 import { ChatSession } from '../../core/chatSession.js';
 import {
   buildRuntimeContext,
@@ -69,9 +71,12 @@ describe('reasoning token accounting over the real curated journal', () => {
         await withSuffixFixture(
           size,
           async (service, ownership, counters) => {
+            const admittedTokens = service.getTotalTokens();
             service.setBaseTokenOffset(100000);
+            expect(service.getBaseTokenOffset()).toBe(100000);
+            expect(service.getTotalTokens()).toBe(admittedTokens + 100000);
             const context = reasoningContext(
-              buildRuntimeContext(service),
+              buildRuntimeContext(service, { contextLimit: 200000 }),
               false,
               policy,
             );
@@ -80,7 +85,8 @@ describe('reasoning token accounting over the real curated journal', () => {
               'eager curated read',
             );
             try {
-              const expected = 100000 - strippedTokens(size, policy);
+              const expected =
+                admittedTokens + 100000 - strippedTokens(size, policy);
               expect(await computeEffectiveTokenCount(service, context)).toBe(
                 expected,
               );
@@ -151,14 +157,18 @@ describe('reasoning accounting policy boundaries', () => {
     await withSuffixFixture(
       512,
       async (service, ownership) => {
+        const admittedTokens = service.getTotalTokens();
+        const acquisitions = ownership.snapshot().acquisitions;
         service.setBaseTokenOffset(900);
         const context = reasoningContext(
           buildRuntimeContext(service),
           true,
           'all',
         );
-        expect(await computeEffectiveTokenCount(service, context)).toBe(900);
-        expect(ownership.snapshot().acquisitions).toBe(0);
+        expect(await computeEffectiveTokenCount(service, context)).toBe(
+          admittedTokens + 900,
+        );
+        expect(ownership.snapshot().acquisitions - acquisitions).toBe(0);
       },
       0,
       thinkingRow,
@@ -170,6 +180,7 @@ describe('reasoning accounting policy boundaries', () => {
       12,
       async (service) => {
         service.setBaseTokenOffset(1);
+        expect(service.getTotalTokens()).toBeLessThan(3 * 2 * (1024 / 4));
         const context = reasoningContext(
           buildRuntimeContext(service),
           false,
@@ -178,7 +189,23 @@ describe('reasoning accounting policy boundaries', () => {
         expect(await computeEffectiveTokenCount(service, context)).toBe(0);
       },
       0,
-      thinkingRow,
+      (index) => {
+        const row = thinkingRow(index);
+        return {
+          ...row,
+          blocks: row.blocks.map((block) =>
+            block.type === 'thinking'
+              ? { ...block, thought: 'r'.repeat(1024) }
+              : block,
+          ),
+        };
+      },
+      undefined,
+      (options) => {
+        const service = new HistoryService(options);
+        service.setTokenizerFactory(exactTokenizer());
+        return service;
+      },
     );
   });
 });

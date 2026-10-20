@@ -126,6 +126,13 @@ function acceptedBatches(
       reference: 'attempt-value-run-i/verify-current.json',
       batches: ['attempt-final-journal-i-a'],
     },
+    {
+      reference: 'density-run-j/final-b-current.json',
+      batches: [
+        'density-core-b-final-journal-j-a',
+        'density-final-journal-j-a',
+      ],
+    },
   ];
   return layers.flatMap((layer) =>
     layer.batches.map((batch) => ({ batch, reference: layer.reference })),
@@ -240,14 +247,25 @@ function classify(
   row: Attempt,
   contracts: ReturnType<typeof classificationContracts>,
   attemptContracts: ReturnType<typeof classificationContracts>,
+  densityContracts: ReturnType<typeof classificationContracts>,
   w22: string,
 ): Attempt {
   const cases: CensusCase[] = row.cases.map((test) => {
     const attempt = attemptContracts.get(caseKey(row.path, test));
-    const known =
+    const density = densityContracts.get(caseKey(row.path, test));
+    const densityMatches =
       row.accepted &&
-      row.batch === 'attempt-final-journal-i-a' &&
-      attempt?.sourceHash === row.sourceHash
+      row.backend === 'journal' &&
+      [
+        'density-core-b-final-journal-j-a',
+        'density-final-journal-j-a',
+      ].includes(row.batch) &&
+      density?.sourceHash === row.sourceHash;
+    const known = densityMatches
+      ? density
+      : row.accepted &&
+          row.batch === 'attempt-final-journal-i-a' &&
+          attempt?.sourceHash === row.sourceHash
         ? attempt
         : contracts.get(caseKey(row.path, test));
     const instanceOverride =
@@ -331,6 +349,9 @@ export function runCensus(root: string): ReturnType<typeof reconcile> & {
   const attemptContracts = classificationContracts(w22, [
     'attempt-value-run-i/classification.json',
   ]);
+  const densityContracts = classificationContracts(w22, [
+    'density-run-j/classification.json',
+  ]);
   const checkpoints = [
     join(run, 'accounting.json'),
     join(run, 'accounting-after-boundary.json'),
@@ -395,6 +416,7 @@ export function runCensus(root: string): ReturnType<typeof reconcile> & {
       inspectEvidence(input, provenance, text(input.junit), text(input.log)),
       contracts,
       attemptContracts,
+      densityContracts,
       w22,
     ),
   );
