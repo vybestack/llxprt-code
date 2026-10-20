@@ -164,15 +164,10 @@ export class HistoryMediaOwnership implements HistoryMediaOwner {
         }
       },
       rollback: async () => {
-        try {
-          for (const reference of added.values(ownership ?? this.ownership))
-            await this.store.release(
-              reference.contentId,
-              historyOwnerIdFor(reference.contentId),
-            );
-        } finally {
-          added.close();
-        }
+        this.pending = added;
+        await this.releaseDifference(added, this.owned, ownership);
+        added.close();
+        this.pending = undefined;
       },
       finalize: () => {
         for (const reference of added.values(ownership ?? this.ownership)) {
@@ -189,13 +184,19 @@ export class HistoryMediaOwnership implements HistoryMediaOwner {
     keep: HistoryMediaIndex,
     ownership?: RowOwnership,
   ): Promise<void> {
+    const failures: unknown[] = [];
     for (const reference of from.values(ownership ?? this.ownership)) {
-      if (!keep.has(reference.contentId))
+      if (keep.has(reference.contentId)) continue;
+      try {
         await this.store.release(
           reference.contentId,
           historyOwnerIdFor(reference.contentId),
         );
+      } catch (error: unknown) {
+        failures.push(error);
+      }
     }
+    throwOwnershipFailures(failures);
   }
 
   reconcile(

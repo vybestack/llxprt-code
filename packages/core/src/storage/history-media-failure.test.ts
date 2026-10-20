@@ -13,6 +13,18 @@ import type {
 
 class ReserveFailureStore extends LocalMediaStore {
   rejectedId: string | undefined;
+  releaseRejectedIds: ReadonlySet<string> = new Set();
+  releaseAfterRemoval = false;
+  readonly releaseFailure = new Error('release fault');
+
+  override async release(contentId: string, ownerId: string): Promise<void> {
+    if (this.releaseRejectedIds.has(contentId)) {
+      if (this.releaseAfterRemoval) await super.release(contentId, ownerId);
+      throw this.releaseFailure;
+    }
+    await super.release(contentId, ownerId);
+  }
+
   override async reserve(
     reference: MediaReferenceBlock,
     ownerId: string,
@@ -51,6 +63,62 @@ describe('bounded media ownership', () => {
     await store.close();
     await rm(directory, { recursive: true, force: true });
   });
+
+  for (const kind of ['addition', 'replacement']) {
+    for (const afterRemoval of [false, true]) {
+      it(`settles every ${kind} rollback release after removal=${afterRemoval} failure and retains failed reservations for disposal`, async () => {
+        const prior = await admit(1);
+        const first = await admit(2);
+        const second = await admit(3);
+        const third = await admit(4);
+        await owner.reconcile([], () => [
+          { speaker: 'human', blocks: [prior] },
+        ]);
+        const ownership = new RowOwnership();
+        const effect =
+          kind === 'addition'
+            ? owner.prepareReferenceAddition([first, second, third], ownership)
+            : owner.prepareReferenceReplacement(
+                [prior, first, second, third],
+                ownership,
+              );
+        await effect.publish();
+        store.releaseRejectedIds = new Set([first.contentId, second.contentId]);
+        store.releaseAfterRemoval = afterRemoval;
+        try {
+          let failure: unknown;
+          try {
+            await effect.rollback();
+          } catch (error: unknown) {
+            failure = error;
+          }
+          expect(failure).toBeInstanceOf(AggregateError);
+          if (!(failure instanceof AggregateError))
+            throw new Error('Missing release failures');
+          expect(failure.errors).toStrictEqual([
+            store.releaseFailure,
+            store.releaseFailure,
+          ]);
+          expect(await store.hasReservations(prior.contentId)).toBe(true);
+          expect(await store.hasReservations(first.contentId)).toBe(
+            !afterRemoval,
+          );
+          expect(await store.hasReservations(second.contentId)).toBe(
+            !afterRemoval,
+          );
+          expect(await store.hasReservations(third.contentId)).toBe(false);
+          expect(ownership.snapshot().liveRows).toBe(0);
+          store.releaseRejectedIds = new Set();
+          await owner.releaseAll();
+          expect(await store.hasReservations(prior.contentId)).toBe(false);
+          expect(await store.hasReservations(first.contentId)).toBe(false);
+          expect(await store.hasReservations(second.contentId)).toBe(false);
+        } finally {
+          store.releaseRejectedIds = new Set();
+        }
+      });
+    }
+  }
 
   it('finishes borrowing candidate rows before media publication and restores the previous reservation', async () => {
     const previous = await admit(1);
