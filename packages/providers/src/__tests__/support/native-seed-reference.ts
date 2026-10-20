@@ -78,20 +78,21 @@ function referenceResponsesRows(rows: readonly IContent[]): IContent[] {
     ...original.slice(lastCall + 1),
   ]);
 }
+import { frozenSettingsInputs } from '../../anthropic/message-table/__tests__/support/lengthModel/frozenInputs.js';
+import { policyOf } from '../../anthropic/message-table/__tests__/support/lengthModel/lengthChecks.js';
+import { referenceRun } from '../../anthropic/message-table/__tests__/support/lengthModel/referenceFinish.js';
 import {
-  cachedOracle,
-  type StripPolicy,
+  unitFacts,
+  unitOf,
+  type UnitFact,
+} from '../../anthropic/message-table/__tests__/support/lengthModel/unitFacts.js';
+import {
+  conversionOptions,
+  type WireSettings,
 } from '../../anthropic/message-table/__tests__/support/wireBuilderHarness.js';
 import { getMaxTokensForModel } from '../../anthropic/AnthropicModelData.js';
-import { resolveAnthropicImageBudget } from '../../anthropic/AnthropicImageSanitizer.js';
 import { recordBody, type CaseOutcome } from './frozenWire/frozenSend.js';
 import type { FrozenFormat, FrozenSettings } from './frozenWire/frozenCases.js';
-
-function stripPolicy(value: unknown): StripPolicy | undefined {
-  if (value === 'none' || value === 'all' || value === 'allButLast')
-    return value;
-  return undefined;
-}
 
 export function referenceSeedBody(
   format: FrozenFormat,
@@ -137,6 +138,43 @@ export function referenceSeedBody(
   return referenceAnthropicBody(settings, rows);
 }
 
+function referenceBlockOrder(block: IContent['blocks'][number]): number {
+  if (block.type === 'thinking' && block.sourceField === 'thinking') return 0;
+  if (block.type === 'text' || block.type === 'code') return 1;
+  return block.type === 'tool_call' ? 3 : 2;
+}
+
+function referenceAnthropicUnits(
+  rows: readonly IContent[],
+  settings: WireSettings,
+): UnitFact[] {
+  const units = unitFacts(rows, settings);
+  const output: UnitFact[] = [];
+  for (let index = 0; index < units.length; index++) {
+    let end = index;
+    if (units[index].chainStart) {
+      while (end + 1 < units.length && units[end + 1].speaker === 'ai') end++;
+    }
+    const chain = units.slice(index, end + 1);
+    if (end > index && chain.some((unit) => unit.hasResponses)) {
+      const blocks = chain.flatMap((unit) => unit.row.blocks);
+      const merged: IContent = {
+        ...units[end].row,
+        blocks: [0, 1, 2, 3].flatMap((category) =>
+          blocks.filter((block) => referenceBlockOrder(block) === category),
+        ),
+      };
+      output.push(
+        unitOf(output.length, merged, settings, conversionOptions(settings)),
+      );
+      index = end;
+    } else {
+      output.push({ ...units[index], index: output.length });
+    }
+  }
+  return output;
+}
+
 function referenceAnthropicBody(
   settings: FrozenSettings,
   rows: readonly IContent[],
@@ -144,26 +182,12 @@ function referenceAnthropicBody(
   const ephemerals = settings.ephemerals;
   const system = settings.systemInstruction ?? 'test system prompt';
   const cache = settings.providerSettings['prompt-caching'];
-  const messages = cachedOracle(
-    rows,
-    {
-      reasoningEnabled: ephemerals['reasoning.enabled'] === true,
-      strip: stripPolicy(ephemerals['reasoning.stripFromContext']),
-      includeInContext:
-        typeof ephemerals['reasoning.includeInContext'] === 'boolean'
-          ? ephemerals['reasoning.includeInContext']
-          : undefined,
-      currentModel: settings.model,
-      currentBaseURL: 'https://api.anthropic.com',
-      supportsUrlImages: true,
-      imageBudget: resolveAnthropicImageBudget(ephemerals),
-    },
-    {
-      ...(cache === '5m' || cache === '1h' ? { ttl: cache } : {}),
-      mediaPurge:
-        ephemerals['media.semantic-purge'] === 'remove' ||
-        ephemerals['media.semantic-purge'] === 'summary',
-    },
+  const inputs = frozenSettingsInputs(settings);
+  const messages = referenceRun(
+    referenceAnthropicUnits(rows, inputs.wire),
+    policyOf(inputs.wire),
+    inputs.wire,
+    inputs.cache,
   ).json;
   const systemValue =
     cache === '5m' || cache === '1h'

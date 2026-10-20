@@ -187,7 +187,7 @@ function chainOf(
   return out;
 }
 
-function unitOf(
+export function unitOf(
   index: number,
   row: IContent,
   settings: WireSettings,
