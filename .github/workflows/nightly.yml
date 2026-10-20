@@ -502,9 +502,13 @@ jobs:
   # actually catches externals drift (a new native dependency added without an
   # EXTERNALS entry) before it reaches a release.
   cli_bundle_launch:
-    name: 'CLI bundle builds and launches (Nightly)'
-    runs-on: 'ubuntu-latest'
-    timeout-minutes: 15
+    name: 'CLI scripts-disabled consumers (Nightly) [${{ matrix.os }}]'
+    runs-on: '${{ matrix.os }}'
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ['ubuntu-latest', 'macos-15', 'macos-15-intel']
     permissions:
       contents: 'read'
     steps:
@@ -534,6 +538,26 @@ jobs:
         run: |-
           bun test scripts/tests/issue-2999-cli-bundle.bun.test.ts
           bun test --timeout 30000 scripts/tests/issue-3386-installed-profiler-bundle.bun.test.ts
+
+      - name: 'Prove scripts-disabled local/global release consumers'
+        env:
+          LLXPRT_RELEASE_PROOF_DIR: '${{ runner.temp }}/release-proof'
+        run: |
+          npm run build:packages
+          npm run prepare:package
+          npm run bundle:cli
+          bun scripts/tests/release-bound-artifact-helpers.ts
+
+      - name: 'Upload consumer proof logs'
+        if: always()
+        uses: 'actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808' # ratchet:actions/upload-artifact@v4
+        with:
+          name: 'release-consumer-proof-${{ matrix.os }}'
+          path: |
+            ${{ runner.temp }}/release-proof/*.log
+            ${{ runner.temp }}/release-proof/local/*.log
+            ${{ runner.temp }}/release-proof/global/*.log
+          if-no-files-found: warn
 
   notify_failure:
     name: 'Create Issue on Failure'
