@@ -102,7 +102,9 @@ describe('retired reader cross-cleanup error identity', () => {
     await store.close();
     failReads(primary);
     const error = await rejectedValue(
-      withVersionSnapshot(snapshot, async (read) => read.readRow(entry)),
+      withVersionSnapshot(snapshot, async (read) => {
+        await read.readRow(entry);
+      }),
     );
     expect(error).toBeInstanceOf(AggregateError);
     if (!(error instanceof AggregateError)) throw error;
