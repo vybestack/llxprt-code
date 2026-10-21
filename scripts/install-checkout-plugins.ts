@@ -5,7 +5,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { lstatSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { FIRST_PARTY_RUNTIME_PLUGIN_RELEASES } from './utils/release-packages.ts';
 
@@ -125,17 +125,80 @@ try {
   cleanupInstaller();
 }
 
+function privateImageContext(deadline: number): object {
+  const path = join(
+    toolRoot,
+    'bin',
+    process.platform === 'win32' ? 'bun.exe' : 'bun',
+  );
+  const file = lstatSync(path, { throwIfNoEntry: false });
+  const context = {
+    path,
+    owner: 'unproven',
+    metadata: file && {
+      mode: file.mode,
+      size: file.size,
+      modified: file.mtimeMs,
+    },
+  };
+  if (process.platform !== 'win32') return context;
+  const remaining = Math.floor(deadline - performance.now());
+  if (remaining <= 0) return { ...context, probe: { budgetExhausted: true } };
+  const script = [
+    "$ErrorActionPreference='Stop';",
+    `$image='${path.replaceAll("'", "''")}';`,
+    '$all=@(Get-CimInstance Win32_Process); $selected=@{};',
+    `foreach ($p in $all) { if ($p.ExecutablePath -eq $image) { $selected[[int]$p.ProcessId]='exact-private-bun' } elseif ($p.ProcessId -eq ${process.pid}) { $selected[[int]$p.ProcessId]='installer' } };`,
+    "foreach ($id in @($selected.Keys)) { $p=$all | Where-Object ProcessId -eq $id; $seen=@{}; while ($p -and -not $seen.ContainsKey([int]$p.ProcessId)) { $seen[[int]$p.ProcessId]=$true; $parent=$p.ParentProcessId; $p=$all | Where-Object ProcessId -eq $parent; if ($p -and -not $selected.ContainsKey([int]$p.ProcessId)) { $selected[[int]$p.ProcessId]='ancestor-candidate' } } };",
+    "ConvertTo-Json -Compress -InputObject @($all | Where-Object { $selected.ContainsKey([int]$_.ProcessId) } | ForEach-Object { [pscustomobject]@{ pid=$_.ProcessId; parentPid=$_.ParentProcessId; created=$_.CreationDate.ToUniversalTime().ToString('o'); image=[IO.Path]::GetFileName($_.ExecutablePath); role=$selected[[int]$_.ProcessId] } })",
+  ].join(' ');
+  const result = spawnSync(
+    'powershell.exe',
+    ['-NoProfile', '-NonInteractive', '-Command', script],
+    {
+      cwd: repoRoot,
+      stdio: ['ignore', 'pipe', 'ignore'],
+      encoding: 'utf8',
+      windowsHide: true,
+      timeout: Math.min(2000, remaining),
+      maxBuffer: 32 * 1024,
+    },
+  );
+  return {
+    ...context,
+    probe: {
+      status: result.status,
+      signal: result.signal,
+      failed: result.error !== undefined,
+      processCandidates:
+        result.status === 0 && result.error === undefined
+          ? JSON.parse(result.stdout)
+          : null,
+    },
+  };
+}
+
 function cleanupInstaller(): void {
+  const deadline = performance.now() + 2000;
   try {
     rmSync(toolRoot, { recursive: true, force: true });
   } catch (error) {
     try {
+      let privateImage: object;
+      try {
+        privateImage = privateImageContext(deadline);
+      } catch {
+        privateImage = { owner: 'unproven', probeFailed: true };
+      }
       process.stderr.write(
         `[checkout-plugin-cleanup] ${JSON.stringify({
           toolRoot,
           home,
           pid: process.pid,
           parentPid: process.ppid,
+          execPath: process.execPath,
+          runtime: { node: process.versions.node, bun: process.versions.bun },
+          privateImage,
           cwd: process.cwd(),
           platform: process.platform,
           commands,

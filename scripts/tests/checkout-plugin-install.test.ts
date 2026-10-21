@@ -167,6 +167,97 @@ if (process.argv[1]?.endsWith('install-checkout-plugins.ts')) {
       expect(existsSync(join(root, release.dir, 'node_modules'))).toBe(false);
     }
   });
+  it('identifies the runtime and private executable after successful commands without hiding cleanup failure', () => {
+    const root = fixture(true);
+    const preload = join(root, 'private-image-failure.ts');
+    const observed = join(root, 'private-image-observed.json');
+    writeFileSync(
+      preload,
+      `import fs from 'node:fs';
+import { spawn } from 'node:child_process';
+import { syncBuiltinESMExports } from 'node:module';
+import { join } from 'node:path';
+if (process.argv[1]?.endsWith('install-checkout-plugins.ts')) {
+  const remove = fs.rmSync;
+  const failure = Object.assign(new Error('fixture private image busy'), { code: 'EBUSY' });
+  let attempts = 0;
+  let child: ReturnType<typeof spawn> | undefined;
+  fs.rmSync = (...args: Parameters<typeof fs.rmSync>): void => {
+    if (!String(args[0]).includes('plugin-installer-')) return remove(...args);
+    attempts += 1;
+    const bun = join(String(args[0]), 'bin', process.platform === 'win32' ? 'bun.exe' : 'bun');
+    child = spawn(bun, ['--eval', 'const fs=require("node:fs");const fd=fs.openSync(process.execPath,"r");process.stdout.write(String(fs.fstatSync(fd).size));setInterval(() => {}, 1000)'], {
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    throw failure;
+  };
+  syncBuiltinESMExports();
+  process.on('uncaughtException', (error) => {
+    if (!child || child.stdout === null) throw error;
+    const held = child;
+    let heldSize: number | undefined;
+    process.stderr.write(String(error.stack) + '\\n');
+    held.once('exit', (code, signal) => {
+      fs.writeFileSync(${JSON.stringify(observed)}, JSON.stringify({
+        sameError: error === failure, attempts, childPid: held.pid,
+        joined: true, code, signal, heldSize,
+      }));
+      process.exitCode = 1;
+    });
+    held.stdout.once('data', (data: Buffer) => { heldSize = Number(data.toString()); held.kill(); });
+    held.once('error', () => { process.exitCode = 1; });
+  });
+}
+`,
+    );
+    const result = postinstall(root, {
+      NODE_OPTIONS: `--import=${pathToFileURL(preload).href}`,
+      PRIVATE_IMAGE_DIAGNOSTIC_SECRET: 'must-not-appear-in-diagnostic',
+    });
+    expect(result.status).not.toBe(0);
+    const lifecycle = asRecord(JSON.parse(readFileSync(observed, 'utf8')));
+    expect(lifecycle['sameError']).toBe(true);
+    expect(lifecycle['attempts']).toBe(1);
+    expect(lifecycle['joined']).toBe(true);
+    expect(lifecycle['childPid']).toEqual(expect.any(Number));
+    const prefix = '[checkout-plugin-cleanup] ';
+    const line = result.stderr
+      ?.toString()
+      .split(/\r?\n/)
+      .find((entry) => entry.startsWith(prefix));
+    if (line === undefined) throw new Error('Missing private image context');
+    expect(line).not.toContain('must-not-appear-in-diagnostic');
+    const diagnostic = asRecord(JSON.parse(line.slice(prefix.length)));
+    expect(diagnostic['execPath']).toBe(
+      realpathSync(Bun.which('node') ?? 'missing-node'),
+    );
+    expect(asRecord(diagnostic['runtime'])['node']).toEqual(expect.any(String));
+    const image = asRecord(diagnostic['privateImage']);
+    expect(image['owner']).toBe('unproven');
+    expect(asRecord(image['metadata'])['size']).toBeGreaterThan(0);
+    expect(lifecycle['heldSize']).toBe(asRecord(image['metadata'])['size']);
+    expect(lifecycle['signal']).toBe('SIGTERM');
+    const commands = diagnostic['commands'];
+    if (!Array.isArray(commands)) throw new Error('Missing installer commands');
+    expect(commands).toHaveLength(5);
+    expect(commands.map((command) => asRecord(command)['status'])).toEqual([
+      0, 0, 0, 0, 0,
+    ]);
+    expect(image['path']).toBe(asRecord(commands[2])['command']);
+    if (process.platform === 'win32') {
+      const candidates = asRecord(image['probe'])['processCandidates'];
+      if (!Array.isArray(candidates))
+        throw new Error('Missing native process candidates');
+      expect(
+        candidates.some(
+          (candidate) =>
+            asRecord(candidate)['pid'] === lifecycle['childPid'] &&
+            asRecord(candidate)['role'] === 'exact-private-bun',
+        ),
+      ).toBe(true);
+    }
+    expect(result.stderr?.toString()).toContain('fixture private image busy');
+  }, 120_000);
 
   it('fails on a real frozen-lock installation error without installing later contexts', () => {
     const root = fixture(true);
