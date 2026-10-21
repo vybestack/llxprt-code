@@ -319,7 +319,10 @@ function applyStaleAiEntries(
       (b) => b.type !== 'tool_call' || !staleCalls.has(b.id),
     );
 
-    if (totalCalls > 0 && filteredBlocks.every((b) => isEmptyTextBlock(b))) {
+    if (
+      history[aiIndex].blocks.length - filteredBlocks.length === totalCalls &&
+      filteredBlocks.every((b) => isEmptyTextBlock(b))
+    ) {
       removals.add(aiIndex);
     } else {
       replacements.set(aiIndex, {

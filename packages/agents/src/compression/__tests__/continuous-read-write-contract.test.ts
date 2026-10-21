@@ -177,15 +177,16 @@ describe('native read/write policy contract', () => {
           rows,
           densityConfig(mask),
         );
-        const expected = digestRows(
-          invalidateResponsesStatefulChain(
-            rows.flatMap((row, index) =>
-              result.removals.includes(index)
-                ? []
-                : [result.replacements.get(index) ?? row],
-            ),
+        const expectedRows = invalidateResponsesStatefulChain(
+          rows.flatMap((row, index) =>
+            result.removals.includes(index)
+              ? []
+              : [result.replacements.get(index) ?? row],
           ),
         );
+        const expected = digestRows(expectedRows);
+        const expectedTokens =
+          await history.estimateTokensForContents(expectedRows);
         await expect(
           operationFileCreates(
             () => densityHandler(history, mask).ensureDensityOptimized(),
@@ -197,6 +198,7 @@ describe('native read/write policy contract', () => {
           await compressionValueDigest(history.streamRawHistory()),
         );
         expect(result.metadata.readWritePairsPruned).toBeGreaterThan(0);
+        expect(history.getTotalTokens()).toBe(expectedTokens);
       });
     },
   );
