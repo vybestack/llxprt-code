@@ -48,7 +48,8 @@ describe('registered statistics and logging owners', () => {
       history.push(item);
       return history.length;
     };
-    const readStartTime = () => new Date(Date.now() - 120000);
+    const startTime = new Date(Date.now() - 120000);
+    const readStartTime = () => startTime;
     const command = await registered(
       createStatsCommand({
         readStartTime,
