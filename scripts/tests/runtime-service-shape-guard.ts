@@ -91,15 +91,15 @@ function assemblyFunction(node: ts.Node): ts.FunctionDeclaration | undefined {
 function isAssemblyNode(
   node: ts.Node,
   options: RuntimeServiceShapeOptions,
+  program: ts.Program,
 ): boolean {
   const owner = assemblyFunction(node);
   return (
     !!owner?.name &&
     !!options.assembly?.some(
       (entry) =>
-        compilerSourcePath(entry.file) ===
-          compilerSourcePath(owner.getSourceFile().fileName) &&
-        entry.functionName === owner.name?.text,
+        program.getSourceFile(compilerSourcePath(entry.file)) ===
+          owner.getSourceFile() && entry.functionName === owner.name?.text,
     )
   );
 }
@@ -320,7 +320,7 @@ export function scanRuntimeServiceProgram(
       });
     }
     function reportTypes(node: ts.Node, types: readonly ts.Type[]): void {
-      if (isAssemblyNode(node, options)) return;
+      if (isAssemblyNode(node, options, program)) return;
       const summaries = types.map((type) => analyze(type, node));
       if (summaries.some((summary) => summary.bundle)) {
         report(node, 'runtime-service-bundle');
@@ -343,7 +343,7 @@ export function scanRuntimeServiceProgram(
       if (!parameter || !ts.isParameter(parameter) || parameter.type) return;
       if (
         !/\.[cm]?js$/.test(parameter.getSourceFile().fileName) ||
-        isAssemblyNode(argument, options)
+        isAssemblyNode(argument, options, program)
       )
         return;
       const summary = analyze(checker.getTypeAtLocation(argument), argument);
@@ -389,7 +389,7 @@ export function scanRuntimeServiceProgram(
       const bundle =
         ts.isTypeAliasDeclaration(node) || ts.isInterfaceDeclaration(node);
       const parameter = ts.isParameter(node);
-      if ((bundle || parameter) && !isAssemblyNode(node, options)) {
+      if ((bundle || parameter) && !isAssemblyNode(node, options, program)) {
         const summary = analyze(checker.getTypeAtLocation(node), node);
         if (summary.bundle) {
           report(

@@ -4,7 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, expect, it } from 'bun:test';
-import { scanRuntimeServiceShapes } from './runtime-service-shape-guard.js';
+import ts from 'typescript';
+import { compilerSourcePath } from '../compiler-source-path.js';
+import {
+  scanRuntimeServiceProgram,
+  scanRuntimeServiceShapes,
+  type RuntimeServiceShapeFinding,
+} from './runtime-service-shape-guard.js';
 import {
   roots,
   options,
@@ -14,6 +20,92 @@ import {
 } from './runtime-service-shape-test-helpers.js';
 
 describe('runtime service shape guard', () => {
+  it.each([
+    {
+      caseSensitive: false,
+      assemblyFile: 'C:/Fixture/Assembly.ts',
+      exempt: true,
+    },
+    {
+      caseSensitive: true,
+      assemblyFile: 'C:/fixture/assembly.ts',
+      exempt: true,
+    },
+    {
+      caseSensitive: true,
+      assemblyFile: 'C:/Fixture/Assembly.ts',
+      exempt: false,
+    },
+  ])(
+    'uses compiler source identity for assembly paths: %j',
+    ({ caseSensitive, assemblyFile, exempt }) => {
+      const file = 'C:/fixture/assembly.ts';
+      const source = `export class Clock { tick(): void {} }
+export class Session { id = 1; }
+export class Config { clock(): Clock { return new Clock(); } }
+export type Outside = { clock: Clock; session: Session };
+export function assemble(bag: { clock: Clock; session: Session }): void {
+  type Local = { clock: Clock; session: Session };
+  function nested(bag: { clock: Clock; session: Session }): void {}
+  new Config().clock();
+}
+export function other(bag: { clock: Clock; session: Session }): void {}`;
+      const compilerOptions: ts.CompilerOptions = {
+        strict: true,
+        noEmit: true,
+        target: ts.ScriptTarget.ES2022,
+        module: ts.ModuleKind.ESNext,
+        types: [],
+        skipLibCheck: true,
+      };
+      const base = ts.createCompilerHost(compilerOptions, true);
+      const getCanonicalFileName = (name: string): string =>
+        caseSensitive ? name : name.toLowerCase();
+      const key = (name: string): string =>
+        getCanonicalFileName(compilerSourcePath(name));
+      const host: ts.CompilerHost = {
+        ...base,
+        getCanonicalFileName,
+        useCaseSensitiveFileNames: () => caseSensitive,
+        fileExists: (name) => key(name) === key(file) || base.fileExists(name),
+        readFile: (name) =>
+          key(name) === key(file) ? source : base.readFile(name),
+        getSourceFile: (name, version) =>
+          key(name) === key(file)
+            ? ts.createSourceFile(name, source, version, true)
+            : base.getSourceFile(name, version),
+      };
+      const program = ts.createProgram([key(file)], compilerOptions, host);
+      const findings = scanRuntimeServiceProgram(
+        program,
+        {
+          services: ['Clock', 'Session'].map((exportName) => ({
+            file,
+            exportName,
+          })),
+          configs: [{ file, exportName: 'Config' }],
+          assembly: [{ file: assemblyFile, functionName: 'assemble' }],
+        },
+        [file],
+      );
+      const assemblyFindings: ReadonlyArray<
+        Pick<RuntimeServiceShapeFinding, 'rule' | 'line'>
+      > = exempt
+        ? []
+        : [
+            { rule: 'runtime-service-bag-parameter', line: 5 },
+            { rule: 'runtime-service-bundle', line: 6 },
+          ];
+      expect(findings.map(({ rule, line }) => ({ rule, line }))).toEqual([
+        { rule: 'runtime-service-bundle', line: 4 },
+        ...assemblyFindings,
+        { rule: 'runtime-service-bag-parameter', line: 7 },
+        { rule: 'config-service-locator', line: 8 },
+        { rule: 'runtime-service-bag-parameter', line: 10 },
+      ]);
+    },
+  );
+
   it('finishes an installed SDK stream graph and retains its exposed item services', () => {
     expect(
       scanInstalled(`import { Stream } from 'openai/core/streaming';
