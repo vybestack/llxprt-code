@@ -1,6 +1,18 @@
 # Phase 5 proof map
 
-## Current normalized pending-input query increment
+## Current request-only Kimi last-eligible increment
+
+Starting HEAD `c96764e45`; implementation `2c421e8605379403b5a4eb6d87a38d4b22189411`. [PHASE5-KIMI-TAIL-PROOF.json](PHASE5-KIMI-TAIL-PROOF.json) binds the source boundary, native/request differentials, final gates and restored controls. The request snapshot now exposes mapped ID, owned name, zero-based ordinal and eligible count over its existing affected-row/tail view. The writer and request queries share emitted `RowOccurrences`; native tree prefixes plus affected-row eligible deltas determine ranks without all-call enumeration.
+
+The independent old normalizer and tools mapper check all 5000 immutable input/output hashes. Named request tests cover renamed and unnamed duplicates, all-speaker eligibility, reconstructed calls/default names, best/tie response relocation, raw empty/prefix IDs, old pins and append/rebuild/pop. Actual chat conversion checks request-derived mappings, dropped non-AI outputs, fallback consumption, media contents and 9/10/99/100 boundaries. The converter baseline now supplies its required real in-memory tool store, and media comparisons consume actual parts rather than comparing function identity.
+
+The fixed-tail read fixture uses 40/4000/100000 journal rows with 40/4000/4000 calls. The last native call remains in the last row. The original 100000-call construction timed out before request preparation; its failure remains visible and that construction capacity is not established. Existing native/read bounds and timeouts are unchanged. Wrong precedence, shifted ordinal, AI-only eligibility and a journal-walk control reject actual assertions; all mutated files restore with cmp and SHA-256. These controls establish behavior/read-budget rejection, not retained heap.
+
+The unchanged codec suite still reproduces [#3917](https://github.com/vybestack/llxprt-code/issues/3917) at seed `609796497`, with 39 passes and one failure. It was not skipped or retried for green. Early formatter invocations reused `format.log`, so their declared hashes cannot all be checked against the retained final file. The proof records that gap and the three initial shell-only wrapper PID receipts. Final acceptance, control and gate receipts use unique names and exact child/driver PIDs.
+
+The stateful request fallback mapper, consumed/written fallback digit and prefix arithmetic, affected-holder remeasurement, format/settings generations and summary/LENS remain open. Mistral tail used-set continuation, range CRC, full 10k/100k/1M heap and W26/W23/W25/default dependencies remain open. Provider sends still use the old normalizer. Review skipped per Andrew 2026-10-09. See [PHASE5-STATUS.md](PHASE5-STATUS.md) and [LOGDECISIONS.md](LOGDECISIONS.md).
+
+## Historical normalized pending-input query increment
 
 Starting HEAD `7ccd44b5b`; implementation `92beb284e4d7f58aeaadf6b9b379c92ccf7446f5`. [PHASE5-TAIL-QUERIES-PROOF.json](PHASE5-TAIL-QUERIES-PROOF.json) binds 11 committed source/test paths, 8863 package/script hashes and 316 raw receipt hashes. Scoped query acceptance: **36 passes, 2,948,448 assertions, eight isolated serial processes over four files, both outer backends, no failures/skips**. Six scoped gates pass. All 184 recorded child/driver PIDs are absent; none live.
 

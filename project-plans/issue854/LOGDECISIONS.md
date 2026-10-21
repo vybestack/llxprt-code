@@ -1,6 +1,26 @@
 # Issue 854 decision log, 2026-10-20
 
-## Phase 5 normalized pending-input queries
+## Phase 5 request-only Kimi last-eligible queries
+
+Implementation commit: `2c421e8605379403b5a4eb6d87a38d4b22189411`. Final scoped acceptance is 98 passes, zero failures/skips and 3,083,710 assertions across 30 isolated processes; the separate unchanged codec reproduction is 39 passes and one #3917 failure. Seven scoped gates pass. Four negative controls reject and all target files restore with cmp/hash. Proof: `PHASE5-KIMI-TAIL-PROOF.json`.
+
+The first native ordinal refactor made two descents, failing the existing dense read bound at 3185 against `<2500`; shared-prefix descent fixes the cost without changing that bound. The attempted 100000-call construction fixture timed out before request preparation. The final query-scaling fixture retains 100000 rows, with 4000 calls and the last call at the last row, rather than raising its deadline. This demonstrates row-count query scaling; 100000-call construction remains unproved. Preparation/count/ordinal/tail/name metadata reads are 18/3/6/1/10, 30/3/9/1/21 and 40/3/9/1/27 at 40/4000/100000 rows. No journal payload is read except one selected native name block. These are not heap measurements.
+
+The final verification guard originally compared compact JSON with an indented file; all 1206 preserved content hashes matched. Parsing both values corrected the harness without rerunning tests. Early formatter receipts reused a filename, leaving earlier hashes without retained log bodies. The proof states that gap; final acceptance, controls and gates have unique receipts. All 131 recorded child/driver PIDs are absent.
+
+Continue mapping over pending input in the existing indexed request snapshot. `JournalRequestKimi` consumes the same affected-row list and `JournalTailSource`; it is a query view, not another unit adapter. Reuse the persisted writer's `RowOccurrences` to derive actual final emitted calls. Raw pending order is insufficient for relocated responses and R1 reconstructed calls. Preserve named, nonempty-ID eligibility across all speakers.
+
+Keep the request overlay bounded by affected units: last eligible source position per affected-unit ID and eligible-count delta per affected row. Query untouched IDs through the pinned native last-eligible fact. Pending append-only input cannot remove an earlier eligible call; affected-row recomputation replaces its local rank when needed. Compute ordinals from native eligible tree prefixes and preceding affected-row corrections, never by walking every call. Expose mapped ID, owned exact UTF-16 name, zero-based ordinal and eligible total, plus a callback hold. Share the existing query cleanup path and preserve primary error identity.
+
+An initial prefix implementation descended the tree twice for each ordinal. The existing dense-exception test rejected 3185 reads against `<2500`. Share the leaf selection with the prefix computation, retaining one descent and the unchanged bound. Do not trade an extra native lookup against a relaxed resource test.
+
+This coherent group deliberately leaves the stateful request fallback mapper open. It must start at the corrected eligible count and consume fallback IDs in conversion order even for messages dropped afterward; written uses are a separate quantity. Full fallback digit/prefix arithmetic, holder name/token/byte remeasurement, settings/LENS, Mistral tail used-set continuation, range CRC, whole-heap and W26/W23/W25/default work remain dependencies. Provider routing stays on the old normalizer.
+
+Preserve the 5000 frozen inputs and independently recompute old normalization/tools mappings. Compare actual chat conversion using request-derived mappings, including non-AI dropped outputs and ordinal digit boundaries. Check append/rebuild/pop with both no-tail and pending-tail requests. Wrong precedence, shifted ordinal and AI-only eligibility controls must fail real assertions and restore byte-identically. Read-budget rejection is not heap proof. Keep the known #3917 codec failure classified separately and visible.
+
+Review skipped per Andrew 2026-10-09. No cleanup, obstruction move, .llxprt edit/staging, unrelated declaration/recovery staging, OCR, push or merge.
+
+## Phase 5 normalized pending-input queries (earlier increment)
 
 Extend `IndexedJournalRequestSnapshot`, rather than introducing another unit adapter. The request uses the same pinned `VersionSnapshot`, `JournalTailSource`, affected-row overlay, count and `readAt` coordinates. Namespace 1/2 queries now expose counts, one-based occurrence selection, last-at-or-after, strict successor and streamed half-open unit ranges. `withNormalized` prepares one selected-ID view for several queries under one callback hold.
 
