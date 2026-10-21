@@ -1,5 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { Gpt56SourceProjection } from '../tokenizers/gpt56-source-projection.js';
+import {
+  diskResponsesBodyBytes,
+  diskResponsesBodyLength,
+} from './responses-disk-body.js';
+import { useTempDir } from '@vybestack/llxprt-code-core/journal/__tests__/support/useTempDir.js';
+import { indexedResponsesInput } from './journal-responses.test-helper.js';
 import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
 import { IndexedJournalRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/indexed-journal-request-snapshot.js';
 import type { RowFormatSettings } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
@@ -189,7 +196,7 @@ describe('native Responses stored request lengths', () => {
           planStoredResponsesRequest(pin, SETTINGS, 0, REQUEST, TIME)
             .generatedIds,
         ).toBe(101);
-        const seq = session.store.published?.commitSeq;
+        const seq = pin.version?.commitSeq;
         await session.registerRowFormat(
           responsesLengthRegistration({ ...SETTINGS }),
         );
@@ -256,6 +263,115 @@ describe('native Responses stored request lengths', () => {
             /does not support/,
           );
         }
+      } finally {
+        await pin.close();
+      }
+    } finally {
+      await session.close();
+    }
+  });
+});
+
+describe('stored Responses plan against the actual body serializer', () => {
+  const directory = useTempDir('responses-body-format-');
+  it('declares exactly the streamed UTF-8 body length without mutating JSON envelope knobs', async () => {
+    const session = await JournalSession.createUnlinked();
+    try {
+      await session.append(ROWS);
+      await session.registerRowFormat(responsesLengthRegistration(SETTINGS));
+      const pin = await session.store.snapshot();
+      const query = await IndexedJournalRequestSnapshot.create(pin);
+      try {
+        const input = await indexedResponsesInput(query, {
+          includeReasoningInContext: true,
+          outputLimits: parseOutputLimits({}),
+          debug: () => undefined,
+          mediaPdfEnabled: true,
+          reasoningIdTime: TIME,
+        });
+        const request = { ...REQUEST, input };
+        const before = structuredClone(REQUEST);
+        const projection = new Gpt56SourceProjection({
+          protocol: 'openai-responses',
+          directory: directory(),
+          segments: [],
+        });
+        const parts: Uint8Array[] = [];
+        for await (const part of diskResponsesBodyBytes(request, projection))
+          parts.push(part);
+        const streamed = Buffer.concat(parts);
+        expect(
+          Buffer.compare(streamed, expectedBody(await normalized(session), 0)),
+        ).toBe(0);
+        expect(
+          planStoredResponsesRequest(pin, SETTINGS, 0, REQUEST, TIME)
+            .contentLength,
+        ).toBe(streamed.byteLength);
+        expect(await diskResponsesBodyLength(request, projection)).toBe(
+          streamed.byteLength,
+        );
+        expect(REQUEST).toStrictEqual(before);
+      } finally {
+        await query.close();
+        await pin.close();
+      }
+    } finally {
+      await session.close();
+    }
+  });
+});
+
+describe('captured Responses converter settings', () => {
+  it('uses the captured output limit and disabled-PDF policy without freezing caller config', async () => {
+    const session = await JournalSession.createUnlinked();
+    const limits = {
+      tokenLimit: { kind: 'limited' as const, maxTokens: 3 },
+      truncateMode: 'truncate' as const,
+    };
+    const settings = {
+      ...SETTINGS,
+      mediaPdfEnabled: false,
+      outputLimits: limits,
+    };
+    const captured = structuredClone(settings);
+    try {
+      await session.append([
+        ...ROWS,
+        {
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'call_',
+              toolName: '查找"',
+              result: 'long result 雪 '.repeat(100),
+              isComplete: true,
+            },
+          ],
+        },
+      ]);
+      const filling = session.registerRowFormat(
+        responsesLengthRegistration(settings),
+      );
+      limits.tokenLimit.maxTokens = 100;
+      await filling;
+      const pin = await session.store.snapshot();
+      try {
+        const plan = planStoredResponsesRequest(
+          pin,
+          captured,
+          0,
+          REQUEST,
+          TIME,
+        );
+        expect(plan.contentLength).toBe(
+          expectedBody(await normalized(session), 0, captured).byteLength,
+        );
+        expect(plan.pdfBytes).toBe(0);
+        expect(() =>
+          planStoredResponsesRequest(pin, settings, 0, REQUEST, TIME),
+        ).toThrow(/registered/);
+        expect(limits.tokenLimit.maxTokens).toBe(100);
       } finally {
         await pin.close();
       }

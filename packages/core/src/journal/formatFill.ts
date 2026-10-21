@@ -11,6 +11,7 @@ import { decodeMistralSlots, MISTRAL_SLOTS_KEY } from './mistralMapping.js';
 import { PinLease, PinnedRead } from './pinLease.js';
 import { RECORD_KIND } from './recordKinds.js';
 import type { RowEntry } from './rowEntry.js';
+import { repairResponsesPairChanges } from './responsesPairChanges.js';
 import { rowAlgebra } from './rowAlgebra.js';
 import { bulkBuildRowTree } from './rowTreeBuilder.js';
 import { editRowTree } from './rowTreeEdit.js';
@@ -343,12 +344,19 @@ async function incrementalFill(
   built: BuiltGroup,
 ): Promise<BuiltGroup> {
   const { ctx, appender, slot, format } = fill;
-  let next = built;
+  let next =
+    format.summaryKind === 'responses'
+      ? await repairResponsesPairChanges(
+          fill,
+          built,
+          missingEntries(ctx, appender, built.state.rowRoot, slot, format),
+        )
+      : built;
   const algebra = rowAlgebra(slotKindsOf(built.state.slots));
   for await (const entry of missingEntries(
     ctx,
     appender,
-    built.state.rowRoot,
+    next.state.rowRoot,
     slot,
     format,
   )) {
