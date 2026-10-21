@@ -79,24 +79,20 @@ describe('native continuous recency through the live journal consumer', () => {
     });
   }, 180_000);
 
-  it('fails before mutation for native policies whose read/write and deduplication consumers are not implemented', async () => {
+  it('combines read/write pruning, deduplication and surviving-response recency without operation files', async () => {
     await withNativeFallbackFixture(async (fixture) => {
       await seed(fixture, 65);
-      const failure = await densityHandler(fixture.history, 7)
-        .ensureDensityOptimized()
-        .then(
-          () => undefined,
-          (error: unknown) => error,
-        );
-      expect(failure).toBeInstanceOf(Error);
-      expect(failure instanceof Error ? failure.message : undefined).toContain(
-        'not implemented',
+      const files = await operationFileCreates(
+        () => densityHandler(fixture.history, 7).ensureDensityOptimized(),
+        true,
       );
       expect(await digestStream(fixture.history.streamRawHistory())).toBe(
-        digestRows(
-          Array.from({ length: 65 }, (_, index) => densityRow(index, 2048)),
-        ),
+        digestRows(densityOracle(65, 7)),
       );
+      expect(await fixture.durable()).toStrictEqual(
+        await compressionValueDigest(fixture.history.streamRawHistory()),
+      );
+      expect(files).toStrictEqual({ directories: [], files: [] });
     });
   });
 

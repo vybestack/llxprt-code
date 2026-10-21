@@ -186,17 +186,70 @@ describe('native read/write policy contract', () => {
             ),
           ),
         );
-        const files = await operationFileCreates(
-          () => densityHandler(history, mask).ensureDensityOptimized(),
-          true,
-        );
+        await expect(
+          operationFileCreates(
+            () => densityHandler(history, mask).ensureDensityOptimized(),
+            true,
+          ),
+        ).resolves.toStrictEqual({ directories: [], files: [] });
         expect(await digestStream(history.streamRawHistory())).toBe(expected);
         expect(await durable()).toStrictEqual(
           await compressionValueDigest(history.streamRawHistory()),
         );
-        expect(files).toStrictEqual({ directories: [], files: [] });
         expect(result.metadata.readWritePairsPruned).toBeGreaterThan(0);
       });
     },
   );
+
+  it('counts only surviving responses when a raw ID appears before and after its read call', async () => {
+    await withNativeFallbackFixture(async ({ history, seed, durable }) => {
+      const keep = (id: string): IContent => ({
+        speaker: 'ai',
+        blocks: [call(id, 'read_file', { path: `keep-${id}` })],
+      });
+      const tool = (id: string): IContent => ({
+        speaker: 'tool',
+        blocks: [response(id)],
+      });
+      await seed([
+        keep('k0'),
+        tool('k0'),
+        tool('late'),
+        keep('k1'),
+        tool('k1'),
+        {
+          speaker: 'ai',
+          blocks: [call('late', 'read_file', { path: 'changed' })],
+        },
+        tool('late'),
+        keep('k2'),
+        tool('k2'),
+        keep('k3'),
+        tool('k3'),
+        {
+          speaker: 'ai',
+          blocks: [call('w', 'write_file', { path: 'changed' })],
+        },
+      ]);
+      const rows: IContent[] = [];
+      for await (const row of history.streamRawHistory()) rows.push(row);
+      const result = new HighDensityStrategy().optimize(rows, densityConfig(5));
+      expect(result.metadata.readWritePairsPruned).toBe(2);
+      expect(result.metadata.recencyPruned).toBe(1);
+      const expected = digestRows(
+        invalidateResponsesStatefulChain(
+          rows.flatMap((row, index) =>
+            result.removals.includes(index)
+              ? []
+              : [result.replacements.get(index) ?? row],
+          ),
+        ),
+      );
+      await densityHandler(history, 5).ensureDensityOptimized();
+      expect(await digestStream(history.streamRawHistory())).toBe(expected);
+      expect(await durable()).toStrictEqual(
+        await compressionValueDigest(history.streamRawHistory()),
+      );
+    });
+  });
 });

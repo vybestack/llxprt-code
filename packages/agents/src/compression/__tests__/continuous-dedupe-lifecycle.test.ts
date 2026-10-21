@@ -79,24 +79,20 @@ describe('native continuous file deduplication through the live journal consumer
     });
   }, 180_000);
 
-  it('fails before mutation when the request also enables unsupported native read/write pruning', async () => {
+  it('combines read/write pruning, file deduplication and recency without operation files', async () => {
     await withNativeFallbackFixture(async (fixture) => {
       await seed(fixture, 65);
-      const failure = await densityHandler(fixture.history, 7)
-        .ensureDensityOptimized()
-        .then(
-          () => undefined,
-          (error: unknown) => error,
-        );
-      expect(failure).toBeInstanceOf(Error);
-      expect(failure instanceof Error ? failure.message : undefined).toContain(
-        'not implemented',
+      const files = await operationFileCreates(
+        () => densityHandler(fixture.history, 7).ensureDensityOptimized(),
+        true,
       );
       expect(await digestStream(fixture.history.streamRawHistory())).toBe(
-        digestRows(
-          Array.from({ length: 65 }, (_, index) => densityRow(index, 2048)),
-        ),
+        digestRows(densityOracle(65, 7)),
       );
+      expect(await fixture.durable()).toStrictEqual(
+        await compressionValueDigest(fixture.history.streamRawHistory()),
+      );
+      expect(files).toStrictEqual({ directories: [], files: [] });
     });
   });
 
