@@ -1,3 +1,19 @@
+# Reader-lifetime error identity proof, 2026-10-21
+
+Fixes #3919 at `cf38a9525e309e19c45c2a86b803240615b924bd`; test-only type correction at `a98202ccf5f7ab91f2d64352c6d8e6c5f4266011`. [The source-bound identity receipt](W26-SOURCE-BOUND-READER-IDENTITY-PROOF.json) binds commands, source/log hashes, exact error references, baseline stack and PID closure. Raw root: `tmp/p5/reader-identity-run-ad/`.
+
+| Obligation | Executed evidence and boundary |
+| --- | --- |
+| Actual unchanged RED | Complete original reader-lifetime file: 10 pass/1 fail/28 assertions before production edits, then 11 pass/0 fail/29 assertions. Its SHA-256 remains `9744ca9d7829bddc3b2010e895ff9450cb64f89e5856d8903de6e6ae11f96b3b`. The dump counterpart failed while batch retirement preserved the original descriptor error. |
+| Wrapping mechanism | Baseline dump source from committed `e892b4c1c` matches `61b521f9e`. An import-relocated diagnostic passes the same Error sentinel through baseline and fixed native descriptors: baseline returns AggregateError with that object at errors[0], stack at retire:166; fixed returns the object itself. Both descriptors remain live until final release and close physically despite the reported error. No main or full earlier-tree run is claimed. |
+| Ordered independent failures | New complete readerCleanup file: 3 passes, 20 assertions. Exact `toBe` assertions preserve primary and descriptor-error references, readAt failure ordering and reader-scope-before-descriptor cleanup ordering. Suspended-reader failure still releases ownership to zero and closes the descriptor. Existing scope aggregates remain nested where their contracts require them. |
+| Current overall plan | All 24 historical planned files rerun at final source: 187 passes, zero failures/skips, 257,826 assertions. No earlier 186-pass/one-failure result is relabeled green. The new readerCleanup file and additional unchanged native borrow/dump/pin/checkpoint, ACP identity and summary-abort files bring the scoped total to 251 passes, zero failures/skips and 267,623 assertions across 34 serial complete-file processes. |
+| Gates and preservation | Core/agents declarations and strict types, agents Bun-test types, zero-warning lint, Prettier, graph and audit pass. The first core type failure was the new callback returning StoredRow to a Promise<void> helper; only its return shape changed before final-source gates and complete-file execution. New test audit has zero findings. All 1,192 preservation hashes match; five historical span-control originals still match by bytes and SHA-256; all 67 recorded task PIDs are absent. No production mutation remains. |
+
+The prior nonempty-span receipt and RED remain historical evidence below. Its bound span sources and captured control files are unchanged; its measured byte/read values keep that source boundary. Current plan acceptance uses fresh runs rather than reusing those executions. W26, global live-byte accounting, retained-heap acceptance and the other Phase 5/6 work remain open. #3917 stays separately RED without rerun/retry/suppression. Graph validation is not affected-shard execution. Review skipped per Andrew 2026-10-09. No cleanup, .llxprt edit/staging, unrelated declaration/recovery staging, push, merge or default flip.
+
+---
+
 # Native nonempty density-span proof, 2026-10-21
 
 Production `a55052f3d`, early metadata follow-up `12440d39d`, final lifecycle/tests `15560ace6454eb86591bc23824bbeb7e4df67259`. [W26-SOURCE-BOUND-NONEMPTY-SPANS-PROOF.json](W26-SOURCE-BOUND-NONEMPTY-SPANS-PROOF.json) binds **176 passes, zero failures/skips and 257,797 assertions across 23 serial complete-file Bun processes**, final-source declaration/type/test-type/lint/format/graph/audit gates, five restored assertion controls, source/log hashes and process closure. Raw evidence: `tmp/p5/w26-spans-run-ac/`. Earlier source-changing/incomplete runs are excluded rather than promoted to final acceptance.
