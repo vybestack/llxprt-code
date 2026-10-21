@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { EMPTY_AGGREGATE } from './aggregateComposition.js';
+import { ROW_ENTRY_NO_CHRONOLOGY_SEQ } from './rowEntry.js';
 import { JournalFormatError } from './errors.js';
 import type { RecordAppender } from './groupAppender.js';
 import {
@@ -75,6 +76,7 @@ async function addFacts(
     await applyDraftRow(facts, ctx, segment.label, segment.draft);
     return true;
   }
+  if (segment.draft.chronologySeq !== ROW_ENTRY_NO_CHRONOLOGY_SEQ) return false;
   const occurrences = await monotoneInsertOccurrences(
     facts,
     ctx,

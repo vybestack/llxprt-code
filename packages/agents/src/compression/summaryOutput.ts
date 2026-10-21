@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { CompressionSourceRange } from '@vybestack/llxprt-code-core/services/history/compressionChronology.js';
 import type { CompressionInputRows } from '@vybestack/llxprt-code-core/services/history/compressionInput.js';
 import { assertRowIndex } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 
@@ -49,6 +50,27 @@ export function summaryOutput(
     top,
     candidate: {
       length,
+      async chronologySelection(start) {
+        const ranges: CompressionSourceRange[] = [];
+        for (const [from, to] of [
+          [Math.min(start, top), top],
+          [
+            Math.min(
+              source.length,
+              bottom + Math.max(0, start - top - summary.length),
+            ),
+            source.length,
+          ],
+        ]) {
+          if (from === to) continue;
+          const first = await source.sourceOrdinalAt(from);
+          const last = await source.sourceOrdinalAt(to - 1);
+          if (first === undefined || last === undefined)
+            throw new Error('Summary source range has no source ordinal');
+          ranges.push({ from: first, to: last + 1 });
+        }
+        return { ranges, generated: summary.slice(Math.max(0, start - top)) };
+      },
       async *[Symbol.asyncIterator]() {
         for (let index = 0; index < length; index++) {
           const position = sourcePosition(index);

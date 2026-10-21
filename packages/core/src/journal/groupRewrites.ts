@@ -223,7 +223,16 @@ async function keepsIndexFacts(
   const sameSpeakerAndParent =
     header.speaker === draft.speaker &&
     header.parentEndpoint === draft.parentEndpoint;
-  return sameIds && sameParentFlag && sameSpeakerAndParent;
+  const sameChronology = entry.chronologySeq === draft.chronologySeq;
+  const sameCuration =
+    (entry.flags & ROW_FLAG.curated) === (draft.flags & ROW_FLAG.curated);
+  return [
+    sameIds,
+    sameParentFlag,
+    sameSpeakerAndParent,
+    sameChronology,
+    sameCuration,
+  ].every(Boolean);
 }
 
 /** The draft with its owner settled: a named owner stands, `inherit` takes `inherited`. */

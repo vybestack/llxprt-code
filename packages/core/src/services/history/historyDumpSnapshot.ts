@@ -2,11 +2,20 @@
 import type { JournalReadCounters } from '../../recording/journalCounters.js';
 import type { PendingFoldSnapshot } from '../../recording/pendingFoldSnapshot.js';
 import type { IContent } from './IContent.js';
+import type {
+  CompressionChronologySelection,
+  CompressionSpanAnnotation,
+} from './compressionChronology.js';
 import type { ChronologyTraceEntry } from './historyChronology.js';
 import { captureHistoryDumpValues } from './dumpSnapshotValues.js';
 
 export interface HistoryDumpSource {
   rows(): AsyncIterable<IContent>;
+  compressionSpan?(
+    selection: CompressionChronologySelection,
+    hasFrontier: boolean,
+    signal?: AbortSignal,
+  ): Promise<CompressionSpanAnnotation>;
 }
 export interface HistoryDumpSnapshot extends HistoryDumpSource {
   chronology(): AsyncIterable<ChronologyTraceEntry>;

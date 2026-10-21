@@ -192,6 +192,7 @@ describe('trie keys', () => {
       mistralScopeMapping: 7,
       mistralScopeUsed: 8,
       nativeScalar: 9,
+      chronology: 10,
     });
   });
 

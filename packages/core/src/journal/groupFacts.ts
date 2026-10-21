@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalFormatError } from './errors.js';
+import { applyChronologyFact } from './chronologyFacts.js';
 import { kimiEnabled, KIMI_ELIGIBLE_KEY } from './kimiOrdinals.js';
 import type { OccurrencePlanner, PlannedRow } from './groupEdits.js';
 import { IdFactBatch, type BatchSpill } from './idFactBatch.js';
@@ -168,13 +169,14 @@ export async function startFacts(
 }
 
 /** Applies the row of a draft that has not been written yet. */
-export function applyDraftRow(
+export async function applyDraftRow(
   facts: GroupFacts,
   deps: FactDeps,
   label: bigint,
   draft: RowDraft,
 ): Promise<void> {
-  return applyRow(facts, deps, plannedFromDraft(label, draft), draft);
+  await applyChronologyFact(facts.ids, label, draft.chronologySeq, draft.flags);
+  await applyRow(facts, deps, plannedFromDraft(label, draft), draft);
 }
 
 /** Applies a row whose header and id piece have been read (design 4.6). */
@@ -183,6 +185,12 @@ export async function applyRowIds(
   deps: FactDeps,
   { header, rawIds }: RowIds,
 ): Promise<void> {
+  await applyChronologyFact(
+    facts.ids,
+    header.label,
+    header.chronologySeq,
+    header.flags,
+  );
   const ids = header.ids.map((tuple, index) => ({
     rawId: rawIds[index],
     kind: tuple.kind,

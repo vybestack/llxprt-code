@@ -221,7 +221,7 @@ describe('summary output candidate allocation', () => {
       });
     });
 
-    it(`${strategy} creates no curated input files on the public native path`, async () => {
+    it(`${strategy} creates no input or chronology membership files on the public native path`, async () => {
       await seededSummary(
         strategy,
         async ({ history, durable }, { handler }) => {
@@ -239,7 +239,8 @@ describe('summary output candidate allocation', () => {
             receipt.directories.filter((path) =>
               path.includes('compression-span-'),
             ),
-          ).toHaveLength(1);
+          ).toHaveLength(0);
+          expect(receipt).toStrictEqual({ directories: [], files: [] });
           expect(
             receipt.directories.filter(
               (path) =>

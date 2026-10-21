@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent } from './IContent.js';
+import type { CompressionChronologySelection } from './compressionChronology.js';
 import type { HistoryDumpSource } from './historyDumpSnapshot.js';
 
 export type CompressionIndexedRows = (
@@ -8,6 +9,7 @@ export type CompressionIndexedRows = (
 ) & {
   readonly length: number;
   readRow(index: number): IContent | Promise<IContent>;
+  chronologySelection?(start: number): Promise<CompressionChronologySelection>;
 };
 
 export type CompressionInputRows = CompressionIndexedRows & {

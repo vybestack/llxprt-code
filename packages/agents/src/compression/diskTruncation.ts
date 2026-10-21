@@ -29,6 +29,26 @@ export async function replacedSpan(
   frontier: ContentMetadata['semanticMediaPurgeFrontier'];
   hasFrontier: boolean;
 }> {
+  if (
+    previous.compressionSpan !== undefined &&
+    candidate.chronologySelection !== undefined
+  ) {
+    signal?.throwIfAborted();
+    let hasFrontier = false;
+    for (let position = start; position < candidate.length; position++) {
+      signal?.throwIfAborted();
+      if (
+        (await candidate.readRow(position)).metadata
+          ?.semanticMediaPurgeFrontier !== undefined
+      )
+        hasFrontier = true;
+    }
+    return previous.compressionSpan(
+      await candidate.chronologySelection(start),
+      hasFrontier,
+      signal,
+    );
+  }
   const index = new CompressionSpanIndex();
   let fromSeq = Number.POSITIVE_INFINITY;
   let toSeq = Number.NEGATIVE_INFINITY;

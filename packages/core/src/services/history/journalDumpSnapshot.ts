@@ -1,5 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { CompressionInputSnapshot } from './compressionInput.js';
+import type {
+  CompressionChronologySelection,
+  CompressionSpanAnnotation,
+} from './compressionChronology.js';
+import { journalCompressionSpan } from './journalCompressionSpan.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { IContent } from './IContent.js';
 import {
@@ -48,6 +53,16 @@ export class JournalDumpSnapshot implements HistoryDumpSnapshot {
       const entry = await this.snapshot.curatedAt(index);
       return this.snapshot.rowsBelow(entry.label);
     });
+  }
+
+  compressionSpan(
+    selection: CompressionChronologySelection,
+    hasFrontier: boolean,
+    signal?: AbortSignal,
+  ): Promise<CompressionSpanAnnotation> {
+    return this.readers.read(() =>
+      journalCompressionSpan(this.snapshot, selection, hasFrontier, signal),
+    );
   }
 
   [Symbol.asyncIterator](): AsyncGenerator<IContent, void, unknown> {
