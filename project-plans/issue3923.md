@@ -159,3 +159,51 @@ Final audit: `bun scripts/test-audit/scan.ts tmp/verify3923/audit-remediation-fi
 Remediation production files are the queue protocol/store, submission execution and stream outcome handlers, stable notification scheduling, core recovery generation/handoff, and the owned subscription schedule forwarding through Agent tasks. Tests use the real production queue, Agent and TaskLaunchOwner; existing fake-Agent helpers and one integration harness type were aligned with the typed protocol. Original retention, shell resource and admission changes remain intact.
 
 No remaining #3923 implementation or verification failure is known. Failure drains intentionally stay observable after recovery; the tests prove that they no longer keep hasPendingWork permanently true or falsely acknowledge unread results. React act warnings remain test-harness output. The original recorded #3853 timing issue and macOS-only coverage of the new real-process regressions remain limitations, without claiming Windows execution or a Podman timing fix. The independent follow-up review is still pending and must stay limited to the original acknowledgement scope and P1 finding. No separate broad review or OCR was run by this worker. No commits, pushes, PRs, .llxprt edits or check weakening.
+
+## PR #3924 targeted CI and CodeRabbit remediation
+
+Scope is limited to the failed runtime-boundary check and threads PRRT_kwDOPB5qbc6u-RnM and PRRT_kwDOPB5qbc6u-RnX. No further independent review or OCR is requested or run. No commit or push is authorized for this worker.
+
+### Diagnoses and decisions
+
+- Captured job 119513462786 from run 39683973341 in `tmp/verify3923/ci-lint.log`. The failing step is `npm run check:runtime-boundary`, not ESLint. CLI `runtime-service-bag-parameter` rises from 553 to 554 and `runtime-service-bundle` from 775 to 776, with no compiler diagnostics or unratcheted findings. The new `finaliseStreamOutcome` helper accepts the entire SubmitQueryCallbackDeps bundle although it uses only operationLifecycle. Narrow its argument to that lifecycle dependency. Leave the ratchet baseline and enforcement unchanged.
+- Thread RnM is valid: discard and cancellation reject through the same path as provider failure, latching the trigger permanently in the production subscription. Replacement-only recovery tests do not demonstrate recovery in the mounted CLI. Introduce a typed `void | 'deferred'` delivery result across Agent tasks, owner and trigger. Completed delivery still acknowledges the captured batch. Deferred delivery exits the drain without acknowledgement or cleanup error. Actual rejection still latches failure and remains visible through the owned subscription drain.
+- A deferred batch waits for an explicit idle opportunity, rather than retrying on unrelated background terminal events. The mounted hook records the busy generation at deferral. It schedules recovery only after a subsequent busy-to-idle opportunity, excluding the cancelled turn's own idle transition. Cancellation while already idle also waits for a new busy-to-idle opportunity. This avoids max-turns cancellation loops. A separate opportunity generation in the trigger preserves a valid schedule arriving while the old owned delivery is still unwinding, without resetting a genuine failure latch.
+- Thread RnX is valid: a rejected group drain retains its POSIX group and sets ownershipLost permanently. Waiting cannot make that state healthy. Expose the existing state through ShellJobManager and ShellJobOwner and prioritize restart guidance in admission. Retain wait-for-drain guidance for healthy active cleanup. Do not change supervision or release uncertain ownership.
+
+### Test-first evidence
+
+- `ci-red-deferred.log`, exit 1: all three mounted production-hook cases (queue clear, cancellation while busy, cancellation while idle) leave one unread result after a subsequent busy-to-idle transition, instead of delivering it. These tests keep the same Agent task subscription throughout and do not replace subscribeNotifications.
+- `ci-red-ownership.log`, exit 1: a real shell supervisor completes, but an injected EPERM at the OS process-group probe prevents drain confirmation. Admission incorrectly advises waiting after cancel reports the real drain error. The test uses the real Agent, shell owner, manager and group implementation, restoring process.kill in finally.
+- `ci-red-deferred-handoff.log`, exit 1: an explicit idle opportunity scheduled while a deferred delivery is still settling is lost. Expected two attempts, received one. The separate opportunity generation preserves that request while retaining failure semantics.
+- `ci-green-1.log`, exit 0: 44 tests across four focused suites pass before the additional handoff and real-provider busy/idle assertions. Scoped lint identified conditional assertions, nested test control flow and inconsistent helper returns; source/test structure was corrected without weakening rules.
+
+### Targeted verification and audit
+
+- `ci-green-2.log`, exit 0: 74 pass, 0 fail, 391 assertions across six focused suites: production hook/queue, Agent background admission, core recovery and lifetime, task-owner notices, and queue settlement. Includes real Agent provider error and max-turns outcomes across busy/idle rendering, with one attempt and no acknowledgement. The same mounted subscription recovers clear/cancel cases once, then admits a new session only after actual delivery.
+- `ci-core-final.log`, exit 0: 18 pass, 0 fail, 75 assertions after making both return paths explicit in the two new delivery callback fixtures to satisfy the existing consistent-return lint rule. `ci-core-lint-final.log`, exit 0. `ci-scoped-lint-2.log` retains that pre-correction lint failure; it is not claimed as passing.
+- `ci-prebuild.log`, exit 0: workspace build and source/compiled lazy-MCP registry coherence passed.
+- `ci-boundary-before.log/.exit` reproduces the failed ratchet, exit 1. `ci-boundary-after.log/.exit` passes the exact CI audit with `--baseline scripts/runtime-service-shape-baseline.json`, exit 0, all scanners complete, no increases, no unratcheted findings and no compiler diagnostics. CLI counts are restored to 553 service-bag parameters and 775 service bundles. `ci-boundary-summary.json` records both. The detailed raw audit JSON includes existing baseline findings; use the command's ratchet verdict and exit receipt for pass/fail.
+- `ci-lint-aggregate.log` confirms job 119515792158 fails because the JavaScript lint dependency failed, with no second root cause.
+- `ci-audit-final.log`, exit 0, and `ci-audit-summary.json` compare the final AST scan against `audit-remediation-final/findings.tsv`, the pre-CI-remediation scan. Ignoring line shifts, there are no new MOCK_MIRROR, ALWAYS_TRUE, SELF_CONFIRMING or NO_ASSERT findings. Counts remain 173, 13, 274 and 98 respectively, also matching the original audit-main baseline. Four new DUP_ASSERT entries check invariants at distinct lifecycle stages: no early retry, ownership released before and after recovery, no retry from the cancelled turn's idle render, and restart guidance before and after restoring the external OS probe.
+
+### Final CI-remediation verification cycle
+
+Managed job `shell_88089e175c44` completed the required six commands in order on the final source/test state. All paths in the table are relative to `tmp/verify3923/`; each log has a matching `.exit` receipt containing 0.
+
+| Command | Exit | Receipt |
+| --- | --- | --- |
+| `npm run test` | 0 | `ci-full-test-1.log`, `ci-full-test-1-summary.json`: 3007/3007 reported file executions across 18 batches. CLI: 822/822 files; 10173 passed, 0 failed, 5 skipped, 13 todo cases. |
+| `npm run lint` | 0 | `ci-full-lint-1.log`: all 18 partitions completed. |
+| `npm run typecheck` | 0 | `ci-full-typecheck-1.log`: declaration build, workspace checks, scripts and evals checks completed. |
+| `npm run format` | 0 | `ci-full-format-1.log`: no unrelated tracked files changed. |
+| `npm run build` | 0 | `ci-full-build-1.log`: compiled/source lazy-MCP coherence verified. |
+| `bun scripts/start.ts --profile-load lunahigh "write me a haiku and nothing else"` | 0 | `ci-full-smoke-1.log`: actual identity `[lunahigh:gpt-6-luna]`, returned a three-line haiku. |
+
+The separate exact CI runtime-boundary ratchet also exits 0, as recorded above. Full tests contain deliberate failing subprocess fixtures used to test timeout/error classification; their enclosing tests and all reported workspace file batches passed. There was no manual retry of a failing full-cycle check.
+
+The working branch remains `issue3923` at `d834bc703`, with these remediation changes uncommitted and unpushed. Both review findings are addressed locally; the orchestrator owns thread replies/resolution and the later commit/push. Remote PR checks still describe the pushed commit until then. No `.llxprt`, workflow, ratchet baseline, lint rule, test threshold, manifest or lockfile changed. No independent review was launched. OCR review skipped per Andrew 2026-10-09. The OS ownership regression ran on macOS and is POSIX-only; no Windows execution is claimed.
+
+Draft commit message: `fix(async): recover deferred notices on later idle turns (Fixes #3923)`.
+
+Suggested body: Keep discarded and cancelled batches pending until a later idle opportunity without retrying provider failures. Preserve owned delivery handoff, report lost shell ownership as a restart requirement, and narrow stream finalization to its actual lifecycle dependency so the CI boundary ratchet passes.

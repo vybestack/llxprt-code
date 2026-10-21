@@ -80,6 +80,87 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
 }
 
 describe('completion notice lifecycle recovery', () => {
+  it('retains deferred notices without retrying on unrelated completions until an idle opportunity', async () => {
+    const manager = new AsyncTaskManager();
+    let attempts = 0;
+    const delivered: string[] = [];
+    const trigger = new AsyncTaskAutoTrigger(
+      manager,
+      new AsyncTaskReminderService(manager),
+      () => false,
+      async (text) => {
+        attempts++;
+        if (attempts === 1) return 'deferred';
+        delivered.push(text);
+        return undefined;
+      },
+    );
+    const off = trigger.subscribe();
+    try {
+      register(manager, 'deferred-result');
+      complete(manager, 'deferred-result');
+      await settle();
+      await off.drain();
+      expect(attempts).toBe(1);
+      expect(manager.getPendingNotifications()).toHaveLength(1);
+      register(manager, 'later-result');
+      complete(manager, 'later-result');
+      await settle();
+      expect(attempts).toBe(1);
+      expect(manager.getPendingNotifications()).toHaveLength(2);
+      off.schedule();
+      await settle();
+      await off.drain();
+      expect(attempts).toBe(2);
+      expect(delivered).toHaveLength(1);
+      expect(delivered[0]).toContain('deferred-result');
+      expect(delivered[0]).toContain('later-result');
+      expect(manager.getPendingNotifications()).toHaveLength(0);
+    } finally {
+      off();
+      await off.drain();
+    }
+  });
+
+  it('preserves an idle opportunity requested while a deferred delivery is still settling', async () => {
+    const manager = new AsyncTaskManager();
+    const entered = deferred();
+    const release = deferred();
+    let attempts = 0;
+    const trigger = new AsyncTaskAutoTrigger(
+      manager,
+      new AsyncTaskReminderService(manager),
+      () => false,
+      async () => {
+        attempts++;
+        if (attempts === 1) {
+          entered.resolve();
+          await release.promise;
+          return 'deferred';
+        }
+        return undefined;
+      },
+    );
+    const off = trigger.subscribe();
+    try {
+      register(manager, 'settling-result');
+      complete(manager, 'settling-result');
+      await entered.promise;
+      off.schedule();
+      await settle();
+      expect(attempts).toBe(1);
+      release.resolve();
+      await off.drain();
+      await settle();
+      expect(attempts).toBe(2);
+      expect(manager.getPendingNotifications()).toHaveLength(0);
+    } finally {
+      release.resolve();
+      off();
+      await off.drain();
+    }
+  });
+
   for (const state of ['completed', 'failed']) {
     it(`delivers a ${state} task on callback idle update without another event`, async () => {
       const manager = new AsyncTaskManager();

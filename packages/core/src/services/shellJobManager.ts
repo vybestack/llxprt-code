@@ -672,6 +672,10 @@ export class ShellJobManager {
     return this.posixGroups.size > 0 || this.countLiveSurvivors() > 0;
   }
 
+  hasLostOwnership(): boolean {
+    return this.ownershipLost;
+  }
+
   getRunningJobs(): ShellJob[] {
     const result: ShellJob[] = [];
     for (const ctx of this.jobs.values()) {

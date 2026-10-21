@@ -16,6 +16,7 @@ import type { ShellNotificationSource } from './shellNotificationSource.js';
 import {
   AsyncNoticeSubscription,
   type AsyncNoticeUnsubscribe,
+  type AsyncNoticeDeliveryOutcome,
 } from './async-notice-subscription.js';
 
 /**
@@ -39,9 +40,13 @@ const SHELL_COALESCE_DEBOUNCE_MS = 300;
 export class AsyncTaskAutoTrigger {
   private isTriggering = false;
   private deliveryFailed = false;
+  private deliveryDeferred = false;
   private recoveryVersion = 0;
+  private opportunityVersion = 0;
   private isAgentBusy: () => boolean;
-  private triggerAgentTurn: (message: string) => Promise<void>;
+  private triggerAgentTurn: (
+    message: string,
+  ) => Promise<AsyncNoticeDeliveryOutcome>;
   private shellSource: ShellNotificationSource | undefined;
   private readonly subscriptions = new Set<AsyncNoticeSubscription>();
 
@@ -52,7 +57,7 @@ export class AsyncTaskAutoTrigger {
     >,
     private readonly reminderService: AsyncTaskReminderService,
     isAgentBusy: () => boolean,
-    triggerAgentTurn: (message: string) => Promise<void>,
+    triggerAgentTurn: (message: string) => Promise<AsyncNoticeDeliveryOutcome>,
   ) {
     this.isAgentBusy = isAgentBusy;
     this.triggerAgentTurn = triggerAgentTurn;
@@ -74,11 +79,12 @@ export class AsyncTaskAutoTrigger {
    */
   updateCallbacks(
     isAgentBusy: () => boolean,
-    triggerAgentTurn: (message: string) => Promise<void>,
+    triggerAgentTurn: (message: string) => Promise<AsyncNoticeDeliveryOutcome>,
   ): void {
     this.isAgentBusy = isAgentBusy;
     this.triggerAgentTurn = triggerAgentTurn;
     this.deliveryFailed = false;
+    this.deliveryDeferred = false;
     this.recoveryVersion++;
     this.scheduleAutoTriggerCheck();
   }
@@ -128,6 +134,7 @@ export class AsyncTaskAutoTrigger {
     );
     this.subscriptions.add(subscription);
     this.deliveryFailed = false;
+    this.deliveryDeferred = false;
     this.recoveryVersion++;
     subscription.schedule();
     const unsubComplete = this.taskManager.onTaskCompleted(() =>
@@ -167,7 +174,11 @@ export class AsyncTaskAutoTrigger {
       }
     };
     unsubscribe.drain = (): Promise<void> => subscription.drain();
-    unsubscribe.schedule = (): void => subscription.schedule();
+    unsubscribe.schedule = (): void => {
+      this.opportunityVersion++;
+      this.deliveryDeferred = false;
+      subscription.schedule();
+    };
     return unsubscribe;
   }
 
@@ -181,17 +192,24 @@ export class AsyncTaskAutoTrigger {
   private async maybeAutoTrigger(
     subscription: AsyncNoticeSubscription,
   ): Promise<void> {
-    if (this.isTriggering || this.deliveryFailed) return;
+    if (this.isTriggering || this.deliveryFailed || this.deliveryDeferred)
+      return;
 
     this.isTriggering = true;
     const recoveryVersion = this.recoveryVersion;
+    const opportunityVersion = this.opportunityVersion;
     try {
       while (
         subscription.active &&
         !this.isAgentBusy() &&
         this.reminderService.hasPendingNotifications()
       ) {
-        await this.deliverPending();
+        if ((await this.deliverPending()) === 'deferred') {
+          this.deliveryDeferred =
+            recoveryVersion === this.recoveryVersion &&
+            opportunityVersion === this.opportunityVersion;
+          break;
+        }
       }
     } catch (error) {
       this.deliveryFailed = recoveryVersion === this.recoveryVersion;
@@ -200,7 +218,9 @@ export class AsyncTaskAutoTrigger {
       this.isTriggering = false;
       if (
         !this.deliveryFailed &&
-        (!subscription.active || recoveryVersion !== this.recoveryVersion)
+        (!subscription.active ||
+          recoveryVersion !== this.recoveryVersion ||
+          opportunityVersion !== this.opportunityVersion)
       ) {
         this.scheduleAutoTriggerCheck();
       }
@@ -212,7 +232,7 @@ export class AsyncTaskAutoTrigger {
    * Extracted as a helper to keep {@link maybeAutoTrigger} within complexity
    * limits. Throws on delivery failure so the caller can skip marking.
    */
-  private async deliverPending(): Promise<void> {
+  private async deliverPending(): Promise<'delivered' | 'deferred'> {
     // Generate the notification message — captures the exact task IDs
     // included so we only mark those as notified (not tasks that complete
     // between now and delivery).
@@ -220,14 +240,16 @@ export class AsyncTaskAutoTrigger {
 
     if (!result) {
       // Nothing to notify (race condition - already delivered)
-      return;
+      return 'delivered';
     }
 
     // Attempt delivery
-    await this.triggerAgentTurn(result.text);
+    if ((await this.triggerAgentTurn(result.text)) === 'deferred')
+      return 'deferred';
 
     // SUCCESS: Mark only the tasks whose content was delivered
     // @requirement REQ-ASYNC-011
     this.reminderService.markNotified(result.notifiedTaskIds);
+    return 'delivered';
   }
 }

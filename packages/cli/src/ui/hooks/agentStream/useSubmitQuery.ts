@@ -354,6 +354,13 @@ function useSubmitQueryEffects(
   const { submitQueryRef, streamingState, runtime, agent, enqueueSubmission } =
     deps;
   const streamingStateRef = useRef(streamingState);
+  const busyOpportunityRef = useRef(0);
+  const deferredOpportunityRef = useRef(-1);
+  if (
+    streamingState !== StreamingState.Idle &&
+    streamingStateRef.current === StreamingState.Idle
+  )
+    busyOpportunityRef.current++;
   streamingStateRef.current = streamingState;
   const notificationRef = useRef<ReturnType<
     Agent['tasks']['subscribeNotifications']
@@ -365,7 +372,8 @@ function useSubmitQueryEffects(
   useEffect(() => {
     if (streamingState === StreamingState.Idle) {
       scheduleNextQueuedSubmission();
-      notificationRef.current?.schedule();
+      if (busyOpportunityRef.current > deferredOpportunityRef.current)
+        notificationRef.current?.schedule();
     }
   }, [streamingState, scheduleNextQueuedSubmission]);
 
@@ -380,17 +388,19 @@ function useSubmitQueryEffects(
 
   useEffect(() => {
     const isAgentBusy = () => streamingStateRef.current !== StreamingState.Idle;
-    const triggerAgentTurn = (message: string): Promise<void> =>
-      new Promise<void>((resolve, reject) => {
+    const triggerAgentTurn: Parameters<
+      Agent['tasks']['subscribeNotifications']
+    >[1] = (message) =>
+      new Promise((resolve, reject) => {
         enqueueSubmission({
           query: [{ type: 'text', text: message }],
           onSettled: (outcome) => {
             if (outcome.status === 'completed') resolve();
             else if (outcome.status === 'failed') reject(outcome.error);
-            else
-              reject(
-                new Error(`Background notice submission ${outcome.status}`),
-              );
+            else {
+              deferredOpportunityRef.current = busyOpportunityRef.current;
+              resolve('deferred');
+            }
           },
         });
         scheduleNextQueuedSubmission();

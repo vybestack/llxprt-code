@@ -336,7 +336,7 @@ async function flushTurnRecording(cbd: SubmitQueryCallbackDeps): Promise<void> {
 }
 
 async function finaliseStreamOutcome(
-  cbd: SubmitQueryCallbackDeps,
+  operationLifecycle: SubmitQueryCallbackDeps['operationLifecycle'],
   turn: TurnInit,
   outcome: SubmissionOutcome,
 ): Promise<SubmissionOutcome> {
@@ -345,9 +345,9 @@ async function finaliseStreamOutcome(
   if (outcome.status === 'discarded') status = 'cancelled_before_send';
   if (outcome.status === 'cancelled')
     status =
-      cbd.operationLifecycle?.classifyCancellation(turn.abortSignal) ??
+      operationLifecycle?.classifyCancellation(turn.abortSignal) ??
       'cancelled_during_api';
-  await finaliseOperation(cbd.operationLifecycle, turn.abortSignal, status);
+  await finaliseOperation(operationLifecycle, turn.abortSignal, status);
   return outcome;
 }
 
@@ -378,7 +378,7 @@ async function streamAndFinalise(
     }
 
     if (streamError === null) {
-      return await finaliseStreamOutcome(cbd, turn, outcome);
+      return await finaliseStreamOutcome(cbd.operationLifecycle, turn, outcome);
     }
     if (isCancellation(streamError, turn.abortSignal)) {
       const status =

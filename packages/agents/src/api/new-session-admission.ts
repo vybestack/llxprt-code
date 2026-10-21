@@ -30,7 +30,9 @@ export function createNewSessionAdmission(
         blockers.push(
           'task cleanup or completion delivery (wait for it to settle)',
         );
-      if (shell.hasPendingWork())
+      if (shell.hasLostOwnership())
+        blockers.push('shell cleanup failed (restart the CLI)');
+      else if (shell.hasPendingWork())
         blockers.push('shell cleanup (wait for owned process groups to drain)');
       if (
         tasks.getPendingNotifications().length > 0 ||

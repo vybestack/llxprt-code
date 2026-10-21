@@ -5,6 +5,8 @@
  */
 import { debugLogger } from '../utils/debugLogger.js';
 
+export type AsyncNoticeDeliveryOutcome = void | 'deferred';
+
 export interface AsyncNoticeUnsubscribe {
   (): void;
   drain(): Promise<void>;

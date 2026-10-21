@@ -172,6 +172,55 @@ describe('new sessions exclude background work', () => {
     }
   });
 
+  it.skipIf(process.platform === 'win32')(
+    'requires restart after the OS cannot confirm a shell group drained',
+    async () => {
+      const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+      const { shell } = owners(agent);
+      const terminal = deferred<void>();
+      const off = shell.onJobCompleted(() => terminal.resolve());
+      const originalKill = process.kill;
+      try {
+        const job = shell.launch({
+          command: 'printf ownership-probe',
+          cwd: process.cwd(),
+        });
+        if (job.pid === undefined)
+          throw new Error('Expected shell group identity');
+        const pgid = job.pid;
+        process.kill = (pid, signal): true => {
+          if (pid === -pgid && signal === 0)
+            throw Object.assign(new Error('probe denied'), { code: 'EPERM' });
+          return originalKill.call(process, pid, signal);
+        };
+        await deadline(terminal.promise, 'terminal shell record');
+        shell.markNotified([job.id]);
+        await expect(agent.session.startNewSession()).rejects.toThrow(
+          'wait for owned process groups to drain',
+        );
+        await expect(shell.current()?.cancel(job.id)).rejects.toThrow(
+          'Cannot confirm shell process group',
+        );
+        expect(shell.hasPendingWork()).toBe(true);
+        await expect(agent.session.startNewSession()).rejects.toThrow(
+          'shell cleanup failed (restart the CLI)',
+        );
+        process.kill = originalKill;
+        await expect(shell.dispose()).rejects.toThrow(
+          'Shell process group cleanup failed',
+        );
+        await expect(agent.session.startNewSession()).rejects.toThrow(
+          'shell cleanup failed (restart the CLI)',
+        );
+      } finally {
+        process.kill = originalKill;
+        off();
+        await cleanup();
+      }
+    },
+    15000,
+  );
+
   it('rejects client-channel tools awaiting approval even after scheduling returns', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     agent.setApprovalMode(ApprovalMode.DEFAULT);

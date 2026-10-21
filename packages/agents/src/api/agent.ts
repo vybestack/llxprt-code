@@ -961,7 +961,7 @@ export type AgentTaskInfo = AgentSubagentTaskInfo | AgentShellJobInfo;
 export interface AgentTasksControl {
   subscribeNotifications(
     isBusy: () => boolean,
-    deliver: (message: string) => Promise<void>,
+    deliver: (message: string) => Promise<void | 'deferred'>,
   ): (() => void) & { drain(): Promise<void>; schedule(): void };
   list(): readonly AgentTaskInfo[];
   listRunning(): readonly AgentTaskInfo[];
