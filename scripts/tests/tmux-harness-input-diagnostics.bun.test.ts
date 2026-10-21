@@ -34,6 +34,7 @@ function records(text: string): Array<Record<string, unknown>> {
 async function submit(
   diagnostics: boolean,
   fail: boolean,
+  pasteMode = 'on',
 ): Promise<number | null> {
   const scriptPath = path.join(outDir, 'script.json');
   await writeFile(
@@ -45,6 +46,7 @@ async function submit(
         process.execPath,
         path.resolve('scripts/tests/fixtures/tmux-input-recorder.ts'),
         path.join(outDir, 'received.bin'),
+        pasteMode,
       ],
       steps: [
         {
@@ -107,13 +109,58 @@ describe('tmux harness input diagnostics over native terminal input', () => {
     const beforeEnter = lineTrace.find((row) => row['phase'] === 'before-key');
     expect(beforeEnter?.['key']).toBe('Enter');
     expect(beforeEnter?.['shellPromptVisible']).toBe(true);
-    expect(beforeEnter?.['tmux']).toMatchObject({
-      bracket_paste_flag: '1',
+    const native = records(
+      await readFile(path.join(outDir, 'received.bin.tmux.json'), 'utf8'),
+    )[0];
+    expect(native?.['bracket_paste_flag']).toMatch(/^1?$/);
+    expect(native).toMatchObject({
       pane_in_mode: '0',
+      pane_active: '1',
+      buffer_size: '',
+    });
+    expect(beforeEnter?.['tmux']).toMatchObject({
+      bracket_paste_flag:
+        native?.['bracket_paste_flag'] === ''
+          ? null
+          : native?.['bracket_paste_flag'],
+      pane_in_mode: '0',
+      pane_active: '1',
+      buffer_size: null,
     });
     expect(
       lineTrace.filter((row) => row['phase'] === 'before-key'),
     ).toHaveLength(1);
+  }, 20000);
+
+  it('preserves disabled and unavailable native format values without treating zero as unknown', async () => {
+    expect(await submit(true, false, 'off')).toBe(0);
+    const native = records(
+      await readFile(path.join(outDir, 'received.bin.tmux.json'), 'utf8'),
+    )[0];
+    expect(native?.['bracket_paste_flag']).toMatch(/^0?$/);
+    expect(native).toMatchObject({
+      pane_in_mode: '0',
+      pane_active: '1',
+      buffer_size: '',
+    });
+    const trace = records(
+      await readFile(path.join(outDir, 'input-diagnostics.jsonl'), 'utf8'),
+    );
+    const beforeEnter = trace.find(
+      (row) => row['stepIndex'] === 1 && row['phase'] === 'before-key',
+    );
+    expect(beforeEnter?.['tmux']).toMatchObject({
+      bracket_paste_flag:
+        native?.['bracket_paste_flag'] === ''
+          ? null
+          : native?.['bracket_paste_flag'],
+      pane_in_mode: '0',
+      pane_active: '1',
+      buffer_size: null,
+    });
+    expect((await readFile(path.join(outDir, 'received.bin'))).toString()).toBe(
+      'echo private-credential-value\r\u0004',
+    );
   }, 20000);
 
   it('preserves the original wait failure and captures terminal state without resubmitting', async () => {
