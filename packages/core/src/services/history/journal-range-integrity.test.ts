@@ -11,6 +11,8 @@ import { readFrameHead, type FrameHead } from '../../journal/frame.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { RowEntry } from '../../journal/rowEntry.js';
 import { createFileHandleReader } from '../../journal/positionalFile.js';
+import { IndexedJournalRequestSnapshot } from './indexed-journal-request-snapshot.js';
+import { measuredRequestSnapshot } from './__tests__/support/measured-request-snapshot.js';
 
 async function integrityRow(
   path: string,
@@ -232,5 +234,70 @@ describe('ROW piece and reference metadata corruption', () => {
         trailerOffset: session.store.published?.selfOffset,
       });
     });
+  });
+});
+
+describe('invalid selected range references', () => {
+  const directory = useTempDir('journal-range-reference-');
+  it('names the row offset and requested ordinal for an absent block', async () => {
+    await integrityRow(
+      `${directory()}/ordinal.llxj`,
+      async (snapshot, entry) => {
+        await expect(snapshot.readBlock(entry, 99)).rejects.toThrow(
+          `Row ${entry.label} at offset ${entry.recordOffset}: block 99 is absent`,
+        );
+      },
+    );
+  });
+  it('names the row offset and both identities for a wrong row reference', async () => {
+    await integrityRow(
+      `${directory()}/identity.llxj`,
+      async (snapshot, entry) => {
+        await expect(
+          snapshot.readBlock({ ...entry, label: entry.label + 1n }, 0),
+        ).rejects.toThrow(
+          `Row at offset ${entry.recordOffset} has label ${entry.label}, its entry says ${entry.label + 1n}`,
+        );
+      },
+    );
+  });
+  it('preserves the CRC cause when the last query pin release also fails', async () => {
+    await integrityRow(
+      `${directory()}/release.llxj`,
+      async (_snapshot, entry, head, session) => {
+        const { snapshot, stats } = await measuredRequestSnapshot(
+          session,
+          new Error('release failure'),
+        );
+        const indexed = await IndexedJournalRequestSnapshot.create(snapshot);
+        const header = decodeRowHeader(head.kindHeader);
+        await flip(
+          session.path,
+          head.bodyOffset + header.blocks[0].offset + 25,
+        );
+        let primary: unknown;
+        const thrown: unknown = await indexed
+          .withNormalized(1, 1, 'call_integrity-id', async () => {
+            await snapshot.close();
+            await indexed.close();
+            try {
+              await snapshot.readBlock(entry, 0);
+            } catch (error) {
+              primary = error;
+              throw error;
+            }
+          })
+          .catch((error: unknown) => error);
+        expect(thrown).toBeInstanceOf(JournalCorruptionError);
+        expect(thrown).toBe(primary);
+        if (!(thrown instanceof JournalCorruptionError))
+          throw new Error('Missing corruption');
+        expect(thrown.cause).toMatchObject({
+          code: 'body-crc-mismatch',
+          offset: entry.recordOffset,
+        });
+        expect(stats.releases).toBe(1);
+      },
+    );
   });
 });

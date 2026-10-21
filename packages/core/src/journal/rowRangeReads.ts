@@ -18,11 +18,13 @@ async function rowHead(
 ): Promise<{ readonly head: FrameHead; readonly header: RowHeader }> {
   const head = await access.readRecordHead(entry.recordOffset, 'ROW');
   if (head.kind !== RECORD_KIND.ROW)
-    throw new JournalFormatError('Block source record is not a row');
+    throw new JournalFormatError(
+      `Block source at offset ${entry.recordOffset} is not a row`,
+    );
   const header = decodeRowHeader(head.kindHeader);
   if (header.label !== entry.label)
     throw new JournalFormatError(
-      'Block source row label differs from its entry',
+      `Row at offset ${entry.recordOffset} has label ${header.label}, its entry says ${entry.label}`,
     );
   validateRowAgainstBody(header, head.bodyLen);
   return { head, header };
@@ -35,7 +37,9 @@ export async function readStoredBlock(
 ): Promise<Uint8Array> {
   const { head, header } = await rowHead(access, entry);
   if (!Number.isInteger(index) || index < 0 || index >= header.blocks.length)
-    throw new JournalFormatError('Row block is absent');
+    throw new JournalFormatError(
+      `Row ${entry.label} at offset ${entry.recordOffset}: block ${index} is absent`,
+    );
   const block = header.blocks[index];
   return readRowPiece(access, head, block.offset, block.length);
 }
