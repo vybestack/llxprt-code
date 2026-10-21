@@ -1,3 +1,15 @@
+# Annotated append follow-up, 2026-10-21
+
+Production `fc1bd78a75925e014ebf1dcade37f432cb6f7f68` uses an explicit streamed-append marker and streams the new ordinal suffix into mirrors. Prepared groups accept accompanying setState edits, so mirror primary identity shares the row/annotation trailer. Other accompanying edits fail immediately. The history adapter registers only the annotation-window key for mirror metadata transfer; file-local fact and format metadata stay local. Clearing an absent registered key streams the target metadata trie and is not claimed logarithmic. No source owner is replaced with a publication-wide unowned owner.
+
+The standing span window stays 1024, sort cache stays 65536 bytes, and ordinary unannotated four-MiB batching stays unchanged. Logical failure compensation preserves causes and permits continuation; physical failures remain poisoned. The receipt records remaining physical-object/mirror-I/O-ack coverage limits. Seventeen final executions are reused only across an explicitly listed other-test-only erased-type difference; the changed mirror test and all gates run again.
+
+Keep selected-read and no-file claims narrow. Single-fixed-span retain commits cost 7 first/3 repeat positional file reads at both 40/4000 rows after seeding, with enabled caches. Annotation sorting above 1024 spans appends private records to the existing file; compaction removes them. These counters do not establish full-operation read cost, total retained heap or zero journal bytes. Do not infer cache-anchor parity from DetachedState snapshots, which contain tokens, spans and chronology but no anchor. The new fixtures leave independent nonempty-anchor coverage open. Original 1,192 preservation hashes, 293 original declarations and both helper declarations match; all 1204 current preservation hashes match too.
+
+Broader parity keeps three enabled earlier-source RED cases, including native summary-span loss outside the standing window. Fixing that row-derived summary contract is not hidden by widening the cap or changing fixtures. No new producer family, review, default change, push, merge, cleanup or weaker enforcement. #3917 remains separate. See [the receipt](recovery-2026-10-19/recovered-control/W26-SOURCE-BOUND-ANNOTATED-APPEND-PROOF.json) for exact hashes, controls, scope and remaining work.
+
+---
+
 ## 2026-10-21: finalize existing native CLI proof without another functional cluster
 
 Keep initial `3d63f3ee0` and final production `5c0d55bcfc2edd67bb34f6817d52f6110403075b` unchanged. Await driver 2496 before touching its source, then confirm all five captured originals restore with byte equality, cmp, SHA-256 and HEAD equality. Controls fail 8/8/4/2/3 actual assertions for old CLI files, wrong human cuts, wrong raw source ordinals, retained prefix rows and early reservation release. Embedded expected/received blob errors in the early-release assertion are not additional failed tests. Do not count ineffective, wrong-mode or runtime-only attempts as assertion traps.

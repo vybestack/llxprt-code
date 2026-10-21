@@ -1,3 +1,27 @@
+# Native annotated append publication proof, 2026-10-21
+
+[W26-SOURCE-BOUND-ANNOTATED-APPEND-PROOF.json](W26-SOURCE-BOUND-ANNOTATED-APPEND-PROOF.json) binds production `fc1bd78a75925e014ebf1dcade37f432cb6f7f68`, source `e9400f8c7eb3e7387781deb1b660cbf56420d201fa482976199f5034fdf0971d`, 18 complete serial files/143 passes/11101 assertions, twelve scoped gates and five restored controls. Raw evidence: `tmp/p5/w26-append-run-an/`. Broader parity retains three earlier-source RED cases and is excluded from the green totals.
+
+| Obligation | Executable evidence and limit |
+| --- | --- |
+| Actual public no-file append | journal-annotated-append.test.ts: 3/64/65/5000, creating APIs denied across roots, prefix values and unordered annotation window |
+| Independent values/tokens/final durable annotations | journal-annotated-append-mirrors.test.ts: old live oracle at 512/8192, both reopened native files, waitForCommit, fork and compaction; no old duplicate replay equivalence claim |
+| Labels, physical offsets and current owners | journal-annotated-append-owners.test.ts: 3/64/65/5000 after a nontrivial prefix cut; original mixed parity assertions remain retained |
+| Backpressure and large values | journal-annotated-append-lifetime.test.ts: peak zero/final zero at 512/8192 under bound two, every character above nine MiB; no whole-heap claim |
+| Logical faults, earlier batch rollback and physical poison | annotated append/failures files plus unchanged publication regressions; physical injected-object identity and actual mirror-I/O-ack faults remain unproved |
+| Shared cleanup identity | Original journalStore.readerLifetime 11/29 and readerCleanup 3/20, unchanged and rerun |
+| Storage and bounds | journal-density-span-facts/spans: 1024 standing spans, 65536-byte cache, unreachable sort bytes removed by compaction, identical metadata writes zero bytes |
+| Selected read cost | journal-density-span-facts.test.ts:240-302 counts positional file reads for a single fixed-span retain commit after seeding, caches enabled: 7 first/3 repeat reads at both 40/4000 rows. No full-operation or sort read bound. |
+| Existing-file sort writes | 1025/8192 spans append 784647/6461536 private bytes; compaction removes unreachable sort records and preserves live ROW bytes. No zero-write claim for annotated append. |
+| Cache-anchor boundary | New annotated fixtures do not independently assert a nonempty anchor. Prior CLI anchor proof is separate, not fresh annotated-append coverage. |
+| Controls | Old interval allocation, retained incoming values, wrong source ordinal, wrong owner, missing mirror annotations: actual assertions fail and originals restore cmp/hash to committed bytes |
+| Gates and source qualification | Core/agents/CLI declaration and strict types, agents/CLI Bun types, lint, format, graph and audit; seventeen reused files differ only in another test's erased parameter type, corrected mirror file and gates run fresh |
+| Retained RED | Earlier mixed parity 7 pass/3 fail: old duplicate replay at 512/8192 and native summary range outside the 1024 window at 8192; no skip or weakened assertion |
+
+W26/Phase 5 and the remaining provider, old/disk, capacity/accounting, spool and heap boundaries stay open. #3917 is not rerun or suppressed. Review skipped per Andrew 2026-10-09.
+
+---
+
 # Native CLI prefix proof, 2026-10-21
 
 [W26-SOURCE-BOUND-CLI-PROOF.json](W26-SOURCE-BOUND-CLI-PROOF.json) binds initial `3d63f3ee0`, final production `5c0d55bcf`, 43 complete serial files with 319 passes/73,393 assertions and zero failures/skips, twelve passing commands in nine scoped categories, and five restored controls. All accepted runs match source digest `9e2f9a8789981ceb05a3b0a5288f2dad01bbe3384d32aface5d4fc08eaa1ad78`. Matching pre-commit checkpoint and final runs are reused; earlier different-source receipts are excluded. Raw root: `tmp/p5/w26-cli-run-am/`.
