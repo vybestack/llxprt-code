@@ -3,6 +3,7 @@ import { expect } from 'bun:test';
 import {
   checkpointRows,
   type HistoryCheckpoint,
+  type HistoryCheckpointRows,
 } from '@vybestack/llxprt-code-core/services/history/historyCheckpointRows.js';
 import { rejectedValue } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-test-helpers.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -13,6 +14,45 @@ import {
 import { compressionValueDigest } from '../compression-value-fixture.js';
 import { checkpointScratch } from '../checkpoint-source-fault-helpers.js';
 import { withNativeFallbackFixture } from './native-fallback-fixture.js';
+
+function failingCheckpoint(
+  checkpoint: HistoryCheckpoint,
+  failure: Error,
+  onClose: () => void,
+): HistoryCheckpointRows {
+  if (
+    !('compressionInput' in checkpoint) ||
+    checkpoint.compressionInput === undefined
+  )
+    throw new Error('Expected the native checkpoint compression view');
+  const input = checkpoint.compressionInput;
+  let count = 0;
+  const readRow = async (index: number): Promise<IContent> => {
+    if (++count === 21) throw failure;
+    return input.rows.readRow(index);
+  };
+  return {
+    length: checkpoint.length,
+    [Symbol.asyncIterator]: () => checkpointRows(checkpoint),
+    compressionInput: {
+      previous: input.previous,
+      rows: {
+        length: input.rows.length,
+        readRow,
+        sourceOrdinalAt: (index) => input.rows.sourceOrdinalAt(index),
+        chronologySelection: input.rows.chronologySelection?.bind(input.rows),
+        async *[Symbol.asyncIterator]() {
+          try {
+            for (let index = 0; index < input.rows.length; index++)
+              yield await readRow(index);
+          } finally {
+            onClose();
+          }
+        },
+      },
+    },
+  };
+}
 
 export async function nativeTruncationSourceFailure(
   size: number,
@@ -33,20 +73,11 @@ export async function nativeTruncationSourceFailure(
     ): Promise<T> =>
       capture(async (checkpoint) => {
         escaped = checkpointRows(checkpoint);
-        return execute({
-          length: checkpoint.length,
-          async *[Symbol.asyncIterator]() {
-            let count = 0;
-            try {
-              for await (const row of checkpointRows(checkpoint)) {
-                if (++count === 21) throw failure;
-                yield row;
-              }
-            } finally {
-              closed = true;
-            }
-          },
-        });
+        return execute(
+          failingCheckpoint(checkpoint, failure, () => {
+            closed = true;
+          }),
+        );
       }, signal);
     expect(
       await rejectedValue(executeTruncation(history, size).then(() => {})),

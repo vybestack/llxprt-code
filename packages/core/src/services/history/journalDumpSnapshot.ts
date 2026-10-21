@@ -103,8 +103,10 @@ export class JournalDumpSnapshot implements HistoryDumpSnapshot {
       );
     if (start === this.length) return { ranges: [], generated: [] };
     const first = await this.sourceOrdinalAt(start);
-    const last = await this.sourceOrdinalAt(this.length - 1);
-    return { ranges: [{ from: first, to: last + 1 }], generated: [] };
+    return {
+      ranges: [{ from: first, to: this.snapshot.rows }],
+      generated: [],
+    };
   }
 
   compressionSpan(
