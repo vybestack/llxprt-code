@@ -16,6 +16,7 @@ import {
   simpleTokenEstimateForText,
 } from '@vybestack/llxprt-code-core/services/history/historyTokenEstimation.js';
 
+import { truncateNativePendingToolResponses } from './native-pending-tool-ranking.js';
 import {
   withToolResponseRanking,
   replaceRankedToolResponse,
@@ -199,6 +200,11 @@ export async function truncateLargestToolResponses(
   deps: ToolResultTruncatorDeps,
   marginAdjustedLimit: number,
 ): Promise<ToolResponseTruncationResult> {
+  const native = await truncateNativePendingToolResponses(
+    deps,
+    marginAdjustedLimit,
+  );
+  if (native !== undefined) return native;
   return withToolResponseRanking(
     deps.historyService,
     [],

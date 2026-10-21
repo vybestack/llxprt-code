@@ -204,7 +204,7 @@ export async function mirrorEdits(
         kind: 'prepared',
         admission: [],
         prepare: async (group) => {
-          await group.build(edits);
+          if (edits.length > 0) await group.build(edits);
           await group.copyMetadata(
             delta.access,
             delta.after.roots.metaRoot,
