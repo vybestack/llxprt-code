@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type OpenAI from 'openai';
+import { nativeKimiRow, type NativeKimiResolver } from './native-kimi-row.js';
 import {
   nativeMistralRow,
   type NativeMistralResolver,
@@ -53,6 +54,7 @@ export interface ChatBodyOptions {
    */
   readonly toolIdStore?: ToolIdStore;
   readonly nativeMistral?: NativeMistralResolver;
+  readonly nativeKimi?: NativeKimiResolver;
   /**
    * Rewrites the stream of block-bearing rows during conversion (for example
    * to resolve stored media). It runs once per build, only on the conversion
@@ -110,6 +112,17 @@ function createToolIdMapper(
   options: ChatBodyOptions,
 ): StreamingToolIdMapper | undefined {
   const format = options.toolFormat;
+  if (options.nativeKimi !== undefined) {
+    if (
+      format !== 'kimi' ||
+      options.toolIdStore !== undefined ||
+      options.nativeMistral !== undefined
+    )
+      throw new Error(
+        'Native Kimi resolution requires kimi format without another mapper',
+      );
+    return undefined;
+  }
   if (options.nativeMistral !== undefined) {
     if (format !== 'mistral' || options.toolIdStore !== undefined)
       throw new Error(
@@ -337,7 +350,11 @@ export async function* streamChatMessages(
         options.nativeMistral === undefined
           ? undefined
           : await nativeMistralRow(row, options.nativeMistral);
-      yield* conversion.convert(row, index, native);
+      const kimi =
+        options.nativeKimi === undefined
+          ? undefined
+          : await nativeKimiRow(row, index, options.nativeKimi);
+      yield* conversion.convert(row, index, kimi ?? native);
     }
     if (index + 1 !== facts.rowCount)
       throw new Error('Chat body rows changed between passes');

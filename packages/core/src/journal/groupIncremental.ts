@@ -35,6 +35,7 @@ import { appendRowEntries } from './rowTreeBuilder.js';
 import { editRowTree } from './rowTreeEdit.js';
 import { slotKindsOf } from './version.js';
 import { updateContributions } from './contributionChanges.js';
+import { updateKimiPrefixes } from './kimiPrefixWriter.js';
 import { readRowIds } from './rowReads.js';
 import { fillMistralScope } from './mistralScope.js';
 import { MISTRAL_GENERATION_KEY } from './mistralMapping.js';
@@ -292,12 +293,19 @@ export async function buildIncremental(
       ? undefined
       : { facts: collected.facts, appender },
   );
+  const tree = await updateKimiPrefixes(
+    ctx,
+    plan,
+    segments,
+    collected.facts,
+    appender,
+    await treeFor(ctx, plan, appender, changes),
+  );
   const { idRoot, metaRoot } = await commitFacts(
     collected.facts === undefined ? undefined : finishFacts(collected.facts),
     plan,
     appender,
   );
-  const tree = await treeFor(ctx, plan, appender, changes);
   const stateRoot = await commitState(ctx, plan, appender);
   return {
     state: trailerState(ctx, plan, mutation, chainBase, {

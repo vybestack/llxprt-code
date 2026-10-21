@@ -3,7 +3,8 @@ import { JournalFormatError } from './errors.js';
 import type { PlannedRow } from './groupEdits.js';
 import type { FactDeps, GroupFacts } from './groupFacts.js';
 import type { IdFactQueries } from './idFactQueries.js';
-import { KIMI_FLAG } from './kimiFactCodec.js';
+import { KIMI_FLAG, type KimiOccurrence } from './kimiFactCodec.js';
+import { kimiSafeCount } from './kimiDigits.js';
 import { replaceKimiRow, type KimiRowId } from './kimiFactWriter.js';
 import { fact0Key } from './idKeys.js';
 import type { IdFactBatch, BatchSpill } from './idFactBatch.js';
@@ -27,6 +28,18 @@ import {
   ROW_ID_KIND,
   ROW_SPEAKER,
 } from './rowRecord.js';
+
+export interface KimiUnmappedUse {
+  readonly occurrence: KimiOccurrence;
+  readonly response: boolean;
+}
+
+export function kimiSourceMapped(rawId: string, fact: IdFact): boolean {
+  return (
+    rawId !== '' &&
+    (fact.lastEligibleCall !== undefined || reconstructedTarget(fact))
+  );
+}
 
 interface RowList {
   readonly family: NormalizedFamily;
@@ -75,6 +88,7 @@ class RowOccurrences {
   private readonly facts = new Map<string, IdFact>();
   readonly lists = new Map<string, RowList>();
   eligibleCalls = 0;
+  readonly unmapped: KimiUnmappedUse[] = [];
   readonly kimiRows = new Map<
     string,
     {
@@ -155,16 +169,29 @@ class RowOccurrences {
     );
     if (block === undefined)
       throw new JournalFormatError('Missing emitted Kimi source block');
+    const unmapped =
+      (kind === OCCURRENCE_KIND.response || ai) &&
+      !kimiSourceMapped(occurrence.rawId, this.factOf(occurrence.rawId));
     const flags =
+      (unmapped ? KIMI_FLAG.unmapped : 0) |
       (eligible ? KIMI_FLAG.eligible : 0) |
       (ai ? KIMI_FLAG.ai : 0) |
       (reconstructed ? KIMI_FLAG.reconstructed : 0);
-    (kind === OCCURRENCE_KIND.call ? target.calls : target.responses).push({
+    const emitted: KimiOccurrence = {
       position,
-      eligibleWithinRow: this.eligibleCalls,
+      eligibleWithinRow: unmapped ? 0 : this.eligibleCalls,
+      fallbackWithinRow: unmapped ? this.unmapped.length : 0,
       block,
       flags,
-    });
+    };
+    (kind === OCCURRENCE_KIND.call ? target.calls : target.responses).push(
+      emitted,
+    );
+    if (unmapped)
+      this.unmapped.push({
+        occurrence: emitted,
+        response: kind === OCCURRENCE_KIND.response,
+      });
   }
 
   private emit(
@@ -289,13 +316,21 @@ export async function kimiRowCalls(
   facts: Pick<IdFactQueries, 'fact'>,
 ): Promise<{
   readonly eligibleCalls: number;
-  readonly ids: ReadonlyMap<string, { readonly calls: KimiRowId['calls'] }>;
+  readonly unmapped: readonly KimiUnmappedUse[];
+  readonly ids: ReadonlyMap<
+    string,
+    {
+      readonly calls: KimiRowId['calls'];
+      readonly responses: KimiRowId['responses'];
+    }
+  >;
 }> {
   const occurrences = new RowOccurrences(row, (_family, id) => id, true);
   await occurrences.initialize(source, facts);
   for (const part of [0, 1]) occurrences.part(source, entry, part);
   return {
     eligibleCalls: occurrences.eligibleCalls,
+    unmapped: occurrences.unmapped,
     ids: occurrences.kimiRows,
   };
 }
@@ -307,12 +342,12 @@ export async function writeNormalizedRowOccurrences(
   deps: FactDeps,
   spill: BatchSpill,
   kimiFacts?: GroupFacts,
-): Promise<number> {
+): Promise<{ readonly callBlocks: number; readonly unmappedBlocks: number }> {
   if (
     deps.idDeps.occurrenceSpace !== 'source-with-normalized' ||
     (row.flags & ROW_FLAG.curated) === 0
   )
-    return 0;
+    return { callBlocks: 0, unmappedBlocks: 0 };
   const source = await deps.planOccurrences(row, ids.queries);
   const occurrences = new RowOccurrences(
     row,
@@ -338,5 +373,8 @@ export async function writeNormalizedRowOccurrences(
         identity: deps.idDeps.hasher(ID_NS.fact, fact0Key(rawId)),
       });
   }
-  return occurrences.eligibleCalls;
+  return {
+    callBlocks: kimiSafeCount(occurrences.eligibleCalls),
+    unmappedBlocks: kimiSafeCount(occurrences.unmapped.length),
+  };
 }

@@ -28,9 +28,11 @@ describe('request Kimi query pin ownership', () => {
         expect(stats.releases).toBe(0);
         expect(await view.mappedId('a')).toBe('functions.tail:1');
         expect(await view.ordinal('a')).toBe(1);
+        expect(await view.counterBefore()).toBe(2);
       });
       expect(stats.releases).toBe(1);
       await expect(indexed.kimiEligibleCount()).rejects.toThrow('closed');
+      await expect(indexed.kimiCounterBefore(0)).rejects.toThrow('closed');
     } finally {
       await session.close();
     }
@@ -58,6 +60,7 @@ describe('request Kimi query pin ownership', () => {
             await snapshot.close();
             await indexed.close();
             expect(await view.name('a')).toBe('inspect');
+            expect(await view.counterBefore()).toBe(1);
             if (abort) {
               controller.abort(primary);
               return;

@@ -2,7 +2,8 @@
 import { JournalFormatError } from './errors.js';
 import { decodeDecimal } from './metaFacts.js';
 import { KimiOrdinalQueries } from './kimiOrdinals.js';
-import type { KimiOccurrence } from './kimiFactCodec.js';
+import { KIMI_FLAG, type KimiOccurrence } from './kimiFactCodec.js';
+import { kimiSafeCount } from './kimiDigits.js';
 import { KimiFactQueries, type KimiIdFact } from './kimiFactQueries.js';
 import {
   assertMistralSlot,
@@ -99,7 +100,29 @@ export class VersionSnapshot {
   }
 
   kimiUnmappedCount(): Promise<number> {
-    return this.kimiFacts.unmappedCount();
+    return this.kimi.unmappedCount();
+  }
+
+  kimiUnmappedBelow(label: bigint): Promise<number> {
+    return this.kimi.unmappedBelow(label);
+  }
+
+  kimiWrittenDigits(): Promise<number> {
+    return this.kimiFacts.writtenDigits();
+  }
+
+  kimiUnmappedWrittenCount(): Promise<number> {
+    return this.kimiFacts.unmappedWrittenCount();
+  }
+
+  async kimiFallbackIndex(occurrence: KimiOccurrence): Promise<number> {
+    if ((occurrence.flags & KIMI_FLAG.unmapped) === 0)
+      throw new RangeError('Kimi occurrence does not consume a fallback');
+    return kimiSafeCount(
+      (await this.kimiEligibleCount()) +
+        (await this.kimiUnmappedBelow(occurrence.position.label)) +
+        occurrence.fallbackWithinRow,
+    );
   }
 
   kimiHolders(rawId: string): AsyncGenerator<KimiOccurrence> {

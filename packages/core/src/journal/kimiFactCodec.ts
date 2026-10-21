@@ -15,11 +15,17 @@ export const KIMI_FIELD = {
   last: 5,
   exception: 6,
 } as const;
-export const KIMI_FLAG = { eligible: 1, ai: 2, reconstructed: 4 } as const;
+export const KIMI_FLAG = {
+  eligible: 1,
+  ai: 2,
+  reconstructed: 4,
+  unmapped: 8,
+} as const;
 
 export interface KimiOccurrence {
   readonly position: UnitPosition;
   readonly eligibleWithinRow: number;
+  readonly fallbackWithinRow: number;
   readonly block: number;
   readonly flags: number;
 }
@@ -54,11 +60,18 @@ export function kimiKey(
 }
 
 export function encodeKimiOccurrence(occurrence: KimiOccurrence): Uint8Array {
-  if ((occurrence.flags & ~7) !== 0)
+  if ((occurrence.flags & ~15) !== 0 || (occurrence.flags & 9) === 9)
     throw new JournalFormatError('Invalid emitted Kimi flags');
   const bytes = new Uint8Array(20);
   bytes.set(encodeUnitPositionValue(occurrence.position));
-  putU16(viewOf(bytes), 13, 'Kimi eligible rank', occurrence.eligibleWithinRow);
+  putU16(
+    viewOf(bytes),
+    13,
+    'Kimi row rank',
+    (occurrence.flags & KIMI_FLAG.unmapped) !== 0
+      ? occurrence.fallbackWithinRow
+      : occurrence.eligibleWithinRow,
+  );
   putU32(viewOf(bytes), 15, 'Kimi source block', occurrence.block);
   bytes[19] = occurrence.flags;
   return bytes;
@@ -66,11 +79,18 @@ export function encodeKimiOccurrence(occurrence: KimiOccurrence): Uint8Array {
 
 export function decodeKimiOccurrence(bytes: Uint8Array): KimiOccurrence {
   assertLength(bytes, 20, 'Emitted Kimi occurrence');
-  if ((bytes[19] & ~7) !== 0)
+  if ((bytes[19] & ~15) !== 0 || (bytes[19] & 9) === 9)
     throw new JournalFormatError('Invalid emitted Kimi flags');
   return {
     position: decodeUnitPositionValue(bytes.subarray(0, 13)),
-    eligibleWithinRow: viewOf(bytes).getUint16(13, true),
+    eligibleWithinRow:
+      (bytes[19] & KIMI_FLAG.unmapped) === 0
+        ? viewOf(bytes).getUint16(13, true)
+        : 0,
+    fallbackWithinRow:
+      (bytes[19] & KIMI_FLAG.unmapped) !== 0
+        ? viewOf(bytes).getUint16(13, true)
+        : 0,
     block: viewOf(bytes).getUint32(15, true),
     flags: bytes[19],
   };

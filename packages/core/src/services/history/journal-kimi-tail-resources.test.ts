@@ -58,6 +58,7 @@ describe('request Kimi metadata read bounds', () => {
         const indexed = await IndexedJournalRequestSnapshot.create(snapshot, [
           { speaker: 'tool', blocks: [response('id-0')] },
           { speaker: 'human', blocks: [call('id-0', 'tail')] },
+          { speaker: 'ai', blocks: [call('', 'empty')] },
         ]);
         const readings: Record<string, number> = { prepare: stats.heads };
         try {
@@ -65,6 +66,18 @@ describe('request Kimi metadata read bounds', () => {
           stats.heads = 0;
           expect(await indexed.kimiEligibleCount()).toBe(calls + 1);
           readings.count = stats.heads;
+          expect(stats.heads).toBeLessThan(150);
+          stats.heads = 0;
+          expect(await indexed.kimiCounterBefore(indexed.count - 1)).toBe(
+            calls + 1,
+          );
+          readings.counter = stats.heads;
+          expect(stats.heads).toBeLessThan(150);
+          stats.heads = 0;
+          expect(await indexed.kimiCounterBefore(indexed.count)).toBe(
+            calls + 2,
+          );
+          readings.endCounter = stats.heads;
           expect(stats.heads).toBeLessThan(150);
           stats.heads = 0;
           expect(await indexed.kimiOrdinal('id-0')).toBe(calls);

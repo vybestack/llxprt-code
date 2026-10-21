@@ -35,8 +35,8 @@ describe('journal file header', () => {
     expect(Array.from(JOURNAL_MAGIC)).toStrictEqual(
       Array.from(bytes.subarray(0, 8)),
     );
-    expect(view.getUint32(8, true)).toBe(6);
-    expect(JOURNAL_FORMAT_VERSION).toBe(6);
+    expect(view.getUint32(8, true)).toBe(7);
+    expect(JOURNAL_FORMAT_VERSION).toBe(7);
     expect(view.getUint32(12, true)).toBe(0);
     expect(Array.from(bytes.subarray(16, 32))).toStrictEqual(
       Array.from(header.fileId),
@@ -82,6 +82,14 @@ describe('journal file header', () => {
         header,
       );
     }
+  });
+
+  it('refuses version 6 journals with unfilled fallback prefixes and the old occurrence rank interpretation', () => {
+    const bytes = encodeJournalHeader(sampleHeader(22));
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    view.setUint32(8, 6, true);
+    view.setUint32(60, crc32(bytes.subarray(0, 60)), true);
+    expect(() => decodeJournalHeader(bytes)).toThrow('format version mismatch');
   });
 
   it('detects every single bit flip', () => {

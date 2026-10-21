@@ -2,6 +2,8 @@
 import { JournalFormatError } from '../../journal/errors.js';
 import { KIMI_FLAG, type KimiOccurrence } from '../../journal/kimiFactCodec.js';
 import { kimiOccurrenceName } from '../../journal/kimiFactQueries.js';
+import { kimiSafeCount } from '../../journal/kimiDigits.js';
+import type { IndexedUnit } from '../../journal/rowTreeQueries.js';
 import { kimiRowCalls } from '../../journal/normalizedRowOccurrences.js';
 import { plannedFromIds } from '../../journal/unitContributions.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
@@ -14,6 +16,7 @@ export class JournalRequestKimi {
   private readonly corrections: Array<{
     readonly label: bigint;
     readonly delta: number;
+    readonly unmappedDelta: number;
   }> = [];
   private count = 0;
 
@@ -42,8 +45,12 @@ export class JournalRequestKimi {
       this.source.facts,
     );
     const delta = emitted.eligibleCalls - row.entry.callBlocks;
-    this.corrections.push({ label: row.entry.label, delta });
-    this.count += delta;
+    this.corrections.push({
+      label: row.entry.label,
+      delta,
+      unmappedDelta: emitted.unmapped.length - row.entry.unmappedBlocks,
+    });
+    this.count = kimiSafeCount(this.count + delta);
     for (const [id, list] of emitted.ids)
       for (const call of list.calls)
         if ((call.flags & KIMI_FLAG.eligible) !== 0) this.last.set(id, call);
@@ -52,6 +59,43 @@ export class JournalRequestKimi {
   eligibleCount(): number {
     this.snapshot.requireOpen();
     return this.count;
+  }
+
+  async counterBefore(selected?: IndexedUnit): Promise<number> {
+    this.snapshot.requireOpen();
+    const label = selected?.entry.label;
+    let consumed =
+      label === undefined
+        ? await this.snapshot.kimiUnmappedCount()
+        : await this.snapshot.kimiUnmappedBelow(label);
+    for (const row of this.corrections)
+      if (label === undefined || row.label < label)
+        consumed += row.unmappedDelta;
+    for (const id of this.last.keys()) {
+      const native = await this.snapshot.kimiIdFact(id);
+      if (native === undefined || native.unmappedUses === 0) continue;
+      for await (const holder of this.snapshot.kimiHolders(id)) {
+        if (
+          (holder.flags & KIMI_FLAG.unmapped) === 0 ||
+          this.corrections.some((row) => row.label === holder.position.label)
+        )
+          continue;
+        if (label === undefined || holder.position.label < label) consumed--;
+      }
+    }
+    if (selected !== undefined) {
+      const planned = plannedFromIds(await this.source.readIds(selected.entry));
+      const emitted = await kimiRowCalls(
+        planned,
+        selected.entry,
+        await planSourceRowOccurrences(planned, this.snapshot.facts),
+        this.source.facts,
+      );
+      consumed += emitted.unmapped.filter(
+        (use) => use.occurrence.position.unit < selected.unit,
+      ).length;
+    }
+    return kimiSafeCount(this.count + kimiSafeCount(consumed));
   }
 
   private async occurrence(rawId: string): Promise<KimiOccurrence | undefined> {

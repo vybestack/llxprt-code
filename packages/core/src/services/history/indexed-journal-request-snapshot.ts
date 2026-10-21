@@ -278,6 +278,16 @@ export class IndexedJournalRequestSnapshot {
     return this.withMistral(slot, (view) => view.mapping(rawId));
   }
 
+  kimiCounterBefore(index: number): Promise<number> {
+    return this.withKimi(async (view) => {
+      if (!Number.isSafeInteger(index) || index < 0 || index > this.count)
+        throw new RangeError('Kimi counter unit is outside the request');
+      return view.counterBefore(
+        index === this.count ? undefined : await this.locate(index),
+      );
+    });
+  }
+
   kimiEligibleCount(): Promise<number> {
     return this.withKimi((view) => view.eligibleCount());
   }

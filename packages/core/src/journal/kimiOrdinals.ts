@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalFormatError } from './errors.js';
+import { kimiSafeCount } from './kimiDigits.js';
 import type { IdKeyHasher } from './idKeys.js';
 import { BoundedIdNodeCache } from './idTrieCache.js';
 import { KeyedMapReader } from './keyedMap.js';
@@ -46,6 +47,7 @@ export class KimiOrdinalQueries {
 
   private async prefix(
     label: bigint,
+    field: 'callBlocks' | 'unmappedBlocks' = 'callBlocks',
   ): Promise<{ readonly below: number; readonly entry?: RowEntry }> {
     await this.count();
     const version = this.read.version;
@@ -56,7 +58,8 @@ export class KimiOrdinalQueries {
     while (node.kind === 'internal') {
       let next: number | undefined;
       for (const slot of node.slots) {
-        if (slot.maxLabel < label) below += slot.aggregate.callBlocks;
+        if (slot.maxLabel < label)
+          below = kimiSafeCount(below + slot.aggregate[field]);
         else {
           next = slot.childOffset;
           break;
@@ -66,7 +69,7 @@ export class KimiOrdinalQueries {
       node = await readRowTreeNode(this.read.access, next);
     }
     for (const entry of node.entries) {
-      if (entry.label < label) below += entry.callBlocks;
+      if (entry.label < label) below = kimiSafeCount(below + entry[field]);
       else return { below, entry: entry.label === label ? entry : undefined };
     }
     return { below };
@@ -74,6 +77,15 @@ export class KimiOrdinalQueries {
 
   async below(label: bigint): Promise<number> {
     return (await this.prefix(label)).below;
+  }
+
+  async unmappedCount(): Promise<number> {
+    await this.count();
+    return this.read.version?.aggregate.unmappedBlocks ?? 0;
+  }
+
+  async unmappedBelow(label: bigint): Promise<number> {
+    return (await this.prefix(label, 'unmappedBlocks')).below;
   }
 
   async ordinal(label: bigint, withinRow: number): Promise<number> {

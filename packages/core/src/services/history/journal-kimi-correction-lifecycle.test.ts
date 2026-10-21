@@ -38,6 +38,13 @@ async function assertState(
   const snapshot = await session.store.snapshot();
   try {
     expect(await snapshot.kimiMappedId(id)).toBe(mapped);
+    let prefix = 0;
+    for await (const entry of snapshot.entries()) {
+      expect(await snapshot.kimiUnmappedBelow(entry.label)).toBe(prefix);
+      prefix += entry.unmappedBlocks;
+    }
+    expect(await snapshot.kimiUnmappedCount()).toBe(prefix);
+    expect(await snapshot.kimiWrittenDigits()).toBeGreaterThanOrEqual(0);
     let count = 0;
     for await (const fact of snapshot.kimiExceptions()) {
       expect(fact.callCount).toBeGreaterThan(0);

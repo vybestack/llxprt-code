@@ -26,7 +26,7 @@ export async function rebuildContributions(
         row,
         facts.ids.queries,
       );
-      const callBlocks = await writeNormalizedRowOccurrences(
+      const counters = await writeNormalizedRowOccurrences(
         row,
         updated,
         facts.ids,
@@ -34,7 +34,7 @@ export async function rebuildContributions(
         { appender, readGroup: ctx.readGroup },
         facts,
       );
-      yield facts.kimi ? { ...updated, callBlocks } : updated;
+      yield facts.kimi ? { ...updated, ...counters } : updated;
     }
   }
   return bulkBuildRowTree(appender, algebra, entries());
