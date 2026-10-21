@@ -23,6 +23,10 @@ import {
 } from './journalRowCodec.js';
 import type { IContent } from './IContent.js';
 import type { RowEntry } from '../../journal/rowEntry.js';
+import {
+  captureRowFormat,
+  type RowFormatRegistration,
+} from '../../journal/rowFormat.js';
 
 /** What a caller may replace: the file seams (tests) and the occurrence planner (the normalizer of phase 5). */
 export interface JournalSessionOptions {
@@ -151,6 +155,12 @@ export class JournalSession {
       }),
     );
     return this.store.commit([{ kind: 'append', rows }]);
+  }
+
+  async registerRowFormat(registration: RowFormatRegistration): Promise<void> {
+    await this.store.commit([
+      { kind: 'format', registration: captureRowFormat(registration) },
+    ]);
   }
 
   /** The entry a row holds. */

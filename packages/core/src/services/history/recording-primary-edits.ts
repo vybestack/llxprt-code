@@ -47,6 +47,7 @@ export function recordingAcceptsEdits(
       case 'clear':
       case 'trimHead':
       case 'fill':
+      case 'format':
       case 'kimi':
       case 'mistral':
       case 'mistralScope':

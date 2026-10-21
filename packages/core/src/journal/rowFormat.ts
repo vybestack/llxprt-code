@@ -1,0 +1,79 @@
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { createHash } from 'node:crypto';
+import type { OutputLimitConfig } from '../utils/toolOutputLimiter.js';
+import type { RowEntry } from './rowEntry.js';
+import type { VersionSnapshot } from './versionSnapshot.js';
+import type { SlotSummary } from './slotSummary.js';
+
+export interface RowFormatSettings {
+  readonly formatId:
+    | 'openai-chat:plain'
+    | 'openai-chat:openai'
+    | 'openai-chat:kimi'
+    | 'openai-chat:mistral'
+    | 'responses'
+    | 'anthropic';
+  readonly formatRev: number;
+  readonly model: string;
+  readonly endpoint: string;
+  readonly isOAuth: boolean;
+  readonly toolNameTransform: 'none' | 'oauth';
+  readonly supportsUrlImages: boolean;
+  readonly reasoningEnabled: boolean;
+  readonly reasoningFieldName: string;
+  readonly mediaPdfEnabled: boolean;
+  readonly unsupportedMedia: 'notice' | 'reject';
+  readonly outputLimits: Readonly<OutputLimitConfig> | null;
+}
+
+function ordered(value: unknown): string {
+  if (value === undefined)
+    throw new TypeError('Format settings must be JSON values');
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(ordered).join(',')}]`;
+  return `{${Object.entries(value)
+    .sort(([a], [b]) => (a < b ? -1 : Number(a > b)))
+    .map(([key, item]) => `${JSON.stringify(key)}:${ordered(item)}`)
+    .join(',')}}`;
+}
+
+export function rowFormatKey(settings: RowFormatSettings): bigint {
+  return createHash('sha256')
+    .update(ordered(settings))
+    .digest()
+    .readBigUInt64LE(0);
+}
+
+export interface RowLengthFacts {
+  readonly summary: SlotSummary;
+  readonly lens: Uint8Array;
+}
+
+export interface RowFormatRegistration {
+  readonly settings: RowFormatSettings;
+  readonly measure: (
+    snapshot: VersionSnapshot,
+    entry: RowEntry,
+    settings: RowFormatSettings,
+  ) => Promise<RowLengthFacts>;
+}
+
+export function captureRowFormatSettings(
+  input: RowFormatSettings,
+): RowFormatSettings {
+  const settings = structuredClone(input);
+  if (settings.outputLimits !== null) {
+    Object.freeze(settings.outputLimits.tokenLimit);
+    Object.freeze(settings.outputLimits);
+  }
+  return Object.freeze(settings);
+}
+
+export function captureRowFormat(
+  registration: RowFormatRegistration,
+): RowFormatRegistration {
+  return {
+    settings: captureRowFormatSettings(registration.settings),
+    measure: registration.measure,
+  };
+}

@@ -63,6 +63,11 @@ import {
   writeUnlinkedCompactionCandidate,
 } from './storeCompaction.js';
 import type { SlotKinds } from './aggregateComposition.js';
+import {
+  fillRowFormats,
+  warmRowFormat,
+  type RegisteredRowFormat,
+} from './formatFill.js';
 
 /** What the store is built from: the file seams, the hash, the two normalizers and the planner. */
 export interface JournalStoreDependencies {
@@ -127,6 +132,7 @@ interface SpineEntry {
  * (design 4.1), so a version is never readable before it is durable.
  */
 export class JournalStore {
+  private rowFormats: readonly RegisteredRowFormat[] = [];
   private commitEffect: CommitEffectFactory | undefined;
 
   setCommitEffect(factory: CommitEffectFactory): void {
@@ -230,6 +236,7 @@ export class JournalStore {
       candidate,
     );
     clone.restartOnNewFile();
+    clone.rowFormats = this.rowFormats;
     return clone;
   }
 
@@ -568,6 +575,32 @@ export class JournalStore {
     this.rearmAt = 0;
   }
 
+  private async reuseRowFormat(
+    edits: readonly VersionEdit[],
+  ): Promise<CommittedGroup | undefined> {
+    const before = this.currentVersion;
+    const warm = await warmRowFormat(
+      this.buildContext(),
+      edits,
+      this.rowFormats,
+    );
+    if (warm === undefined || before === undefined) return undefined;
+    this.rowFormats = warm;
+    const read = this.readOfPublished();
+    return {
+      ack: {
+        commitSeq: before.commitSeq,
+        durableEnd: before.durableEnd,
+        groupTag: before.groupTag,
+      },
+      before,
+      after: before,
+      read,
+      writtenLabels: [],
+      close: () => read.close(),
+    };
+  }
+
   private async runCommit(
     edits: readonly VersionEdit[],
   ): Promise<CommittedGroup> {
@@ -581,6 +614,8 @@ export class JournalStore {
     }
     const mutation = mutationOf(edits);
     const before = this.currentVersion;
+    const warm = await this.reuseRowFormat(edits);
+    if (warm !== undefined) return warm;
     const plan = await planGroup(this.planContext(), edits);
     let built: Awaited<ReturnType<typeof buildGroup>> | undefined;
     const effect = this.commitEffect?.({
@@ -588,6 +623,7 @@ export class JournalStore {
       getState: (key) => this.getStateUnpinned(key),
     });
     let ack: CommitAck;
+    let rowFormats = this.rowFormats;
     try {
       ack = await this.writer.commitStreamedGroup(async (appender) => {
         try {
@@ -597,6 +633,15 @@ export class JournalStore {
             mutation,
             effect === undefined ? appender : effectAppender(appender, effect),
           );
+          const filled = await fillRowFormats(
+            this.buildContext(),
+            built,
+            appender,
+            edits,
+            rowFormats,
+          );
+          built = filled.built;
+          rowFormats = filled.registered;
           if (effect !== undefined) {
             built = {
               ...built,
@@ -619,6 +664,7 @@ export class JournalStore {
       throw new JournalFormatError('A committed group left no trailer');
     }
     this.install(trailer);
+    this.rowFormats = rowFormats;
     this.chain = built.chainBase.push(trailer.selfOffset);
     if (built.spine !== undefined) {
       this.spineEntry = { rowRoot: trailer.rowRoot, spine: built.spine };
@@ -680,6 +726,7 @@ export class JournalStore {
 
   private buildContext(): BuildContext {
     return {
+      measureFormats: this.rowFormats.length > 0,
       access: this.access,
       readGroup: (writtenEnd) =>
         createRecordAccess(this.path, this.writer.reader, {

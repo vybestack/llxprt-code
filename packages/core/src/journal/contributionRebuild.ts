@@ -34,7 +34,15 @@ export async function rebuildContributions(
         { appender, readGroup: ctx.readGroup },
         facts,
       );
-      yield facts.kimi ? { ...updated, ...counters } : updated;
+      yield {
+        ...updated,
+        ...(facts.kimi ? counters : {}),
+        stamp: [
+          { gen: 0, imageGen: 0 },
+          { gen: 0, imageGen: 0 },
+          { gen: 0, imageGen: 0 },
+        ],
+      };
     }
   }
   return bulkBuildRowTree(appender, algebra, entries());

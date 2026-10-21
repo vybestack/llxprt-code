@@ -18,6 +18,7 @@ import type { slotKindsOf, Version } from './version.js';
 
 /** The seams a group is built with, all supplied by the store. */
 export interface BuildContext extends FactDeps {
+  readonly measureFormats?: boolean;
   readonly access: RecordAccess | undefined;
   /** Reads the file up to `writtenEnd`, which reaches records the current group has written and drained. */
   readonly readGroup: ReadGroup;

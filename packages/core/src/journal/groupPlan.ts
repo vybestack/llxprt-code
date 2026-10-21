@@ -227,6 +227,8 @@ async function applyEdit(
     return;
   }
   switch (edit.kind) {
+    case 'format':
+      break;
     case 'mistralScope':
       assertMistralSlot(edit.slot);
       plan.mistralScope = edit;
@@ -238,6 +240,10 @@ async function applyEdit(
       break;
     case 'mistral':
       assertMistralSlot(edit.slot);
+      if (plan.base.slots.formatSlots[edit.slot].summaryKind !== null)
+        throw new JournalFormatError(
+          'Mapping-only activation cannot replace an assigned format slot',
+        );
       startNewLineage(plan);
       plan.mistralSlot = edit.slot;
       plan.rebuilt = true;
@@ -296,6 +302,7 @@ function isLineageRewrite(
  */
 function mutationKind(edit: VersionEdit): VersionEdit['kind'] {
   switch (edit.kind) {
+    case 'format':
     case 'kimi':
     case 'mistral':
     case 'mistralScope':
@@ -361,6 +368,7 @@ export async function planGroup(
   if (
     edits.some(
       (edit) =>
+        edit.kind === 'format' ||
         edit.kind === 'mistral' ||
         edit.kind === 'kimi' ||
         edit.kind === 'mistralScope',

@@ -71,7 +71,18 @@ export async function updateContributions(
     for (let index = 0; index < list.length; index++) {
       const entry = list[index];
       const row = await sourceRow(ctx, entry, sources.get(entry.label));
-      list[index] = await withUnitContributions(entry, row, facts);
+      const contribution = await withUnitContributions(entry, row, facts);
+      list[index] =
+        groupFacts === undefined
+          ? contribution
+          : {
+              ...contribution,
+              stamp: [
+                { gen: 0, imageGen: 0 },
+                { gen: 0, imageGen: 0 },
+                { gen: 0, imageGen: 0 },
+              ],
+            };
       if (groupFacts !== undefined) {
         const counters = await writeNormalizedRowOccurrences(
           row,

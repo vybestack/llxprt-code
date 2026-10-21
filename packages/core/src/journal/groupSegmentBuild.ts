@@ -70,7 +70,11 @@ export async function buildFromSegments(
       segment.kind === 'foreign' ||
       segment.kind === 'foreignStream',
   );
-  if (writesRows && hasActiveSlot(plan.base.slots)) {
+  if (
+    writesRows &&
+    hasActiveSlot(plan.base.slots) &&
+    ctx.measureFormats !== true
+  ) {
     throw new JournalFormatError(
       'A format slot is active, and filling its summaries is not part of this edit',
     );
