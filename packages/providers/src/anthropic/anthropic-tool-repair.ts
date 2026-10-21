@@ -7,6 +7,13 @@ import type {
 } from './anthropic-repair-source.js';
 
 type ResultBlock = Extract<AnthropicMessageBlock, { type: 'tool_result' }>;
+interface ReplayBoundary {
+  readonly id: string;
+  readonly consumed: number;
+  readonly before: number;
+  readonly depth: number;
+}
+export const ANTHROPIC_REPAIR_METADATA_DEPTH = 16;
 export interface ToolRepairOverlay {
   readonly id: string;
   readonly callMessage: number;
@@ -26,39 +33,74 @@ export class AnthropicToolRepair {
     | {
         readonly start: number;
         readonly end: number;
+        readonly id: string;
+        readonly consumed: number;
         readonly next: RepairMessage | undefined;
       }
     | undefined;
   constructor(readonly source: AnthropicRepairSource) {}
 
-  async orphan(message: RepairMessage): Promise<boolean> {
-    if (message.slot !== 'results') return false;
-    for await (const piece of this.source.pieces(message, false)) {
-      if (typeof piece === 'string') continue;
-      for (const block of piece)
-        if (
-          block.type === 'tool_result' &&
-          (await this.source.query.normalizedCount(2, 0, block.tool_use_id)) > 0
-        )
-          return false;
+  private async survivesAt(
+    index: number,
+    boundary: ReplayBoundary,
+  ): Promise<boolean> {
+    const facts = await this.source.query.anthropicToolFactsAt(index);
+    const within = new Map<string, number>();
+    for (const fact of facts) {
+      if (fact.kind !== 'result' || fact.orphan) continue;
+      const local = (within.get(fact.id) ?? 0) + 1;
+      within.set(fact.id, local);
+      const ordinal = fact.resultsBefore + local;
+      const removed =
+        fact.id === boundary.id
+          ? ordinal <= boundary.consumed
+          : (await this.walk(
+              fact.id,
+              boundary.before,
+              undefined,
+              ordinal,
+              boundary.depth + 1,
+            )) !== undefined;
+      if (!removed) return true;
     }
-    return true;
+    return false;
   }
 
-  async next(message: RepairMessage): Promise<RepairMessage | undefined> {
+  private async survives(
+    message: RepairMessage,
+    boundary: ReplayBoundary,
+  ): Promise<boolean> {
+    if (message.slot !== 'results') return true;
+    for (let at = message.start; at <= message.end; at++)
+      if (await this.survivesAt(at, boundary)) return true;
+    return false;
+  }
+
+  private async next(
+    message: RepairMessage,
+    boundary: ReplayBoundary,
+  ): Promise<RepairMessage | undefined> {
     if (
       this.nextCache?.start === message.start &&
-      this.nextCache.end === message.end
+      this.nextCache.end === message.end &&
+      this.nextCache.id === boundary.id &&
+      this.nextCache.consumed === boundary.consumed
     )
       return this.nextCache.next;
     let next: RepairMessage | undefined;
     for await (const candidate of this.source.messages(message.end + 1)) {
-      if (!(await this.orphan(candidate))) {
+      if (await this.survives(candidate, boundary)) {
         next = candidate;
         break;
       }
     }
-    this.nextCache = { start: message.start, end: message.end, next };
+    this.nextCache = {
+      start: message.start,
+      end: message.end,
+      id: boundary.id,
+      consumed: boundary.consumed,
+      next,
+    };
     return next;
   }
 
@@ -67,7 +109,12 @@ export class AnthropicToolRepair {
     through: number,
     known: RepairMessage | undefined,
     wantedOrdinal?: number,
+    depth = 0,
   ): Promise<ToolRepairOverlay | undefined> {
+    if (depth > ANTHROPIC_REPAIR_METADATA_DEPTH)
+      throw new JournalFormatError(
+        'Anthropic cross-ID repair dependency exceeds the metadata budget; stored semantic summaries are required',
+      );
     const query = this.source.query;
     return query.withNormalized(2, 0, id, (uses) =>
       query.withNormalized(2, 1, id, async (results) => {
@@ -85,7 +132,12 @@ export class AnthropicToolRepair {
               ? known
               : await this.source.groupAt(unit);
           previousEnd = message.end;
-          const next = await this.next(message);
+          const next = await this.next(message, {
+            id,
+            consumed,
+            before: message.start - 1,
+            depth,
+          });
           let ordinal: number | undefined;
           let missing = false;
           if (next?.role === 'user') {
@@ -101,6 +153,7 @@ export class AnthropicToolRepair {
             missing = true;
             inserted = true;
           }
+          inserted ||= missing;
           if (
             (ordinal !== undefined || missing) &&
             (wantedOrdinal === undefined

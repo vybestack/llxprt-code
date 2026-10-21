@@ -19,6 +19,7 @@ import {
   type AnthropicAtom,
 } from './anthropic-unit-transfer.js';
 import { getEmptyMessagePlaceholder } from './AnthropicMessageValidator.js';
+import { projectAnthropicUnit } from './anthropic-unit-facts.js';
 import { modelSupportsPrefill } from './AnthropicModelData.js';
 import type { AnthropicMessageBlock } from './AnthropicMessageNormalizer.js';
 
@@ -74,6 +75,7 @@ export class AnthropicStreamRepair {
     settings: RowFormatSettings,
     policy: RepairPolicy = {},
   ): Promise<AnthropicStreamRepair> {
+    projectAnthropicUnit({ speaker: 'human', blocks: [] }, settings);
     const source = new AnthropicRepairSource(query, settings);
     const last =
       policy.strip === 'allButLast' && policy.includeInContext !== false
@@ -293,9 +295,12 @@ export function withAnthropicStreamRepair<T>(
   signal?: AbortSignal,
 ): Promise<T> {
   const captured = structuredClone(settings);
+  const capturedPolicy = { ...policy };
   return query.withHeld(
     async (view) =>
-      consume(await AnthropicStreamRepair.create(view, captured, policy)),
+      consume(
+        await AnthropicStreamRepair.create(view, captured, capturedPolicy),
+      ),
     signal,
   );
 }

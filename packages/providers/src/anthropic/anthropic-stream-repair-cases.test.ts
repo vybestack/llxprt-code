@@ -169,6 +169,108 @@ describe('native Anthropic named repair and finish cases', () => {
     );
   });
 
+  it('refuses unsupported caching even when there are no units to convert', async () => {
+    await withQuery([], async (query) => {
+      const settings: RowFormatSettings = {
+        ...settingsOf({ reasoningEnabled: false }),
+        anthropic: { cache: '1h', imageBudget: null },
+      };
+      await expect(
+        withAnthropicStreamRepair(query, settings, {}, async (engine) =>
+          serialized(engine),
+        ),
+      ).rejects.toThrow(/cache-off/);
+    });
+  });
+
+  it('captures the thinking policy before asynchronous native reads', async () => {
+    const rows: readonly IContent[] = [
+      {
+        speaker: 'ai',
+        blocks: [
+          {
+            type: 'thinking',
+            sourceField: 'thinking',
+            thought: 'kept',
+            signature: 'signature',
+          },
+        ],
+      },
+      { speaker: 'ai', blocks: [{ type: 'text', text: 'answer' }] },
+    ];
+    const wire: WireSettings = {
+      reasoningEnabled: true,
+      strip: 'allButLast',
+      currentModel: 'claude-sonnet-4',
+    };
+    const expected = await emittedCandidate(
+      await normalizedRows(rows),
+      wire,
+      {},
+    );
+    await withQuery(rows, async (query) => {
+      const policy: { strip: 'all' | 'allButLast' } = { strip: 'allButLast' };
+      const output = withAnthropicStreamRepair(
+        query,
+        settingsOf(wire),
+        policy,
+        async (engine) => serialized(engine),
+      );
+      policy.strip = 'all';
+      expect(await output).toBe(expected);
+    });
+  });
+
+  it('uses ONE ONE TWO for converted-ID collisions and later messages see consumed source positions', async () => {
+    const call = (id: string): IContent => ({
+      speaker: 'ai',
+      blocks: [{ type: 'tool_call', id, name: 'read', parameters: {} }],
+    });
+    const result = (id: string, value: string): IContent => ({
+      speaker: 'tool',
+      blocks: [
+        { type: 'tool_response', callId: id, toolName: 'read', result: value },
+      ],
+    });
+    const text = (value: string): IContent => ({
+      speaker: 'human',
+      blocks: [{ type: 'text', text: value }],
+    });
+    const rows: readonly IContent[] = [
+      text('q'),
+      { speaker: 'ai', blocks: [...call('').blocks, ...call('').blocks] },
+      text('next'),
+      call('hist_tool_empty'),
+      result('hist_tool_empty', 'ONE'),
+      text('more'),
+      call('toolu_empty'),
+      result('toolu_empty', 'TWO'),
+    ];
+    const wire: WireSettings = {
+      reasoningEnabled: false,
+      currentModel: 'claude-opus-5',
+    };
+    const expected = await emittedCandidate(
+      await normalizedRows(rows),
+      wire,
+      {},
+    );
+    expect(expected.match(/ONE|TWO/g)).toStrictEqual(['ONE', 'ONE', 'TWO']);
+    await withQuery(rows, async (query) =>
+      withAnthropicStreamRepair(
+        query,
+        settingsOf(wire),
+        wire,
+        async (engine) => {
+          expect(await serialized(engine)).toBe(expected);
+          expect((await engine.measure()).bytes).toBe(
+            Buffer.byteLength(expected),
+          );
+        },
+      ),
+    );
+  });
+
   it('preserves callback error identity and releases its extra pin', async () => {
     const rows: readonly IContent[] = [
       { speaker: 'human', blocks: [{ type: 'text', text: 'q' }] },
