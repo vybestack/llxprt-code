@@ -10,7 +10,7 @@
  * so its public import surface is unchanged).
  */
 
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import { killRunnerChild } from './bespoke-runner-isolation.js';
 
@@ -350,6 +350,12 @@ export async function killChildTreeAndWait(
     await killWindowsTreeAndWait(pid, childClosed, options);
     return;
   }
+  const timeoutMs = options.reapTimeoutMs ?? REAP_TIMEOUT_MS;
+  const deadlineAt = performance.now() + timeoutMs;
+  const owned = new Map<number, ProcessIdentity>();
+  for (const [memberPid, identity] of readProcessTable(timeoutMs)) {
+    if (identity.group === pid) owned.set(memberPid, identity);
+  }
   // POSIX: kill the entire per-test process group by negative PID. The
   // child was spawned with detached: true (see runTestFile) so it leads
   // its own group; this sends SIGKILL to every descendant that inherited
@@ -363,11 +369,98 @@ export async function killChildTreeAndWait(
     if (code !== 'ESRCH') throw error;
   }
 
-  await withTimeout(
-    childClosed,
-    options.reapTimeoutMs ?? REAP_TIMEOUT_MS,
-    `Timed-out child (pid ${pid}) close lifecycle`,
-  );
+  await waitForPosixTreeClose(pid, childClosed, owned, timeoutMs, deadlineAt);
+}
+
+interface ProcessIdentity {
+  readonly group: number;
+  readonly started: string;
+}
+
+function readProcessTable(timeoutMs: number): Map<number, ProcessIdentity> {
+  const result = spawnSync('ps', ['-axo', 'pid=,pgid=,lstart='], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: Math.max(1, Math.ceil(timeoutMs)),
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(`Cannot observe owned test processes: ${result.stderr}`);
+  }
+  const table = new Map<number, ProcessIdentity>();
+  for (const line of result.stdout.split('\n')) {
+    if (!line.trim()) continue;
+    const [pid, group, ...started] = line.trim().split(/\s+/);
+    const memberPid = Number(pid);
+    const processGroup = Number(group);
+    if (
+      !Number.isSafeInteger(memberPid) ||
+      !Number.isSafeInteger(processGroup) ||
+      started.length === 0
+    )
+      throw new Error(`Invalid process identity: ${line}`);
+    table.set(memberPid, {
+      group: processGroup,
+      started: started.join(' '),
+    });
+  }
+  return table;
+}
+
+function waitForPosixTreeClose(
+  pid: number,
+  childClosed: Promise<void>,
+  owned: ReadonlyMap<number, ProcessIdentity>,
+  timeoutMs: number,
+  deadlineAt: number,
+): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    let finished = false;
+    let poll: ReturnType<typeof setTimeout> | undefined;
+    const finish = (): void => {
+      finished = true;
+      clearTimeout(deadline);
+      clearTimeout(poll);
+    };
+    const fail = (error: unknown): void => {
+      finish();
+      reject(error);
+    };
+    const deadline = setTimeout(
+      () => {
+        fail(
+          new Error(
+            `Timed-out child (pid ${pid}) process group close lifecycle did not complete within ${timeoutMs}ms`,
+          ),
+        );
+      },
+      Math.max(0, deadlineAt - performance.now()),
+    );
+    const observeGroupExit = (): void => {
+      try {
+        const current = readProcessTable(deadlineAt - performance.now());
+        // A descendant's kernel entry can outlive the direct child's close.
+        // Retain its start identity so PID reuse cannot adopt unrelated work.
+        if (
+          [...owned].every(
+            ([memberPid, identity]) =>
+              current.get(memberPid)?.started !== identity.started,
+          )
+        ) {
+          finish();
+          resolve();
+          return;
+        }
+      } catch (error) {
+        fail(error);
+        return;
+      }
+      poll = setTimeout(observeGroupExit, EXIT_POLL_INTERVAL_MS);
+    };
+    childClosed.then(() => {
+      if (!finished) observeGroupExit();
+    }, fail);
+  });
 }
 
 function killCliProcessTree(child: {
