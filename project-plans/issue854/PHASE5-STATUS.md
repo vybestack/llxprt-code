@@ -1,3 +1,15 @@
+# Native global ranking is journal-backed; Phase 5 remains open, 2026-10-21
+
+`99226cc46`, `87a1f1101` and mixed-edit correctness fix `0827f815a` replace native last-resort tool-ranking scratch with versioned score/position facts. Acceptance is committed at `fff8b7587bce08e3b1010c7b90c7d7f9c8d18e69`. Exact old score/tie order, cumulative rounds, pending precedence and source ownership pass; pending content is not prematurely persisted. The public full-candidate callsite uses native ranking. Explicit-old contracts and backend default are unchanged.
+
+[The receipt](recovery-2026-10-19/recovered-control/W26-SOURCE-BOUND-GLOBAL-TOOL-RANKING-PROOF.json) binds **157 passes, zero failures/skips and 504,169 assertions across 29 serial complete-file Bun executions**, nine scoped gate categories, five restored assertion controls and four expected original retaining-trap failures. Native array parity covers 512/8192 and owner cases 3/64/65/5000. Original bounds and the full greater-than-nine-MiB checkpoint remain unchanged. #3919 original identity is green. Warm history-only reuse adds zero bytes/commits; cold fill is 381/107961 reads at 40/4000, selected combined query 47/174 reads. These are scoped read/cache/object-lifetime results, not heap acceptance.
+
+W26 and Phase 5 remain open for incremental rank maintenance after density/structural changes, pending-overlay/stale-fact capacity, native read/write pruning and file deduplication, remaining other-strategy/append-only and explicit-old scratch, provider normalization/cache/tails/ranges/semantic generations and global LENS/live bytes. Old backend removal stays at phase 9 and the default is unchanged. Phase 6 provider body/key/message/tokenizer spools and request guards, retained heap/string bytes and total cache/pin capacity, W23/W25/cutover and cold Mistral remain separate.
+
+All 1,192 preservation hashes match, including 293 unrelated declarations, raw recovery and inherited dirty memory. All recorded verification/control/pipeline PIDs are absent. #3917 remains separately RED without rerun/retry/suppression. No cleanup, unrelated/.llxprt staging, push, merge, default flip or enforcement weakening. Review skipped per Andrew 2026-10-09.
+
+---
+
 # Native compression-span queries pass scoped acceptance; W26 remains open, 2026-10-21
 
 `9f6d9738bfb4e400cca69db989a7d189d9839fa2` and green follow-up `525721d2ab94be2d03b23d33c2a8487fd979dc52` remove native truncation's curated checkpoint copy and temporary compression-span index. Cache-anchor publication shares the pinned query. The public checkpoint contract carries the actual native dump and raw source ordinals, keeping curated ranks and normalized unit ranks separate. Readers and pending queries retire before their pin; writer shutdown defers descriptor closure to the final reader. #3919's unchanged original identity assertion is green, with ordered cleanup aggregation preserved.

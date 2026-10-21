@@ -1,3 +1,23 @@
+# Native global tool-ranking proof, 2026-10-21
+
+Source `99226cc46`, rounds/overlay `87a1f1101`, mixed-edit fix `0827f815a`, acceptance `fff8b7587bce08e3b1010c7b90c7d7f9c8d18e69`. [Receipt](W26-SOURCE-BOUND-GLOBAL-TOOL-RANKING-PROOF.json): **157 passes, zero failures/skips and 504,169 assertions across 29 serial complete-file Bun executions**, nine scoped gate categories, five restored assertion controls and the separate four-failure original retaining trap. Raw root: `tmp/p5/w26-tool-ranking-run-af/`.
+
+| Obligation | Evidence and boundary |
+| --- | --- |
+| Public native flow and allocation | Complete native source callsite, native public ranking and array parity files run through real native history. No ranked candidate file is created across observed roots. No provider transport/body-spool claim or source-file deletion. |
+| Score, ties, rounds and pending | Array oracle at 3/64/65/512/5000/8192 compares whole history, pending, tokens and mirrors. Exact score/descending ordinal/block ties, repeated raw IDs, cross-speaker blocks and cumulative rounds pass. Pending content is not prematurely appended; overlay measurement facts are separate. |
+| Facts and identity | Complete rank/index/invalidation, model, owners, pop, version-copy/compaction and writer files cover old pins, rewritten rows, mixed pop/ranking, float scores, append, clone/reopen and same-writer continuation. Owner test pins a generation to exclude automatic storage compaction from operation-file observation. |
+| Cold, warm and reads | 40/4000 cold fills: 381/107961 physical reads. Combined position/top/three-rank query: 47/174 reads, 18/36 node calls. Forty ready history-only repeats: zero bytes/commits or measurements. Per-node-cache charged cap: 65536 bytes. No total heap/pin/live-byte claim. |
+| Lifetime and original contracts | Native 512-row rank/output sampled peaks 9/1, final zero. Original old-layout 512/8192 borrowed/copy/string ownership and retaining trap, native full greater-than-nine-MiB checkpoint, and unchanged #3919 readerLifetime/readerCleanup complete files run. Old-layout sink failure is not relabeled native ranked sink failure. |
+| Negative proof | Old ranking files, retain-all-candidates, wrong tie, stale tokenizer policy and history rescan fail expect assertions; all restore cmp/hash. Rescan: 598 against 44 node calls; retention: 129 against 64. Nonunique harness matching and syntax-only exceptions are excluded. |
+| Gates, audit and source | Core/agents declarations/strict types, agents Bun-test types, zero-warning scoped lint, Prettier, graph and audit pass. Green manifests match final bytes. Audit findings retain explicit state-transition/immutability classifications. Graph does not establish shard execution. Controls have target/log hashes, not full per-mutant manifests. |
+
+W26 and Phase 5 remain open for incremental rank maintenance after density/structural changes, pending-overlay/stale-fact capacity, native read/write pruning and file deduplication, remaining other-strategy/append-only and explicit-old scratch, provider normalization/cache/tails/ranges/semantic generations and global LENS/live bytes. Old backend removal stays at phase 9 and the default is unchanged. Phase 6 provider body/key/message/tokenizer spools and request guards, retained heap/string bytes and total cache/pin capacity, W23/W25/cutover and cold Mistral remain separate.
+
+All 1,192 preservation hashes match, including 293 unrelated declarations, raw recovery and inherited dirty memory. All recorded verification/control/pipeline PIDs are absent. #3917 remains separately RED without rerun/retry/suppression. No cleanup, unrelated/.llxprt staging, push, merge, default flip or enforcement weakening. Review skipped per Andrew 2026-10-09.
+
+---
+
 # Native compression-span query and retirement proof, 2026-10-21
 
 Implementation `9f6d9738bfb4e400cca69db989a7d189d9839fa2`; green follow-up `525721d2ab94be2d03b23d33c2a8487fd979dc52`. [W26-SOURCE-BOUND-COMPRESSION-SPANS-PROOF.json](W26-SOURCE-BOUND-COMPRESSION-SPANS-PROOF.json) binds **207 passes, zero failures/skips, 267,626 assertions in 32 serial complete files**, nine scoped gates, eight restored assertion controls, exact source/log hashes and process closure. Raw root: `tmp/p5/w26-compression-spans-run-ae/`.
