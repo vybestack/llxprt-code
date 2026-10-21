@@ -7,7 +7,15 @@ import type { VersionEdit } from '../../journal/groupEdits.js';
 import { JournalInputError } from '../../journal/errors.js';
 
 import type { CommitAck } from '../../journal/groupWriter.js';
-import { pulledRows } from './journalDetachedStream.js';
+import {
+  pulledRows,
+  pullFeed,
+  type PullFeed,
+} from './journalDetachedStream.js';
+import { JournalDensitySpans } from './journalDensitySpans.js';
+import type { RemovedInteriorSpan } from './historyEventTypes.js';
+import { mergeRemovedInteriorSpans } from './contextRange.js';
+import { SPAN_WINDOW_CAPACITY } from './historySpanWindow.js';
 import type { RowDraft } from '../../journal/rowDraft.js';
 import type { IContent } from './IContent.js';
 import {
@@ -30,6 +38,14 @@ async function* inputDrafts(
 }
 /** Encoded bytes after which an append group is written, so a long append holds a bounded part in memory. */
 const APPEND_GROUP_BYTES = 4 * 1024 * 1024;
+
+type AnnotatedAppend =
+  | { readonly draft: RowDraft }
+  | { readonly span: RemovedInteriorSpan };
+
+type AppendProjection = (
+  spans: JournalDensitySpans,
+) => Promise<RemovedInteriorSpan[]>;
 
 function encodedBytes(draft: RowDraft): number {
   return draft.blocks.reduce(
@@ -60,6 +76,80 @@ export class JournalDetachedPublication {
   /** The failure this publication's own groups reported; compensation resolves exactly that one. */
   private failure: unknown;
   private prepared: PreparedGroup | undefined;
+  private annotated:
+    | PullFeed<AnnotatedAppend, RemovedInteriorSpan[]>
+    | undefined;
+  private annotatedOwner = 0;
+  private appendProjection: AppendProjection | undefined;
+  private retainAppendSpans = false;
+
+  async appendSpan(span: RemovedInteriorSpan, origin?: string): Promise<void> {
+    if (this.annotated === undefined) {
+      await this.flushAppends();
+      const owner = await this.store.resolveOwner(origin);
+      this.annotatedOwner = owner.id;
+      this.annotated = pullFeed(async (events) => {
+        let projected: RemovedInteriorSpan[] = [];
+        await this.prepare(async (group) => {
+          const spans = new JournalDensitySpans(group);
+          const drafts = this.annotatedDrafts(events, spans);
+          let first = await drafts.next();
+          if (first.done !== true) {
+            await group.append(
+              (async function* (): AsyncGenerator<RowDraft> {
+                yield first.value;
+                first = { done: true, value: undefined };
+                yield* drafts;
+              })(),
+              owner.edits,
+            );
+          } else this.store.discardOwnerRegistration();
+          if (this.appendProjection === undefined)
+            throw new Error('Annotated append projection is not ready');
+          projected = await this.appendProjection(spans);
+          if (this.retainAppendSpans) await spans.retain(projected);
+        }, owner.edits);
+        return projected;
+      });
+    }
+    await this.annotated.put({ span });
+  }
+
+  private async *annotatedDrafts(
+    events: AsyncGenerator<AnnotatedAppend, void, unknown>,
+    spans: JournalDensitySpans,
+  ): AsyncGenerator<RowDraft> {
+    for (;;) {
+      let next: IteratorResult<AnnotatedAppend, void>;
+      try {
+        next = await events.next();
+      } catch (error) {
+        throw new JournalInputError(error);
+      }
+      if (next.done === true) return;
+      if ('span' in next.value) await spans.append(next.value.span);
+      else yield next.value.draft;
+    }
+  }
+
+  async projectAppends(
+    accumulated: readonly RemovedInteriorSpan[],
+    project: (spans: readonly RemovedInteriorSpan[]) => RemovedInteriorSpan[],
+    retain: boolean,
+  ): Promise<RemovedInteriorSpan[]> {
+    if (this.annotated === undefined)
+      return project(
+        mergeRemovedInteriorSpans(accumulated).slice(-SPAN_WINDOW_CAPACITY),
+      );
+    this.appendProjection = async (spans) =>
+      project(await spans.project(accumulated, []));
+    this.retainAppendSpans = retain;
+    return this.annotated.close();
+  }
+
+  async abortAppends(error: unknown): Promise<void> {
+    await this.annotated?.abort(error);
+  }
 
   async prepare(
     prepare: GroupPreparation,
@@ -178,6 +268,12 @@ export class JournalDetachedPublication {
   ): Promise<void> {
     try {
       const draft = encodeAppended(this.store.writes, content, origin);
+      if (this.annotated !== undefined) {
+        await this.annotated.put({
+          draft: { ...draft, owner: inheritedOwner ?? this.annotatedOwner },
+        });
+        return;
+      }
       this.pendingAppends.push(draft);
       this.pendingAppendOwners.push(inheritedOwner);
       this.pendingAppendBytes += encodedBytes(draft);

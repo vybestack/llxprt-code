@@ -1,7 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import { mergeRemovedInteriorSpans } from './contextRange.js';
-import { DensitySpanRows } from './densitySpanRows.js';
 import { JournalDensitySpans } from './journalDensitySpans.js';
 import type {
   DetachedHistoryHost,
@@ -146,7 +145,7 @@ async function publishOver(
   } finally {
     scope.close(false);
   }
-  closeTask(task, prepared.spans(), failure);
+  closeTask(task, failure);
 }
 
 /**
@@ -159,7 +158,7 @@ async function publishOver(
 interface CandidatePreparation {
   readonly candidate: JournalCandidate;
   readonly media: MediaFeed | undefined;
-  spans(): DensitySpanRows | JournalDensitySpans | undefined;
+  spans(): JournalDensitySpans | undefined;
   produce(): Promise<Parameters<DetachedHistoryHost['apply']>>;
 }
 
@@ -175,24 +174,25 @@ async function createCandidate(
   state: ReturnType<DetachedHistoryHost['snapshot']>,
 ): Promise<CandidatePreparation> {
   const appendOnly = task.append === true;
-  let densitySpans: DensitySpanRows | JournalDensitySpans | undefined =
-    appendOnly ? new DensitySpanRows() : undefined;
+  let densitySpans: JournalDensitySpans | undefined;
   const origin =
     options.origin === undefined ? undefined : historyOriginId(options.origin);
   const owner = await store.resolveOwner(appendOnly ? undefined : origin);
   const media = mediaFeed(host, appendOnly, effects);
-  const activeSpans = (): DensitySpanRows | JournalDensitySpans => {
-    if (densitySpans === undefined)
-      throw new Error('Span preparation is not active');
-    return densitySpans;
-  };
   const candidate = new JournalCandidate({
     snapshot,
     host,
     modelName,
     signal: options.signal,
     publication,
-    densitySpans: { append: (span) => activeSpans().append(span) },
+    densitySpans: {
+      append: (span) => {
+        if (appendOnly) return publication.appendSpan(span, origin);
+        if (densitySpans === undefined)
+          throw new Error('Span preparation is not active');
+        return densitySpans.append(span);
+      },
+    },
     appendOnly,
     baseTokens: appendOnly ? state.tokens : 0,
     media,
@@ -204,7 +204,8 @@ async function createCandidate(
       task,
       snapshot,
       candidate,
-      activeSpans(),
+      densitySpans,
+      publication,
       state,
       media,
       store.resumeBoundary,
@@ -232,7 +233,8 @@ async function produceCandidate(
   task: DetachedHistoryTask,
   snapshot: VersionSnapshot,
   candidate: JournalCandidate,
-  densitySpans: DensitySpanRows | JournalDensitySpans,
+  densitySpans: JournalDensitySpans | undefined,
+  publication: JournalDetachedPublication,
   state: ReturnType<DetachedHistoryHost['snapshot']>,
   media: MediaFeed | undefined,
   resumeBoundary: bigint | undefined,
@@ -241,7 +243,14 @@ async function produceCandidate(
   await candidate.seedRange();
   try {
     await transformCandidate(task, snapshot, candidate, signal, resumeBoundary);
-    const spans = await projectedSpans(candidate, densitySpans, state);
+    const spans =
+      densitySpans === undefined
+        ? await publication.projectAppends(
+            state.spans,
+            (projected) => candidate.range.snapshot(projected).removedInterior,
+            candidate.count > 0,
+          )
+        : await projectedSpans(candidate, densitySpans, state);
     await media?.close();
     await candidate.finish();
     if (densitySpans instanceof JournalDensitySpans)
@@ -256,7 +265,7 @@ async function produceCandidate(
 
 async function projectedSpans(
   candidate: JournalCandidate,
-  densitySpans: DensitySpanRows | JournalDensitySpans,
+  densitySpans: JournalDensitySpans,
   state: ReturnType<DetachedHistoryHost['snapshot']>,
 ): Promise<RemovedInteriorSpan[]> {
   const rewound = await candidate.rewoundSpan();
@@ -453,18 +462,8 @@ async function compensate(input: CompensationInput): Promise<unknown[]> {
 
 function closeTask(
   task: DetachedHistoryTask,
-  densitySpans: DensitySpanRows | JournalDensitySpans | undefined,
   failure: { error: unknown } | undefined,
 ): void {
   task.transform = undefined;
-  const closing: unknown[] = [];
-  try {
-    if (densitySpans instanceof DensitySpanRows) densitySpans.close();
-  } catch (error) {
-    closing.push(error);
-  }
-  if (failure !== undefined)
-    throw historyMutationFailure(failure.error, closing);
-  if (closing.length > 0)
-    throw new AggregateError(closing, 'Detached mutation cleanup failed');
+  if (failure !== undefined) throw failure.error;
 }

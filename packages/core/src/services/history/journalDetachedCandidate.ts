@@ -154,6 +154,7 @@ export class JournalCandidate {
   async abort(error: unknown): Promise<void> {
     if (this.feed === undefined) this.discardUnrecordedOwner();
     await this.feed?.abort(error);
+    await this.ctx.publication.abortAppends(error);
     await this.entries.return();
   }
 
