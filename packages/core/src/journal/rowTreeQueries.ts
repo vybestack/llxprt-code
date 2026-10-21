@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { ROW_SPEAKER } from './rowRecord.js';
 import type { RecordAccess } from './recordAccess.js';
 import { JournalFormatError } from './errors.js';
 import { unitCount } from './unitContributions.js';
@@ -121,4 +122,34 @@ export async function entryAtUnit(
     within -= count;
   }
   throw new JournalFormatError('Unit aggregate exceeds its entries');
+}
+
+export async function humanRowOrdinal(
+  access: RecordAccess,
+  root: RowTreeRootRef,
+  index: number,
+): Promise<number> {
+  let node = await readRowTreeNode(access, root.offset);
+  let ordinal = 0;
+  let remaining = index;
+  while (node.kind === 'internal') {
+    let next: number | undefined;
+    for (const slot of node.slots) {
+      if (remaining < slot.aggregate.humanRows) {
+        next = slot.childOffset;
+        break;
+      }
+      remaining -= slot.aggregate.humanRows;
+      ordinal += slot.count;
+    }
+    if (next === undefined)
+      throw new JournalFormatError('Human aggregate exceeds its children');
+    node = await readRowTreeNode(access, next);
+  }
+  for (const entry of node.entries) {
+    if (entry.speaker === ROW_SPEAKER.human && remaining-- === 0)
+      return ordinal;
+    ordinal++;
+  }
+  throw new JournalFormatError('Human aggregate exceeds its entries');
 }

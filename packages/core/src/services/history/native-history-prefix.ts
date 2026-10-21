@@ -1,10 +1,40 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { HistoryService } from './HistoryService.js';
 import type { HistoryCheckpointRows } from './historyCheckpointRows.js';
-import type { IContent } from './IContent.js';
+import type { IContent, MediaReferenceBlock } from './IContent.js';
 import type { LocalMediaStore } from '../../storage/local-media-store.js';
 import { historyMutationFailure } from './historyMutationEffects.js';
 import { randomUUID } from 'node:crypto';
+async function releasePrefixReference(
+  contentId: string,
+  store: LocalMediaStore | undefined,
+  owner: string,
+  failures: unknown[],
+): Promise<void> {
+  try {
+    if (store === undefined)
+      throw new Error('History media store is unavailable');
+    await store.release(contentId, owner);
+  } catch (error) {
+    failures.push(error);
+  }
+}
+
+async function releasePrefixMedia(
+  references: AsyncIterable<MediaReferenceBlock>,
+  store: LocalMediaStore | undefined,
+  owner: string,
+): Promise<unknown[]> {
+  const failures: unknown[] = [];
+  try {
+    for await (const reference of references) {
+      await releasePrefixReference(reference.contentId, store, owner, failures);
+    }
+  } catch (error) {
+    failures.push(error);
+  }
+  return failures;
+}
 
 async function withPrefixMedia<T>(
   checkpoint: HistoryCheckpointRows,
@@ -26,17 +56,10 @@ async function withPrefixMedia<T>(
   } catch (error) {
     result = { error };
   }
-  try {
-    for await (const reference of references()) {
-      if (store === undefined)
-        throw new Error('History media store is unavailable');
-      await store.release(reference.contentId, owner);
-    }
-  } catch (error) {
-    if ('error' in result) throw historyMutationFailure(result.error, [error]);
-    throw error;
-  }
-  if ('error' in result) throw result.error;
+  const failures = await releasePrefixMedia(references(), store, owner);
+  if ('error' in result) throw historyMutationFailure(result.error, failures);
+  if (failures.length > 0)
+    throw historyMutationFailure(failures[0], failures.slice(1));
   return result.value;
 }
 
@@ -102,6 +125,7 @@ export class NativeHistoryPrefixOwner {
       if (prefix.removed === 0) return execute(prefix);
       return withPrefixMedia(checkpoint, store, () =>
         history.detachedValues.withRollbackCheckpoint(async (restore) => {
+          const anchor = history.getCacheAnchorSeq();
           try {
             signal?.throwIfAborted();
             const result = await execute(prefix);
@@ -113,6 +137,9 @@ export class NativeHistoryPrefixOwner {
               await history.waitForCommit();
             } catch (rollbackError) {
               throw historyMutationFailure(error, [rollbackError]);
+            } finally {
+              if (anchor === 0) history.resetCacheAnchorSeq();
+              else history.setCacheAnchorSeq(anchor);
             }
             throw error;
           }

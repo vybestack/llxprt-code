@@ -36,6 +36,7 @@ import {
 } from './rowReads.js';
 import {
   entryByLabel,
+  humanRowOrdinal,
   countRowsBelow,
   countUnitsBelow,
   entryAtUnit,
@@ -310,6 +311,23 @@ export class VersionSnapshot {
   /** The number of live rows. */
   get rows(): number {
     return this.read.version?.rows ?? 0;
+  }
+
+  async humanCut(turns: number, fromEnd: boolean): Promise<number> {
+    this.requireOpen();
+    if (!Number.isSafeInteger(turns) || turns < 0)
+      throw new RangeError('Human turn count must be a non-negative integer');
+    if (turns === 0) return this.rows;
+    const humans = this.version?.aggregate.humanRows ?? 0;
+    if (turns > humans) return fromEnd ? 0 : this.rows;
+    const root = this.rootRef();
+    if (root === undefined)
+      throw new JournalFormatError('Human count without a row tree');
+    return humanRowOrdinal(
+      this.read.access,
+      root,
+      fromEnd ? humans - turns : turns - 1,
+    );
   }
 
   get units(): number {

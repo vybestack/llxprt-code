@@ -4,11 +4,8 @@ import type {
   DensityCallLookup,
 } from './compressionInput.js';
 import { DensityCallFacts } from '../../journal/densityCallFacts.js';
-import {
-  ROW_BLOCK_TYPE,
-  ROW_FLAG,
-  ROW_SPEAKER,
-} from '../../journal/rowRecord.js';
+import { ROW_BLOCK_TYPE } from '../../journal/rowRecord.js';
+import { snapshotReferences } from './journalMediaReferences.js';
 import { JournalFormatError } from '../../journal/errors.js';
 import { decodeStoredBlock } from './journalRowCodec.js';
 import type {
@@ -17,11 +14,7 @@ import type {
 } from './compressionChronology.js';
 import { journalCompressionSpan } from './journalCompressionSpan.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
-import {
-  isMediaReferenceBlock,
-  type IContent,
-  type MediaReferenceBlock,
-} from './IContent.js';
+import type { IContent, MediaReferenceBlock } from './IContent.js';
 import {
   buildChronologyTrace,
   type ChronologyTraceEntry,
@@ -148,43 +141,14 @@ export class JournalDumpSnapshot implements HistoryDumpSnapshot {
     void,
     unknown
   > {
-    for await (const entry of this.snapshot.entries()) {
+    for await (const reference of snapshotReferences(this.snapshot)) {
       this.readers.requireOpen();
-      if ((entry.flags & ROW_FLAG.hasMedia) === 0) continue;
-      const { header } = await this.snapshot.readIds(entry);
-      for (let index = 0; index < header.blocks.length; index++) {
-        if (header.blocks[index].type !== ROW_BLOCK_TYPE.media) continue;
-        const block = decodeStoredBlock(
-          await this.snapshot.readBlock(entry, index),
-          ROW_BLOCK_TYPE.media,
-        );
-        if (isMediaReferenceBlock(block)) yield block;
-      }
+      yield reference;
     }
   }
 
   humanCut(turns: number, fromEnd: boolean): Promise<number> {
-    return this.readers.read(async () => {
-      if (!Number.isSafeInteger(turns) || turns < 0)
-        throw new RangeError('Human turn count must be a non-negative integer');
-      if (turns === 0) return this.snapshot.rows;
-      let humans = 0;
-      if (fromEnd) {
-        for (let index = this.snapshot.rows - 1; index >= 0; index--) {
-          const entry = await this.snapshot.entryAt(index);
-          if (entry.speaker === ROW_SPEAKER.human && ++humans === turns)
-            return index;
-        }
-        return 0;
-      }
-      let index = 0;
-      for await (const entry of this.snapshot.entries()) {
-        if (entry.speaker === ROW_SPEAKER.human && ++humans === turns)
-          return index;
-        index++;
-      }
-      return this.snapshot.rows;
-    });
+    return this.readers.read(() => this.snapshot.humanCut(turns, fromEnd));
   }
 
   async chronologySelection(

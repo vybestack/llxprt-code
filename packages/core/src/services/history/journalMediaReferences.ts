@@ -1,17 +1,17 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
-import { collectMediaReferences } from '../../storage/media-reference-lifecycle.js';
+import { ROW_BLOCK_TYPE, ROW_FLAG } from '../../journal/rowRecord.js';
 import type {
   HistoryMediaOwner,
   PreparedHistoryBatchEffect,
 } from './historyBatchContracts.js';
-import type { MediaReferenceBlock } from './IContent.js';
-import { decodeStoredRow } from './journalRowCodec.js';
+import { isMediaReferenceBlock, type MediaReferenceBlock } from './IContent.js';
+import { decodeStoredBlock } from './journalRowCodec.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 
 /**
- * The media references of the first `rowLimit` rows of `snapshot`, one row
- * decoded at a time from the file; nothing is kept.
+ * The media references of the first `rowLimit` rows of `snapshot`, reading
+ * only declared media blocks; no text payload is decoded or kept.
  */
 export async function* snapshotReferences(
   snapshot: VersionSnapshot,
@@ -20,9 +20,16 @@ export async function* snapshotReferences(
   let read = 0;
   for await (const entry of snapshot.entries()) {
     if (read++ >= rowLimit) return;
-    yield* collectMediaReferences([
-      decodeStoredRow(await snapshot.readRow(entry)),
-    ]);
+    if ((entry.flags & ROW_FLAG.hasMedia) === 0) continue;
+    const { header } = await snapshot.readIds(entry);
+    for (let index = 0; index < header.blocks.length; index++) {
+      if (header.blocks[index].type !== ROW_BLOCK_TYPE.media) continue;
+      const block = decodeStoredBlock(
+        await snapshot.readBlock(entry, index),
+        ROW_BLOCK_TYPE.media,
+      );
+      if (isMediaReferenceBlock(block)) yield block;
+    }
   }
 }
 

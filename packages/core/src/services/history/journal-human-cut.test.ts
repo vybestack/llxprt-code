@@ -139,7 +139,7 @@ describe('native checkpoint human turn selection', () => {
     const entered = barrier();
     const released = barrier();
     const failure = new Error('header query failed');
-    const query = spyOn(snapshot, 'entryAt').mockImplementation(async () => {
+    const query = spyOn(snapshot, 'humanCut').mockImplementation(async () => {
       entered.open();
       await released.promise;
       throw failure;
