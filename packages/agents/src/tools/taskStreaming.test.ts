@@ -27,6 +27,7 @@ import type { LiveOutputUpdate } from '@vybestack/llxprt-code-tools';
 /** The part of {@link SubAgentScope} that task streaming manipulates. */
 interface TestSubAgentScope {
   onMessage?: (message: string) => void;
+  onOutputReset?: () => void;
 }
 
 /** Narrow bridge from the minimal test scope to the full scope type. */
@@ -79,10 +80,14 @@ describe('taskStreaming', () => {
     agentId: string,
     options: {
       existingHandler?: (message: string) => void;
+      existingResetHandler?: () => void;
       updateOutput?: (update: LiveOutputUpdate) => void;
     } = {},
   ): StreamingHarness {
-    const scope: TestSubAgentScope = { onMessage: options.existingHandler };
+    const scope: TestSubAgentScope = {
+      onMessage: options.existingHandler,
+      onOutputReset: options.existingResetHandler,
+    };
     const updates: LiveOutputUpdate[] = [];
     const collect = (update: LiveOutputUpdate): void => {
       updates.push(update);
