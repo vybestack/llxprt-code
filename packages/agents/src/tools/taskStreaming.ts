@@ -66,7 +66,7 @@ export function setupTaskStreaming(
   const escapedAgentId = escapeXmlAttributeValue(agentId);
   let xmlOutputOpen = false;
   let restoreScopeHandler: (() => void) | undefined;
-  const normalizer = createStreamNormalizer();
+  let normalizer = createStreamNormalizer();
   const emitAppend = (data: string): void => {
     updateOutput?.({ mode: 'append', data });
   };
@@ -91,6 +91,19 @@ export function setupTaskStreaming(
     xmlOutputOpen = true;
 
     const existingHandler = scope.onMessage;
+    const existingResetHandler = scope.onOutputReset;
+    const resetRelay = (): void => {
+      if (xmlOutputOpen) {
+        // Published progress is append-only. Mark its invalidation explicitly
+        // and discard any pending CR so it cannot join the replacement attempt.
+        normalizer = createStreamNormalizer();
+        heartbeat.reset();
+        emitAppend(
+          '\n[Subagent response interrupted. Previous attempt output is abandoned; retrying.]\n',
+        );
+      }
+      existingResetHandler?.();
+    };
     const relay = (message: string): void => {
       if (xmlOutputOpen) {
         heartbeat.reset();
@@ -107,8 +120,12 @@ export function setupTaskStreaming(
       if (scope.onMessage === relay) {
         scope.onMessage = existingHandler;
       }
+      if (scope.onOutputReset === resetRelay) {
+        scope.onOutputReset = existingResetHandler;
+      }
     };
     scope.onMessage = relay;
+    scope.onOutputReset = resetRelay;
   }
 
   // Start the heartbeat AFTER stream initialization so an exception during
