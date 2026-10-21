@@ -57,8 +57,19 @@ export interface RowLengthFacts {
   readonly pdfBytes?: number;
 }
 
+export interface RowFormatFill {
+  readonly measure: RowFormatRegistration['measure'];
+  finish(): Promise<Uint8Array>;
+  close(): void | Promise<void>;
+}
+
 export interface RowFormatRegistration {
   readonly settings: RowFormatSettings;
+  readonly incremental?: 'unsupported';
+  readonly prepare?: (
+    snapshot: VersionSnapshot,
+    settings: RowFormatSettings,
+  ) => Promise<RowFormatFill>;
   readonly measure: (
     snapshot: VersionSnapshot,
     entry: RowEntry,
@@ -87,5 +98,15 @@ export function captureRowFormat(
   return {
     settings: captureRowFormatSettings(registration.settings),
     measure: registration.measure,
+    prepare: registration.prepare,
+    incremental: registration.incremental,
   };
+}
+
+export function rowFormatAuxKey(
+  slot: number,
+  key: bigint,
+  gen: number,
+): string {
+  return `format:aux:${slot}:${key}:${gen}`;
 }

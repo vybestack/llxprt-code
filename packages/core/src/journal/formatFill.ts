@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { finishFormatFill } from './formatFillLifecycle.js';
 import type { Aggregate } from './aggregate.js';
 import type { Triple } from './bytes.js';
 import { JournalFormatError } from './errors.js';
@@ -383,6 +384,41 @@ async function incrementalFill(
   return next;
 }
 
+async function fillSlot(
+  fill: SlotFill,
+  built: BuiltGroup,
+  cold: boolean,
+): Promise<BuiltGroup> {
+  const { snapshot, registration, ctx, appender, slot } = fill;
+  let prepared:
+    | Awaited<ReturnType<NonNullable<RowFormatRegistration['prepare']>>>
+    | undefined;
+  try {
+    prepared = await registration.prepare?.(snapshot, registration.settings);
+    const nextFill =
+      prepared === undefined
+        ? fill
+        : {
+            ...fill,
+            registration: { ...registration, measure: prepared.measure },
+          };
+    let next = built;
+    if (built.state.rootAggregate.rows > 0)
+      next = cold
+        ? await coldFill(nextFill, built)
+        : await incrementalFill(nextFill, built);
+    return prepared === undefined
+      ? next
+      : await finishFormatFill(ctx, appender, next, slot, prepared);
+  } finally {
+    try {
+      await prepared?.close();
+    } finally {
+      await snapshot.close();
+    }
+  }
+}
+
 export async function fillRowFormats(
   ctx: BuildContext,
   built: BuiltGroup,
@@ -424,7 +460,7 @@ export async function fillRowFormats(
     const format = next.state.slots.formatSlots[slot];
     if (
       format.summaryKind === null ||
-      !needsFill(next.state.rootAggregate, slot, format)
+      (!needsFill(next.state.rootAggregate, slot, format) && slot !== assigned)
     )
       continue;
     const registration = registry.find(
@@ -435,16 +471,18 @@ export async function fillRowFormats(
         'Active format measurer must be registered before changing history',
       );
     await appender.drain();
-    const snapshot = snapshotOf(ctx, next, appender);
-    const fill = { ctx, appender, snapshot, slot, format, registration };
-    try {
-      next =
-        slot === assigned
-          ? await coldFill(fill, next)
-          : await incrementalFill(fill, next);
-    } finally {
-      await snapshot.close();
-    }
+    next = await fillSlot(
+      {
+        ctx,
+        appender,
+        snapshot: snapshotOf(ctx, next, appender),
+        slot,
+        format,
+        registration,
+      },
+      next,
+      slot === assigned,
+    );
   }
   return { built: next, registered: registry };
 }

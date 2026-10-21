@@ -1,3 +1,11 @@
+# Cold Anthropic stored lengths are implemented; mutation maintenance is not, 2026-10-21
+
+The opt-in registration now runs the actual native repair engine once across ordered ROW contributions, persists both thinking transfer tables in LENS/tree summaries, and writes a fixed-size last-kept root summary to native metadata. Cache-off full-history request planning reads the pinned aggregate and that metadata instead of reconverting history. The first native test file passes four tests/22 assertions, including independent old-emitter length/count comparisons and 40/4000-row queries at four physical reads each. This is not yet the 5000-case stored-format acceptance or a payload-interception proof.
+
+The new fill-scoped provider callback is disposed on success or failure. Repair facts are prepared before format measurement in the same native writer. Cache 5m/1h, tails/ranges, message overrides and unsupported converter settings fail explicitly. Provider routes/default remain unchanged. This first increment deliberately rejects history mutations of a measured Anthropic version before starting the writer, including after reopen, because affected-holder repair is not implemented. It does not full-refill on every append or return a stale plan. The API is usable for explicit measurement of an existing history, not yet a mutable production session.
+
+Eight scoped gates pass in `tmp/p5/anthropic-stored-run-u/gates-93706`; the native receipt is `native-94429`. Remaining work includes native stored differential/lifecycle/controls, bounded auxiliary generation storage, incremental holder maintenance, live-byte accounting, serialized-request filter/read cost, cache/tails/ranges, retained heap and 100000-call construction. W23/W25/W26 remain open. #3917 remains separately RED without retry/suppression. Review skipped per Andrew 2026-10-09.
+
 # Anthropic repeated-ID cost root is committed and passes scoped acceptance, 2026-10-21
 
 Implementation `613319d3eee5d054d8d331e1faffe83e91dd2462` finishes the inherited WIP from `88e8f8a56`. Test follow-up `08da8726fb81e75527cda2bffbf4ee21a0b2b55b` uses independently held versions and old-pipeline bytes. Full native Anthropic format/LENS work remains incomplete; provider routes and the backend default are unchanged.

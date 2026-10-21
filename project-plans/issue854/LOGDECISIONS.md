@@ -1,3 +1,9 @@
+## 2026-10-21: first actual Anthropic stored-length increment
+
+Provider measurement now owns one lazy native repair iterator for a cold fill, rather than restarting history for every row callback. Chain output is charged to its starting ROW; subsequent ROW contributions can be identities. Each ROW LENS stores two 296-byte numeric summaries: the kept/stripped transfer pair and the last-kept correction. The latter also folds into a 296-byte metadata root, so request planning need not decode ROW/LENS. Full request envelope/tools/system values are measured once outside history.
+
+Until affected-holder maintenance exists, measured Anthropic histories reject source mutations before writer admission, including reopen without callbacks. This limited opt-in API avoids both stale facts and an automatic full refill per append. Ordinary mutable provider routing is unchanged. Core imports no provider; the existing format registration supplies its prepare/finish/dispose lifecycle. Cache/range/tail support is not inferred from full-history cache-off support. Cold conversion still makes bounded repeated passes within a conversion message; the iterator does not restart the entire history per ROW. No heap or full-phase acceptance is claimed.
+
 ## 2026-10-21: Persist Anthropic repair decisions and separate cold fill from request cost
 
 Commit the coherent root fix early at `613319d3e`, before the full scale/corpus lane. Follow with `08da8726f` so old-version checks use independent pins and old-byte expectations. Preserve inherited WIP, 293 unrelated declarations, raw recovery and dirty memory. The final receipt is `PHASE5-ANTHROPIC-REPAIR-COST-PROOF.json`; raw results live under `tmp/p5/anthropic-repair-cost-finish-u`, with the actual old baseline retained under `anthropic-repair-cost-run-t`.

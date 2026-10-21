@@ -88,6 +88,11 @@ export class VersionSnapshot {
     return new NativeFactIndexReader(this.facts, scope);
   }
 
+  formatAuxiliary(key: string): Promise<Uint8Array | undefined> {
+    this.requireOpen();
+    return this.kimi.meta.get(this.version?.roots.metaRoot ?? 0, key);
+  }
+
   normalizedId(family: 1 | 2, rawId: string): string {
     this.read.requireOpen();
     return family === 1

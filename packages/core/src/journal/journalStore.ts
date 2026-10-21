@@ -70,6 +70,7 @@ import {
   writeUnlinkedCompactionCandidate,
 } from './storeCompaction.js';
 import type { SlotKinds } from './aggregateComposition.js';
+import { requireIncrementalFormats } from './formatFillLifecycle.js';
 import {
   fillRowFormats,
   warmRowFormat,
@@ -619,27 +620,29 @@ export class JournalStore {
     edits: readonly VersionEdit[],
     facts: NativeFactIndexRegistration | undefined,
   ): ReturnType<typeof fillRowFormats> {
-    const filled = await fillRowFormats(
+    const indexed = await fillNativeFacts(
       this.buildContext(),
       built,
+      appender,
+      facts,
+    );
+    return fillRowFormats(
+      this.buildContext(),
+      indexed,
       appender,
       edits,
       this.rowFormats,
     );
-    return {
-      registered: filled.registered,
-      built: await fillNativeFacts(
-        this.buildContext(),
-        filled.built,
-        appender,
-        facts,
-      ),
-    };
   }
 
   private async nativeFactRegistration(
     edits: readonly VersionEdit[],
   ): Promise<NativeFactIndexRegistration | undefined> {
+    requireIncrementalFormats(
+      edits,
+      this.rowFormats,
+      this.currentVersion?.slots,
+    );
     const edit = edits.find((item) => item.kind === 'factIndex');
     const registration =
       edit?.kind === 'factIndex' ? edit.registration : this.factIndex;

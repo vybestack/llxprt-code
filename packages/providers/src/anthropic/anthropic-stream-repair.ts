@@ -31,7 +31,7 @@ export interface LazyRepairAtom {
   readonly key: number;
   readonly role: 'assistant' | 'user';
   readonly repair: boolean;
-  openPieces(): AsyncGenerator<RepairPiece>;
+  openPieces(redact?: boolean): AsyncGenerator<RepairPiece>;
 }
 interface Run {
   readonly start: number;
@@ -46,7 +46,10 @@ const leading = (block: AnthropicMessageBlock, role: Run['role']): boolean =>
     ? block.type === 'tool_result'
     : block.type === 'thinking' || block.type === 'redacted_thinking';
 
-function numeric(piece: RepairPiece, role: Run['role']): AnthropicAtom {
+export function numericRepairPiece(
+  piece: RepairPiece,
+  role: Run['role'],
+): AnthropicAtom {
   return typeof piece === 'string'
     ? {
         role,
@@ -116,7 +119,8 @@ export class AnthropicStreamRepair {
           key,
           role: message.role,
           repair: false,
-          openPieces: () => this.tools.kept(message, this.redact(message)),
+          openPieces: (redact = this.redact(message)) =>
+            this.tools.kept(message, redact),
         };
       if (message.role !== 'assistant') continue;
       let inserted = false;
@@ -147,7 +151,7 @@ export class AnthropicStreamRepair {
       let emitted = false;
       for await (const piece of atom.openPieces()) {
         emitted = true;
-        const fact = numeric(piece, atom.role);
+        const fact = numericRepairPiece(piece, atom.role);
         summary = composeSlotSummaries(
           summary,
           anthropicUnitTransfer(
@@ -163,7 +167,7 @@ export class AnthropicStreamRepair {
         );
       }
       if (!emitted) {
-        const fact = numeric([], atom.role);
+        const fact = numericRepairPiece([], atom.role);
         summary = composeSlotSummaries(
           summary,
           anthropicUnitTransfer(
