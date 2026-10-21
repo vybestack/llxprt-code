@@ -1,5 +1,22 @@
 # Phase 5 proof map
 
+## Native plain-chat format/settings and stored-length checkpoint
+
+Implementation `b381acd74` starts at `0d5223237`; final source `3d0b2bdbafe14630d3bf95d974c92c4b4568542d` includes fail-fast admission and lifecycle supplements. [PHASE5-FORMAT-PROOF.json](PHASE5-FORMAT-PROOF.json) binds 15 scoped files to committed blobs, the 9063-path inventory and exact serial execution. Actual raw evidence is `tmp/p5/format-run-o`. No provider route/default changed.
+
+| Obligation | Direct evidence and limit |
+| --- | --- |
+| Complete declared key, supported subset | `rowFormat.ts` hashes sorted settings including exact model/endpoint and nested output limits; `journal-chat-length.test.ts` varies each field and rejects every unimplemented format/flag. Only plain chat revision 1 is admitted. The existing provider configuration pipeline is not replaced. |
+| Native fill and mutation maintenance | `JournalSession.registerRowFormat` -> queued `JournalStore` group -> `fillRowFormats` -> provider callback -> LENS/summary/stamp -> trailer. Native tests cover append, better-response holder repair, pop, owner edit, density rebuild, clone, compaction, reopen and old pins. Mistral mapping reservations cannot share a slot with assigned length semantics. |
+| Independent byte expectation | Old converter output and the existing phase-zero model, rather than the new measurement helper, establish message lengths. Tests include escaping, lone surrogates, Unicode tool names, relocated base64 media, URL/PDF URI wrappers and both thinking variants. All 5000 frozen normalization-oracle inputs and original golden/reference bytes remain unchanged. |
+| Cold and warm cost | A 128-row cold fill reads more than 128 physical ranges; warm planning reads zero; append stays below 150. Filling is an explicit conversion pass, not a zero-cost query or a separate count pass. Repeated newest-key registration avoids another trailer. Read budgets do not prove retained heap. |
+| Settings/pin/error lifetime | Tests capture settings before await, retain an old pin across eviction, refuse missing/stale facts and preserve the original callback error plus published pin version. Started-group callback failure uses the existing poisoned-writer/reopen rule. |
+| Negative controls and preservation | Six final mutants fail actual assertions for byte length, admission, key, stale generation, missing-zero facts and stale holder. Each restores with `cmp`/hash. An earlier capture mutant's runtime failure is separate. All 1778 preservation hashes, including 293 declarations, match; all 195 recorded PIDs are absent. |
+
+Final acceptance: 340 passes, zero failures/skips, 667,384 assertions, 42 serial Bun processes over 21 files on both backends, unchanged `180000` test timeout. Eight validation checks pass, plus the formatting-write step. Four `DUP_ASSERT` classifications span distinct cold/warm and lifecycle boundaries; no prohibited touched finding remains. Graph validation is not all-affected-shard execution. Earlier source/authoring runs are retained but not added to final acceptance totals.
+
+Still open: LENS-based recomputation and live-byte accounting; Kimi all-holder name/token/byte repair; image-only generations/metrics; other formats and revision pins; selected/tail/last-kept reasoning and request-only digit summaries; full envelope/media/PDF/token limits and stream guard; retained heap and 100000-call construction; W23's eight planning/header cases; Stage A/W25/provider cutover and W26 scratch removal. Reached-piece CRC remains closed within the checkpoint below. Codec #3917 remains separately RED without retry/suppression. Review skipped per Andrew 2026-10-09.
+
 ## Current ROW range integrity checkpoint
 
 Version 8 implementation `bc57523d0f1fd8a7f5d123d95c9dedd8c0875312` starts at `31534370c`. The per-piece CRC layout is wired through native `encodeRowDraft`, selected block/metadata/id readers, the full-row splitter and the recording scanner. Clone/compaction preserve its bytes through the existing streamed copy. Whole-body CRCs remain independent. [PHASE5-CRC-PROOF.json](PHASE5-CRC-PROOF.json) records current source-bound execution; [PHASE5-CRC-DECISIONS.md](PHASE5-CRC-DECISIONS.md) defines the guarantee.
