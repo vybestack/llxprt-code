@@ -16,6 +16,7 @@ import {
   writeRepairMessage,
 } from './anthropic-repair-index.js';
 import { projectAnthropicUnit } from './anthropic-unit-facts.js';
+import { appendAnthropicFacts } from './anthropic-append-facts.js';
 
 interface Consumed {
   readonly ordinal: number;
@@ -125,6 +126,8 @@ export function anthropicRepairFactIndex(
   projectAnthropicUnit({ speaker: 'human', blocks: [] }, settings);
   return {
     scope: anthropicRepairScope(settings),
+    append: (snapshot, writer, previous, edits) =>
+      appendAnthropicFacts(snapshot, writer, previous, edits, settings),
     async write(snapshot, writer, generation) {
       const query = await IndexedJournalRequestSnapshot.create(snapshot);
       try {
@@ -141,6 +144,16 @@ export function anthropicRepairFactIndex(
         }
         await writer.set(['messages'], [messages, last + 1]);
         const index = await AnthropicRepairIndex.prepared(writer, generation);
+        let tailChain = false;
+        let tailCalls = false;
+        if (messages > 0) {
+          const tail = await index.message(messages);
+          tailChain =
+            tail.slot === 'chain' ||
+            (await source.describe(tail.start))?.chain === true;
+          for await (const _call of source.calls(tail)) tailCalls = true;
+        }
+        await writer.set(['tail'], [Number(tailChain), Number(tailCalls)]);
         for (let ordinal = 1; ordinal <= messages; ordinal++) {
           const message = await index.message(ordinal);
           if (message.role !== 'assistant') continue;

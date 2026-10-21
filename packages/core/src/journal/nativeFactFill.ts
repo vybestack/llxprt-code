@@ -62,13 +62,27 @@ export async function requireNativeFactWriter(
       'Active native fact writer must be registered before changing history',
     );
 }
+function changesSource(edit: VersionEdit): boolean {
+  return ![
+    'setState',
+    'checkpoint',
+    'deleteCheckpoint',
+    'format',
+    'factIndex',
+  ].includes(edit.kind);
+}
+
 export async function fillNativeFacts(
   ctx: BuildContext,
   built: BuiltGroup,
   appender: RecordAppender,
   registration: NativeFactIndexRegistration | undefined,
-): Promise<BuiltGroup> {
-  if (registration === undefined) return built;
+  edits: readonly VersionEdit[],
+): Promise<{ built: BuiltGroup; invalidated: boolean }> {
+  const explicit = edits.some((edit) => edit.kind === 'factIndex');
+  const changed = edits.some(changesSource);
+  if (registration === undefined || (!explicit && !changed))
+    return { built, invalidated: false };
   await appender.drain();
   const batch = new IdFactBatch(
     new IdTrieReader(ctx.readGroup(appender.nextOffset), ctx.idCache),
@@ -84,8 +98,25 @@ export async function fillNativeFacts(
     const generation = nativeFactVersion(
       (previous?.[0] ?? 0) + (previous?.[1] ?? 0) * 0x1_0000_0000 + 1,
     );
-    await registration.write(snapshot, writer, generation);
-    await writer.set(['version'], generation);
+    let invalidated = false;
+    if (
+      !explicit &&
+      registration.append !== undefined &&
+      ctx.published?.slots.formatSlots.some(
+        (format) => format.summaryKind === 'anthropic',
+      ) === true
+    ) {
+      invalidated = !(await registration.append(
+        snapshot,
+        writer,
+        ctx.published,
+        edits,
+      ));
+    } else {
+      await registration.write(snapshot, writer, generation);
+      await writer.set(['version'], generation);
+    }
+    await writer.set(['invalid'], [Number(invalidated)]);
     const committed = await batch.commit(appender);
     await appender.drain();
     const meta = new KeyedMapBatch(
@@ -97,11 +128,17 @@ export async function fillNativeFacts(
       ),
       built.state.metaRoot,
     );
-    meta.set(ACTIVE_FACT_INDEX, new TextEncoder().encode(registration.scope));
+    meta.set(
+      ACTIVE_FACT_INDEX,
+      new TextEncoder().encode(invalidated ? '' : registration.scope),
+    );
     const metaRoot = await meta.commit(appender);
     return {
-      ...built,
-      state: { ...built.state, idRoot: committed.root, metaRoot },
+      built: {
+        ...built,
+        state: { ...built.state, idRoot: committed.root, metaRoot },
+      },
+      invalidated,
     };
   } finally {
     await snapshot.close();

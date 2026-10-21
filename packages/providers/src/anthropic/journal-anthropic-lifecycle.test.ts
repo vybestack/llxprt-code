@@ -139,8 +139,8 @@ describe('stored Anthropic generations and pinned lifetime', () => {
       await session.close();
     }
   });
-  it('refuses unsupported history edits before changing an acknowledged measured version', async () => {
-    const session = await JournalSession.create(
+  it('refuses unattached history edits before changing an acknowledged measured version', async () => {
+    let session = await JournalSession.create(
       `${directory()}/unsupported-edits.llxj`,
       { journal: testJournalSeams().dependencies },
     );
@@ -149,6 +149,13 @@ describe('stored Anthropic generations and pinned lifetime', () => {
         { speaker: 'human', blocks: [{ type: 'text', text: 'original' }] },
       ]);
       await register(session);
+      await session.close();
+      session = await JournalSession.open(
+        `${directory()}/unsupported-edits.llxj`,
+        {
+          journal: testJournalSeams().dependencies,
+        },
+      );
       const pin = await session.store.snapshot();
       const entry = await pin.entryAt(0);
       const published = pin.version;

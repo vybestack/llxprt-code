@@ -4,6 +4,8 @@ import { JournalFormatError } from './errors.js';
 import type { IdFactBatch } from './idFactBatch.js';
 import type { IdFactQueries } from './idFactQueries.js';
 import type { VersionSnapshot } from './versionSnapshot.js';
+import type { VersionEdit } from './groupEdits.js';
+import type { Version } from './version.js';
 
 export const NATIVE_FACT_NAMESPACE = ID_NS.nativeScalar;
 export const ACTIVE_FACT_INDEX = 'native:scalar-index';
@@ -61,6 +63,12 @@ export class NativeFactIndexWriter extends NativeFactIndexReader {
 
 export interface NativeFactIndexRegistration {
   readonly scope: string;
+  readonly append?: (
+    snapshot: VersionSnapshot,
+    writer: NativeFactIndexWriter,
+    previous: Version,
+    edits: readonly VersionEdit[],
+  ) => Promise<boolean>;
   readonly write: (
     snapshot: VersionSnapshot,
     writer: NativeFactIndexWriter,

@@ -13,6 +13,8 @@ import { finalizeAnthropicTransfer } from './anthropic-unit-transfer.js';
 import { projectAnthropicUnit } from './anthropic-unit-facts.js';
 import type { RepairPolicy } from './anthropic-repair-source.js';
 import { prepareAnthropicStoredFill } from './anthropic-stored-fill.js';
+import { prepareAnthropicStoredAppend } from './anthropic-stored-append.js';
+import { anthropicRepairScope } from './anthropic-repair-index.js';
 import { jsonValueByteLength } from '../utils/progressive-json-body.js';
 
 export function anthropicLengthRegistration(
@@ -22,8 +24,10 @@ export function anthropicLengthRegistration(
   projectAnthropicUnit({ speaker: 'human', blocks: [] }, settings);
   return {
     settings,
-    incremental: 'unsupported',
+    incremental: 'append',
+    nativeFactScope: anthropicRepairScope(settings),
     prepare: prepareAnthropicStoredFill,
+    prepareAppend: prepareAnthropicStoredAppend,
     async measure() {
       throw new JournalFormatError(
         'Anthropic measurement requires a fill-scoped native iterator',
@@ -149,14 +153,11 @@ async function planPinned(
       ? identitySlotSummary('anthropic')
       : decodeSlotSummary(version.aggregate.summaries[slot], format);
   const stripped = policy.includeInContext === false || policy.strip === 'all';
-  if (!stripped && policy.strip === 'allButLast') {
-    const metadata = await snapshot.formatAuxiliary(slot);
-    if (metadata === undefined)
-      throw new JournalFormatError(
-        'Anthropic last-kept aggregate is unmeasured',
-      );
+  const metadata = await snapshot.formatAuxiliary(slot);
+  if (metadata === undefined)
+    throw new JournalFormatError('Anthropic last-kept aggregate is unmeasured');
+  if (!stripped && policy.strip === 'allButLast')
     summary = decodeSlotSummary(metadata, format);
-  }
   if (summary.kind !== 'anthropic')
     throw new JournalFormatError('Missing stored Anthropic transfer');
   const measured = finalizeAnthropicTransfer(

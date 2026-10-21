@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import type { OutputLimitConfig } from '../utils/toolOutputLimiter.js';
 import type { RowEntry } from './rowEntry.js';
 import type { VersionSnapshot } from './versionSnapshot.js';
+import type { Version } from './version.js';
 import type { SlotSummary } from './slotSummary.js';
 
 export interface RowFormatSettings {
@@ -65,7 +66,13 @@ export interface RowFormatFill {
 
 export interface RowFormatRegistration {
   readonly settings: RowFormatSettings;
-  readonly incremental?: 'unsupported';
+  readonly incremental?: 'unsupported' | 'append';
+  readonly nativeFactScope?: string;
+  readonly prepareAppend?: (
+    snapshot: VersionSnapshot,
+    settings: RowFormatSettings,
+    previous: Version,
+  ) => Promise<RowFormatFill>;
   readonly prepare?: (
     snapshot: VersionSnapshot,
     settings: RowFormatSettings,
@@ -99,7 +106,9 @@ export function captureRowFormat(
     settings: captureRowFormatSettings(registration.settings),
     measure: registration.measure,
     prepare: registration.prepare,
+    prepareAppend: registration.prepareAppend,
     incremental: registration.incremental,
+    nativeFactScope: registration.nativeFactScope,
   };
 }
 

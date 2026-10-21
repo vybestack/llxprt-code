@@ -1,5 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { finishFormatFill } from './formatFillLifecycle.js';
+import {
+  finishFormatFill,
+  invalidateAnthropicFormats,
+} from './formatFillLifecycle.js';
 import type { Aggregate } from './aggregate.js';
 import type { Triple } from './bytes.js';
 import { JournalFormatError } from './errors.js';
@@ -394,7 +397,16 @@ async function fillSlot(
     | Awaited<ReturnType<NonNullable<RowFormatRegistration['prepare']>>>
     | undefined;
   try {
-    prepared = await registration.prepare?.(snapshot, registration.settings);
+    prepared =
+      !cold &&
+      registration.prepareAppend !== undefined &&
+      ctx.published !== undefined
+        ? await registration.prepareAppend(
+            snapshot,
+            registration.settings,
+            ctx.published,
+          )
+        : await registration.prepare?.(snapshot, registration.settings);
     const nextFill =
       prepared === undefined
         ? fill
@@ -419,12 +431,63 @@ async function fillSlot(
   }
 }
 
+interface FormatPass {
+  readonly ctx: BuildContext;
+  readonly appender: RecordAppender;
+  readonly registry: readonly RegisteredRowFormat[];
+  readonly assigned: number;
+  readonly invalidatedAnthropic: boolean;
+  readonly activeFactScope: string | undefined;
+}
+
+async function fillRegisteredSlot(
+  pass: FormatPass,
+  built: BuiltGroup,
+  slot: number,
+): Promise<BuiltGroup> {
+  const { ctx, appender, registry, assigned } = pass;
+  const format = built.state.slots.formatSlots[slot];
+  if (format.summaryKind === null) return built;
+  if (pass.invalidatedAnthropic && format.summaryKind === 'anthropic')
+    return built;
+  if (!needsFill(built.state.rootAggregate, slot, format) && slot !== assigned)
+    return built;
+  const registration = registry.find(
+    (item) => item.key === format.formatKeyHash,
+  )?.registration;
+  if (registration === undefined)
+    throw new JournalFormatError(
+      'Active format measurer must be registered before changing history',
+    );
+  if (
+    slot !== assigned &&
+    registration.nativeFactScope !== undefined &&
+    registration.nativeFactScope !== pass.activeFactScope
+  )
+    return invalidateAnthropicFormats(built, format.formatKeyHash);
+  await appender.drain();
+  return fillSlot(
+    {
+      ctx,
+      appender,
+      snapshot: snapshotOf(ctx, built, appender),
+      slot,
+      format,
+      registration,
+    },
+    built,
+    slot === assigned,
+  );
+}
+
 export async function fillRowFormats(
   ctx: BuildContext,
   built: BuiltGroup,
   appender: RecordAppender,
   edits: readonly VersionEdit[],
   registered: readonly RegisteredRowFormat[],
+  invalidatedAnthropic = false,
+  activeFactScope?: string,
 ): Promise<{ built: BuiltGroup; registered: readonly RegisteredRowFormat[] }> {
   let next = built;
   let registry = registered;
@@ -456,33 +519,24 @@ export async function fillRowFormats(
       { key, registration },
     ];
   }
-  for (let slot = 0; slot < 3; slot++) {
-    const format = next.state.slots.formatSlots[slot];
-    if (
-      format.summaryKind === null ||
-      (!needsFill(next.state.rootAggregate, slot, format) && slot !== assigned)
+  if (
+    assigned < 0 &&
+    edits.every((item) =>
+      ['factIndex', 'setState', 'checkpoint', 'deleteCheckpoint'].includes(
+        item.kind,
+      ),
     )
-      continue;
-    const registration = registry.find(
-      (item) => item.key === format.formatKeyHash,
-    )?.registration;
-    if (registration === undefined)
-      throw new JournalFormatError(
-        'Active format measurer must be registered before changing history',
-      );
-    await appender.drain();
-    next = await fillSlot(
-      {
-        ctx,
-        appender,
-        snapshot: snapshotOf(ctx, next, appender),
-        slot,
-        format,
-        registration,
-      },
-      next,
-      slot === assigned,
-    );
-  }
+  )
+    return { built: next, registered: registry };
+  const pass = {
+    ctx,
+    appender,
+    registry,
+    assigned,
+    invalidatedAnthropic,
+    activeFactScope,
+  };
+  for (let slot = 0; slot < 3; slot++)
+    next = await fillRegisteredSlot(pass, next, slot);
   return { built: next, registered: registry };
 }

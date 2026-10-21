@@ -70,7 +70,10 @@ import {
   writeUnlinkedCompactionCandidate,
 } from './storeCompaction.js';
 import type { SlotKinds } from './aggregateComposition.js';
-import { requireIncrementalFormats } from './formatFillLifecycle.js';
+import {
+  invalidateAnthropicFormats,
+  requireIncrementalFormats,
+} from './formatFillLifecycle.js';
 import {
   fillRowFormats,
   warmRowFormat,
@@ -625,13 +628,18 @@ export class JournalStore {
       built,
       appender,
       facts,
+      edits,
     );
     return fillRowFormats(
       this.buildContext(),
-      indexed,
+      indexed.invalidated
+        ? invalidateAnthropicFormats(indexed.built)
+        : indexed.built,
       appender,
       edits,
       this.rowFormats,
+      indexed.invalidated,
+      facts?.scope,
     );
   }
 

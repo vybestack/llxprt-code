@@ -50,6 +50,39 @@ export function requireIncrementalFormats(
     );
 }
 
+export function invalidateAnthropicFormats(
+  built: BuiltGroup,
+  key?: bigint,
+): BuiltGroup {
+  const advance = (
+    slot: SlotTable['formatSlots'][number],
+  ): SlotTable['formatSlots'][number] => {
+    if (
+      slot.summaryKind !== 'anthropic' ||
+      (key !== undefined && slot.formatKeyHash !== key)
+    )
+      return slot;
+    if (slot.gen === 0xffff_ffff)
+      throw new JournalFormatError('Format generation overflow');
+    return { ...slot, gen: slot.gen + 1 };
+  };
+  const slots = built.state.slots;
+  return {
+    ...built,
+    state: {
+      ...built.state,
+      slots: {
+        ...slots,
+        formatSlots: [
+          advance(slots.formatSlots[0]),
+          advance(slots.formatSlots[1]),
+          advance(slots.formatSlots[2]),
+        ],
+      },
+    },
+  };
+}
+
 export async function finishFormatFill(
   ctx: BuildContext,
   appender: RecordAppender,
