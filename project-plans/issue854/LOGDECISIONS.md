@@ -1,5 +1,19 @@
 # Issue 854 decision log, 2026-10-20
 
+## Phase 5 actual Mistral conversion and fresh selections
+
+Implementation `e678d199e` starts at `b09316357`. Native full requests resolve through the actual chat converter with persisted observed mappings, pending-only observations and one separate lazy empty-ID mapping. The complete normalized stream gives every converted nonempty result an observed call, through reconstruction or its original call. A filtered stream can remove that call, so it uses fresh scoped facts instead of silently reusing the full mapping.
+
+Cold selected conversion streams its selected unit header/ID plans in observe order and then actual conversion order. Namespace 7 stores scoped mappings/salts; namespace 8 stores scoped used strings. The existing capped group writer persists both in the journal. Resolution is a trie lookup; warm scope admission needs no selected-ID pass or new commit. Selection indices are explicit input. There is no all-history request mapper, per-ID journal scan or operation file. Persistent scope space grows with distinct selections until a native fact rebuild drops it; this cost is recorded rather than described as a constant-space journal operation.
+
+Scope identity uses a versioned native conversion generation, pending-tail ID/header facts, slot and selection. Compaction and clone keep generation and scope facts. Row-changing commits advance generation, including a purge whose ID tuples stay unchanged but whose self unit changes. Missing generation requires an explicit fill. Scope values contain no offsets and stay below the copier's IdFact size discriminator. See [PHASE5-MISTRAL-CONVERSION-DECISIONS.md](PHASE5-MISTRAL-CONVERSION-DECISIONS.md) and [PHASE5-MISTRAL-CONVERSION-PROOF.json](PHASE5-MISTRAL-CONVERSION-PROOF.json).
+
+Final test commit `f1d5aeea2` adds Unicode cases and selected-read receipts. Acceptance is 194 passes, zero failures/skips and 315,060 assertions across 42 serial processes over 21 files, plus seven passing scoped gates. Actual old-normalizer/chat-converter comparisons include all 5000 frozen inputs as full requests and one fresh deterministic filtered subset each, with zero unsupported inputs, resolver callback-order checks and exact IDs/salts. Filtering accepts increasing normalized-unit indices, not raw-row renormalization, reordering or modified streams. Unexpected full-view nonempty unobserved IDs and IDs absent from a selected scope fail explicitly.
+
+The 4000-row/2000-response selection measures 115,233 cold metadata heads, zero blocks/bodies and warm reuse with zero additional measured heads/physical reads on both backends. Three sampled resolutions satisfy the unchanged `<150` physical-read bound; cold heads remain `<selected * 100`, warm heads `<120`. Cold fill has metadata work proportional to selection size. Read-budget controls do not prove retained heap. Four controls reject and restore byte-identically; the first recognizer's false negative is retained with its actual wrong-ID failure. No completed test lane was rerun at handoff.
+
+The old production provider route and default stay unchanged; the native converter seam remains opt-in. Kimi fallback/digit-prefix arithmetic and holder measurements, full format/settings/summary/LENS, whole-range CRC, full retained heap and W26/W23/W25 dependencies remain open. Unchanged codec #3917 remains a separate RED boundary, not a suppressed acceptance result. Review skipped per Andrew 2026-10-09.
+
 ## Phase 5 request-only Kimi last-eligible queries
 
 Implementation commit: `2c421e8605379403b5a4eb6d87a38d4b22189411`. Final scoped acceptance is 98 passes, zero failures/skips and 3,083,710 assertions across 30 isolated processes; the separate unchanged codec reproduction is 39 passes and one #3917 failure. Seven scoped gates pass. Four negative controls reject and all target files restore with cmp/hash. Proof: `PHASE5-KIMI-TAIL-PROOF.json`.

@@ -1,6 +1,26 @@
 # Phase 5 proof map
 
-## Current Mistral observe-tail checkpoint
+## Current actual Mistral conversion checkpoint
+
+Implementation `e678d199e` starts at `b09316357`; final test commit `f1d5aeea2` records Unicode behavior and measured selected-query costs. [PHASE5-MISTRAL-CONVERSION-PROOF.json](PHASE5-MISTRAL-CONVERSION-PROOF.json) binds 21 scoped paths to the tested and committed source, 42 completed serial test processes and seven scoped gates. Acceptance is 194 passes, zero failures/skips and 315,060 assertions. Graph validation proves import-graph consistency, not affected-shard execution.
+
+The actual old normalizer, tools mapper and chat converter establish exact IDs, salts, resolver order and emitted messages for all 5000 unchanged inputs as full requests and 5000 deterministic filtered selections on each backend. Named cases cover empty/unnamed IDs, reconstructed and cross-speaker calls, non-AI output drops, Unicode, repeated names/raw IDs, nine-character passthrough collisions, first-holder removal and a later pending holder reserving an earlier empty allocation's first candidate. The full view keeps only pending observations and one lazy empty allocation; the converter's prepared map is row-local.
+
+Filtered requests persist fresh observe-then-convert mappings and used strings in the journal. This admission accepts increasing indices into the already normalized request. It does not renormalize filtered raw rows, reorder units or support arbitrary edited streams. No tested corpus input is excluded, but the corpus covers one subset per input, not every subset. Unexpected full-view unobserved nonempty IDs and out-of-scope selected IDs fail explicitly.
+
+| Proof obligation | Direct evidence |
+| --- | --- |
+| Actual conversion order and lazy salts | `mistral-native-conversion.test.ts`, `mistral-native-frozen.test.ts` and `support/native-mistral-oracle.ts`: actual converter callbacks, exact old-mapper IDs/salts and final message differential. |
+| Fresh filtered namespace | Named first-holder/response-only selections and every frozen input's deterministic selection compare against a new old mapper, without reusing native full mappings. |
+| Scope persistence and invalidation | `journal-mistral-conversion.test.ts`: clone, compaction and reopen reuse a filled scope; same-ID purge changes conversion generation. |
+| Query costs | Same file: 4000 rows/2000 selected responses, 115,233 cold metadata heads, zero blocks/bodies; warm reuse adds zero measured heads and zero physical reads with warm caches. Three sampled resolutions stay below 150 physical reads. Cold fill stays below `selected * 100` heads; warm heads stay below 120. |
+| Existing observe-tail bounds | `journal-mistral-tail-resources.test.ts`: 40/4000/100000 rows with 40/4000/4000 calls; preparation 22/36/46 heads, tail lookup 7/8/8, duplicate 2/2/2 and native lookup 3/4/4; zero block/body reads. |
+
+Four controls reject missing pending reservations, full-native reuse for a selection, omitted scoped collision checks and an all-history request map. Each target restores with `cmp` and equal SHA-256 before final acceptance and both commits. The lazy control's original recognizer failed despite the intended wrong-ID assertion; its original failure is retained and recognized from the recorded log without a retry. Read-budget rejection does not establish heap flatness. One `DUP_ASSERT` spans compaction/reopen commit-sequence assertions; no prohibited touched audit finding is accepted.
+
+The opt-in native converter seam is exercised by tests, while production provider sends and the backend default remain old. Cold selected fill performs two selected header/ID passes and uses capped writer/trie caches, with no history-sized request mapper or operation file; distinct scopes consume persistent journal space until native rebuild. This proof does not establish full retained heap, every selection, 100000-call construction, Kimi fallback/digit-prefix arithmetic and holder remeasurement, full format/settings/summary/LENS, range CRC or W26/W23/W25 acceptance. Unchanged codec #3917 remains separately RED at seed `609796497`, not retried or suppressed. See [PHASE5-STATUS.md](PHASE5-STATUS.md), [PHASE5-MISTRAL-CONVERSION-DECISIONS.md](PHASE5-MISTRAL-CONVERSION-DECISIONS.md) and [LOGDECISIONS.md](LOGDECISIONS.md). Review skipped per Andrew 2026-10-09.
+
+## Historical Mistral observe-tail checkpoint
 
 Starting HEAD `2be851cc3`; implementation `7ae2cf1ec7432ae3802278d38afd9a8c8660876d`. [PHASE5-MISTRAL-TAIL-PROOF.json](PHASE5-MISTRAL-TAIL-PROOF.json) binds 13 scoped source/test paths, serial acceptance and restored controls. The existing indexed request owns the pin, source and emitted affected-row view; `withMistral` adds no normalization adapter. New observed mappings retain only pending raw IDs, query native namespace 3 and preserve raw-owned VALUE validation. Actual emitted calls, not raw tail insertion order, determine assignment.
 
