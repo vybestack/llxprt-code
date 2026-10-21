@@ -1,3 +1,11 @@
+# Native purge missing acceptance supplement, 2026-10-21
+
+Independent 512/8192 eager token/value/event/range parity and primary/recorder JSON-byte parity now have direct native tests, committed first at `fc81ce5a9`. A separate native request-pin consumer verifies pending media through actual purge, request-only reservation/instance-lease survival under janitor, immutable bytes, fresh-request omission, exact abort identity, collection after awaited release, and bounded 65-distinct-unit lifetimes. Production source remains `5ecf4ab4d`; these tests required no production change. See [the source-bound supplement](recovery-2026-10-19/recovered-control/W26-SOURCE-BOUND-PURGE-MEDIA-PROOF.json) and W26 proof map for final gates and restored controls.
+
+Full public ChatSession no-file acceptance remains RED at ProviderNormalizationDisk before purge assertions. This below-provider-preparation consumer does not migrate full send. Existing provider shared HeldMediaReservations ID bookkeeping and external reservation files remain Phase 8 work; provider body/key/message/tokenizer spools and guards remain Phase 6. CLI clear/restore, annotated append, concrete fallback/curatedCandidate, pending/stale structural capacity, normalization/cache/tails/ranges/semantic generations, accounting/LENS/live bytes and whole heap/cache/pin capacity remain open, together with W23/W25/cutover/cold Mistral. #3917 remains separately RED, without retry or suppression. Defaults are unchanged. Review skipped per Andrew 2026-10-09.
+
+---
+
 # Native purge producer migrated; public request normalization remains RED, 2026-10-21
 
 Early checkpoint `f92964ea6` removes native semantic-media-purge base/candidate density copies. The follow-up uses scoped pinned raw rows, current source ordinals and version compensation, including callback rollback failure. [W26 purge receipt](recovery-2026-10-19/recovered-control/W26-SOURCE-BOUND-PURGE-PROOF.json) binds exact executions and source; [status](recovery-2026-10-19/recovered-control/W26-STATUS.md) and [caller census](recovery-2026-10-19/recovered-control/W26-NATIVE-PRODUCER-CENSUS.md) distinguish producer-only acceptance from the actual `Agent.stream` failure.

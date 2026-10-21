@@ -1,3 +1,20 @@
+# Native purge acceptance supplement, 2026-10-21
+
+[W26-SOURCE-BOUND-PURGE-MEDIA-PROOF.json](W26-SOURCE-BOUND-PURGE-MEDIA-PROOF.json) supplements the earlier purge receipt rather than rewriting its missing-coverage statements. Early green acceptance commit: `fc81ce5a9`; production source: `5ecf4ab4d`. Raw evidence: `tmp/p5/w26-purge-media-run-al/`.
+
+| Acceptance | Executable boundary |
+| --- | --- |
+| Independent 512/8192 eager successful tokens, full candidate/published values, origins, metadata/annotations, events/ranges and both durable files | agents `core/semantic-purge-native-scale-parity.test.ts`; unchanged eager oracle and old HistoryService; actual SemanticMediaPurgeSession; creating APIs denied during purge |
+| Concurrent old native request pin and in-flight immutable media survive actual purge plus janitor; fresh request omits media; completion/abort releases for collection | agents `core/semantic-purge-native-media-lease.test.ts`; actual IndexedJournalRequestSnapshot, real LocalMediaStore and RequestMediaResolver; transport gate after payload read |
+| Only current decoded media row/reservation/materialization remains live | Same file, 65 distinct media units, WeakRefs at awaited handoffs and after close; no shared all-ID reservation handle |
+| Detector sensitivity | Restored controls release blob owner early, substitute stale pinned payload, retain decoded rows, miscount purge tokens, or stop mirror delivery after nonempty seed |
+| Physical poison, compensation/version restoration, query/producer/row-65 abort, reader retirement and descriptor-close error identity | Existing native purge failure/compensation/disk-failure files and original journalStore.readerLifetime/readerCleanup, rerun serially |
+| Full public no-file request | Unchanged `api/__tests__/semantic-purge-native-chat.test.ts` remains runtime RED at ProviderNormalizationDisk, before purge assertions |
+
+The supplement records nine scoped gates, AST findings, source hashes, exact controls and byte-equal/cmp/hash restoration. Graph validation is not shard execution. Current-unit consumer proof does not close Phase 8 provider shared-reservation bookkeeping, per-request reservation files, unread-media lifetime, Phase 6 provider preparation/body transport or retained heap. Earlier unchanged 5000 golden and 3/64/65/5000 owner receipts are not counted as fresh runs. No threshold, assertion, timeout or enforcement rule changed.
+
+---
+
 # Native semantic purge producer proof and public-chat RED, 2026-10-21
 
 [Source-bound purge receipt](W26-SOURCE-BOUND-PURGE-PROOF.json). Early implementation `f92964ea6`; source/test follow-up `5ecf4ab4de7c69239d7cda474756f0fb77619e8b`; raw root `tmp/p5/w26-purge-run-ak/`. Producer acceptance: 129 passes, zero failures/skips, 110,309 assertions in 26 complete serial files and nine scoped gates. Reused executions retain exact production/executed-test bytes and list other-test-only differences. This closes neither the complete public request path nor W26.

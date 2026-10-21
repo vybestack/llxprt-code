@@ -29,6 +29,13 @@ function seededRows(size: number): IContent[] {
       metadata: {
         id: `scale-${index}`,
         responsesStored: index % 2 === 1,
+        ...(index === 0 ? { cacheAnchor: true } : {}),
+        ...(index === 3
+          ? {
+              isSummary: true,
+              chronologyReplaced: { fromSeq: 2, toSeq: 2, itemCount: 1 },
+            }
+          : {}),
         chronology: {
           seq: index + 1,
           userTurn: index + 1,

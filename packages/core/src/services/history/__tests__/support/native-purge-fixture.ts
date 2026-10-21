@@ -54,6 +54,7 @@ export class PurgePublicationOwner extends HistoryMediaOwnership {
 }
 
 interface NativePurgeFixture {
+  readonly session: JournalSession;
   readonly history: HistoryService;
   readonly store: PurgeReleaseStore;
   readonly owner: PurgePublicationOwner;
@@ -91,6 +92,7 @@ export async function withNativePurgeFixture(
     await history.attachJournal(recording, true, undefined, origin);
     await history.registerMediaOwner(owner);
     await action({
+      session,
       history,
       store,
       owner,
@@ -101,6 +103,7 @@ export async function withNativePurgeFixture(
           if (path === null) throw new Error('Missing persisted journal');
           await collectJournalFileRowsForAssertions(path, (rows) => {
             expect(rows).toStrictEqual(expected);
+            expect(JSON.stringify(rows)).toBe(JSON.stringify(expected));
           });
         }
       },
