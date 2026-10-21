@@ -62,6 +62,7 @@ export interface SubagentLaunchRequest {
 export interface ChildTaskRun {
   readonly output: OutputObject;
   onMessage?: (message: string) => void;
+  onOutputReset?: () => void;
   runInteractive(
     context: ContextState,
     options?: SubagentExecutionOptions,

@@ -34,13 +34,13 @@ import {
  * Property-based tests use fast-check (≥30% of core state tests).
  */
 
-import { afterEach, beforeEach, describe, it, expect, vi } from 'bun:test';
+import { afterEach, beforeEach, describe, it, expect, spyOn } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
-  SessionRecordingService,
   SessionDiscovery,
+  SessionRecordingService,
   type IContent,
   type SessionRecordingServiceConfig,
 } from '@vybestack/llxprt-code-core';
@@ -831,56 +831,45 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
         contents: [makeContent('first message here')],
       });
 
-      let releasePreview = (): void => {};
-      const pendingPreview = new Promise<void>((resolve) => {
+      let releasePreview: () => void = () => {};
+      const previewGate = new Promise<void>((resolve) => {
         releasePreview = resolve;
       });
       const readPreview = SessionDiscovery.readFirstUserMessage;
-      const reader = vi
-        .spyOn(SessionDiscovery, 'readFirstUserMessage')
-        .mockImplementation(async (filePath) => {
-          await pendingPreview;
-          return readPreview(filePath);
-        });
+      const previewRead = spyOn(
+        SessionDiscovery,
+        'readFirstUserMessage',
+      ).mockImplementation(async (filePath, maxLength) => {
+        await previewGate;
+        return readPreview(filePath, maxLength);
+      });
+      const { result, unmount } = renderHook(() =>
+        useSessionBrowser(makeHookProps(chatsDir)),
+      );
+
       try {
-        const props = makeHookProps(chatsDir);
-        const { result } = renderHook(() => useSessionBrowser(props));
         for (const char of 'nomatchterm') {
           result.current.handleKeypress(char, makeKey(char));
         }
 
         await waitFor(() => {
+          expect(result.current.sessions).toHaveLength(1);
+          expect(result.current.sessions[0].previewState).toBe('loading');
           expect(
-            result.all.some(
-              (snapshot) =>
-                snapshot.sessions.length === 1 &&
-                snapshot.sessions[0].previewState === 'loading',
-            ),
-          ).toBe(true);
+            result.current.filteredSessions.map((s) => s.sessionId),
+          ).toStrictEqual(['slow-preview-session']);
         });
-        const loadingSnapshot = result.all.find(
-          (snapshot) =>
-            snapshot.sessions.length === 1 &&
-            snapshot.sessions[0].previewState === 'loading',
-        );
-        expect(
-          loadingSnapshot?.filteredSessions.some(
-            (s) => s.sessionId === 'slow-preview-session',
-          ),
-        ).toBe(true);
 
         releasePreview();
+
         await waitFor(() => {
           expect(result.current.sessions[0].previewState).toBe('loaded');
-          expect(
-            result.current.filteredSessions.some(
-              (s) => s.sessionId === 'slow-preview-session',
-            ),
-          ).toBe(false);
+          expect(result.current.filteredSessions).toHaveLength(0);
         });
       } finally {
         releasePreview();
-        reader.mockRestore();
+        unmount();
+        previewRead.mockRestore();
       }
     });
   });

@@ -131,10 +131,16 @@ export async function consumeInteractiveTurnOutput(
 }> {
   let textResponse = '';
   let reportedOutputTokens: number | undefined;
-  const outputCounter = new InteractiveOutputCounter();
+  let outputCounter = new InteractiveOutputCounter();
   try {
     for await (const event of stream) {
       if (signal.aborted) break;
+      if (event.type === AgentEventType.Retry) {
+        textResponse = '';
+        reportedOutputTokens = undefined;
+        outputCounter = new InteractiveOutputCounter();
+        execCtx.onOutputReset?.();
+      }
       outputCounter.add(event);
       reportedOutputTokens =
         readInteractiveOutputTokens(event) ?? reportedOutputTokens;

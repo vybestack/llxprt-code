@@ -137,6 +137,8 @@ export class SubAgentScope {
 
   /** Optional callback for streaming text messages during execution */
   onMessage?: (message: string) => void;
+  /** Discards current-attempt derived output; already published progress is historical. */
+  onOutputReset?: () => void;
 
   private timeoutHandle: ReturnType<typeof setTimeout> | null = null;
   private activeRun: Promise<void> | undefined;
@@ -842,6 +844,7 @@ export class SubAgentScope {
         ),
       logger: this.logger,
       onMessage: this.onMessage,
+      onOutputReset: this.onOutputReset,
     };
   }
 

@@ -38,6 +38,15 @@ import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import type { OpenAIResponsesRequest } from './OpenAIResponsesTypes.js';
 import { BoundedJsonBody } from '../utils/boundedJsonBody.js';
 import { isPreviousResponseNotFoundError } from './openAIResponsesStatefulRecovery.js';
+import { ResponsesHiddenPrefix } from './openai-responses-hidden-prefix.js';
+import {
+  decideLifecycleRetry,
+  type LifecycleAttemptState,
+} from './openai-responses-lifecycle-retry.js';
+import {
+  ResponsesWebSocketLifetime,
+  WEBSOCKET_CONNECTION_LIMIT_CODE,
+} from './openai-responses-websocket-lifetime.js';
 
 export const DEFAULT_WEBSOCKET_JSON_ENVELOPE_BYTES = 32 * 1024 * 1024;
 export const CODEX_WEBSOCKET_BETA_HEADER = 'responses_websockets=2026-02-06';
@@ -47,24 +56,13 @@ export const CODEX_WEBSOCKET_BETA_HEADER = 'responses_websockets=2026-02-06';
  * connection that has been open for its sixty-minute lifecycle limit. Only this
  * exact code is a connection lifecycle event eligible for reconnect-and-retry.
  */
-export const WEBSOCKET_CONNECTION_LIMIT_CODE =
-  'websocket_connection_limit_reached';
+export { WEBSOCKET_CONNECTION_LIMIT_CODE } from './openai-responses-websocket-lifetime.js';
 
 /**
  * True only for a stream-interruption error whose nested provider error carries the
  * documented connection-limit code. No message substrings and no other codes.
  */
-export function isWebSocketConnectionLimitError(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) return false;
-  const details = (error as { details?: unknown }).details;
-  if (typeof details !== 'object' || details === null) return false;
-  const providerError = (details as { providerError?: unknown }).providerError;
-  if (typeof providerError !== 'object' || providerError === null) return false;
-  return (
-    (providerError as { code?: unknown }).code ===
-    WEBSOCKET_CONNECTION_LIMIT_CODE
-  );
-}
+export { isWebSocketConnectionLimitError } from './openai-responses-websocket-lifetime.js';
 
 /**
  * True only for the #3446 renewal verdict: a lifecycle-limit retry that
@@ -93,65 +91,6 @@ function createStatefulConnectionRenewalError(
     { statefulConnectionRenewal: true, retiredParentId: parentId },
     cause,
   );
-}
-
-/**
- * Per-request lifecycle state shared between {@link streamResponse} and its
- * single attempt helper so the #2771 retry decision sees what has already
- * been yielded and whether the one allowed retry was spent.
- */
-interface LifecycleAttemptState {
-  completed: boolean;
-  retryUsed: boolean;
-  contentYielded: boolean;
-  // The error that triggered the pending retry, so the caller can carry it as
-  // the cause of a follow-on verdict (#3446).
-  lifecycleError: unknown;
-}
-
-type LifecycleRetryOutcome =
-  | { readonly retry: true }
-  | { readonly retry: false; readonly error: unknown };
-
-/**
- * #2771 retry policy: the connection-limit verdict is scoped to the
- * connection, not the request, so the same request may be retried exactly
- * once on a brand-new connection. Aborts always surface unchanged, any other
- * error surfaces unchanged once IContent has been yielded (the turn is no
- * longer safely replayable), and a second lifecycle-limit rejection fails
- * the turn with a terminal StreamInterruptionError instead of looping.
- */
-function decideLifecycleRetry(
-  error: unknown,
-  state: LifecycleAttemptState,
-): LifecycleRetryOutcome {
-  if (error instanceof Error && error.name === 'AbortError') {
-    return { retry: false, error };
-  }
-  if (!isWebSocketConnectionLimitError(error) || state.contentYielded) {
-    return { retry: false, error };
-  }
-  if (state.retryUsed) {
-    // Preserve the original providerError payload and cause so generic
-    // classification (details.providerError) and diagnostics survive the
-    // terminal wrap; nothing outside this module retries on this code.
-    const providerError = (error as { details?: { providerError?: unknown } })
-      .details?.providerError;
-    return {
-      retry: false,
-      error: createStreamInterruptionError(
-        'Codex Responses WebSocket reached the connection lifecycle ' +
-          `limit (${WEBSOCKET_CONNECTION_LIMIT_CODE}) and the single ` +
-          'retry was also rejected',
-        providerError !== undefined ? { providerError } : undefined,
-        error,
-      ),
-    };
-  }
-  // Thread the lifecycle error through so a follow-on verdict can carry it
-  // as its cause (#3446).
-  state.lifecycleError = error;
-  return { retry: true };
 }
 
 export interface TransportLogger {
@@ -357,6 +296,7 @@ function openUndiciSocket(
 interface LiveConnection {
   readonly socket: TransportSocket;
   readonly identity: string;
+  readonly lifetime: ResponsesWebSocketLifetime;
 }
 
 interface FrameResult {
@@ -625,6 +565,8 @@ async function sendBoundedRequestEnvelope(
 class CodexResponsesWebSocketTransport implements WebSocketTransport {
   private active: LiveConnection | undefined;
   private requestQueue: Promise<void> = Promise.resolve();
+  private requestActive = false;
+  private renewalPending = false;
 
   private readonly openSocket: OpenTransportSocket;
   private readonly handshakeTimeoutMs: number;
@@ -649,12 +591,22 @@ class CodexResponsesWebSocketTransport implements WebSocketTransport {
       lifecycleError: undefined,
     };
     let socket: TransportSocket | undefined;
+    this.requestActive = true;
     try {
+      throwIfAborted(options.abortSignal);
+      this.retireExpiredConnection();
+      if (this.renewalPending && request.previous_response_id !== undefined) {
+        throw createStatefulConnectionRenewalError(
+          request.previous_response_id,
+          undefined,
+        );
+      }
       // #2771: at most one fresh-connection retry per request.
       for (;;) {
         throwIfAborted(options.abortSignal);
         socket = await this.acquireConnection(options);
         throwIfAborted(options.abortSignal);
+        this.renewalPending = false;
         const result = yield* this.attemptResponse(
           socket,
           request,
@@ -679,6 +631,9 @@ class CodexResponsesWebSocketTransport implements WebSocketTransport {
       }
     } finally {
       if (!state.completed && socket !== undefined) this.invalidate(socket);
+      this.requestActive = false;
+      this.retireExpiredConnection();
+      if (this.renewalPending) this.close();
       resolveTurn();
     }
   }
@@ -706,6 +661,11 @@ class CodexResponsesWebSocketTransport implements WebSocketTransport {
       // so a stalled stream cannot hold the connection open.
       () => this.invalidate(socket),
     );
+    const prefix = new ResponsesHiddenPrefix(state);
+    const checkAbort = (): void => {
+      if (!source.didReceiveAcceptedTerminal())
+        throwIfAborted(options.abortSignal);
+    };
     try {
       if (socket.readyState !== socket.OPEN) {
         throw createStreamInterruptionError(
@@ -725,6 +685,9 @@ class CodexResponsesWebSocketTransport implements WebSocketTransport {
         },
       )) {
         source.throwIfFailed();
+        if (prefix.quarantine(message)) continue;
+        yield* prefix.publish(() => source.throwIfFailed());
+        source.throwIfFailed();
         state.contentYielded = true;
         yield message;
       }
@@ -736,8 +699,13 @@ class CodexResponsesWebSocketTransport implements WebSocketTransport {
       state.completed = true;
       return 'completed';
     } catch (error) {
+      checkAbort();
       const outcome = decideLifecycleRetry(error, state);
-      if (!outcome.retry) throw outcome.error;
+      if (!outcome.retry) {
+        if (error instanceof Error && error.name === 'AbortError') throw error;
+        yield* prefix.publish(checkAbort);
+        throw outcome.error;
+      }
       state.retryUsed = true;
       this.invalidate(socket);
       this.config.logger?.debug(
@@ -752,8 +720,16 @@ class CodexResponsesWebSocketTransport implements WebSocketTransport {
   }
 
   close(): void {
+    this.active?.lifetime.close();
     if (this.active !== undefined) this.closeSocket(this.active.socket);
     this.active = undefined;
+  }
+
+  private retireExpiredConnection(): void {
+    if (this.active?.lifetime.isExpired() === true) {
+      this.renewalPending = true;
+      this.close();
+    }
   }
 
   private async acquireRequestTurn(
@@ -786,7 +762,11 @@ class CodexResponsesWebSocketTransport implements WebSocketTransport {
     }
     this.close();
     const socket = await this.open(url, options.headers, options.abortSignal);
-    this.active = { socket, identity };
+    const lifetime = new ResponsesWebSocketLifetime(socket, () => {
+      this.renewalPending = true;
+      if (!this.requestActive) this.close();
+    });
+    this.active = { socket, identity, lifetime };
     return socket;
   }
 
@@ -864,8 +844,8 @@ class CodexResponsesWebSocketTransport implements WebSocketTransport {
   }
 
   private invalidate(socket: TransportSocket): void {
-    if (this.active?.socket === socket) this.active = undefined;
-    this.closeSocket(socket);
+    if (this.active?.socket === socket) this.close();
+    else this.closeSocket(socket);
   }
 
   private closeSocket(socket: TransportSocket): void {

@@ -57,6 +57,7 @@ export interface ExecutionLoopContext {
   readonly resolveToolName: (rawName: string | undefined) => string | null;
   readonly logger: DebugLogger;
   onMessage?: (message: string) => void;
+  onOutputReset?: () => void;
 }
 
 // ---------------------------------------------------------------------------

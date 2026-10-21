@@ -11,6 +11,7 @@ import {
   mkdirSync,
   mkdtempSync,
   chmodSync,
+  cpSync,
   writeFileSync,
   readFileSync,
   readdirSync,
@@ -18,7 +19,7 @@ import {
   rmSync,
   symlinkSync,
 } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
@@ -143,18 +144,42 @@ const captureSmokeOutput = [
   'smoke.on("close", (status) => finish(status ?? 1));',
 ].join('\n');
 
+function prepareSmokeSource(sourceRoot: string, destination: string): void {
+  cpSync(sourceRoot, destination, {
+    recursive: true,
+    filter: (source) => {
+      const parts = relative(sourceRoot, source).split(sep);
+      return (
+        parts[0] !== 'tmp' &&
+        !parts.some((part) => ['.git', 'node_modules', 'dist'].includes(part))
+      );
+    },
+  });
+  const dependencies = join(sourceRoot, 'node_modules');
+  if (existsSync(dependencies)) {
+    symlinkSync(dependencies, join(destination, 'node_modules'), 'junction');
+  }
+}
+
 function runSmokeAsync(): SmokeHandle {
   const captureDir = mkdtempSync(join(tmpdir(), 'llxprt-release-smoke-'));
   const stdoutPath = join(captureDir, 'stdout.log');
   const stderrPath = join(captureDir, 'stderr.log');
   writeFileSync(stdoutPath, '');
   writeFileSync(stderrPath, '');
+  const sourceRoot = join(captureDir, 'source');
+  try {
+    prepareSmokeSource(repoRoot, sourceRoot);
+  } catch (error) {
+    rmSync(captureDir, { recursive: true, force: true });
+    throw error;
+  }
 
   const runningChild = spawn(
     'node',
-    ['-e', captureSmokeOutput, stdoutPath, stderrPath, smokeScript, repoRoot],
+    ['-e', captureSmokeOutput, stdoutPath, stderrPath, smokeScript, sourceRoot],
     {
-      cwd: repoRoot,
+      cwd: sourceRoot,
       env: { ...process.env },
       stdio: 'ignore',
       // Spawn detached on POSIX so we can kill the entire process group
@@ -292,6 +317,27 @@ function runSmokeAsync(): SmokeHandle {
 }
 
 describe('release-like CLI pack/install smoke (issue #2603)', () => {
+  it('keeps checkout scratch out of the release smoke source copy', () => {
+    const root = mkdtempSync(join(tmpdir(), 'llxprt-smoke-source-'));
+    try {
+      const source = join(root, 'source');
+      const destination = join(root, 'copy');
+      mkdirSync(join(source, 'tmp'), { recursive: true });
+      mkdirSync(join(source, 'node_modules'));
+      const manifest = readFileSync(join(repoRoot, 'package.json'));
+      writeFileSync(join(source, 'package.json'), manifest);
+      writeFileSync(join(source, 'tmp', 'prior-run.log'), 'not release input');
+      prepareSmokeSource(source, destination);
+      expect(readFileSync(join(destination, 'package.json'))).toEqual(manifest);
+      expect(existsSync(join(destination, 'tmp'))).toBe(false);
+      expect(realpathSync(join(destination, 'node_modules'))).toBe(
+        realpathSync(join(source, 'node_modules')),
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('the standalone smoke script exists and is invocable via npm script', () => {
     expect(existsSync(smokeScript)).toBe(true);
   });

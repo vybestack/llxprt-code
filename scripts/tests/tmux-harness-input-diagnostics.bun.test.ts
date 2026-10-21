@@ -6,16 +6,33 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
 let outDir = '';
+let socketRoot = '';
 beforeEach(async () => {
   outDir = await mkdtemp(path.join(os.tmpdir(), 'tmux-input-diagnostics-'));
+  socketRoot = await mkdtemp(
+    path.join(
+      process.platform === 'win32' ? os.tmpdir() : '/tmp',
+      'llxprt-td-',
+    ),
+  );
+  const socketPath = path.join(
+    await realpath(socketRoot),
+    'llxprt-tmux-harness-XXXXXX',
+    'tmux.sock',
+  );
+  const limit = process.platform === 'darwin' ? 104 : 108;
+  if (process.platform !== 'win32' && Buffer.byteLength(socketPath) >= limit) {
+    throw new Error(`Fixture socket path exceeds ${limit - 1} bytes`);
+  }
 });
 afterEach(async () => {
   await rm(outDir, { recursive: true, force: true });
+  await rm(socketRoot, { recursive: true, force: true });
 });
 
 function records(text: string): Array<Record<string, unknown>> {
@@ -35,7 +52,7 @@ async function submit(
   diagnostics: boolean,
   fail: boolean,
   pasteMode = 'on',
-): Promise<number | null> {
+): Promise<{ status: number | null; diagnostics: string }> {
   const scriptPath = path.join(outDir, 'script.json');
   await writeFile(
     scriptPath,
@@ -76,18 +93,25 @@ async function submit(
     'node',
     ['scripts/tmux-harness.ts', '--script', scriptPath, '--out-dir', outDir],
     {
+      env: { ...process.env, TMPDIR: socketRoot },
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout: 15000,
     },
   );
   if (result.error) throw result.error;
-  return result.status;
+  return {
+    status: result.status,
+    diagnostics: `harness exit=${result.status} signal=${result.signal}
+${result.stderr}
+${result.stdout}`.replaceAll('private-credential-value', '[redacted]'),
+  };
 }
 
 describe('tmux harness input diagnostics over native terminal input', () => {
   it('records literal delivery and one real carriage return without persisting command contents', async () => {
-    expect(await submit(true, false)).toBe(0);
+    const result = await submit(true, false);
+    expect(result.status, result.diagnostics).toBe(0);
     expect((await readFile(path.join(outDir, 'received.bin'))).toString()).toBe(
       'echo private-credential-value\r\u0004',
     );
@@ -133,7 +157,8 @@ describe('tmux harness input diagnostics over native terminal input', () => {
   }, 20000);
 
   it('preserves disabled and unavailable native format values without treating zero as unknown', async () => {
-    expect(await submit(true, false, 'off')).toBe(0);
+    const result = await submit(true, false, 'off');
+    expect(result.status, result.diagnostics).toBe(0);
     const native = records(
       await readFile(path.join(outDir, 'received.bin.tmux.json'), 'utf8'),
     )[0];
@@ -164,7 +189,8 @@ describe('tmux harness input diagnostics over native terminal input', () => {
   }, 20000);
 
   it('preserves the original wait failure and captures terminal state without resubmitting', async () => {
-    expect(await submit(true, true)).toBe(1);
+    const result = await submit(true, true);
+    expect(result.status, result.diagnostics).toBe(1);
     const text = await readFile(
       path.join(outDir, 'input-diagnostics.jsonl'),
       'utf8',
@@ -183,7 +209,8 @@ describe('tmux harness input diagnostics over native terminal input', () => {
   }, 20000);
 
   it('leaves uninstrumented scenarios without a diagnostic file', async () => {
-    expect(await submit(false, false)).toBe(0);
+    const result = await submit(false, false);
+    expect(result.status, result.diagnostics).toBe(0);
     await expect(
       readFile(path.join(outDir, 'input-diagnostics.jsonl')),
     ).rejects.toMatchObject({ code: 'ENOENT' });
