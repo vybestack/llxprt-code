@@ -124,7 +124,8 @@ export async function runCleanupFailure(primary: boolean): Promise<void> {
   if (failure !== undefined) throw failure;
 }
 
-if (import.meta.main) {
+const entrypoint = import.meta;
+if ('main' in entrypoint && entrypoint.main === true) {
   try {
     await runCleanupFailure(true);
     process.exitCode = 0;

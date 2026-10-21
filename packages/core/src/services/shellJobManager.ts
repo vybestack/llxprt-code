@@ -668,6 +668,10 @@ export class ShellJobManager {
     return record.notifiedAt === undefined;
   }
 
+  hasPendingWork(): boolean {
+    return this.posixGroups.size > 0 || this.countLiveSurvivors() > 0;
+  }
+
   getRunningJobs(): ShellJob[] {
     const result: ShellJob[] = [];
     for (const ctx of this.jobs.values()) {

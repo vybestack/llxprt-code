@@ -8,6 +8,7 @@ import { debugLogger } from '../utils/debugLogger.js';
 export interface AsyncNoticeUnsubscribe {
   (): void;
   drain(): Promise<void>;
+  schedule(): void;
 }
 
 export class AsyncNoticeSubscription {

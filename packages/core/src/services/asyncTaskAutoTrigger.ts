@@ -38,6 +38,8 @@ const SHELL_COALESCE_DEBOUNCE_MS = 300;
  */
 export class AsyncTaskAutoTrigger {
   private isTriggering = false;
+  private deliveryFailed = false;
+  private recoveryVersion = 0;
   private isAgentBusy: () => boolean;
   private triggerAgentTurn: (message: string) => Promise<void>;
   private shellSource: ShellNotificationSource | undefined;
@@ -76,6 +78,9 @@ export class AsyncTaskAutoTrigger {
   ): void {
     this.isAgentBusy = isAgentBusy;
     this.triggerAgentTurn = triggerAgentTurn;
+    this.deliveryFailed = false;
+    this.recoveryVersion++;
+    this.scheduleAutoTriggerCheck();
   }
 
   /**
@@ -122,6 +127,9 @@ export class AsyncTaskAutoTrigger {
       (): Promise<void> => this.maybeAutoTrigger(subscription),
     );
     this.subscriptions.add(subscription);
+    this.deliveryFailed = false;
+    this.recoveryVersion++;
+    subscription.schedule();
     const unsubComplete = this.taskManager.onTaskCompleted(() =>
       subscription.schedule(),
     );
@@ -159,6 +167,7 @@ export class AsyncTaskAutoTrigger {
       }
     };
     unsubscribe.drain = (): Promise<void> => subscription.drain();
+    unsubscribe.schedule = (): void => subscription.schedule();
     return unsubscribe;
   }
 
@@ -172,9 +181,10 @@ export class AsyncTaskAutoTrigger {
   private async maybeAutoTrigger(
     subscription: AsyncNoticeSubscription,
   ): Promise<void> {
-    if (this.isTriggering) return;
+    if (this.isTriggering || this.deliveryFailed) return;
 
     this.isTriggering = true;
+    const recoveryVersion = this.recoveryVersion;
     try {
       while (
         subscription.active &&
@@ -183,11 +193,17 @@ export class AsyncTaskAutoTrigger {
       ) {
         await this.deliverPending();
       }
+    } catch (error) {
+      this.deliveryFailed = recoveryVersion === this.recoveryVersion;
+      throw error;
     } finally {
       this.isTriggering = false;
-    }
-    if (!subscription.active) {
-      this.scheduleAutoTriggerCheck();
+      if (
+        !this.deliveryFailed &&
+        (!subscription.active || recoveryVersion !== this.recoveryVersion)
+      ) {
+        this.scheduleAutoTriggerCheck();
+      }
     }
   }
 

@@ -90,6 +90,7 @@ export class TaskLaunchOwner {
       );
     };
     retire.drain = (): Promise<void> => draining ?? subscription.drain();
+    retire.schedule = (): void => subscription.schedule();
     this.notices.add(retire);
     return retire;
   }

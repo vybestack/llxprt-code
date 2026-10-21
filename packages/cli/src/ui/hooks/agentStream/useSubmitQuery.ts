@@ -38,7 +38,7 @@ import {
   resolveContentPrefixIdentity,
   createCliModelIdentityRuntime,
 } from '../../utils/modelIdentity.js';
-import type { QueuedSubmission } from './types.js';
+import type { QueuedSubmission, SubmissionOutcome } from './types.js';
 import type { StreamRuntime, UiSubagentManager } from '../../cliUiRuntime.js';
 import { observeAgentEvent } from '../../../observation/jspWiring.js';
 
@@ -54,7 +54,8 @@ import {
 export type SubmissionDisposition =
   | 'consumed'
   | 'requeue'
-  | 'requeue-await-event';
+  | 'requeue-await-event'
+  | SubmissionOutcome;
 
 const MAX_QUEUED_SUBMISSION_RETRIES = 3;
 // A one-second pause avoids a tight failure loop while keeping transient
@@ -153,7 +154,7 @@ export interface UseSubmitQueryDeps {
         message: AgentRequestInput,
         signal: AbortSignal,
         promptId: string,
-      ) => Promise<void>)
+      ) => Promise<void | SubmissionOutcome>)
     | null
   >;
   submitQueryRef: React.MutableRefObject<SubmissionExecutor | null>;
@@ -352,6 +353,11 @@ function useSubmitQueryEffects(
 ) {
   const { submitQueryRef, streamingState, runtime, agent, enqueueSubmission } =
     deps;
+  const streamingStateRef = useRef(streamingState);
+  streamingStateRef.current = streamingState;
+  const notificationRef = useRef<ReturnType<
+    Agent['tasks']['subscribeNotifications']
+  > | null>(null);
   useEffect(() => {
     submitQueryRef.current = submitQuery;
   }, [submitQuery, submitQueryRef]);
@@ -359,6 +365,7 @@ function useSubmitQueryEffects(
   useEffect(() => {
     if (streamingState === StreamingState.Idle) {
       scheduleNextQueuedSubmission();
+      notificationRef.current?.schedule();
     }
   }, [streamingState, scheduleNextQueuedSubmission]);
 
@@ -372,12 +379,19 @@ function useSubmitQueryEffects(
   }, [runtime, scheduleNextQueuedSubmission]);
 
   useEffect(() => {
-    const isAgentBusy = () => streamingState !== StreamingState.Idle;
+    const isAgentBusy = () => streamingStateRef.current !== StreamingState.Idle;
     const triggerAgentTurn = (message: string): Promise<void> =>
-      new Promise<void>((resolve) => {
+      new Promise<void>((resolve, reject) => {
         enqueueSubmission({
           query: [{ type: 'text', text: message }],
-          onConsumed: resolve,
+          onSettled: (outcome) => {
+            if (outcome.status === 'completed') resolve();
+            else if (outcome.status === 'failed') reject(outcome.error);
+            else
+              reject(
+                new Error(`Background notice submission ${outcome.status}`),
+              );
+          },
         });
         scheduleNextQueuedSubmission();
       });
@@ -386,11 +400,13 @@ function useSubmitQueryEffects(
       isAgentBusy,
       triggerAgentTurn,
     );
+    notificationRef.current = unsubscribe;
 
     return () => {
+      notificationRef.current = null;
       unsubscribe();
     };
-  }, [agent, streamingState, scheduleNextQueuedSubmission, enqueueSubmission]);
+  }, [agent, scheduleNextQueuedSubmission, enqueueSubmission]);
 }
 
 interface DrainLifecycle {
@@ -421,13 +437,13 @@ function useDrainCleanup(
       if (pendingSubmissionRef.current !== null) {
         if (
           lifecycle.inFlight !== null &&
-          pendingSubmissionRef.current.onConsumed !== undefined
+          pendingSubmissionRef.current.onSettled !== undefined
         ) {
           lifecycle.inFlight.controller?.abort();
           return;
         }
-        if (pendingSubmissionRef.current.onConsumed !== undefined) {
-          pendingSubmissionRef.current.onConsumed();
+        if (pendingSubmissionRef.current.onSettled !== undefined) {
+          pendingSubmissionRef.current.onSettled({ status: 'discarded' });
         } else {
           requeueSubmission(pendingSubmissionRef.current);
         }
@@ -465,6 +481,26 @@ async function executeQueuedSubmission(
   return settlement;
 }
 
+function settleQueuedSubmission(
+  next: QueuedSubmission,
+  disposition: SubmissionDisposition,
+  retryLimitReached: boolean,
+  requeue: UseSubmitQueryDeps['requeueSubmission'],
+): void {
+  if (typeof disposition === 'object') {
+    next.onSettled?.(disposition);
+  } else if (disposition === 'consumed') {
+    next.onSettled?.({ status: 'completed' });
+  } else if (retryLimitReached) {
+    next.onSettled?.({
+      status: 'failed',
+      error: new Error('Queued submission retry limit reached'),
+    });
+  } else {
+    requeue(next);
+  }
+}
+
 function useDrainSubmission(
   drainTimeoutRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>,
   retryTimeoutRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>,
@@ -490,26 +526,28 @@ function useDrainSubmission(
         );
       } catch (error: unknown) {
         debugLogger.error('Queued submission failed unexpectedly:', error);
+        if (next.onSettled !== undefined)
+          disposition = { status: 'failed', error };
       } finally {
         lifecycle.inFlight = null;
-        if (!lifecycle.mounted) disposition = 'consumed';
+        if (!lifecycle.mounted && typeof disposition === 'string')
+          disposition = { status: 'discarded' };
         const ownsPendingSubmission = pendingSubmissionRef.current === next;
         const shouldRetry =
           ownsPendingSubmission &&
           disposition === 'requeue-await-event' &&
           retryCountRef.current < MAX_QUEUED_SUBMISSION_RETRIES;
         const retryLimitReached =
-          ownsPendingSubmission &&
-          disposition === 'requeue-await-event' &&
-          !shouldRetry;
+          !shouldRetry && disposition === 'requeue-await-event';
 
         if (ownsPendingSubmission) {
           pendingSubmissionRef.current = null;
-          if (disposition !== 'consumed' && !retryLimitReached) {
-            requeueSubmission(next);
-          } else {
-            next.onConsumed?.();
-          }
+          settleQueuedSubmission(
+            next,
+            disposition,
+            retryLimitReached,
+            requeueSubmission,
+          );
           releaseDrain();
         }
 
@@ -737,8 +775,7 @@ function useSubmitQueryCallback(cbd: SubmitQueryCallbackDeps) {
           }
         }
 
-        await runSubmitQueryCore(current, query, turn);
-        return 'consumed';
+        return await runSubmitQueryCore(current, query, turn);
       } finally {
         // Guard against stale cleanup: a terminal error/idle-timeout event
         // may have already released interactive ownership, allowing a newer
