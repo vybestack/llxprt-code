@@ -61,6 +61,29 @@ export interface ResponsesInputBuildContext {
 
 const OPENAI_RESPONSES_REASONING_ID_KEY = 'openai.responses.reasoningId';
 
+export interface ResponsesToolPairs {
+  hasCall(callId: string): boolean;
+  hasResponse(callId: string): boolean;
+}
+
+export function buildOpenAIResponsesUnit(
+  unit: IContent,
+  context: ResponsesInputBuildContext,
+  pairs: ResponsesToolPairs,
+  nextReasoningId: () => string,
+): ResponsesInputItem[] {
+  const input: ResponsesInputItem[] = [];
+  appendInputForContent(
+    input,
+    unit,
+    pairs,
+    context,
+    nextReasoningId,
+    isMediaPdfEnabled(context),
+  );
+  return input;
+}
+
 export function buildOpenAIResponsesInput(
   patchedContent: IContent[],
   context: ResponsesInputBuildContext,
@@ -127,7 +150,7 @@ function enforcePdfAggregateLimit(
 function appendInputForContent(
   input: ResponsesInputItem[],
   item: IContent,
-  pairs: ToolPairLookup,
+  pairs: ResponsesToolPairs,
   context: ResponsesInputBuildContext,
   nextReasoningId: () => string,
   mediaPdfEnabled: boolean,
@@ -214,7 +237,7 @@ function appendReasoningItems(
 function appendAssistantInput(
   input: ResponsesInputItem[],
   content: IContent,
-  pairs: ToolPairLookup,
+  pairs: ResponsesToolPairs,
   context: ResponsesInputBuildContext,
   nextReasoningId: () => string,
 ): void {
@@ -252,7 +275,7 @@ function appendAssistantInput(
 function appendToolInput(
   input: ResponsesInputItem[],
   content: IContent,
-  pairs: ToolPairLookup,
+  pairs: ResponsesToolPairs,
   context: ResponsesInputBuildContext,
   mediaPdfEnabled: boolean,
 ): void {

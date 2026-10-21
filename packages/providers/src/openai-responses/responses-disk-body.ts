@@ -74,16 +74,19 @@ async function* segmentBytes(
  * function both walk this one list, so the length cannot describe a different
  * body than the bytes.
  */
+type RequestPart =
+  | { readonly kind: 'literal'; readonly bytes: Uint8Array }
+  | { readonly kind: 'member'; readonly key: string; readonly value: unknown };
+
 type BodyPart =
   | { readonly kind: 'literal'; readonly bytes: Uint8Array }
   | { readonly kind: 'value'; readonly value: unknown }
   | { readonly kind: 'segment'; readonly segment: Gpt56SourceSegment };
 
-function* parts(
+export function* responsesRequestParts(
   request: OpenAIResponsesRequest,
-  projection: Gpt56SourceProjection,
   signal?: AbortSignal,
-): Generator<BodyPart, void> {
+): Generator<RequestPart, void> {
   let prefix = '{';
   for (const key of Object.keys(request)) {
     signal?.throwIfAborted();
@@ -93,14 +96,27 @@ function* parts(
       kind: 'literal',
       bytes: Buffer.from(`${prefix}${JSON.stringify(key)}:`),
     };
-    const segment = projection.promptSegments.find(
-      (entry) => entry.promptKey === key,
-    );
-    if (segment === undefined) yield { kind: 'value', value };
-    else yield { kind: 'segment', segment };
+    yield { kind: 'member', key, value };
     prefix = ',';
   }
   yield { kind: 'literal', bytes: Buffer.from('}') };
+}
+
+function* parts(
+  request: OpenAIResponsesRequest,
+  projection: Gpt56SourceProjection,
+  signal?: AbortSignal,
+): Generator<BodyPart, void> {
+  for (const part of responsesRequestParts(request, signal)) {
+    if (part.kind === 'literal') yield part;
+    else {
+      const segment = projection.promptSegments.find(
+        (entry) => entry.promptKey === part.key,
+      );
+      if (segment === undefined) yield { kind: 'value', value: part.value };
+      else yield { kind: 'segment', segment };
+    }
+  }
 }
 
 export async function* diskResponsesBodyBytes(

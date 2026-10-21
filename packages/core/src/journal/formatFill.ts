@@ -196,6 +196,10 @@ async function measured(
     ...entry,
     lensRef: replaceSlot(entry.lensRef, slot, lensRef),
     summary: replaceSlot(entry.summary, slot, encodeSlotSummary(facts.summary)),
+    media: {
+      ...entry.media,
+      pdfBytes: replaceSlot(entry.media.pdfBytes, slot, facts.pdfBytes ?? 0),
+    },
     stamp: replaceSlot(entry.stamp, slot, {
       gen: format.gen,
       imageGen: format.imageGen,

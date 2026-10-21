@@ -47,6 +47,7 @@ export function rowFormatKey(settings: RowFormatSettings): bigint {
 export interface RowLengthFacts {
   readonly summary: SlotSummary;
   readonly lens: Uint8Array;
+  readonly pdfBytes?: number;
 }
 
 export interface RowFormatRegistration {
