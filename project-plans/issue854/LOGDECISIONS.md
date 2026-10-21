@@ -1,5 +1,19 @@
 # Issue 854 decision log, 2026-10-20
 
+## Phase 5 Kimi fallback prefixes and written suffix digits
+
+Implementation `fb45ff0c10b822effebc51dd8bde58fe9e993958` starts at `3b608a885`. Keep conversion consumption separate from written IDs: the tools mapper starts fallback allocation after all eligible observed blocks, and a later-dropped tool response still advances it. Populate existing row/tree `unmappedBlocks`, persist the occurrence's within-row fallback rank, and compute indices through pinned tree prefixes rather than preceding-row enumeration. The rank shares the existing u16 with eligible rank under a mutually exclusive flag. Reject version 6 with file version 7 because its activation cannot establish the new semantics; widths remain unchanged and no compatibility shim is introduced.
+
+When append first maps an old unnamed ID, stream its old holders and recompute each current holder row's full occurrence ranks, including unrelated IDs within that row, before committing facts and tree together. Retain no history-sized holder set. Repeated holders can revisit the same row. Rebuild/fill streams final source metadata, and copied offset-free occurrence values remain below the IdFact discriminator. Nonzero-prefix mutation/copy assertions and OffsetAudit supplement the existing lifecycle tests.
+
+Use O(decimal widths) summation for counter digits, then subtract the indexed widths of dropped fallback responses. The mapped-exception correction remains separate. These are suffix digits only, not a holder name/token/byte measurement or completed LENS field. Request counters merge affected-row consumed deltas and remove earlier unmapped holders only for newly mapped pending IDs, excluding already corrected rows. A selected row is measured from its own metadata. Pending IDs with many native holders add sparse holder-stream work per query; no uniform depth-only bound is claimed for dense duplicates.
+
+The opt-in actual converter resolver uses a prepared occurrence array for one row. A raw-ID map would reuse fallback IDs incorrectly for repeated unmapped occurrences. Production sends/default remain old; the converter still performs its existing observation pass for other chat facts. No Mistral policy change or unbounded selection memoization is copied into Kimi.
+
+Effective acceptance is 200 passes, zero failures/skips, 385,020 assertions across 44 serial processes over 22 files on both backends, including all 5000 unchanged inputs and every projected unit counter. Seven scoped gates pass. Missing-prefix, wrong-consumption, shifted-digit-boundary, omitted-drop and whole-prefix-scan controls fail assertions and restore with cmp/hash. The scan mutant reads 4581 heads against `<150`. The earlier invalid mutant and split-case harness expectation mismatch remain classified separately. Fixed-tail counter reads are 6/9/9 at 40/4000/100000 rows with 40/4000/4000 calls. Read bounds are not retained-heap proof or proof of 100000-call construction.
+
+Full request-only digit-summary integration, holder name/token/byte remeasurement, full format/settings/summary/LENS, range CRC, retained heap at 10k/100k/1M, Stage A/W25/cutover, W26 and W23 remain open. Known codec #3917 stays separately RED without retry or suppression. See `PHASE5-KIMI-PREFIX-PROOF.json` and `PHASE5-KIMI-PREFIX-DECISIONS.md`. Review skipped per Andrew 2026-10-09.
+
 ## Phase 5 actual Mistral conversion and fresh selections
 
 Implementation `e678d199e` starts at `b09316357`. Native full requests resolve through the actual chat converter with persisted observed mappings, pending-only observations and one separate lazy empty-ID mapping. The complete normalized stream gives every converted nonempty result an observed call, through reconstruction or its original call. A filtered stream can remove that call, so it uses fresh scoped facts instead of silently reusing the full mapping.

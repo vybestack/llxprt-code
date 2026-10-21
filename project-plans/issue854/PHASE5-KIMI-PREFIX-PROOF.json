@@ -1,0 +1,1773 @@
+{
+  "testFollowupCommit": "c10fcb071d66fa42b2b0a3739fcb380127bad2e2",
+  "committedSourceBytesMatch": true,
+  "created": "2026-10-21T01:31:28.132Z",
+  "startingHead": "3b608a8858ea0b4f5d603239802b0762a415fc1e",
+  "implementationCommit": "fb45ff0c10b822effebc51dd8bde58fe9e993958",
+  "sources": {
+    "packages/core/src/journal/contributionChanges.ts": {
+      "sha256": "09a3308ea72b1aa5f44843bd6274ec84d3ec9eff22e056877853ced0253a95e7",
+      "commit": "fb45ff0c10b822effebc51dd8bde58fe9e993958"
+    },
+    "packages/core/src/journal/contributionRebuild.ts": {
+      "sha256": "c56510668cfd7cb680fc99c36c09334bb4a33dd95d7621e58132cde25b134bbd",
+      "commit": "fb45ff0c10b822effebc51dd8bde58fe9e993958"
+    },
+    "packages/core/src/journal/fileHeader.test.ts": {
+      "sha256": "82411b505c9fac3759cf9adf9f6dc4f7fa045627ded458c37296e3e8f6c44112",
+      "commit": "fb45ff0c10b822effebc51dd8bde58fe9e993958"
+    },
+    "packages/core/src/journal/fileHeader.ts": {
+      "sha256": "0bfbac5932f48c79edd4c0c18ea79132c8b152e2ba03bb6f0dd0925b2e8f475e",
+      "commit": "fb45ff0c10b822effebc51dd8bde58fe9e993958"
+    },
+    "packages/core/src/journal/groupIncremental.ts": {
+      "sha256": "52b669b6bc04317026d9237482a287d460458a80d8ae9f40a467bbaf8ffac7c9",
+      "commit": "fb45ff0c10b822effebc51dd8bde58fe9e993958"
+    },
+    "packages/core/src/journal/kimiDigits.test.ts": {
+      "sha256": "5b7b446a042ad66b7d620699e83908ba117fc2ef08c88ad1f011f87f353dc95b",
+      "commit": "fb45ff0c10b822effebc51dd8bde58fe9e993958"
+    },
+    "packages/core/src/journal/kimiDigits.ts": {
+      "sha256": "9a0834538589854178b983fb139ebb468d172d743ef21ef7bb1f420684682e59",
+      "commit": "fb45ff0c10b822effebc51dd8bde58fe9e993958"
+    },
+    "packages/core/src/journal/kimiFactCodec.ts": {
+      "sha256": "d8c5d4c180d32f9e7131d08704de6974e2cb01c82682ef4495625b21c3060e09",
+      "commit": "fb45ff0c10b822effebc51dd8bde58fe9e993958"
+    },
+    "packages/core/src/journal/kimiFactQueries.ts": {
+      "sha256": "347695e30104b64391b6569eb4e9d722ef924393eb8cce5855035ab71b8d4519",
+      "commit": "fb45ff0c10b822effebc51dd8bde58fe9e993958"
+    },
+    "packages/core/src/journal/kimiOrdinals.ts": {
+      "sha256": "49940dcdc7a7df84e102f137b13b6fa156a94b5a2845486e6dff06505defb567",
+      "commit": "fb45ff0c10b822effebc51dd8bde58fe9e993958"
+    },
+    "packages/core/src/journal/kimiPrefixWriter.ts": {
+      "sha256": "0a711ae5f5e5e5ca8734f261365c76aa798b8e297ce8341093f7a0881d64703c",
+      "commit": "fb45ff0c10b822effebc51dd8bde58fe9e993958"
+    },
+    "packages/core/src/journal/normalizedRowOccurrences.ts": {
+      "sha256": "9dde5b86c01323c277e19c44e7c650f5ff6094f598e267955a35c098689fc89b",
+      "commit": "fb45ff0c10b822effebc51dd8bde58fe9e993958"
+    },
+    "packages/core/src/journal/versionSnapshot.ts": {
+      "sha256": "70482c4e1d92a59140208dbde52c562ac01e15db8c0c4bf81c9bc839051e6743",
+      "commit": "fb45ff0c10b822effebc51dd8bde58fe9e993958"
+    },
+    "packages/core/src/services/history/indexed-journal-request-snapshot.ts": {
+      "sha256": "3f63b61431941be0cacf6b2d6f4adf9b24375de437c06a843b45211efaf8ad22",
+      "commit": "fb45ff0c10b822effebc51dd8bde58fe9e993958"
+    },
+    "packages/core/src/services/history/journal-kimi-correction-lifecycle.test.ts": {
+      "sha256": "a2bbac9f2e991baf3f4d4f7072c2831580e295d0ddb7f29d6c5074a26c3c60cd",
+      "commit": "fb45ff0c10b822effebc51dd8bde58fe9e993958"
+    },
+    "packages/core/src/services/history/journal-kimi-prefix.test.ts": {
+      "sha256": "b789d0ef6ff78b523100ebe2e1cd124f86214dc2537daa15bfc5cc358bea9eac",
+      "commit": "c10fcb071d66fa42b2b0a3739fcb380127bad2e2"
+    },
+    "packages/core/src/services/history/journal-kimi-tail-pins.test.ts": {
+      "sha256": "ec41fe74a64a5d605af0d0af575ecf5975c8458d6ea47a2835fd8bdb29bc184f",
+      "commit": "fb45ff0c10b822effebc51dd8bde58fe9e993958"
+    },
+    "packages/core/src/services/history/journal-kimi-tail-resources.test.ts": {
+      "sha256": "ff239aefb373ce9eea649744acede2b98ce8866c78f3ca56c90ba78b92e1a3b6",
+      "commit": "fb45ff0c10b822effebc51dd8bde58fe9e993958"
+    },
+    "packages/core/src/services/history/journal-request-kimi.ts": {
+      "sha256": "d666a11070902fa2cd20061d78adef73e60e3ef1f1a46448d32f8e357a5fd9f2",
+      "commit": "fb45ff0c10b822effebc51dd8bde58fe9e993958"
+    },
+    "packages/providers/src/openai/OpenAIChatBodyBuilder.ts": {
+      "sha256": "84d83434a422bec3568db345df6a9128d8b3e2aea98f15ed49263954d26ac557",
+      "commit": "fb45ff0c10b822effebc51dd8bde58fe9e993958"
+    },
+    "packages/providers/src/openai/__tests__/journal-kimi-prefix.test.ts": {
+      "sha256": "2affc564768f9141e9479ba39967e3264e4b81875c6e371e770eba6cec79d664",
+      "commit": "fb45ff0c10b822effebc51dd8bde58fe9e993958"
+    },
+    "packages/providers/src/openai/__tests__/kimi-native-frozen.test.ts": {
+      "sha256": "35f732b8efa92f6c1b83c4514da45585be85eda4fa736041cb2c0ce783056b53",
+      "commit": "fb45ff0c10b822effebc51dd8bde58fe9e993958"
+    },
+    "packages/providers/src/openai/__tests__/support/native-kimi-oracle.ts": {
+      "sha256": "cb7461951cf2417edb7b1fde5f3782c34455d3f8b8f114bc17a40ae4752bf06b",
+      "commit": "fb45ff0c10b822effebc51dd8bde58fe9e993958"
+    },
+    "packages/providers/src/openai/native-kimi-row.ts": {
+      "sha256": "59f500e49be5c76d65972992de1847f99d4f0ba3649992f52e4bd67fdc1bb0b1",
+      "commit": "fb45ff0c10b822effebc51dd8bde58fe9e993958"
+    }
+  },
+  "totals": {
+    "files": 22,
+    "processes": 44,
+    "pass": 200,
+    "fail": 0,
+    "skip": 0,
+    "assertions": 385020
+  },
+  "accepted": [
+    {
+      "name": "accepted-old-0",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/kimiDigits.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-old-0.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 79234,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:19:36.472Z",
+      "code": 0,
+      "finished": "2026-10-21T01:19:36.593Z",
+      "logHash": "9583f74b26240bdf1839291f9308f8bd119e13eb5e5f57df0bc76665d659d170"
+    },
+    {
+      "name": "accepted-old-1",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/fileHeader.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-old-1.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 79240,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:19:36.594Z",
+      "code": 0,
+      "finished": "2026-10-21T01:19:36.728Z",
+      "logHash": "f327b8979866f00d1704edb6476de0ee614a5026c4831df652fe42289ff5a119"
+    },
+    {
+      "name": "accepted-old-3",
+      "command": [
+        "bun",
+        "test",
+        "src/openai/__tests__/journal-kimi-prefix.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-old-3.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "pid": 79246,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:19:37.088Z",
+      "code": 0,
+      "finished": "2026-10-21T01:19:49.413Z",
+      "logHash": "4f10cb85fdf683403fd955de32fa3e619f6aba78d01ba4058957a7779456c925"
+    },
+    {
+      "name": "accepted-old-4",
+      "command": [
+        "bun",
+        "test",
+        "src/openai/__tests__/kimi-native-frozen.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-old-4.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "pid": 79405,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:19:49.415Z",
+      "code": 0,
+      "finished": "2026-10-21T01:20:16.520Z",
+      "logHash": "a10fff4c82a2d27b80b4a413b5e3204592d631615670c4fb27ee001c116192ef"
+    },
+    {
+      "name": "accepted-old-5",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journal-kimi-corrections.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-old-5.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 79905,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:20:16.521Z",
+      "code": 0,
+      "finished": "2026-10-21T01:20:17.293Z",
+      "logHash": "a99abcaa40476ddad4b749ad67a961ea01d0d215f79f55b899501a96ab459c61"
+    },
+    {
+      "name": "accepted-old-6",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journal-kimi-correction-lifecycle.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-old-6.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 79919,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:20:17.294Z",
+      "code": 0,
+      "finished": "2026-10-21T01:20:17.652Z",
+      "logHash": "4534bdb1f4426d3a17f16a21afdc8da9f4b0ac4e0a6e67d5674de29f09ca8c0e"
+    },
+    {
+      "name": "accepted-old-7",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journal-kimi-correction-resources.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-old-7.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 79925,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:20:17.653Z",
+      "code": 0,
+      "finished": "2026-10-21T01:20:22.575Z",
+      "logHash": "235f707b64772a490163f7a2e1585fdf52ef1fcdb0d5330b51c9d064f901bfca"
+    },
+    {
+      "name": "accepted-old-8",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journal-kimi-tail.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-old-8.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 79991,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:20:22.576Z",
+      "code": 0,
+      "finished": "2026-10-21T01:20:22.969Z",
+      "logHash": "78e4910daf9ff2d79639de92bde6110e11bdeaebc13a10fc6aa5013a4dfa0181"
+    },
+    {
+      "name": "accepted-old-9",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journal-kimi-tail-pins.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-old-9.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 79998,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:20:22.970Z",
+      "code": 0,
+      "finished": "2026-10-21T01:20:23.294Z",
+      "logHash": "8e4738cff4bf60ec7377fcbd78879a81449691b8879c9e337d0c2b80ac8d7d49"
+    },
+    {
+      "name": "accepted-old-10",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/kimi-tail-oracle.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-old-10.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 80009,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:20:23.296Z",
+      "code": 0,
+      "finished": "2026-10-21T01:20:34.004Z",
+      "logHash": "cf1a74ad993f11bf2f487dc32a97fb0ce6bd8e9084ebb9e0c274c59ae4782fc4"
+    },
+    {
+      "name": "accepted-old-11",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journal-kimi-tail-resources.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-old-11.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 80149,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:20:34.005Z",
+      "code": 0,
+      "finished": "2026-10-21T01:20:48.391Z",
+      "logHash": "274ef65d407b814bcfc3f21a5dfe8c4efc81befe78615f79ca49d6802e0be50e"
+    },
+    {
+      "name": "accepted-old-12",
+      "command": [
+        "bun",
+        "test",
+        "src/openai/__tests__/journal-kimi-corrections.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-old-12.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "pid": 80442,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:20:48.392Z",
+      "code": 0,
+      "finished": "2026-10-21T01:20:49.206Z",
+      "logHash": "1f2a9026671c38742bee22add982e254ac25286ea3497b15442d58221547c794"
+    },
+    {
+      "name": "accepted-old-13",
+      "command": [
+        "bun",
+        "test",
+        "src/openai/__tests__/journal-kimi-tail.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-old-13.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "pid": 80453,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:20:49.207Z",
+      "code": 0,
+      "finished": "2026-10-21T01:20:50.360Z",
+      "logHash": "b4d8c4cfed386ed8693b8576cdceb6e6489cc6d0ecb7cb6dfd4007f6c9bc2aca"
+    },
+    {
+      "name": "accepted-old-14",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journal-kimi-ordinals.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-old-14.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 80482,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:20:50.361Z",
+      "code": 0,
+      "finished": "2026-10-21T01:20:51.388Z",
+      "logHash": "215b8df15afeefcefcdc34f0d4051106161a51953ec282ef35536076f1d22c33"
+    },
+    {
+      "name": "accepted-old-15",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journal-kimi-ordinal-contracts.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-old-15.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 80491,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:20:51.389Z",
+      "code": 0,
+      "finished": "2026-10-21T01:20:56.239Z",
+      "logHash": "b89d77e7ab148498a700ea169f1126073e60016ece9e912cb3aaa1d52dd6527f"
+    },
+    {
+      "name": "accepted-old-16",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/normalization-unit-oracle.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-old-16.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 80564,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:20:56.240Z",
+      "code": 0,
+      "finished": "2026-10-21T01:21:10.632Z",
+      "logHash": "e074994d9e70443076b744f82199f25d5b22e6fe808954d75f01f6e0a64d7619"
+    },
+    {
+      "name": "accepted-old-17",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journal-tail-query-pins.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-old-17.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 80887,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:21:10.633Z",
+      "code": 0,
+      "finished": "2026-10-21T01:21:10.948Z",
+      "logHash": "aa1357ef8ba2621db2f4e8f7fa7912b413582f86fde4aaf1ebe1818b28b3330c"
+    },
+    {
+      "name": "accepted-old-18",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/offsetFields.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-old-18.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 80891,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:21:10.949Z",
+      "code": 0,
+      "finished": "2026-10-21T01:21:11.082Z",
+      "logHash": "3437d5dae29d6e71bf6ed5338b667c650cee837f65b20a66781020b3cd6384ee"
+    },
+    {
+      "name": "accepted-old-19",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/idFactCodec.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-old-19.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 80898,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:21:11.083Z",
+      "code": 0,
+      "finished": "2026-10-21T01:21:11.207Z",
+      "logHash": "11097fea9c37058331fb6dcba841701063c48eb3392c624af767263a78424930"
+    },
+    {
+      "name": "accepted-old-20",
+      "command": [
+        "bun",
+        "test",
+        "src/openai/OpenAIChatBodyBuilder.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-old-20.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "pid": 80899,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:21:11.208Z",
+      "code": 0,
+      "finished": "2026-10-21T01:21:13.884Z",
+      "logHash": "30f38b3f52ba5a21cf58d71f56f9c8d9e87c321eaaf175a84f93d21adcbbf8e4"
+    },
+    {
+      "name": "accepted-old-21",
+      "command": [
+        "bun",
+        "test",
+        "src/__tests__/frozenWire.openai-chat-kimi.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-old-21.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "pid": 80941,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:21:13.885Z",
+      "code": 0,
+      "finished": "2026-10-21T01:21:28.282Z",
+      "logHash": "951d3edf86ee7d0a7d1696e1a13ebad8da7a046bcdfe9d7b57265d87a5f658c9"
+    },
+    {
+      "name": "accepted-journal-0",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/kimiDigits.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-journal-0.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 81544,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:21:28.284Z",
+      "code": 0,
+      "finished": "2026-10-21T01:21:28.402Z",
+      "logHash": "9acd7a99d3640d5b08535ef77e537a8ca30d85929d804a419481d44677db3cfd"
+    },
+    {
+      "name": "accepted-journal-1",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/fileHeader.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-journal-1.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 81545,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:21:28.404Z",
+      "code": 0,
+      "finished": "2026-10-21T01:21:28.521Z",
+      "logHash": "fe8bca2e8c994b5b5df41adbf2ee5cb10545bcf9dfeaed1784c2cb4c3aff6cff"
+    },
+    {
+      "name": "accepted-journal-3",
+      "command": [
+        "bun",
+        "test",
+        "src/openai/__tests__/journal-kimi-prefix.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-journal-3.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "pid": 81556,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:21:28.865Z",
+      "code": 0,
+      "finished": "2026-10-21T01:21:41.193Z",
+      "logHash": "3ffe9272d463a495e360ba92cded1c086d77c6d81ccbeee8946324d5ebf212ab"
+    },
+    {
+      "name": "accepted-journal-4",
+      "command": [
+        "bun",
+        "test",
+        "src/openai/__tests__/kimi-native-frozen.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-journal-4.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "pid": 81878,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:21:41.194Z",
+      "code": 0,
+      "finished": "2026-10-21T01:22:08.861Z",
+      "logHash": "a1006ff09ed91bb35c7884cd45c3d79d682c98eb70da2dcb2ff58f495fa62e1a"
+    },
+    {
+      "name": "accepted-journal-5",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journal-kimi-corrections.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-journal-5.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 82542,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:22:08.862Z",
+      "code": 0,
+      "finished": "2026-10-21T01:22:09.592Z",
+      "logHash": "98567c8af597a807da330d8dfc8f602e28b2760f263bf9706129e28f13c6a45f"
+    },
+    {
+      "name": "accepted-journal-6",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journal-kimi-correction-lifecycle.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-journal-6.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 82552,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:22:09.594Z",
+      "code": 0,
+      "finished": "2026-10-21T01:22:09.952Z",
+      "logHash": "2040f5fa457fac060e9be0af62a3bfc825b5496343fa0f83e7e368fcd729e2be"
+    },
+    {
+      "name": "accepted-journal-7",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journal-kimi-correction-resources.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-journal-7.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 82578,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:22:09.953Z",
+      "code": 0,
+      "finished": "2026-10-21T01:22:15.101Z",
+      "logHash": "9ab296baa7efbe46fc0e83c5bed1c031abe714a6c65c4130a154814ba97c2b0f"
+    },
+    {
+      "name": "accepted-journal-8",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journal-kimi-tail.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-journal-8.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 82729,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:22:15.102Z",
+      "code": 0,
+      "finished": "2026-10-21T01:22:15.495Z",
+      "logHash": "43e62c0e9fe471e4c338faff4a7de6e29983fa29b9a0fc3420af2b758d13c743"
+    },
+    {
+      "name": "accepted-journal-9",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journal-kimi-tail-pins.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-journal-9.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 82731,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:22:15.497Z",
+      "code": 0,
+      "finished": "2026-10-21T01:22:15.826Z",
+      "logHash": "a35931f244dd02edd1630f8218ac86850fe2a614714fe125bd98d4614d6bb25c"
+    },
+    {
+      "name": "accepted-journal-10",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/kimi-tail-oracle.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-journal-10.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 82739,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:22:15.827Z",
+      "code": 0,
+      "finished": "2026-10-21T01:22:27.125Z",
+      "logHash": "926089efd223ee3874b4dc0ff5c28ef1e27a6891a6d8bc2e5d81897d628a3964"
+    },
+    {
+      "name": "accepted-journal-11",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journal-kimi-tail-resources.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-journal-11.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 82929,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:22:27.127Z",
+      "code": 0,
+      "finished": "2026-10-21T01:22:41.554Z",
+      "logHash": "c2ecac44efdca4202396dc9e799564fb971f922a051610b5529f543050375a6b"
+    },
+    {
+      "name": "accepted-journal-12",
+      "command": [
+        "bun",
+        "test",
+        "src/openai/__tests__/journal-kimi-corrections.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-journal-12.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "pid": 83200,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:22:41.555Z",
+      "code": 0,
+      "finished": "2026-10-21T01:22:42.393Z",
+      "logHash": "91545ef7f051d3f330f226ef763bef04390b5635eb516a1b3dab874c69a4bea4"
+    },
+    {
+      "name": "accepted-journal-13",
+      "command": [
+        "bun",
+        "test",
+        "src/openai/__tests__/journal-kimi-tail.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-journal-13.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "pid": 83219,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:22:42.395Z",
+      "code": 0,
+      "finished": "2026-10-21T01:22:43.546Z",
+      "logHash": "0e40f7ee2da1bb55034e6a6fd469e940110904cc70e31aef8a900a1f021298a8"
+    },
+    {
+      "name": "accepted-journal-14",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journal-kimi-ordinals.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-journal-14.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 83242,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:22:43.547Z",
+      "code": 0,
+      "finished": "2026-10-21T01:22:44.637Z",
+      "logHash": "226766ac7a22e421cdb0ca99d56f0fce7d759b5a0abf2b2d421249d4e8bb8b2d"
+    },
+    {
+      "name": "accepted-journal-15",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journal-kimi-ordinal-contracts.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-journal-15.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 83279,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:22:44.639Z",
+      "code": 0,
+      "finished": "2026-10-21T01:22:49.582Z",
+      "logHash": "9f08602e212aa5d18fc7f86171a35633a04f278c83a91d837a47cefc05d79088"
+    },
+    {
+      "name": "accepted-journal-16",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/normalization-unit-oracle.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-journal-16.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 83350,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:22:49.583Z",
+      "code": 0,
+      "finished": "2026-10-21T01:23:04.504Z",
+      "logHash": "b53d580f38445aa86d80400b20b2d7ee5ab116cbc51e529480dd9f5f9c3314c3"
+    },
+    {
+      "name": "accepted-journal-17",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journal-tail-query-pins.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-journal-17.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 83522,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:23:04.505Z",
+      "code": 0,
+      "finished": "2026-10-21T01:23:04.817Z",
+      "logHash": "d554f53c296a31db072c4689a5fd537f0029fe04330447b2c1e7caaec3826942"
+    },
+    {
+      "name": "accepted-journal-18",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/offsetFields.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-journal-18.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 83524,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:23:04.818Z",
+      "code": 0,
+      "finished": "2026-10-21T01:23:04.951Z",
+      "logHash": "1ea68aac6eeaab46dd8dc3d817b4af5a5e48e89d0d7a076d165634f693d7ef9d"
+    },
+    {
+      "name": "accepted-journal-19",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/idFactCodec.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-journal-19.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 83529,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:23:04.953Z",
+      "code": 0,
+      "finished": "2026-10-21T01:23:05.078Z",
+      "logHash": "d975f3efe250981d2d817afa2f5959a997f226c8fead7bbbec21e48383042077"
+    },
+    {
+      "name": "accepted-journal-20",
+      "command": [
+        "bun",
+        "test",
+        "src/openai/OpenAIChatBodyBuilder.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-journal-20.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "pid": 83530,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:23:05.080Z",
+      "code": 0,
+      "finished": "2026-10-21T01:23:07.409Z",
+      "logHash": "a7183afadb5b3559e05168b1a5ba09490b4a99cc08d97a2c3be77c67987e3c99"
+    },
+    {
+      "name": "accepted-journal-21",
+      "command": [
+        "bun",
+        "test",
+        "src/__tests__/frozenWire.openai-chat-kimi.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/accepted-journal-21.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "pid": 83636,
+      "driverPid": 79231,
+      "started": "2026-10-21T01:23:07.410Z",
+      "code": 0,
+      "finished": "2026-10-21T01:23:22.201Z",
+      "logHash": "609cf9720d0aff4eadc66e68fc9e49462c5e3a81bac2ee3baac13c49fb0f6521"
+    },
+    {
+      "name": "nonzero-final-old",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journal-kimi-prefix.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/nonzero-final-old.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 89569,
+      "driverPid": 89562,
+      "started": "2026-10-21T01:27:08.983Z",
+      "code": 0,
+      "finished": "2026-10-21T01:27:09.349Z",
+      "logHash": "2eaa8598f7d485b16bc852d0116413ca34e12feb95839072e19da0382fbee9e1"
+    },
+    {
+      "name": "nonzero-final-journal",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journal-kimi-prefix.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/nonzero-final-journal.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 89596,
+      "driverPid": 89562,
+      "started": "2026-10-21T01:27:09.360Z",
+      "code": 0,
+      "finished": "2026-10-21T01:27:09.704Z",
+      "logHash": "eead939d95425da4308e8a20de9e9b31e3e955889516424b5b3944ec7e8532a4"
+    }
+  ],
+  "gates": [
+    {
+      "name": "commit-gates-declarations",
+      "command": [
+        "bun",
+        "../../scripts/build_package.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 84616,
+      "driverPid": 84612,
+      "started": "2026-10-21T01:23:28.743Z",
+      "code": 0,
+      "finished": "2026-10-21T01:23:32.558Z",
+      "logHash": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127"
+    },
+    {
+      "name": "commit-gates-types",
+      "command": [
+        "bunx",
+        "tsc",
+        "--noEmit",
+        "-p",
+        "packages/core/tsconfig.noemit.json"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 84674,
+      "driverPid": 84612,
+      "started": "2026-10-21T01:23:32.560Z",
+      "code": 0,
+      "finished": "2026-10-21T01:23:39.242Z",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "commit-gates-provider-types",
+      "command": [
+        "bunx",
+        "tsc",
+        "--noEmit",
+        "-p",
+        "packages/providers/tsconfig.noemit.json"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 84747,
+      "driverPid": 84612,
+      "started": "2026-10-21T01:23:39.244Z",
+      "code": 0,
+      "finished": "2026-10-21T01:23:45.053Z",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "commit-gates-lint",
+      "command": [
+        "bunx",
+        "eslint",
+        "--max-warnings",
+        "0",
+        "packages/core/src/journal/contributionChanges.ts",
+        "packages/core/src/journal/contributionRebuild.ts",
+        "packages/core/src/journal/fileHeader.test.ts",
+        "packages/core/src/journal/fileHeader.ts",
+        "packages/core/src/journal/groupIncremental.ts",
+        "packages/core/src/journal/kimiFactCodec.ts",
+        "packages/core/src/journal/kimiFactQueries.ts",
+        "packages/core/src/journal/kimiOrdinals.ts",
+        "packages/core/src/journal/normalizedRowOccurrences.ts",
+        "packages/core/src/journal/versionSnapshot.ts",
+        "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+        "packages/core/src/services/history/journal-kimi-correction-lifecycle.test.ts",
+        "packages/core/src/services/history/journal-kimi-tail-pins.test.ts",
+        "packages/core/src/services/history/journal-kimi-tail-resources.test.ts",
+        "packages/core/src/services/history/journal-request-kimi.ts",
+        "packages/providers/src/openai/OpenAIChatBodyBuilder.ts",
+        "packages/core/src/journal/kimiDigits.test.ts",
+        "packages/core/src/journal/kimiDigits.ts",
+        "packages/core/src/journal/kimiPrefixWriter.ts",
+        "packages/core/src/services/history/journal-kimi-prefix.test.ts",
+        "packages/providers/src/openai/__tests__/journal-kimi-prefix.test.ts",
+        "packages/providers/src/openai/__tests__/kimi-native-frozen.test.ts",
+        "packages/providers/src/openai/__tests__/support/native-kimi-oracle.ts",
+        "packages/providers/src/openai/native-kimi-row.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 84804,
+      "driverPid": 84612,
+      "started": "2026-10-21T01:23:45.054Z",
+      "code": 0,
+      "finished": "2026-10-21T01:23:51.690Z",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "commit-gates-prettier",
+      "command": [
+        "bunx",
+        "prettier",
+        "--check",
+        "packages/core/src/journal/contributionChanges.ts",
+        "packages/core/src/journal/contributionRebuild.ts",
+        "packages/core/src/journal/fileHeader.test.ts",
+        "packages/core/src/journal/fileHeader.ts",
+        "packages/core/src/journal/groupIncremental.ts",
+        "packages/core/src/journal/kimiFactCodec.ts",
+        "packages/core/src/journal/kimiFactQueries.ts",
+        "packages/core/src/journal/kimiOrdinals.ts",
+        "packages/core/src/journal/normalizedRowOccurrences.ts",
+        "packages/core/src/journal/versionSnapshot.ts",
+        "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+        "packages/core/src/services/history/journal-kimi-correction-lifecycle.test.ts",
+        "packages/core/src/services/history/journal-kimi-tail-pins.test.ts",
+        "packages/core/src/services/history/journal-kimi-tail-resources.test.ts",
+        "packages/core/src/services/history/journal-request-kimi.ts",
+        "packages/providers/src/openai/OpenAIChatBodyBuilder.ts",
+        "packages/core/src/journal/kimiDigits.test.ts",
+        "packages/core/src/journal/kimiDigits.ts",
+        "packages/core/src/journal/kimiPrefixWriter.ts",
+        "packages/core/src/services/history/journal-kimi-prefix.test.ts",
+        "packages/providers/src/openai/__tests__/journal-kimi-prefix.test.ts",
+        "packages/providers/src/openai/__tests__/kimi-native-frozen.test.ts",
+        "packages/providers/src/openai/__tests__/support/native-kimi-oracle.ts",
+        "packages/providers/src/openai/native-kimi-row.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 84867,
+      "driverPid": 84612,
+      "started": "2026-10-21T01:23:51.691Z",
+      "code": 0,
+      "finished": "2026-10-21T01:23:51.982Z",
+      "logHash": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+    },
+    {
+      "name": "commit-gates-graph",
+      "command": [
+        "bun",
+        "scripts/check-affected-test-shards.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 84875,
+      "driverPid": 84612,
+      "started": "2026-10-21T01:23:51.983Z",
+      "code": 0,
+      "finished": "2026-10-21T01:23:54.142Z",
+      "logHash": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67"
+    },
+    {
+      "name": "commit-gates-audit",
+      "command": [
+        "bun",
+        "scripts/test-audit/scan.ts",
+        "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/commit-gates-audit"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 84927,
+      "driverPid": 84612,
+      "started": "2026-10-21T01:23:54.144Z",
+      "code": 0,
+      "finished": "2026-10-21T01:23:56.962Z",
+      "logHash": "27ef4189ba333dc61129d42cd1c8fe3f39490f2a6076fd3f00f9d91e2681c733"
+    },
+    {
+      "name": "nonzero-final-lint",
+      "command": [
+        "bunx",
+        "eslint",
+        "--max-warnings",
+        "0",
+        "packages/core/src/services/history/journal-kimi-prefix.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 89603,
+      "driverPid": 89562,
+      "started": "2026-10-21T01:27:09.709Z",
+      "code": 0,
+      "finished": "2026-10-21T01:27:13.470Z",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "nonzero-final-types",
+      "command": [
+        "bunx",
+        "tsc",
+        "--noEmit",
+        "-p",
+        "packages/core/tsconfig.noemit.json"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 89683,
+      "driverPid": 89562,
+      "started": "2026-10-21T01:27:13.472Z",
+      "code": 0,
+      "finished": "2026-10-21T01:27:15.283Z",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "nonzero-final-audit",
+      "command": [
+        "bun",
+        "scripts/test-audit/scan.ts",
+        "tmp/854-notes/p5/kimi-prefix-run-m/nonzero-final-audit"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 89718,
+      "driverPid": 89562,
+      "started": "2026-10-21T01:27:15.285Z",
+      "code": 0,
+      "finished": "2026-10-21T01:27:18.081Z",
+      "logHash": "e51a7ef6a8880e2ce52682262ec709366255c6f85880f6408a80d375ea74dc22"
+    },
+    {
+      "name": "nonzero-final-prettier",
+      "command": [
+        "bunx",
+        "prettier",
+        "--check",
+        "packages/core/src/services/history/journal-kimi-prefix.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 92162,
+      "driverPid": 92161,
+      "started": "2026-10-21T01:29:29.318Z",
+      "code": 0,
+      "finished": "2026-10-21T01:29:29.459Z",
+      "logHash": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+    }
+  ],
+  "controls": [
+    {
+      "name": "control-missing-prefix",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journal-kimi-prefix.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/control-missing-prefix.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 77186,
+      "driverPid": 77185,
+      "started": "2026-10-21T01:17:51.014Z",
+      "code": 1,
+      "finished": "2026-10-21T01:17:51.320Z",
+      "logHash": "2be4e197370bb06bd901112de4bf0df23f2a0c39daffc48312da3af98e689af2"
+    },
+    {
+      "name": "control-written-instead-of-consumed",
+      "command": [
+        "bun",
+        "test",
+        "src/openai/__tests__/journal-kimi-prefix.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/control-written-instead-of-consumed.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "pid": 77192,
+      "driverPid": 77185,
+      "started": "2026-10-21T01:17:51.325Z",
+      "code": 1,
+      "finished": "2026-10-21T01:17:51.734Z",
+      "logHash": "69402e20a982b9c41550998ec9ff001a2d20428ca706d4ebb9b4688219217edd"
+    },
+    {
+      "name": "control-digit-boundary",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/kimiDigits.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/control-digit-boundary.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 77208,
+      "driverPid": 77185,
+      "started": "2026-10-21T01:17:51.737Z",
+      "code": 1,
+      "finished": "2026-10-21T01:17:51.867Z",
+      "logHash": "f929d72a62be345c5214014699aa2ff48b1d962cb1b61a2c159134fbaaf9c70c"
+    },
+    {
+      "name": "control-dropped-writes",
+      "command": [
+        "bun",
+        "test",
+        "src/openai/__tests__/journal-kimi-prefix.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/control-dropped-writes.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "pid": 77213,
+      "driverPid": 77185,
+      "started": "2026-10-21T01:17:51.871Z",
+      "code": 1,
+      "finished": "2026-10-21T01:17:52.283Z",
+      "logHash": "0a071915ebea4d1b6278d1a238879eafa682eef9ad1cce7ee452ae013fd110a6"
+    },
+    {
+      "name": "control-whole-prefix-walk-fixed",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journal-kimi-tail-resources.test.ts",
+        "--test-name-pattern",
+        "4000 rows",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 77786,
+      "driverPid": 77785,
+      "started": "2026-10-21T01:18:11.829Z",
+      "code": 1,
+      "finished": "2026-10-21T01:18:16.626Z",
+      "logHash": "edc2b75c91f4a5de3e6caa856bbdfc47914d320034dfc0c5103f7107fe35ead4"
+    }
+  ],
+  "restorations": [
+    {
+      "name": "missing-prefix",
+      "path": "packages/core/src/journal/normalizedRowOccurrences.ts",
+      "before": "dfb3eb247eb92acc2b2c5c8939a476cacec9f16e2d43d27cfe40ad3a66666bbe",
+      "restored": "dfb3eb247eb92acc2b2c5c8939a476cacec9f16e2d43d27cfe40ad3a66666bbe",
+      "cmp": true
+    },
+    {
+      "name": "written-instead-of-consumed",
+      "path": "packages/core/src/journal/normalizedRowOccurrences.ts",
+      "before": "dfb3eb247eb92acc2b2c5c8939a476cacec9f16e2d43d27cfe40ad3a66666bbe",
+      "restored": "dfb3eb247eb92acc2b2c5c8939a476cacec9f16e2d43d27cfe40ad3a66666bbe",
+      "cmp": true
+    },
+    {
+      "name": "digit-boundary",
+      "path": "packages/core/src/journal/kimiDigits.ts",
+      "before": "9a0834538589854178b983fb139ebb468d172d743ef21ef7bb1f420684682e59",
+      "restored": "9a0834538589854178b983fb139ebb468d172d743ef21ef7bb1f420684682e59",
+      "cmp": true
+    },
+    {
+      "name": "dropped-writes",
+      "path": "packages/core/src/journal/kimiFactQueries.ts",
+      "before": "347695e30104b64391b6569eb4e9d722ef924393eb8cce5855035ab71b8d4519",
+      "restored": "347695e30104b64391b6569eb4e9d722ef924393eb8cce5855035ab71b8d4519",
+      "cmp": true
+    },
+    {
+      "name": "whole-prefix-walk",
+      "path": "packages/core/src/journal/versionSnapshot.ts",
+      "before": "70482c4e1d92a59140208dbde52c562ac01e15db8c0c4bf81c9bc839051e6743",
+      "restored": "70482c4e1d92a59140208dbde52c562ac01e15db8c0c4bf81c9bc839051e6743",
+      "cmp": true
+    },
+    {
+      "name": "whole-prefix-walk-fixed",
+      "path": "packages/core/src/journal/versionSnapshot.ts",
+      "before": "70482c4e1d92a59140208dbde52c562ac01e15db8c0c4bf81c9bc839051e6743",
+      "restored": "70482c4e1d92a59140208dbde52c562ac01e15db8c0c4bf81c9bc839051e6743",
+      "cmp": true
+    }
+  ],
+  "initialFailures": [
+    {
+      "name": "red-provider",
+      "command": [
+        "bun",
+        "test",
+        "src/openai/__tests__/journal-kimi-prefix.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/red-provider.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "pid": 46263,
+      "driverPid": 46257,
+      "started": "2026-10-21T01:05:39.837Z",
+      "code": 1,
+      "finished": "2026-10-21T01:05:40.835Z",
+      "logHash": "7ae0df8882463f1db05bb6cc9c74d7ca76d1c787a16713a9ea8eff721a15b1ac"
+    },
+    {
+      "name": "red-digits",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/kimiDigits.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/red-digits.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 46302,
+      "driverPid": 46257,
+      "started": "2026-10-21T01:05:40.836Z",
+      "code": 1,
+      "finished": "2026-10-21T01:05:40.962Z",
+      "logHash": "e5881bff4c00bc0fae5f3da3b0b19820aa660f66d7f84fd3099d9ba58e1f11b7"
+    },
+    {
+      "name": "red-version",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/fileHeader.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/red-version.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 51052,
+      "driverPid": 51050,
+      "started": "2026-10-21T01:08:02.627Z",
+      "code": 1,
+      "finished": "2026-10-21T01:08:02.752Z",
+      "logHash": "cb4eae331e7b0c13ee6753921d4a82866682a75adbd5f05f2a8a0cb43f672292"
+    },
+    {
+      "name": "red-native-converter",
+      "command": [
+        "bun",
+        "test",
+        "src/openai/__tests__/journal-kimi-prefix.test.ts",
+        "--timeout",
+        "180000",
+        "--reporter=junit",
+        "--reporter-outfile=/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/854-notes/p5/kimi-prefix-run-m/red-native-converter.xml"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "pid": 59403,
+      "driverPid": 59402,
+      "started": "2026-10-21T01:10:21.759Z",
+      "code": 1,
+      "finished": "2026-10-21T01:10:26.671Z",
+      "logHash": "690104fee93aeb3e2f4dd73571390c045498395616801441b855fb6cdb1cb564"
+    },
+    {
+      "name": "first-gates-lint",
+      "command": [
+        "bunx",
+        "eslint",
+        "--max-warnings",
+        "0",
+        "packages/core/src/journal/contributionChanges.ts",
+        "packages/core/src/journal/contributionRebuild.ts",
+        "packages/core/src/journal/fileHeader.test.ts",
+        "packages/core/src/journal/fileHeader.ts",
+        "packages/core/src/journal/groupIncremental.ts",
+        "packages/core/src/journal/kimiFactCodec.ts",
+        "packages/core/src/journal/kimiFactQueries.ts",
+        "packages/core/src/journal/kimiOrdinals.ts",
+        "packages/core/src/journal/normalizedRowOccurrences.ts",
+        "packages/core/src/journal/versionSnapshot.ts",
+        "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+        "packages/core/src/services/history/journal-kimi-correction-lifecycle.test.ts",
+        "packages/core/src/services/history/journal-kimi-tail-resources.test.ts",
+        "packages/core/src/services/history/journal-request-kimi.ts",
+        "packages/providers/src/openai/OpenAIChatBodyBuilder.ts",
+        "packages/core/src/journal/kimiDigits.test.ts",
+        "packages/core/src/journal/kimiDigits.ts",
+        "packages/core/src/journal/kimiPrefixWriter.ts",
+        "packages/core/src/services/history/journal-kimi-prefix.test.ts",
+        "packages/providers/src/openai/__tests__/journal-kimi-prefix.test.ts",
+        "packages/providers/src/openai/native-kimi-row.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 66365,
+      "driverPid": 65911,
+      "started": "2026-10-21T01:12:13.341Z",
+      "code": 1,
+      "finished": "2026-10-21T01:12:21.633Z",
+      "logHash": "2146b8f4aff564038b7374de323e997a7a9c9bbd934755f93ad1717a48a2ddd5"
+    },
+    {
+      "name": "refactored-gates-lint",
+      "command": [
+        "bunx",
+        "eslint",
+        "--max-warnings",
+        "0",
+        "packages/core/src/journal/contributionChanges.ts",
+        "packages/core/src/journal/contributionRebuild.ts",
+        "packages/core/src/journal/fileHeader.test.ts",
+        "packages/core/src/journal/fileHeader.ts",
+        "packages/core/src/journal/groupIncremental.ts",
+        "packages/core/src/journal/kimiFactCodec.ts",
+        "packages/core/src/journal/kimiFactQueries.ts",
+        "packages/core/src/journal/kimiOrdinals.ts",
+        "packages/core/src/journal/normalizedRowOccurrences.ts",
+        "packages/core/src/journal/versionSnapshot.ts",
+        "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+        "packages/core/src/services/history/journal-kimi-correction-lifecycle.test.ts",
+        "packages/core/src/services/history/journal-kimi-tail-resources.test.ts",
+        "packages/core/src/services/history/journal-request-kimi.ts",
+        "packages/providers/src/openai/OpenAIChatBodyBuilder.ts",
+        "packages/core/src/journal/kimiDigits.test.ts",
+        "packages/core/src/journal/kimiDigits.ts",
+        "packages/core/src/journal/kimiPrefixWriter.ts",
+        "packages/core/src/services/history/journal-kimi-prefix.test.ts",
+        "packages/providers/src/openai/__tests__/journal-kimi-prefix.test.ts",
+        "packages/providers/src/openai/__tests__/support/native-kimi-oracle.ts",
+        "packages/providers/src/openai/native-kimi-row.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 72448,
+      "driverPid": 71979,
+      "started": "2026-10-21T01:15:21.754Z",
+      "code": 1,
+      "finished": "2026-10-21T01:15:30.052Z",
+      "logHash": "cad62e7d8bf7b4de148bea8a3e7b8889b1f7669f9bfafa873a2a65d6f5db3f5e"
+    },
+    {
+      "name": "format-nonzero",
+      "command": [
+        "bunx",
+        "prettier",
+        "--write",
+        "packages/core/src/services/history/journal-kimi-prefix.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 89023,
+      "driverPid": 89022,
+      "started": "2026-10-21T01:26:30.301Z",
+      "code": 2,
+      "finished": "2026-10-21T01:26:30.410Z",
+      "logHash": "959e77963a07e11f292328bf8173a5d146cbdc3e82aaabc16ad6d8bdd82ea4c2"
+    },
+    {
+      "name": "nonzero-lint",
+      "command": [
+        "bunx",
+        "eslint",
+        "--max-warnings",
+        "0",
+        "packages/core/src/services/history/journal-kimi-prefix.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 89211,
+      "driverPid": 89196,
+      "started": "2026-10-21T01:26:41.413Z",
+      "code": 1,
+      "finished": "2026-10-21T01:26:45.179Z",
+      "logHash": "1f34de033f827be1a420afe674cedcf72bf5b436d0344c650815a347ef4480d1"
+    }
+  ],
+  "invalidControl": [
+    {
+      "name": "control-whole-prefix-walk",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journal-kimi-tail-resources.test.ts",
+        "--test-name-pattern",
+        "4000 rows",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 77222,
+      "driverPid": 77185,
+      "started": "2026-10-21T01:17:52.287Z",
+      "code": 1,
+      "finished": "2026-10-21T01:17:52.533Z",
+      "logHash": "ac7c4512df7246deac89734b094aeeffac3f467d523382a21571bfe70a6ea17e"
+    }
+  ],
+  "harnessExpectationMismatch": "red-split-counter exited zero; only extracted call survives old normalization, no product fix or RED claimed",
+  "readMeasurements": [
+    {
+      "size": 40,
+      "readings": {
+        "prepare": 20,
+        "count": 3,
+        "counter": 6,
+        "endCounter": 0,
+        "ordinal": 1,
+        "tailMapping": 1,
+        "journalMapping": 10,
+        "calls": 40
+      },
+      "pid": 80149,
+      "backend": "old"
+    },
+    {
+      "size": 4000,
+      "readings": {
+        "prepare": 33,
+        "count": 3,
+        "counter": 9,
+        "endCounter": 0,
+        "ordinal": 1,
+        "tailMapping": 1,
+        "journalMapping": 21,
+        "calls": 4000
+      },
+      "pid": 80149,
+      "backend": "old"
+    },
+    {
+      "size": 100000,
+      "readings": {
+        "prepare": 43,
+        "count": 3,
+        "counter": 9,
+        "endCounter": 0,
+        "ordinal": 1,
+        "tailMapping": 1,
+        "journalMapping": 27,
+        "calls": 4000
+      },
+      "pid": 80149,
+      "backend": "old"
+    },
+    {
+      "size": 40,
+      "readings": {
+        "prepare": 20,
+        "count": 3,
+        "counter": 6,
+        "endCounter": 0,
+        "ordinal": 1,
+        "tailMapping": 1,
+        "journalMapping": 10,
+        "calls": 40
+      },
+      "pid": 82929,
+      "backend": "journal"
+    },
+    {
+      "size": 4000,
+      "readings": {
+        "prepare": 33,
+        "count": 3,
+        "counter": 9,
+        "endCounter": 0,
+        "ordinal": 1,
+        "tailMapping": 1,
+        "journalMapping": 21,
+        "calls": 4000
+      },
+      "pid": 82929,
+      "backend": "journal"
+    },
+    {
+      "size": 100000,
+      "readings": {
+        "prepare": 43,
+        "count": 3,
+        "counter": 9,
+        "endCounter": 0,
+        "ordinal": 1,
+        "tailMapping": 1,
+        "journalMapping": 27,
+        "calls": 4000
+      },
+      "pid": 82929,
+      "backend": "journal"
+    }
+  ],
+  "preservation": {
+    "path": "tmp/854-notes/p5/kimi-prefix-run-m/preservation-final.json",
+    "entries": 1380,
+    "sha256": "14acbaa86b0902d1cc124329b28153ce588f5c226f87aee4f19e78c3fc1a1b17",
+    "generatedDeclarations": 293
+  },
+  "fullSourceInventory": {
+    "path": "tmp/854-notes/p5/kimi-prefix-run-m/final-sources.json",
+    "entries": 8187,
+    "sha256": "be6e1b4ca2006c3c7021e7776c27ec153f7d5da556d15b1001ec5e9edf3c08ee",
+    "unchangedAcceptedInventoryExceptSupplementalTest": true
+  },
+  "rawReceipts": {
+    "path": "tmp/854-notes/p5/kimi-prefix-run-m/receipt-index.json",
+    "entries": 291,
+    "sha256": "b45641e84862cb2dedb49df5c4b701ec1568f6038a1fbe7ead7821436a9e5c3a"
+  },
+  "absentPids": [
+    46263,
+    46257,
+    46302,
+    51052,
+    51050,
+    55736,
+    55712,
+    57647,
+    59403,
+    59402,
+    65665,
+    65658,
+    65676,
+    65689,
+    65816,
+    65923,
+    65911,
+    66047,
+    66198,
+    66365,
+    71546,
+    71542,
+    71559,
+    71994,
+    71979,
+    72113,
+    72292,
+    72448,
+    73265,
+    73261,
+    73485,
+    73497,
+    73574,
+    74757,
+    74756,
+    77186,
+    77185,
+    77192,
+    77208,
+    77213,
+    77222,
+    77786,
+    77785,
+    79230,
+    79225,
+    79234,
+    79231,
+    79240,
+    79241,
+    79246,
+    79405,
+    79905,
+    79919,
+    79925,
+    79991,
+    79998,
+    80009,
+    80149,
+    80442,
+    80453,
+    80482,
+    80491,
+    80564,
+    80887,
+    80891,
+    80898,
+    80899,
+    80941,
+    81544,
+    81545,
+    81548,
+    81556,
+    81878,
+    82542,
+    82552,
+    82578,
+    82729,
+    82731,
+    82739,
+    82929,
+    83200,
+    83219,
+    83242,
+    83279,
+    83350,
+    83522,
+    83524,
+    83529,
+    83530,
+    83636,
+    84616,
+    84612,
+    84674,
+    84747,
+    84804,
+    84867,
+    84875,
+    84927,
+    89023,
+    89022,
+    89197,
+    89196,
+    89199,
+    89203,
+    89211,
+    89564,
+    89562,
+    89569,
+    89596,
+    89603,
+    89683,
+    89718,
+    92162,
+    92161,
+    79223
+  ],
+  "livePids": [],
+  "scope": {
+    "implemented": "Version-7 consumed row/tree prefixes, occurrence fallback rank, written suffix-digit total with sparse dropped subtraction, pinned request unit counters, opt-in native conversion",
+    "cost": "Prefix is tree-depth plus selected-row metadata and pending mapped-ID holder corrections; repeated unmapped holders of pending IDs can add sparse occurrence-stream cost per query. No uniform depth-only claim for adversarial duplicates.",
+    "remaining": [
+      "Full request-only digit-summary integration and holder name/token/byte remeasurement",
+      "Full format/settings generations and summary/LENS",
+      "Whole-range CRC; retained heap at 10k/100k/1M",
+      "100000-call construction timeout remains unresolved; query fixture is 100000 rows/4000 calls",
+      "Stage A/W25/provider cutover, W26 scratch and W23 eight planning/header cases"
+    ],
+    "providerRoute": "Production provider route and backend default unchanged"
+  },
+  "knownCodecFailure": {
+    "issue": 3917,
+    "seed": 609796497,
+    "status": "Previously reproduced 39 pass/1 fail/536 assertions; unchanged source, not retried or suppressed in this slice"
+  },
+  "touchedAuditFindings": [
+    "DUP_ASSERT old pin fallback ranks before/after mutation",
+    "DUP_ASSERT counter read bounds across distinct counters",
+    "DUP_ASSERT old pinned unmapped count before/after append"
+  ],
+  "review": "review skipped per Andrew 2026-10-09"
+}
