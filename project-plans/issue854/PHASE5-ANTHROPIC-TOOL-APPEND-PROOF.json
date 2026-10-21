@@ -1,0 +1,1098 @@
+{
+  "task": "Issue 854: bounded unique Anthropic AI call then actual result append; scoped cache-off checkpoint only",
+  "checkedAt": "2026-10-21T09:11:48.009Z",
+  "implementationCommit": "a52809d8aacbfa4631561db4bdca5639426cbfc4",
+  "testedSourceCommit": "930d8572ffaa0557e1e7f45038562c5c73059156",
+  "sources": [
+    {
+      "path": "packages/core/src/journal/formatFill.ts",
+      "sha256": "643a41c5f7706e4f2b0050696c2746a56af1bf3a6af3e6fb59b27b6469714324",
+      "committedSha256": "643a41c5f7706e4f2b0050696c2746a56af1bf3a6af3e6fb59b27b6469714324",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/core/src/journal/formatFillLifecycle.ts",
+      "sha256": "ed42c9ccb33280d3fed2d6ab486bfda9b742a553c558ac4b720203c5dbca441c",
+      "committedSha256": "ed42c9ccb33280d3fed2d6ab486bfda9b742a553c558ac4b720203c5dbca441c",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/core/src/journal/frame.ts",
+      "sha256": "61b9a1aba779908ef80c31dff7633fda919b7f246ddd9e902ff92369d89a7cb9",
+      "committedSha256": "61b9a1aba779908ef80c31dff7633fda919b7f246ddd9e902ff92369d89a7cb9",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/core/src/journal/groupEdits.ts",
+      "sha256": "1b52c4dfdc3c840d451f9bef569e001de76b8f865f55748e5de7e4339def38a8",
+      "committedSha256": "1b52c4dfdc3c840d451f9bef569e001de76b8f865f55748e5de7e4339def38a8",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/core/src/journal/groupPlan.ts",
+      "sha256": "5310b519494b952ea9bb41f061605a1da26992704ab172b6ff47b3b44c3ffa59",
+      "committedSha256": "5310b519494b952ea9bb41f061605a1da26992704ab172b6ff47b3b44c3ffa59",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/core/src/journal/idFactCodec.test.ts",
+      "sha256": "07c839806f3fd9620209b24579533a4c300b93e4684c3f722a63b6919d79ed23",
+      "committedSha256": "07c839806f3fd9620209b24579533a4c300b93e4684c3f722a63b6919d79ed23",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/core/src/journal/idKeys.ts",
+      "sha256": "8d1fea5385890e4cd575d5e193dfe6d950dc443496138a01471a81438172c1da",
+      "committedSha256": "8d1fea5385890e4cd575d5e193dfe6d950dc443496138a01471a81438172c1da",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/core/src/journal/idTrieReader.ts",
+      "sha256": "2551146ecf1837374b0ffc5dc69015dda5dc4d38074163f4d115cf30ee527a3d",
+      "committedSha256": "2551146ecf1837374b0ffc5dc69015dda5dc4d38074163f4d115cf30ee527a3d",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/core/src/journal/journalStore.ts",
+      "sha256": "eaf676b6215a9ba64c2e2c9a975cb1b85bb924652153493ca120b46116dc400b",
+      "committedSha256": "eaf676b6215a9ba64c2e2c9a975cb1b85bb924652153493ca120b46116dc400b",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/core/src/journal/keyedMap.ts",
+      "sha256": "37080d2f6ad65c5657c5bc4d54e8278d9bd9b4ba3fa10df433531b923cc323ee",
+      "committedSha256": "37080d2f6ad65c5657c5bc4d54e8278d9bd9b4ba3fa10df433531b923cc323ee",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/core/src/journal/nativeFactFill.ts",
+      "sha256": "bdc0907b1a49d7554785df82a915da7a1288712e6ca3fdf12936b5b05f044e3d",
+      "committedSha256": "bdc0907b1a49d7554785df82a915da7a1288712e6ca3fdf12936b5b05f044e3d",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/core/src/journal/nativeFactIndex.ts",
+      "sha256": "88d827d6755309a7b5c36aba6d0d7247349689f6f266e93482a70af35336bd4a",
+      "committedSha256": "88d827d6755309a7b5c36aba6d0d7247349689f6f266e93482a70af35336bd4a",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/core/src/journal/positionalFile.ts",
+      "sha256": "6b92c061d924f7f9d46d48b6135f4893d237ff3589a16bab65f0a4d9610e2e31",
+      "committedSha256": "6b92c061d924f7f9d46d48b6135f4893d237ff3589a16bab65f0a4d9610e2e31",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/core/src/journal/recordAccess.ts",
+      "sha256": "43f01c9d936e058a7fda81a486ca21cafad14f0560988509d3ad6ba6bbeb94a6",
+      "committedSha256": "43f01c9d936e058a7fda81a486ca21cafad14f0560988509d3ad6ba6bbeb94a6",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/core/src/journal/rowFormat.ts",
+      "sha256": "052c561e16e1777b1e1d5656a1d06a4702a35f4bf0e5b13cfae419b0743f3305",
+      "committedSha256": "052c561e16e1777b1e1d5656a1d06a4702a35f4bf0e5b13cfae419b0743f3305",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/core/src/journal/rowTreeReader.ts",
+      "sha256": "bf757054b1cde6494539974b409d54b79fe3031bfab59936cf57235f2f18b1b2",
+      "committedSha256": "bf757054b1cde6494539974b409d54b79fe3031bfab59936cf57235f2f18b1b2",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/core/src/journal/slotSummary.ts",
+      "sha256": "1b7acda64db0f0c198e51a0b199e297caccbdbfa7b321379d2302f3ffcf235af",
+      "committedSha256": "1b7acda64db0f0c198e51a0b199e297caccbdbfa7b321379d2302f3ffcf235af",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/core/src/journal/summaryComposition.ts",
+      "sha256": "17f1395d0d2fa3b31a4d3705e683a3ad20d33db81cbfdda4fe1c3c7f5cc212c9",
+      "committedSha256": "17f1395d0d2fa3b31a4d3705e683a3ad20d33db81cbfdda4fe1c3c7f5cc212c9",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/core/src/journal/versionSnapshot.ts",
+      "sha256": "3d192c29bdaf42b7907668ed94e454eac3652044a81567447d125e88222dd732",
+      "committedSha256": "3d192c29bdaf42b7907668ed94e454eac3652044a81567447d125e88222dd732",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+      "sha256": "7c5de608711f2cc7a3e97f79487502403d06451adb38f9929ac5c493f3225392",
+      "committedSha256": "7c5de608711f2cc7a3e97f79487502403d06451adb38f9929ac5c493f3225392",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/core/src/services/history/journal-request-occurrences.ts",
+      "sha256": "10994db01dd5c6e31ca5fd1ad176f6b2972b960a5bf4221249a6e4bcead33c14",
+      "committedSha256": "10994db01dd5c6e31ca5fd1ad176f6b2972b960a5bf4221249a6e4bcead33c14",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/core/src/services/history/journal-response-plan.ts",
+      "sha256": "30284ba092e8f867313f0b972d67ace8c924a53d90716a990d332d3e5a0c2983",
+      "committedSha256": "30284ba092e8f867313f0b972d67ace8c924a53d90716a990d332d3e5a0c2983",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/core/src/services/history/recording-primary-edits.test.ts",
+      "sha256": "c6a1b6200c0e0787c79435d1f979fc75a401a02c5ac0f62a92c52303cc8d49aa",
+      "committedSha256": "c6a1b6200c0e0787c79435d1f979fc75a401a02c5ac0f62a92c52303cc8d49aa",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/core/src/services/history/recording-primary-edits.ts",
+      "sha256": "76f4e2292b3fddb42e9ed3c49c05247d7a96aa789a2e92ce280d2c90b4943215",
+      "committedSha256": "76f4e2292b3fddb42e9ed3c49c05247d7a96aa789a2e92ce280d2c90b4943215",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-append-facts.ts",
+      "sha256": "5b6e30d1d0185fdd376bca55aa18bd4f1a54c7941c26e6e156278cdddc9f50a7",
+      "committedSha256": "5b6e30d1d0185fdd376bca55aa18bd4f1a54c7941c26e6e156278cdddc9f50a7",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-repair-fact-writer.ts",
+      "sha256": "a6bd916b50e47165981aa5a81482a8615df28cbefe8351e56d8bb435d3427da3",
+      "committedSha256": "a6bd916b50e47165981aa5a81482a8615df28cbefe8351e56d8bb435d3427da3",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-repair-index.ts",
+      "sha256": "1ab37cf19d2cf82e0437fb07929f4efb8aeba03a457443cb206436fa2609f071",
+      "committedSha256": "1ab37cf19d2cf82e0437fb07929f4efb8aeba03a457443cb206436fa2609f071",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-repair-lifecycle.test.ts",
+      "sha256": "5ac15170a52dd8e076e83276e6a0d34c9e831c80479966245e7115bfa2b347dd",
+      "committedSha256": "5ac15170a52dd8e076e83276e6a0d34c9e831c80479966245e7115bfa2b347dd",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-repair-source.ts",
+      "sha256": "0656ace57d84797b5830d5c34d4aec02beec5c73c9132b1cf807f2c40909b5e3",
+      "committedSha256": "0656ace57d84797b5830d5c34d4aec02beec5c73c9132b1cf807f2c40909b5e3",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-stored-append.ts",
+      "sha256": "7669b72bfe216a21fbab1d34e73c9154871554fc450b03ed3663f01abe18bd37",
+      "committedSha256": "7669b72bfe216a21fbab1d34e73c9154871554fc450b03ed3663f01abe18bd37",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-stored-fill.ts",
+      "sha256": "4e554c06644bfe83f075b6b4d3242f34a05e67277b45ab811ee51996ab85e5ec",
+      "committedSha256": "4e554c06644bfe83f075b6b4d3242f34a05e67277b45ab811ee51996ab85e5ec",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-stream-repair-cases.test.ts",
+      "sha256": "2acdf81e54d566ffd0132cbca1269b526530794c654d9af21251f393b44fd53a",
+      "committedSha256": "2acdf81e54d566ffd0132cbca1269b526530794c654d9af21251f393b44fd53a",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-stream-repair-frozen.test.ts",
+      "sha256": "f3fc9fa62908be244ec0dd6616f36b594260d7a8a59e84ee125ebaf64ddbccdb",
+      "committedSha256": "f3fc9fa62908be244ec0dd6616f36b594260d7a8a59e84ee125ebaf64ddbccdb",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-stream-repair-scale.test.ts",
+      "sha256": "554941825a7e258058c93975fc7d85c5cf2245aeeda7e7606e1a19b757ff9e26",
+      "committedSha256": "554941825a7e258058c93975fc7d85c5cf2245aeeda7e7606e1a19b757ff9e26",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-stream-repair.test.ts",
+      "sha256": "cfa0233bdacdb4025745c5142c25a3d893ca3adfd8163ae8e8cef4f58593c97f",
+      "committedSha256": "cfa0233bdacdb4025745c5142c25a3d893ca3adfd8163ae8e8cef4f58593c97f",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-stream-repair.ts",
+      "sha256": "c2c5232ce1bc58099b7b5809a36bb25b854c0aef189d6375e939dde5cd342f55",
+      "committedSha256": "c2c5232ce1bc58099b7b5809a36bb25b854c0aef189d6375e939dde5cd342f55",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-tool-append-facts.ts",
+      "sha256": "25bee294fb4c9a53a3a513f0c3d505c296c134575f1e674befcc65feef1ae9f5",
+      "committedSha256": "25bee294fb4c9a53a3a513f0c3d505c296c134575f1e674befcc65feef1ae9f5",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-tool-repair.ts",
+      "sha256": "37d4b65ee66d2a369997f0748e2935ef6af6f245029f4fcf04e2881f05b78956",
+      "committedSha256": "37d4b65ee66d2a369997f0748e2935ef6af6f245029f4fcf04e2881f05b78956",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-unit-facts.ts",
+      "sha256": "f211643ec8d0e0dbb2a1b946b34729fc74d5a1fc25b2afd5bf148d5475588605",
+      "committedSha256": "f211643ec8d0e0dbb2a1b946b34729fc74d5a1fc25b2afd5bf148d5475588605",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-unit-transfer.ts",
+      "sha256": "413b57024f7429df960aa8b74da8d30604083cf05ddc9c94c3856c6b50f25e4f",
+      "committedSha256": "413b57024f7429df960aa8b74da8d30604083cf05ddc9c94c3856c6b50f25e4f",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/providers/src/anthropic/journal-anthropic-append-lifecycle.test.ts",
+      "sha256": "b748ace35e3a8b2518c2bd781312c5be7597e247fee0c563321f437664b9221c",
+      "committedSha256": "b748ace35e3a8b2518c2bd781312c5be7597e247fee0c563321f437664b9221c",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/providers/src/anthropic/journal-anthropic-frozen.test.ts",
+      "sha256": "6667af9e7fff3a901176f2aad5333f2fba3ef054a655de347d6ed520c0103c1f",
+      "committedSha256": "6667af9e7fff3a901176f2aad5333f2fba3ef054a655de347d6ed520c0103c1f",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/providers/src/anthropic/journal-anthropic-incremental.test.ts",
+      "sha256": "8862d8d7866027eab44185395bdecc98f6fb418116952530329276ad83cd2a5b",
+      "committedSha256": "8862d8d7866027eab44185395bdecc98f6fb418116952530329276ad83cd2a5b",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/providers/src/anthropic/journal-anthropic-length.test.ts",
+      "sha256": "1628039bbaed36f18a893cab0c0c0fa59db6d133f7e68ecea9829947a62f9f5b",
+      "committedSha256": "1628039bbaed36f18a893cab0c0c0fa59db6d133f7e68ecea9829947a62f9f5b",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/providers/src/anthropic/journal-anthropic-length.ts",
+      "sha256": "bd53393777d9224ef784390f3733816c392e75b4fbc37f7d399f269ab1ca1650",
+      "committedSha256": "bd53393777d9224ef784390f3733816c392e75b4fbc37f7d399f269ab1ca1650",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/providers/src/anthropic/journal-anthropic-lifecycle.test.ts",
+      "sha256": "fca331f7c5af75ecc46620ee997ee3c264dc2cefa037d1f9ad79f741729395f8",
+      "committedSha256": "fca331f7c5af75ecc46620ee997ee3c264dc2cefa037d1f9ad79f741729395f8",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    },
+    {
+      "path": "packages/providers/src/anthropic/journal-anthropic-named.test.ts",
+      "sha256": "c1a3a269fb7bc44adf1ef7b5cc5d024a0a3a262fd29d242e733642f1a88f844d",
+      "committedSha256": "c1a3a269fb7bc44adf1ef7b5cc5d024a0a3a262fd29d242e733642f1a88f844d",
+      "commit": "930d8572ffaa0557e1e7f45038562c5c73059156"
+    }
+  ],
+  "sourceInventories": [
+    {
+      "path": "tmp/p5/anthropic-tool-append-run-w/early-42403/sources.json",
+      "sha256": "21f91e6a8183d3af9357d790c1e376ea40cc71876917b1cbc921e72da07f6553",
+      "entries": 8941,
+      "differences": [
+        "packages/providers/src/anthropic/journal-anthropic-append-lifecycle.test.ts"
+      ],
+      "reuseLimit": "Only the lifecycle test changed to independently computed old-emitter expectations. Production and incremental sources match. Core declarations/types are reused; final provider types, lint, formatting, graph, audit and lifecycle run after that test edit."
+    },
+    {
+      "path": "tmp/p5/anthropic-tool-append-run-w/polish-48819/sources.json",
+      "sha256": "cb8828306a839288d9d327cde8e3ecbb8da7ebcae884453da3bdc37e5cce235b",
+      "entries": 8941,
+      "differences": [],
+      "reuseLimit": "All inventory hashes match current source."
+    },
+    {
+      "path": "tmp/p5/anthropic-tool-append-run-w/native-50673/sources.json",
+      "sha256": "cb8828306a839288d9d327cde8e3ecbb8da7ebcae884453da3bdc37e5cce235b",
+      "entries": 8941,
+      "differences": [],
+      "reuseLimit": "All inventory hashes match current source."
+    },
+    {
+      "path": "tmp/p5/anthropic-tool-append-run-w/extra-52221/sources.json",
+      "sha256": "cb8828306a839288d9d327cde8e3ecbb8da7ebcae884453da3bdc37e5cce235b",
+      "entries": 8941,
+      "differences": [],
+      "reuseLimit": "All inventory hashes match current source."
+    },
+    {
+      "path": "tmp/p5/anthropic-tool-append-run-w/frozen-52459/sources.json",
+      "sha256": "cb8828306a839288d9d327cde8e3ecbb8da7ebcae884453da3bdc37e5cce235b",
+      "entries": 8941,
+      "differences": [],
+      "reuseLimit": "All inventory hashes match current source."
+    }
+  ],
+  "unchangedOracles": [
+    {
+      "path": "packages/providers/src/__tests__/support/frozenWire/normalizedRows.ts",
+      "sha256": "a858813612178d56765a8b2c0ef31fc194d67b23c63853b7366c1bbd5c2c26ac"
+    },
+    {
+      "path": "packages/providers/src/__tests__/support/frozenWire/frozenCases.ts",
+      "sha256": "ea818df95e6f8514a5c3e047a0f942ebdfbbf1f66163a27a41be78fb1f6e2d9f"
+    },
+    {
+      "path": "packages/providers/src/anthropic/message-table/__tests__/support/wireBuilderHarness.ts",
+      "sha256": "4e0f5ed8f0448517efe53fc30244d6069435592c6b08f01ff2a8ac17ca8c813d"
+    },
+    {
+      "path": "packages/providers/src/anthropic/message-table/__tests__/support/lengthModel/lengthChecks.ts",
+      "sha256": "2255f6148eb4f7115afd4d7777ac16adeafe7cb039d75890277bac90b14179ca"
+    }
+  ],
+  "acceptance": {
+    "pass": 92,
+    "fail": 0,
+    "skip": 0,
+    "assertions": 11216,
+    "processes": 9,
+    "receipts": [
+      {
+        "name": "incremental",
+        "cwd": "packages/providers",
+        "args": [
+          "bun",
+          "test",
+          "src/anthropic/journal-anthropic-incremental.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 50673,
+        "pid": 50679,
+        "start": "2026-10-21T09:05:47.204Z",
+        "finish": "2026-10-21T09:07:32.182Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-tool-append-run-w/native-50673/incremental.log",
+        "logHash": "675d5c47de07b9c5a12f589a33a7380a917ddd050eeb5041ee8baa9a3bf8c530",
+        "differences": []
+      },
+      {
+        "name": "append-lifecycle",
+        "cwd": "packages/providers",
+        "args": [
+          "bun",
+          "test",
+          "src/anthropic/journal-anthropic-append-lifecycle.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 50673,
+        "pid": 52184,
+        "start": "2026-10-21T09:07:32.182Z",
+        "finish": "2026-10-21T09:07:33.456Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-tool-append-run-w/native-50673/append-lifecycle.log",
+        "logHash": "0b473b6f533312073dd092fd72b9edd6528e80f0a3e924e29e92a793f7177187",
+        "differences": []
+      },
+      {
+        "name": "old-lifecycle",
+        "cwd": "packages/providers",
+        "args": [
+          "bun",
+          "test",
+          "src/anthropic/journal-anthropic-lifecycle.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 50673,
+        "pid": 52215,
+        "start": "2026-10-21T09:07:33.457Z",
+        "finish": "2026-10-21T09:07:34.034Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-tool-append-run-w/native-50673/old-lifecycle.log",
+        "logHash": "2c2fbeae33253bdcdcbe55d42f7b79ebf752834b376b2c4dccef7af6d6bfd3ee",
+        "differences": []
+      },
+      {
+        "name": "stored-length",
+        "cwd": "packages/providers",
+        "args": [
+          "bun",
+          "test",
+          "src/anthropic/journal-anthropic-length.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 52221,
+        "pid": 52225,
+        "start": "2026-10-21T09:07:34.234Z",
+        "finish": "2026-10-21T09:07:47.632Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-tool-append-run-w/extra-52221/stored-length.log",
+        "logHash": "f5f6dee9ff037ed0b77a39cea2ebdd82c204a8fcd1325e6d2dc152fa6fd49c7e",
+        "differences": []
+      },
+      {
+        "name": "named",
+        "cwd": "packages/providers",
+        "args": [
+          "bun",
+          "test",
+          "src/anthropic/journal-anthropic-named.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 52221,
+        "pid": 52393,
+        "start": "2026-10-21T09:07:47.632Z",
+        "finish": "2026-10-21T09:07:49.180Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-tool-append-run-w/extra-52221/named.log",
+        "logHash": "3c20f59319780c3ecc8da3f008d20b2f56844dfeda06227a4094aeb52e48acef",
+        "differences": []
+      },
+      {
+        "name": "repair-lifecycle",
+        "cwd": "packages/providers",
+        "args": [
+          "bun",
+          "test",
+          "src/anthropic/anthropic-repair-lifecycle.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 52221,
+        "pid": 52414,
+        "start": "2026-10-21T09:07:49.180Z",
+        "finish": "2026-10-21T09:07:50.108Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-tool-append-run-w/extra-52221/repair-lifecycle.log",
+        "logHash": "1e552a6756c92ef82402a91650ae0b09d508147e16905d53d1900c73e96fc72b",
+        "differences": []
+      },
+      {
+        "name": "format",
+        "cwd": "packages/core",
+        "args": [
+          "bun",
+          "test",
+          "src/journal/formatTables.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 52221,
+        "pid": 52423,
+        "start": "2026-10-21T09:07:50.108Z",
+        "finish": "2026-10-21T09:07:50.387Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-tool-append-run-w/extra-52221/format.log",
+        "logHash": "2f1c33742f0e4330eb6fca48c3b07d3c053a10528c05a4427cf086d573d1cd38",
+        "differences": []
+      },
+      {
+        "name": "responses",
+        "cwd": "packages/providers",
+        "args": [
+          "bun",
+          "test",
+          "src/openai-responses/journal-responses-lifecycle.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 52221,
+        "pid": 52427,
+        "start": "2026-10-21T09:07:50.388Z",
+        "finish": "2026-10-21T09:07:53.203Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-tool-append-run-w/extra-52221/responses.log",
+        "logHash": "9587fbbfb58a10b2b4fd9613a11f7bd24b8c09537c8a84a860346ea444556ba5",
+        "differences": []
+      },
+      {
+        "name": "frozen",
+        "cwd": "packages/providers",
+        "args": [
+          "bun",
+          "test",
+          "src/anthropic/journal-anthropic-frozen.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 52459,
+        "pid": 52462,
+        "start": "2026-10-21T09:07:53.401Z",
+        "finish": "2026-10-21T09:11:03.753Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-tool-append-run-w/frozen-52459/frozen.log",
+        "logHash": "78c8af8bf11667b763c2db58e42a8cdbf0f2a3021b1ffd54c5c7198b3c45ea43",
+        "differences": []
+      }
+    ],
+    "parity": {
+      "matched": 5000,
+      "thinking": 3021,
+      "repaired": 2542,
+      "chained": 1078,
+      "lastKept": 516,
+      "domain": "normalized source histories, not raw original frozen bodies",
+      "pid": 52462
+    },
+    "domain": "For all 5000 unchanged cache-off source histories, stored length/count and complete envelope length agree with independently normalized old-emitter bytes and phase zero. Incremental/lifecycle tests also assert actual native serialized bytes. This lane does not assert native serialized-byte equality for every frozen history, original raw-body equality or arbitrary-history append support.",
+    "execution": "One complete file per Bun process from its package directory, --timeout 180000, serial. No whole-monorepo or all-affected-shard execution claim."
+  },
+  "gates": {
+    "count": 8,
+    "receipts": [
+      {
+        "name": "declarations-core",
+        "cwd": "packages/core",
+        "args": [
+          "bun",
+          "../../scripts/build_package.ts"
+        ],
+        "env": {
+          "LLXPRT_EMIT_DECLARATIONS_ONLY": "1"
+        },
+        "driver": 42403,
+        "pid": 42409,
+        "start": "2026-10-21T08:59:59.233Z",
+        "finish": "2026-10-21T09:00:03.128Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-tool-append-run-w/early-42403/declarations-core.log",
+        "logHash": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127",
+        "differences": []
+      },
+      {
+        "name": "declarations-providers",
+        "cwd": "packages/providers",
+        "args": [
+          "bun",
+          "../../scripts/build_package.ts"
+        ],
+        "env": {
+          "LLXPRT_EMIT_DECLARATIONS_ONLY": "1"
+        },
+        "driver": 42403,
+        "pid": 42466,
+        "start": "2026-10-21T09:00:03.128Z",
+        "finish": "2026-10-21T09:00:05.484Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-tool-append-run-w/early-42403/declarations-providers.log",
+        "logHash": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127",
+        "differences": []
+      },
+      {
+        "name": "types-core",
+        "args": [
+          "bunx",
+          "tsc",
+          "--noEmit",
+          "-p",
+          "packages/core/tsconfig.noemit.json"
+        ],
+        "driver": 42403,
+        "pid": 42496,
+        "start": "2026-10-21T09:00:05.484Z",
+        "finish": "2026-10-21T09:00:12.155Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-tool-append-run-w/early-42403/types-core.log",
+        "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "differences": []
+      },
+      {
+        "name": "types-providers",
+        "args": [
+          "bunx",
+          "tsc",
+          "--noEmit",
+          "-p",
+          "packages/providers/tsconfig.noemit.json"
+        ],
+        "driver": 48819,
+        "pid": 48828,
+        "start": "2026-10-21T09:03:47.450Z",
+        "finish": "2026-10-21T09:03:49.721Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-tool-append-run-w/polish-48819/types-providers.log",
+        "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "differences": []
+      },
+      {
+        "name": "lint",
+        "args": [
+          "bunx",
+          "eslint",
+          "--max-warnings",
+          "0",
+          "packages/providers/src/anthropic/anthropic-tool-append-facts.ts",
+          "packages/providers/src/anthropic/anthropic-append-facts.ts",
+          "packages/providers/src/anthropic/anthropic-stored-append.ts",
+          "packages/providers/src/anthropic/anthropic-stored-fill.ts",
+          "packages/providers/src/anthropic/journal-anthropic-length.ts",
+          "packages/providers/src/anthropic/journal-anthropic-incremental.test.ts",
+          "packages/providers/src/anthropic/journal-anthropic-append-lifecycle.test.ts"
+        ],
+        "driver": 48819,
+        "pid": 48846,
+        "start": "2026-10-21T09:03:49.721Z",
+        "finish": "2026-10-21T09:03:54.158Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-tool-append-run-w/polish-48819/lint.log",
+        "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "differences": []
+      },
+      {
+        "name": "prettier",
+        "args": [
+          "bunx",
+          "prettier",
+          "--check",
+          "packages/providers/src/anthropic/anthropic-tool-append-facts.ts",
+          "packages/providers/src/anthropic/anthropic-append-facts.ts",
+          "packages/providers/src/anthropic/anthropic-stored-append.ts",
+          "packages/providers/src/anthropic/anthropic-stored-fill.ts",
+          "packages/providers/src/anthropic/journal-anthropic-length.ts",
+          "packages/providers/src/anthropic/journal-anthropic-incremental.test.ts",
+          "packages/providers/src/anthropic/journal-anthropic-append-lifecycle.test.ts"
+        ],
+        "driver": 48819,
+        "pid": 48897,
+        "start": "2026-10-21T09:03:54.158Z",
+        "finish": "2026-10-21T09:03:54.514Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-tool-append-run-w/polish-48819/prettier.log",
+        "logHash": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+        "differences": []
+      },
+      {
+        "name": "graph",
+        "args": [
+          "bun",
+          "scripts/check-affected-test-shards.ts"
+        ],
+        "driver": 48819,
+        "pid": 48904,
+        "start": "2026-10-21T09:03:54.514Z",
+        "finish": "2026-10-21T09:03:56.785Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-tool-append-run-w/polish-48819/graph.log",
+        "logHash": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67",
+        "differences": []
+      },
+      {
+        "name": "audit",
+        "args": [
+          "bun",
+          "scripts/test-audit/scan.ts",
+          "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/anthropic-tool-append-run-w/polish-48819/audit"
+        ],
+        "driver": 48819,
+        "pid": 48929,
+        "start": "2026-10-21T09:03:56.786Z",
+        "finish": "2026-10-21T09:03:59.726Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-tool-append-run-w/polish-48819/audit.log",
+        "logHash": "a32e6f88cd7647b61ccf8d0840be2db61392d51cb1f82d2de9ef6bd516bbaaf6",
+        "differences": []
+      }
+    ],
+    "audit": {
+      "path": "tmp/p5/anthropic-tool-append-run-w/polish-48819/audit/findings.tsv",
+      "sha256": "6bc594a4d087c5d8a0c95e0dfbdfb7dc0e4aed6147cc1673b71ce295786ae35c"
+    },
+    "touchedAudit": [
+      "packages/providers/src/anthropic/journal-anthropic-append-lifecycle.test.ts\t351\tnative Anthropic append lifetime and invalidation > (unnamed)\tDUP_ASSERT\t2x identical assertion: expect(await rendered(old)).toBe(before)\tproviders",
+      "packages/providers/src/anthropic/journal-anthropic-append-lifecycle.test.ts\t379\tnative Anthropic append lifetime and invalidation > maintains real tool rounds on empty, reopened, forked and physically copied versions with held repair roots\tDUP_ASSERT\t2x identical assertion: expect(await rendered(old, current)).toBe(before)\tproviders",
+      "packages/providers/src/anthropic/journal-anthropic-append-lifecycle.test.ts\t487\tnative Anthropic append lifetime and invalidation > preserves the published repair root after an actual holder measurement fails and poisons disk writes\tDUP_ASSERT\t2x identical assertion: expect(await rendered(old)).toBe(body)\tproviders",
+      "packages/providers/src/anthropic/anthropic-repair-lifecycle.test.ts\t112\tpersisted native Anthropic repair facts > maintains native decisions across append, fill, pop, fork and compaction while an old request stays pinned\tDUP_ASSERT\t2x identical assertion: expect(await output(query)).toBe(old)\tproviders",
+      "packages/providers/src/anthropic/journal-anthropic-lifecycle.test.ts\t250\tstored Anthropic generations and pinned lifetime > preserves stored correction lengths through reopen, fork and physical compaction\tDUP_ASSERT\t2x identical assertion: expect(await bytes(reopened)).toBe(expected)\tproviders"
+    ],
+    "qualification": "DUP_ASSERT entries span independently checked old-pin preservation across mutation/failure or compaction checkpoints. No prohibited bound finding. Import graph consistency does not establish all affected shard tests ran."
+  },
+  "controls": {
+    "count": 5,
+    "manifest": {
+      "path": "tmp/p5/anthropic-tool-append-run-w/controls-49569/manifest.json",
+      "sha256": "87dfefb577c502868156f7414aa49d771d7445c3bfa83cf415d6f65f55e901cc"
+    },
+    "results": [
+      {
+        "name": "wrong-holder",
+        "path": "packages/providers/src/anthropic/anthropic-stored-append.ts",
+        "from": "      await state.query.readAt(state.units),",
+        "to": "      await state.query.readAt(Math.max(0, state.units - 2)),",
+        "file": "journal-anthropic-append-lifecycle",
+        "expected": "maintains real tool rounds on empty",
+        "args": [
+          "bun",
+          "test",
+          "src/anthropic/journal-anthropic-append-lifecycle.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 49569,
+        "pid": 49573,
+        "start": "2026-10-21T09:04:43.940Z",
+        "finish": "2026-10-21T09:04:44.812Z",
+        "code": 1,
+        "assertion": true,
+        "intended": true,
+        "cmp": 0,
+        "before": "7669b72bfe216a21fbab1d34e73c9154871554fc450b03ed3663f01abe18bd37",
+        "after": "7669b72bfe216a21fbab1d34e73c9154871554fc450b03ed3663f01abe18bd37",
+        "restored": true,
+        "log": "tmp/p5/anthropic-tool-append-run-w/controls-49569/wrong-holder.log",
+        "logHash": "04f93a96f1d6005c85732eb7295769485c128f7cce2faf79e25cafadf36d43a4"
+      },
+      {
+        "name": "response-drop",
+        "path": "packages/core/src/services/history/journal-response-plan.ts",
+        "from": "    return block;\n  }\n  if (ref.kind === 'orphan')",
+        "to": "    return { ...block, result: 'DROPPED ACTUAL RESPONSE', error: undefined };\n  }\n  if (ref.kind === 'orphan')",
+        "file": "journal-anthropic-append-lifecycle",
+        "expected": "maintains append-result",
+        "args": [
+          "bun",
+          "test",
+          "src/anthropic/journal-anthropic-append-lifecycle.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 49569,
+        "pid": 49585,
+        "start": "2026-10-21T09:04:44.826Z",
+        "finish": "2026-10-21T09:04:45.694Z",
+        "code": 1,
+        "assertion": true,
+        "intended": true,
+        "cmp": 0,
+        "before": "30284ba092e8f867313f0b972d67ace8c924a53d90716a990d332d3e5a0c2983",
+        "after": "30284ba092e8f867313f0b972d67ace8c924a53d90716a990d332d3e5a0c2983",
+        "restored": true,
+        "log": "tmp/p5/anthropic-tool-append-run-w/controls-49569/response-drop.log",
+        "logHash": "45981e2f4b0f7ec92526f5402000442210867e8459bf7f5955afa95ac52de580"
+      },
+      {
+        "name": "stale-repair",
+        "path": "packages/providers/src/anthropic/anthropic-tool-append-facts.ts",
+        "from": "  await writer.set(['messages'], [index.count + 2, index.lastThinking + 1]);",
+        "to": "  await writer.set(['messages'], [index.count, index.lastThinking + 1]);",
+        "file": "journal-anthropic-append-lifecycle",
+        "expected": "maintains real tool rounds on empty",
+        "args": [
+          "bun",
+          "test",
+          "src/anthropic/journal-anthropic-append-lifecycle.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 49569,
+        "pid": 49594,
+        "start": "2026-10-21T09:04:45.708Z",
+        "finish": "2026-10-21T09:04:46.674Z",
+        "code": 1,
+        "assertion": true,
+        "intended": true,
+        "cmp": 0,
+        "before": "25bee294fb4c9a53a3a513f0c3d505c296c134575f1e674befcc65feef1ae9f5",
+        "after": "25bee294fb4c9a53a3a513f0c3d505c296c134575f1e674befcc65feef1ae9f5",
+        "restored": true,
+        "log": "tmp/p5/anthropic-tool-append-run-w/controls-49569/stale-repair.log",
+        "logHash": "af250b4de01b2a80e04e4a54123deaa3a1f671d3fb7eefe91fa606b2a794f4fb"
+      },
+      {
+        "name": "full-refill",
+        "path": "packages/core/src/journal/formatFill.ts",
+        "from": "    slot === assigned,",
+        "to": "    slot === assigned || format.summaryKind === 'anthropic',",
+        "file": "journal-anthropic-incremental",
+        "expected": "maintains a real tool round after 40 fixed-density",
+        "args": [
+          "bun",
+          "test",
+          "src/anthropic/journal-anthropic-incremental.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 49569,
+        "pid": 49609,
+        "start": "2026-10-21T09:04:46.687Z",
+        "finish": "2026-10-21T09:05:45.857Z",
+        "code": 1,
+        "assertion": true,
+        "intended": true,
+        "cmp": 0,
+        "before": "643a41c5f7706e4f2b0050696c2746a56af1bf3a6af3e6fb59b27b6469714324",
+        "after": "643a41c5f7706e4f2b0050696c2746a56af1bf3a6af3e6fb59b27b6469714324",
+        "restored": true,
+        "log": "tmp/p5/anthropic-tool-append-run-w/controls-49569/full-refill.log",
+        "logHash": "8d8c226fc9552bd66e548b388202312c6e5dbce6adc02b55264b6c013e681cee"
+      },
+      {
+        "name": "drop-invalidation",
+        "path": "packages/core/src/journal/formatFillLifecycle.ts",
+        "from": "    return { ...slot, gen: slot.gen + 1 };",
+        "to": "    return slot;",
+        "file": "journal-anthropic-append-lifecycle",
+        "expected": "invalidates owner without publishing a stale length",
+        "args": [
+          "bun",
+          "test",
+          "src/anthropic/journal-anthropic-append-lifecycle.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 49569,
+        "pid": 50660,
+        "start": "2026-10-21T09:05:45.871Z",
+        "finish": "2026-10-21T09:05:46.975Z",
+        "code": 1,
+        "assertion": true,
+        "intended": true,
+        "cmp": 0,
+        "before": "ed42c9ccb33280d3fed2d6ab486bfda9b742a553c558ac4b720203c5dbca441c",
+        "after": "ed42c9ccb33280d3fed2d6ab486bfda9b742a553c558ac4b720203c5dbca441c",
+        "restored": true,
+        "log": "tmp/p5/anthropic-tool-append-run-w/controls-49569/drop-invalidation.log",
+        "logHash": "3916b829493f11f1f14c18f092c6c61b6711b8605cbcb657cd6b77d76e915f7a"
+      }
+    ],
+    "restoration": "Committed originals required before every mutation. Own-mutant comparison before restoration; cmp and before/after SHA-256 equality, rechecked against current committed source. Final native acceptance follows all five restorations.",
+    "excluded": "controls-32857 is historical, not counted: its full-refill run also contained the then-RED observer baseline. Earlier runtime/ineffective controls in prior checkpoints are not imported or counted."
+  },
+  "readCosts": [
+    {
+      "count": 40,
+      "appendReads": 48,
+      "appendHistoricalPayloadReads": 0,
+      "warmReads": 4,
+      "payloadReads": 0,
+      "pid": 50679
+    },
+    {
+      "count": 4000,
+      "appendReads": 77,
+      "appendHistoricalPayloadReads": 0,
+      "warmReads": 4,
+      "payloadReads": 0,
+      "pid": 50679
+    },
+    {
+      "count": 40,
+      "coldReads": 4877,
+      "callReads": 110,
+      "resultReads": 121,
+      "callPhysical": {
+        "metadataOrHeads": 90,
+        "rowBodies": 20,
+        "lens": 0,
+        "historicalPayloadReads": 0,
+        "prefetchPayloadOverlaps": 2
+      },
+      "resultPhysical": {
+        "metadataOrHeads": 99,
+        "rowBodies": 22,
+        "lens": 0,
+        "historicalPayloadReads": 0,
+        "prefetchPayloadOverlaps": 4
+      },
+      "historicalPayloadReads": 0,
+      "resultHistoricalRecordOverlaps": 5,
+      "holderReads": 24,
+      "wholeFactFills": 0,
+      "wholeFormatFills": 0,
+      "warmReads": 4,
+      "payloadReads": 0,
+      "pid": 50679
+    },
+    {
+      "count": 4000,
+      "coldReads": 782056,
+      "callReads": 175,
+      "resultReads": 185,
+      "callPhysical": {
+        "metadataOrHeads": 155,
+        "rowBodies": 20,
+        "lens": 0,
+        "historicalPayloadReads": 0,
+        "prefetchPayloadOverlaps": 1
+      },
+      "resultPhysical": {
+        "metadataOrHeads": 163,
+        "rowBodies": 22,
+        "lens": 0,
+        "historicalPayloadReads": 0,
+        "prefetchPayloadOverlaps": 1
+      },
+      "historicalPayloadReads": 0,
+      "resultHistoricalRecordOverlaps": 3,
+      "holderReads": 24,
+      "wholeFactFills": 0,
+      "wholeFormatFills": 0,
+      "warmReads": 4,
+      "payloadReads": 0,
+      "pid": 50679
+    }
+  ],
+  "readSemantics": {
+    "interval": "Read range is [position, position + actual bytesRead). Setup, pin acquisition, range discovery and classification happen outside measured append/query windows.",
+    "cold": "Cold reads include fixture append plus explicit fact/format fills. They are not warm append costs.",
+    "selected": "rowBodies counts reads starting in selected ROW frames that reach their body, including ROW-head prefetch. lens counts reads starting in selected LENS frames. Other ROW/LENS start-targets count as historicalPayloadReads and must remain zero.",
+    "structural": "metadataOrHeads includes structural metadata reads. prefetchPayloadOverlaps separately counts structural-start reads whose returned ranges cross ROW/LENS records. These bytes were physically read and are not called zero overlap.",
+    "result": "resultHistoricalRecordOverlaps retains the raw overlap counter against all prior ROW/LENS except the allowed holder ROW. Structural prefetch and allowed selected-holder prefetch can overlap its old LENS. No assertion or claim of zero physical historical overlap is made for result append.",
+    "warm": "Three cache-off full-history thinking policies together use four metadata reads and zero ROW/LENS overlap; complete live payload ranges are installed before the measured query window.",
+    "bounds": "Unchanged append bound <250 total physical reads and warm bound <40. Whole fact/format fills are each one cold registration and zero additional fills for the ordinary call/result round. Counters are not retained-heap proof."
+  },
+  "supported": {
+    "shape": "One appended row per call/result operation. A named, nonempty-ID AI call, with one current raw-ID entry and no duplicate normalized call/result occurrence, followed by the first/best single tool-response block on a non-AI row. The call must remain the final prior holder, exactly two normalized units, outside thinking chains. Non-AI result includes tool and human speakers. This does not support cross-speaker call holders.",
+    "writer": "Actual native journal append updates current-ID pair membership, two repair message boundaries and the affected final call holder. Format callback rewinds to that holder and preserves its preceding auxiliary summary; no whole-history fact/format refill. Full source inventory binds the native writer and real serialized repair engine.",
+    "snapshots": "Same active format generation, old acknowledged pins, reopened attachments/multiple slots, independent fork, physical compaction, owner invalidation and original callback failure/poison/reopen behavior are asserted.",
+    "unsupported": "Duplicate/unnamed/empty/non-AI calls, normalized collisions, unmatched/late/better-late results and thinking-chain tool appends invalidate until explicit cold registration. General duplicate/cross-speaker holder repair is not implemented.",
+    "requestOnly": "Pending response remains request-only and stored pending-tail planning is refused. Cache 5m/1h, selected ranges, overrides and stored media retain their explicit refusal; no stale length is accepted."
+  },
+  "roots": {
+    "base": "tmp/p5/anthropic-tool-append-run-w",
+    "early": "tmp/p5/anthropic-tool-append-run-w/early-42403",
+    "polish": "tmp/p5/anthropic-tool-append-run-w/polish-48819",
+    "controls": "tmp/p5/anthropic-tool-append-run-w/controls-49569",
+    "native": "tmp/p5/anthropic-tool-append-run-w/native-50673",
+    "extra": "tmp/p5/anthropic-tool-append-run-w/extra-52221",
+    "frozen": "tmp/p5/anthropic-tool-append-run-w/frozen-52459",
+    "scripts": [
+      {
+        "path": "tmp/p5/anthropic-tool-append-run-w/run.ts",
+        "sha256": "80dad162613fd55ed7f7cb343f8c91ed27191ff7b131d80a59809c55a818d7c2"
+      },
+      {
+        "path": "tmp/p5/anthropic-tool-append-run-w/controls.ts",
+        "sha256": "98835f8812297b444a6a6b970d04867616c511cd661ae7c7914b1763753d1bbc"
+      }
+    ],
+    "excludedEvidence": [
+      {
+        "path": "tmp/p5/anthropic-tool-append-run-w/red.log",
+        "sha256": "eb6fd814768f2501db32647d1f1eeaf5999672e6a4639aeb4e7e8a9d383f78eb"
+      },
+      {
+        "path": "tmp/p5/anthropic-tool-append-run-w/early-20160/incremental.log",
+        "sha256": "511ee5c3ad606e3dcad85b1ac5481144c9752cc408c789b5c5aa09ef6459c6c9"
+      },
+      {
+        "path": "tmp/p5/anthropic-tool-append-run-w/early-34284/incremental.log",
+        "sha256": "7a2b45944ab5348ca4311f236b4ce78fec373b64e0450d3e25006c6ad2761945"
+      },
+      {
+        "path": "tmp/p5/anthropic-tool-append-run-w/early-42403/audit/findings.tsv",
+        "sha256": "3539173e25cfe2a5a7c69dd7a8b82cae2d5ac7d7ee7283e837880238d04c2a5e"
+      },
+      {
+        "path": "tmp/p5/anthropic-tool-append-run-w/read-classification-cause.log",
+        "sha256": "71601f7525ecce69f21d1622f5745e61fb761bec20155cb0a21578816ae16ee3"
+      },
+      {
+        "path": "tmp/p5/anthropic-tool-append-run-w/read-classification-cause-2.log",
+        "sha256": "fb4366f010a8545dcf99843542f42530abcce264492ff0d314152800a4fcbc2f"
+      },
+      {
+        "path": "tmp/p5/anthropic-tool-append-run-w/diagnose-read.ts",
+        "sha256": "9095955105f97b7f1dd9b8108eb6dded2b1f1dfdd49f9f1522aeaf4aab634983"
+      },
+      {
+        "path": "tmp/p5/anthropic-tool-append-run-w/diagnose-read.log",
+        "sha256": "fd1ad92bc31ecfd5b02d85a260e89f46c24037e8ca7e00a0aa7d06a2a2e4bd77"
+      },
+      {
+        "path": "tmp/p5/anthropic-tool-append-run-w/controls-32857/manifest.json",
+        "sha256": "07a8e04a82780363a166e3fda27df869f2b9e48a985e2341347ab130264889c5"
+      }
+    ],
+    "finalObserverCause": "Five 40-row result overlaps were ID-trie 1024-byte structural prefetch, not targeted historical LENS reads; requested and actual ends matched in the diagnostic. Initial debug import failed before observation. Final tests preserve overlap counts separately rather than claim no physical overlap.",
+    "auditCause": "Three new old-pin expectations initially used rendered(old) as their expected body. They now use the independent normalized old emitter before and after the mutation/failure; added assertions preserve both checkpoints."
+  },
+  "preservation": {
+    "manifest": {
+      "path": "tmp/p5/anthropic-incremental-run-v/preserved.json",
+      "sha256": "0ac24095773a60993a58075f9cb9b8e9e18e6556a0a15de0b0cdc34575e4daf2"
+    },
+    "paths": 1192,
+    "unrelatedDeclarations": 293,
+    "differences": []
+  },
+  "processes": {
+    "recorded": [
+      34280,
+      34281,
+      34284,
+      34295,
+      34385,
+      34596,
+      35075,
+      35554,
+      35853,
+      35872,
+      36064,
+      36273,
+      40402,
+      42403,
+      42409,
+      42466,
+      42496,
+      42560,
+      42720,
+      42841,
+      42842,
+      42870,
+      42902,
+      47480,
+      47511,
+      48819,
+      48828,
+      48846,
+      48897,
+      48904,
+      48929,
+      48961,
+      49567,
+      49569,
+      49573,
+      49585,
+      49594,
+      49609,
+      50660,
+      50673,
+      50679,
+      52184,
+      52215,
+      52221,
+      52225,
+      52393,
+      52414,
+      52423,
+      52427,
+      52459,
+      52462
+    ],
+    "active": []
+  },
+  "remaining": [
+    "General duplicate/cross-speaker or non-final-holder incremental repair",
+    "Cache 5m/1h, pending-tail and selected-range format planning",
+    "Image/stored-media generations and LENS recomputation/live bytes",
+    "Production request routing/planning integration, tokens, stream guard and actual header installation",
+    "Retained heap at 10k/100k/1M, 100000-call construction and cold Mistral work",
+    "Phase 5, W23 eight planning/header cases, Stage A/W25/provider cutover and W26"
+  ],
+  "restrictions": "No production edit in this finalization, cleanup, .llxprt edit/staging, unrelated declaration/recovery staging, OCR, push, merge, default change or assertion/domain/bound/timeout/enforcement weakening. #3917 remains separately RED without retry/suppression. Review skipped per Andrew 2026-10-09."
+}

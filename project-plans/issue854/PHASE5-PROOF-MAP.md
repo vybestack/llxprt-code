@@ -1,5 +1,20 @@
 # Phase 5 proof map
 
+## Bounded unique Anthropic call/result append, 2026-10-21
+
+Production `a52809d8aacbfa4631561db4bdca5639426cbfc4`; tests `930d8572ffaa0557e1e7f45038562c5c73059156`. [PHASE5-ANTHROPIC-TOOL-APPEND-PROOF.json](PHASE5-ANTHROPIC-TOOL-APPEND-PROOF.json) binds 47 committed paths to **92 passes, zero failures/skips and 11,216 assertions across nine serial complete-file processes**, eight scoped gates and five restored assertion controls. All 51 recorded PIDs are absent; all 1192 preservation hashes match, including 293 unrelated declarations and raw recovery. Raw root: `tmp/p5/anthropic-tool-append-run-w`.
+
+| Obligation | Evidence and boundary |
+| --- | --- |
+| Actual native append | One named, unique AI call and its first actual result, one row per operation, with the call still the final two-unit holder outside thinking chains. Current-ID facts and the affected holder update without whole fact/format refill. Tool/human results pass; non-AI call holders and general duplicate/late-holder repair remain unsupported. |
+| Read budget | At 40/4000 source rows, call 110/175 reads, result 121/185; additional whole fills zero/zero. Result metadata/head reads 99/163 and selected ROW-body reads 22/22. Warm three-policy planning uses 4/4 reads with zero ROW/LENS overlap. Cold construction/fill is 4877/782056. No heap claim. |
+| Physical overlap | Result append has 5/3 raw prior-record overlaps. Structural prefetch and selected-holder reads can extend into adjacent holder LENS bytes; final classification preserves these counts rather than call them zero physical overlap. No read starts in unrelated historical ROW/LENS records. Discovery/classification are outside measured intervals. |
+| Independent bytes and lifetime | Old normalizer/emitter establish stored length and actual serialized bytes; all 5000 unchanged normalized source histories remain the frozen domain. Old pins, empty/reopen/multiple slots, fork, compaction, owner, original failure/poison/reopen and pending-tail refusal pass. No original raw-body or arbitrary append claim. |
+| Invalidation | Duplicate/empty/unnamed/non-AI calls, normalized collisions, unmatched/late/better-late results and chain tools invalidate until cold refill. Cache 5m/1h, tails/ranges, overrides and stored media remain refused. |
+| Controls and provenance | Wrong holder, response drop, stale repair count, full refill and dropped invalidation fail assertions and restore with cmp/equal hashes before acceptance. Earlier observer RED, self-derived old-pin expectations and historical controls with a failing baseline are excluded. Graph validation is not all-affected-shard execution. |
+
+General affected-holder support, cache/tails/ranges, image/media generations, LENS/live bytes, production planning/headers/tokens/stream guard, heap/capacity, cold Mistral, W23's eight cases, Stage A/W25/cutover and W26 remain open. Routes/default unchanged; #3917 remains separately RED without retry/suppression. Review skipped per Andrew 2026-10-09.
+
 ## Bounded ordinary-text Anthropic append checkpoint, 2026-10-21
 
 Implementation `9853af8b0`; tested follow-up `743f31c1ea797e46536a4015e53ec8b597f604d9`. [PHASE5-ANTHROPIC-APPEND-PROOF.json](PHASE5-ANTHROPIC-APPEND-PROOF.json) binds **97 passes, zero failures/skips and 11,093 assertions across 14 serial complete-file Bun processes**, eight scoped gates and four restored assertion controls. Raw root: `tmp/p5/anthropic-incremental-run-v`.
