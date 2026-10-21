@@ -5,6 +5,7 @@ import { testJournalSeams } from '../../journal/__tests__/support/journalFixture
 import { JournalSession } from './journalSession.js';
 import { IndexedJournalRequestSnapshot } from './indexed-journal-request-snapshot.js';
 import type { IContent } from './IContent.js';
+import type { AnthropicToolOccurrenceFacts } from './journal-anthropic-facts.js';
 
 const call = (id: string): IContent => ({
   speaker: 'ai',
@@ -123,12 +124,28 @@ describe('held native Anthropic repair inputs', () => {
       const old = await session.store.snapshot();
       const query = await IndexedJournalRequestSnapshot.create(old);
       try {
-        const before = await query.anthropicToolFactsAt(0);
+        const before: AnthropicToolOccurrenceFacts[] = [
+          {
+            block: 0,
+            rawId: 'toolu_X',
+            id: 'toolu_X',
+            kind: 'use',
+            source: { label: 2097152n, part: 0, block: 0 },
+            best: undefined,
+            uses: 2,
+            results: 2,
+            usesBefore: 1,
+            resultsBefore: 1,
+            nextResult: 3,
+            orphan: false,
+          },
+        ];
+        expect(await query.anthropicToolFactsAt(2)).toStrictEqual(before);
         await session.append([result('toolu_X', 'ONE')]);
         const pin = await session.store.snapshot();
         const current = await IndexedJournalRequestSnapshot.create(pin);
         try {
-          expect(await query.anthropicToolFactsAt(0)).toStrictEqual(before);
+          expect(await query.anthropicToolFactsAt(2)).toStrictEqual(before);
           const first = await current.anthropicToolFactsAt(0);
           const second = await current.anthropicToolFactsAt(2);
           expect(first[0].uses).toBe(2);
