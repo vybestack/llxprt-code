@@ -23,9 +23,6 @@ export interface ToolRankNode extends ToolRank {
   readonly count: number;
   readonly total: number;
 }
-function key(parts: readonly (number | string)[]): Uint8Array {
-  return utf8.encode(JSON.stringify([TOOL_RANKING_READY, ...parts]));
-}
 function view(bytes: Uint8Array): DataView {
   return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 }
@@ -36,10 +33,26 @@ export function rankBefore(a: ToolRank, b: ToolRank): boolean {
 }
 
 export class ToolRankingTree {
-  constructor(private readonly facts: IdFactQueries) {}
+  constructor(
+    private readonly facts: IdFactQueries,
+    private readonly pending = false,
+  ) {}
+
+  protected key(parts: ReadonlyArray<number | string>): Uint8Array {
+    return utf8.encode(
+      JSON.stringify([
+        TOOL_RANKING_READY,
+        ...(this.pending ? ['pending'] : []),
+        ...parts,
+      ]),
+    );
+  }
 
   private async part(id: number, part: number): Promise<DataView> {
-    const bytes = await this.facts.getEntry(namespace, key(['node', id, part]));
+    const bytes = await this.facts.getEntry(
+      namespace,
+      this.key(['node', id, part]),
+    );
     if (bytes?.length !== 16)
       throw new JournalFormatError('Missing tool ranking node');
     return view(bytes);
@@ -69,12 +82,20 @@ export class ToolRankingTree {
     count: number;
     rows: number;
     saving: number;
+    lastParent: number;
   }> {
-    const bytes = await this.facts.getEntry(namespace, key(['header']));
+    const bytes = await this.facts.getEntry(namespace, this.key(['header']));
     if (bytes?.length !== 20)
       throw new JournalFormatError('Missing tool ranking header');
+    const parent = await this.facts.getEntry(
+      namespace,
+      this.key(['lastParent']),
+    );
+    if (parent?.length !== 4)
+      throw new JournalFormatError('Missing tool ranking parent boundary');
     const data = view(bytes);
     return {
+      lastParent: view(parent).getUint32(0, true) - 1,
       root: data.getUint32(0, true),
       count: data.getUint32(4, true),
       rows: data.getUint32(8, true),
@@ -108,7 +129,7 @@ export class ToolRankingTree {
   async position(label: bigint, block: number): Promise<ToolRank | undefined> {
     const bytes = await this.facts.getEntry(
       namespace,
-      key(['position', String(label), block]),
+      this.key(['position', String(label), block]),
     );
     if (bytes === undefined) return undefined;
     if (bytes.length !== 4)
@@ -119,8 +140,11 @@ export class ToolRankingTree {
 }
 
 export class ToolRankingTreeWriter extends ToolRankingTree {
-  constructor(private readonly batch: IdFactBatch) {
-    super(batch.queries);
+  constructor(
+    private readonly batch: IdFactBatch,
+    pending = false,
+  ) {
+    super(batch.queries, pending);
   }
 
   private async write(node: ToolRankNode): Promise<ToolRankNode> {
@@ -148,7 +172,11 @@ export class ToolRankingTreeWriter extends ToolRankingTree {
     const total = new Uint8Array(16);
     view(total).setFloat64(0, next.total, true);
     for (const [part, bytes] of [position, scores, tree, total].entries())
-      await this.batch.setEntry(namespace, key(['node', node.id, part]), bytes);
+      await this.batch.setEntry(
+        namespace,
+        this.key(['node', node.id, part]),
+        bytes,
+      );
     return next;
   }
   private async rotateRight(node: ToolRankNode): Promise<ToolRankNode> {
@@ -208,7 +236,7 @@ export class ToolRankingTreeWriter extends ToolRankingTree {
       view(bytes).setUint32(0, rank.id, true);
       await this.batch.setEntry(
         namespace,
-        key(['position', String(rank.label), rank.block]),
+        this.key(['position', String(rank.label), rank.block]),
         bytes,
       );
       return rank.id;
@@ -226,6 +254,7 @@ export class ToolRankingTreeWriter extends ToolRankingTree {
     count: number,
     rows: number,
     saving: number,
+    lastParent = -1,
   ): Promise<void> {
     const bytes = new Uint8Array(20);
     const data = view(bytes);
@@ -233,6 +262,9 @@ export class ToolRankingTreeWriter extends ToolRankingTree {
     data.setUint32(4, count, true);
     data.setUint32(8, rows, true);
     data.setFloat64(12, saving, true);
-    await this.batch.setEntry(namespace, key(['header']), bytes);
+    await this.batch.setEntry(namespace, this.key(['header']), bytes);
+    const parent = new Uint8Array(4);
+    view(parent).setUint32(0, lastParent + 1, true);
+    await this.batch.setEntry(namespace, this.key(['lastParent']), parent);
   }
 }

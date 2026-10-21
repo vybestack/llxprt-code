@@ -14,7 +14,10 @@
  * limitations under the License.
  */
 
-import type { ToolRankingPolicy } from '../../journal/tool-ranking-fill.js';
+import type {
+  ToolRankingPolicy,
+  ToolRankingOverlay,
+} from '../../journal/tool-ranking-fill.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type {
   HistoryRepair,
@@ -102,8 +105,14 @@ export class HistoryService extends HistoryServiceReads {
 
   async openToolResponseRanking(
     policy: ToolRankingPolicy,
+    overlay?: ToolRankingOverlay,
   ): Promise<VersionSnapshot | undefined> {
-    return this.journal.openToolResponseRanking(policy);
+    return this.journal.openToolResponseRanking(policy, overlay);
+  }
+
+  historyMutationGuard(): () => boolean {
+    const mark = this.journal.mutationMark();
+    return () => this.journal.isCurrentMutationMark(mark);
   }
 
   async adoptResumeBoot(

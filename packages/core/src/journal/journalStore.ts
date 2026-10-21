@@ -1,7 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import {
   fillToolRanking,
-  rankingReady,
+  warmToolRanking,
+  toolRankingPolicy,
   type ToolRankingPolicy,
 } from './tool-ranking-fill.js';
 import type { RecencyFactPolicy } from './recencyFacts.js';
@@ -609,12 +610,7 @@ export class JournalStore {
       this.rowFormats,
     );
     const facts = await warmNativeFacts(this.buildContext(), edits);
-    const ranking =
-      edits.length === 1 &&
-      edits[0].kind === 'toolRanking' &&
-      (await rankingReady(this.buildContext(), edits[0].policy.revision))
-        ? edits[0].policy
-        : undefined;
+    const ranking = await warmToolRanking(this.buildContext(), edits);
     if (
       (warm === undefined && facts === undefined && ranking === undefined) ||
       before === undefined
@@ -644,11 +640,7 @@ export class JournalStore {
     edits: readonly VersionEdit[],
     facts: NativeFactIndexRegistration | undefined,
   ): ReturnType<typeof fillRowFormats> {
-    const rankingEdit = edits.find((edit) => edit.kind === 'toolRanking');
-    const ranking =
-      rankingEdit?.kind === 'toolRanking'
-        ? rankingEdit.policy
-        : this.toolRanking;
+    const ranking = toolRankingPolicy(edits, this.toolRanking);
     const ranked = await fillToolRanking(
       this.buildContext(),
       built,
@@ -753,11 +745,7 @@ export class JournalStore {
     this.install(trailer);
     this.rowFormats = rowFormats;
     this.factIndex = factIndex;
-    const rankingEdit = resolvedEdits.find(
-      (edit) => edit.kind === 'toolRanking',
-    );
-    if (rankingEdit?.kind === 'toolRanking')
-      this.toolRanking = rankingEdit.policy;
+    this.toolRanking = toolRankingPolicy(resolvedEdits, this.toolRanking);
     this.chain = built.chainBase.push(trailer.selfOffset);
     if (built.spine !== undefined) {
       this.spineEntry = { rowRoot: trailer.rowRoot, spine: built.spine };

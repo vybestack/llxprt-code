@@ -1,5 +1,4 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { ToolRankingPolicy } from '../../journal/tool-ranking-fill.js';
 import type { GroupPreparation } from '../../journal/preparedGroup.js';
 import type { EntryFill, VersionEdit } from '../../journal/groupEdits.js';
 import type { CommitAck } from '../../journal/groupWriter.js';
@@ -74,7 +73,10 @@ import { planToolPairingRepair } from './journalHistoryRepair.js';
 import { optimizeDensityOnJournal } from './journalDensity.js';
 import { mergeOnJournal } from './journalMerge.js';
 import { publishDetachedOnJournal } from './journalPublishDetached.js';
-import { waitForDetachedCapture } from './journalDetachedCapture.js';
+import {
+  captureSettledJournalSnapshot,
+  openJournalToolRanking,
+} from './journal-tool-ranking.js';
 import {
   reconcileMediaOnJournal,
   removeTailOnJournal,
@@ -476,22 +478,11 @@ export class JournalHistoryStore implements HistoryStorePort {
    * updates the caller still owes are settled, and nothing was queued while
    * they ran. The snapshot holds a pin: the caller closes it.
    */
-  async settledSnapshot(
-    settleTokens: () => Promise<void>,
-    signal?: AbortSignal,
-  ): Promise<VersionSnapshot> {
-    await waitForDetachedCapture(() => this.waitForDurable(), signal);
-    const snapshot = await this.session.store.snapshot();
-    try {
-      await waitForDetachedCapture(settleTokens, signal);
-      await waitForDetachedCapture(() => this.waitForDurable(), signal);
-      this.assertSettled(snapshot, 'captured');
-    } catch (error) {
-      await snapshot.close();
-      throw error;
-    }
-    return snapshot;
-  }
+  settledSnapshot = captureSettledJournalSnapshot(
+    () => this.waitForDurable(),
+    () => this.session.store.snapshot(),
+    (snapshot) => this.assertSettled(snapshot, 'captured'),
+  );
 
   /** Brackets one logical publication; the scope only counts (see {@link JournalPublication}). */
   openPublication(): HistoryPublicationScope {
@@ -717,18 +708,15 @@ export class JournalHistoryStore implements HistoryStorePort {
 
   openCompressionInput = journalCompressionInput;
 
-  async openToolResponseRanking(
-    policy: ToolRankingPolicy,
-  ): Promise<VersionSnapshot> {
-    await this.waitForDurable();
-    return this.exclusive(async () => {
-      const group = await this.mirrors.commit(
-        await this.topology.prepare([{ kind: 'toolRanking', policy }]),
-      );
-      await group.close();
-      return this.session.store.snapshot();
-    });
-  }
+  openToolResponseRanking = openJournalToolRanking({
+    wait: () => this.waitForDurable(),
+    exclusive: (action) => this.exclusive(action),
+    commit: async (policy, overlay) =>
+      this.mirrors.commit(
+        await this.topology.prepare([{ kind: 'toolRanking', policy, overlay }]),
+      ),
+    snapshot: () => this.session.store.snapshot(),
+  });
 
   async openDumpSnapshot(): Promise<JournalDumpSnapshot> {
     this.assertUsable();

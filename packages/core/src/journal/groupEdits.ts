@@ -1,5 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { ToolRankingPolicy } from './tool-ranking-fill.js';
+import type {
+  ToolRankingPolicy,
+  ToolRankingOverlay,
+} from './tool-ranking-fill.js';
 import type { GroupPreparation } from './preparedGroup.js';
 import type { IdFactQueries } from './idFactQueries.js';
 import type { IdOccurrence } from './idFactUpdate.js';
@@ -71,7 +74,11 @@ export type VersionEdit =
   | { readonly kind: 'chronology' }
   | { readonly kind: 'densityCalls' }
   | { readonly kind: 'recency' }
-  | { readonly kind: 'toolRanking'; readonly policy: ToolRankingPolicy }
+  | {
+      readonly kind: 'toolRanking';
+      readonly policy: ToolRankingPolicy;
+      readonly overlay?: ToolRankingOverlay;
+    }
   | {
       readonly kind: 'factIndex';
       readonly registration: NativeFactIndexRegistration;
