@@ -63,6 +63,7 @@ interface NativePurgeFixture {
 
 export async function withNativePurgeFixture(
   action: (fixture: NativePurgeFixture) => Promise<void>,
+  origin?: object,
 ): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), 'native-purge-'));
   const primary = join(root, 'primary.llxj');
@@ -87,7 +88,7 @@ export async function withNativePurgeFixture(
   const owner = new PurgePublicationOwner(store);
   try {
     history.setTokenizerFactory(exactTokenizer());
-    await history.attachJournal(recording, true);
+    await history.attachJournal(recording, true, undefined, origin);
     await history.registerMediaOwner(owner);
     await action({
       history,
