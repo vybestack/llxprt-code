@@ -16,6 +16,11 @@ import {
   InMemoryProviderKeyStorage,
 } from '../../../../../providers/src/auth/proxy/__tests__/credential-proxy-server-helpers.js';
 
+type CredentialFixtureTrace = (
+  boundary: string,
+  state?: Readonly<Record<string, boolean | readonly number[]>>,
+) => void;
+
 class ObservedTokenTransport extends ProxyTokenStore {
   closeCount = 0;
 
@@ -42,6 +47,7 @@ export class OwnedCredentialFixture {
   private constructor(
     socketPath: string,
     private readonly server: CredentialProxyServer,
+    private readonly trace?: CredentialFixtureTrace,
   ) {
     const transports = this.transports;
     const keys = this.keys;
@@ -67,12 +73,19 @@ export class OwnedCredentialFixture {
     })(socketPath);
   }
 
-  static async create(): Promise<OwnedCredentialFixture> {
+  static async create(
+    trace?: CredentialFixtureTrace,
+  ): Promise<OwnedCredentialFixture> {
     const server = new CredentialProxyServer({
       tokenStore: new InMemoryTokenStore(),
       providerKeyStorage: new InMemoryProviderKeyStorage(),
     });
-    return new OwnedCredentialFixture(await server.start(), server);
+    trace?.('credentials.server.start:enter');
+    const socketPath = await server.start();
+    trace?.('credentials.server.start:exit', {
+      socketAssigned: server.getSocketPath() !== null,
+    });
+    return new OwnedCredentialFixture(socketPath, server, trace);
   }
 
   snapshot(): readonly number[] {
@@ -100,34 +113,63 @@ export class OwnedCredentialFixture {
   }
 
   async dispose(): Promise<void> {
+    this.trace?.('credentials.clients.close:enter', {
+      transportCloses: this.snapshot(),
+      keyCloses: this.keySnapshot(),
+    });
     for (const key of this.keys) key.cleanup();
     for (const transport of this.transports) transport.getClient().close();
+    this.trace?.('credentials.server.stop:enter', {
+      socketAssigned: this.server.getSocketPath() !== null,
+      transportCloses: this.snapshot(),
+      keyCloses: this.keySnapshot(),
+    });
     await this.server.stop();
+    this.trace?.('credentials.server.stop:exit', {
+      socketAssigned: this.server.getSocketPath() !== null,
+    });
   }
 }
 
-export function useOwnedCredentials(): () => OwnedCredentialFixture {
+export function useOwnedCredentials(
+  trace?: CredentialFixtureTrace,
+): () => OwnedCredentialFixture {
   let fixture: OwnedCredentialFixture;
   let home: string;
   let previousHome: string | undefined;
   beforeEach(async () => {
+    trace?.('credentials.beforeEach:enter');
     previousHome = process.env.LLXPRT_CONFIG_HOME;
+    trace?.('credentials.home.create:enter');
     home = await mkdtemp(join(tmpdir(), 'preferred-credential-owner-'));
+    trace?.('credentials.home.create:exit');
     process.env.LLXPRT_CONFIG_HOME = home;
+    trace?.('credentials.settings.write:enter');
     await writeFile(
       join(home, 'settings.json'),
       JSON.stringify({ oauthEnabledProviders: { codex: true } }),
     );
-    fixture = await OwnedCredentialFixture.create();
+    trace?.('credentials.settings.write:exit');
+    trace?.('credentials.fixture.create:enter');
+    fixture = await OwnedCredentialFixture.create(trace);
+    trace?.('credentials.fixture.create:exit');
+    trace?.('credentials.beforeEach:exit');
   });
   afterEach(async () => {
+    trace?.('credentials.afterEach:enter');
     try {
+      trace?.('credentials.fixture.dispose:enter');
       await fixture.dispose();
+      trace?.('credentials.fixture.dispose:exit');
     } finally {
+      trace?.('credentials.afterEach.finally:enter');
       if (previousHome === undefined) delete process.env.LLXPRT_CONFIG_HOME;
       else process.env.LLXPRT_CONFIG_HOME = previousHome;
+      trace?.('credentials.home.remove:enter');
       await rm(home, { recursive: true, force: true });
+      trace?.('credentials.home.remove:exit');
     }
+    trace?.('credentials.afterEach:exit');
   });
   return () => fixture;
 }
