@@ -21,7 +21,10 @@
 
 import * as path from 'node:path';
 import { optimizeDiskDensity } from './diskDensityOptimization.js';
-import { compressHighDensityDisk } from './highDensityDiskPlan.js';
+import {
+  compressHighDensityDisk,
+  prepareHighDensityDisk,
+} from './highDensityDiskPlan.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import type { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
 import type {
@@ -625,6 +628,11 @@ function findPrunableToolResponses(
 export class HighDensityStrategy implements CompressionStrategy {
   readonly optimizeRows = optimizeDiskDensity;
   readonly diskCompressionOwnership = new RowOwnership();
+  prepareDisk(
+    context: Parameters<typeof prepareHighDensityDisk>[0],
+  ): ReturnType<typeof prepareHighDensityDisk> {
+    return prepareHighDensityDisk(context, this.diskCompressionOwnership);
+  }
   readonly compressDisk = (
     context: Parameters<typeof compressHighDensityDisk>[0],
     candidate: HistoryDensityRows,

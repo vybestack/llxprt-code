@@ -407,7 +407,7 @@ describe('compression modules on the journal store keep the owner of every row t
     },
   );
 
-  it.each(SIZES)(
+  it.each([...SIZES, 5000])(
     'high-density over %i rows drops a head and keeps the owners of the rest, summarized tool rows included',
     async (count) => {
       const response: ToolResponseBlock = {

@@ -118,51 +118,85 @@ function toolSummary(
   return `[${block.toolName}${param ? ` ${param}` : ''}: ${outcome} ${RERUN_HINT_SUFFIX}]`;
 }
 
-async function summarize(
+function outputRows(
   rows: CompressionInputRows,
-  candidate: HistoryDensityRows,
   tail: number,
   index: DensityDiskIndex,
   owner: RowOwnership,
-): Promise<void> {
-  for (let position = 0; position < rows.length; position++) {
-    await withRow(rows, position, owner, async (row) => {
-      const ordinal = await rows.sourceOrdinalAt(position);
+): CompressionInputRows {
+  const readRow = (position: number): Promise<IContent> =>
+    withRow(rows, position, owner, async (row) => {
       if (position >= tail || row.speaker === 'human' || row.speaker === 'ai')
-        candidate.append(row, ordinal);
-      else {
-        const blocks: ContentBlock[] = [];
-        for (const block of row.blocks)
-          blocks.push(
-            block.type === 'tool_response'
-              ? {
-                  ...block,
-                  result: toolSummary(
-                    block,
-                    await keyParam(rows, index, block.callId, owner),
-                  ),
-                }
-              : block,
-          );
-        candidate.append({ ...row, blocks }, ordinal);
-      }
+        return row;
+      const blocks: ContentBlock[] = [];
+      for (const block of row.blocks)
+        blocks.push(
+          block.type === 'tool_response'
+            ? {
+                ...block,
+                result: toolSummary(
+                  block,
+                  await keyParam(rows, index, block.callId, owner),
+                ),
+              }
+            : block,
+        );
+      return { ...row, blocks };
     });
-  }
+  return {
+    length: rows.length,
+    readRow,
+    sourceOrdinalAt: (position) => rows.sourceOrdinalAt(position),
+    async *[Symbol.asyncIterator]() {
+      for (let position = 0; position < rows.length; position++) {
+        const row = await readRow(position);
+        owner.retain(row);
+        try {
+          yield row;
+        } finally {
+          owner.release(row);
+        }
+      }
+    },
+    async chronologySelection(start) {
+      if (start === rows.length) return { ranges: [], generated: [] };
+      const first = await rows.sourceOrdinalAt(start);
+      const last = await rows.sourceOrdinalAt(rows.length - 1);
+      if (first === undefined || last === undefined)
+        throw new Error('High-density output has no source ordinal');
+      return { ranges: [{ from: first, to: last + 1 }], generated: [] };
+    },
+  };
 }
 
-export async function compressHighDensityDisk(
-  context: Omit<DiskTruncationContext, 'history'> & {
-    readonly history: CompressionInputRows;
-  },
-  candidate: HistoryDensityRows,
-  owner: RowOwnership,
-): Promise<
+type HighDensityContext = Omit<DiskTruncationContext, 'history'> & {
+  readonly history: CompressionInputRows;
+};
+
+export type HighDensityOutput =
   | { readonly kind: 'noop' }
-  | { readonly kind: 'applied'; readonly start: number; readonly top: number }
-> {
+  | {
+      readonly kind: 'applied';
+      readonly start: number;
+      readonly top: number;
+      readonly candidate: CompressionInputRows;
+      close(): void;
+    };
+
+export async function prepareHighDensityDisk(
+  context: HighDensityContext,
+  owner: RowOwnership,
+  diskCandidate?: HistoryDensityRows,
+): Promise<HighDensityOutput> {
   const rows = context.history;
   if (rows.length === 0) return { kind: 'noop' };
   const index = new DensityDiskIndex();
+  let closed = false;
+  const close = (): void => {
+    if (closed) return;
+    closed = true;
+    index.close();
+  };
   try {
     await indexCalls(rows, index, owner);
     const tail = await tailBoundary(
@@ -177,18 +211,29 @@ export async function compressHighDensityDisk(
       index,
       owner,
     );
-    if (tail <= 0) return { kind: 'noop' };
+    if (tail <= 0) {
+      close();
+      return { kind: 'noop' };
+    }
     const target = Math.floor(
       context.runtimeContext.ephemerals.compressionThreshold() *
         context.runtimeContext.ephemerals.contextLimit() *
         context.runtimeContext.ephemerals.densityCompressHeadroom(),
     );
-    await summarize(rows, candidate, tail, index, owner);
+    const output = outputRows(rows, tail, index, owner);
+    if (diskCandidate !== undefined) {
+      for (let position = 0; position < rows.length; position++)
+        diskCandidate.append(
+          await output.readRow(position),
+          await rows.sourceOrdinalAt(position),
+        );
+    }
+    const candidate = diskCandidate ?? output;
     let tokens = await context.estimateTokens(candidate);
     let start = 0;
     // The production estimator is a sum of independent per-row costs.
     while (tokens > target && start < tail) {
-      const row = candidate.readRow(start);
+      const row = await candidate.readRow(start);
       owner.retain(row);
       try {
         tokens -= await context.estimateTokens([row]);
@@ -197,8 +242,37 @@ export async function compressHighDensityDisk(
       }
       start++;
     }
-    return { kind: 'applied', start, top: 0 };
-  } finally {
-    index.close();
+    return {
+      kind: 'applied',
+      start,
+      top: 0,
+      candidate,
+      close,
+    };
+  } catch (error) {
+    try {
+      close();
+    } catch (cleanup) {
+      throw new AggregateError(
+        [error, cleanup],
+        'High-density planning cleanup failed',
+        { cause: error },
+      );
+    }
+    throw error;
   }
+}
+
+export async function compressHighDensityDisk(
+  context: HighDensityContext,
+  candidate: HistoryDensityRows,
+  owner: RowOwnership,
+): Promise<
+  | { readonly kind: 'noop' }
+  | { readonly kind: 'applied'; readonly start: number; readonly top: number }
+> {
+  const output = await prepareHighDensityDisk(context, owner, candidate);
+  if (output.kind === 'noop') return output;
+  output.close();
+  return { kind: 'applied', start: output.start, top: output.top };
 }

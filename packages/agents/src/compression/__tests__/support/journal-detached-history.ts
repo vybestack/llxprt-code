@@ -70,5 +70,8 @@ export function journalRoutedHistory(owned: OwnedJournal): HistoryService {
   Object.defineProperty(history, 'openDumpSnapshot', {
     value: async () => snapshot(),
   });
+  Object.defineProperty(history, 'openCompressionInput', {
+    value: () => owned.store.openCompressionInput(),
+  });
   return history;
 }

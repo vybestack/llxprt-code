@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
+import type { HighDensityOutput } from './highDensityDiskPlan.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { HistoryDumpSource } from '@vybestack/llxprt-code-core/services/history/historyDumpSnapshot.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -10,7 +10,7 @@ import {
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import { HighDensityStrategy } from './HighDensityStrategy.js';
 import { buildCompressionMetadata } from './compressionContextBuilder.js';
-import { publishCandidate } from './diskTruncation.js';
+import { applyCompressionValuesWithAnchor } from './cache-anchor-values.js';
 import { fallbackDisk } from './diskMiddleOut.js';
 
 type Outcome = {
@@ -25,17 +25,15 @@ async function compressPinned(
   origin?: object,
 ): Promise<Outcome> {
   const strategy = new HighDensityStrategy();
-  let candidate: HistoryDensityRows | undefined;
+  let output: HighDensityOutput | undefined;
   let result: { readonly outcome: Outcome } | { readonly error: unknown };
   const attempt = async (): Promise<Outcome> => {
-    let prepared: Awaited<ReturnType<HighDensityStrategy['compressDisk']>>;
+    let prepared: HighDensityOutput;
     try {
       prepared = await retryWithBackoff(
         async () => {
-          candidate?.close();
-          candidate = undefined;
-          candidate = new HistoryDensityRows(strategy.diskCompressionOwnership);
-          return strategy.compressDisk(context, candidate);
+          output = await strategy.prepareDisk(context);
+          return output;
         },
         {
           maxAttempts: 3,
@@ -53,18 +51,14 @@ async function compressPinned(
       return fallbackDisk(context, history, previous, error, origin);
     }
     if (prepared.kind === 'noop') return { outcome: 'noop' };
-    if (candidate === undefined)
-      throw new Error('Missing high-density disk candidate');
-    const rows = candidate;
-    const summary = await publishCandidate(
+    const summary = await applyCompressionValuesWithAnchor(
       history,
       previous,
-      rows,
+      prepared.candidate,
       prepared.start,
       context.runtimeState.model,
       0,
       { origin },
-      (position) => rows.sourceOrdinalAt(position),
     );
     return { outcome: 'applied', summary };
   };
@@ -74,7 +68,7 @@ async function compressPinned(
     result = { error };
   }
   try {
-    candidate?.close();
+    if (output?.kind === 'applied') output.close();
   } catch (error) {
     throw new AggregateError(
       'error' in result ? [result.error, error] : [error],

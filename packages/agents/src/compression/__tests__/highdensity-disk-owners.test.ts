@@ -2,11 +2,7 @@
 import { describe, expect, it } from 'bun:test';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import {
-  checkpointRows,
-  type HistoryCheckpoint,
-} from '@vybestack/llxprt-code-core/services/history/historyCheckpointRows.js';
+import type { CompressionInputSnapshot } from '@vybestack/llxprt-code-core/services/history/compressionInput.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import {
   highdensitySetup,
@@ -19,38 +15,10 @@ class RetainingHistory extends HighdensityDiskHistory {
   readonly copied: IContent[] = [];
   readonly borrowedOwners = new RowOwnership();
   readonly copyOwners = new RowOwnership();
-  constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
-    super(options);
-    // The compressor reads rows through the pinned checkpoint, so the trap
-    // holds references to the rows of the first pass over that checkpoint.
-    const real = this.detachedValues;
-    let first = true;
-    const hold = (row: IContent): void => this.hold(row);
-    Object.defineProperty(this, 'detachedValues', {
-      value: {
-        ...real,
-        withCheckpoint: <T>(
-          execute: (checkpoint: HistoryCheckpoint) => Promise<T>,
-          signal?: AbortSignal,
-        ): Promise<T> =>
-          real.withCheckpoint((source) => {
-            const checkpoint = source;
-            let retain = first;
-            first = false;
-            return execute({
-              length: checkpoint.length,
-              async *[Symbol.asyncIterator]() {
-                const pass = retain;
-                retain = false;
-                for await (const row of checkpointRows(checkpoint)) {
-                  if (pass) hold(row);
-                  yield row;
-                }
-              },
-            });
-          }, signal),
-      },
-    });
+  override async openCompressionInput(): Promise<CompressionInputSnapshot> {
+    const input = await super.openCompressionInput();
+    for await (const row of input.previous.rows()) this.hold(row);
+    return input;
   }
   private hold(row: IContent): void {
     const copy = { ...row, blocks: [...row.blocks] };

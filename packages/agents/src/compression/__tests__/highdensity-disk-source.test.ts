@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import {
-  checkpointSourceFault,
+  compressionInputSourceFault,
   checkpointScratch,
   checkpointState,
   expectedCheckpointState,
@@ -20,7 +20,11 @@ import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.
 
 class FailingSourceHistory extends HighdensityDiskHistory {
   failure: Error | undefined;
-  private readonly source = checkpointSourceFault(this, () => this.failure, 31);
+  private readonly source = compressionInputSourceFault(
+    this,
+    () => this.failure,
+    31,
+  );
 
   get closedSnapshots(): number {
     return this.source.closed;

@@ -67,6 +67,35 @@ export function checkpointScratch(): string[] {
     /^(history-detached-|history-density-)/.test(name),
   );
 }
+export function compressionInputSourceFault(
+  history: HistoryService,
+  failure: () => Error | undefined,
+  ordinal: number,
+): { readonly closed: number } {
+  const open = history.openCompressionInput.bind(history);
+  let closed = 0;
+  history.openCompressionInput = async () => {
+    const input = await open();
+    const read = input.rows.readRow.bind(input.rows);
+    let visited = 0;
+    input.rows.readRow = (position) => {
+      const error = failure();
+      if (++visited === ordinal && error !== undefined) throw error;
+      return read(position);
+    };
+    const close = input.close.bind(input);
+    input.close = async () => {
+      await close();
+      closed++;
+    };
+    return input;
+  };
+  return {
+    get closed(): number {
+      return closed;
+    },
+  };
+}
 
 type Digest = Awaited<ReturnType<typeof detachedDigest>>;
 

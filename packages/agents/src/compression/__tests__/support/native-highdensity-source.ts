@@ -1,9 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { expect } from 'bun:test';
-import {
-  checkpointRows,
-  type HistoryCheckpoint,
-} from '@vybestack/llxprt-code-core/services/history/historyCheckpointRows.js';
 import { transformFixtureRows } from '@vybestack/llxprt-code-core/services/history/__tests__/support/transform-value-fixtures-test-helpers.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -20,35 +16,28 @@ function sourceFault(
 ): {
   readonly visited: number;
   readonly closed: number;
-  next(): Promise<IteratorResult<IContent, void>>;
+  next(): Promise<IteratorResult<IContent>>;
   restore(): void;
 } {
-  const capture = history.detachedValues.withCheckpoint.bind(
-    history.detachedValues,
-  );
+  const capture = history.openCompressionInput.bind(history);
   let closed = 0;
   let visited = 0;
-  let escaped: AsyncGenerator<IContent, void, unknown> | undefined;
-  history.detachedValues.withCheckpoint = <T>(
-    execute: (checkpoint: HistoryCheckpoint) => Promise<T>,
-    signal?: AbortSignal,
-  ): Promise<T> =>
-    capture(async (checkpoint) => {
-      escaped = checkpointRows(checkpoint);
-      return execute({
-        length: checkpoint.length,
-        async *[Symbol.asyncIterator]() {
-          try {
-            for await (const row of checkpointRows(checkpoint)) {
-              if (++visited === 31) throw failure;
-              yield row;
-            }
-          } finally {
-            closed++;
-          }
-        },
-      });
-    }, signal);
+  let escaped: AsyncIterator<IContent> | undefined;
+  history.openCompressionInput = async () => {
+    const input = await capture();
+    escaped = input.previous.rows()[Symbol.asyncIterator]();
+    const read = input.rows.readRow.bind(input.rows);
+    input.rows.readRow = (position) => {
+      if (++visited === 31) throw failure;
+      return read(position);
+    };
+    const close = input.close.bind(input);
+    input.close = async () => {
+      await close();
+      closed++;
+    };
+    return input;
+  };
   return {
     get visited() {
       return visited;
@@ -61,7 +50,7 @@ function sourceFault(
       return escaped.next();
     },
     restore: () => {
-      history.detachedValues.withCheckpoint = capture;
+      history.openCompressionInput = capture;
     },
   };
 }
@@ -94,9 +83,7 @@ export async function nativeHighdensitySourceFailure(
     ).toBe(failure);
     expect(probe.visited).toBe(31);
     expect(probe.closed).toBe(1);
-    await expect(probe.next()).rejects.toThrow(
-      'A journal read was used after its pin was released',
-    );
+    await expect(probe.next()).rejects.toThrow('Dump snapshot is closed');
     expect(checkpointScratch()).toStrictEqual(scratch);
     expect(
       await compressionValueDigest(history.streamRawHistory()),
