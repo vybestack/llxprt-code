@@ -82,6 +82,7 @@ export class VersionSnapshot {
 
   async recencyFacts(revision: string): Promise<RecencyFacts> {
     this.requireOpen();
+    if (this.rows === 0) return new RecencyFacts(this.facts, revision);
     const ready = await this.kimi.meta.get(
       this.version?.roots.metaRoot ?? 0,
       RECENCY_INDEX_READY,
