@@ -27,8 +27,9 @@ describe('native continuous recency decision', () => {
         const expected = digestRows(densityOracle(size, 4));
         const handler = densityHandler(history, 4);
         getScratchRoot();
-        const files = await operationFileCreates(() =>
-          handler.ensureDensityOptimized(),
+        const files = await operationFileCreates(
+          () => handler.ensureDensityOptimized(),
+          true,
         );
         expect(await digestStream(history.streamRawHistory())).toBe(expected);
         expect(await durable()).toStrictEqual(

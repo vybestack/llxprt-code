@@ -8,6 +8,7 @@ export function historyMutationFailure(
     : new AggregateError(
         [primary, ...failures],
         'History mutation and rollback failed',
+        { cause: primary },
       );
 }
 

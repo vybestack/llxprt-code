@@ -67,6 +67,31 @@ async function sameMetadata(
   return prior !== undefined && bytesEqual(prior, value);
 }
 
+function preparationWrites(appender: RecordAppender): {
+  readonly appender: RecordAppender;
+  failure(): { error: unknown } | undefined;
+} {
+  let failure: { error: unknown } | undefined;
+  const write = async <T>(operation: () => Promise<T>): Promise<T> => {
+    try {
+      return await operation();
+    } catch (error) {
+      failure = { error };
+      throw error;
+    }
+  };
+  return {
+    appender: {
+      get nextOffset() {
+        return appender.nextOffset;
+      },
+      append: (record) => write(() => appender.append(record)),
+      drain: () => write(() => appender.drain()),
+    },
+    failure: () => failure,
+  };
+}
+
 export async function prepareBuild(
   ctx: BuildContext,
   planning: PlanContext,
@@ -109,9 +134,10 @@ export async function prepareBuild(
     }
   };
   if (preparation?.kind === 'prepared') {
+    const writes = preparationWrites(appender);
     try {
       await preparation.prepare({
-        appender,
+        appender: writes.appender,
         read: ctx.readGroup,
         build,
         retainMetadata: async (key, value) => {
@@ -125,7 +151,7 @@ export async function prepareBuild(
             ...result,
             built: await retainMetadata(
               ctx,
-              appender,
+              writes.appender,
               result.built,
               key,
               value,
@@ -134,6 +160,8 @@ export async function prepareBuild(
         },
       });
     } catch (error) {
+      const failure = writes.failure();
+      if (failure !== undefined) throw failure.error;
       if (error instanceof JournalInputError || buildFailure?.error === error)
         throw error;
       throw new JournalInputError(error);
