@@ -525,6 +525,7 @@ export async function fillRowFormats(
     assigned < 0 &&
     edits.every((item) =>
       [
+        'densityFiles',
         'toolRanking',
         'factIndex',
         'setState',

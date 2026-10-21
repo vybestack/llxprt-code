@@ -1,5 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { ToolRankingTree, TOOL_RANKING_READY } from './tool-ranking-tree.js';
+import {
+  DensityFileFacts,
+  DENSITY_FILES_READY,
+  DENSITY_FILES_SCOPE,
+} from './density-file-facts.js';
 import { RecencyFacts, RECENCY_INDEX_READY } from './recencyFacts.js';
 import { ACTIVE_FACT_INDEX, NativeFactIndexReader } from './nativeFactIndex.js';
 import { rowFormatAuxKey } from './rowFormat.js';
@@ -91,6 +96,19 @@ export class VersionSnapshot {
     if (new TextDecoder().decode(ready) !== revision)
       throw new JournalFormatError('Recency fact policy requires a fill');
     return new RecencyFacts(this.facts, revision);
+  }
+
+  async densityFiles(revision: string): Promise<DensityFileFacts> {
+    this.requireOpen();
+    const ready = await this.kimi.meta.get(
+      this.version?.roots.metaRoot ?? 0,
+      DENSITY_FILES_READY,
+    );
+    if (ready === undefined || new TextDecoder().decode(ready) !== revision)
+      throw new JournalFormatError('Density file policy requires a fill');
+    return new DensityFileFacts(
+      new NativeFactIndexReader(this.facts, DENSITY_FILES_SCOPE),
+    );
   }
 
   async toolRanking(revision: string): Promise<ToolRankingTree> {

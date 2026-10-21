@@ -66,6 +66,7 @@ export async function warmToolRanking(
 }
 function sourceChange(edit: VersionEdit): boolean {
   return ![
+    'densityFiles',
     'toolRanking',
     'factIndex',
     'format',

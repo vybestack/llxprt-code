@@ -21,12 +21,18 @@ function acceptsState(
   );
 }
 
-function isStructuralFill(
-  edit: VersionEdit,
-): edit is Extract<
+function isStructuralFill(edit: VersionEdit): edit is Extract<
   VersionEdit,
-  { kind: 'chronology' | 'densityCalls' | 'recency' }
+  {
+    kind:
+      | 'chronology'
+      | 'densityCalls'
+      | 'recency'
+      | 'densityFiles'
+      | 'toolRanking';
+  }
 > {
+  if (edit.kind === 'densityFiles' || edit.kind === 'toolRanking') return true;
   return (
     edit.kind === 'chronology' ||
     edit.kind === 'densityCalls' ||
@@ -72,7 +78,6 @@ export function recordingAcceptsEdits(
       case 'trimHead':
       case 'fill':
       case 'format':
-      case 'toolRanking':
       case 'factIndex':
       case 'kimi':
       case 'mistral':

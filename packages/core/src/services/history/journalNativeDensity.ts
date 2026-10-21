@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { DensityFileFacts } from '../../journal/density-file-facts.js';
 import type { RecencyFacts } from '../../journal/recencyFacts.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { DetachedHistoryTransform } from './detachedHistoryAPI.js';
@@ -16,6 +17,7 @@ function recencyTransform(
   policy: NativeDensityPolicy,
   facts: RecencyFacts,
   resumeBoundary: bigint | undefined,
+  fileFacts: DensityFileFacts | undefined,
 ): DetachedHistoryTransform {
   return async (_source, sink) => {
     let ordinal = 0;
@@ -24,14 +26,19 @@ function recencyTransform(
         await snapshot.readRow(entry),
         resumeBoundary,
       );
-      const replacement = await policy.replace(
-        row,
+      const deduplicated =
+        fileFacts === undefined
+          ? undefined
+          : await policy.files?.replace(row, ordinal, fileFacts);
+      const recency = await policy.replace(
+        deduplicated ?? row,
         async (block, bucket) =>
           (await facts.count(bucket)) -
             (await facts.ordinal(entry.label, block)) +
             1 >
           policy.retention,
       );
+      const replacement = recency ?? deduplicated;
       const [clean] = invalidateResponsesStatefulChain([replacement ?? row]);
       if (replacement === undefined) await sink.appendDerived(ordinal, clean);
       else await sink.appendReplacement(ordinal, clean);
@@ -48,7 +55,13 @@ async function publishRecency(
 ): Promise<void> {
   if (snapshot.rows === 0) return;
   const facts = await snapshot.recencyFacts(policy.factRevision);
-  if (!((await facts.maximum()) > policy.retention)) return;
+  const fileFacts =
+    policy.files === undefined
+      ? undefined
+      : await snapshot.densityFiles(policy.files.facts.revision);
+  const duplicates =
+    fileFacts === undefined ? 0 : (await fileFacts.header())[3];
+  if (!((await facts.maximum()) > policy.retention) && duplicates === 0) return;
   await store.publishDetached(
     {
       transform: recencyTransform(
@@ -56,6 +69,7 @@ async function publishRecency(
         policy,
         facts,
         store.resumeBoundary,
+        fileFacts,
       ),
     },
     {
@@ -81,6 +95,8 @@ export async function optimizeNativeDensity(
   const policy = request.nativePolicy?.();
   if (policy === undefined)
     throw new Error('Native density policy is required');
+  if (policy.files !== undefined)
+    await (await store.openDensityFiles(policy.files.facts)).close();
   const snapshot = await store.settledSnapshot(() =>
     request.host.waitForTokenUpdates(),
   );

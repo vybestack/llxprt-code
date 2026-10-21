@@ -5,6 +5,12 @@ import {
   toolRankingPolicy,
   type ToolRankingPolicy,
 } from './tool-ranking-fill.js';
+import {
+  fillDensityFiles,
+  warmDensityFiles,
+  densityFilePolicy,
+} from './density-file-fill.js';
+import type { DensityFilePolicy } from './density-file-facts.js';
 import type { RecencyFactPolicy } from './recencyFacts.js';
 import {
   fillNativeFacts,
@@ -157,6 +163,7 @@ export class JournalStore {
   private rowFormats: readonly RegisteredRowFormat[] = [];
   private factIndex: NativeFactIndexRegistration | undefined;
   private toolRanking: ToolRankingPolicy | undefined;
+  private densityFiles: DensityFilePolicy | undefined;
   private commitEffect: CommitEffectFactory | undefined;
 
   setCommitEffect(factory: CommitEffectFactory): void {
@@ -262,6 +269,7 @@ export class JournalStore {
     clone.restartOnNewFile();
     clone.rowFormats = this.rowFormats;
     clone.factIndex = this.factIndex;
+    clone.densityFiles = this.densityFiles;
     return clone;
   }
 
@@ -611,12 +619,14 @@ export class JournalStore {
     );
     const facts = await warmNativeFacts(this.buildContext(), edits);
     const ranking = await warmToolRanking(this.buildContext(), edits);
+    const files = await warmDensityFiles(this.buildContext(), edits);
     if (
-      (warm === undefined && facts === undefined && ranking === undefined) ||
+      [warm, facts, ranking, files].every((value) => value === undefined) ||
       before === undefined
     )
       return undefined;
     if (ranking !== undefined) this.toolRanking = ranking;
+    if (files !== undefined) this.densityFiles = files;
     if (warm !== undefined) this.rowFormats = warm;
     if (facts !== undefined) this.factIndex = facts;
     const read = this.readOfPublished();
@@ -648,9 +658,16 @@ export class JournalStore {
       edits,
       ranking,
     );
-    const indexed = await fillNativeFacts(
+    const withFiles = await fillDensityFiles(
       this.buildContext(),
       ranked,
+      appender,
+      edits,
+      densityFilePolicy(edits, this.densityFiles),
+    );
+    const indexed = await fillNativeFacts(
+      this.buildContext(),
+      withFiles,
       appender,
       facts,
       edits,
@@ -746,6 +763,7 @@ export class JournalStore {
     this.rowFormats = rowFormats;
     this.factIndex = factIndex;
     this.toolRanking = toolRankingPolicy(resolvedEdits, this.toolRanking);
+    this.densityFiles = densityFilePolicy(resolvedEdits, this.densityFiles);
     this.chain = built.chainBase.push(trailer.selfOffset);
     if (built.spine !== undefined) {
       this.spineEntry = { rowRoot: trailer.rowRoot, spine: built.spine };

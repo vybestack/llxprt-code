@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { DensityFilePolicy } from './density-file-facts.js';
 import type {
   ToolRankingPolicy,
   ToolRankingOverlay,
@@ -74,6 +75,10 @@ export type VersionEdit =
   | { readonly kind: 'chronology' }
   | { readonly kind: 'densityCalls' }
   | { readonly kind: 'recency' }
+  | {
+      readonly kind: 'densityFiles';
+      readonly policy: DensityFilePolicy;
+    }
   | {
       readonly kind: 'toolRanking';
       readonly policy: ToolRankingPolicy;

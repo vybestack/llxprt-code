@@ -23,6 +23,7 @@ export function requireIncrementalFormats(
     (edit) =>
       ![
         'format',
+        'densityFiles',
         'toolRanking',
         'factIndex',
         'setState',

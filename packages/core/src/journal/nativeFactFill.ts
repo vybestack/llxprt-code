@@ -48,6 +48,7 @@ export async function requireNativeFactWriter(
   const changesSource = edits.some(
     (edit) =>
       ![
+        'densityFiles',
         'toolRanking',
         'setState',
         'checkpoint',
@@ -73,6 +74,7 @@ function changesSource(edit: VersionEdit): boolean {
     'deleteCheckpoint',
     'format',
     'factIndex',
+    'densityFiles',
     'toolRanking',
   ].includes(edit.kind);
 }

@@ -711,12 +711,12 @@ export class JournalHistoryStore implements HistoryStorePort {
   openToolResponseRanking = openJournalToolRanking({
     wait: () => this.waitForDurable(),
     exclusive: (action) => this.exclusive(action),
-    commit: async (policy, overlay) =>
-      this.mirrors.commit(
-        await this.topology.prepare([{ kind: 'toolRanking', policy, overlay }]),
-      ),
+    commit: async (edits) =>
+      this.mirrors.commit(await this.topology.prepare(edits)),
     snapshot: () => this.session.store.snapshot(),
   });
+
+  openDensityFiles = this.openToolResponseRanking.files;
 
   async openDumpSnapshot(): Promise<JournalDumpSnapshot> {
     this.assertUsable();

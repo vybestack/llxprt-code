@@ -6,14 +6,17 @@ import {
   DENSITY_PRUNED_POINTER,
 } from '@vybestack/llxprt-code-core/services/history/densityRecencyFacts.js';
 
+import { nativeFileDedupe } from './native-file-dedupe.js';
+
 export function nativeRecencyPolicy(
   config: DensityConfig,
 ): NativeDensityPolicy {
-  if (config.readWritePruning || config.fileDedupe)
-    throw new Error(
-      'Native continuous read/write pruning and file deduplication are not implemented',
-    );
+  if (config.readWritePruning)
+    throw new Error('Native continuous read/write pruning is not implemented');
   return {
+    files: config.fileDedupe
+      ? nativeFileDedupe(config.workspaceRoot)
+      : undefined,
     factRevision: DENSITY_RECENCY_REVISION,
     retention: config.recencyPruning
       ? Math.max(1, config.recencyRetention)
