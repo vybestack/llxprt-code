@@ -4,7 +4,7 @@ import type {
   DensityCallLookup,
 } from './compressionInput.js';
 import { DensityCallFacts } from '../../journal/densityCallFacts.js';
-import { ROW_BLOCK_TYPE } from '../../journal/rowRecord.js';
+import { ROW_BLOCK_TYPE, ROW_SPEAKER } from '../../journal/rowRecord.js';
 import { JournalFormatError } from '../../journal/errors.js';
 import { decodeStoredBlock } from './journalRowCodec.js';
 import type {
@@ -90,6 +90,30 @@ export class JournalDumpSnapshot implements HistoryDumpSnapshot {
     return this.readers.read(async () => {
       const entry = await this.snapshot.curatedAt(index);
       return this.snapshot.rowsBelow(entry.label);
+    });
+  }
+
+  humanCut(turns: number, fromEnd: boolean): Promise<number> {
+    return this.readers.read(async () => {
+      if (!Number.isSafeInteger(turns) || turns < 0)
+        throw new RangeError('Human turn count must be a non-negative integer');
+      if (turns === 0) return this.snapshot.rows;
+      let humans = 0;
+      if (fromEnd) {
+        for (let index = this.snapshot.rows - 1; index >= 0; index--) {
+          const entry = await this.snapshot.entryAt(index);
+          if (entry.speaker === ROW_SPEAKER.human && ++humans === turns)
+            return index;
+        }
+        return 0;
+      }
+      let index = 0;
+      for await (const entry of this.snapshot.entries()) {
+        if (entry.speaker === ROW_SPEAKER.human && ++humans === turns)
+          return index;
+        index++;
+      }
+      return this.snapshot.rows;
     });
   }
 

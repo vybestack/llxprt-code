@@ -10,6 +10,7 @@ import type { IContent } from './IContent.js';
  */
 export interface HistoryCheckpointRows extends AsyncIterable<IContent> {
   readonly length: number;
+  humanCut?(turns: number, fromEnd: boolean): Promise<number>;
   readonly compressionInput?: Pick<
     CompressionInputSnapshot,
     'previous' | 'rows'

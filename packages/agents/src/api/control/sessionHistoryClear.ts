@@ -7,6 +7,7 @@ import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-
 import { HistoryMediaIndex } from '@vybestack/llxprt-code-core/storage/history-media-index.js';
 import { collectMediaReferences } from '@vybestack/llxprt-code-core/storage/media-reference-lifecycle.js';
 import { randomUUID } from 'node:crypto';
+import { NativeHistoryPrefix } from '../../core/native-history-prefix.js';
 
 interface ClearMediaScope {
   readonly references: HistoryMediaIndex;
@@ -102,7 +103,38 @@ async function rewriteClientHistory(
   client: AgentClientContract,
   store: LocalMediaStore,
   selectCut: (rows: HistoryDensityRows) => number,
+  turns: number,
+  fromEnd: boolean,
 ): Promise<number> {
+  const history = client.getHistoryService();
+  if (
+    history?.detachedValues.host().journal.compressionRowCount !== undefined
+  ) {
+    return history.detachedValues.withCheckpoint(async (checkpoint) => {
+      if (!('humanCut' in checkpoint) || checkpoint.humanCut === undefined)
+        throw new Error('Native history checkpoint lacks turn selection');
+      const cut = await checkpoint.humanCut(turns, fromEnd);
+      if (cut === checkpoint.length) return 0;
+      const prefix = new NativeHistoryPrefix(history, checkpoint, cut);
+      await history.detachedValues.withRollbackCheckpoint(async (restore) => {
+        try {
+          await client.resetChat(prefix);
+        } catch (error) {
+          try {
+            await restore();
+          } catch (rollbackError) {
+            throw new AggregateError(
+              [error, rollbackError],
+              'History clear and rollback failed',
+              { cause: error },
+            );
+          }
+          throw error;
+        }
+      });
+      return checkpoint.length - cut;
+    });
+  }
   const rows = new HistoryDensityRows();
   const media: ClearMediaScope = {
     references: new HistoryMediaIndex(),
@@ -146,7 +178,7 @@ export async function clearClientHistory(
   client: AgentClientContract,
   store: LocalMediaStore,
 ): Promise<void> {
-  await rewriteClientHistory(client, store, clearCut);
+  await rewriteClientHistory(client, store, clearCut, 2, false);
 }
 
 /** Removes the last `turns` human-led turns; returns the number of rows removed. */
@@ -158,5 +190,5 @@ export async function restoreClientTurns(
   if (!Number.isSafeInteger(turns) || turns < 0) {
     throw new Error('Turns to remove must be a non-negative integer');
   }
-  return rewriteClientHistory(client, store, restoreCut(turns));
+  return rewriteClientHistory(client, store, restoreCut(turns), turns, true);
 }

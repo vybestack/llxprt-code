@@ -73,6 +73,7 @@ function snapshotCheckpoint(
 ): HistoryCheckpointRows {
   return {
     length: snapshot.rows,
+    humanCut: (turns, fromEnd) => dump.humanCut(turns, fromEnd),
     compressionInput: { previous: dump, rows: dump },
     [Symbol.asyncIterator]: () =>
       snapshotRows(snapshot, signal, resumeBoundary),

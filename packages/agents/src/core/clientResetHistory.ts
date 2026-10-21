@@ -2,6 +2,7 @@
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ChatSession } from './chatSession.js';
 import { isHistorySource } from './deferredHistorySource.js';
+import { NativeHistoryPrefix } from './native-history-prefix.js';
 
 export async function resetClientHistory(
   chat: ChatSession,
@@ -12,7 +13,9 @@ export async function resetClientHistory(
     await chat.clearHistory();
     return;
   }
-  if (isHistorySource(preserved)) {
+  if (preserved instanceof NativeHistoryPrefix) {
+    await preserved.apply(chat.getHistoryService());
+  } else if (isHistorySource(preserved)) {
     await replaceSource(preserved);
     await chat.getHistoryService().settleMediaOwnership();
   } else {
