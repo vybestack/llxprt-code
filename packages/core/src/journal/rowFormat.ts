@@ -24,6 +24,13 @@ export interface RowFormatSettings {
   readonly mediaPdfEnabled: boolean;
   readonly unsupportedMedia: 'notice' | 'reject';
   readonly outputLimits: Readonly<OutputLimitConfig> | null;
+  readonly anthropic?: {
+    readonly cache: 'off' | '5m' | '1h';
+    readonly imageBudget: {
+      readonly maxDimension?: number;
+      readonly maxPixels?: number;
+    } | null;
+  };
 }
 
 function ordered(value: unknown): string {
@@ -66,6 +73,10 @@ export function captureRowFormatSettings(
   if (settings.outputLimits !== null) {
     Object.freeze(settings.outputLimits.tokenLimit);
     Object.freeze(settings.outputLimits);
+  }
+  if (settings.anthropic !== undefined) {
+    Object.freeze(settings.anthropic.imageBudget);
+    Object.freeze(settings.anthropic);
   }
   return Object.freeze(settings);
 }
