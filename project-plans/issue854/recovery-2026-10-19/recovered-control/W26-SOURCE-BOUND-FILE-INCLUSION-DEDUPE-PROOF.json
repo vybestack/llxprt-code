@@ -1,0 +1,1965 @@
+{
+  "generatedAt": "2026-10-21T16:54:22.176Z",
+  "scope": "Native continuous human-text file-inclusion deduplication only; W26 and Phase 5 remain open.",
+  "productionCommit": "b52db2a8a5b87e00be2ad7109643b0b6f4f93e57",
+  "earlyWipTestCommit": "55fc2dd8fe8a423aca96081b63ee2e980157d09e",
+  "acceptanceTestCommit": "be99a54c2f6e4ea75d35c3217a696d38c7a6e968",
+  "rawRoot": "tmp/p5/w26-policy-run-ag/",
+  "runsHash": "c16aa6d5679fe434a6cd2757b6a187c328a29da119db344347b8f554f410e518",
+  "acceptance": {
+    "files": 24,
+    "pass": 123,
+    "fail": 0,
+    "skip": 0,
+    "assertions": 263828,
+    "executions": [
+      {
+        "name": "restored-density-file-facts",
+        "cwd": "packages/core",
+        "command": [
+          "bun",
+          "test",
+          "src/journal/density-file-facts.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "extraEnv": {},
+        "driver": 62664,
+        "pid": 62719,
+        "start": "2026-10-21T16:48:12.074Z",
+        "end": "2026-10-21T16:48:12.757Z",
+        "code": 0,
+        "log": "tmp/p5/w26-policy-run-ag/restored-density-file-facts.log",
+        "logHash": "57dc1f6b6a4ca3b4bc9012c419fe71163dfb64f33c07663975f79ff1aef622f2",
+        "sourceHash": "06dc19e634655cbe2b66070eced86e1800481961a07e1d19d6942a3dc0600e09",
+        "changed": [],
+        "manifest": "tmp/p5/w26-policy-run-ag/restored-density-file-facts-source.json",
+        "finalSourceDifferences": [
+          "packages/agents/src/compression/__tests__/continuous-dedupe-lifecycle.test.ts"
+        ],
+        "executedTest": {
+          "path": "packages/core/src/journal/density-file-facts.test.ts",
+          "sha256": "b176f83f64e643910503dc530dfdc689ec9c4da78333c959115bdae9c822411c"
+        },
+        "counts": {
+          "pass": 3,
+          "fail": 0,
+          "skip": 0,
+          "assertions": 27
+        }
+      },
+      {
+        "name": "restored-density-file-cost",
+        "cwd": "packages/core",
+        "command": [
+          "bun",
+          "test",
+          "src/journal/density-file-cost.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "extraEnv": {},
+        "driver": 62664,
+        "pid": 62702,
+        "start": "2026-10-21T16:48:10.822Z",
+        "end": "2026-10-21T16:48:11.895Z",
+        "code": 0,
+        "log": "tmp/p5/w26-policy-run-ag/restored-density-file-cost.log",
+        "logHash": "75db5ddb35ce853fc4ff4de271c69b47b52bf0b66c4c5426d1ea92637e61608c",
+        "sourceHash": "06dc19e634655cbe2b66070eced86e1800481961a07e1d19d6942a3dc0600e09",
+        "changed": [],
+        "manifest": "tmp/p5/w26-policy-run-ag/restored-density-file-cost-source.json",
+        "finalSourceDifferences": [
+          "packages/agents/src/compression/__tests__/continuous-dedupe-lifecycle.test.ts"
+        ],
+        "executedTest": {
+          "path": "packages/core/src/journal/density-file-cost.test.ts",
+          "sha256": "5029f9f3cbf4bbdb66e66f3bfb9d4f7e52810c950a7d93fcf30ba641aa7b9355"
+        },
+        "counts": {
+          "pass": 2,
+          "fail": 0,
+          "skip": 0,
+          "assertions": 4331
+        }
+      },
+      {
+        "name": "restored-continuous-dedupe-contract",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "src/compression/__tests__/continuous-dedupe-contract.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "extraEnv": {},
+        "driver": 62664,
+        "pid": 62747,
+        "start": "2026-10-21T16:48:13.955Z",
+        "end": "2026-10-21T16:48:14.768Z",
+        "code": 0,
+        "log": "tmp/p5/w26-policy-run-ag/restored-continuous-dedupe-contract.log",
+        "logHash": "3710ca424d07f8595a867e88662ed32a44791a55e4612ed2f0f32553f993e2d0",
+        "sourceHash": "06dc19e634655cbe2b66070eced86e1800481961a07e1d19d6942a3dc0600e09",
+        "changed": [],
+        "manifest": "tmp/p5/w26-policy-run-ag/restored-continuous-dedupe-contract-source.json",
+        "finalSourceDifferences": [
+          "packages/agents/src/compression/__tests__/continuous-dedupe-lifecycle.test.ts"
+        ],
+        "executedTest": {
+          "path": "packages/agents/src/compression/__tests__/continuous-dedupe-contract.test.ts",
+          "sha256": "946b7e3c4ac9cbeebf09b711f7e530d3a67b2674f4267df884cffe98c5e4f482"
+        },
+        "counts": {
+          "pass": 2,
+          "fail": 0,
+          "skip": 0,
+          "assertions": 6
+        }
+      },
+      {
+        "name": "final1-continuous-native-dedupe",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "src/compression/__tests__/continuous-native-dedupe.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "extraEnv": {},
+        "driver": 53004,
+        "pid": 53066,
+        "start": "2026-10-21T16:36:12.641Z",
+        "end": "2026-10-21T16:37:11.409Z",
+        "code": 0,
+        "log": "tmp/p5/w26-policy-run-ag/final1-continuous-native-dedupe.log",
+        "logHash": "590b23e168a961e49bd805df4e617901bcddf99d9263afad70af8a5f1dccafb0",
+        "sourceHash": "5cb19fd01ea32754432bf82c69604544e24b30baed4b00a2a13b7555ea40139a",
+        "changed": [],
+        "manifest": "tmp/p5/w26-policy-run-ag/final1-continuous-native-dedupe-source.json",
+        "finalSourceDifferences": [
+          "packages/agents/src/compression/__tests__/continuous-dedupe-contract.test.ts",
+          "packages/agents/src/compression/__tests__/continuous-dedupe-lifecycle.test.ts",
+          "packages/core/src/journal/density-file-cost.test.ts",
+          "packages/core/src/journal/density-file-facts.test.ts"
+        ],
+        "executedTest": {
+          "path": "packages/agents/src/compression/__tests__/continuous-native-dedupe.test.ts",
+          "sha256": "8cb9ac4ad689fbc20b43238d647607f1472264696cd22e5264d92223341c087c"
+        },
+        "counts": {
+          "pass": 4,
+          "fail": 0,
+          "skip": 0,
+          "assertions": 12
+        }
+      },
+      {
+        "name": "final1-continuous-dedupe-owners",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "src/compression/__tests__/continuous-dedupe-owners.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "extraEnv": {},
+        "driver": 53004,
+        "pid": 53847,
+        "start": "2026-10-21T16:37:11.592Z",
+        "end": "2026-10-21T16:37:44.851Z",
+        "code": 0,
+        "log": "tmp/p5/w26-policy-run-ag/final1-continuous-dedupe-owners.log",
+        "logHash": "9ce6f32d5d22794e3091c0d2c9161eb60f22a24ad19a249075bd15b17a6cd08b",
+        "sourceHash": "5cb19fd01ea32754432bf82c69604544e24b30baed4b00a2a13b7555ea40139a",
+        "changed": [],
+        "manifest": "tmp/p5/w26-policy-run-ag/final1-continuous-dedupe-owners-source.json",
+        "finalSourceDifferences": [
+          "packages/agents/src/compression/__tests__/continuous-dedupe-contract.test.ts",
+          "packages/agents/src/compression/__tests__/continuous-dedupe-lifecycle.test.ts",
+          "packages/core/src/journal/density-file-cost.test.ts",
+          "packages/core/src/journal/density-file-facts.test.ts"
+        ],
+        "executedTest": {
+          "path": "packages/agents/src/compression/__tests__/continuous-dedupe-owners.test.ts",
+          "sha256": "b913237c22a9d6051f1b44f8ebefcd06fcd62827cd5784609fff49875a9aa39a"
+        },
+        "counts": {
+          "pass": 4,
+          "fail": 0,
+          "skip": 0,
+          "assertions": 12
+        }
+      },
+      {
+        "name": "restored-continuous-dedupe-lifecycle",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "src/compression/__tests__/continuous-dedupe-lifecycle.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "extraEnv": {},
+        "driver": 63653,
+        "pid": 63900,
+        "start": "2026-10-21T16:49:37.903Z",
+        "end": "2026-10-21T16:50:12.409Z",
+        "code": 0,
+        "log": "tmp/p5/w26-policy-run-ag/restored-continuous-dedupe-lifecycle.log",
+        "logHash": "cdf5c437acc47a137ac154940c91bb8f4f4c9dfdc1e2ab4280f72f62cf84db3e",
+        "sourceHash": "70ff2997e2d4b7f75953241152c56e364652555db3f09f790f7657e00ce99a49",
+        "changed": [],
+        "manifest": "tmp/p5/w26-policy-run-ag/restored-continuous-dedupe-lifecycle-source.json",
+        "finalSourceDifferences": [],
+        "executedTest": {
+          "path": "packages/agents/src/compression/__tests__/continuous-dedupe-lifecycle.test.ts",
+          "sha256": "da2e69c06d8927f45221505e32ebdb95a5227b3a8fc4a0d4f31c54d72330e9b7"
+        },
+        "counts": {
+          "pass": 6,
+          "fail": 0,
+          "skip": 0,
+          "assertions": 90
+        }
+      },
+      {
+        "name": "final1-continuous-native-recency",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "src/compression/__tests__/continuous-native-recency.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "extraEnv": {},
+        "driver": 53004,
+        "pid": 54782,
+        "start": "2026-10-21T16:38:19.191Z",
+        "end": "2026-10-21T16:38:46.905Z",
+        "code": 0,
+        "log": "tmp/p5/w26-policy-run-ag/final1-continuous-native-recency.log",
+        "logHash": "292d5098fd8f5c829459796ec86eae7165984f0094b00923243855557d26804c",
+        "sourceHash": "5cb19fd01ea32754432bf82c69604544e24b30baed4b00a2a13b7555ea40139a",
+        "changed": [],
+        "manifest": "tmp/p5/w26-policy-run-ag/final1-continuous-native-recency-source.json",
+        "finalSourceDifferences": [
+          "packages/agents/src/compression/__tests__/continuous-dedupe-contract.test.ts",
+          "packages/agents/src/compression/__tests__/continuous-dedupe-lifecycle.test.ts",
+          "packages/core/src/journal/density-file-cost.test.ts",
+          "packages/core/src/journal/density-file-facts.test.ts"
+        ],
+        "executedTest": {
+          "path": "packages/agents/src/compression/__tests__/continuous-native-recency.test.ts",
+          "sha256": "a25e354209fc694931df0ce07e0efe7e7778811321f917c8171dcbd0cf3827f2"
+        },
+        "counts": {
+          "pass": 3,
+          "fail": 0,
+          "skip": 0,
+          "assertions": 12
+        }
+      },
+      {
+        "name": "final1-continuous-recency-lifecycle",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "src/compression/__tests__/continuous-recency-lifecycle.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "extraEnv": {},
+        "driver": 53004,
+        "pid": 55118,
+        "start": "2026-10-21T16:38:47.088Z",
+        "end": "2026-10-21T16:39:19.215Z",
+        "code": 0,
+        "log": "tmp/p5/w26-policy-run-ag/final1-continuous-recency-lifecycle.log",
+        "logHash": "29d4eb444a00bcc5dbe7f2c2c6e9701202b3feb0989e651b3dc2da2c42c6b66d",
+        "sourceHash": "5cb19fd01ea32754432bf82c69604544e24b30baed4b00a2a13b7555ea40139a",
+        "changed": [],
+        "manifest": "tmp/p5/w26-policy-run-ag/final1-continuous-recency-lifecycle-source.json",
+        "finalSourceDifferences": [
+          "packages/agents/src/compression/__tests__/continuous-dedupe-contract.test.ts",
+          "packages/agents/src/compression/__tests__/continuous-dedupe-lifecycle.test.ts",
+          "packages/core/src/journal/density-file-cost.test.ts",
+          "packages/core/src/journal/density-file-facts.test.ts"
+        ],
+        "executedTest": {
+          "path": "packages/agents/src/compression/__tests__/continuous-recency-lifecycle.test.ts",
+          "sha256": "6dba4426f11fe48b5ea722e23437830d0bdefa62db446893c291107522487032"
+        },
+        "counts": {
+          "pass": 6,
+          "fail": 0,
+          "skip": 0,
+          "assertions": 90
+        }
+      },
+      {
+        "name": "final1-density-disk",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "src/compression/__tests__/density-disk.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "extraEnv": {},
+        "driver": 53004,
+        "pid": 55565,
+        "start": "2026-10-21T16:39:19.420Z",
+        "end": "2026-10-21T16:39:43.343Z",
+        "code": 0,
+        "log": "tmp/p5/w26-policy-run-ag/final1-density-disk.log",
+        "logHash": "f04436180cb6ebbf8bfac1be1da94e10f00c78868bfa0858674604dae89d9983",
+        "sourceHash": "5cb19fd01ea32754432bf82c69604544e24b30baed4b00a2a13b7555ea40139a",
+        "changed": [],
+        "manifest": "tmp/p5/w26-policy-run-ag/final1-density-disk-source.json",
+        "finalSourceDifferences": [
+          "packages/agents/src/compression/__tests__/continuous-dedupe-contract.test.ts",
+          "packages/agents/src/compression/__tests__/continuous-dedupe-lifecycle.test.ts",
+          "packages/core/src/journal/density-file-cost.test.ts",
+          "packages/core/src/journal/density-file-facts.test.ts"
+        ],
+        "executedTest": {
+          "path": "packages/agents/src/compression/__tests__/density-disk.test.ts",
+          "sha256": "803b3c7475c915ad0012d88b03aec73f7a44262cffc554992755e8724a30af23"
+        },
+        "counts": {
+          "pass": 10,
+          "fail": 0,
+          "skip": 0,
+          "assertions": 80
+        }
+      },
+      {
+        "name": "final1-density-disk-owner-controls",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "src/compression/__tests__/density-disk-owner-controls.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "extraEnv": {},
+        "driver": 53004,
+        "pid": 55877,
+        "start": "2026-10-21T16:39:43.525Z",
+        "end": "2026-10-21T16:39:54.007Z",
+        "code": 0,
+        "log": "tmp/p5/w26-policy-run-ag/final1-density-disk-owner-controls.log",
+        "logHash": "00a025e0d462a77230b1b966eb60bc092a4934e909a4c547699f608beffb650a",
+        "sourceHash": "5cb19fd01ea32754432bf82c69604544e24b30baed4b00a2a13b7555ea40139a",
+        "changed": [],
+        "manifest": "tmp/p5/w26-policy-run-ag/final1-density-disk-owner-controls-source.json",
+        "finalSourceDifferences": [
+          "packages/agents/src/compression/__tests__/continuous-dedupe-contract.test.ts",
+          "packages/agents/src/compression/__tests__/continuous-dedupe-lifecycle.test.ts",
+          "packages/core/src/journal/density-file-cost.test.ts",
+          "packages/core/src/journal/density-file-facts.test.ts"
+        ],
+        "executedTest": {
+          "path": "packages/agents/src/compression/__tests__/density-disk-owner-controls.test.ts",
+          "sha256": "1474cfa40f7caa62f8caade07870c287ecf9a5255d76e5bd6f26306830452b3f"
+        },
+        "counts": {
+          "pass": 4,
+          "fail": 0,
+          "skip": 0,
+          "assertions": 18
+        }
+      },
+      {
+        "name": "final1-density-disk-pinning",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "src/compression/__tests__/density-disk-pinning.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "extraEnv": {},
+        "driver": 53004,
+        "pid": 56039,
+        "start": "2026-10-21T16:39:54.210Z",
+        "end": "2026-10-21T16:40:02.259Z",
+        "code": 0,
+        "log": "tmp/p5/w26-policy-run-ag/final1-density-disk-pinning.log",
+        "logHash": "3f5463a14761df5b134246d6cb26d07d7828a9419f097383f4d5ed8a445b9442",
+        "sourceHash": "5cb19fd01ea32754432bf82c69604544e24b30baed4b00a2a13b7555ea40139a",
+        "changed": [],
+        "manifest": "tmp/p5/w26-policy-run-ag/final1-density-disk-pinning-source.json",
+        "finalSourceDifferences": [
+          "packages/agents/src/compression/__tests__/continuous-dedupe-contract.test.ts",
+          "packages/agents/src/compression/__tests__/continuous-dedupe-lifecycle.test.ts",
+          "packages/core/src/journal/density-file-cost.test.ts",
+          "packages/core/src/journal/density-file-facts.test.ts"
+        ],
+        "executedTest": {
+          "path": "packages/agents/src/compression/__tests__/density-disk-pinning.test.ts",
+          "sha256": "589ec156c7a1b234b51e0ac8c57fb143ed119c47b4a8f9b8055805714b7ed133"
+        },
+        "counts": {
+          "pass": 3,
+          "fail": 0,
+          "skip": 0,
+          "assertions": 16
+        }
+      },
+      {
+        "name": "restored-continuous-dedupe-allocation",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "src/compression/__tests__/continuous-dedupe-allocation.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "extraEnv": {},
+        "driver": 62664,
+        "pid": 62731,
+        "start": "2026-10-21T16:48:12.942Z",
+        "end": "2026-10-21T16:48:13.773Z",
+        "code": 0,
+        "log": "tmp/p5/w26-policy-run-ag/restored-continuous-dedupe-allocation.log",
+        "logHash": "a27a520df928e1138096e672b0f64512416d89cedc187f120bd4544a6a21c4eb",
+        "sourceHash": "06dc19e634655cbe2b66070eced86e1800481961a07e1d19d6942a3dc0600e09",
+        "changed": [],
+        "manifest": "tmp/p5/w26-policy-run-ag/restored-continuous-dedupe-allocation-source.json",
+        "finalSourceDifferences": [
+          "packages/agents/src/compression/__tests__/continuous-dedupe-lifecycle.test.ts"
+        ],
+        "executedTest": {
+          "path": "packages/agents/src/compression/__tests__/continuous-dedupe-allocation.test.ts",
+          "sha256": "008b921b0ba50d0e9ffe1f65faeeabb36e1f73dcce413a33c88f22272c9bde0a"
+        },
+        "counts": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0,
+          "assertions": 1
+        }
+      },
+      {
+        "name": "finish-journalStore.readerLifetime",
+        "cwd": "packages/core",
+        "command": [
+          "bun",
+          "test",
+          "src/journal/journalStore.readerLifetime.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "extraEnv": {},
+        "driver": 58475,
+        "pid": 58523,
+        "start": "2026-10-21T16:43:03.902Z",
+        "end": "2026-10-21T16:43:04.461Z",
+        "code": 0,
+        "log": "tmp/p5/w26-policy-run-ag/finish-journalStore.readerLifetime.log",
+        "logHash": "cf928c7a38a871aa5ea9dc104ee3700755823d24b773fc6188320fc3fcb02a4b",
+        "sourceHash": "d2baca0176f71e9a7ff157dc928a26caa9a99ccddc43d6d316161970caac0fa3",
+        "changed": [],
+        "manifest": "tmp/p5/w26-policy-run-ag/finish-journalStore.readerLifetime-source.json",
+        "finalSourceDifferences": [
+          "packages/agents/src/compression/__tests__/continuous-dedupe-lifecycle.test.ts",
+          "packages/core/src/journal/density-file-cost.test.ts"
+        ],
+        "executedTest": {
+          "path": "packages/core/src/journal/journalStore.readerLifetime.test.ts",
+          "sha256": "9744ca9d7829bddc3b2010e895ff9450cb64f89e5856d8903de6e6ae11f96b3b"
+        },
+        "counts": {
+          "pass": 11,
+          "fail": 0,
+          "skip": 0,
+          "assertions": 29
+        }
+      },
+      {
+        "name": "finish-journalStore.readerCleanup",
+        "cwd": "packages/core",
+        "command": [
+          "bun",
+          "test",
+          "src/journal/journalStore.readerCleanup.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "extraEnv": {},
+        "driver": 58475,
+        "pid": 58540,
+        "start": "2026-10-21T16:43:04.667Z",
+        "end": "2026-10-21T16:43:05.235Z",
+        "code": 0,
+        "log": "tmp/p5/w26-policy-run-ag/finish-journalStore.readerCleanup.log",
+        "logHash": "822ad269f8818c7d10545afab617029154838a5567ab7b65156bf616073b6340",
+        "sourceHash": "d2baca0176f71e9a7ff157dc928a26caa9a99ccddc43d6d316161970caac0fa3",
+        "changed": [],
+        "manifest": "tmp/p5/w26-policy-run-ag/finish-journalStore.readerCleanup-source.json",
+        "finalSourceDifferences": [
+          "packages/agents/src/compression/__tests__/continuous-dedupe-lifecycle.test.ts",
+          "packages/core/src/journal/density-file-cost.test.ts"
+        ],
+        "executedTest": {
+          "path": "packages/core/src/journal/journalStore.readerCleanup.test.ts",
+          "sha256": "caa8ad4cf7442eb2df8f22d6a02ef3743e8eeda1ae1698f989732c9a1d6d3cb0"
+        },
+        "counts": {
+          "pass": 3,
+          "fail": 0,
+          "skip": 0,
+          "assertions": 20
+        }
+      },
+      {
+        "name": "finish-tool-ranking",
+        "cwd": "packages/core",
+        "command": [
+          "bun",
+          "test",
+          "src/journal/tool-ranking.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "extraEnv": {},
+        "driver": 58475,
+        "pid": 58558,
+        "start": "2026-10-21T16:43:05.425Z",
+        "end": "2026-10-21T16:43:06.108Z",
+        "code": 0,
+        "log": "tmp/p5/w26-policy-run-ag/finish-tool-ranking.log",
+        "logHash": "e294cc710d4a17024439ed54df030c3d024c392b18b50dfdcc676508582bab9c",
+        "sourceHash": "d2baca0176f71e9a7ff157dc928a26caa9a99ccddc43d6d316161970caac0fa3",
+        "changed": [],
+        "manifest": "tmp/p5/w26-policy-run-ag/finish-tool-ranking-source.json",
+        "finalSourceDifferences": [
+          "packages/agents/src/compression/__tests__/continuous-dedupe-lifecycle.test.ts",
+          "packages/core/src/journal/density-file-cost.test.ts"
+        ],
+        "executedTest": {
+          "path": "packages/core/src/journal/tool-ranking.test.ts",
+          "sha256": "9554441f0dea5ba6856ebd9263a780cad3845bf61117545016d7e6413b9cd81a"
+        },
+        "counts": {
+          "pass": 2,
+          "fail": 0,
+          "skip": 0,
+          "assertions": 20
+        }
+      },
+      {
+        "name": "finish-tool-ranking-invalidation",
+        "cwd": "packages/core",
+        "command": [
+          "bun",
+          "test",
+          "src/journal/tool-ranking-invalidation.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "extraEnv": {},
+        "driver": 58475,
+        "pid": 58574,
+        "start": "2026-10-21T16:43:06.290Z",
+        "end": "2026-10-21T16:43:06.878Z",
+        "code": 0,
+        "log": "tmp/p5/w26-policy-run-ag/finish-tool-ranking-invalidation.log",
+        "logHash": "da61601967dc4a29cb59a9dabcc4b2fb840f139e4c7bc82bcd4e8c720afcea8a",
+        "sourceHash": "d2baca0176f71e9a7ff157dc928a26caa9a99ccddc43d6d316161970caac0fa3",
+        "changed": [],
+        "manifest": "tmp/p5/w26-policy-run-ag/finish-tool-ranking-invalidation-source.json",
+        "finalSourceDifferences": [
+          "packages/agents/src/compression/__tests__/continuous-dedupe-lifecycle.test.ts",
+          "packages/core/src/journal/density-file-cost.test.ts"
+        ],
+        "executedTest": {
+          "path": "packages/core/src/journal/tool-ranking-invalidation.test.ts",
+          "sha256": "64c1c4b433ad9a9cb385c20f6813570bb82f4bfcefa84f14fef0771b2b97ece8"
+        },
+        "counts": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0,
+          "assertions": 8
+        }
+      },
+      {
+        "name": "finish-journalStore.model",
+        "cwd": "packages/core",
+        "command": [
+          "bun",
+          "test",
+          "src/journal/journalStore.model.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "extraEnv": {},
+        "driver": 58475,
+        "pid": 58594,
+        "start": "2026-10-21T16:43:07.079Z",
+        "end": "2026-10-21T16:43:11.032Z",
+        "code": 0,
+        "log": "tmp/p5/w26-policy-run-ag/finish-journalStore.model.log",
+        "logHash": "55c4e3ba3d15097ea1effdf3b2800c5b139d09404d32283ef6e7abbb77ca7bd2",
+        "sourceHash": "d2baca0176f71e9a7ff157dc928a26caa9a99ccddc43d6d316161970caac0fa3",
+        "changed": [],
+        "manifest": "tmp/p5/w26-policy-run-ag/finish-journalStore.model-source.json",
+        "finalSourceDifferences": [
+          "packages/agents/src/compression/__tests__/continuous-dedupe-lifecycle.test.ts",
+          "packages/core/src/journal/density-file-cost.test.ts"
+        ],
+        "executedTest": {
+          "path": "packages/core/src/journal/journalStore.model.test.ts",
+          "sha256": "47ec37320a367718f5eb96cb750888d57eea8eaa34b94c7b5538101bcf081707"
+        },
+        "counts": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0,
+          "assertions": 256613
+        }
+      },
+      {
+        "name": "finish-groupWriter",
+        "cwd": "packages/core",
+        "command": [
+          "bun",
+          "test",
+          "src/journal/groupWriter.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "extraEnv": {},
+        "driver": 58475,
+        "pid": 58651,
+        "start": "2026-10-21T16:43:11.215Z",
+        "end": "2026-10-21T16:43:11.630Z",
+        "code": 0,
+        "log": "tmp/p5/w26-policy-run-ag/finish-groupWriter.log",
+        "logHash": "1cc75a9c38d6cc40fd700c9546468a4ee8a4b677318b1545e6d9306b8363b5f4",
+        "sourceHash": "d2baca0176f71e9a7ff157dc928a26caa9a99ccddc43d6d316161970caac0fa3",
+        "changed": [],
+        "manifest": "tmp/p5/w26-policy-run-ag/finish-groupWriter-source.json",
+        "finalSourceDifferences": [
+          "packages/agents/src/compression/__tests__/continuous-dedupe-lifecycle.test.ts",
+          "packages/core/src/journal/density-file-cost.test.ts"
+        ],
+        "executedTest": {
+          "path": "packages/core/src/journal/groupWriter.test.ts",
+          "sha256": "1facb50089abcf94e8dcb5be94a7940f9824965cb3f3799cfd7e58fecd4358cb"
+        },
+        "counts": {
+          "pass": 24,
+          "fail": 0,
+          "skip": 0,
+          "assertions": 73
+        }
+      },
+      {
+        "name": "finish-versionCopy",
+        "cwd": "packages/core",
+        "command": [
+          "bun",
+          "test",
+          "src/journal/versionCopy.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "extraEnv": {},
+        "driver": 58475,
+        "pid": 58663,
+        "start": "2026-10-21T16:43:11.811Z",
+        "end": "2026-10-21T16:43:12.429Z",
+        "code": 0,
+        "log": "tmp/p5/w26-policy-run-ag/finish-versionCopy.log",
+        "logHash": "63e923f67a09c436b8c785747a338d7a55ffbed195202db5c7321222c055d0ea",
+        "sourceHash": "d2baca0176f71e9a7ff157dc928a26caa9a99ccddc43d6d316161970caac0fa3",
+        "changed": [],
+        "manifest": "tmp/p5/w26-policy-run-ag/finish-versionCopy-source.json",
+        "finalSourceDifferences": [
+          "packages/agents/src/compression/__tests__/continuous-dedupe-lifecycle.test.ts",
+          "packages/core/src/journal/density-file-cost.test.ts"
+        ],
+        "executedTest": {
+          "path": "packages/core/src/journal/versionCopy.test.ts",
+          "sha256": "4ce975745866cdd82087ce738abe1c16bb4806deedc57e0e08af0fb0fccc9161"
+        },
+        "counts": {
+          "pass": 6,
+          "fail": 0,
+          "skip": 0,
+          "assertions": 169
+        }
+      },
+      {
+        "name": "finish-versionCopy.compaction",
+        "cwd": "packages/core",
+        "command": [
+          "bun",
+          "test",
+          "src/journal/versionCopy.compaction.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "extraEnv": {},
+        "driver": 58475,
+        "pid": 58676,
+        "start": "2026-10-21T16:43:12.612Z",
+        "end": "2026-10-21T16:43:17.058Z",
+        "code": 0,
+        "log": "tmp/p5/w26-policy-run-ag/finish-versionCopy.compaction.log",
+        "logHash": "fa4227677dee63e7b4a423d745c37a307371debf82ffe96a1ea9415703a65e6d",
+        "sourceHash": "d2baca0176f71e9a7ff157dc928a26caa9a99ccddc43d6d316161970caac0fa3",
+        "changed": [],
+        "manifest": "tmp/p5/w26-policy-run-ag/finish-versionCopy.compaction-source.json",
+        "finalSourceDifferences": [
+          "packages/agents/src/compression/__tests__/continuous-dedupe-lifecycle.test.ts",
+          "packages/core/src/journal/density-file-cost.test.ts"
+        ],
+        "executedTest": {
+          "path": "packages/core/src/journal/versionCopy.compaction.test.ts",
+          "sha256": "4e6979f3defcb7f759bf19b5fb01d485fdd14face2d6d8c1c9db25dce385926c"
+        },
+        "counts": {
+          "pass": 7,
+          "fail": 0,
+          "skip": 0,
+          "assertions": 2031
+        }
+      },
+      {
+        "name": "finish-historyBackend",
+        "cwd": "packages/core",
+        "command": [
+          "bun",
+          "test",
+          "src/services/history/historyBackend.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "extraEnv": {},
+        "driver": 58475,
+        "pid": 58731,
+        "start": "2026-10-21T16:43:17.240Z",
+        "end": "2026-10-21T16:43:17.854Z",
+        "code": 0,
+        "log": "tmp/p5/w26-policy-run-ag/finish-historyBackend.log",
+        "logHash": "0e9f4a6dea33b4e16f648363813d1a507c1b3e86308d1ed0c84c83b502abf26e",
+        "sourceHash": "d2baca0176f71e9a7ff157dc928a26caa9a99ccddc43d6d316161970caac0fa3",
+        "changed": [],
+        "manifest": "tmp/p5/w26-policy-run-ag/finish-historyBackend-source.json",
+        "finalSourceDifferences": [
+          "packages/agents/src/compression/__tests__/continuous-dedupe-lifecycle.test.ts",
+          "packages/core/src/journal/density-file-cost.test.ts"
+        ],
+        "executedTest": {
+          "path": "packages/core/src/services/history/historyBackend.test.ts",
+          "sha256": "236c51c46e5dc84cb819c77c5c9cbd69be00834560616bb5b09c36859db0912e"
+        },
+        "counts": {
+          "pass": 12,
+          "fail": 0,
+          "skip": 0,
+          "assertions": 111
+        }
+      },
+      {
+        "name": "finish-recording-primary-edits",
+        "cwd": "packages/core",
+        "command": [
+          "bun",
+          "test",
+          "src/services/history/recording-primary-edits.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "extraEnv": {},
+        "driver": 58475,
+        "pid": 58739,
+        "start": "2026-10-21T16:43:18.036Z",
+        "end": "2026-10-21T16:43:18.349Z",
+        "code": 0,
+        "log": "tmp/p5/w26-policy-run-ag/finish-recording-primary-edits.log",
+        "logHash": "1bd5145058baa81ff8e7f25d739f423b63131f099b23246b739b55c86da25551",
+        "sourceHash": "d2baca0176f71e9a7ff157dc928a26caa9a99ccddc43d6d316161970caac0fa3",
+        "changed": [],
+        "manifest": "tmp/p5/w26-policy-run-ag/finish-recording-primary-edits-source.json",
+        "finalSourceDifferences": [
+          "packages/agents/src/compression/__tests__/continuous-dedupe-lifecycle.test.ts",
+          "packages/core/src/journal/density-file-cost.test.ts"
+        ],
+        "executedTest": {
+          "path": "packages/core/src/services/history/recording-primary-edits.test.ts",
+          "sha256": "c6a1b6200c0e0787c79435d1f979fc75a401a02c5ac0f62a92c52303cc8d49aa"
+        },
+        "counts": {
+          "pass": 3,
+          "fail": 0,
+          "skip": 0,
+          "assertions": 4
+        }
+      },
+      {
+        "name": "finish-detached-checkpoint.journal",
+        "cwd": "packages/core",
+        "command": [
+          "bun",
+          "test",
+          "src/services/history/detached-checkpoint.journal.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "extraEnv": {},
+        "driver": 58475,
+        "pid": 58748,
+        "start": "2026-10-21T16:43:18.544Z",
+        "end": "2026-10-21T16:43:31.030Z",
+        "code": 0,
+        "log": "tmp/p5/w26-policy-run-ag/finish-detached-checkpoint.journal.log",
+        "logHash": "e4585e8ba91c28ba492cb65ae821bf29d71bad5e93e111ce14eee30633915c4a",
+        "sourceHash": "d2baca0176f71e9a7ff157dc928a26caa9a99ccddc43d6d316161970caac0fa3",
+        "changed": [],
+        "manifest": "tmp/p5/w26-policy-run-ag/finish-detached-checkpoint.journal-source.json",
+        "finalSourceDifferences": [
+          "packages/agents/src/compression/__tests__/continuous-dedupe-lifecycle.test.ts",
+          "packages/core/src/journal/density-file-cost.test.ts"
+        ],
+        "executedTest": {
+          "path": "packages/core/src/services/history/detached-checkpoint.journal.test.ts",
+          "sha256": "2a22ddd54aea11787e2417731d1604f3a2c0a9b766a2749b41d150e0217ed57c"
+        },
+        "counts": {
+          "pass": 4,
+          "fail": 0,
+          "skip": 0,
+          "assertions": 49
+        }
+      },
+      {
+        "name": "finish-tool-ranking-native-source",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "src/compression/__tests__/tool-ranking-native-source.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "extraEnv": {},
+        "driver": 58475,
+        "pid": 58934,
+        "start": "2026-10-21T16:43:31.244Z",
+        "end": "2026-10-21T16:43:32.365Z",
+        "code": 0,
+        "log": "tmp/p5/w26-policy-run-ag/finish-tool-ranking-native-source.log",
+        "logHash": "936dd2d8bfa1fec9a67d5587a1ee23b17ea759e484fd14881c8bc1e53e38989f",
+        "sourceHash": "d2baca0176f71e9a7ff157dc928a26caa9a99ccddc43d6d316161970caac0fa3",
+        "changed": [],
+        "manifest": "tmp/p5/w26-policy-run-ag/finish-tool-ranking-native-source-source.json",
+        "finalSourceDifferences": [
+          "packages/agents/src/compression/__tests__/continuous-dedupe-lifecycle.test.ts",
+          "packages/core/src/journal/density-file-cost.test.ts"
+        ],
+        "executedTest": {
+          "path": "packages/agents/src/compression/__tests__/tool-ranking-native-source.test.ts",
+          "sha256": "edda7184cc60b9b7414b04bf31d4713e626fd074bfe2d630060356280d250d6e"
+        },
+        "counts": {
+          "pass": 1,
+          "fail": 0,
+          "skip": 0,
+          "assertions": 6
+        }
+      }
+    ]
+  },
+  "gates": [
+    {
+      "name": "final2-gate-core-declarations",
+      "cwd": ".",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-b",
+        "packages/core/tsconfig.build.json",
+        "--emitDeclarationOnly"
+      ],
+      "extraEnv": {},
+      "driver": 64410,
+      "pid": 64415,
+      "start": "2026-10-21T16:50:12.614Z",
+      "end": "2026-10-21T16:50:16.206Z",
+      "code": 0,
+      "log": "tmp/p5/w26-policy-run-ag/final2-gate-core-declarations.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceHash": "70ff2997e2d4b7f75953241152c56e364652555db3f09f790f7657e00ce99a49",
+      "changed": [],
+      "manifest": "tmp/p5/w26-policy-run-ag/final2-gate-core-declarations-source.json",
+      "finalSourceDifferences": [],
+      "counts": {
+        "pass": 0,
+        "fail": 0,
+        "skip": 0,
+        "assertions": 0
+      }
+    },
+    {
+      "name": "final2-gate-agents-declarations",
+      "cwd": ".",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-b",
+        "packages/agents/tsconfig.build.json",
+        "--emitDeclarationOnly"
+      ],
+      "extraEnv": {},
+      "driver": 64410,
+      "pid": 64471,
+      "start": "2026-10-21T16:50:16.405Z",
+      "end": "2026-10-21T16:50:18.998Z",
+      "code": 0,
+      "log": "tmp/p5/w26-policy-run-ag/final2-gate-agents-declarations.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceHash": "70ff2997e2d4b7f75953241152c56e364652555db3f09f790f7657e00ce99a49",
+      "changed": [],
+      "manifest": "tmp/p5/w26-policy-run-ag/final2-gate-agents-declarations-source.json",
+      "finalSourceDifferences": [],
+      "counts": {
+        "pass": 0,
+        "fail": 0,
+        "skip": 0,
+        "assertions": 0
+      }
+    },
+    {
+      "name": "final2-gate-core-types",
+      "cwd": ".",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "packages/core/tsconfig.noemit.json"
+      ],
+      "extraEnv": {},
+      "driver": 64410,
+      "pid": 64507,
+      "start": "2026-10-21T16:50:19.180Z",
+      "end": "2026-10-21T16:50:26.477Z",
+      "code": 0,
+      "log": "tmp/p5/w26-policy-run-ag/final2-gate-core-types.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceHash": "70ff2997e2d4b7f75953241152c56e364652555db3f09f790f7657e00ce99a49",
+      "changed": [],
+      "manifest": "tmp/p5/w26-policy-run-ag/final2-gate-core-types-source.json",
+      "finalSourceDifferences": [],
+      "counts": {
+        "pass": 0,
+        "fail": 0,
+        "skip": 0,
+        "assertions": 0
+      }
+    },
+    {
+      "name": "final2-gate-agents-types",
+      "cwd": ".",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "packages/agents/tsconfig.noemit.json"
+      ],
+      "extraEnv": {},
+      "driver": 64410,
+      "pid": 64622,
+      "start": "2026-10-21T16:50:26.660Z",
+      "end": "2026-10-21T16:50:36.975Z",
+      "code": 0,
+      "log": "tmp/p5/w26-policy-run-ag/final2-gate-agents-types.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceHash": "70ff2997e2d4b7f75953241152c56e364652555db3f09f790f7657e00ce99a49",
+      "changed": [],
+      "manifest": "tmp/p5/w26-policy-run-ag/final2-gate-agents-types-source.json",
+      "finalSourceDifferences": [],
+      "counts": {
+        "pass": 0,
+        "fail": 0,
+        "skip": 0,
+        "assertions": 0
+      }
+    },
+    {
+      "name": "final2-gate-bun-types",
+      "cwd": ".",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "packages/agents/tsconfig.test-bun.json",
+        "--types",
+        "node,bun"
+      ],
+      "extraEnv": {},
+      "driver": 64410,
+      "pid": 64747,
+      "start": "2026-10-21T16:50:37.163Z",
+      "end": "2026-10-21T16:50:43.053Z",
+      "code": 0,
+      "log": "tmp/p5/w26-policy-run-ag/final2-gate-bun-types.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceHash": "70ff2997e2d4b7f75953241152c56e364652555db3f09f790f7657e00ce99a49",
+      "changed": [],
+      "manifest": "tmp/p5/w26-policy-run-ag/final2-gate-bun-types-source.json",
+      "finalSourceDifferences": [],
+      "counts": {
+        "pass": 0,
+        "fail": 0,
+        "skip": 0,
+        "assertions": 0
+      }
+    },
+    {
+      "name": "final2-gate-lint",
+      "cwd": ".",
+      "command": [
+        "node_modules/.bin/eslint",
+        "--max-warnings",
+        "0",
+        "packages/agents/src/compression/nativeRecencyPolicy.ts",
+        "packages/core/src/journal/formatFill.ts",
+        "packages/core/src/journal/formatFillLifecycle.ts",
+        "packages/core/src/journal/groupEdits.ts",
+        "packages/core/src/journal/groupPlan.ts",
+        "packages/core/src/journal/journalStore.ts",
+        "packages/core/src/journal/nativeFactFill.ts",
+        "packages/core/src/journal/tool-ranking-fill.ts",
+        "packages/core/src/journal/versionSnapshot.ts",
+        "packages/core/src/services/history/journal-tool-ranking.ts",
+        "packages/core/src/services/history/journalHistoryStore.ts",
+        "packages/core/src/services/history/journalNativeDensity.ts",
+        "packages/core/src/services/history/nativeDensityPolicy.ts",
+        "packages/core/src/services/history/recording-primary-edits.ts",
+        "packages/core/src/journal/density-file-facts.ts",
+        "packages/core/src/journal/density-file-fill.ts",
+        "packages/agents/src/compression/native-file-dedupe.ts",
+        "packages/agents/src/compression/__tests__/continuous-native-dedupe.test.ts",
+        "packages/core/src/journal/density-file-facts.test.ts",
+        "packages/core/src/journal/density-file-cost.test.ts",
+        "packages/agents/src/compression/__tests__/continuous-dedupe-contract.test.ts",
+        "packages/agents/src/compression/__tests__/continuous-dedupe-lifecycle.test.ts",
+        "packages/agents/src/compression/__tests__/continuous-dedupe-owners.test.ts",
+        "packages/agents/src/compression/__tests__/continuous-dedupe-allocation.test.ts"
+      ],
+      "extraEnv": {},
+      "driver": 64410,
+      "pid": 64844,
+      "start": "2026-10-21T16:50:43.237Z",
+      "end": "2026-10-21T16:50:50.592Z",
+      "code": 0,
+      "log": "tmp/p5/w26-policy-run-ag/final2-gate-lint.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceHash": "70ff2997e2d4b7f75953241152c56e364652555db3f09f790f7657e00ce99a49",
+      "changed": [],
+      "manifest": "tmp/p5/w26-policy-run-ag/final2-gate-lint-source.json",
+      "finalSourceDifferences": [],
+      "counts": {
+        "pass": 0,
+        "fail": 0,
+        "skip": 0,
+        "assertions": 0
+      }
+    },
+    {
+      "name": "final2-gate-format",
+      "cwd": ".",
+      "command": [
+        "node_modules/.bin/prettier",
+        "--check",
+        "packages/agents/src/compression/nativeRecencyPolicy.ts",
+        "packages/core/src/journal/formatFill.ts",
+        "packages/core/src/journal/formatFillLifecycle.ts",
+        "packages/core/src/journal/groupEdits.ts",
+        "packages/core/src/journal/groupPlan.ts",
+        "packages/core/src/journal/journalStore.ts",
+        "packages/core/src/journal/nativeFactFill.ts",
+        "packages/core/src/journal/tool-ranking-fill.ts",
+        "packages/core/src/journal/versionSnapshot.ts",
+        "packages/core/src/services/history/journal-tool-ranking.ts",
+        "packages/core/src/services/history/journalHistoryStore.ts",
+        "packages/core/src/services/history/journalNativeDensity.ts",
+        "packages/core/src/services/history/nativeDensityPolicy.ts",
+        "packages/core/src/services/history/recording-primary-edits.ts",
+        "packages/core/src/journal/density-file-facts.ts",
+        "packages/core/src/journal/density-file-fill.ts",
+        "packages/agents/src/compression/native-file-dedupe.ts",
+        "packages/agents/src/compression/__tests__/continuous-native-dedupe.test.ts",
+        "packages/core/src/journal/density-file-facts.test.ts",
+        "packages/core/src/journal/density-file-cost.test.ts",
+        "packages/agents/src/compression/__tests__/continuous-dedupe-contract.test.ts",
+        "packages/agents/src/compression/__tests__/continuous-dedupe-lifecycle.test.ts",
+        "packages/agents/src/compression/__tests__/continuous-dedupe-owners.test.ts",
+        "packages/agents/src/compression/__tests__/continuous-dedupe-allocation.test.ts"
+      ],
+      "extraEnv": {},
+      "driver": 64410,
+      "pid": 64954,
+      "start": "2026-10-21T16:50:50.780Z",
+      "end": "2026-10-21T16:50:51.276Z",
+      "code": 0,
+      "log": "tmp/p5/w26-policy-run-ag/final2-gate-format.log",
+      "logHash": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+      "sourceHash": "70ff2997e2d4b7f75953241152c56e364652555db3f09f790f7657e00ce99a49",
+      "changed": [],
+      "manifest": "tmp/p5/w26-policy-run-ag/final2-gate-format-source.json",
+      "finalSourceDifferences": [],
+      "counts": {
+        "pass": 0,
+        "fail": 0,
+        "skip": 0,
+        "assertions": 0
+      }
+    },
+    {
+      "name": "final2-gate-graph",
+      "cwd": ".",
+      "command": [
+        "bun",
+        "scripts/check-affected-test-shards.ts"
+      ],
+      "extraEnv": {},
+      "driver": 64410,
+      "pid": 64959,
+      "start": "2026-10-21T16:50:51.457Z",
+      "end": "2026-10-21T16:50:53.870Z",
+      "code": 0,
+      "log": "tmp/p5/w26-policy-run-ag/final2-gate-graph.log",
+      "logHash": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67",
+      "sourceHash": "70ff2997e2d4b7f75953241152c56e364652555db3f09f790f7657e00ce99a49",
+      "changed": [],
+      "manifest": "tmp/p5/w26-policy-run-ag/final2-gate-graph-source.json",
+      "finalSourceDifferences": [],
+      "counts": {
+        "pass": 0,
+        "fail": 0,
+        "skip": 0,
+        "assertions": 0
+      }
+    },
+    {
+      "name": "final2-gate-audit",
+      "cwd": ".",
+      "command": [
+        "bun",
+        "scripts/test-audit/scan.ts",
+        "tmp/p5/w26-policy-run-ag/final-audit"
+      ],
+      "extraEnv": {},
+      "driver": 64410,
+      "pid": 64990,
+      "start": "2026-10-21T16:50:54.054Z",
+      "end": "2026-10-21T16:50:57.243Z",
+      "code": 0,
+      "log": "tmp/p5/w26-policy-run-ag/final2-gate-audit.log",
+      "logHash": "b570cb37f0bccf4ec8ca8998ca4e9a1f8158b1c5d051c41576ceb8f79429d599",
+      "sourceHash": "70ff2997e2d4b7f75953241152c56e364652555db3f09f790f7657e00ce99a49",
+      "changed": [],
+      "manifest": "tmp/p5/w26-policy-run-ag/final2-gate-audit-source.json",
+      "finalSourceDifferences": [],
+      "counts": {
+        "pass": 0,
+        "fail": 0,
+        "skip": 0,
+        "assertions": 0
+      }
+    }
+  ],
+  "sourceBindings": [
+    {
+      "path": "packages/agents/src/compression/__tests__/continuous-native-dedupe.test.ts",
+      "sha256": "8cb9ac4ad689fbc20b43238d647607f1472264696cd22e5264d92223341c087c",
+      "committedBlob": "a40e2c374f76bdb48d544c8dc3c3dfd7adeacdc7"
+    },
+    {
+      "path": "packages/agents/src/compression/native-file-dedupe.ts",
+      "sha256": "f9f5d07488f7b87617890c463ce153a03cd5c9d68b0d995883f5cb5580b16fb4",
+      "committedBlob": "550b3d03f3d5b789936c5eff48725e7190d033f6"
+    },
+    {
+      "path": "packages/agents/src/compression/nativeRecencyPolicy.ts",
+      "sha256": "7e390e6e0936a06b18e55d4597e6af5878dd3056a9a8ca5e83912f1c3eb45a85",
+      "committedBlob": "300abdcd88c6e9111517f268de2962e0581131a9"
+    },
+    {
+      "path": "packages/core/src/journal/density-file-facts.ts",
+      "sha256": "e087f6fe67046f72585e096ceb50876ef8aad06ca722aa814eb71bb340973b64",
+      "committedBlob": "1b2dff9346c5ac3fd8c35aa2e80dd6741e2525ea"
+    },
+    {
+      "path": "packages/core/src/journal/density-file-fill.ts",
+      "sha256": "b63a6e10ffdd81c58ed07fc244dd459d3de33e6f013dcc026a63b0545a5fb42a",
+      "committedBlob": "37e1fa6fd73699ec33435914c0d9128860083d04"
+    },
+    {
+      "path": "packages/core/src/journal/formatFill.ts",
+      "sha256": "bebad1c20e9e5ed6bc929f20bcca9e7259230776dcf5e705622042b4223acb1f",
+      "committedBlob": "0d9f1f908f8d754f20c2ecc50b79a6f7c2c86fcf"
+    },
+    {
+      "path": "packages/core/src/journal/formatFillLifecycle.ts",
+      "sha256": "0c435f387e3825f1c0a3ba70d628804f4466b6ca4b3ab015f97ef03671fe374b",
+      "committedBlob": "c7a6aa000575901238ec2b66ec44823ad840fb29"
+    },
+    {
+      "path": "packages/core/src/journal/groupEdits.ts",
+      "sha256": "d5b0d962952da844fcd1503657fffffae5b967e58edb366adfa894717e00dd9c",
+      "committedBlob": "34301d38cab47ad815acbf3ba95122e66b1b3224"
+    },
+    {
+      "path": "packages/core/src/journal/groupPlan.ts",
+      "sha256": "decf1df0b9d51afd7bb75fd997c8fa4dcfd8f4fc467053b178f81ac31180f9a1",
+      "committedBlob": "a2f729bf4802467e4a4fb299a7603b0afa358fd0"
+    },
+    {
+      "path": "packages/core/src/journal/journalStore.ts",
+      "sha256": "da1e08ebc75c926cff35ae8e27faff8a20b7d0374d401e5003ebf9d578bbe2f9",
+      "committedBlob": "8af5fb768fcfa69ea59deb9342a92f8c2cd90cdf"
+    },
+    {
+      "path": "packages/core/src/journal/nativeFactFill.ts",
+      "sha256": "c00ec7715739ac14e8a93c974aea616b726745c0320b4a25613e18cf2c6d0ef9",
+      "committedBlob": "14459a026aefa15865c08de56dd8f1676f6640a0"
+    },
+    {
+      "path": "packages/core/src/journal/tool-ranking-fill.ts",
+      "sha256": "d73ce522c147a58fd74d9b5f19d74b312c3e74e34b08c06ad255bf3df0604bd2",
+      "committedBlob": "7c9769e4d7e234d1e24dda1662bd9457657f8e9d"
+    },
+    {
+      "path": "packages/core/src/journal/versionSnapshot.ts",
+      "sha256": "0aa24e4d3ed035cd6112d05b8240918dc342ea327a083aa36c591a07ff8d8266",
+      "committedBlob": "b21035bca1041db18ad2ad6663738014f6847171"
+    },
+    {
+      "path": "packages/core/src/services/history/journal-tool-ranking.ts",
+      "sha256": "66eac69e1e6fa722e47b6796013ac3c64bb32c58716998a62a7c1caf085f30a5",
+      "committedBlob": "abf98249b98132faa9b0a07cc6f317ea7557699b"
+    },
+    {
+      "path": "packages/core/src/services/history/journalHistoryStore.ts",
+      "sha256": "69c95b1c3a5002ea99f68cd6e5bf2fa49e45dc9f185fb9d68600e446e9a036c4",
+      "committedBlob": "e922b3d64ac12a8455af50c37599ed7f3f920bb0"
+    },
+    {
+      "path": "packages/core/src/services/history/journalNativeDensity.ts",
+      "sha256": "3ac4a5b9f1eb38f6934cc186f71f30b8fc5bd7efb157fd80271662ecf8b0e7cd",
+      "committedBlob": "dafcb4e55a8e13dcd46781675c8f391144a701eb"
+    },
+    {
+      "path": "packages/core/src/services/history/nativeDensityPolicy.ts",
+      "sha256": "d2d15a4f95e44e31640b35e462785837679f8f3ef5457731434abb4b2ff8b332",
+      "committedBlob": "f88fd476b0f2803c53a2cb421915f48e089bffb3"
+    },
+    {
+      "path": "packages/core/src/services/history/recording-primary-edits.ts",
+      "sha256": "9ace0e1fc8a0e5fd7ec1e55cbcd96c28ae1bf3ad646854d4d7a6d6255ef0d7c0",
+      "committedBlob": "3f1ed887dc46ca8d68eb669027464a7a480d866e"
+    },
+    {
+      "path": "packages/core/src/journal/density-file-facts.test.ts",
+      "sha256": "b176f83f64e643910503dc530dfdc689ec9c4da78333c959115bdae9c822411c",
+      "committedBlob": "ee3ae8b48f48b71d21cad57771b481a41357742b"
+    },
+    {
+      "path": "packages/core/src/journal/density-file-cost.test.ts",
+      "sha256": "5029f9f3cbf4bbdb66e66f3bfb9d4f7e52810c950a7d93fcf30ba641aa7b9355",
+      "committedBlob": "590b493200051e34d2fce41089bda135beb8c31c"
+    },
+    {
+      "path": "packages/agents/src/compression/__tests__/continuous-dedupe-contract.test.ts",
+      "sha256": "946b7e3c4ac9cbeebf09b711f7e530d3a67b2674f4267df884cffe98c5e4f482",
+      "committedBlob": "a4fa1158c4df775060d828a257eeed14bb50ec2b"
+    },
+    {
+      "path": "packages/agents/src/compression/__tests__/continuous-dedupe-owners.test.ts",
+      "sha256": "b913237c22a9d6051f1b44f8ebefcd06fcd62827cd5784609fff49875a9aa39a",
+      "committedBlob": "306fe724837d9989d472b16b8b391769b0b761b1"
+    },
+    {
+      "path": "packages/agents/src/compression/__tests__/continuous-dedupe-lifecycle.test.ts",
+      "sha256": "da2e69c06d8927f45221505e32ebdb95a5227b3a8fc4a0d4f31c54d72330e9b7",
+      "committedBlob": "c22c9170940c3213f14501b30f1aa93c799f61cd"
+    },
+    {
+      "path": "packages/agents/src/compression/__tests__/continuous-native-recency.test.ts",
+      "sha256": "a25e354209fc694931df0ce07e0efe7e7778811321f917c8171dcbd0cf3827f2",
+      "committedBlob": "6843900e8edba5a156662c2502faf2770b0ecbf0"
+    },
+    {
+      "path": "packages/agents/src/compression/__tests__/continuous-recency-lifecycle.test.ts",
+      "sha256": "6dba4426f11fe48b5ea722e23437830d0bdefa62db446893c291107522487032",
+      "committedBlob": "ed26430456b88c520fa115a43c47a45870d61cb5"
+    },
+    {
+      "path": "packages/agents/src/compression/__tests__/density-disk.test.ts",
+      "sha256": "803b3c7475c915ad0012d88b03aec73f7a44262cffc554992755e8724a30af23",
+      "committedBlob": "ba09e61722b58ab991ca1009c351013c0a4f6aa3"
+    },
+    {
+      "path": "packages/agents/src/compression/__tests__/density-disk-owner-controls.test.ts",
+      "sha256": "1474cfa40f7caa62f8caade07870c287ecf9a5255d76e5bd6f26306830452b3f",
+      "committedBlob": "6d37ef011d7b6ee3a82e480bb62fc2cb5155a089"
+    },
+    {
+      "path": "packages/agents/src/compression/__tests__/density-disk-pinning.test.ts",
+      "sha256": "589ec156c7a1b234b51e0ac8c57fb143ed119c47b4a8f9b8055805714b7ed133",
+      "committedBlob": "8cde44e291c64a498863b160c7e9adcd209caada"
+    },
+    {
+      "path": "packages/agents/src/compression/__tests__/continuous-dedupe-allocation.test.ts",
+      "sha256": "008b921b0ba50d0e9ffe1f65faeeabb36e1f73dcce413a33c88f22272c9bde0a",
+      "committedBlob": "47ce55059584f03ccb46601efbcc6f6732fe5e0a"
+    },
+    {
+      "path": "packages/core/src/journal/journalStore.readerLifetime.test.ts",
+      "sha256": "9744ca9d7829bddc3b2010e895ff9450cb64f89e5856d8903de6e6ae11f96b3b",
+      "committedBlob": "1d08a7620cfbc719c6906984d55c9810293972af"
+    },
+    {
+      "path": "packages/core/src/journal/journalStore.readerCleanup.test.ts",
+      "sha256": "caa8ad4cf7442eb2df8f22d6a02ef3743e8eeda1ae1698f989732c9a1d6d3cb0",
+      "committedBlob": "7d8b2e0e591b0e2a8616668af7c26314b0c7904f"
+    },
+    {
+      "path": "packages/core/src/journal/tool-ranking.test.ts",
+      "sha256": "9554441f0dea5ba6856ebd9263a780cad3845bf61117545016d7e6413b9cd81a",
+      "committedBlob": "cd0ab518f12a8fa9217d3f4d8404afaadd9215fa"
+    },
+    {
+      "path": "packages/core/src/journal/tool-ranking-invalidation.test.ts",
+      "sha256": "64c1c4b433ad9a9cb385c20f6813570bb82f4bfcefa84f14fef0771b2b97ece8",
+      "committedBlob": "f819a13a82015bed73d472c96a2864637abe3fe7"
+    },
+    {
+      "path": "packages/core/src/journal/journalStore.model.test.ts",
+      "sha256": "47ec37320a367718f5eb96cb750888d57eea8eaa34b94c7b5538101bcf081707",
+      "committedBlob": "c9f07bff99640d13cf76e3ce42c07603763fc0ca"
+    },
+    {
+      "path": "packages/core/src/journal/groupWriter.test.ts",
+      "sha256": "1facb50089abcf94e8dcb5be94a7940f9824965cb3f3799cfd7e58fecd4358cb",
+      "committedBlob": "bacdba9690476bc67ee11f3972e258d2701e71ff"
+    },
+    {
+      "path": "packages/core/src/journal/versionCopy.test.ts",
+      "sha256": "4ce975745866cdd82087ce738abe1c16bb4806deedc57e0e08af0fb0fccc9161",
+      "committedBlob": "bebd7b36864d48859779ddb747da8956918bcfa9"
+    },
+    {
+      "path": "packages/core/src/journal/versionCopy.compaction.test.ts",
+      "sha256": "4e6979f3defcb7f759bf19b5fb01d485fdd14face2d6d8c1c9db25dce385926c",
+      "committedBlob": "186c1511b521deeb1cdee4891f44ef459768841a"
+    },
+    {
+      "path": "packages/core/src/services/history/historyBackend.test.ts",
+      "sha256": "236c51c46e5dc84cb819c77c5c9cbd69be00834560616bb5b09c36859db0912e",
+      "committedBlob": "daf33baed6b23e78435c018f24dfa89d75a1eba5"
+    },
+    {
+      "path": "packages/core/src/services/history/recording-primary-edits.test.ts",
+      "sha256": "c6a1b6200c0e0787c79435d1f979fc75a401a02c5ac0f62a92c52303cc8d49aa",
+      "committedBlob": "b68c44a36b8191002bfe3a952f44b0b4c1417f3b"
+    },
+    {
+      "path": "packages/core/src/services/history/detached-checkpoint.journal.test.ts",
+      "sha256": "2a22ddd54aea11787e2417731d1604f3a2c0a9b766a2749b41d150e0217ed57c",
+      "committedBlob": "8752009b748f948a91bc5d53bc2bb4887dbe7dc6"
+    },
+    {
+      "path": "packages/agents/src/compression/__tests__/tool-ranking-native-source.test.ts",
+      "sha256": "edda7184cc60b9b7414b04bf31d4713e626fd074bfe2d630060356280d250d6e",
+      "committedBlob": "9a9a85b901605b46d7e0ff9b27d0d1141d018ec1"
+    }
+  ],
+  "controls": [
+    {
+      "name": "old-scratch",
+      "path": "packages/core/src/services/history/journalDensity.ts",
+      "from": "    await optimizeNativeDensity(store, request);",
+      "to": "    const scratch = new HistoryDensityRows(request.ownership);\n    scratch.close();\n    await optimizeNativeDensity(store, request);",
+      "pkg": "agents",
+      "test": "compression/__tests__/continuous-dedupe-allocation",
+      "code": 1,
+      "assertion": true,
+      "originalHash": "64d64485007bca30cf5e288622574718a85a3b0d1c1b07066c1e89f49744c5fd",
+      "mutantHash": "4f6a19a2d02db2e215e627547b102f9ba2a42e30ea4c1b4f8bc3d505b83fc616",
+      "restoredHash": "64d64485007bca30cf5e288622574718a85a3b0d1c1b07066c1e89f49744c5fd",
+      "cmp": 0,
+      "backup": "tmp/p5/w26-policy-run-ag/control-old-scratch.original",
+      "log": "tmp/p5/w26-policy-run-ag/control-old-scratch.log",
+      "logHash": "d2a6388c3ad495bdc26dc462000828e5756e4780a15188d7d4b23ad59f88c4be",
+      "counts": {
+        "pass": 0,
+        "fail": 1,
+        "skip": 0,
+        "assertions": 1
+      },
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/continuous-dedupe-allocation.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "pid": 60525,
+      "driver": 60516,
+      "manifest": "tmp/p5/w26-policy-run-ag/control-old-scratch-source.json",
+      "manifestHash": "6df38edda512715d35d2fd304c9ccbadbbb96da25edf4e9ae4ad25ca8b973858",
+      "restorationFresh": {
+        "byteEqual": true,
+        "sha256": "64d64485007bca30cf5e288622574718a85a3b0d1c1b07066c1e89f49744c5fd",
+        "matchesCommittedTarget": true
+      }
+    },
+    {
+      "name": "wrong-latest",
+      "path": "packages/core/src/journal/density-file-facts.ts",
+      "from": "ordinal > old[0]",
+      "to": "ordinal < old[0]",
+      "pkg": "core",
+      "test": "journal/density-file-facts",
+      "code": 1,
+      "assertion": true,
+      "originalHash": "e087f6fe67046f72585e096ceb50876ef8aad06ca722aa814eb71bb340973b64",
+      "mutantHash": "5f36454ca663750371e351fcac1ad864525d4aae16f7f6980243e2a49da01b5c",
+      "restoredHash": "e087f6fe67046f72585e096ceb50876ef8aad06ca722aa814eb71bb340973b64",
+      "cmp": 0,
+      "backup": "tmp/p5/w26-policy-run-ag/control-wrong-latest.original",
+      "log": "tmp/p5/w26-policy-run-ag/control-wrong-latest.log",
+      "logHash": "e60ff72fa9979798c9f48363f69c15ab8ec1d8417a142734ec5ae40c3a978cbb",
+      "counts": {
+        "pass": 0,
+        "fail": 3,
+        "skip": 0,
+        "assertions": 6
+      },
+      "command": [
+        "bun",
+        "test",
+        "src/journal/density-file-facts.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "pid": 61170,
+      "driver": 61145,
+      "manifest": "tmp/p5/w26-policy-run-ag/control-wrong-latest-source.json",
+      "manifestHash": "cd0052bfde6c774a01fbd692a72e584ae71ddb8a2847278974818eec527bdc51",
+      "restorationFresh": {
+        "byteEqual": true,
+        "sha256": "e087f6fe67046f72585e096ceb50876ef8aad06ca722aa814eb71bb340973b64",
+        "matchesCommittedTarget": true
+      }
+    },
+    {
+      "name": "wrong-offset-tie",
+      "path": "packages/core/src/journal/density-file-facts.ts",
+      "from": "occurrence.start > old[2]",
+      "to": "occurrence.start >= old[2]",
+      "pkg": "agents",
+      "test": "compression/__tests__/continuous-dedupe-contract",
+      "code": 1,
+      "assertion": true,
+      "originalHash": "e087f6fe67046f72585e096ceb50876ef8aad06ca722aa814eb71bb340973b64",
+      "mutantHash": "d648817fd7bc3f2a8a08c6700a06bed21c77c245d5887aa49f5814df48d9bb1f",
+      "restoredHash": "e087f6fe67046f72585e096ceb50876ef8aad06ca722aa814eb71bb340973b64",
+      "cmp": 0,
+      "backup": "tmp/p5/w26-policy-run-ag/control-wrong-offset-tie.original",
+      "log": "tmp/p5/w26-policy-run-ag/control-wrong-offset-tie.log",
+      "logHash": "2c13f88cf5d421a27d21e5c0a15ad198b6b2d74e8e0c735f51b17f4189322ce6",
+      "counts": {
+        "pass": 1,
+        "fail": 1,
+        "skip": 0,
+        "assertions": 4
+      },
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/continuous-dedupe-contract.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "pid": 61195,
+      "driver": 61145,
+      "manifest": "tmp/p5/w26-policy-run-ag/control-wrong-offset-tie-source.json",
+      "manifestHash": "fd3f18cead865a52ac0cd26607633556771e36c35583c08eaa4c5384157c9b51",
+      "restorationFresh": {
+        "byteEqual": true,
+        "sha256": "e087f6fe67046f72585e096ceb50876ef8aad06ca722aa814eb71bb340973b64",
+        "matchesCommittedTarget": true
+      }
+    },
+    {
+      "name": "stale-policy",
+      "path": "packages/core/src/journal/density-file-fill.ts",
+      "from": "return bytes !== undefined && new TextDecoder().decode(bytes) === revision;",
+      "to": "return (bytes?.length ?? 0) > 0;",
+      "pkg": "core",
+      "test": "journal/density-file-facts",
+      "code": 1,
+      "assertion": true,
+      "originalHash": "b63a6e10ffdd81c58ed07fc244dd459d3de33e6f013dcc026a63b0545a5fb42a",
+      "mutantHash": "c2c1473c48ac0b40346d2c5757cda4f9e2f03d6101f4f78afd31080a3088d324",
+      "restoredHash": "b63a6e10ffdd81c58ed07fc244dd459d3de33e6f013dcc026a63b0545a5fb42a",
+      "cmp": 0,
+      "backup": "tmp/p5/w26-policy-run-ag/control-stale-policy.original",
+      "log": "tmp/p5/w26-policy-run-ag/control-stale-policy.log",
+      "logHash": "5a439a58faa962449c8061ca8d2705d2a0b0c3187ce9d2f05b33342e30683cd9",
+      "counts": {
+        "pass": 1,
+        "fail": 2,
+        "skip": 0,
+        "assertions": 16
+      },
+      "command": [
+        "bun",
+        "test",
+        "src/journal/density-file-facts.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "pid": 61217,
+      "driver": 61145,
+      "manifest": "tmp/p5/w26-policy-run-ag/control-stale-policy-source.json",
+      "manifestHash": "c9ac835ae43540e8838f89378807041c272ff603c91312af30f2e52fd6fc223a",
+      "restorationFresh": {
+        "byteEqual": true,
+        "sha256": "b63a6e10ffdd81c58ed07fc244dd459d3de33e6f013dcc026a63b0545a5fb42a",
+        "matchesCommittedTarget": true
+      }
+    },
+    {
+      "name": "history-refill-on-append",
+      "path": "packages/core/src/journal/density-file-fill.ts",
+      "from": "  const old = incremental",
+      "to": "  const old = false && incremental",
+      "pkg": "core",
+      "test": "journal/density-file-facts",
+      "code": 1,
+      "assertion": true,
+      "originalHash": "b63a6e10ffdd81c58ed07fc244dd459d3de33e6f013dcc026a63b0545a5fb42a",
+      "mutantHash": "2cf7857b9bc71cd40fb59d662ea32ce44cf3f82f202854803fbde1f803c79ff5",
+      "restoredHash": "b63a6e10ffdd81c58ed07fc244dd459d3de33e6f013dcc026a63b0545a5fb42a",
+      "cmp": 0,
+      "backup": "tmp/p5/w26-policy-run-ag/control-history-refill-on-append.original",
+      "log": "tmp/p5/w26-policy-run-ag/control-history-refill-on-append.log",
+      "logHash": "253779e75130c5ad588659e1373d386c7b3c6cac2596eb77b70671df8de9cae4",
+      "counts": {
+        "pass": 2,
+        "fail": 1,
+        "skip": 0,
+        "assertions": 15
+      },
+      "command": [
+        "bun",
+        "test",
+        "src/journal/density-file-facts.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "pid": 61233,
+      "driver": 61145,
+      "manifest": "tmp/p5/w26-policy-run-ag/control-history-refill-on-append-source.json",
+      "manifestHash": "e491afa2c9efb2fd489470b75f004d22549291e998f11cfd7b63ee0dd23a073e",
+      "restorationFresh": {
+        "byteEqual": true,
+        "sha256": "b63a6e10ffdd81c58ed07fc244dd459d3de33e6f013dcc026a63b0545a5fb42a",
+        "matchesCommittedTarget": true
+      }
+    },
+    {
+      "name": "retain-final",
+      "path": "packages/core/src/journal/density-file-facts.ts",
+      "code": 1,
+      "assertion": true,
+      "originalHash": "e087f6fe67046f72585e096ceb50876ef8aad06ca722aa814eb71bb340973b64",
+      "mutantHash": "a259ace92b366aa76cd61c4e801be8e1dda327f75ab59b80b27fa58dbd92d72a",
+      "restoredHash": "e087f6fe67046f72585e096ceb50876ef8aad06ca722aa814eb71bb340973b64",
+      "cmp": 0,
+      "backup": "tmp/p5/w26-policy-run-ag/control-retain-final.original",
+      "log": "tmp/p5/w26-policy-run-ag/control-retain-final.log",
+      "logHash": "e0ad8b652dbe7d9e9548876899d3cbc7ff8f073ec8d1c26bb1526db1b82a0504",
+      "counts": {
+        "pass": 0,
+        "fail": 2,
+        "skip": 0,
+        "assertions": 4315
+      },
+      "command": [
+        "bun",
+        "test",
+        "src/journal/density-file-cost.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "pid": 62666,
+      "driver": 62664,
+      "manifest": "tmp/p5/w26-policy-run-ag/control-retain-final-source.json",
+      "manifestHash": "5a89de0b8e7148308c4274ce1e2fe818032795d102042bb9936e51a5c44482a3",
+      "restorationFresh": {
+        "byteEqual": true,
+        "sha256": "e087f6fe67046f72585e096ceb50876ef8aad06ca722aa814eb71bb340973b64",
+        "matchesCommittedTarget": true
+      }
+    },
+    {
+      "name": "scan",
+      "path": "packages/core/src/journal/versionSnapshot.ts",
+      "code": 1,
+      "assertion": true,
+      "originalHash": "0aa24e4d3ed035cd6112d05b8240918dc342ea327a083aa36c591a07ff8d8266",
+      "mutantHash": "21dcc4e6be2683ff2a91c988cf6dd201408795503d7f6b8b351a1b634754bcf9",
+      "restoredHash": "0aa24e4d3ed035cd6112d05b8240918dc342ea327a083aa36c591a07ff8d8266",
+      "cmp": 0,
+      "backup": "tmp/p5/w26-policy-run-ag/control-scan.original",
+      "log": "tmp/p5/w26-policy-run-ag/control-scan.log",
+      "logHash": "b2be56e9036f16eddd85c5b3704ad60887f8011a9cc5b03f29196be966fe0571",
+      "counts": {
+        "pass": 0,
+        "fail": 2,
+        "skip": 0,
+        "assertions": 4282
+      },
+      "command": [
+        "bun",
+        "test",
+        "src/journal/density-file-cost.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "pid": 62684,
+      "driver": 62664,
+      "manifest": "tmp/p5/w26-policy-run-ag/control-scan-source.json",
+      "manifestHash": "bc3c164dcbd764c1d3b8b15254f2047a03652176753ecc151ef097dc6b00da68",
+      "restorationFresh": {
+        "byteEqual": true,
+        "sha256": "0aa24e4d3ed035cd6112d05b8240918dc342ea327a083aa36c591a07ff8d8266",
+        "matchesCommittedTarget": true
+      }
+    },
+    {
+      "name": "output-retain",
+      "path": "packages/core/src/services/history/journalNativeDensity.ts",
+      "code": 1,
+      "assertion": true,
+      "originalHash": "3ac4a5b9f1eb38f6934cc186f71f30b8fc5bd7efb157fd80271662ecf8b0e7cd",
+      "mutantHash": "85cb85db464d96e39fec00546690dbd93003f84cd9ba393d404d9bdbc9b585ed",
+      "restoredHash": "3ac4a5b9f1eb38f6934cc186f71f30b8fc5bd7efb157fd80271662ecf8b0e7cd",
+      "cmp": 0,
+      "backup": "tmp/p5/w26-policy-run-ag/control-output-retain.original",
+      "log": "tmp/p5/w26-policy-run-ag/control-output-retain.log",
+      "logHash": "3dc264db4c09d014c6f0baafd5727169108e76dda21100abe909d6a800115acf",
+      "counts": {
+        "pass": 4,
+        "fail": 2,
+        "skip": 0,
+        "assertions": 16
+      },
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/continuous-dedupe-lifecycle.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "pid": 63657,
+      "driver": 63653,
+      "manifest": "tmp/p5/w26-policy-run-ag/control-output-retain-source.json",
+      "manifestHash": "6d81cdbfe526899ce0bbb33d39c8b22c697b158d4534b160952988071d28d136",
+      "restorationFresh": {
+        "byteEqual": true,
+        "sha256": "3ac4a5b9f1eb38f6934cc186f71f30b8fc5bd7efb157fd80271662ecf8b0e7cd",
+        "matchesCommittedTarget": true
+      }
+    }
+  ],
+  "initialUnsupportedPolicyRed": {
+    "log": "tmp/p5/w26-policy-run-ag/allocation-red.log",
+    "sha256": "90856bb71011207119be180b2ec0676cad1622f0cc9cbf67e63136caaf24df48",
+    "pass": 0,
+    "fail": 2,
+    "skip": 0,
+    "assertions": 0,
+    "classification": "Two runtime unsupported-policy failures before implementation, not allocation assertion failures or accepted negative controls. No complete source manifest is available for this historical log."
+  },
+  "originalRetainingTrap": {
+    "name": "original-retaining-trap",
+    "cwd": "packages/agents",
+    "command": [
+      "bun",
+      "test",
+      "src/compression/__tests__/density-disk-owner-controls.test.ts",
+      "--timeout",
+      "180000"
+    ],
+    "extraEnv": {
+      "DENSITY_RETAINING_TRAP": "1"
+    },
+    "driver": 61238,
+    "pid": 61874,
+    "start": "2026-10-21T16:47:09.235Z",
+    "end": "2026-10-21T16:47:19.764Z",
+    "code": 1,
+    "log": "tmp/p5/w26-policy-run-ag/original-retaining-trap.log",
+    "logHash": "93e4f2e0bfb04a8385819616291976bdfadd26571e82609aecaebc6a01da872d",
+    "sourceHash": "d2baca0176f71e9a7ff157dc928a26caa9a99ccddc43d6d316161970caac0fa3",
+    "changed": [],
+    "manifest": "tmp/p5/w26-policy-run-ag/original-retaining-trap-source.json",
+    "finalSourceDifferences": [
+      "packages/agents/src/compression/__tests__/continuous-dedupe-lifecycle.test.ts",
+      "packages/core/src/journal/density-file-cost.test.ts"
+    ],
+    "executedTest": {
+      "path": "packages/agents/src/compression/__tests__/density-disk-owner-controls.test.ts",
+      "sha256": "1474cfa40f7caa62f8caade07870c287ecf9a5255d76e5bd6f26306830452b3f"
+    },
+    "counts": {
+      "pass": 0,
+      "fail": 4,
+      "skip": 0,
+      "assertions": 4
+    }
+  },
+  "excluded": [
+    {
+      "name": "test-continuous-dedupe-contract",
+      "code": 1,
+      "log": "tmp/p5/w26-policy-run-ag/test-continuous-dedupe-contract.log",
+      "logHash": "2aa8a4d9c1cbdee1db19da750358c2226e04389d604998578345a54f7673e502",
+      "counts": {
+        "pass": 1,
+        "fail": 1,
+        "skip": 0,
+        "assertions": 4
+      }
+    },
+    {
+      "name": "final1-density-disk-lifecycle",
+      "code": 1,
+      "log": "tmp/p5/w26-policy-run-ag/final1-density-disk-lifecycle.log",
+      "logHash": "ea7428afc496f465ae10d4e6a0c80c920cf7f398aa774109692ae158a6bc755d",
+      "counts": {
+        "pass": 5,
+        "fail": 3,
+        "skip": 0,
+        "assertions": 476
+      }
+    }
+  ],
+  "remainingRed": {
+    "name": "final1-density-disk-lifecycle",
+    "pass": 5,
+    "fail": 3,
+    "assertions": 476,
+    "cause": "Three native cases enable readWritePruning and reject at the explicit unimplemented-policy guard before their injected admission/publication failures. The complete file is RED, excluded from green acceptance, and was not rerun or changed.",
+    "separateIssue3917": "Remains separately RED; no rerun/retry/suppression in this finalization."
+  },
+  "policy": {
+    "selection": "Only human text fenced file inclusions. Trim and resolve exact paths against captured workspace root, case-sensitive. Content is not compared or hashed. Newest raw source row wins; within a row greatest character offset wins, with stable first occurrence for equal offsets even across blocks.",
+    "revision": [
+      "file-inclusions:1",
+      "resolved workspace root",
+      "row-desc-offset-desc-stable:1"
+    ],
+    "distinction": "Tool READ/WRITE pruning is not implemented here. Nonhuman blocks, tool responses and failed operations are preserved by this policy; readWritePruning refuses before mutation. Independent old-array optimizer is the value oracle, not a mocked production policy.",
+    "facts": "Versioned namespace-scoped shared trie stores path winner row/block/offset/count and generation/header scalars. Append visits only added rows when registration/revision is ready; structural source changes rebuild; unregistered reopened append invalidates readiness until refill. Old pins retain published facts.",
+    "pending": "This continuous operation consumes stored raw rows; it introduces no whole-history all-paths RAM map. Existing global-ranking pending overlay remains bounded by supplied caller input, without a newly proved total pending/stale-generation capacity cap."
+  },
+  "measurements": {
+    "rows": [
+      40,
+      4000
+    ],
+    "coldFillPhysicalReads": [
+      175,
+      20853
+    ],
+    "selectedThreeKeyPhysicalReads": [
+      9,
+      16
+    ],
+    "selectedFactCalls": [
+      6,
+      6
+    ],
+    "selectedReadBound": "6 * ceil(log2(rows + 1)) + 8; pin acquisition, initial history construction, cold fill and full operation are excluded from selected-query bounds.",
+    "observedPeakCacheChargedBytes": [
+      898,
+      65536
+    ],
+    "perCacheCapBytes": 65536,
+    "chargeBoundary": "Existing cache charge includes node bytes and fixed typed-array/map-slot/key overhead. Not a total cache/pin/heap bound, and not a new exact arbitrary-length path-string byte audit.",
+    "unchangedPolicyReuse": {
+      "repeats": 40,
+      "newMeasurements": 0,
+      "newJournalBytes": 0,
+      "newCommits": 0
+    },
+    "readyReopen": {
+      "newMeasurements": 0,
+      "newJournalBytes": 0
+    },
+    "outputLifetime": [
+      {
+        "rows": 512,
+        "outputs": 512,
+        "samples": 4,
+        "sampledPeak": 1,
+        "final": 0
+      },
+      {
+        "rows": 8192,
+        "outputs": 8192,
+        "samples": 64,
+        "sampledPeak": 1,
+        "final": 0
+      }
+    ],
+    "lifetimeBoundary": "Actual sink argument objects tracked by WeakRef at awaited sink backpressure, unchanged bound two. Final query arrays collect to zero; retention control leaves three live selected values. This establishes object lifetime, not retained heap/string bytes or all-history-key capacity."
+  },
+  "audit": {
+    "log": "tmp/p5/w26-policy-run-ag/final2-gate-audit.log",
+    "findingsHash": "078e5761741a3672c76a9a474ce66b420a8abcdc61d87b35a64d1f89dd33fbdd",
+    "touchedFindings": [
+      "packages/core/src/journal/density-file-facts.test.ts\t65\tnative density file facts > maintains only appended keys and preserves old pins through rewrite, pop, clone, compaction and ready reopen\tDUP_ASSERT\t2x identical assertion: expect(await current(session, 'files:1')).toStrictEqual([2, 0, 0, 2])\tcore",
+      "packages/core/src/journal/density-file-facts.test.ts\t65\tnative density file facts > maintains only appended keys and preserves old pins through rewrite, pop, clone, compaction and ready reopen\tDUP_ASSERT\t2x identical assertion: expect(await current(session, 'files:1')).toStrictEqual([0, 0, 0, 1])\tcore",
+      "packages/core/src/journal/density-file-cost.test.ts\t72\tnative density file query cost > queries three fixed path keys over %i rows without a source scan or warm refill\tDUP_ASSERT\t2x identical assertion: expect(measured).toBe(size)\tcore",
+      "packages/agents/src/compression/__tests__/continuous-dedupe-lifecycle.test.ts\t44\tnative continuous file deduplication through the live journal consumer > runs through real ChatSession before-send orchestration and reuses the unchanged result without operation files\tDUP_ASSERT\t2x identical assertion: expect(await digestStream(fixture.history.streamRawHistory())).toBe( digestRows(densityOra\tagents",
+      "packages/agents/src/compression/__tests__/continuous-dedupe-lifecycle.test.ts\t173\tnative continuous file deduplication through the live journal consumer > preserves a fact-query failure by identity and keeps the old history available before continuing\tDUP_ASSERT\t2x identical assertion: expect(await digestStream(fixture.history.streamRawHistory())).toBe( expected, )\tagents"
+    ],
+    "classification": "Five DUP_ASSERT flags cross rewrite/compaction, cold/warm no-op, publication reuse or failed-query preservation boundaries against independent counts/fixture digests. No touched SELF_CONFIRMING/MOCK_MIRROR/ALWAYS_TRUE/NO_ASSERT flag. Scanner success is not a finding-free corpus."
+  },
+  "preservation": {
+    "baseline": "tmp/p5/w26-continuous-run-ab/preserved.json",
+    "baselineHash": "e80230bd1742f585274b87bf3b154268ec6bb6f96cb41616555a254eac7298ef",
+    "checked": 1192,
+    "declarations": 293,
+    "changed": []
+  },
+  "processClosure": {
+    "checkedAt": "2026-10-21T16:54:22.374Z",
+    "pids": [
+      51298,
+      51300,
+      51314,
+      51339,
+      53004,
+      53011,
+      53037,
+      53044,
+      53066,
+      53847,
+      54305,
+      54782,
+      55118,
+      55565,
+      55877,
+      56039,
+      56130,
+      58475,
+      58484,
+      58491,
+      58501,
+      58523,
+      58540,
+      58558,
+      58574,
+      58594,
+      58651,
+      58663,
+      58676,
+      58731,
+      58739,
+      58748,
+      58934,
+      60516,
+      60525,
+      61145,
+      61151,
+      61170,
+      61195,
+      61217,
+      61233,
+      61238,
+      61250,
+      61317,
+      61351,
+      61442,
+      61592,
+      61664,
+      61764,
+      61777,
+      61822,
+      61874,
+      62664,
+      62666,
+      62684,
+      62702,
+      62719,
+      62731,
+      62747,
+      62755,
+      62758,
+      62802,
+      62850,
+      62981,
+      63101,
+      63192,
+      63289,
+      63297,
+      63326,
+      63651,
+      63652,
+      63653,
+      63657,
+      63900,
+      64410,
+      64415,
+      64471,
+      64507,
+      64622,
+      64747,
+      64844,
+      64954,
+      64959,
+      64990
+    ],
+    "alive": [],
+    "inheritedPipelinePids": [
+      63651,
+      63652,
+      64410
+    ],
+    "noNewTestLaneLaunched": true
+  },
+  "boundaries": [
+    "Original 512/8192 old-layout borrowed/copy/ownership bounds and the original retaining trap are unchanged. Native checkpoint retains every byte of the greater-than-nine-MiB result.",
+    "Complete unchanged #3919 readerLifetime and readerCleanup files pass; no new dedupe-specific descriptor-retirement experiment is claimed.",
+    "Native owners cover 3/64/65/5000. Generic mutation-model and version-copy regressions do not independently prove every dedupe fact after every primitive.",
+    "No provider-body-spool, whole-product retained-heap, global LENS/live-byte or total cache/pin capacity closure. Other strategies, append-only and explicit-old files remain; old backend removal is phase 9 and defaults are unchanged.",
+    "Graph validation is not affected-shard execution. No full monorepo acceptance is claimed. Matching production/executed-test runs are reused with exact other-test-only source bridges.",
+    "No cleanup, .llxprt edits/staging, unrelated declarations/recovery staging, push, merge, default flip, policy expansion or enforcement weakening. Review skipped per Andrew 2026-10-09."
+  ]
+}
