@@ -1,5 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalFormatError, JournalInputError } from './errors.js';
+import { bytesEqual } from './bytes.js';
+import { KeyedMapReader, KeyedMapBatch } from './keyedMap.js';
 import type { RecordAppender } from './groupAppender.js';
 import {
   buildGroup,
@@ -16,6 +18,7 @@ export interface PreparedGroup {
   readonly appender: RecordAppender;
   readonly read: ReadGroup;
   build(edits: readonly VersionEdit[]): Promise<void>;
+  retainMetadata(key: string, value: Uint8Array): Promise<void>;
 }
 
 export type GroupPreparation = (group: PreparedGroup) => Promise<void>;
@@ -25,6 +28,43 @@ export interface PreparedBuild {
   readonly built: BuiltGroup | undefined;
   readonly edits: readonly VersionEdit[];
   readonly facts: NativeFactIndexRegistration | undefined;
+}
+
+async function retainMetadata(
+  ctx: BuildContext,
+  appender: RecordAppender,
+  built: BuiltGroup,
+  key: string,
+  value: Uint8Array,
+): Promise<BuiltGroup> {
+  await appender.drain();
+  const reader = new KeyedMapReader(
+    ctx.readGroup(appender.nextOffset),
+    ctx.metaCache,
+    'meta',
+    ctx.hasher,
+  );
+  const batch = new KeyedMapBatch(reader, built.state.metaRoot);
+  batch.set(key, value);
+  return {
+    ...built,
+    state: { ...built.state, metaRoot: await batch.commit(appender) },
+  };
+}
+
+async function sameMetadata(
+  ctx: BuildContext,
+  key: string,
+  value: Uint8Array,
+): Promise<boolean> {
+  const reader = new KeyedMapReader(
+    ctx.access,
+    ctx.metaCache,
+    'meta',
+    ctx.hasher,
+  );
+  const prior = await reader.get(ctx.published?.roots.metaRoot ?? 0, key);
+  return prior !== undefined && bytesEqual(prior, value);
 }
 
 export async function prepareBuild(
@@ -70,7 +110,29 @@ export async function prepareBuild(
   };
   if (preparation?.kind === 'prepared') {
     try {
-      await preparation.prepare({ appender, read: ctx.readGroup, build });
+      await preparation.prepare({
+        appender,
+        read: ctx.readGroup,
+        build,
+        retainMetadata: async (key, value) => {
+          if (!started && (await sameMetadata(ctx, key, value))) return;
+          if (!started) await build([{ kind: 'append', rows: [] }]);
+          if (result.built === undefined)
+            throw new JournalFormatError(
+              'Metadata needs a completed row group',
+            );
+          result = {
+            ...result,
+            built: await retainMetadata(
+              ctx,
+              appender,
+              result.built,
+              key,
+              value,
+            ),
+          };
+        },
+      });
     } catch (error) {
       if (error instanceof JournalInputError || buildFailure?.error === error)
         throw error;

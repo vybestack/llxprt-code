@@ -4,6 +4,10 @@ import { BoundedIdNodeCache } from '../../journal/idTrieCache.js';
 import { mergeIdTrie } from '../../journal/idTrieMerge.js';
 import { IdTrieReader } from '../../journal/idTrieReader.js';
 import type { RemovedInteriorSpan } from './historyEventTypes.js';
+import {
+  encodeJournalSpanWindow,
+  JOURNAL_SPAN_WINDOW,
+} from './journalSpanWindow.js';
 import { SPAN_WINDOW_CAPACITY } from './historySpanWindow.js';
 
 interface OrderedSpan {
@@ -144,6 +148,14 @@ export class JournalDensitySpans {
     while (index < bounded.length) take(bounded[index++].span);
     this.peak = Math.max(this.peak, retained.length);
     return retained;
+  }
+
+  async retain(spans: readonly RemovedInteriorSpan[]): Promise<void> {
+    if (spans.length > 0)
+      await this.group.retainMetadata(
+        JOURNAL_SPAN_WINDOW,
+        encodeJournalSpanWindow(spans),
+      );
   }
 
   metrics(): {

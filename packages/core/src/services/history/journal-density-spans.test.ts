@@ -133,6 +133,9 @@ describe('native detached density annotation projection', () => {
       expect(observed.spans()).toStrictEqual([
         { start: 1, end: 1, reason: 'density-replaced' },
       ]);
+      expect(
+        await journal.session.store.getMeta('history:density-spans:1'),
+      ).toBeDefined();
       const bytes = statSync(journal.session.path).size;
       const commit = journal.session.store.published?.commitSeq;
       await edit();

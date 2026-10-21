@@ -244,6 +244,8 @@ async function produceCandidate(
     const spans = await projectedSpans(candidate, densitySpans, state);
     await media?.close();
     await candidate.finish();
+    if (densitySpans instanceof JournalDensitySpans)
+      await densitySpans.retain(spans);
     return [candidate.tokens, spans];
   } catch (error) {
     await media?.abort(error);
