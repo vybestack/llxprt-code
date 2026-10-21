@@ -1,3 +1,13 @@
+# Native high-density call lookup scratch is removed, 2026-10-21
+
+Production `61b521f9e` and tests `937d8fc98`/`6aa35d79019754d04a94c922ca073a6839f8f414` replace native high-density's first-call/last-response scratch with versioned namespace-11 raw-ID positions. The public operation creates zero files/directories; no source file was deleted, provider route changed or backend default flipped. Continuous density decisions and tool-response score ranking still allocate and are not covered by this removal.
+
+[W26-SOURCE-BOUND-RANKING-PROOF.json](recovery-2026-10-19/recovered-control/W26-SOURCE-BOUND-RANKING-PROOF.json) binds **233 passes, zero failures/skips and 326,653 assertions across 37 serial complete-file Bun processes**, nine scoped gate categories and five restored assertion controls. Independent parity covers 512/8192 rows, owner fixtures 3/64/65/5000 and unchanged original ownership/nine-MiB bounds. Queries use 5/9 physical reads over 40/4000 distinct-ID rows, outside cold construction; each ID-node cache is capped at 64 KiB. Repeated lookups add no file bytes/commit. Decoded/call-block lifetime proof does not establish retained heap. Shared trie and ROW live-byte figures are separately qualified in W26-STATUS.
+
+Phase 5/W26 remain open for continuous density/ranking, other strategies/old files, nonempty spans, normalization/cache/tails/ranges/semantic generations and global LENS/live bytes. Phase 6 provider body/key/message/tokenizer spools and headers/tokens/stream guards, W23 remaining cases, Stage A/W25/default/cutover, whole-heap/capacity and cold Mistral are unchanged. All 1192 preserved hashes match; all 196 recorded PIDs are absent. #3917 stays separately RED without retry/suppression. Review skipped per Andrew 2026-10-09.
+
+---
+
 # Native high-density input/output passes scoped acceptance, 2026-10-21
 
 Input checkpoint `e3dd3fef0` and output/lifecycle `1c0290a00c28561e82e357e48c3bd24c8a52b4a4` remove public native high-density input/output rows/index and chronology files. The runner reads pinned service-curated rows and streams one output at a time, carrying raw source ordinals into the existing native detached writer and held-version compensation. Its separate first-call/last-response `density-decision-index-*` scratch remains. No provider route or backend default changed.

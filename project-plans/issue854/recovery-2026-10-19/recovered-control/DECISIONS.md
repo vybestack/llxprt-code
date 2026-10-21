@@ -1,3 +1,13 @@
+## 2026-10-21: retain semantic policy in agents, persist source call positions
+
+Close only native high-density's first/last call lookup scratch. Namespace 11 uses exact raw IDs, curated source labels and source block order; normalized provider IDs/units stay in namespaces 1/2. Agents still decide path precedence, error summaries, tool-tail boundaries and token-budget truncation. Continuous optimizeRows decisions and tool-response score ranking remain separate owners. Do not cache those semantic decisions under structural readiness or describe their files as eliminated.
+
+Use existing versioned ID roots, bounded batches and per-cache 64 KiB storage. Append updates new rows; rewrite/fill/pop/owner/copy paths retain old-pin semantics. Query tests measure 5/9 physical reads for two lookups over 40/4000 rows after pin setup. Cold construction/fill is separate and its read count is not measured here. Repeated lookup adds zero bytes; 1007 shared trie bytes and 24 density payload bytes in a 6615-byte fixture do not replace global live-byte accounting. ROW aggregate liveBytes excludes ID/metadata overhead. Current row/block size and other owners prevent interpreting one cache cap as a whole-pin/process heap cap.
+
+Preserve every cleanup assertion by migrating fault injection from the removed scratch index to the actual output descriptor. Reuse source-matched completed files and rerun only invalidated/unfinished files. Keep all mutation controls assertion-based, restore captured bytes and hashes before acceptance, and exclude invalid launches/runtime failures. Source-bound proof records 233 passes, zero failures/skips and 326,653 assertions across 37 serial complete-file Bun processes, nine gate categories, five controls and absent recorded PIDs. Original owner/trap/nine-MiB limits and independent old-array/fixture oracles remain unchanged. Whole-heap/capacity, provider spools, W26 remainder, Phase 5 LENS/live bytes and W25/default stay open. Review skipped per Andrew 2026-10-09.
+
+---
+
 ## 2026-10-20: native Mistral assignment before Kimi/tail expansion
 
 Use the existing id trie, namespace 3 and mappedRef VALUE relocation. Activate mapping-only slots through a separate fill, keeping format summary admission and provider sends unchanged. Persist exact raw ownership and insertion salt; preserve current converter pass-through collisions; rebuild from surviving raw id pieces after removal/insertion. Start a mapped lineage on activation and retain its mask through prefix rebuilds, because pre-fill roots and emptied bases otherwise lose mappings. Full policy and limits: PHASE5-MISTRAL-DECISIONS.md.
