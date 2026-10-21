@@ -1,3 +1,25 @@
+# Native provider fallback producer proof, 2026-10-21
+
+[W26-SOURCE-BOUND-FALLBACK-PROOF.json](W26-SOURCE-BOUND-FALLBACK-PROOF.json) binds production `a645a5c96`, early test commit `d38209ca7`, 27 complete serial files/200 passes/1,670 assertions, nine scoped gates, five restored assertion controls and 1,204 preservation hashes. Raw evidence is `tmp/p5/w26-fallback-run-ap/`. Both consumers of the repaired fixture observer and all gates ran fresh; 24 reused files retain identical production/executed-test bytes with the sole other-test difference listed. Earlier authoring/failed results are excluded; accepted commands name source/log hashes and PIDs. Final digest: `ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4`. Eight audit labels remain classified and all recorded PIDs are absent.
+
+| Contract | Executable evidence and boundary |
+| --- | --- |
+| Actual handler fallback without files | native-provider-fallback: real CompressionHandler after exhausted FakeProvider; cross-root creating APIs denied with an awaited resolution matcher |
+| External context overflow and max-attempt chain | native-provider-fallback-provider-errors: status 400 makes one request; 429 follows two existing three-request attempts before forced fallback; exact tail/durable values |
+| Independent old/eager parity | native-provider-fallback-contracts: 512/8192 complete surviving values, token total, context range and durable digest; empty/one/two/under-target, summary priorities and complete greater-than-nine-MiB value |
+| Cache anchor and summary boundaries | Real handler clears removed anchor 1; no-op/rollback retain or restore anchor 1. Scale fallback does not add a nonempty-anchor assertion. Unchanged truncation-value-publication.journal and journal-annotated-summary-parity keep their separate nonempty-anchor/summary-span proof and preserve 334e227f4. |
+| Current raw owners | native-provider-fallback-owners: 3/64/65/5000 with invalid-AI holes, awaited ordinal mapping, old pin and reopened origins; lifecycle covers numeric-zero owner |
+| Version and publication lifetime | native-provider-fallback-lifecycle: borrowed rows readable throughout awaited clone/compaction/publication, independent old pin, compacted current values/owners; no-op changes no file bytes |
+| Admission, rejection and abort | native-provider-fallback-failures: row-65 exact primary error and old durable mirror, same-writer continuation; rejection after install restores version/baseline; suspended admitted iterator retires before pin release |
+| Actual media compensation | native-provider-fallback-media plus unchanged fallback-values-media.journal: acknowledged finalization failure keeps the original object and restores media/history/durable values before continuation |
+| Indexed query bounds | native-provider-fallback-indexed: full ROW reads denied during no-op/count/source-rank queries at 40/4000; operation readRow totals 121/12001 include linear token/summary/retained passes, not physical I/O or whole-operation logarithmic proof |
+| Converted-row lifetime | native-provider-fallback-lifetime: 512/8192, actual read-result WeakRefs, peak zero/final zero under bound two; direct hook restored in finally, no mock result cache; no whole-heap claim |
+| Existing publication/error contracts | Original fallback suites, truncation publication, journal detached publication/current owners, groupWriter physical poison and #3919 readerLifetime/readerCleanup run unchanged except the fixture observer's erased async-capable row type |
+| Falsification | Old copied candidate, all-input retention, wrong ordinal, wrong summary priority and primary wrapping each fail an actual matcher; source restores cmp/SHA-256 and matches production |
+| Remaining RED | Public ProviderNormalizationDisk, #3917 and two explicit-old duplicate-replay failures retain their earlier receipts and are not relabeled green. Pending-token last-resort disk ranking is a remaining actual native owner. Phase 6, capacity/accounting/heap, defaults/cutover and Phase 9 remain separate. |
+
+---
+
 # Annotated append summary parity supplement, 2026-10-21
 
 [W26-SOURCE-BOUND-ANNOTATED-APPEND-PARITY-PROOF.json](W26-SOURCE-BOUND-ANNOTATED-APPEND-PARITY-PROOF.json) binds `334e227f4`, source `b09025fc542cd20bfacd8bece435fea32ed4705b99a49fbfb8dfeedd314f23b5`, 23 complete passing serial files/167 passes/11260 assertions and 12 scoped gates. Original mixed parity remains enabled at 8 pass/2 explicit-old replay failures.

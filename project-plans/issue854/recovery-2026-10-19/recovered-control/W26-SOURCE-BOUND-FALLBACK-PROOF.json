@@ -1,0 +1,1687 @@
+{
+  "date": "2026-10-21T23:24:25.657Z",
+  "status": "Native provider-fallback producer passes scoped acceptance. Pending-token disk ranking and public ProviderNormalizationDisk remain; W26/Phase 5 stay open.",
+  "production": "a645a5c965c8b879517ed3a8331f1971e768f555",
+  "source": {
+    "hash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+    "count": 9073,
+    "owned": [
+      {
+        "path": "packages/agents/src/compression/__tests__/compression-provider-fallback-test-helpers.ts",
+        "sha256": "ef674f9bc2affe895c9327a2192bf795594a6b7e052da13b1adaf438b2be3b51"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/compression-value-fixture.ts",
+        "sha256": "5c91fa88426b3b885742e21bc5fe60e8107530f233578f74878aac1de0379b14"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/native-provider-fallback-contracts.test.ts",
+        "sha256": "0ff96a201b248555a87c8ee37a04ae2461d43b7d8c20ecd48a379eb58d43d516"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/native-provider-fallback-failures.test.ts",
+        "sha256": "b5e091630850df1a04087eaee543ce97a6d22b5711d1fb7c08637504834621a9"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/native-provider-fallback-helpers.ts",
+        "sha256": "ed0104ae1578e53e06e4acf7737e71907f13d65a04c901eb5f97accc0a2b0c92"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/native-provider-fallback-indexed.test.ts",
+        "sha256": "9492fac54dfdd731a221c7583b1f765c07bb646b469ad8523e1cddca30574248"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/native-provider-fallback-lifecycle.test.ts",
+        "sha256": "ab76a74ddb2e1a65e1e34f99df34eb00aa138036c06a3407e6095bcd2d45ff38"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/native-provider-fallback-lifetime.test.ts",
+        "sha256": "f439ad96eee8f41d3fc8f0cbfba59bd7a933387c6885384529e2291d69d760db"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/native-provider-fallback-media.test.ts",
+        "sha256": "ce526ca32ce33078ec8a0ed249d29e5beaea6d748df759ea1f5c17cfdbbd859a"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/native-provider-fallback-owners.test.ts",
+        "sha256": "176ec49f7afd137f7ba6943ad735e79a38aa9f91c39dd0de3d35131b6b64472d"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/native-provider-fallback-provider-errors.test.ts",
+        "sha256": "0b31c3d011e656fa70639975f61ec3d64b75c5665b979599157270fa4de36366"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/native-provider-fallback.test.ts",
+        "sha256": "a48c01b8693266b9c4611bcebcc2ef7a5628fac648215f895e42c8ef01532a10"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/provider-fallback-fixture-contract.test.ts",
+        "sha256": "dcd9eb05192f1358777a584419a307f32681ae0ed157727fe66a3fa3c1871795"
+      },
+      {
+        "path": "packages/agents/src/compression/diskProviderFallback.ts",
+        "sha256": "5756fe5aa036f581963dca41c4a795908a1769810dfa0622cc19bb02593f31fc"
+      },
+      {
+        "path": "packages/agents/src/compression/providerFallbackCandidate.ts",
+        "sha256": "263101d5d775b17734e528955c73d71c06556fbaa725bfe9b3f56ebf03987738"
+      }
+    ],
+    "manifest": "tmp/p5/w26-fallback-run-ap/followup-source.json"
+  },
+  "rawRoot": "tmp/p5/w26-fallback-run-ap/",
+  "accepted": [
+    {
+      "name": "final-native-provider-fallback",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/native-provider-fallback.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 5588,
+      "pid": 5622,
+      "start": "2026-10-21T23:08:29.052Z",
+      "end": "2026-10-21T23:08:29.864Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/final-native-provider-fallback.log",
+      "logHash": "302be2faf314ccdc19fcd470fd67b5e2550c3b5690764c430b195ccca0b4e6ba",
+      "summary": [
+        " 1 pass",
+        " 0 fail",
+        " 7 expect() calls",
+        "Ran 1 test across 1 file. [576.00ms]"
+      ]
+    },
+    {
+      "name": "final-native-provider-fallback-contracts",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/native-provider-fallback-contracts.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 5588,
+      "pid": 5803,
+      "start": "2026-10-21T23:08:30.121Z",
+      "end": "2026-10-21T23:08:47.857Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/final-native-provider-fallback-contracts.log",
+      "logHash": "ff8cd5b12daad817380a7b934dfd94457f8e0ad15aacfcfd1f47766dcc80df82",
+      "summary": [
+        " 9 pass",
+        " 0 fail",
+        " 43 expect() calls",
+        "Ran 9 tests across 1 file. [17.49s]"
+      ]
+    },
+    {
+      "name": "final-native-provider-fallback-owners",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/native-provider-fallback-owners.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 5588,
+      "pid": 6978,
+      "start": "2026-10-21T23:08:48.094Z",
+      "end": "2026-10-21T23:09:23.422Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/final-native-provider-fallback-owners.log",
+      "logHash": "5625ee9b688fbda88d589759c18edbf82601db4be9e456ff69450544122e0b95",
+      "summary": [
+        " 4 pass",
+        " 0 fail",
+        " 24 expect() calls",
+        "Ran 4 tests across 1 file. [35.09s]"
+      ]
+    },
+    {
+      "name": "final-native-provider-fallback-failures",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/native-provider-fallback-failures.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 5588,
+      "pid": 8443,
+      "start": "2026-10-21T23:09:23.622Z",
+      "end": "2026-10-21T23:09:25.233Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/final-native-provider-fallback-failures.log",
+      "logHash": "fb9cfbe9833e04f5a677ec08a837409bce9a211e58819f57454d4183e00040f5",
+      "summary": [
+        " 3 pass",
+        " 0 fail",
+        " 23 expect() calls",
+        "Ran 3 tests across 1 file. [1361.00ms]"
+      ]
+    },
+    {
+      "name": "final-native-provider-fallback-lifetime",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/native-provider-fallback-lifetime.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 5588,
+      "pid": 8533,
+      "start": "2026-10-21T23:09:25.439Z",
+      "end": "2026-10-21T23:09:45.200Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/final-native-provider-fallback-lifetime.log",
+      "logHash": "42991d9e053a6225a2e2274e8de88e7cff37644f0d5de64ddfe846d8acc1d420",
+      "summary": [
+        "FALLBACK_LIFETIME {\"size\":512,\"reads\":1537,\"samples\":12,\"peak\":0,\"final\":0}",
+        "FALLBACK_LIFETIME {\"size\":8192,\"reads\":24577,\"samples\":192,\"peak\":0,\"final\":0}",
+        " 2 pass",
+        " 0 fail",
+        " 212 expect() calls",
+        "Ran 2 tests across 1 file. [19.50s]"
+      ]
+    },
+    {
+      "name": "final-native-provider-fallback-indexed",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/native-provider-fallback-indexed.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 5588,
+      "pid": 9346,
+      "start": "2026-10-21T23:09:45.401Z",
+      "end": "2026-10-21T23:09:54.411Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/final-native-provider-fallback-indexed.log",
+      "logHash": "84b88f9d67b4678520e75fc43e4fa46ebbcebab2d7ab98cf725a6a2c7a04a172",
+      "summary": [
+        "FALLBACK_INDEXED {\"size\":40,\"selected\":121,\"notes\":\"total includes linear token, summary and retained-row passes; indexed queries deny payload\"}",
+        "FALLBACK_INDEXED {\"size\":4000,\"selected\":12001,\"notes\":\"total includes linear token, summary and retained-row passes; indexed queries deny payload\"}",
+        " 2 pass",
+        " 0 fail",
+        " 12 expect() calls",
+        "Ran 2 tests across 1 file. [8.77s]"
+      ]
+    },
+    {
+      "name": "final-native-provider-fallback-provider-errors",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/native-provider-fallback-provider-errors.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 5588,
+      "pid": 9708,
+      "start": "2026-10-21T23:09:54.660Z",
+      "end": "2026-10-21T23:10:08.432Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/final-native-provider-fallback-provider-errors.log",
+      "logHash": "20431675bc8cb7e168e012f08dab42ebecc1baf7fdf2af64582585db40262482",
+      "summary": [
+        " 2 pass",
+        " 0 fail",
+        " 14 expect() calls",
+        "Ran 2 tests across 1 file. [13.52s]"
+      ]
+    },
+    {
+      "name": "final-native-provider-fallback-lifecycle",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/native-provider-fallback-lifecycle.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 5588,
+      "pid": 10310,
+      "start": "2026-10-21T23:10:08.635Z",
+      "end": "2026-10-21T23:10:09.692Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/final-native-provider-fallback-lifecycle.log",
+      "logHash": "43667ee1a4b000351d1da69306c531de8f04752a50e91d67fdcdccf303345038",
+      "summary": [
+        " 2 pass",
+        " 0 fail",
+        " 16 expect() calls",
+        "Ran 2 tests across 1 file. [785.00ms]"
+      ]
+    },
+    {
+      "name": "final-native-provider-fallback-media",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/native-provider-fallback-media.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 5588,
+      "pid": 10375,
+      "start": "2026-10-21T23:10:09.900Z",
+      "end": "2026-10-21T23:10:10.826Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/final-native-provider-fallback-media.log",
+      "logHash": "7c68915c2634318051502f40d679d51669dbbe21433cd9060bc311ca425898dc",
+      "summary": [
+        " 1 pass",
+        " 0 fail",
+        " 10 expect() calls",
+        "Ran 1 test across 1 file. [665.00ms]"
+      ]
+    },
+    {
+      "name": "final-provider-fallback-disk",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/provider-fallback-disk.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 5588,
+      "pid": 10501,
+      "start": "2026-10-21T23:10:12.283Z",
+      "end": "2026-10-21T23:10:39.553Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/final-provider-fallback-disk.log",
+      "logHash": "a45c69d1a5bca9bd1037a0cf9b4b56fe104bdc20e49a9d051dbf5966adffff2f",
+      "summary": [
+        " 13 pass",
+        " 0 fail",
+        " 100 expect() calls",
+        "Ran 13 tests across 1 file. [27.02s]"
+      ]
+    },
+    {
+      "name": "final-provider-fallback-diagnostics",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/provider-fallback-diagnostics.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 5588,
+      "pid": 14613,
+      "start": "2026-10-21T23:10:39.777Z",
+      "end": "2026-10-21T23:10:40.802Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/final-provider-fallback-diagnostics.log",
+      "logHash": "b60998f92049f431c47c68deb32be3d2de269617f573d0309817c89f6bfa5fac",
+      "summary": [
+        " 1 pass",
+        " 0 fail",
+        " 8 expect() calls",
+        "Ran 1 test across 1 file. [786.00ms]"
+      ]
+    },
+    {
+      "name": "final-fallback-values-contracts",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/fallback-values-contracts.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 5588,
+      "pid": 14670,
+      "start": "2026-10-21T23:10:41.000Z",
+      "end": "2026-10-21T23:11:34.447Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/final-fallback-values-contracts.log",
+      "logHash": "b2a8ab0e8d240fcea3f467e3852b874d19a81ee159ef615552bc0a9b28405336",
+      "summary": [
+        " 16 pass",
+        " 0 fail",
+        " 166 expect() calls",
+        "Ran 16 tests across 1 file. [53.05s]"
+      ]
+    },
+    {
+      "name": "final-fallback-values-contracts.journal",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/fallback-values-contracts.journal.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 5588,
+      "pid": 16922,
+      "start": "2026-10-21T23:11:34.695Z",
+      "end": "2026-10-21T23:12:36.472Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/final-fallback-values-contracts.journal.log",
+      "logHash": "a6e3421835b96af97ad3718366a9888696b055a6b94a9fa51d7d5f36f1b10a1d",
+      "summary": [
+        " 4 pass",
+        " 0 fail",
+        " 46 expect() calls",
+        "Ran 4 tests across 1 file. [61.54s]"
+      ]
+    },
+    {
+      "name": "final-fallback-values.journal",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/fallback-values.journal.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 5588,
+      "pid": 17689,
+      "start": "2026-10-21T23:12:36.669Z",
+      "end": "2026-10-21T23:16:02.747Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/final-fallback-values.journal.log",
+      "logHash": "b6b3d53394b4c10564fa99fc736f23778325ec2133f61e9933c18755089afd16",
+      "summary": [
+        " 13 pass",
+        " 0 fail",
+        " 112 expect() calls",
+        "Ran 13 tests across 1 file. [205.83s]"
+      ]
+    },
+    {
+      "name": "final-fallback-values-live.journal",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/fallback-values-live.journal.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 5588,
+      "pid": 20508,
+      "start": "2026-10-21T23:16:02.960Z",
+      "end": "2026-10-21T23:16:38.368Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/final-fallback-values-live.journal.log",
+      "logHash": "b3e99160d92f38b9840dd5f12b26057e772496245bfdb862a0c9b3433438f6ec",
+      "summary": [
+        " 8 pass",
+        " 0 fail",
+        " 170 expect() calls",
+        "Ran 8 tests across 1 file. [35.17s]"
+      ]
+    },
+    {
+      "name": "final-fallback-values-media.journal",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/fallback-values-media.journal.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 5588,
+      "pid": 20984,
+      "start": "2026-10-21T23:16:38.562Z",
+      "end": "2026-10-21T23:16:54.561Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/final-fallback-values-media.journal.log",
+      "logHash": "63c46db05281a627f8095eeaaaa040c64e50c1d48d3d675d12190547a919d4c1",
+      "summary": [
+        " 4 pass",
+        " 0 fail",
+        " 38 expect() calls",
+        "Ran 4 tests across 1 file. [15.76s]"
+      ]
+    },
+    {
+      "name": "final-fallback-source-partial.journal",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/fallback-source-partial.journal.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 5588,
+      "pid": 21220,
+      "start": "2026-10-21T23:16:54.759Z",
+      "end": "2026-10-21T23:17:20.049Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/final-fallback-source-partial.journal.log",
+      "logHash": "8b71ef9b2c0f613536018d07c5260c1396436846428b88209c69dbeaef1471c7",
+      "summary": [
+        " 2 pass",
+        " 0 fail",
+        " 26 expect() calls",
+        "Ran 2 tests across 1 file. [24.93s]"
+      ]
+    },
+    {
+      "name": "final-truncation-value-publication.journal",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/truncation-value-publication.journal.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 5588,
+      "pid": 21749,
+      "start": "2026-10-21T23:17:21.693Z",
+      "end": "2026-10-21T23:18:21.206Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/final-truncation-value-publication.journal.log",
+      "logHash": "ca66469ab4f55675216565dbb2a6643b67871cf6f1d6b9ccefe93c25ee8b689a",
+      "summary": [
+        " 10 pass",
+        " 0 fail",
+        " 160 expect() calls",
+        "Ran 10 tests across 1 file. [59.17s]"
+      ]
+    },
+    {
+      "name": "final-journalStore.readerLifetime",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/journalStore.readerLifetime.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 5588,
+      "pid": 22877,
+      "start": "2026-10-21T23:18:21.431Z",
+      "end": "2026-10-21T23:18:22.128Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/final-journalStore.readerLifetime.log",
+      "logHash": "ae51c13463080a6bce4415e3ee2c7167447006e8b8f4be185453f09cf9169b80",
+      "summary": [
+        " 11 pass",
+        " 0 fail",
+        " 29 expect() calls",
+        "Ran 11 tests across 1 file. [445.00ms]"
+      ]
+    },
+    {
+      "name": "final-journalStore.readerCleanup",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/journalStore.readerCleanup.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 5588,
+      "pid": 22888,
+      "start": "2026-10-21T23:18:22.328Z",
+      "end": "2026-10-21T23:18:22.947Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/final-journalStore.readerCleanup.log",
+      "logHash": "b833cc5ff06ce27820e9756227442c0a8bb91c27dc1c65aef347ca4b5f239fb5",
+      "summary": [
+        " 3 pass",
+        " 0 fail",
+        " 20 expect() calls",
+        "Ran 3 tests across 1 file. [373.00ms]"
+      ]
+    },
+    {
+      "name": "final-groupWriter",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/groupWriter.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 5588,
+      "pid": 22903,
+      "start": "2026-10-21T23:18:23.146Z",
+      "end": "2026-10-21T23:18:23.598Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/final-groupWriter.log",
+      "logHash": "9d525067bd208ec17696b781bce3e56db373c9c20bc16763df45cbd955ea964c",
+      "summary": [
+        " 24 pass",
+        " 0 fail",
+        " 73 expect() calls",
+        "Ran 24 tests across 1 file. [221.00ms]"
+      ]
+    },
+    {
+      "name": "final-journalHistoryStore.publishDetached",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journalHistoryStore.publishDetached.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 5588,
+      "pid": 22917,
+      "start": "2026-10-21T23:18:23.797Z",
+      "end": "2026-10-21T23:18:25.978Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/final-journalHistoryStore.publishDetached.log",
+      "logHash": "43c8c12bca474f15dd79a9dd96ad9ce4ff2c2780ed5bf4efd18ed1b358459572",
+      "summary": [
+        " 23 pass",
+        " 0 fail",
+        " 75 expect() calls",
+        "Ran 23 tests across 1 file. [1.93s]"
+      ]
+    },
+    {
+      "name": "final-journalHistoryStore.detachedOwners",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journalHistoryStore.detachedOwners.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 5588,
+      "pid": 22945,
+      "start": "2026-10-21T23:18:26.182Z",
+      "end": "2026-10-21T23:18:30.215Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/final-journalHistoryStore.detachedOwners.log",
+      "logHash": "8ba5efad02b9c111b34b094822aa18b6add3111debf6f83da359fed32409683d",
+      "summary": [
+        " 13 pass",
+        " 0 fail",
+        " 21 expect() calls",
+        "Ran 13 tests across 1 file. [3.80s]"
+      ]
+    },
+    {
+      "name": "final-journal-annotated-summary-parity",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journal-annotated-summary-parity.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 5588,
+      "pid": 22990,
+      "start": "2026-10-21T23:18:30.452Z",
+      "end": "2026-10-21T23:19:13.853Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/final-journal-annotated-summary-parity.log",
+      "logHash": "8982bafcd28d982a7c63fec6f5a65a847e79abf835883a21bed088b385cd3831",
+      "summary": [
+        " 2 pass",
+        " 0 fail",
+        " 34 expect() calls",
+        "Ran 2 tests across 1 file. [43.14s]"
+      ]
+    },
+    {
+      "name": "fixture-observer-propagation",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/compression-provider-fallback-propagation.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 24539,
+      "pid": 24543,
+      "start": "2026-10-21T23:20:18.671Z",
+      "end": "2026-10-21T23:20:19.808Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/fixture-observer-propagation.log",
+      "logHash": "afa9c182f7671add8b16f9f9a1e92a2c1dea53cbfb69ba34d932efe39ab4e15f",
+      "summary": [
+        " 15 pass",
+        " 0 fail",
+        " 81 expect() calls",
+        "Ran 15 tests across 1 file. [877.00ms]"
+      ]
+    },
+    {
+      "name": "followup-provider-fallback-fixture-contract",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/provider-fallback-fixture-contract.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 25007,
+      "pid": 25013,
+      "start": "2026-10-21T23:20:52.808Z",
+      "end": "2026-10-21T23:20:53.779Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/followup-provider-fallback-fixture-contract.log",
+      "logHash": "e67a0a8bba53767c92ac63d61347ca21b27280e6704b3cac25245af89f13b2e3",
+      "summary": [
+        " 3 pass",
+        " 0 fail",
+        " 13 expect() calls",
+        "Ran 3 tests across 1 file. [731.00ms]"
+      ]
+    },
+    {
+      "name": "followup-fallback-values",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/fallback-values.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 25007,
+      "pid": 25031,
+      "start": "2026-10-21T23:20:53.992Z",
+      "end": "2026-10-21T23:21:09.348Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/followup-fallback-values.log",
+      "logHash": "daf629775c43fe320e19228f231aee7bfd364ca6bc019850a092095308c3e785",
+      "summary": [
+        " 9 pass",
+        " 0 fail",
+        " 137 expect() calls",
+        "Ran 9 tests across 1 file. [15.11s]"
+      ]
+    },
+    {
+      "name": "followup-gate-core-declarations",
+      "cwd": ".",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-b",
+        "packages/core/tsconfig.build.json",
+        "--emitDeclarationOnly"
+      ],
+      "driver": 25007,
+      "pid": 25199,
+      "start": "2026-10-21T23:21:09.573Z",
+      "end": "2026-10-21T23:21:13.171Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/followup-gate-core-declarations.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": []
+    },
+    {
+      "name": "followup-gate-agents-declarations",
+      "cwd": ".",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-b",
+        "packages/agents/tsconfig.build.json",
+        "--emitDeclarationOnly"
+      ],
+      "driver": 25007,
+      "pid": 25260,
+      "start": "2026-10-21T23:21:13.371Z",
+      "end": "2026-10-21T23:21:15.961Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/followup-gate-agents-declarations.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": []
+    },
+    {
+      "name": "followup-gate-core-types",
+      "cwd": ".",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "packages/core/tsconfig.noemit.json"
+      ],
+      "driver": 25007,
+      "pid": 25302,
+      "start": "2026-10-21T23:21:16.181Z",
+      "end": "2026-10-21T23:21:23.265Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/followup-gate-core-types.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": []
+    },
+    {
+      "name": "followup-gate-agents-types",
+      "cwd": ".",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "packages/agents/tsconfig.noemit.json"
+      ],
+      "driver": 25007,
+      "pid": 25429,
+      "start": "2026-10-21T23:21:23.463Z",
+      "end": "2026-10-21T23:21:33.624Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/followup-gate-agents-types.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": []
+    },
+    {
+      "name": "followup-gate-agents-bun-types",
+      "cwd": ".",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "packages/agents/tsconfig.test-bun.json",
+        "--types",
+        "node,bun"
+      ],
+      "driver": 25007,
+      "pid": 25589,
+      "start": "2026-10-21T23:21:33.823Z",
+      "end": "2026-10-21T23:21:39.640Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/followup-gate-agents-bun-types.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": []
+    },
+    {
+      "name": "followup-gate-lint",
+      "cwd": ".",
+      "command": [
+        "node_modules/.bin/eslint",
+        "--max-warnings",
+        "0",
+        "packages/agents/src/compression/diskProviderFallback.ts",
+        "packages/agents/src/compression/providerFallbackCandidate.ts",
+        "packages/agents/src/compression/__tests__/compression-value-fixture.ts",
+        "packages/agents/src/compression/__tests__/provider-fallback-fixture-contract.test.ts",
+        "packages/agents/src/compression/__tests__/native-provider-fallback-contracts.test.ts",
+        "packages/agents/src/compression/__tests__/native-provider-fallback-lifecycle.test.ts",
+        "packages/agents/src/compression/__tests__/native-provider-fallback-helpers.ts",
+        "packages/agents/src/compression/__tests__/native-provider-fallback-provider-errors.test.ts",
+        "packages/agents/src/compression/__tests__/native-provider-fallback-lifetime.test.ts",
+        "packages/agents/src/compression/__tests__/native-provider-fallback-media.test.ts",
+        "packages/agents/src/compression/__tests__/native-provider-fallback-indexed.test.ts",
+        "packages/agents/src/compression/__tests__/native-provider-fallback.test.ts",
+        "packages/agents/src/compression/__tests__/native-provider-fallback-owners.test.ts",
+        "packages/agents/src/compression/__tests__/native-provider-fallback-failures.test.ts",
+        "packages/agents/src/compression/__tests__/compression-provider-fallback-test-helpers.ts"
+      ],
+      "driver": 25007,
+      "pid": 25662,
+      "start": "2026-10-21T23:21:39.840Z",
+      "end": "2026-10-21T23:21:44.541Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/followup-gate-lint.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": []
+    },
+    {
+      "name": "followup-gate-format",
+      "cwd": ".",
+      "command": [
+        "node_modules/.bin/prettier",
+        "--check",
+        "packages/agents/src/compression/diskProviderFallback.ts",
+        "packages/agents/src/compression/providerFallbackCandidate.ts",
+        "packages/agents/src/compression/__tests__/compression-value-fixture.ts",
+        "packages/agents/src/compression/__tests__/provider-fallback-fixture-contract.test.ts",
+        "packages/agents/src/compression/__tests__/native-provider-fallback-contracts.test.ts",
+        "packages/agents/src/compression/__tests__/native-provider-fallback-lifecycle.test.ts",
+        "packages/agents/src/compression/__tests__/native-provider-fallback-helpers.ts",
+        "packages/agents/src/compression/__tests__/native-provider-fallback-provider-errors.test.ts",
+        "packages/agents/src/compression/__tests__/native-provider-fallback-lifetime.test.ts",
+        "packages/agents/src/compression/__tests__/native-provider-fallback-media.test.ts",
+        "packages/agents/src/compression/__tests__/native-provider-fallback-indexed.test.ts",
+        "packages/agents/src/compression/__tests__/native-provider-fallback.test.ts",
+        "packages/agents/src/compression/__tests__/native-provider-fallback-owners.test.ts",
+        "packages/agents/src/compression/__tests__/native-provider-fallback-failures.test.ts",
+        "packages/agents/src/compression/__tests__/compression-provider-fallback-test-helpers.ts"
+      ],
+      "driver": 25007,
+      "pid": 25714,
+      "start": "2026-10-21T23:21:44.739Z",
+      "end": "2026-10-21T23:21:45.136Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/followup-gate-format.log",
+      "logHash": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+      "summary": []
+    },
+    {
+      "name": "followup-gate-graph",
+      "cwd": ".",
+      "command": [
+        "bun",
+        "scripts/check-affected-test-shards.ts"
+      ],
+      "driver": 25007,
+      "pid": 25721,
+      "start": "2026-10-21T23:21:45.332Z",
+      "end": "2026-10-21T23:21:47.737Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/followup-gate-graph.log",
+      "logHash": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67",
+      "summary": []
+    },
+    {
+      "name": "followup-gate-audit",
+      "cwd": ".",
+      "command": [
+        "bun",
+        "scripts/test-audit/scan.ts",
+        "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-fallback-run-ap/followup-audit"
+      ],
+      "driver": 25007,
+      "pid": 25753,
+      "start": "2026-10-21T23:21:47.935Z",
+      "end": "2026-10-21T23:21:51.113Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/followup-gate-audit.log",
+      "logHash": "93c46b45d90c2b0ed07437c22db12d63424451b8ac65a8bb0625b4c7bbf3e863",
+      "summary": []
+    }
+  ],
+  "totals": {
+    "files": 27,
+    "pass": 200,
+    "fail": 0,
+    "skip": 0,
+    "assertions": 1670
+  },
+  "gates": 9,
+  "reuse": {
+    "sourceBridges": [
+      {
+        "name": "final-native-provider-fallback",
+        "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+        "finalSourceHash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+        "differences": [
+          "packages/agents/src/compression/__tests__/compression-provider-fallback-test-helpers.ts"
+        ],
+        "reason": "Only the fixture counter hook changed. Both importing consumers ran fresh; this executed file and all production bytes are identical."
+      },
+      {
+        "name": "final-native-provider-fallback-contracts",
+        "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+        "finalSourceHash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+        "differences": [
+          "packages/agents/src/compression/__tests__/compression-provider-fallback-test-helpers.ts"
+        ],
+        "reason": "Only the fixture counter hook changed. Both importing consumers ran fresh; this executed file and all production bytes are identical."
+      },
+      {
+        "name": "final-native-provider-fallback-owners",
+        "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+        "finalSourceHash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+        "differences": [
+          "packages/agents/src/compression/__tests__/compression-provider-fallback-test-helpers.ts"
+        ],
+        "reason": "Only the fixture counter hook changed. Both importing consumers ran fresh; this executed file and all production bytes are identical."
+      },
+      {
+        "name": "final-native-provider-fallback-failures",
+        "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+        "finalSourceHash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+        "differences": [
+          "packages/agents/src/compression/__tests__/compression-provider-fallback-test-helpers.ts"
+        ],
+        "reason": "Only the fixture counter hook changed. Both importing consumers ran fresh; this executed file and all production bytes are identical."
+      },
+      {
+        "name": "final-native-provider-fallback-lifetime",
+        "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+        "finalSourceHash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+        "differences": [
+          "packages/agents/src/compression/__tests__/compression-provider-fallback-test-helpers.ts"
+        ],
+        "reason": "Only the fixture counter hook changed. Both importing consumers ran fresh; this executed file and all production bytes are identical."
+      },
+      {
+        "name": "final-native-provider-fallback-indexed",
+        "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+        "finalSourceHash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+        "differences": [
+          "packages/agents/src/compression/__tests__/compression-provider-fallback-test-helpers.ts"
+        ],
+        "reason": "Only the fixture counter hook changed. Both importing consumers ran fresh; this executed file and all production bytes are identical."
+      },
+      {
+        "name": "final-native-provider-fallback-provider-errors",
+        "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+        "finalSourceHash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+        "differences": [
+          "packages/agents/src/compression/__tests__/compression-provider-fallback-test-helpers.ts"
+        ],
+        "reason": "Only the fixture counter hook changed. Both importing consumers ran fresh; this executed file and all production bytes are identical."
+      },
+      {
+        "name": "final-native-provider-fallback-lifecycle",
+        "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+        "finalSourceHash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+        "differences": [
+          "packages/agents/src/compression/__tests__/compression-provider-fallback-test-helpers.ts"
+        ],
+        "reason": "Only the fixture counter hook changed. Both importing consumers ran fresh; this executed file and all production bytes are identical."
+      },
+      {
+        "name": "final-native-provider-fallback-media",
+        "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+        "finalSourceHash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+        "differences": [
+          "packages/agents/src/compression/__tests__/compression-provider-fallback-test-helpers.ts"
+        ],
+        "reason": "Only the fixture counter hook changed. Both importing consumers ran fresh; this executed file and all production bytes are identical."
+      },
+      {
+        "name": "final-provider-fallback-disk",
+        "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+        "finalSourceHash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+        "differences": [
+          "packages/agents/src/compression/__tests__/compression-provider-fallback-test-helpers.ts"
+        ],
+        "reason": "Only the fixture counter hook changed. Both importing consumers ran fresh; this executed file and all production bytes are identical."
+      },
+      {
+        "name": "final-provider-fallback-diagnostics",
+        "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+        "finalSourceHash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+        "differences": [
+          "packages/agents/src/compression/__tests__/compression-provider-fallback-test-helpers.ts"
+        ],
+        "reason": "Only the fixture counter hook changed. Both importing consumers ran fresh; this executed file and all production bytes are identical."
+      },
+      {
+        "name": "final-fallback-values-contracts",
+        "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+        "finalSourceHash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+        "differences": [
+          "packages/agents/src/compression/__tests__/compression-provider-fallback-test-helpers.ts"
+        ],
+        "reason": "Only the fixture counter hook changed. Both importing consumers ran fresh; this executed file and all production bytes are identical."
+      },
+      {
+        "name": "final-fallback-values-contracts.journal",
+        "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+        "finalSourceHash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+        "differences": [
+          "packages/agents/src/compression/__tests__/compression-provider-fallback-test-helpers.ts"
+        ],
+        "reason": "Only the fixture counter hook changed. Both importing consumers ran fresh; this executed file and all production bytes are identical."
+      },
+      {
+        "name": "final-fallback-values.journal",
+        "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+        "finalSourceHash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+        "differences": [
+          "packages/agents/src/compression/__tests__/compression-provider-fallback-test-helpers.ts"
+        ],
+        "reason": "Only the fixture counter hook changed. Both importing consumers ran fresh; this executed file and all production bytes are identical."
+      },
+      {
+        "name": "final-fallback-values-live.journal",
+        "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+        "finalSourceHash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+        "differences": [
+          "packages/agents/src/compression/__tests__/compression-provider-fallback-test-helpers.ts"
+        ],
+        "reason": "Only the fixture counter hook changed. Both importing consumers ran fresh; this executed file and all production bytes are identical."
+      },
+      {
+        "name": "final-fallback-values-media.journal",
+        "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+        "finalSourceHash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+        "differences": [
+          "packages/agents/src/compression/__tests__/compression-provider-fallback-test-helpers.ts"
+        ],
+        "reason": "Only the fixture counter hook changed. Both importing consumers ran fresh; this executed file and all production bytes are identical."
+      },
+      {
+        "name": "final-fallback-source-partial.journal",
+        "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+        "finalSourceHash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+        "differences": [
+          "packages/agents/src/compression/__tests__/compression-provider-fallback-test-helpers.ts"
+        ],
+        "reason": "Only the fixture counter hook changed. Both importing consumers ran fresh; this executed file and all production bytes are identical."
+      },
+      {
+        "name": "final-truncation-value-publication.journal",
+        "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+        "finalSourceHash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+        "differences": [
+          "packages/agents/src/compression/__tests__/compression-provider-fallback-test-helpers.ts"
+        ],
+        "reason": "Only the fixture counter hook changed. Both importing consumers ran fresh; this executed file and all production bytes are identical."
+      },
+      {
+        "name": "final-journalStore.readerLifetime",
+        "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+        "finalSourceHash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+        "differences": [
+          "packages/agents/src/compression/__tests__/compression-provider-fallback-test-helpers.ts"
+        ],
+        "reason": "Only the fixture counter hook changed. Both importing consumers ran fresh; this executed file and all production bytes are identical."
+      },
+      {
+        "name": "final-journalStore.readerCleanup",
+        "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+        "finalSourceHash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+        "differences": [
+          "packages/agents/src/compression/__tests__/compression-provider-fallback-test-helpers.ts"
+        ],
+        "reason": "Only the fixture counter hook changed. Both importing consumers ran fresh; this executed file and all production bytes are identical."
+      },
+      {
+        "name": "final-groupWriter",
+        "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+        "finalSourceHash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+        "differences": [
+          "packages/agents/src/compression/__tests__/compression-provider-fallback-test-helpers.ts"
+        ],
+        "reason": "Only the fixture counter hook changed. Both importing consumers ran fresh; this executed file and all production bytes are identical."
+      },
+      {
+        "name": "final-journalHistoryStore.publishDetached",
+        "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+        "finalSourceHash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+        "differences": [
+          "packages/agents/src/compression/__tests__/compression-provider-fallback-test-helpers.ts"
+        ],
+        "reason": "Only the fixture counter hook changed. Both importing consumers ran fresh; this executed file and all production bytes are identical."
+      },
+      {
+        "name": "final-journalHistoryStore.detachedOwners",
+        "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+        "finalSourceHash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+        "differences": [
+          "packages/agents/src/compression/__tests__/compression-provider-fallback-test-helpers.ts"
+        ],
+        "reason": "Only the fixture counter hook changed. Both importing consumers ran fresh; this executed file and all production bytes are identical."
+      },
+      {
+        "name": "final-journal-annotated-summary-parity",
+        "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+        "finalSourceHash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+        "differences": [
+          "packages/agents/src/compression/__tests__/compression-provider-fallback-test-helpers.ts"
+        ],
+        "reason": "Only the fixture counter hook changed. Both importing consumers ran fresh; this executed file and all production bytes are identical."
+      }
+    ],
+    "freshConsumers": [
+      "packages/agents/src/compression/__tests__/compression-provider-fallback-propagation.test.ts",
+      "packages/agents/src/compression/__tests__/provider-fallback-fixture-contract.test.ts"
+    ],
+    "productionAndExecutedTestBytesMatch": true
+  },
+  "excluded": [
+    {
+      "name": "final-provider-fallback-fixture-contract",
+      "code": 0,
+      "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+      "log": "tmp/p5/w26-fallback-run-ap/final-provider-fallback-fixture-contract.log",
+      "logHash": "38f943ca9b8dce3faa702dd4a1cb686b950ba37a86307a7ce2562770f58492a9",
+      "reason": "Superseded by fresh source-bound consumer or gate execution"
+    },
+    {
+      "name": "final-compression-provider-fallback-propagation",
+      "code": 1,
+      "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+      "log": "tmp/p5/w26-fallback-run-ap/final-compression-provider-fallback-propagation.log",
+      "logHash": "d6f96ffc81b47b768eeb8869682b952e24e7268807284320acd43699a8fa47db",
+      "reason": "Stale fixture counter observed OneShotStrategy.compressDisk; actual producer calls prepareDisk. Original assertions and attempt policy unchanged; repaired full file passes 15 tests/81 assertions."
+    },
+    {
+      "name": "final-gate-core-declarations",
+      "code": 0,
+      "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+      "log": "tmp/p5/w26-fallback-run-ap/final-gate-core-declarations.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "reason": "Superseded by fresh source-bound consumer or gate execution"
+    },
+    {
+      "name": "final-gate-agents-declarations",
+      "code": 0,
+      "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+      "log": "tmp/p5/w26-fallback-run-ap/final-gate-agents-declarations.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "reason": "Superseded by fresh source-bound consumer or gate execution"
+    },
+    {
+      "name": "final-gate-core-types",
+      "code": 0,
+      "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+      "log": "tmp/p5/w26-fallback-run-ap/final-gate-core-types.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "reason": "Superseded by fresh source-bound consumer or gate execution"
+    },
+    {
+      "name": "final-gate-agents-types",
+      "code": 0,
+      "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+      "log": "tmp/p5/w26-fallback-run-ap/final-gate-agents-types.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "reason": "Superseded by fresh source-bound consumer or gate execution"
+    },
+    {
+      "name": "final-gate-agents-bun-types",
+      "code": 0,
+      "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+      "log": "tmp/p5/w26-fallback-run-ap/final-gate-agents-bun-types.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "reason": "Superseded by fresh source-bound consumer or gate execution"
+    },
+    {
+      "name": "final-gate-lint",
+      "code": 0,
+      "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+      "log": "tmp/p5/w26-fallback-run-ap/final-gate-lint.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "reason": "Superseded by fresh source-bound consumer or gate execution"
+    },
+    {
+      "name": "final-gate-format",
+      "code": 0,
+      "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+      "log": "tmp/p5/w26-fallback-run-ap/final-gate-format.log",
+      "logHash": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+      "reason": "Superseded by fresh source-bound consumer or gate execution"
+    },
+    {
+      "name": "final-gate-graph",
+      "code": 0,
+      "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+      "log": "tmp/p5/w26-fallback-run-ap/final-gate-graph.log",
+      "logHash": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67",
+      "reason": "Superseded by fresh source-bound consumer or gate execution"
+    },
+    {
+      "name": "final-gate-audit",
+      "code": 0,
+      "sourceHash": "e772b81b273fc1d9be34ce3696fca299b882d4594b75408c56a9d16a8e243b70",
+      "log": "tmp/p5/w26-fallback-run-ap/final-gate-audit.log",
+      "logHash": "93c46b45d90c2b0ed07437c22db12d63424451b8ac65a8bb0625b4c7bbf3e863",
+      "reason": "Superseded by fresh source-bound consumer or gate execution"
+    }
+  ],
+  "controls": [
+    {
+      "name": "control2-old-curated",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/native-provider-fallback.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 4243,
+      "pid": 4255,
+      "start": "2026-10-21T23:08:03.183Z",
+      "end": "2026-10-21T23:08:03.987Z",
+      "code": 1,
+      "signal": null,
+      "sourceHash": "45d63ddab66a10e404ff668f8131f980bb2fe8e78dbce1cb8813a1ab23b67376",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/control2-old-curated.log",
+      "logHash": "59af01ee29c1f3fa11f31fbfa9399c5d2c46c6858994adfd0315b64758108bfb",
+      "summary": [
+        " 0 pass",
+        " 1 fail",
+        " 1 expect() calls",
+        "Ran 1 test across 1 file. [548.00ms]"
+      ],
+      "path": "packages/agents/src/compression/diskProviderFallback.ts",
+      "originalHash": "5756fe5aa036f581963dca41c4a795908a1769810dfa0622cc19bb02593f31fc",
+      "restored": true,
+      "assertionFailures": 1
+    },
+    {
+      "name": "control2-retain-all-input",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/native-provider-fallback-lifetime.test.ts",
+        "--test-name-pattern",
+        "512",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 4243,
+      "pid": 4304,
+      "start": "2026-10-21T23:08:04.203Z",
+      "end": "2026-10-21T23:08:05.244Z",
+      "code": 1,
+      "signal": null,
+      "sourceHash": "01dcf5b48f15944584314812c929b77e8b370d24b5c3b5e2e90a3ffdb170667c",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/control2-retain-all-input.log",
+      "logHash": "2813b473cf9b4be4bb688c1779fdd3b753570e1989ae1a97f76e43f2b3921023",
+      "summary": [
+        " 0 pass",
+        " 1 fail",
+        " 1 expect() calls",
+        "Ran 1 test across 1 file. [789.00ms]"
+      ],
+      "path": "packages/agents/src/compression/diskProviderFallback.ts",
+      "originalHash": "5756fe5aa036f581963dca41c4a795908a1769810dfa0622cc19bb02593f31fc",
+      "restored": true,
+      "assertionFailures": 1
+    },
+    {
+      "name": "control2-wrong-source-ordinal",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/native-provider-fallback-owners.test.ts",
+        "--test-name-pattern",
+        "65 rows",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 4243,
+      "pid": 4370,
+      "start": "2026-10-21T23:08:05.445Z",
+      "end": "2026-10-21T23:08:06.638Z",
+      "code": 1,
+      "signal": null,
+      "sourceHash": "795052e3012ed7cc7dece740a0d98cee49064705d284b6a7d5f1f542443f7fda",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/control2-wrong-source-ordinal.log",
+      "logHash": "0ee397f77d7aece7633e63531cafcd9120052d79b2655cc327a9730909ff8459",
+      "summary": [
+        " 0 pass",
+        " 1 fail",
+        " 2 expect() calls",
+        "Ran 1 test across 1 file. [938.00ms]"
+      ],
+      "path": "packages/agents/src/compression/diskProviderFallback.ts",
+      "originalHash": "5756fe5aa036f581963dca41c4a795908a1769810dfa0622cc19bb02593f31fc",
+      "restored": true,
+      "assertionFailures": 1
+    },
+    {
+      "name": "control2-summary-priority",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/native-provider-fallback-contracts.test.ts",
+        "--test-name-pattern",
+        "prefers",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 4243,
+      "pid": 4435,
+      "start": "2026-10-21T23:08:06.836Z",
+      "end": "2026-10-21T23:08:07.625Z",
+      "code": 1,
+      "signal": null,
+      "sourceHash": "3c60417cf9f322b8f1118c106e10f47485c1b3d18efc14ee05178bf16064cafb",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/control2-summary-priority.log",
+      "logHash": "43f246bafc53d6c7aa96eb6e7e884ff4e714844e6f2807a65c364079eb52cbd5",
+      "summary": [
+        " 0 pass",
+        " 1 fail",
+        " 5 expect() calls",
+        "Ran 1 test across 1 file. [553.00ms]"
+      ],
+      "path": "packages/agents/src/compression/diskProviderFallback.ts",
+      "originalHash": "5756fe5aa036f581963dca41c4a795908a1769810dfa0622cc19bb02593f31fc",
+      "restored": true,
+      "assertionFailures": 1
+    },
+    {
+      "name": "control2-wrap-identity",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/native-provider-fallback-failures.test.ts",
+        "--test-name-pattern",
+        "row-65",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 4243,
+      "pid": 4488,
+      "start": "2026-10-21T23:08:07.824Z",
+      "end": "2026-10-21T23:08:08.781Z",
+      "code": 1,
+      "signal": null,
+      "sourceHash": "3f4b477a47291a6d080a5d84d6c886616914b813098983aa172b058c84e647db",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-fallback-run-ap/control2-wrap-identity.log",
+      "logHash": "461f61b845fa8027a54ce9e76c874a20a3e475949b91b6898646a313a0075b01",
+      "summary": [
+        " 0 pass",
+        " 1 fail",
+        " 1 expect() calls",
+        "Ran 1 test across 1 file. [718.00ms]"
+      ],
+      "path": "packages/agents/src/compression/diskProviderFallback.ts",
+      "originalHash": "5756fe5aa036f581963dca41c4a795908a1769810dfa0622cc19bb02593f31fc",
+      "restored": true,
+      "assertionFailures": 1
+    }
+  ],
+  "preservation": {
+    "count": 1204,
+    "failures": [],
+    "declarations": 306,
+    "memory": "92b20147d09588700e203951849a9a84a2aaade0aa6d006c4b395ba84c7fb2bb",
+    "expectedMemory": "92b20147d09588700e203951849a9a84a2aaade0aa6d006c4b395ba84c7fb2bb",
+    "memoryMatches": true
+  },
+  "callerInventory": {
+    "scope": "Tracked packages/agents/src/compression and packages/core/src/services/history production TypeScript, excluding tests and declarations. Bounded constructor/caller inventory only; not global allocation closure.",
+    "outputs": [
+      {
+        "path": "tmp/p5/w26-fallback-run-ap/production-constructors.txt",
+        "sha256": "18aefc6b71b7a9ca3551e43410557e6ab4c58977914b24d532366a189513a6a5"
+      },
+      {
+        "path": "tmp/p5/w26-fallback-run-ap/production-callers.txt",
+        "sha256": "e0c66da8f074285c70a9f6d8129610f6b5d7790947661f5062d20b2059678401"
+      }
+    ],
+    "sourceHash": "ae0806fbd998051d809c6b0e4d14d5d616909e66485deee13d94867af20acdd4",
+    "remainingNativeOwner": "pendingContextWindowEnforcement.ts:450 -> toolResultTruncator.ts:202 -> toolResponseDiskRanking.ts:60",
+    "publicNormalization": "provider-curated-stream.ts:466 remains a native request allocation; actual public ChatSession RED is retained in the purge receipt."
+  },
+  "retainedRedReferences": [
+    "project-plans/issue854/recovery-2026-10-19/recovered-control/W26-SOURCE-BOUND-PURGE-PROOF.json",
+    "project-plans/issue854/recovery-2026-10-19/recovered-control/W26-SOURCE-BOUND-ANNOTATED-APPEND-PARITY-PROOF.json"
+  ],
+  "testCommit": "d38209ca792bf663b5609f2a0a6ab6c2fc78692b",
+  "audit": {
+    "touchedFindings": [
+      "packages/agents/src/compression/__tests__/native-provider-fallback-contracts.test.ts\t91\tindexed native fallback value and summary contracts > (unnamed)\tSELF_CONFIRMING\texpected 'before' computed from the same call under test: await compressionValueDigest(history.streamRawHistory())\tagents",
+      "packages/agents/src/compression/__tests__/native-provider-fallback-lifecycle.test.ts\t114\tborrowed native fallback version lifecycle > preserves numeric-zero ownership when the minimum surviving turn starts at zero\tSELF_CONFIRMING\texpected 'bytes' computed from the same call under test: statSync(owned.session.path).size\tagents",
+      "packages/agents/src/compression/__tests__/native-provider-fallback-media.test.ts\t46\tindexed native fallback media compensation > preserves removed media and the original finalization error through acknowledged rollback\tSELF_CONFIRMING\texpected 'before' computed from the same call under test: await compressionValueDigest(history.streamRawHistory())\tagents",
+      "packages/agents/src/compression/__tests__/native-provider-fallback-media.test.ts\t49\tindexed native fallback media compensation > preserves removed media and the original finalization error through acknowledged rollback\tSELF_CONFIRMING\texpected 'tokens' computed from the same call under test: history.getTotalTokens()\tagents",
+      "packages/agents/src/compression/__tests__/native-provider-fallback-media.test.ts\t15\tindexed native fallback media compensation > preserves removed media and the original finalization error through acknowledged rollback\tDUP_ASSERT\t2x identical assertion: expect(await fixture.reserved(reference.contentId)).toBe(true)\tagents",
+      "packages/agents/src/compression/__tests__/native-provider-fallback-failures.test.ts\t51\tnative indexed provider fallback failures > preserves the original row-65 admission error and old mirror, then continues on the same writer\tSELF_CONFIRMING\texpected 'before' computed from the same call under test: await compressionValueDigest(history.streamRawHistory())\tagents",
+      "packages/agents/src/compression/__tests__/native-provider-fallback-failures.test.ts\t54\tnative indexed provider fallback failures > preserves the original row-65 admission error and old mirror, then continues on the same writer\tSELF_CONFIRMING\texpected 'tokens' computed from the same call under test: history.getTotalTokens()\tagents",
+      "packages/agents/src/compression/__tests__/native-provider-fallback-failures.test.ts\t96\tnative indexed provider fallback failures > restores the held version and baseline after provider result rejection following installation\tSELF_CONFIRMING\texpected 'before' computed from the same call under test: await compressionValueDigest(history.streamRawHistory())\tagents"
+    ],
+    "classification": "Seven SELF_CONFIRMING labels compare public state before and after a no-op or failed publication; one DUP_ASSERT checks a media reservation before failure and after compensation. All remain listed, with no suppression.",
+    "cases": [
+      "contracts: unchanged no-op live-history digest",
+      "lifecycle: unchanged journal file length on no-op",
+      "media: restored history digest and token count after exact-error finalization rejection; reservation remains held before and after rollback",
+      "failures: restored digest and token count after row65 admission failure, then successful continuation; restored digest after installed-result rejection"
+    ]
+  },
+  "pids": {
+    "all": [
+      5585,
+      5586,
+      25005,
+      25006,
+      37828,
+      37975,
+      5588,
+      10375,
+      25007,
+      25199,
+      22945,
+      8443,
+      60205,
+      25260,
+      45205,
+      21220,
+      1330,
+      1367,
+      95873,
+      22917,
+      37906,
+      47048,
+      25013,
+      25589,
+      24162,
+      95311,
+      25662,
+      93128,
+      24226,
+      4243,
+      4435,
+      89477,
+      49031,
+      5803,
+      86725,
+      10501,
+      51611,
+      84855,
+      43973,
+      17689,
+      21706,
+      10430,
+      45805,
+      14613,
+      25031,
+      5622,
+      22888,
+      40996,
+      20984,
+      93385,
+      4488,
+      9346,
+      89272,
+      89314,
+      25721,
+      25429,
+      22903,
+      8533,
+      16922,
+      10310,
+      95729,
+      4255,
+      333,
+      347,
+      49107,
+      93151,
+      92984,
+      24173,
+      23866,
+      22990,
+      23713,
+      87263,
+      23656,
+      464,
+      22877,
+      4370,
+      21749,
+      6978,
+      25302,
+      89215,
+      20508,
+      23981,
+      43860,
+      23768,
+      89670,
+      95688,
+      89152,
+      9708,
+      25714,
+      25753,
+      24050,
+      4304,
+      14670,
+      24539,
+      24543,
+      94384
+    ],
+    "live": []
+  },
+  "productionMatchesHead": true,
+  "red": {
+    "original": "red-provider.log: real FakeProvider failure followed by denied curatedCandidate creation at c45a14cf7. Final authoring changed token expectations and the awaited promise matcher, so exact final-byte RED is not claimed.",
+    "finalOldCandidateControl": "control2-old-curated.log fails the actual real-handler no-file matcher.",
+    "authoringExclusions": [
+      "cold prompt initialization and unprepared invocation",
+      "initial empty-anchor/token expectations",
+      "spy result retention in lifetime harness",
+      "429 expected three rather than the existing two groups of three",
+      "strict-type input annotations",
+      "control parser initially missed Bun promise-resolution matcher text",
+      "four stale bookkeeping observer failures retained in accept/final logs"
+    ]
+  },
+  "decisions": {
+    "implementation": "Borrow checkpoint.compressionInput.rows through awaited applyResult; shared top-down and summary selection; async readRow/sourceOrdinalAt awaited at publication. Explicit old checkpoint shapes still copy directly through curatedCandidate until Phase 9. No native row/index/span candidate files.",
+    "semantics": "Current raw source ordinals and owner IDs survive invalid-AI holes and numeric zero. First reason-marked summary supersedes earlier ordinary/legacy markers. hasPendingRows is false. The held checkpoint remains live through awaited callback and retires admitted iterators on error.",
+    "proof": "Real CompressionHandler exhausted FakeProvider and external status 400/429 rejection; independent old/eager 512/8192 values, successful tokens, context ranges and durable mirrors; 3/64/65/5000 owners; complete original nine-MiB and new greater-than-nine-MiB values; original ownership bounds; row65 exact admission error and same-writer continuation, result rejection, cancellation, media compensation, old pin/fork/compaction and no-op file bytes.",
+    "anchors": "Real handler starts with cacheAnchorSeq 1 and requires zero after prefix removal. No-op sizes 1/2/8 retain anchor 1; row65 and installed-result rejection restore anchor 1. Independent fallback 512/8192 does not add a nonempty-anchor assertion. Unchanged truncation-value-publication.journal and journal-annotated-summary-parity retain their separate summary/frontier/nonempty-anchor proof, preserving 334e227f4.",
+    "cost": "No-op/count/source-rank queries deny full ROW decoding at 40/4000. readRow operation totals 121/12001 include linear token, summary and retained conversion. No physical positional-read or cold/warm-cache measurement is added. Existing 65536-byte per-cache caps remain. WeakRef peaks zero/final zero at512/8192 under unchanged bound two do not establish whole-heap or aggregate cache/pin capacity.",
+    "limits": "Original groupWriter physical-poison tests pass, without a new fallback-specific physical I/O identity fault. Below-provider-preparation proofs do not establish full public ChatSession no-file behavior, normalized wire parity or all-provider metadata projection. Graph validation is not affected-shard execution. No full-repository acceptance claim.",
+    "remaining": "PendingContextWindowEnforcer -> truncateLargestToolResponses -> withToolResponseRanking remains a native-reachable disk owner. Absent-policy density and explicit disk APIs remain native-capable. Public ProviderNormalizationDisk RED; Phase6 request/body/key/message/tokenizer spools/guards; structural/global ranking and pending/stale capacity; normalization/cache/tails/ranges/semantic generations; LENS/live bytes; Phase8 shared reservations; whole-heap/cache/pin capacity; W23/W25/cutover and cold Mistral remain open. #3917 stays separate RED with no rerun/retry/suppression. The two explicit-old durable replay failures remain recorded and unresolved. Defaults and Phase9 unchanged.",
+    "review": "review skipped per Andrew 2026-10-09",
+    "preservation": "No cleanup, .llxprt edits/staging, raw recovery/declaration staging, OCR, push, merge, default change or enforcement weakening."
+  }
+}
