@@ -1,3 +1,15 @@
+Old-backend diagnostic: the retained 512-row zero/duplicate-chronology probe has 1025 live rows, but its mirror contains only the original 512 content records and replay returns 512. The suffix is absent before replay, so resolver first-chronology lookup alone does not explain this failure. The exact upstream delivery trigger remains unconfirmed; no legacy code was changed. Raw probe JSON/log are in the new evidence directory.
+
+# Keep summary annotations outside the standing density cap, 2026-10-21
+
+Production `334e227f4` follows an observed current-source native RED and independent 512/8192 failures. Standing metadata contains only the latest 1024 density/mutation spans, preserving the original cap and merge ordering. Summary start/end values live in version facts and are queried independently, because old public-array range semantics rederive them from live rows regardless of standing-window eviction. Native candidate accumulation explicitly excludes summary arrays. No cached ROW metadata, full-history fallback scan, raised limit or original-fixture reduction was introduced.
+
+The immutable array oracle preserves source chronology and current-owner/reference-body semantics. Nonempty cache-anchor positions and body digests are checked on live history and two reopened mirrors. Existing native final-metadata fanout remains unchanged. The original mixed file improves from 7 pass/3 fail to 8 pass/2 fail; both remaining failures are explicit-old durable replay before native comparison, so full-suite green is not claimed. Legacy replay stays read-only and out of this implementation increment.
+
+[The supplement](recovery-2026-10-19/recovered-control/W26-SOURCE-BOUND-ANNOTATED-APPEND-PARITY-PROOF.json) records source-matching gates, restored controls and preservation. Historical native files without the new fact family and per-origin summary scalar ranges are not newly proved. Provider fallback/curatedCandidate, Phase 6 normalization/spools/guards, ranking/capacity/accounting, aggregate heap/cache/pins, #3917, default/cutover and Phase 9 remain separate. No new producer feature, cleanup, OCR, push or merge. Review skipped per Andrew 2026-10-09.
+
+---
+
 # Annotated append follow-up, 2026-10-21
 
 Production `fc1bd78a75925e014ebf1dcade37f432cb6f7f68` uses an explicit streamed-append marker and streams the new ordinal suffix into mirrors. Prepared groups accept accompanying setState edits, so mirror primary identity shares the row/annotation trailer. Other accompanying edits fail immediately. The history adapter registers only the annotation-window key for mirror metadata transfer; file-local fact and format metadata stay local. Clearing an absent registered key streams the target metadata trie and is not claimed logarithmic. No source owner is replaced with a publication-wide unowned owner.

@@ -1,3 +1,18 @@
+# Annotated append summary parity supplement, 2026-10-21
+
+[W26-SOURCE-BOUND-ANNOTATED-APPEND-PARITY-PROOF.json](W26-SOURCE-BOUND-ANNOTATED-APPEND-PARITY-PROOF.json) binds `334e227f4`, source `b09025fc542cd20bfacd8bece435fea32ed4705b99a49fbfb8dfeedd314f23b5`, 23 complete passing serial files/167 passes/11260 assertions and 12 scoped gates. Original mixed parity remains enabled at 8 pass/2 explicit-old replay failures.
+
+| Contract | Evidence |
+| --- | --- |
+| Original native8192 RED to PASS | original-native8192-red.log reproduces missing compressed [1,2] on e6bc899bf/fc1bd78a7; unchanged original test passes in final complete mixed run |
+| Independent summary, standing window, history and cache anchors | journal-annotated-summary-parity at 512/8192: manual array, old live oracle, full native/two reopened mirror digests, nonempty anchor index/seq/body digest, exact standing-only metadata bytes |
+| Summary count independent of density cap | journal-context-span-lifecycle: 1100 summaries plus append, prefix pop, clone, compaction, clear |
+| Existing bounds and failure identity | Complete original annotated append, owners, lifetime/failures, density, publication and #3919 reader lifetime/cleanup receipts |
+| Falsification | Four restored controls: drop-summary, latestwindow-wrongcut, rawlabel-seq, wrongcacheanchor; actual expectation failures |
+| Retained RED and scope | Old duplicate-chronology replay at 512/8192, no legacy fix or skip. Provider fallback, Phase 6 normalization, capacity/accounting/heap and #3917 stay separate |
+
+---
+
 # Native annotated append publication proof, 2026-10-21
 
 [W26-SOURCE-BOUND-ANNOTATED-APPEND-PROOF.json](W26-SOURCE-BOUND-ANNOTATED-APPEND-PROOF.json) binds production `fc1bd78a75925e014ebf1dcade37f432cb6f7f68`, source `e9400f8c7eb3e7387781deb1b660cbf56420d201fa482976199f5034fdf0971d`, 18 complete serial files/143 passes/11101 assertions, twelve scoped gates and five restored controls. Raw evidence: `tmp/p5/w26-append-run-an/`. Broader parity retains three earlier-source RED cases and is excluded from the green totals.
