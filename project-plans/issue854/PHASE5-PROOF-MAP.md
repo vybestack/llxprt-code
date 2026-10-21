@@ -1,5 +1,17 @@
 # Phase 5 proof map
 
+## Current Mistral observe-tail checkpoint
+
+Starting HEAD `2be851cc3`. [PHASE5-MISTRAL-TAIL-PROOF.json](PHASE5-MISTRAL-TAIL-PROOF.json) binds 13 scoped source/test paths, serial acceptance and restored controls. The existing indexed request owns the pin, source and emitted affected-row view; `withMistral` adds no normalization adapter. New observed mappings retain only pending raw IDs, query native namespace 3 and preserve raw-owned VALUE validation. Actual emitted calls, not raw tail insertion order, determine assignment.
+
+This is the complete pinned request's observe mapping, with three explicitly activated slots. It is not a fresh mapper over a filtered range. The selection test shows salt 1 for the complete request versus salt 0 after its first collision holder is removed. Earlier journal R1 targets already have native mappings, so a pending duplicate cannot assign them again. Persistent middle insertion/removal retains the rebuild policy. Lazy empty/unobserved-response conversion mappings and actual provider conversion-order proof are **not implemented** in this checkpoint.
+
+Both outer backends pass all 5000 unchanged frozen input/output hashes against the old full normalizer and actual tools Mistral mapper. Final acceptance: 90 passes, zero failures/skips, 64,302 assertions, 24 isolated serial Bun processes over 12 files. Seven scoped gates pass. Callback close/failure/abort ownership, concurrent pending-view isolation, native pop/rebuild/clone/compaction and raw-owner corruption are covered. The duplicate native read now drains buffered writes before opening a group read whose bound includes them; removing that fix reproduces EOF.
+
+Preparation at 40/4000/100000 rows takes 22/36/46 heads; first tail mapping 7/8/8, duplicate 2/2/2 and selected native mapping 3/4/4. No journal payload block/body is read. Calls number 40/4000/4000; prior 100000-call construction capacity remains unproved. The all-history used-set mutation takes 18,154 heads against `<150`; wrong collision ownership and wrong raw ownership also fail. All five controls restore with cmp/hash. Read budgets do not prove retained heap. Three `DUP_ASSERT` reports remain across distinct boundaries; no prohibited touched audit finding is accepted.
+
+The first control failed the intended mapped-ID assertions but its recognizer searched an elided source line. Its original log and restoration remain; it was not rerun. Initial missing API, missing measured candidate, syntax/lint and EOF receipts are separate from final acceptance. Unchanged codec #3917 remains RED, 39 passes/one failure/536 assertions, with no green retry. Provider routing/default, settings/summary/LENS, Kimi fallback digits/ranks and holder remeasurement, full heap, range CRC and W26/W23/W25 dependencies remain open. See [PHASE5-STATUS.md](PHASE5-STATUS.md) and [PHASE5-MISTRAL-DECISIONS.md](PHASE5-MISTRAL-DECISIONS.md). Review skipped per Andrew 2026-10-09.
+
 ## Current request-only Kimi last-eligible increment
 
 Starting HEAD `c96764e45`; implementation `2c421e8605379403b5a4eb6d87a38d4b22189411`. [PHASE5-KIMI-TAIL-PROOF.json](PHASE5-KIMI-TAIL-PROOF.json) binds the source boundary, native/request differentials, final gates and restored controls. The request snapshot now exposes mapped ID, owned name, zero-based ordinal and eligible count over its existing affected-row/tail view. The writer and request queries share emitted `RowOccurrences`; native tree prefixes plus affected-row eligible deltas determine ranks without all-call enumeration.

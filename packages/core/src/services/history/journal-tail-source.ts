@@ -112,6 +112,11 @@ export class JournalTailSource implements JournalResponseSource {
 
   readonly isTail = (label: bigint): boolean => label >= this.firstLabel;
 
+  hasPendingId(rawId: string): boolean {
+    this.snapshot.requireOpen();
+    return this.overlay.has(rawId);
+  }
+
   affectedJournalLabels(): readonly bigint[] {
     const labels = new Set<bigint>();
     for (const [id, fact] of this.overlay) {

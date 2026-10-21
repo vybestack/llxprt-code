@@ -55,3 +55,11 @@ Expose mapped digit corrections and raw-ID holder streams now. Keep request-only
 The actual converter and old mapper supply independent expectations. Controls reject wrong last eligible/name/ordinal, wrong written uses and retaining all IDs. Read-budget rejection is not a retained-heap result. Preserve frozen inputs and all initial failure receipts. See [PHASE5-KIMI-DECISIONS.md](PHASE5-KIMI-DECISIONS.md) for field layouts and lifecycle behavior.
 
 Review skipped per Andrew 2026-10-09. No cleanup, .llxprt edit/staging, unrelated declaration/recovery staging, OCR, push or merge.
+
+## 2026-10-20: Mistral observe-tail checkpoint
+
+Continue native observe mappings through the existing indexed request's source and emitted-row view. Use namespace 3 plus an overlay containing only new pending raw IDs. Share emitted call metadata with the Kimi path, sorting row-local calls by part/unit/block before assigning salts. Preserve pass-through collisions, unnamed/all-speaker eligibility and raw-ID-owned VALUE validation.
+
+Treat this as complete-request observe mapping only. A journal R1 target was already observed before a later pending call arrives, so its native mapping wins. Tail suffixes do not insert new first observations before journal holders. Persistent middle insertion/removal still rebuilds; filtered request selections need a fresh mapper and cannot reuse full-request salts. Do not silently generalize this into a generic mapping cache or a request refill that mutates history.
+
+The independent frozen differential exposed read-back of a native mapping while a logical group bound included buffered, unwritten records. Drain before reading an existing mapping. The restored control reproduces EOF without that drain. Keep lazy conversion-time fallback mapping separate and unfinished rather than claiming that observe facts implement empty/unobserved-response resolution. No provider route, settings generation, summary/LENS, length, heap or CRC completion is implied. W26/W23/W25 dependencies remain open. See PHASE5-MISTRAL-TAIL-PROOF.json for source hashes, final gates, RED receipts and cmp/hash restorations. Review skipped per Andrew 2026-10-09.

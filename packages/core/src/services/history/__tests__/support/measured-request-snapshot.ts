@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import {
+  generateDeterministicMistralId,
   normalizeToAnthropicToolId,
   normalizeToOpenAIToolId,
 } from '@vybestack/llxprt-code-tools';
@@ -62,6 +63,7 @@ export async function measuredRequestSnapshot(
       {
         hasher: sha256KeyHash,
         occurrenceSpace: 'source-with-normalized',
+        mistralCandidate: generateDeterministicMistralId,
         normalizers: {
           openai: normalizeToOpenAIToolId,
           anthropic: normalizeToAnthropicToolId,

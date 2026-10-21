@@ -18,6 +18,8 @@ import type { JournalResponsePlan } from './journal-response-plan.js';
 import { assertRowIndex } from './provider-request-snapshot.js';
 import { streamResponsePlans } from './journal-response-units.js';
 import { JournalRequestKimi } from './journal-request-kimi.js';
+import { JournalRequestMistral } from './journal-request-mistral.js';
+import type { MistralMapping } from '../../journal/mistralMapping.js';
 
 async function releaseQueryHold(
   release: () => void | Promise<void>,
@@ -33,6 +35,7 @@ async function releaseQueryHold(
 export class IndexedJournalRequestSnapshot {
   private closed = false;
   private kimi: Promise<JournalRequestKimi> | undefined;
+  private readonly mistral = new Map<number, Promise<JournalRequestMistral>>();
 
   private constructor(
     private readonly snapshot: VersionSnapshot,
@@ -208,6 +211,36 @@ export class IndexedJournalRequestSnapshot {
       signal?.throwIfAborted();
       return consume(view);
     }, signal);
+  }
+
+  withMistral<T>(
+    slot: number,
+    consume: (view: JournalRequestMistral) => T | Promise<T>,
+    signal?: AbortSignal,
+  ): Promise<T> {
+    return this.query(async () => {
+      await this.snapshot.requireMistralSlot(slot);
+      let prepared = this.mistral.get(slot);
+      if (prepared === undefined) {
+        prepared = JournalRequestMistral.create(
+          this.snapshot,
+          this.source,
+          this.rows,
+          slot,
+        );
+        this.mistral.set(slot, prepared);
+      }
+      const view = await prepared;
+      signal?.throwIfAborted();
+      return consume(view);
+    }, signal);
+  }
+
+  mistralMapping(
+    rawId: string,
+    slot: number,
+  ): Promise<MistralMapping | undefined> {
+    return this.withMistral(slot, (view) => view.mapping(rawId));
   }
 
   kimiEligibleCount(): Promise<number> {

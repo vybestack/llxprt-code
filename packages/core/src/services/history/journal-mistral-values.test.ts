@@ -8,6 +8,7 @@ import { ID_NS, sha256KeyHash, fact0Key } from '../../journal/idKeys.js';
 import { JournalSession } from './journalSession.js';
 import { call } from './__tests__/support/normalization-cases.js';
 import { recordingAcceptsEdits } from './recording-primary-edits.js';
+import { IndexedJournalRequestSnapshot } from './indexed-journal-request-snapshot.js';
 
 describe('native Mistral value identity', () => {
   const directory = useTempDir('native-mistral-values-');
@@ -26,6 +27,7 @@ describe('native Mistral value identity', () => {
         },
       ]);
       const snapshot = await session.store.snapshot();
+      const request = await IndexedJournalRequestSnapshot.create(snapshot);
       const read = await session.store.openRead();
       try {
         const fact = await snapshot.facts.fact('alpha long id');
@@ -48,6 +50,9 @@ describe('native Mistral value identity', () => {
           await expect(
             snapshot.mistralMapping('alpha long id', 0),
           ).rejects.toThrow('another raw id');
+          await expect(
+            request.mistralMapping('alpha long id', 0),
+          ).rejects.toThrow('another raw id');
         } finally {
           await handle.write(original, 0, original.length, fact.mappedRef);
           await handle.close();
@@ -57,6 +62,7 @@ describe('native Mistral value identity', () => {
         ).toHaveLength(9);
       } finally {
         await read.close();
+        await request.close();
         await snapshot.close();
       }
     } finally {

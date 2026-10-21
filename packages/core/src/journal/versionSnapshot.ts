@@ -3,7 +3,13 @@ import { JournalFormatError } from './errors.js';
 import { KimiOrdinalQueries } from './kimiOrdinals.js';
 import type { KimiOccurrence } from './kimiFactCodec.js';
 import { KimiFactQueries, type KimiIdFact } from './kimiFactQueries.js';
-import { readMistralMapping, type MistralMapping } from './mistralMapping.js';
+import {
+  assertMistralSlot,
+  decodeMistralSlots,
+  MISTRAL_SLOTS_KEY,
+  readMistralMapping,
+  type MistralMapping,
+} from './mistralMapping.js';
 import { nextCuratedEntry } from './curatedQueries.js';
 import { IdFactQueries, type IdFactDeps } from './idFactQueries.js';
 import type { IdNodeCache } from './idTrieCache.js';
@@ -108,6 +114,29 @@ export class VersionSnapshot {
 
   kimiEligibleBelow(label: bigint): Promise<number> {
     return this.kimi.below(label);
+  }
+
+  async requireMistralSlot(slot: number): Promise<void> {
+    this.read.requireOpen();
+    assertMistralSlot(slot);
+    const slots = decodeMistralSlots(
+      await this.kimi.meta.get(
+        this.version?.roots.metaRoot ?? 0,
+        MISTRAL_SLOTS_KEY,
+      ),
+    );
+    if ((slots & (1 << slot)) === 0)
+      throw new JournalFormatError('Mistral observe mappings need a fill');
+  }
+
+  mistralCandidate(rawId: string, salt: number): string {
+    this.read.requireOpen();
+    const candidate = this.idDeps.mistralCandidate;
+    if (candidate === undefined)
+      throw new JournalFormatError(
+        'Mistral mapping candidate is not registered',
+      );
+    return candidate(rawId, salt);
   }
 
   async mistralMapping(

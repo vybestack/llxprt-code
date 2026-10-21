@@ -135,6 +135,7 @@ async function assignMapping(
   const fact = await facts.ids.queries.fact(rawId);
   if (fact === undefined)
     throw new JournalFormatError('Mistral call has no raw id fact');
+  if (fact.mappedRef !== 0) await appender.drain();
   const mappings =
     fact.mappedRef === 0
       ? []
