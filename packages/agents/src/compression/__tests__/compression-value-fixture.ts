@@ -46,7 +46,7 @@ export function valueGate(): { promise: Promise<void>; resolve(): void } {
 }
 
 export async function compressionValueDigest(
-  rows: AsyncIterable<IContent>,
+  rows: Iterable<IContent> | AsyncIterable<IContent>,
 ): Promise<{ count: number; bytes: number; sha256: string }> {
   const hash = createHash('sha256');
   let count = 0;

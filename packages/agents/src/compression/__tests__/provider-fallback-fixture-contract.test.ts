@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { HistoryIndexedRows } from '@vybestack/llxprt-code-core/services/history/historyMutationSnapshot.js';
+import type { CompressionIndexedRows as HistoryIndexedRows } from '@vybestack/llxprt-code-core/services/history/compressionInput.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import {

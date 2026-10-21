@@ -99,11 +99,11 @@ export async function seedFallbackCooldown(
   const estimation = vi
     .spyOn(history, 'estimateTokensForContents')
     .mockRejectedValue(new EmptySummaryError('top-down-truncation'));
-  const compressDisk = OneShotStrategy.prototype.compressDisk;
-  vi.spyOn(OneShotStrategy.prototype, 'compressDisk').mockImplementation(
-    function (this: OneShotStrategy, context, candidate) {
+  const prepareDisk = OneShotStrategy.prototype.prepareDisk;
+  vi.spyOn(OneShotStrategy.prototype, 'prepareDisk').mockImplementation(
+    function (this: OneShotStrategy, context) {
       control.calls++;
-      return compressDisk.call(this, context, candidate);
+      return prepareDisk.call(this, context);
     },
   );
   await handler.performCompression('seed-failure-1');

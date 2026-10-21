@@ -45,14 +45,17 @@ describe('native provider fallback producer', () => {
       );
       history.setCacheAnchorSeq(1);
       handler.setLastPromptTokenCount(150_000);
-      const creates = await operationFileCreates(async () => {
+      const creates = operationFileCreates(async () => {
         await handler.enforceContextWindow(
           0,
           'native-provider-fallback',
           provider,
         );
       }, true);
-      expect(creates).toStrictEqual({ directories: [], files: [] });
+      await expect(creates).resolves.toStrictEqual({
+        directories: [],
+        files: [],
+      });
       const actual = await Array.fromAsync(history.streamRawHistory());
       expect(actual.map(({ blocks }) => blocks)).toStrictEqual([
         row(6).blocks,
