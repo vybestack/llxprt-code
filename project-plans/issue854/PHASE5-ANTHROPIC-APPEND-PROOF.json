@@ -1,0 +1,1017 @@
+{
+  "task": "Issue 854: bounded native Anthropic ordinary-text append checkpoint, not complete Phase 5",
+  "checkedAt": "2026-10-21T08:20:48.815Z",
+  "startingCommit": "9853af8b0",
+  "implementationCommit": "743f31c1ea797e46536a4015e53ec8b597f604d9",
+  "testedSourceCommit": "743f31c1ea797e46536a4015e53ec8b597f604d9",
+  "sources": [
+    {
+      "path": "packages/core/src/journal/formatFill.ts",
+      "sha256": "643a41c5f7706e4f2b0050696c2746a56af1bf3a6af3e6fb59b27b6469714324",
+      "committedSha256": "643a41c5f7706e4f2b0050696c2746a56af1bf3a6af3e6fb59b27b6469714324",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/core/src/journal/formatFillLifecycle.ts",
+      "sha256": "ed42c9ccb33280d3fed2d6ab486bfda9b742a553c558ac4b720203c5dbca441c",
+      "committedSha256": "ed42c9ccb33280d3fed2d6ab486bfda9b742a553c558ac4b720203c5dbca441c",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/core/src/journal/groupEdits.ts",
+      "sha256": "1b52c4dfdc3c840d451f9bef569e001de76b8f865f55748e5de7e4339def38a8",
+      "committedSha256": "1b52c4dfdc3c840d451f9bef569e001de76b8f865f55748e5de7e4339def38a8",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/core/src/journal/groupPlan.ts",
+      "sha256": "5310b519494b952ea9bb41f061605a1da26992704ab172b6ff47b3b44c3ffa59",
+      "committedSha256": "5310b519494b952ea9bb41f061605a1da26992704ab172b6ff47b3b44c3ffa59",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/core/src/journal/idFactCodec.test.ts",
+      "sha256": "07c839806f3fd9620209b24579533a4c300b93e4684c3f722a63b6919d79ed23",
+      "committedSha256": "07c839806f3fd9620209b24579533a4c300b93e4684c3f722a63b6919d79ed23",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/core/src/journal/idKeys.ts",
+      "sha256": "8d1fea5385890e4cd575d5e193dfe6d950dc443496138a01471a81438172c1da",
+      "committedSha256": "8d1fea5385890e4cd575d5e193dfe6d950dc443496138a01471a81438172c1da",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/core/src/journal/journalStore.ts",
+      "sha256": "eaf676b6215a9ba64c2e2c9a975cb1b85bb924652153493ca120b46116dc400b",
+      "committedSha256": "eaf676b6215a9ba64c2e2c9a975cb1b85bb924652153493ca120b46116dc400b",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/core/src/journal/keyedMap.ts",
+      "sha256": "37080d2f6ad65c5657c5bc4d54e8278d9bd9b4ba3fa10df433531b923cc323ee",
+      "committedSha256": "37080d2f6ad65c5657c5bc4d54e8278d9bd9b4ba3fa10df433531b923cc323ee",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/core/src/journal/nativeFactFill.ts",
+      "sha256": "bdc0907b1a49d7554785df82a915da7a1288712e6ca3fdf12936b5b05f044e3d",
+      "committedSha256": "bdc0907b1a49d7554785df82a915da7a1288712e6ca3fdf12936b5b05f044e3d",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/core/src/journal/nativeFactIndex.ts",
+      "sha256": "88d827d6755309a7b5c36aba6d0d7247349689f6f266e93482a70af35336bd4a",
+      "committedSha256": "88d827d6755309a7b5c36aba6d0d7247349689f6f266e93482a70af35336bd4a",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/core/src/journal/rowFormat.ts",
+      "sha256": "052c561e16e1777b1e1d5656a1d06a4702a35f4bf0e5b13cfae419b0743f3305",
+      "committedSha256": "052c561e16e1777b1e1d5656a1d06a4702a35f4bf0e5b13cfae419b0743f3305",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/core/src/journal/slotSummary.ts",
+      "sha256": "1b7acda64db0f0c198e51a0b199e297caccbdbfa7b321379d2302f3ffcf235af",
+      "committedSha256": "1b7acda64db0f0c198e51a0b199e297caccbdbfa7b321379d2302f3ffcf235af",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/core/src/journal/summaryComposition.ts",
+      "sha256": "17f1395d0d2fa3b31a4d3705e683a3ad20d33db81cbfdda4fe1c3c7f5cc212c9",
+      "committedSha256": "17f1395d0d2fa3b31a4d3705e683a3ad20d33db81cbfdda4fe1c3c7f5cc212c9",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/core/src/journal/versionSnapshot.ts",
+      "sha256": "3d192c29bdaf42b7907668ed94e454eac3652044a81567447d125e88222dd732",
+      "committedSha256": "3d192c29bdaf42b7907668ed94e454eac3652044a81567447d125e88222dd732",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+      "sha256": "7c5de608711f2cc7a3e97f79487502403d06451adb38f9929ac5c493f3225392",
+      "committedSha256": "7c5de608711f2cc7a3e97f79487502403d06451adb38f9929ac5c493f3225392",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/core/src/services/history/journal-request-occurrences.ts",
+      "sha256": "10994db01dd5c6e31ca5fd1ad176f6b2972b960a5bf4221249a6e4bcead33c14",
+      "committedSha256": "10994db01dd5c6e31ca5fd1ad176f6b2972b960a5bf4221249a6e4bcead33c14",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/core/src/services/history/recording-primary-edits.test.ts",
+      "sha256": "c6a1b6200c0e0787c79435d1f979fc75a401a02c5ac0f62a92c52303cc8d49aa",
+      "committedSha256": "c6a1b6200c0e0787c79435d1f979fc75a401a02c5ac0f62a92c52303cc8d49aa",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/core/src/services/history/recording-primary-edits.ts",
+      "sha256": "76f4e2292b3fddb42e9ed3c49c05247d7a96aa789a2e92ce280d2c90b4943215",
+      "committedSha256": "76f4e2292b3fddb42e9ed3c49c05247d7a96aa789a2e92ce280d2c90b4943215",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-append-facts.ts",
+      "sha256": "91010836388f420cacdf1554ac4816fd898650db353fde26d1a8a6b0e71d2790",
+      "committedSha256": "91010836388f420cacdf1554ac4816fd898650db353fde26d1a8a6b0e71d2790",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-repair-fact-writer.ts",
+      "sha256": "a6bd916b50e47165981aa5a81482a8615df28cbefe8351e56d8bb435d3427da3",
+      "committedSha256": "a6bd916b50e47165981aa5a81482a8615df28cbefe8351e56d8bb435d3427da3",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-repair-index.ts",
+      "sha256": "1ab37cf19d2cf82e0437fb07929f4efb8aeba03a457443cb206436fa2609f071",
+      "committedSha256": "1ab37cf19d2cf82e0437fb07929f4efb8aeba03a457443cb206436fa2609f071",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-repair-lifecycle.test.ts",
+      "sha256": "5ac15170a52dd8e076e83276e6a0d34c9e831c80479966245e7115bfa2b347dd",
+      "committedSha256": "5ac15170a52dd8e076e83276e6a0d34c9e831c80479966245e7115bfa2b347dd",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-repair-source.ts",
+      "sha256": "0656ace57d84797b5830d5c34d4aec02beec5c73c9132b1cf807f2c40909b5e3",
+      "committedSha256": "0656ace57d84797b5830d5c34d4aec02beec5c73c9132b1cf807f2c40909b5e3",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-stored-append.ts",
+      "sha256": "c44193bfe208a950dd395b1e17a7e3c042213c1552a370fe3a9fa6bf6326539e",
+      "committedSha256": "c44193bfe208a950dd395b1e17a7e3c042213c1552a370fe3a9fa6bf6326539e",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-stored-fill.ts",
+      "sha256": "aec368b809fc35d22dcb412d7cdc7457db245a6d15b1a81a3e38c5dc1160dfc8",
+      "committedSha256": "aec368b809fc35d22dcb412d7cdc7457db245a6d15b1a81a3e38c5dc1160dfc8",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-stream-repair-cases.test.ts",
+      "sha256": "2acdf81e54d566ffd0132cbca1269b526530794c654d9af21251f393b44fd53a",
+      "committedSha256": "2acdf81e54d566ffd0132cbca1269b526530794c654d9af21251f393b44fd53a",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-stream-repair-frozen.test.ts",
+      "sha256": "f3fc9fa62908be244ec0dd6616f36b594260d7a8a59e84ee125ebaf64ddbccdb",
+      "committedSha256": "f3fc9fa62908be244ec0dd6616f36b594260d7a8a59e84ee125ebaf64ddbccdb",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-stream-repair-scale.test.ts",
+      "sha256": "554941825a7e258058c93975fc7d85c5cf2245aeeda7e7606e1a19b757ff9e26",
+      "committedSha256": "554941825a7e258058c93975fc7d85c5cf2245aeeda7e7606e1a19b757ff9e26",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-stream-repair.test.ts",
+      "sha256": "cfa0233bdacdb4025745c5142c25a3d893ca3adfd8163ae8e8cef4f58593c97f",
+      "committedSha256": "cfa0233bdacdb4025745c5142c25a3d893ca3adfd8163ae8e8cef4f58593c97f",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-stream-repair.ts",
+      "sha256": "c2c5232ce1bc58099b7b5809a36bb25b854c0aef189d6375e939dde5cd342f55",
+      "committedSha256": "c2c5232ce1bc58099b7b5809a36bb25b854c0aef189d6375e939dde5cd342f55",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-tool-repair.ts",
+      "sha256": "37d4b65ee66d2a369997f0748e2935ef6af6f245029f4fcf04e2881f05b78956",
+      "committedSha256": "37d4b65ee66d2a369997f0748e2935ef6af6f245029f4fcf04e2881f05b78956",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-unit-facts.ts",
+      "sha256": "f211643ec8d0e0dbb2a1b946b34729fc74d5a1fc25b2afd5bf148d5475588605",
+      "committedSha256": "f211643ec8d0e0dbb2a1b946b34729fc74d5a1fc25b2afd5bf148d5475588605",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-unit-transfer.ts",
+      "sha256": "413b57024f7429df960aa8b74da8d30604083cf05ddc9c94c3856c6b50f25e4f",
+      "committedSha256": "413b57024f7429df960aa8b74da8d30604083cf05ddc9c94c3856c6b50f25e4f",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/providers/src/anthropic/journal-anthropic-append-lifecycle.test.ts",
+      "sha256": "f45b2a33e9f3265dda1c9fc4d443a4f9005424a2fe5aaa1bc0857bdb16cc68ad",
+      "committedSha256": "f45b2a33e9f3265dda1c9fc4d443a4f9005424a2fe5aaa1bc0857bdb16cc68ad",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/providers/src/anthropic/journal-anthropic-frozen.test.ts",
+      "sha256": "6667af9e7fff3a901176f2aad5333f2fba3ef054a655de347d6ed520c0103c1f",
+      "committedSha256": "6667af9e7fff3a901176f2aad5333f2fba3ef054a655de347d6ed520c0103c1f",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/providers/src/anthropic/journal-anthropic-incremental.test.ts",
+      "sha256": "db8aa93d8fb392333a131d7626e4d11617b173b2c314f989ec2daee0e8ef9556",
+      "committedSha256": "db8aa93d8fb392333a131d7626e4d11617b173b2c314f989ec2daee0e8ef9556",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/providers/src/anthropic/journal-anthropic-length.test.ts",
+      "sha256": "1628039bbaed36f18a893cab0c0c0fa59db6d133f7e68ecea9829947a62f9f5b",
+      "committedSha256": "1628039bbaed36f18a893cab0c0c0fa59db6d133f7e68ecea9829947a62f9f5b",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/providers/src/anthropic/journal-anthropic-length.ts",
+      "sha256": "5c9b3e7e0cd81a630a36422f7f443f12fbdf9ba5b4d22a065c7f9798b7449479",
+      "committedSha256": "5c9b3e7e0cd81a630a36422f7f443f12fbdf9ba5b4d22a065c7f9798b7449479",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/providers/src/anthropic/journal-anthropic-lifecycle.test.ts",
+      "sha256": "fca331f7c5af75ecc46620ee997ee3c264dc2cefa037d1f9ad79f741729395f8",
+      "committedSha256": "fca331f7c5af75ecc46620ee997ee3c264dc2cefa037d1f9ad79f741729395f8",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    },
+    {
+      "path": "packages/providers/src/anthropic/journal-anthropic-named.test.ts",
+      "sha256": "c1a3a269fb7bc44adf1ef7b5cc5d024a0a3a262fd29d242e733642f1a88f844d",
+      "committedSha256": "c1a3a269fb7bc44adf1ef7b5cc5d024a0a3a262fd29d242e733642f1a88f844d",
+      "commit": "743f31c1ea797e46536a4015e53ec8b597f604d9"
+    }
+  ],
+  "sourceInventories": [
+    {
+      "path": "tmp/p5/anthropic-incremental-run-v/precommit-78001/sources.json",
+      "sha256": "e6e28c13604cb9dc6b3d227b4b2167ae870d3ee620124c2f8c60b724c743a6e0",
+      "entries": 8940,
+      "differences": []
+    },
+    {
+      "path": "tmp/p5/anthropic-incremental-run-v/native-85047/sources.json",
+      "sha256": "e6e28c13604cb9dc6b3d227b4b2167ae870d3ee620124c2f8c60b724c743a6e0",
+      "entries": 8940,
+      "differences": []
+    },
+    {
+      "path": "tmp/p5/anthropic-incremental-run-v/regressions-84732/sources.json",
+      "sha256": "e6e28c13604cb9dc6b3d227b4b2167ae870d3ee620124c2f8c60b724c743a6e0",
+      "entries": 8940,
+      "differences": []
+    },
+    {
+      "path": "tmp/p5/anthropic-incremental-run-v/frozen-82188/sources.json",
+      "sha256": "e6e28c13604cb9dc6b3d227b4b2167ae870d3ee620124c2f8c60b724c743a6e0",
+      "entries": 8940,
+      "differences": []
+    },
+    {
+      "path": "tmp/p5/anthropic-incremental-run-v/extra-84793/sources.json",
+      "sha256": "e6e28c13604cb9dc6b3d227b4b2167ae870d3ee620124c2f8c60b724c743a6e0",
+      "entries": 8940,
+      "differences": []
+    }
+  ],
+  "unchangedOracles": [
+    {
+      "path": "packages/providers/src/__tests__/support/frozenWire/normalizedRows.ts",
+      "sha256": "a858813612178d56765a8b2c0ef31fc194d67b23c63853b7366c1bbd5c2c26ac"
+    },
+    {
+      "path": "packages/providers/src/__tests__/support/frozenWire/frozenCases.ts",
+      "sha256": "ea818df95e6f8514a5c3e047a0f942ebdfbbf1f66163a27a41be78fb1f6e2d9f"
+    },
+    {
+      "path": "packages/providers/src/anthropic/message-table/__tests__/support/wireBuilderHarness.ts",
+      "sha256": "4e0f5ed8f0448517efe53fc30244d6069435592c6b08f01ff2a8ac17ca8c813d"
+    },
+    {
+      "path": "packages/providers/src/anthropic/message-table/__tests__/support/lengthModel/lengthChecks.ts",
+      "sha256": "2255f6148eb4f7115afd4d7777ac16adeafe7cb039d75890277bac90b14179ca"
+    }
+  ],
+  "acceptance": {
+    "pass": 97,
+    "fail": 0,
+    "skip": 0,
+    "assertions": 11093,
+    "processes": 14,
+    "receipts": [
+      {
+        "name": "incremental",
+        "cwd": "packages/providers",
+        "args": [
+          "bun",
+          "test",
+          "src/anthropic/journal-anthropic-incremental.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 85047,
+        "pid": 85049,
+        "start": "2026-10-21T08:18:34.101Z",
+        "finish": "2026-10-21T08:19:12.962Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-incremental-run-v/native-85047/incremental.log",
+        "logHash": "634b0ccf3bcdc7fb155378b2d3a781b461063d6a4d981f67aace68505836d9ad",
+        "differences": []
+      },
+      {
+        "name": "append-lifecycle",
+        "cwd": "packages/providers",
+        "args": [
+          "bun",
+          "test",
+          "src/anthropic/journal-anthropic-append-lifecycle.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 85047,
+        "pid": 85561,
+        "start": "2026-10-21T08:19:12.962Z",
+        "finish": "2026-10-21T08:19:13.737Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-incremental-run-v/native-85047/append-lifecycle.log",
+        "logHash": "a2e920ada9080912b2b44da85ee40e5b960dee18b0af165379c8171d2fe6c2ac",
+        "differences": []
+      },
+      {
+        "name": "old-lifecycle",
+        "cwd": "packages/providers",
+        "args": [
+          "bun",
+          "test",
+          "src/anthropic/journal-anthropic-lifecycle.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 85047,
+        "pid": 85574,
+        "start": "2026-10-21T08:19:13.737Z",
+        "finish": "2026-10-21T08:19:14.299Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-incremental-run-v/native-85047/old-lifecycle.log",
+        "logHash": "d54da1a77760ba2b23ffcef4ca4e781d147dbb3c4307be795815d6a5356e2a85",
+        "differences": []
+      },
+      {
+        "name": "chat-length",
+        "cwd": "packages/providers",
+        "args": [
+          "bun",
+          "test",
+          "src/openai/journal-chat-length.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 84732,
+        "pid": 84734,
+        "start": "2026-10-21T08:18:11.922Z",
+        "finish": "2026-10-21T08:18:12.642Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-incremental-run-v/regressions-84732/chat-length.log",
+        "logHash": "59804c8c22b1d8a6a8030b1ffe7acd8645847f3a2f1f9718c9313087b764b3b8",
+        "differences": []
+      },
+      {
+        "name": "chat-lifecycle",
+        "cwd": "packages/providers",
+        "args": [
+          "bun",
+          "test",
+          "src/openai/journal-chat-length-lifecycle.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 84732,
+        "pid": 84742,
+        "start": "2026-10-21T08:18:12.642Z",
+        "finish": "2026-10-21T08:18:13.320Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-incremental-run-v/regressions-84732/chat-lifecycle.log",
+        "logHash": "e518fc144c159be6b25d19314c3d7fd1dd1fbbca60a59deab92fe05408ed6ba3",
+        "differences": []
+      },
+      {
+        "name": "responses-length",
+        "cwd": "packages/providers",
+        "args": [
+          "bun",
+          "test",
+          "src/openai-responses/journal-responses-length.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 84732,
+        "pid": 84753,
+        "start": "2026-10-21T08:18:13.320Z",
+        "finish": "2026-10-21T08:18:14.078Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-incremental-run-v/regressions-84732/responses-length.log",
+        "logHash": "19fc30529cb1a8865a8378b75cf844697998ad4e0f84f1e7a4fa39da98c79e3b",
+        "differences": []
+      },
+      {
+        "name": "responses-lifecycle",
+        "cwd": "packages/providers",
+        "args": [
+          "bun",
+          "test",
+          "src/openai-responses/journal-responses-lifecycle.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 84732,
+        "pid": 84761,
+        "start": "2026-10-21T08:18:14.078Z",
+        "finish": "2026-10-21T08:18:16.865Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-incremental-run-v/regressions-84732/responses-lifecycle.log",
+        "logHash": "e05b0aa436456cdcd183fddd79e4cb3df2b62ba29b78d4bd294ea70810783835",
+        "differences": []
+      },
+      {
+        "name": "format-tables",
+        "cwd": "packages/core",
+        "args": [
+          "bun",
+          "test",
+          "src/journal/formatTables.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 84732,
+        "pid": 84792,
+        "start": "2026-10-21T08:18:16.865Z",
+        "finish": "2026-10-21T08:18:17.141Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-incremental-run-v/regressions-84732/format-tables.log",
+        "logHash": "91dd2ce8dfe1f3ad1035d83c11e70b7356d4a109629ca64bc3fa1e17cadf26ff",
+        "differences": []
+      },
+      {
+        "name": "frozen",
+        "cwd": "packages/providers",
+        "args": [
+          "bun",
+          "test",
+          "src/anthropic/journal-anthropic-frozen.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 82188,
+        "pid": 82195,
+        "start": "2026-10-21T08:15:00.802Z",
+        "finish": "2026-10-21T08:18:11.726Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-incremental-run-v/frozen-82188/frozen.log",
+        "logHash": "6eb3ad0ec76013346aa988a64bf0581c7445e38f8860fc5af19eddbc7815e290",
+        "differences": []
+      },
+      {
+        "name": "stored-length",
+        "cwd": "packages/providers",
+        "args": [
+          "bun",
+          "test",
+          "src/anthropic/journal-anthropic-length.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 84793,
+        "pid": 84799,
+        "start": "2026-10-21T08:18:17.335Z",
+        "finish": "2026-10-21T08:18:30.738Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-incremental-run-v/extra-84793/stored-length.log",
+        "logHash": "92a0362bf7b13e6d99dd10872f97d4cc734ffd3e2dfdb3ebe8ba44aa321f1dc9",
+        "differences": []
+      },
+      {
+        "name": "stored-named",
+        "cwd": "packages/providers",
+        "args": [
+          "bun",
+          "test",
+          "src/anthropic/journal-anthropic-named.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 84793,
+        "pid": 84982,
+        "start": "2026-10-21T08:18:30.738Z",
+        "finish": "2026-10-21T08:18:31.969Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-incremental-run-v/extra-84793/stored-named.log",
+        "logHash": "a301e61409d0fa0374f41ff1e5001122c7e99274911eda7ae3e094dc4bc23fbb",
+        "differences": []
+      },
+      {
+        "name": "repair-lifecycle",
+        "cwd": "packages/providers",
+        "args": [
+          "bun",
+          "test",
+          "src/anthropic/anthropic-repair-lifecycle.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 84793,
+        "pid": 85004,
+        "start": "2026-10-21T08:18:31.969Z",
+        "finish": "2026-10-21T08:18:32.915Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-incremental-run-v/extra-84793/repair-lifecycle.log",
+        "logHash": "2f63529d6a01d7a07ef14f0dfc584a2cc5d1f58ecba33208822e1c62791b1a14",
+        "differences": []
+      },
+      {
+        "name": "version-snapshot",
+        "cwd": "packages/core",
+        "args": [
+          "bun",
+          "test",
+          "src/journal/versionSnapshot.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 84793,
+        "pid": 85024,
+        "start": "2026-10-21T08:18:32.916Z",
+        "finish": "2026-10-21T08:18:33.389Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-incremental-run-v/extra-84793/version-snapshot.log",
+        "logHash": "a746efb1c66d8edd84a6f680417a7d2e088c8906ca493a75d1209b8f703de88d",
+        "differences": []
+      },
+      {
+        "name": "mistral-copy",
+        "cwd": "packages/core",
+        "args": [
+          "bun",
+          "test",
+          "src/journal/versionCopy.mistral.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 84793,
+        "pid": 85029,
+        "start": "2026-10-21T08:18:33.389Z",
+        "finish": "2026-10-21T08:18:33.908Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-incremental-run-v/extra-84793/mistral-copy.log",
+        "logHash": "f4b9f64b3f2eba799aba8a398df62d4a19011a5b3890d2de67380ed60f155fc8",
+        "differences": []
+      }
+    ],
+    "parity": {
+      "matched": 5000,
+      "thinking": 3021,
+      "repaired": 2542,
+      "chained": 1078,
+      "lastKept": 516,
+      "domain": "normalized source histories, not raw original frozen bodies",
+      "pid": 82195
+    },
+    "domain": "All 5000 unchanged cache-off frozen histories after independent normalization, not original raw-body equality. This cold native parity is separate from ordinary-text append scale and state transitions.",
+    "commands": "One complete Bun file per process from its package directory, --timeout 180000, serial heavy lanes. No whole-repository or all-affected-shard test claim."
+  },
+  "gates": {
+    "count": 8,
+    "receipts": [
+      {
+        "name": "declarations-core",
+        "cwd": "packages/core",
+        "args": [
+          "bun",
+          "../../scripts/build_package.ts"
+        ],
+        "env": {
+          "LLXPRT_EMIT_DECLARATIONS_ONLY": "1"
+        },
+        "driver": 78001,
+        "pid": 78005,
+        "start": "2026-10-21T08:09:49.792Z",
+        "finish": "2026-10-21T08:09:53.622Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-incremental-run-v/precommit-78001/declarations-core.log",
+        "logHash": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127",
+        "differences": []
+      },
+      {
+        "name": "declarations-providers",
+        "cwd": "packages/providers",
+        "args": [
+          "bun",
+          "../../scripts/build_package.ts"
+        ],
+        "env": {
+          "LLXPRT_EMIT_DECLARATIONS_ONLY": "1"
+        },
+        "driver": 78001,
+        "pid": 78048,
+        "start": "2026-10-21T08:09:53.623Z",
+        "finish": "2026-10-21T08:09:55.925Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-incremental-run-v/precommit-78001/declarations-providers.log",
+        "logHash": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127",
+        "differences": []
+      },
+      {
+        "name": "types-core",
+        "args": [
+          "bunx",
+          "tsc",
+          "--noEmit",
+          "-p",
+          "packages/core/tsconfig.noemit.json"
+        ],
+        "driver": 78001,
+        "pid": 78100,
+        "start": "2026-10-21T08:09:55.925Z",
+        "finish": "2026-10-21T08:10:02.495Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-incremental-run-v/precommit-78001/types-core.log",
+        "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "differences": []
+      },
+      {
+        "name": "types-providers",
+        "args": [
+          "bunx",
+          "tsc",
+          "--noEmit",
+          "-p",
+          "packages/providers/tsconfig.noemit.json"
+        ],
+        "driver": 78001,
+        "pid": 78204,
+        "start": "2026-10-21T08:10:02.495Z",
+        "finish": "2026-10-21T08:10:11.694Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-incremental-run-v/precommit-78001/types-providers.log",
+        "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "differences": []
+      },
+      {
+        "name": "lint",
+        "args": [
+          "bunx",
+          "eslint",
+          "--max-warnings",
+          "0",
+          "packages/core/src/journal/formatFill.ts",
+          "packages/core/src/journal/formatFillLifecycle.ts",
+          "packages/core/src/journal/journalStore.ts",
+          "packages/core/src/journal/nativeFactFill.ts",
+          "packages/core/src/journal/nativeFactIndex.ts",
+          "packages/core/src/journal/rowFormat.ts",
+          "packages/providers/src/anthropic/anthropic-repair-fact-writer.ts",
+          "packages/providers/src/anthropic/journal-anthropic-length.ts",
+          "packages/providers/src/anthropic/journal-anthropic-lifecycle.test.ts",
+          "packages/providers/src/anthropic/anthropic-append-facts.ts",
+          "packages/providers/src/anthropic/anthropic-stored-append.ts",
+          "packages/providers/src/anthropic/journal-anthropic-incremental.test.ts",
+          "packages/providers/src/anthropic/journal-anthropic-append-lifecycle.test.ts"
+        ],
+        "driver": 78001,
+        "pid": 78344,
+        "start": "2026-10-21T08:10:11.694Z",
+        "finish": "2026-10-21T08:10:18.404Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-incremental-run-v/precommit-78001/lint.log",
+        "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "differences": []
+      },
+      {
+        "name": "prettier",
+        "args": [
+          "bunx",
+          "prettier",
+          "--check",
+          "packages/core/src/journal/formatFill.ts",
+          "packages/core/src/journal/formatFillLifecycle.ts",
+          "packages/core/src/journal/journalStore.ts",
+          "packages/core/src/journal/nativeFactFill.ts",
+          "packages/core/src/journal/nativeFactIndex.ts",
+          "packages/core/src/journal/rowFormat.ts",
+          "packages/providers/src/anthropic/anthropic-repair-fact-writer.ts",
+          "packages/providers/src/anthropic/journal-anthropic-length.ts",
+          "packages/providers/src/anthropic/journal-anthropic-lifecycle.test.ts",
+          "packages/providers/src/anthropic/anthropic-append-facts.ts",
+          "packages/providers/src/anthropic/anthropic-stored-append.ts",
+          "packages/providers/src/anthropic/journal-anthropic-incremental.test.ts",
+          "packages/providers/src/anthropic/journal-anthropic-append-lifecycle.test.ts"
+        ],
+        "driver": 78001,
+        "pid": 78432,
+        "start": "2026-10-21T08:10:18.404Z",
+        "finish": "2026-10-21T08:10:18.804Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-incremental-run-v/precommit-78001/prettier.log",
+        "logHash": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+        "differences": []
+      },
+      {
+        "name": "graph",
+        "args": [
+          "bun",
+          "scripts/check-affected-test-shards.ts"
+        ],
+        "driver": 78001,
+        "pid": 78438,
+        "start": "2026-10-21T08:10:18.804Z",
+        "finish": "2026-10-21T08:10:21.136Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-incremental-run-v/precommit-78001/graph.log",
+        "logHash": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67",
+        "differences": []
+      },
+      {
+        "name": "audit",
+        "args": [
+          "bun",
+          "scripts/test-audit/scan.ts",
+          "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/anthropic-incremental-run-v/precommit-78001/audit"
+        ],
+        "driver": 78001,
+        "pid": 78459,
+        "start": "2026-10-21T08:10:21.136Z",
+        "finish": "2026-10-21T08:10:24.120Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-incremental-run-v/precommit-78001/audit.log",
+        "logHash": "0e0c23836f13db5249ed659e4744010645515a7db7bd9af7cf7c32aad1fb83a5",
+        "differences": []
+      }
+    ],
+    "touchedAudit": [
+      "packages/providers/src/anthropic/anthropic-repair-lifecycle.test.ts\t112\tpersisted native Anthropic repair facts > maintains native decisions across append, fill, pop, fork and compaction while an old request stays pinned\tDUP_ASSERT\t2x identical assertion: expect(await output(query)).toBe(old)\tproviders",
+      "packages/providers/src/anthropic/journal-anthropic-lifecycle.test.ts\t250\tstored Anthropic generations and pinned lifetime > preserves stored correction lengths through reopen, fork and physical compaction\tDUP_ASSERT\t2x identical assertion: expect(await bytes(reopened)).toBe(expected)\tproviders"
+    ],
+    "audit": {
+      "path": "tmp/p5/anthropic-incremental-run-v/precommit-78001/audit/findings.tsv",
+      "sha256": "3bec821d0a697061da1dc75bbaba75d7d8d4fdb155a744962205c562e086a6a6"
+    },
+    "graphLimit": "Import-graph consistency does not establish affected-shard execution."
+  },
+  "controls": {
+    "count": 4,
+    "manifest": {
+      "path": "tmp/p5/anthropic-incremental-run-v/final-controls-79917/manifest.json",
+      "sha256": "8f9f7c118a97c9a9a7af9b35d7eb71edcfa608cde41140b003ef9dedad113327"
+    },
+    "results": [
+      {
+        "name": "full-refill",
+        "path": "packages/core/src/journal/formatFill.ts",
+        "from": "    slot === assigned,",
+        "to": "    slot === assigned || format.summaryKind === 'anthropic',",
+        "file": "journal-anthropic-incremental",
+        "expected": "appends to 40 unique-ID text rows",
+        "args": [
+          "bun",
+          "test",
+          "src/anthropic/journal-anthropic-incremental.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 79917,
+        "pid": 79919,
+        "start": "2026-10-21T08:12:07.812Z",
+        "finish": "2026-10-21T08:12:31.241Z",
+        "code": 1,
+        "assertion": true,
+        "intended": true,
+        "cmp": 0,
+        "before": "643a41c5f7706e4f2b0050696c2746a56af1bf3a6af3e6fb59b27b6469714324",
+        "after": "643a41c5f7706e4f2b0050696c2746a56af1bf3a6af3e6fb59b27b6469714324",
+        "restored": true,
+        "log": "tmp/p5/anthropic-incremental-run-v/final-controls-79917/full-refill.log",
+        "logHash": "1bb474d385ebb2fb614ac698f6f57bef61ad289ae1321b440f5b652582cf8dd3"
+      },
+      {
+        "name": "stale-summary",
+        "path": "packages/providers/src/anthropic/anthropic-stored-append.ts",
+        "from": "    kept = compose(kept, withThinking);",
+        "to": "    kept = state.identity;",
+        "file": "journal-anthropic-incremental",
+        "expected": "preserves old-emitter bytes for assistant merge",
+        "args": [
+          "bun",
+          "test",
+          "src/anthropic/journal-anthropic-incremental.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 79917,
+        "pid": 80184,
+        "start": "2026-10-21T08:12:31.255Z",
+        "finish": "2026-10-21T08:12:43.037Z",
+        "code": 1,
+        "assertion": true,
+        "intended": true,
+        "cmp": 0,
+        "before": "c44193bfe208a950dd395b1e17a7e3c042213c1552a370fe3a9fa6bf6326539e",
+        "after": "c44193bfe208a950dd395b1e17a7e3c042213c1552a370fe3a9fa6bf6326539e",
+        "restored": true,
+        "log": "tmp/p5/anthropic-incremental-run-v/final-controls-79917/stale-summary.log",
+        "logHash": "7c4b197c039175c46e05f7a3f66013ed6c0e14ebcf23fb2756695f418b7c9540"
+      },
+      {
+        "name": "last-kept",
+        "path": "packages/providers/src/anthropic/anthropic-stored-append.ts",
+        "from": "    if (startsThinking) state.corrected = state.stripped;",
+        "to": "    if (false) state.corrected = state.stripped;",
+        "file": "journal-anthropic-incremental",
+        "expected": "preserves old-emitter bytes for last thinking changes",
+        "args": [
+          "bun",
+          "test",
+          "src/anthropic/journal-anthropic-incremental.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 79917,
+        "pid": 80380,
+        "start": "2026-10-21T08:12:43.050Z",
+        "finish": "2026-10-21T08:13:22.094Z",
+        "code": 1,
+        "assertion": true,
+        "intended": true,
+        "cmp": 0,
+        "before": "c44193bfe208a950dd395b1e17a7e3c042213c1552a370fe3a9fa6bf6326539e",
+        "after": "c44193bfe208a950dd395b1e17a7e3c042213c1552a370fe3a9fa6bf6326539e",
+        "restored": true,
+        "log": "tmp/p5/anthropic-incremental-run-v/final-controls-79917/last-kept.log",
+        "logHash": "16645e3e3f8dbfb3fec384e596b543f89eb8eca16d7678903fc5b7c3a7c867fa"
+      },
+      {
+        "name": "drop-invalidation",
+        "path": "packages/core/src/journal/formatFillLifecycle.ts",
+        "from": "    return { ...slot, gen: slot.gen + 1 };",
+        "to": "    return slot;",
+        "file": "journal-anthropic-append-lifecycle",
+        "expected": "invalidates clear without publishing a stale length",
+        "args": [
+          "bun",
+          "test",
+          "src/anthropic/journal-anthropic-append-lifecycle.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 79917,
+        "pid": 80884,
+        "start": "2026-10-21T08:13:22.106Z",
+        "finish": "2026-10-21T08:13:22.678Z",
+        "code": 1,
+        "assertion": true,
+        "intended": true,
+        "cmp": 0,
+        "before": "ed42c9ccb33280d3fed2d6ab486bfda9b742a553c558ac4b720203c5dbca441c",
+        "after": "ed42c9ccb33280d3fed2d6ab486bfda9b742a553c558ac4b720203c5dbca441c",
+        "restored": true,
+        "log": "tmp/p5/anthropic-incremental-run-v/final-controls-79917/drop-invalidation.log",
+        "logHash": "8a949a0ad6b1b03658447ba9dd3ea8492e6e7ed04701dc627832b3bc860512c3",
+        "certifiedTest": "invalidates owner without publishing a stale length",
+        "harnessCorrection": "The original label expected clear; actual dropped-generation failure is owner, where rows remain fully measured and old auxiliary bytes would otherwise remain accepted. The original manifest/log is preserved; no mutation or test rerun."
+      }
+    ],
+    "restoration": "Exact committed source required before each mutation; restore only if current source equals own mutant, then cmp plus equal before/after SHA-256. Native acceptance follows restoration."
+  },
+  "readCosts": [
+    {
+      "count": 40,
+      "appendReads": 47,
+      "appendHistoricalPayloadReads": 0,
+      "warmReads": 4,
+      "payloadReads": 0,
+      "pid": 85049
+    },
+    {
+      "count": 4000,
+      "appendReads": 74,
+      "appendHistoricalPayloadReads": 0,
+      "warmReads": 4,
+      "payloadReads": 0,
+      "pid": 85049
+    }
+  ],
+  "roots": {
+    "append": "tmp/p5/anthropic-incremental-run-v",
+    "precommit": "tmp/p5/anthropic-incremental-run-v/precommit-78001",
+    "controls": "tmp/p5/anthropic-incremental-run-v/final-controls-79917",
+    "native": "tmp/p5/anthropic-incremental-run-v/native-85047",
+    "regressions": "tmp/p5/anthropic-incremental-run-v/regressions-84732",
+    "frozen": "tmp/p5/anthropic-incremental-run-v/frozen-82188",
+    "extra": "tmp/p5/anthropic-incremental-run-v/extra-84793",
+    "reopenRed": {
+      "path": "tmp/p5/anthropic-incremental-run-v/reopen-slots-red.log",
+      "sha256": "c360617874ec5412ecc7465fe4aa91a4eae121317bf90377189b0b912387af07"
+    },
+    "emptyPolicyRed": {
+      "path": "tmp/p5/anthropic-incremental-run-v/empty-policy-red.log",
+      "sha256": "cc4da190a6cc21a92b2588cca91482b0178d934f69e878d3427bb6703d47b164"
+    },
+    "initialAppendRed": {
+      "path": "tmp/p5/anthropic-incremental-run-v/red.log",
+      "sha256": "584e9d392f5d28e64ff30abc804d433868ecd9eb1255d0360b052c4f55661b0e"
+    },
+    "inheritedGreen": "tmp/p5/anthropic-incremental-run-v/early-66772",
+    "excludedAuthoring": [
+      "tmp/p5/anthropic-incremental-run-v/precommit-75341/lint.log",
+      "tmp/p5/anthropic-incremental-run-v/precommit-76496/audit/findings.tsv",
+      "tmp/p5/anthropic-incremental-run-v/final-proof.log"
+    ]
+  },
+  "policy": {
+    "maintained": "Attached cache-off exact settings; non-tool rows with no tool IDs and only text/code/thinking blocks. Ordinary text append is the measured depth-sized path. New standalone thinking and text continuation of existing chains are covered; a second thinking unit inside the same active AI chain invalidates.",
+    "invalidated": "Tool calls/results, media, unsupported complex source mutations, and unmatched/unattached inactive settings. Explicit cold fact/format registration restores availability; no automatic full-history refill on append.",
+    "snapshots": "Registered factories receive a fresh fill-scoped VersionSnapshot and matching captured settings. No captured old store/view is reused. Active generation remains stable on supported append, while old pins retain their own ID/meta/row roots.",
+    "empty": "Even an empty history requires generation-qualified auxiliary metadata for every policy. Warm registration is a no-op; clear/pop invalidation cannot publish a stale empty or zero length.",
+    "metadata": "Curated row/normalized-unit contribution rules still control which metadata-bearing rows enter the native stream. Thinking changes chain/last-kept state; media and tool references can alter earlier emission, so append support must not be generalized to them."
+  },
+  "preservation": {
+    "manifest": {
+      "path": "tmp/p5/anthropic-incremental-run-v/preserved.json",
+      "sha256": "0ac24095773a60993a58075f9cb9b8e9e18e6556a0a15de0b0cdc34575e4daf2"
+    },
+    "paths": 1192,
+    "unrelatedDeclarations": 293,
+    "differences": []
+  },
+  "processes": {
+    "recorded": [
+      78001,
+      78005,
+      78048,
+      78100,
+      78204,
+      78344,
+      78432,
+      78438,
+      78459,
+      79917,
+      79919,
+      80184,
+      80380,
+      80884,
+      82188,
+      82195,
+      84732,
+      84734,
+      84742,
+      84753,
+      84761,
+      84792,
+      84793,
+      84799,
+      84982,
+      85004,
+      85024,
+      85029,
+      85047,
+      85049,
+      85561,
+      85574
+    ],
+    "active": []
+  },
+  "remaining": [
+    "tool/pair/affected-holder incremental maintenance",
+    "cache 5m/1h, tails and selected ranges",
+    "image/stored-media generations",
+    "LENS recomputation/live bytes and planning integration",
+    "tokens, stream guard and actual request/header installation",
+    "retained heap 10k/100k/1M, 100000-call construction, cold Mistral work",
+    "Phase 5, W23 eight planning/header cases, Stage A/W25/provider cutover, W26"
+  ],
+  "restrictions": "No cleanup, .llxprt edits/staging, unrelated declaration/recovery staging, default change, enforcement weakening, OCR, push or merge. #3917 remains separately RED without retry or suppression. Review skipped per Andrew 2026-10-09."
+}

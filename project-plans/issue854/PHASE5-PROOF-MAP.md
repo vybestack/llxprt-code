@@ -1,5 +1,21 @@
 # Phase 5 proof map
 
+## Bounded ordinary-text Anthropic append checkpoint, 2026-10-21
+
+Implementation `9853af8b0`; tested follow-up `743f31c1ea797e46536a4015e53ec8b597f604d9`. [PHASE5-ANTHROPIC-APPEND-PROOF.json](PHASE5-ANTHROPIC-APPEND-PROOF.json) binds **97 passes, zero failures/skips and 11,093 assertions across 14 serial complete-file Bun processes**, eight scoped gates and four restored assertion controls. Raw root: `tmp/p5/anthropic-incremental-run-v`.
+
+| Obligation | Evidence and limit |
+| --- | --- |
+| Incremental native writer | Complete incremental file: 40/4000 text rows use 47/74 append reads and no historical ROW/LENS reads. Three warm policies use 4/4 reads with no ROW/LENS reads. The independent old emitter supplies byte/count expectations; no production measure is its own oracle. |
+| State transitions | Assistant merging/whitespace, new last-thinking after a speaker boundary and text continuation of thinking chains match old bytes. A second thinking-bearing unit in an active AI chain invalidates instead of publishing a stale plan. |
+| Lifetime and empty state | Reopened current settings attach among multiple old slots; active generation remains unchanged on supported append. Fresh snapshot factories preserve parent/fork divergence and old pins through slot reuse and compaction. Empty settings/registration and clear/refill assert exact old bytes, message counts and native units. |
+| Unsupported mutations | Append-result, pop, clear, replace, density, compress, owner and chain-thinking invalidate every policy until explicit cold registration. A later ordinary append cannot make invalid facts current. Unattached reopened histories reject before changing acknowledgement. |
+| Frozen source boundary | Fresh native stored differential matches all 5000 unchanged independently normalized histories with old-emitter/phase-zero bytes. It is cold parity, not arbitrary tool/media append acceptance or original raw-body equality. |
+| Controls and gates | Full-refill read interception, stale-summary bytes, last-kept bytes and dropped-invalidation rejection all fail assertions and restore with cmp/equal hashes. Final native acceptance follows restoration. Eight gates pass; two existing bound-source DUP_ASSERT findings span old-pin and compaction checkpoints. No prohibited touched finding remains. Graph validation is not all-affected-shard execution. |
+| Preservation | 40 committed source/test paths and full package/script inventories match. All 1192 unrelated preservation hashes match, including 293 declarations/recovery/memory; all 32 accepted PIDs are absent. |
+
+Remaining: tool/pair/affected-holder append, cache/tails/ranges, image/media generations, LENS/live bytes and planning integration, tokens/headers/stream guard, retained heap/capacity, cold Mistral, W23 planning cases, Stage A/W25/cutover and W26. Routes/default unchanged; #3917 remains separately RED. Review skipped per Andrew 2026-10-09.
+
 ## Stored cache-off Anthropic format checkpoint, 2026-10-21
 
 Implementation `0ba26cf5238260845257a32a283ea1a34d755183`; predecessor `d6dc50c83`. [PHASE5-ANTHROPIC-STORED-PROOF.json](PHASE5-ANTHROPIC-STORED-PROOF.json) binds 76 passes, zero failures/skips and 10,705 assertions across 11 serial complete-file Bun processes, eight scoped gates and five restored assertion controls. Raw receipts: `tmp/p5/anthropic-stored-finish-v`.
