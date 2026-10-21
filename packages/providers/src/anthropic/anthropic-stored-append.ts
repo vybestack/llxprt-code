@@ -60,6 +60,7 @@ interface AppendState {
   readonly query: IndexedJournalRequestSnapshot;
   readonly identity: AnthropicSummary;
   corrected: AnthropicSummary;
+  prefix: AnthropicSummary;
   stripped: AnthropicSummary;
   chain: boolean;
   units: number;
@@ -74,6 +75,7 @@ async function measureAppend(
     throw new JournalFormatError(
       'Append measurements must follow native row order',
     );
+  state.prefix = state.corrected;
   let kept = state.identity;
   let removed = state.identity;
   let localCorrection = state.identity;
@@ -149,19 +151,30 @@ export async function prepareAnthropicStoredAppend(
   const tail = await facts.get(['append-base']);
   if (tail === undefined || tail.length !== 2)
     throw new JournalFormatError('Append requires native boundary facts');
+  const rewind = (await facts.get(['append-rewind']))?.[0] ?? 0;
+  if (rewind !== 0 && auxiliary?.length !== 592)
+    throw new JournalFormatError('Tool append requires measured holder prefix');
+  const prefixOffset = rewind === 0 ? 0 : 296;
+  const corrected =
+    auxiliary === undefined
+      ? identity
+      : anthropic(
+          decodeSlotSummary(
+            auxiliary.subarray(prefixOffset, prefixOffset + 296),
+            format,
+          ),
+        );
   const query = await IndexedJournalRequestSnapshot.create(snapshot);
   const state: AppendState = {
     snapshot,
     settings,
     query,
     identity,
-    corrected:
-      auxiliary === undefined
-        ? identity
-        : anthropic(decodeSlotSummary(auxiliary, format)),
+    corrected,
+    prefix: corrected,
     stripped: selected(base, 1),
     chain: tail[0] !== 0,
-    units: previous.aggregate.units,
+    units: rewind === 0 ? previous.aggregate.units : rewind - 1,
     lastLabel: 0n,
   };
   return {
@@ -171,7 +184,10 @@ export async function prepareAnthropicStoredAppend(
         throw new JournalFormatError(
           'Append did not consume the new native units',
         );
-      return encodeSlotSummary(state.corrected);
+      const auxiliary = new Uint8Array(592);
+      auxiliary.set(encodeSlotSummary(state.corrected));
+      auxiliary.set(encodeSlotSummary(state.prefix), 296);
+      return auxiliary;
     },
     close: () => query.close(),
   };

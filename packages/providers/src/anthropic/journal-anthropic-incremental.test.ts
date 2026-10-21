@@ -252,6 +252,36 @@ describe('incremental native Anthropic stored summaries', () => {
   }
   for (const scenario of [
     {
+      name: 'ordinary unique call and actual response',
+      before: [think('old'), text('q')],
+      added: [
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'call_round',
+              name: 'read',
+              parameters: { path: '雪' },
+            },
+          ],
+        } satisfies IContent,
+        {
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'call_round',
+              toolName: 'read',
+              result: 'actual result 雪',
+              isComplete: true,
+            },
+          ],
+        } satisfies IContent,
+        text('answer', 'ai'),
+      ],
+    },
+    {
       name: 'assistant merge and whitespace',
       before: [text('q'), text('old', 'ai')],
       added: [text('  \n', 'ai'), text('new', 'ai')],

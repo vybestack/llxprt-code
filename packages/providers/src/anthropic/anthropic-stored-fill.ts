@@ -79,6 +79,7 @@ export async function prepareAnthropicStoredFill(
     let units = 0;
     let lastLabel = 0n;
     let lastKept = identity();
+    let prefix = identity();
     return {
       async measure(current, entry) {
         if (current !== snapshot || entry.label <= lastLabel)
@@ -109,6 +110,7 @@ export async function prepareAnthropicStoredFill(
         }
         units = end;
         lastLabel = entry.label;
+        prefix = lastKept;
         lastKept = compose(lastKept, corrected);
         const summary: AnthropicSummary = {
           kind: 'anthropic',
@@ -126,7 +128,10 @@ export async function prepareAnthropicStoredFill(
           throw new JournalFormatError(
             'Anthropic stored fill did not consume the complete native contribution stream',
           );
-        return encodeSlotSummary(lastKept);
+        const auxiliary = new Uint8Array(592);
+        auxiliary.set(encodeSlotSummary(lastKept));
+        auxiliary.set(encodeSlotSummary(prefix), 296);
+        return auxiliary;
       },
       async close() {
         try {

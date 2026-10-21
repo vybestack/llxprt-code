@@ -157,7 +157,7 @@ async function planPinned(
   if (metadata === undefined)
     throw new JournalFormatError('Anthropic last-kept aggregate is unmeasured');
   if (!stripped && policy.strip === 'allButLast')
-    summary = decodeSlotSummary(metadata, format);
+    summary = decodeSlotSummary(metadata.subarray(0, 296), format);
   if (summary.kind !== 'anthropic')
     throw new JournalFormatError('Missing stored Anthropic transfer');
   const measured = finalizeAnthropicTransfer(

@@ -10,6 +10,7 @@ import {
 } from '@vybestack/llxprt-code-core/journal/rowRecord.js';
 import { IndexedJournalRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/indexed-journal-request-snapshot.js';
 import { AnthropicRepairSource } from './anthropic-repair-source.js';
+import { appendUniqueAnthropicTool } from './anthropic-tool-append-facts.js';
 import {
   AnthropicRepairIndex,
   writeRepairMessage,
@@ -85,7 +86,13 @@ export async function appendAnthropicFacts(
   edits: readonly VersionEdit[],
   settings: RowFormatSettings,
 ): Promise<boolean> {
-  if (!appendOnly(edits)) return false;
+  const ordinary = appendOnly(edits);
+  const edit = edits[0];
+  const toolRow =
+    edits.length === 1 && edit.kind === 'append' && edit.rows.length === 1
+      ? edit.rows[0]
+      : undefined;
+  if (!ordinary && toolRow === undefined) return false;
   const version = await writer.get(['version']);
   if (
     version === undefined ||
@@ -95,6 +102,16 @@ export async function appendAnthropicFacts(
     return false;
   const query = await IndexedJournalRequestSnapshot.create(snapshot);
   try {
+    const source = new AnthropicRepairSource(query, settings);
+    if (!ordinary && toolRow !== undefined)
+      return await appendUniqueAnthropicTool(
+        snapshot,
+        writer,
+        previous,
+        toolRow,
+        source,
+      );
+    await writer.set(['append-rewind'], [0]);
     const index = await AnthropicRepairIndex.read(writer);
     const tail = await writer.get(['tail']);
     if (tail === undefined || tail.length !== 2 || tail[1] !== 0) return false;
@@ -107,7 +124,6 @@ export async function appendAnthropicFacts(
       ['append-base'],
       [Number(boundary.chain), index.lastThinking + 1],
     );
-    const source = new AnthropicRepairSource(query, settings);
     for (let at = previous.aggregate.units; at < query.count; at++) {
       const next = await appendUnit(
         source,

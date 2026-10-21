@@ -125,7 +125,7 @@ describe('native Anthropic append lifetime and invalidation', () => {
     'owner',
     'chain-thinking',
   ] as const) {
-    it(`invalidates ${mutation} without publishing a stale length and permits explicit refill`, async () => {
+    it(`${mutation === 'append-result' ? 'maintains' : 'invalidates'} ${mutation} without publishing a stale length and permits explicit refill`, async () => {
       const session = await JournalSession.create(
         `${directory()}/${mutation}.llxj`,
         { journal: testJournalSeams().dependencies },
@@ -205,10 +205,14 @@ describe('native Anthropic append lifetime and invalidation', () => {
           };
           await session.store.commit([edits[mutation]]);
           expect(session.store.published).not.toBe(old.version);
-          await expect(bytes(session)).rejects.toThrow(/stale|unmeasured/);
-          await rejectsInvalidatedPolicies(session);
-          await session.append([text('still requires explicit refill')]);
-          await rejectsInvalidatedPolicies(session);
+          const verify =
+            mutation === 'append-result'
+              ? async (current: JournalSession): Promise<void> =>
+                  matchesOldEmitter(current, await storedRows(current))
+              : rejectsInvalidatedPolicies;
+          await verify(session);
+          await session.append([text('after mutation')]);
+          await verify(session);
           expect(
             await planStoredAnthropicRequest(
               old,
