@@ -93,6 +93,20 @@ export class JournalDumpSnapshot implements HistoryDumpSnapshot {
     });
   }
 
+  async chronologySelection(
+    start: number,
+  ): Promise<CompressionChronologySelection> {
+    this.readers.requireOpen();
+    if (!Number.isInteger(start) || start < 0 || start > this.length)
+      throw new RangeError(
+        'Compression selection start is outside the snapshot',
+      );
+    if (start === this.length) return { ranges: [], generated: [] };
+    const first = await this.sourceOrdinalAt(start);
+    const last = await this.sourceOrdinalAt(this.length - 1);
+    return { ranges: [{ from: first, to: last + 1 }], generated: [] };
+  }
+
   compressionSpan(
     selection: CompressionChronologySelection,
     hasFrontier: boolean,

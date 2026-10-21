@@ -3,7 +3,6 @@ import { checkpointRows } from '@vybestack/llxprt-code-core/services/history/his
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { HistoryDumpSource } from '@vybestack/llxprt-code-core/services/history/historyDumpSnapshot.js';
 import type { CompressionIndexedRows } from '@vybestack/llxprt-code-core/services/history/compressionInput.js';
-import type { HistoryIndexedRows } from '@vybestack/llxprt-code-core/services/history/historyMutationSnapshot.js';
 import type { DetachedHistoryOptions } from '@vybestack/llxprt-code-core/services/history/detachedHistoryAPI.js';
 import { sanitizeProviderContentForSerialization } from '@vybestack/llxprt-code-core/services/history/historyCloneUtils.js';
 import { CompressionSpanIndex } from '@vybestack/llxprt-code-core/services/history/compression-span-index.js';
@@ -15,7 +14,10 @@ import {
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { buildCompressionMetadata } from './compressionContextBuilder.js';
 import { appendCandidateRow, curatedCandidate } from './curatedCandidate.js';
-import { TopDownTruncationStrategy } from './TopDownTruncationStrategy.js';
+import {
+  TopDownTruncationStrategy,
+  type DiskTruncationResult,
+} from './TopDownTruncationStrategy.js';
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { shouldRetryCompressionError } from '@vybestack/llxprt-code-core/core/compression/types.js';
 
@@ -117,17 +119,19 @@ export async function publishCandidate(
     'detachedValues' | 'setCacheAnchorSeq' | 'resetCacheAnchorSeq'
   >,
   previous: HistoryDumpSource,
-  curated: HistoryIndexedRows,
+  curated: CompressionIndexedRows,
   start: number,
   model: string,
   top = 0,
   options: DetachedHistoryOptions = {},
-  sourceOrdinalAt?: (position: number) => number | undefined,
+  sourceOrdinalAt?: (
+    position: number,
+  ) => number | undefined | Promise<number | undefined>,
 ): Promise<IContent | undefined> {
   options.signal?.throwIfAborted();
   const anchor =
     top > 0
-      ? curated.readRow(start + top - 1).metadata?.chronology?.seq
+      ? (await curated.readRow(start + top - 1)).metadata?.chronology?.seq
       : undefined;
   if (
     top > 0 &&
@@ -147,7 +151,7 @@ export async function publishCandidate(
       for (let position = start; position < curated.length; position++) {
         options.signal?.throwIfAborted();
         const [clean] = invalidateResponsesStatefulChain([
-          annotateCandidateRow(curated.readRow(position), position, {
+          annotateCandidateRow(await curated.readRow(position), position, {
             start,
             top,
             span,
@@ -157,7 +161,7 @@ export async function publishCandidate(
         await appendCandidateRow(
           sink,
           sanitizeProviderContentForSerialization(clean),
-          sourceOrdinalAt?.(position),
+          await sourceOrdinalAt?.(position),
         );
         if (
           !marked &&
@@ -196,19 +200,45 @@ export async function runDiskTruncation(
   const metadata = await buildCompressionMetadata(...args);
   const history = args[2];
   const origin = args[7]?.historyOrigin;
+  const compress = (
+    rows: CompressionIndexedRows,
+  ): Promise<DiskTruncationResult> =>
+    retryWithBackoff(
+      () =>
+        new TopDownTruncationStrategy().compressDisk({
+          ...metadata,
+          history: rows,
+        }),
+      {
+        maxAttempts: 3,
+        initialDelayMs: 2000,
+        maxDelayMs: 10000,
+        shouldRetryOnError: shouldRetryCompressionError,
+      },
+    );
   return history.detachedValues.withCheckpoint(async (previous) => {
+    if (
+      'compressionInput' in previous &&
+      previous.compressionInput !== undefined
+    ) {
+      const input = previous.compressionInput;
+      const result = await compress(input.rows);
+      if (result.kind === 'noop') return { outcome: 'noop' };
+      const summary = await publishCandidate(
+        history,
+        input.previous,
+        input.rows,
+        result.start,
+        metadata.runtimeState.model,
+        0,
+        { origin },
+        (position) => input.rows.sourceOrdinalAt(position),
+      );
+      return { outcome: 'applied', summary };
+    }
     const curated = await curatedCandidate(checkpointRows(previous));
     try {
-      const strategy = new TopDownTruncationStrategy();
-      const result = await retryWithBackoff(
-        () => strategy.compressDisk({ ...metadata, history: curated }),
-        {
-          maxAttempts: 3,
-          initialDelayMs: 2000,
-          maxDelayMs: 10000,
-          shouldRetryOnError: shouldRetryCompressionError,
-        },
-      );
+      const result = await compress(curated);
       if (result.kind === 'noop') return { outcome: 'noop' };
       const summary = await publishCandidate(
         history,

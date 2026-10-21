@@ -19,6 +19,7 @@ import {
   snapshotReferences,
 } from './journalMediaReferences.js';
 import { snapshotRows } from './journalDetachedCapture.js';
+import { JournalDumpSnapshot } from './journalDumpSnapshot.js';
 
 type Enqueue = (execute: () => Promise<void>) => Promise<void>;
 
@@ -68,9 +69,11 @@ function snapshotCheckpoint(
   snapshot: VersionSnapshot,
   signal: AbortSignal | undefined,
   resumeBoundary: bigint | undefined,
+  dump: JournalDumpSnapshot,
 ): HistoryCheckpointRows {
   return {
     length: snapshot.rows,
+    compressionInput: { previous: dump, rows: dump },
     [Symbol.asyncIterator]: () =>
       snapshotRows(snapshot, signal, resumeBoundary),
   };
@@ -88,7 +91,8 @@ export async function withCheckpointOnJournal<T>(
   execute: (checkpoint: HistoryCheckpointRows) => Promise<T>,
   signal?: AbortSignal,
 ): Promise<T> {
-  const captured: { snapshot?: VersionSnapshot } = {};
+  const captured: { snapshot?: VersionSnapshot; dump?: JournalDumpSnapshot } =
+    {};
   const release = store.checkpointLifetime.hold();
   let failure: { error: unknown } | undefined;
   try {
@@ -101,19 +105,32 @@ export async function withCheckpointOnJournal<T>(
     signal?.throwIfAborted();
     if (captured.snapshot === undefined)
       throw new Error('The checkpoint was not captured');
+    captured.dump = new JournalDumpSnapshot(
+      captured.snapshot,
+      store.resumeBoundary,
+    );
     return await execute(
-      snapshotCheckpoint(captured.snapshot, signal, store.resumeBoundary),
+      snapshotCheckpoint(
+        captured.snapshot,
+        signal,
+        store.resumeBoundary,
+        captured.dump,
+      ),
     );
   } catch (error) {
     failure = { error };
     throw error;
   } finally {
-    await releaseCheckpoint(captured.snapshot, release, failure);
+    await releaseCheckpoint(
+      captured.dump ?? captured.snapshot,
+      release,
+      failure,
+    );
   }
 }
 
 async function releaseCheckpoint(
-  snapshot: VersionSnapshot | undefined,
+  snapshot: Pick<VersionSnapshot, 'close'> | undefined,
   release: () => Promise<void>,
   failure: { error: unknown } | undefined,
 ): Promise<void> {
@@ -146,7 +163,9 @@ export async function withRollbackCheckpointOnJournal<T>(
 ): Promise<T> {
   const scope: { state?: DetachedState; mark?: JournalMark } = {};
   await enqueue(async () => {
-    (await store.settledSnapshot(() => host.waitForTokenUpdates())).close();
+    await (
+      await store.settledSnapshot(() => host.waitForTokenUpdates())
+    ).close();
     scope.mark = store.captureCompensation();
     scope.state = host.snapshot();
   });

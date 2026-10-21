@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { HistoryIndexedRows } from './historyMutationSnapshot.js';
+import type { CompressionInputSnapshot } from './compressionInput.js';
 import type { IContent } from './IContent.js';
 
 /**
@@ -9,6 +10,10 @@ import type { IContent } from './IContent.js';
  */
 export interface HistoryCheckpointRows extends AsyncIterable<IContent> {
   readonly length: number;
+  readonly compressionInput?: Pick<
+    CompressionInputSnapshot,
+    'previous' | 'rows'
+  >;
 }
 
 /**
