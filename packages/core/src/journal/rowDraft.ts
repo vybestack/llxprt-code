@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { frameLength } from './frame.js';
+import { ROW_PIECE_CRC_BYTES, rowPieceParts } from './rowPiece.js';
 import type { FrameBody } from './frame.js';
 import type { GroupRecord } from './groupAppender.js';
 import { RECORD_KIND } from './recordKinds.js';
@@ -61,7 +62,7 @@ function blockDirectory(
   let offset = start;
   return blocks.map((block) => {
     const entry = { offset, length: block.bytes.length, type: block.type };
-    offset += block.bytes.length;
+    offset += block.bytes.length + ROW_PIECE_CRC_BYTES;
     return entry;
   });
 }
@@ -91,13 +92,19 @@ export function encodeRowDraft(label: bigint, draft: RowDraft): EncodedRow {
     chronologyStep: draft.chronologyStep,
     chronologyRecordedAt: draft.chronologyRecordedAt,
     parentEndpoint: draft.parentEndpoint,
-    blocks: blockDirectory(idPiece.length + draft.meta.length, draft.blocks),
+    blocks: blockDirectory(
+      idPiece.length + draft.meta.length + 2 * ROW_PIECE_CRC_BYTES,
+      draft.blocks,
+    ),
     ids: draft.ids.map(tupleOf),
   };
   const chunks = [idPiece, draft.meta, ...draft.blocks.map((b) => b.bytes)];
   const body: FrameBody = {
-    length: chunks.reduce((total, chunk) => total + chunk.length, 0),
-    chunks,
+    length: chunks.reduce(
+      (total, chunk) => total + chunk.length + ROW_PIECE_CRC_BYTES,
+      0,
+    ),
+    chunks: rowPieceParts(chunks),
   };
   const kindHeader = encodeRowHeader(header);
   return {

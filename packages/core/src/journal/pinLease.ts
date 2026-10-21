@@ -68,6 +68,10 @@ export function releaseRead(
 /** The reads of `raw`, each refused once the lease is free (a swap may have moved what they reach). */
 function leased(raw: RecordAccess, lease: PinLease): RecordAccess {
   return {
+    recordError(head, error) {
+      lease.require();
+      return raw.recordError(head, error);
+    },
     readRecordHead(offset, what, prefetchBytes) {
       lease.require();
       return raw.readRecordHead(offset, what, prefetchBytes);

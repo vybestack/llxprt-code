@@ -48,6 +48,7 @@ export async function openJournalReadOnly(
     const access: RecordAccess =
       trailer === undefined
         ? {
+            recordError: () => noCommittedState(),
             readRecordHead: (): Promise<FrameHead> => noCommittedState(),
             readRecordStart: (): Promise<FrameStart> => noCommittedState(),
             readRecordRange: (): Promise<Uint8Array> => noCommittedState(),
@@ -60,6 +61,7 @@ export async function openJournalReadOnly(
       header,
       trailer,
       fileSize: size,
+      recordError: access.recordError,
       readRecordHead: access.readRecordHead,
       readRecordStart: access.readRecordStart,
       readRecordBody: access.readRecordBody,

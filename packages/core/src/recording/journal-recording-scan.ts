@@ -9,7 +9,8 @@ import {
 } from '../journal/journalReader.js';
 import { stateReaderOf } from '../journal/journalReaderState.js';
 import { RECORD_KIND } from '../journal/recordKinds.js';
-import { decodeIdPiece, decodeRowHeader } from '../journal/rowRecord.js';
+import { decodeRowHeader } from '../journal/rowRecord.js';
+import { storedRowFromBody } from '../journal/rowReads.js';
 import { FRAME_HEAD_BYTES, type FrameHead } from '../journal/frame.js';
 import { crc32 } from '../journal/bytes.js';
 import {
@@ -41,14 +42,9 @@ async function scanRow(
     else body.set(chunk, offset);
     offset += chunk.length;
   }
-  const content = decodeStoredRow({
-    header,
-    rawIds: decodeIdPiece(body.subarray(0, header.idsLen), header.ids.length),
-    meta: body.subarray(header.idsLen, header.idsLen + header.metaLen),
-    blocks: header.blocks.map((block) =>
-      body.subarray(block.offset, block.offset + block.length),
-    ),
-  });
+  const content = decodeStoredRow(
+    storedRowFromBody(reader, head, header, body),
+  );
   return content;
 }
 

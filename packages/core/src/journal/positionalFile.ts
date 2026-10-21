@@ -1,4 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+export class JournalShortReadError extends Error {
+  constructor(position: number, length: number, filled: number) {
+    super(
+      `Unexpected end of file reading ${length} bytes at ${position}: got ${filled}`,
+    );
+    this.name = 'JournalShortReadError';
+  }
+}
+
 /** Reads that name their offset. A read returns exactly `length` bytes or throws. */
 export interface PositionalReader {
   readAt(position: number, length: number): Promise<Uint8Array>;
@@ -65,9 +74,7 @@ export function createFileHandleReader(
           position + filled,
         );
         if (bytesRead === 0) {
-          throw new Error(
-            `Unexpected end of file reading ${length} bytes at ${position}: got ${filled}`,
-          );
+          throw new JournalShortReadError(position, length, filled);
         }
         filled += bytesRead;
       }

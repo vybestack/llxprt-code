@@ -13,6 +13,7 @@ import {
 } from './journal-response-plan.js';
 import { MEDIA_REFERENCE } from './__tests__/support/journalRowShapes.js';
 import type { IContent } from './IContent.js';
+import { ROW_PIECE_CRC_BYTES } from '../../journal/rowPiece.js';
 
 async function verifyFirstBlock(
   plan: JournalResponsePlan,
@@ -31,7 +32,7 @@ async function verifyFirstBlock(
     expect(Math.max(...lengths)).toBe(
       Buffer.byteLength(
         JSON.stringify({ ...response('a'), result: 'a'.repeat(131072) }),
-      ),
+      ) + ROW_PIECE_CRC_BYTES,
     );
   } finally {
     await blocks.return(undefined);

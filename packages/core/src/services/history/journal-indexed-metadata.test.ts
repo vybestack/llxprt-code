@@ -26,6 +26,7 @@ async function measured(session: JournalSession): Promise<{
   const stats = { heads: 0, blocks: 0, bodies: 0 };
   const raw = read.access;
   const access: RecordAccess = {
+    recordError: raw.recordError,
     readRecordHead(offset, what, prefetch) {
       stats.heads++;
       return raw.readRecordHead(offset, what, prefetch);

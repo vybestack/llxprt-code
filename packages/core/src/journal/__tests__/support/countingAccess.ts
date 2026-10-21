@@ -19,6 +19,7 @@ export function countingAccess(
     reads.set(name, (reads.get(name) ?? 0) + 1);
   };
   return {
+    recordError: access.recordError,
     readRecordHead(offset, what, prefetchBytes) {
       count(what);
       return access.readRecordHead(offset, what, prefetchBytes);

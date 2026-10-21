@@ -30,6 +30,7 @@ export async function measuredRequestSnapshot(
   const stats = { heads: 0, blocks: 0, bodies: 0, releases: 0 };
   const raw = read.access;
   const access: RecordAccess = {
+    recordError: raw.recordError,
     async readRecordHead(offset, what, prefetch) {
       stats.heads++;
       await beforeHead?.();

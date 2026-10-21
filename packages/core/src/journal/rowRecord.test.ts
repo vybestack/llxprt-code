@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { rowPieceParts } from './rowPiece.js';
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { JournalFormatError } from './errors.js';
@@ -316,10 +317,10 @@ describe('a ROW record of 100,000 blocks and 100,000 ids', () => {
     const blockBytes = Array.from({ length: count }, (_, index) =>
       new TextEncoder().encode(JSON.stringify({ type: 'text', text: index })),
     );
-    let offset = idPiece.length + meta.length;
+    let offset = idPiece.length + meta.length + 8;
     const blocks: RowBlockEntry[] = blockBytes.map((bytes) => {
       const entry = { offset, length: bytes.length, type: 1 };
-      offset += bytes.length;
+      offset += bytes.length + 4;
       return entry;
     });
     const row = sampleRow({
@@ -334,7 +335,9 @@ describe('a ROW record of 100,000 blocks and 100,000 ids', () => {
         nameLen: 4,
       })),
     });
-    const body = Buffer.concat([idPiece, meta, ...blockBytes]);
+    const body = Buffer.concat([
+      ...rowPieceParts([idPiece, meta, ...blockBytes]),
+    ]);
     const out = collectingSink();
 
     await writeFrame(out.sink, RECORD_KIND.ROW, encodeRowHeader(row), {
@@ -368,13 +371,13 @@ describe('ROW body', () => {
       idsLen: 10,
       metaLen: 20,
       blocks: [
-        { offset: 30, length: 5, type: 1 },
-        { offset: 35, length: 0, type: 1 },
-        { offset: 35, length: 15, type: 2 },
+        { offset: 38, length: 5, type: 1 },
+        { offset: 47, length: 0, type: 1 },
+        { offset: 51, length: 15, type: 2 },
       ],
     });
 
-    expect(() => validateRowAgainstBody(row, 50)).not.toThrow();
+    expect(() => validateRowAgainstBody(row, 70)).not.toThrow();
   });
 
   it('rejects pieces that run past the body, overlap the pieces or leave the body', () => {

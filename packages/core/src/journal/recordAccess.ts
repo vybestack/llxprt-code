@@ -10,7 +10,10 @@ import {
   type FrameHead,
   type FrameStart,
 } from './frame.js';
-import type { PositionalReader } from './positionalFile.js';
+import {
+  JournalShortReadError,
+  type PositionalReader,
+} from './positionalFile.js';
 import type { TrailerHeader } from './trailerRecord.js';
 
 /** What a record is called in an error when the caller does not name it. */
@@ -24,6 +27,7 @@ const DEFAULT_WHAT = 'record';
  * offset and the trailer that led to it.
  */
 export interface RecordAccess {
+  recordError(head: FrameHead, error: Error): JournalCorruptionError;
   /**
    * `prefetchBytes` is how much of the record to read with its head, for a
    * record whose size the caller knows; it saves the second read.
@@ -63,6 +67,23 @@ export interface RecordAccess {
  */
 export type AccessBounds = Pick<TrailerHeader, 'selfOffset' | 'durableEnd'>;
 
+function validateRange(
+  head: FrameHead,
+  offset: number,
+  length: number,
+  durableEnd: number,
+): void {
+  const invalidOffset = !Number.isSafeInteger(offset) || offset < 0;
+  const invalidLength = !Number.isSafeInteger(length) || length < 0;
+  if (
+    invalidOffset ||
+    invalidLength ||
+    offset + length > head.bodyLen ||
+    head.endOffset > durableEnd
+  )
+    throw new JournalFormatError('Record body range is out of bounds');
+}
+
 export function createRecordAccess(
   path: string,
   reader: PositionalReader,
@@ -71,7 +92,7 @@ export function createRecordAccess(
   const corruption = (
     what: string,
     offset: number,
-    error: JournalFrameError,
+    error: Error,
   ): JournalCorruptionError =>
     new JournalCorruptionError(
       path,
@@ -94,36 +115,40 @@ export function createRecordAccess(
         prefetchBytes,
       );
     } catch (error) {
-      if (error instanceof JournalFrameError) {
+      if (
+        error instanceof JournalFrameError ||
+        error instanceof JournalShortReadError
+      ) {
         throw corruption(what, offset, error);
       }
       throw error;
     }
   };
   return {
+    recordError: (head, error) => corruption('ROW', head.offset, error),
     async readRecordHead(offset, what = DEFAULT_WHAT, prefetchBytes) {
       return (await readStart(offset, what, prefetchBytes)).head;
     },
     readRecordStart: (offset, what, prefetchBytes) =>
       readStart(offset, what, prefetchBytes),
-    readRecordRange(head, offset, length) {
-      const invalidOffset = !Number.isSafeInteger(offset) || offset < 0;
-      const invalidLength = !Number.isSafeInteger(length) || length < 0;
-      const outsideBody = offset + length > head.bodyLen;
-      if (
-        invalidOffset ||
-        invalidLength ||
-        outsideBody ||
-        head.endOffset > trailer.durableEnd
-      )
-        throw new JournalFormatError('Record body range is out of bounds');
-      return reader.readAt(head.bodyOffset + offset, length);
+    async readRecordRange(head, offset, length) {
+      validateRange(head, offset, length, trailer.durableEnd);
+      try {
+        return await reader.readAt(head.bodyOffset + offset, length);
+      } catch (error) {
+        if (error instanceof JournalShortReadError)
+          throw corruption('ROW', head.offset, error);
+        throw error;
+      }
     },
     async *readRecordBody(head, chunkBytes, what = DEFAULT_WHAT) {
       try {
         yield* readFrameBody(reader, head, chunkBytes);
       } catch (error) {
-        if (error instanceof JournalFrameError) {
+        if (
+          error instanceof JournalFrameError ||
+          error instanceof JournalShortReadError
+        ) {
           throw corruption(what, head.offset, error);
         }
         throw error;

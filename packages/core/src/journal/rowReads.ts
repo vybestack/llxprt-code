@@ -10,6 +10,9 @@ import {
   type RowHeader,
 } from './rowRecord.js';
 import { bytesEqual } from './bytes.js';
+import type { FrameHead } from './frame.js';
+import { checkedRowPiece, ROW_PIECE_CRC_BYTES } from './rowPiece.js';
+import { validateRowAgainstBody } from './rowRecord.js';
 
 /** The first read of a row: its kind header and id piece in the usual case (design 2.4). */
 export const ROW_START_PREFETCH_BYTES = 4096;
@@ -24,8 +27,8 @@ export interface RowIds {
 /**
  * Reads the header and id piece of the row an entry points at, in one read
  * for an ordinary row and a second for one whose pieces are larger than the
- * prefetch. The id piece is not under the body CRC here, which is why every
- * string is hashed again and checked against the header's tuple.
+ * prefetch. Its piece CRC is checked before decoding; each string is also
+ * hashed and checked against the frame-protected tuple.
  */
 export async function readRowIds(
   access: RecordAccess,
@@ -47,7 +50,14 @@ export async function readRowIds(
       `Row at offset ${entry.recordOffset} has label ${header.label}, its entry says ${entry.label}`,
     );
   }
-  const piece = await idPieceOf(access, head, bodyPrefix, header.idsLen);
+  validateRowAgainstBody(header, head.bodyLen);
+  const withCrc = await idPieceOf(
+    access,
+    head,
+    bodyPrefix,
+    header.idsLen + ROW_PIECE_CRC_BYTES,
+  );
+  const piece = checkedRowPiece(access, head, withCrc, 0, header.idsLen);
   const rawIds = decodeIdPiece(piece, header.ids.length);
   rawIds.forEach((rawId, index) => {
     if (!bytesEqual(hashId(rawId), header.ids[index].idHash)) {
@@ -133,12 +143,28 @@ export async function readStoredRow(
     );
   }
   const body = await readBody(access, head);
+  return storedRowFromBody(access, head, header, body);
+}
+
+export function storedRowFromBody(
+  access: RecordAccess,
+  head: FrameHead,
+  header: RowHeader,
+  body: Uint8Array,
+): StoredRow {
+  validateRowAgainstBody(header, body.length);
+  const piece = (offset: number, length: number): Uint8Array =>
+    checkedRowPiece(
+      access,
+      head,
+      body.subarray(offset, offset + length + ROW_PIECE_CRC_BYTES),
+      offset,
+      length,
+    );
   return {
     header,
-    rawIds: decodeIdPiece(body.subarray(0, header.idsLen), header.ids.length),
-    meta: body.subarray(header.idsLen, header.idsLen + header.metaLen),
-    blocks: header.blocks.map((block) =>
-      body.subarray(block.offset, block.offset + block.length),
-    ),
+    rawIds: decodeIdPiece(piece(0, header.idsLen), header.ids.length),
+    meta: piece(header.idsLen + ROW_PIECE_CRC_BYTES, header.metaLen),
+    blocks: header.blocks.map((block) => piece(block.offset, block.length)),
   };
 }

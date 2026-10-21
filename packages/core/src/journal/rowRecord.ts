@@ -14,6 +14,7 @@ import {
   viewOf,
 } from './bytes.js';
 import { JournalFormatError } from './errors.js';
+import { ROW_PIECE_CRC_BYTES } from './rowPiece.js';
 
 export const ROW_SPEAKER = { human: 0, ai: 1, tool: 2 } as const;
 export const ROW_ID_KIND = { call: 0, response: 1 } as const;
@@ -338,19 +339,28 @@ export function decodeRowHeader(bytes: Uint8Array): RowHeader {
  * that no block starts inside the two pieces before it.
  */
 export function validateRowAgainstBody(row: RowHeader, bodyLen: number): void {
-  const blocksStart = row.idsLen + row.metaLen;
+  const blocksStart = row.idsLen + row.metaLen + 2 * ROW_PIECE_CRC_BYTES;
   if (blocksStart > bodyLen) {
     throw new JournalFormatError(
-      `Row pieces of ${blocksStart} bytes (ids ${row.idsLen}, metadata ${row.metaLen}) run past the ${bodyLen}-byte body`,
+      `Row pieces of ${blocksStart} bytes (ids ${row.idsLen}, metadata ${row.metaLen}, CRC suffixes) run past the ${bodyLen}-byte body`,
     );
   }
+  let next = blocksStart;
   row.blocks.forEach((block, index) => {
-    if (block.offset < blocksStart || block.offset + block.length > bodyLen) {
+    if (
+      block.offset !== next ||
+      block.offset + block.length + ROW_PIECE_CRC_BYTES > bodyLen
+    ) {
       throw new JournalFormatError(
-        `Row block ${index} at ${block.offset} for ${block.length} bytes lies outside the block area ${blocksStart} to ${bodyLen}`,
+        `Row block ${index} at ${block.offset} for ${block.length} bytes does not match the block area ${next} to ${bodyLen}`,
       );
     }
+    next += block.length + ROW_PIECE_CRC_BYTES;
   });
+  if (next !== bodyLen)
+    throw new JournalFormatError(
+      'Row body has trailing bytes outside its pieces',
+    );
 }
 
 const UTF8_ENCODER = new TextEncoder();
