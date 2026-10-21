@@ -83,11 +83,34 @@ describe('runtime cleanup retires the OAuthManager it owns', () => {
   let sequence = 0;
   let fixtureId = 0;
   let fakeTimersInstalled = false;
+  let cleanupLock: string;
+  let observeNativeCleanup = false;
+  let cleanupEntry: { fakeClock: boolean; lockExists: boolean };
   function trace(
     boundary: string,
     state: Readonly<Record<string, boolean | readonly number[]>> = {},
   ): void {
     if (boundary === 'credentials.beforeEach:enter') fixtureId += 1;
+    if (
+      observeNativeCleanup &&
+      boundary === 'credentials.fixture.dispose:enter'
+    ) {
+      cleanupEntry = {
+        fakeClock: vi.isFakeTimers(),
+        lockExists: fs.existsSync(cleanupLock),
+      };
+    }
+    if (observeNativeCleanup && boundary === 'credentials.home.remove:exit') {
+      expect({
+        ...cleanupEntry,
+        lockRemains: fs.existsSync(cleanupLock),
+      }).toStrictEqual({
+        fakeClock: false,
+        lockExists: true,
+        lockRemains: false,
+      });
+      observeNativeCleanup = false;
+    }
     process.stderr.write(
       JSON.stringify({
         diagnostic: 'oauth-retirement-hooks',
@@ -106,7 +129,6 @@ describe('runtime cleanup retires the OAuthManager it owns', () => {
       }) + '\n',
     );
   }
-  const credentials = useOwnedCredentials(trace);
   let oauth: OAuthManager;
   let release: AcquisitionRelease;
   const retiring: Array<() => void | Promise<void>> = [];
@@ -114,7 +136,10 @@ describe('runtime cleanup retires the OAuthManager it owns', () => {
     trace('runtime.afterEach.cleanup:enter');
     await runCleanupSteps(retiring.splice(0).reverse());
     trace('runtime.afterEach.cleanup:exit');
+    vi.useRealTimers();
+    fakeTimersInstalled = false;
   });
+  const credentials = useOwnedCredentials(trace);
   function openOAuth(
     store: RecordingTokenStore,
     supplied: OAuthManager | undefined = undefined,
@@ -162,6 +187,12 @@ describe('runtime cleanup retires the OAuthManager it owns', () => {
   beforeEach(() => {
     trace('runtime.beforeEach:enter');
     previousConfigHome = process.env['LLXPRT_CONFIG_HOME'];
+    if (previousConfigHome === undefined) {
+      throw new Error('Credential fixture home is unavailable');
+    }
+    cleanupLock = path.join(previousConfigHome, 'native-cleanup', 'held.lock');
+    fs.mkdirSync(path.dirname(cleanupLock));
+    fs.writeFileSync(cleanupLock, 'owned native cleanup');
     configHome = fs.mkdtempSync(path.join(os.tmpdir(), 'oauth-retire-'));
     fs.writeFileSync(
       path.join(configHome, 'settings.json'),
@@ -176,8 +207,6 @@ describe('runtime cleanup retires the OAuthManager it owns', () => {
 
   afterEach(() => {
     trace('runtime.afterEach.restore:enter');
-    vi.useRealTimers();
-    fakeTimersInstalled = false;
     if (previousConfigHome === undefined) {
       delete process.env['LLXPRT_CONFIG_HOME'];
     } else {
@@ -271,5 +300,10 @@ describe('runtime cleanup retires the OAuthManager it owns', () => {
       trace('borrowed.dispose:exit');
     }
     trace('borrowed.body:exit');
+  });
+
+  it('joins native credential cleanup on the real clock', () => {
+    observeNativeCleanup = true;
+    expect(fs.existsSync(cleanupLock)).toBe(true);
   });
 });
