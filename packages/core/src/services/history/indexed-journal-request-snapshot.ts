@@ -27,6 +27,10 @@ import { streamResponsePlans } from './journal-response-units.js';
 import { JournalRequestKimi } from './journal-request-kimi.js';
 import { JournalRequestMistral } from './journal-request-mistral.js';
 import type { MistralMapping } from '../../journal/mistralMapping.js';
+import {
+  anthropicToolFacts,
+  type AnthropicToolOccurrenceFacts,
+} from './journal-anthropic-facts.js';
 
 async function releaseQueryHold(
   release: () => void | Promise<void>,
@@ -245,6 +249,23 @@ export class IndexedJournalRequestSnapshot {
 
   async mistralIdsAt(index: number): Promise<MistralUnitIds> {
     return mistralPlanIds(this.source, await this.planAt(index));
+  }
+
+  anthropicToolFactsAt(
+    index: number,
+    signal?: AbortSignal,
+  ): Promise<readonly AnthropicToolOccurrenceFacts[]> {
+    return this.query(
+      async () =>
+        anthropicToolFacts(
+          this,
+          this.source,
+          (rawId) => this.snapshot.normalizedId(2, rawId),
+          await this.planAt(index, signal),
+          index,
+        ),
+      signal,
+    );
   }
 
   withMistralSelection<T>(
