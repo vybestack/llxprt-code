@@ -72,6 +72,7 @@ async function shed(
       firstHistory,
       lastParent: header.lastParent,
       filtered,
+      replacement: 'derived',
     });
     filtered ||= replaced > 0;
     current = deps.historyService.historyMutationGuard();

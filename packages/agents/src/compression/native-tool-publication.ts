@@ -24,6 +24,7 @@ interface Publication {
   readonly firstHistory: number;
   readonly lastParent: number;
   readonly filtered: boolean;
+  readonly replacement: 'density' | 'derived';
 }
 async function replaceRow(
   row: IContent,
@@ -66,7 +67,7 @@ export async function publishNativeToolResponses(
         } else {
           const result = await replaceRow(row, entry.label, publication);
           replaced += result.replaced;
-          if (result.replaced > 0)
+          if (result.replaced > 0 && publication.replacement === 'density')
             await sink.appendReplacement(ordinal, result.row);
           else await sink.appendDerived(ordinal, result.row);
           ordinal++;

@@ -117,6 +117,7 @@ async function shed(
           firstHistory,
           lastParent: header.lastParent,
           filtered,
+          replacement: 'density',
         });
         filtered ||= history > 0;
         current = deps.historyService.historyMutationGuard();
