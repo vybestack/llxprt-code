@@ -19,7 +19,7 @@ import { KeyringTokenStore } from '@vybestack/llxprt-code-core';
 import { type KeyringAdapter } from '@vybestack/llxprt-code-storage';
 import { SecureStore } from '@vybestack/llxprt-code-storage';
 
-function createRefreshGate(): {
+function createRefreshCancellationGate(): {
   promise: Promise<void>;
   resolve: () => void;
 } {
@@ -194,8 +194,8 @@ describe('OAuthManager - Token Refresh Race Condition (Issue #1159)', () => {
       async (failure) => {
         const expiredToken = createToken('expired-token', -10);
         await tokenStore.saveToken('test-provider', expiredToken);
-        const refreshStarted = createRefreshGate();
-        const refreshGate = createRefreshGate();
+        const refreshStarted = createRefreshCancellationGate();
+        const refreshGate = createRefreshCancellationGate();
         mockProvider.refreshToken = async (): Promise<OAuthToken | null> => {
           refreshCallCount++;
           refreshStarted.resolve();
@@ -274,8 +274,8 @@ describe('OAuthManager - Token Refresh Race Condition (Issue #1159)', () => {
       async ({ forced, cancelled }) => {
         const expiredToken = createToken('expired-token', -10);
         await tokenStore.saveToken('test-provider', expiredToken);
-        const entered = createRefreshGate();
-        const held = createRefreshGate();
+        const entered = createRefreshCancellationGate();
+        const held = createRefreshCancellationGate();
         const providerError = new Error(
           'independent provider failure during retirement',
         );
