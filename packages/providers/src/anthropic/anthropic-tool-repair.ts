@@ -1,19 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalFormatError } from '@vybestack/llxprt-code-core/journal/errors.js';
 import type { AnthropicMessageBlock } from './AnthropicMessageNormalizer.js';
+import type { AnthropicRepairIndex } from './anthropic-repair-index.js';
 import type {
   AnthropicRepairSource,
   RepairMessage,
 } from './anthropic-repair-source.js';
 
 type ResultBlock = Extract<AnthropicMessageBlock, { type: 'tool_result' }>;
-interface ReplayBoundary {
-  readonly id: string;
-  readonly consumed: number;
-  readonly before: number;
-  readonly depth: number;
-}
-export const ANTHROPIC_REPAIR_METADATA_DEPTH = 16;
 export interface ToolRepairOverlay {
   readonly id: string;
   readonly callMessage: number;
@@ -29,155 +23,26 @@ const interrupted = (id: string): ResultBlock => ({
 });
 
 export class AnthropicToolRepair {
-  private nextCache:
-    | {
-        readonly start: number;
-        readonly end: number;
-        readonly id: string;
-        readonly consumed: number;
-        readonly next: RepairMessage | undefined;
-      }
-    | undefined;
-  constructor(readonly source: AnthropicRepairSource) {}
+  readonly work = {
+    walks: 0,
+    recursiveWalks: 0,
+    usePositions: 0,
+    nextQueries: 0,
+    survivalQueries: 0,
+    decisions: 0,
+    takenQueries: 0,
+  };
 
-  private async survivesAt(
-    index: number,
-    boundary: ReplayBoundary,
-  ): Promise<boolean> {
-    const facts = await this.source.query.anthropicToolFactsAt(index);
-    const within = new Map<string, number>();
-    for (const fact of facts) {
-      if (fact.kind !== 'result' || fact.orphan) continue;
-      const local = (within.get(fact.id) ?? 0) + 1;
-      within.set(fact.id, local);
-      const ordinal = fact.resultsBefore + local;
-      const removed =
-        fact.id === boundary.id
-          ? ordinal <= boundary.consumed
-          : (await this.walk(
-              fact.id,
-              boundary.before,
-              undefined,
-              ordinal,
-              boundary.depth + 1,
-            )) !== undefined;
-      if (!removed) return true;
-    }
-    return false;
-  }
-
-  private async survives(
-    message: RepairMessage,
-    boundary: ReplayBoundary,
-  ): Promise<boolean> {
-    if (message.slot !== 'results') return true;
-    for (let at = message.start; at <= message.end; at++)
-      if (await this.survivesAt(at, boundary)) return true;
-    return false;
-  }
-
-  private async next(
-    message: RepairMessage,
-    boundary: ReplayBoundary,
-  ): Promise<RepairMessage | undefined> {
-    if (
-      this.nextCache?.start === message.start &&
-      this.nextCache.end === message.end &&
-      this.nextCache.id === boundary.id &&
-      this.nextCache.consumed === boundary.consumed
-    )
-      return this.nextCache.next;
-    let next: RepairMessage | undefined;
-    for await (const candidate of this.source.messages(message.end + 1)) {
-      if (await this.survives(candidate, boundary)) {
-        next = candidate;
-        break;
-      }
-    }
-    this.nextCache = {
-      start: message.start,
-      end: message.end,
-      id: boundary.id,
-      consumed: boundary.consumed,
-      next,
-    };
-    return next;
-  }
-
-  private walk(
-    id: string,
-    through: number,
-    known: RepairMessage | undefined,
-    wantedOrdinal?: number,
-    depth = 0,
-  ): Promise<ToolRepairOverlay | undefined> {
-    if (depth > ANTHROPIC_REPAIR_METADATA_DEPTH)
-      throw new JournalFormatError(
-        'Anthropic cross-ID repair dependency exceeds the metadata budget; stored semantic summaries are required',
-      );
-    const query = this.source.query;
-    return query.withNormalized(2, 0, id, (uses) =>
-      query.withNormalized(2, 1, id, async (results) => {
-        let consumed = 0;
-        let previousEnd = -1;
-        let inserted = false;
-        const limit = await uses.countBefore(through + 1);
-        for (let at = 1; at <= limit; at++) {
-          const unit = await uses.position(at);
-          if (unit === undefined)
-            throw new JournalFormatError('Repair use ordinal is absent');
-          if (unit <= previousEnd) continue;
-          const message =
-            known !== undefined && known.start <= unit && known.end >= unit
-              ? known
-              : await this.source.groupAt(unit);
-          previousEnd = message.end;
-          const next = await this.next(message, {
-            id,
-            consumed,
-            before: message.start - 1,
-            depth,
-          });
-          let ordinal: number | undefined;
-          let missing = false;
-          if (next?.role === 'user') {
-            const before = await results.countBefore(next.start);
-            const end = await results.countBefore(next.end + 1);
-            if (Math.max(before + 1, consumed + 1) > end) {
-              const later = Math.max(end + 1, consumed + 1);
-              ordinal = later <= results.count ? later : undefined;
-              missing = ordinal === undefined;
-              consumed = ordinal ?? consumed;
-            }
-          } else if (results.count === 0 && !inserted) {
-            missing = true;
-            inserted = true;
-          }
-          inserted ||= missing;
-          if (
-            (ordinal !== undefined || missing) &&
-            (wantedOrdinal === undefined
-              ? message.start === known?.start
-              : wantedOrdinal === ordinal)
-          )
-            return {
-              id,
-              callMessage: message.start,
-              target: next?.role === 'user' ? next.start : undefined,
-              resultOrdinal: ordinal,
-              interrupted: missing,
-            };
-        }
-        return undefined;
-      }),
-    );
-  }
-
+  constructor(
+    readonly source: AnthropicRepairSource,
+    readonly index: AnthropicRepairIndex,
+  ) {}
   decision(
     message: RepairMessage,
     id: string,
   ): Promise<ToolRepairOverlay | undefined> {
-    return this.walk(id, message.end, message);
+    this.work.decisions++;
+    return this.index.decision(message, id);
   }
 
   async result(id: string, ordinal: number): Promise<ResultBlock> {
@@ -233,7 +98,8 @@ export class AnthropicToolRepair {
   }
 
   async taken(id: string, ordinal: number, at: number): Promise<boolean> {
-    return (await this.walk(id, at, undefined, ordinal)) !== undefined;
+    this.work.takenQueries++;
+    return this.index.taken(id, ordinal, at);
   }
 
   async *kept(

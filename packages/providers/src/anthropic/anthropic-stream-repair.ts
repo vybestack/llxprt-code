@@ -14,6 +14,10 @@ import {
 } from './anthropic-repair-source.js';
 import { AnthropicToolRepair } from './anthropic-tool-repair.js';
 import {
+  AnthropicRepairIndex,
+  anthropicRepairScope,
+} from './anthropic-repair-index.js';
+import {
   anthropicUnitTransfer,
   finalizeAnthropicTransfer,
   type AnthropicAtom,
@@ -76,14 +80,16 @@ export class AnthropicStreamRepair {
     policy: RepairPolicy = {},
   ): Promise<AnthropicStreamRepair> {
     projectAnthropicUnit({ speaker: 'human', blocks: [] }, settings);
-    const source = new AnthropicRepairSource(query, settings);
+    const facts = await query.nativeFacts(anthropicRepairScope(settings));
+    const index = await AnthropicRepairIndex.read(facts);
+    const source = new AnthropicRepairSource(query, settings, index);
     const last =
       policy.strip === 'allButLast' && policy.includeInContext !== false
         ? await source.lastThinking()
         : -1;
     return new AnthropicStreamRepair(
       source,
-      new AnthropicToolRepair(source),
+      new AnthropicToolRepair(source, index),
       { ...policy },
       last,
     );

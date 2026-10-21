@@ -160,6 +160,25 @@ export class JournalRequestOccurrences {
   }
 
   private async indexBound(index: number): Promise<number> {
+    if (this.rows.length === 0) {
+      if (index === 0) return 0;
+      if (index >= this.snapshot.units) return this.total;
+      const target = await this.snapshot.unitAt(index);
+      let low = 0;
+      let high = this.total;
+      while (low < high) {
+        const middle = Math.floor((low + high) / 2);
+        const at = await this.persisted(middle + 1);
+        if (
+          at.label < target.entry.label ||
+          (at.label === target.entry.label &&
+            unitOffset(target.entry, at) < target.unit)
+        )
+          low = middle + 1;
+        else high = middle;
+      }
+      return low;
+    }
     let low = 0;
     let high = this.total;
     while (low < high) {

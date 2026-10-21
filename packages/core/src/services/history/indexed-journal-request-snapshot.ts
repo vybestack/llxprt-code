@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { NativeFactIndexReader } from '../../journal/nativeFactIndex.js';
 import type { JournalStore } from '../../journal/journalStore.js';
 import { JournalMistralSelection } from './journal-mistral-selection.js';
 import {
@@ -89,6 +90,15 @@ export class IndexedJournalRequestSnapshot {
     if (this.closed)
       throw new Error('Indexed journal request snapshot is closed');
     this.snapshot.requireOpen();
+  }
+
+  nativeFacts(scope: string): Promise<NativeFactIndexReader> {
+    this.requireOpen();
+    if (this.rows.length !== 0)
+      throw new JournalFormatError(
+        'Native fact indexes require persisted request units without a tail overlay',
+      );
+    return this.snapshot.nativeFacts(scope);
   }
 
   isPending(index: number): boolean {

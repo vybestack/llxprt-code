@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { anthropicRepairFactIndex } from './anthropic-repair-fact-writer.js';
 import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
 import { encodeContentRow } from '@vybestack/llxprt-code-core/services/history/journalRowCodec.js';
 import { IndexedJournalRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/indexed-journal-request-snapshot.js';
@@ -45,6 +46,7 @@ async function nativeOutput(
       kind: 'replace',
       rows: rows.map((row) => encodeContentRow(row, { owner: 0 })),
     },
+    { kind: 'factIndex', registration: anthropicRepairFactIndex(settings) },
   ]);
   const pin = await session.store.snapshot();
   const query = await IndexedJournalRequestSnapshot.create(pin);

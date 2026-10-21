@@ -7,6 +7,7 @@ import type { RowEntry } from './rowEntry.js';
 import type { Version } from './version.js';
 import type { MistralScopeFill } from './mistralScope.js';
 import type { RowFormatRegistration } from './rowFormat.js';
+import type { NativeFactIndexRegistration } from './nativeFactIndex.js';
 
 /**
  * The index-entry fields a fill sets for one row (design 4.6 and 8.2). A fill
@@ -60,6 +61,10 @@ export interface SourceRow {
 
 /** One primitive edit of a commit group (design 4.1). The group applies them in order and commits once. */
 export type VersionEdit =
+  | {
+      readonly kind: 'factIndex';
+      readonly registration: NativeFactIndexRegistration;
+    }
   | {
       readonly kind: 'format';
       readonly registration: RowFormatRegistration;

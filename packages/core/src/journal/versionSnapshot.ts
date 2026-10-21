@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { ACTIVE_FACT_INDEX, NativeFactIndexReader } from './nativeFactIndex.js';
 import { JournalFormatError } from './errors.js';
 import { decodeDecimal } from './metaFacts.js';
 import { KimiOrdinalQueries } from './kimiOrdinals.js';
@@ -74,6 +75,17 @@ export class VersionSnapshot {
       idDeps,
     );
     this.kimiFacts = new KimiFactQueries(this, idDeps, this.kimi.meta);
+  }
+
+  async nativeFacts(scope: string): Promise<NativeFactIndexReader> {
+    this.requireOpen();
+    const active = await this.kimi.meta.get(
+      this.version?.roots.metaRoot ?? 0,
+      ACTIVE_FACT_INDEX,
+    );
+    if (active === undefined || new TextDecoder().decode(active) !== scope)
+      throw new JournalFormatError('Native fact index settings require a fill');
+    return new NativeFactIndexReader(this.facts, scope);
   }
 
   normalizedId(family: 1 | 2, rawId: string): string {

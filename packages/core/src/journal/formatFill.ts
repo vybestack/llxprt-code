@@ -129,7 +129,7 @@ async function* missingEntries(
   }
 }
 
-function snapshotOf(
+export function snapshotOf(
   ctx: BuildContext,
   built: BuiltGroup,
   appender: RecordAppender,

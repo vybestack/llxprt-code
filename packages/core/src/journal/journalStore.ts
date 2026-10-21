@@ -1,5 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import {
+  fillNativeFacts,
+  requireNativeFactWriter,
+  warmNativeFacts,
+} from './nativeFactFill.js';
+import type { NativeFactIndexRegistration } from './nativeFactIndex.js';
+import {
   checkpointKey,
   parseCheckpointEntry,
   type CheckpointDescriptor,
@@ -25,6 +31,7 @@ import {
 } from './compactionSwap.js';
 import { buildGroup, mapReader, type BuildContext } from './groupBuild.js';
 import type { OccurrencePlanner, VersionEdit } from './groupEdits.js';
+import type { RecordAppender } from './groupAppender.js';
 import { mutationOf, planGroup } from './groupPlan.js';
 import type { GroupPlan, PlanContext } from './groupPlanTypes.js';
 import type { CommitAck } from './groupWriter.js';
@@ -133,6 +140,7 @@ interface SpineEntry {
  */
 export class JournalStore {
   private rowFormats: readonly RegisteredRowFormat[] = [];
+  private factIndex: NativeFactIndexRegistration | undefined;
   private commitEffect: CommitEffectFactory | undefined;
 
   setCommitEffect(factory: CommitEffectFactory): void {
@@ -237,6 +245,7 @@ export class JournalStore {
     );
     clone.restartOnNewFile();
     clone.rowFormats = this.rowFormats;
+    clone.factIndex = this.factIndex;
     return clone;
   }
 
@@ -584,8 +593,11 @@ export class JournalStore {
       edits,
       this.rowFormats,
     );
-    if (warm === undefined || before === undefined) return undefined;
-    this.rowFormats = warm;
+    const facts = await warmNativeFacts(this.buildContext(), edits);
+    if ((warm === undefined && facts === undefined) || before === undefined)
+      return undefined;
+    if (warm !== undefined) this.rowFormats = warm;
+    if (facts !== undefined) this.factIndex = facts;
     const read = this.readOfPublished();
     return {
       ack: {
@@ -599,6 +611,40 @@ export class JournalStore {
       writtenLabels: [],
       close: () => read.close(),
     };
+  }
+
+  private async fillFormats(
+    built: Awaited<ReturnType<typeof buildGroup>>,
+    appender: RecordAppender,
+    edits: readonly VersionEdit[],
+    facts: NativeFactIndexRegistration | undefined,
+  ): ReturnType<typeof fillRowFormats> {
+    const filled = await fillRowFormats(
+      this.buildContext(),
+      built,
+      appender,
+      edits,
+      this.rowFormats,
+    );
+    return {
+      registered: filled.registered,
+      built: await fillNativeFacts(
+        this.buildContext(),
+        filled.built,
+        appender,
+        facts,
+      ),
+    };
+  }
+
+  private async nativeFactRegistration(
+    edits: readonly VersionEdit[],
+  ): Promise<NativeFactIndexRegistration | undefined> {
+    const edit = edits.find((item) => item.kind === 'factIndex');
+    const registration =
+      edit?.kind === 'factIndex' ? edit.registration : this.factIndex;
+    await requireNativeFactWriter(this.buildContext(), edits, registration);
+    return registration;
   }
 
   private async runCommit(
@@ -616,6 +662,7 @@ export class JournalStore {
     const before = this.currentVersion;
     const warm = await this.reuseRowFormat(edits);
     if (warm !== undefined) return warm;
+    const factIndex = await this.nativeFactRegistration(edits);
     const plan = await planGroup(this.planContext(), edits);
     let built: Awaited<ReturnType<typeof buildGroup>> | undefined;
     const effect = this.commitEffect?.({
@@ -633,12 +680,11 @@ export class JournalStore {
             mutation,
             effect === undefined ? appender : effectAppender(appender, effect),
           );
-          const filled = await fillRowFormats(
-            this.buildContext(),
+          const filled = await this.fillFormats(
             built,
             appender,
             edits,
-            rowFormats,
+            factIndex,
           );
           built = filled.built;
           rowFormats = filled.registered;
@@ -665,6 +711,7 @@ export class JournalStore {
     }
     this.install(trailer);
     this.rowFormats = rowFormats;
+    this.factIndex = factIndex;
     this.chain = built.chainBase.push(trailer.selfOffset);
     if (built.spine !== undefined) {
       this.spineEntry = { rowRoot: trailer.rowRoot, spine: built.spine };

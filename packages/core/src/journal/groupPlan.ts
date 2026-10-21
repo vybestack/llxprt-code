@@ -227,6 +227,7 @@ async function applyEdit(
     return;
   }
   switch (edit.kind) {
+    case 'factIndex':
     case 'format':
       break;
     case 'mistralScope':
@@ -302,6 +303,7 @@ function isLineageRewrite(
  */
 function mutationKind(edit: VersionEdit): VersionEdit['kind'] {
   switch (edit.kind) {
+    case 'factIndex':
     case 'format':
     case 'kimi':
     case 'mistral':

@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { anthropicRepairFactIndex } from './anthropic-repair-fact-writer.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RowFormatSettings } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
 import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
@@ -57,6 +58,10 @@ describe('native Anthropic stream repairs', () => {
         {
           kind: 'replace',
           rows: rows.map((row) => encodeContentRow(row, { owner: 0 })),
+        },
+        {
+          kind: 'factIndex',
+          registration: anthropicRepairFactIndex(repairSettings),
         },
       ]);
       const pin = await session.store.snapshot();

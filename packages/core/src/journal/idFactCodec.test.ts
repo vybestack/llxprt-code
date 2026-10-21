@@ -191,6 +191,7 @@ describe('trie keys', () => {
       relocation: 6,
       mistralScopeMapping: 7,
       mistralScopeUsed: 8,
+      nativeScalar: 9,
     });
   });
 

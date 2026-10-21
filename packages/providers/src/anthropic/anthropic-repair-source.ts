@@ -5,9 +5,9 @@ import type {
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { IndexedJournalRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/indexed-journal-request-snapshot.js';
 import type { RowFormatSettings } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
-import { JournalFormatError } from '@vybestack/llxprt-code-core/journal/errors.js';
 import { normalizeToAnthropicToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
 import { projectAnthropicUnit } from './anthropic-unit-facts.js';
+import type { AnthropicRepairIndex } from './anthropic-repair-index.js';
 import {
   convertContentToMessages,
   convertBlockToAnthropicPart,
@@ -53,11 +53,18 @@ function chainStart(row: IContent, enabled: boolean): boolean {
 
 export class AnthropicRepairSource {
   readonly options: AnthropicMessageConversionOptions;
-  readonly work = { unitReads: 0, groupSearchUnits: 0 };
-  private lastGroup: RepairMessage | undefined;
+  readonly work = {
+    unitReads: 0,
+    groupSearchUnits: 0,
+    descriptions: 0,
+    messageWalks: 0,
+    groupQueries: 0,
+    chainSearchUnits: 0,
+  };
   constructor(
     readonly query: IndexedJournalRequestSnapshot,
     readonly settings: RowFormatSettings,
+    readonly index?: AnthropicRepairIndex,
   ) {
     this.options = {
       isOAuth: settings.isOAuth,
@@ -73,6 +80,7 @@ export class AnthropicRepairSource {
     return projectAnthropicUnit(await this.query.readAt(index), this.settings);
   }
   async describe(index: number): Promise<UnitDescription | undefined> {
+    this.work.descriptions++;
     const row = await this.row(index);
     if (row === undefined) return undefined;
     const results = row.blocks.some((block) => block.type === 'tool_response');
@@ -105,6 +113,7 @@ export class AnthropicRepairSource {
     if (!unit.chain) return start;
     let end = start;
     for (let at = start + 1; at < this.query.count; at++) {
+      this.work.chainSearchUnits++;
       const candidate = await this.describe(at);
       if (candidate !== undefined) {
         if (candidate.speaker !== 'ai') break;
@@ -114,6 +123,11 @@ export class AnthropicRepairSource {
     return end;
   }
   async *messages(from = 0): AsyncGenerator<RepairMessage> {
+    this.work.messageWalks++;
+    if (this.index !== undefined) {
+      yield* this.index.messages(from);
+      return;
+    }
     let pending = -1;
     let pendingEnd = -1;
     let leading = from === 0;
@@ -143,8 +157,6 @@ export class AnthropicRepairSource {
             slot: end > at ? 'chain' : 'content',
             role: unit.speaker === 'ai' ? 'assistant' : 'user',
           };
-          this.lastGroup =
-            message.role === 'assistant' ? message : this.lastGroup;
           yield message;
           at = end;
         }
@@ -152,33 +164,6 @@ export class AnthropicRepairSource {
     }
     if (pending >= 0)
       yield { start: pending, end: pendingEnd, slot: 'results', role: 'user' };
-  }
-  async groupAt(index: number): Promise<RepairMessage> {
-    const cached = this.lastGroup;
-    if (cached !== undefined && cached.start <= index && cached.end >= index)
-      return cached;
-    let start = index;
-    let searching = true;
-    for (let before = index - 1; before >= 0 && searching; before--) {
-      this.work.groupSearchUnits++;
-      const unit = await this.describe(before);
-      if (unit !== undefined) {
-        if (unit.speaker === 'ai') start = before;
-        else searching = false;
-      }
-    }
-    for await (const group of this.messages(start)) {
-      if (
-        group.start <= index &&
-        group.end >= index &&
-        group.role === 'assistant'
-      )
-        return group;
-      if (group.start > index) break;
-    }
-    throw new JournalFormatError(
-      'Anthropic use occurrence has no conversion message',
-    );
   }
   private chainParts(
     row: IContent,
@@ -252,6 +237,7 @@ export class AnthropicRepairSource {
       yield* this.callsAt(at);
   }
   async lastThinking(): Promise<number> {
+    if (this.index !== undefined) return this.index.lastThinking;
     let last = -1;
     for await (const group of this.messages()) {
       if (group.role !== 'assistant') continue;
