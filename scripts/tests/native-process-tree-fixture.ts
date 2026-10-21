@@ -3,7 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import {
   killChildTreeAndWait,
   observeChildClose,
@@ -80,8 +80,45 @@ export async function withTerminatedNativeProcessTree(
     await killChildTreeAndWait(tree.child, tree.closed, {
       reapTimeoutMs: 8000,
     });
-    exercise(tree.child, descendantPid);
+    try {
+      exercise(tree.child, descendantPid);
+    } catch (error) {
+      throw nativeTreeFailure(tree.child, descendantPid, error);
+    }
   } finally {
     await tree.dispose();
   }
+}
+
+export function nativeTreeFailure(
+  child: ChildProcess,
+  descendantPid: number,
+  cause: unknown,
+): Error {
+  const state =
+    process.platform === 'win32'
+      ? undefined
+      : spawnSync(
+          'ps',
+          [
+            '-ww',
+            '-p',
+            `${child.pid},${descendantPid}`,
+            '-o',
+            'pid=,ppid=,pgid=,stat=,lstart=,args=',
+          ],
+          { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+        );
+  return new Error(
+    `Native tree PID absence failed: ${JSON.stringify({
+      parentPid: child.pid,
+      descendantPid,
+      platform: process.platform,
+      exitCode: child.exitCode,
+      signalCode: child.signalCode,
+      state: state?.stdout,
+      stateError: state?.error?.message,
+    })}`,
+    { cause },
+  );
 }

@@ -66,6 +66,7 @@ describe('OAuthManager - Token Refresh Race Condition (Issue #1159)', () => {
   let tempDir: string;
   let tokenStore: TokenStore;
   let oauthManager: OAuthManager;
+  let cleanupOwner: OAuthManager | undefined;
   let mockProvider: OAuthProvider;
   let refreshCallCount: number;
 
@@ -90,6 +91,7 @@ describe('OAuthManager - Token Refresh Race Condition (Issue #1159)', () => {
       lockDir: join(tempDir, 'locks'),
     });
     oauthManager = new OAuthManager(tokenStore);
+    cleanupOwner = oauthManager;
 
     // Reset refresh call counter
     refreshCallCount = 0;
@@ -118,11 +120,15 @@ describe('OAuthManager - Token Refresh Race Condition (Issue #1159)', () => {
   });
 
   afterEach(async () => {
-    // Clean up temporary directory
     try {
-      await fs.rm(tempDir, { recursive: true, force: true });
-    } catch {
-      // Ignore cleanup errors
+      await cleanupOwner?.dispose();
+    } finally {
+      // Clean up temporary directory
+      try {
+        await fs.rm(tempDir, { recursive: true, force: true });
+      } catch {
+        // Ignore cleanup errors
+      }
     }
   });
 
@@ -342,6 +348,7 @@ describe('OAuthManager - Token Refresh Race Condition (Issue #1159)', () => {
           await pending;
           await retirement;
         }
+        cleanupOwner = undefined;
       },
     );
 

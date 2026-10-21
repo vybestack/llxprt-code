@@ -787,7 +787,7 @@ describe('mechanical composition', () => {
       if (child.pid === undefined)
         throw new Error('Missing native child identity');
       for (const pid of [child.pid, descendantPid]) {
-        expect(() => process.kill(pid, 0)).toThrow(
+        expect(() => process.kill(pid, 0), `Native PID ${pid}`).toThrow(
           expect.objectContaining({ code: 'ESRCH' }),
         );
       }

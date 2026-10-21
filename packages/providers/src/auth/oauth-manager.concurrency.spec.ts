@@ -314,9 +314,10 @@ describe('OAuthManager concurrency', () => {
       oauthManager.registerProvider(provider);
 
       // When: Requesting token with failing refresh
-      await expect(oauthManager.getOAuthToken('anthropic')).rejects.toThrow(
-        'Refresh failed',
-      );
+      const result = await oauthManager.getOAuthToken('anthropic');
+
+      // Then: Should return null
+      expect(result).toBeNull();
 
       // And: Should still release lock
       expect(tokenStore.releaseRefreshLock).toHaveBeenCalledWith(
