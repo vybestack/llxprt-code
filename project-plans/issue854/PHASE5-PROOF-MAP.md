@@ -1,5 +1,13 @@
 # Phase 5 proof map
 
+## Anthropic numeric prerequisite, not native stored-format acceptance
+
+Commit `18efc1a7a28a300330fcf7730b9fe912a4c7fd9e`. [PHASE5-ANTHROPIC-UNIT-PROOF.json](PHASE5-ANTHROPIC-UNIT-PROOF.json) binds five TypeScript sources to seven serial complete-file tests (59 passes, zero failures/skips, 32,398 assertions), eight gates and four restored assertion controls. Raw evidence is `tmp/p5/anthropic-format-run-q`.
+
+The production helper measures one normalized row's numeric atoms and ten-state transfers under both thinking variants, using the existing slot-summary type. Settings capture/hash includes explicit cache policy and image budget. All 5000 normalized histories from unchanged cache-off source inputs compare numeric lengths and counts to the old table emitter and phase-zero model. Emitter/reference hashes match. Global overlays and last-kept decisions are supplied by the reference, not native facts; original raw-form frozen body hashes are not this test's expectation. No fixtures changed.
+
+Native registration/planning, persisted repair/LENS metadata, incremental chain and paired-holder repair, lifecycle/generation failure controls and warm zero-payload/read bounds are absent. No full-format, native heap, LENS integration, W23/W25/W26 or provider-cutover claim follows. Cache 5m/1h, native last-kept/range/tail planning, cold Mistral performance and 100000-call construction remain open. Existing Responses repair remains unchanged. See [PHASE5-ANTHROPIC-UNIT-DECISIONS.md](PHASE5-ANTHROPIC-UNIT-DECISIONS.md).
+
 ## Native parentless Responses stored-summary checkpoint
 
 Implementation `eef2544c2`; follow-up `f62afa9a0894fd12b5da82c6f7d730bf9d943cc0`. [PHASE5-RESPONSES-FORMAT-PROOF.json](PHASE5-RESPONSES-FORMAT-PROOF.json) records 158 passes, zero failures/skips and 53,411 assertions across 12 serial Bun processes over 12 files, eight gates and six restored assertion controls. Raw evidence: `tmp/p5/responses-format-run-p`. Earlier Responses normalization evidence remains separate.

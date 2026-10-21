@@ -1,3 +1,7 @@
+## 2026-10-21: Anthropic numeric unit prerequisite is not native format completion
+
+`18efc1a7a28a300330fcf7730b9fe912a4c7fd9e` commits numeric row-local atoms, both thinking variants and the ten-state transfer, plus typed captured Anthropic cache/image settings. Keep native registration/planning unavailable until indexed conversion-group/repair metadata can account for moved/consumed results and chain-dependent media. Do not call the old table per entry, retain a request-wide pointer map or replay the whole suffix on append. The 5000-input differential supplies reference repair/redaction decisions and establishes only numeric-stage compatibility. Native writer/LENS integration, incremental affected-holder maintenance, lifecycle/read bounds and last-kept queries remain work. Cache 5m/1h is explicitly refused. Existing Responses repair, provider routes and default are unchanged. Decisions and proof boundary: `PHASE5-ANTHROPIC-UNIT-DECISIONS.md` and `PHASE5-ANTHROPIC-UNIT-PROOF.json`. Review skipped per Andrew 2026-10-09.
+
 # Issue 854 decision log, 2026-10-21
 
 ## Phase 5 parentless Responses stored-summary finalization, 2026-10-21
