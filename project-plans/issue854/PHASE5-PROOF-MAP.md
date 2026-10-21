@@ -1,5 +1,30 @@
 # Phase 5 proof map
 
+## Persisted Anthropic repair-index cost root, 2026-10-21
+
+Implementation `613319d3e`; tested-source follow-up `08da8726f`. [PHASE5-ANTHROPIC-REPAIR-COST-PROOF.json](PHASE5-ANTHROPIC-REPAIR-COST-PROOF.json) binds 23 committed source/test paths to **82 passes/149,068 assertions, zero failures/skips, five serial processes over ten files, eight gates and four restored assertion-failing controls**. Evidence: `tmp/p5/anthropic-repair-cost-finish-u`. This supersedes the earlier replay-cost limitation for the measured shapes; full native Anthropic format work remains open.
+
+| Shape / fixture count | Normalized units | Cold index physical reads | Warm registration | Request physical reads | Unit projections |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Thinking chain / 40 | 42 | 1672 | 4 | 13121 | 659 |
+| Thinking chain / 4000 | 4002 | 240104 | 4 | 1920447 | 64019 |
+| One repeated ID / 40 calls | 82 | 4367 | 4 | 18303 | 727 |
+| One repeated ID / 4000 calls | 8002 | 640192 | 4 | 2561527 | 72007 |
+| Three interleaved IDs / 40 calls | 84 | 4507 | 4 | 18572 | 735 |
+| Three interleaved IDs / 4000 calls | 8004 | 640455 | 4 | 2562222 | 72015 |
+| Three IDs, mixed chains / 40 calls | 123 | 7100 | 4 | 46322 | 1845 |
+| Three IDs, mixed chains / 4000 calls | 12003 | 1013782 | 4 | 6620492 | 187965 |
+
+Request reads include native engine construction, serialization and measurement; append, cold fill, warm registration and initial pin setup are separate. Scalar decisions and binary message/range queries replace prefix replay; the measured read bounds apply to these fixtures, not every ID distribution or cold-fill complexity. Old 40-call replay fails unit budgets at 5469/5608 versus `<5448`/`<5576`; its partial output is not a completed byte measurement. Both old 4000-call repeated cases time out at `180000`. The old 4000-thinking-unit chain completes at 2,760,776 physical reads. Baseline provenance is the four recorded source hashes in `baseline-result.json`, not a pristine `88e8f8a56` checkout: three of those hashes differ. No heap or zero-payload warm planning claim follows from these counters.
+
+Native writer wiring is `JournalStore` -> `fillNativeFacts` -> provider registration -> namespace-9 scalar facts -> acknowledged ID/meta roots. Reader wiring is `AnthropicStreamRepair.create` -> pinned `query.nativeFacts` -> `AnthropicRepairIndex` -> actual grouping, tool decisions and taken-result queries. Binary native-position prefix searches avoid repeated global-coordinate walks. Pending fact writes and trie caches have 64 KiB charged caps; source conversion holds one unit, with no history-sized set/map or operation temp files.
+
+Lifecycle tests cover real-row fill, append, pop/refill, reopen writer admission, clone, compaction/offset audit, old pins, invalid facts and original writer errors. All 5000 unchanged cache-off frozen inputs match independent normalized old bytes; raw ONE/ONE/TWO remains separate. Recording admission permits metadata without authorizing foreign grouped rows. Mutations currently perform full fact refill before acknowledgement; incremental affected-holder maintenance remains open.
+
+Consumption, actual atom-target order, last-kept thinking and prefix-replay controls fail assertions and restore by cmp/hash. The prefix control fails physical budgets at 121338/132257 versus `<43296`/`<44352`; its unit budgets pass. An earlier mutation of unused target metadata passed and is excluded, with its restoration recorded. All 61 recorded PIDs are absent and all 1192 preserved hashes match, including 293 unrelated declarations and raw recovery. One old-pin `DUP_ASSERT` crosses append; no prohibited touched audit finding remains. Graph validation is not affected-shard execution.
+
+Open: native Anthropic format registration/LENS/summary generations, remeasurement/live bytes, incremental semantic holder repair, cache/image/media generations, pending/selected/last-kept request corrections, full envelope/header/length planning, retained heap, 100000-call construction, cold Mistral performance, W23/W25/cutover and W26. Routes/default are unchanged. #3917 remains separately RED without retry/suppression. Review skipped per Andrew 2026-10-09.
+
 ## Native Anthropic repair-byte checkpoint; stored format still open
 
 Engine `20707e7e861ddfc69406f9c07f6730d3bd13d3e3`; collision/settings follow-up `06a3eb33cc8070c3b240cfb26a425fc2eab5853d`. [PHASE5-ANTHROPIC-REPAIR-PROOF.json](PHASE5-ANTHROPIC-REPAIR-PROOF.json) binds ten scoped files to **63 passes/10,226 assertions, zero failures/skips, seven serial files, eight gates and three restored assertion controls**. Raw evidence: `tmp/p5/anthropic-repair-run-s/finalize`. This checkpoint adds the already tested frozen/scale proof files without changing implementation.
