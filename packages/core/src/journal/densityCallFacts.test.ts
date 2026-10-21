@@ -184,18 +184,35 @@ describe('versioned source-row density call lookup', () => {
           {
             kind: 'replace',
             rows: (function* () {
-              for (let index = 0; index < size; index++)
-                yield encodeContentRow(row(index), { owner: 0 });
+              for (let index = 0; index < size; index++) {
+                const source = row(index);
+                const id = `distinct-${Math.floor(index / 2)}`;
+                yield encodeContentRow(
+                  {
+                    ...source,
+                    blocks: source.blocks.map((block) => {
+                      if (block.type === 'tool_call') return { ...block, id };
+                      if (block.type === 'tool_response')
+                        return { ...block, callId: id };
+                      return block;
+                    }),
+                  },
+                  { owner: 0 },
+                );
+              }
             })(),
           },
         ]);
         const snapshot = await store.snapshot();
         try {
           const facts = new DensityCallFacts(snapshot.facts);
+          const lastCall = (await snapshot.entryAt(size - 2)).label;
           counter.reads = 0;
           const before = snapshot.facts.lookups;
-          expect(await facts.firstCall('a:b')).toStrictEqual({
-            label: (await snapshot.entryAt(4)).label,
+          expect(
+            await facts.firstCall(`distinct-${size / 2 - 1}`),
+          ).toStrictEqual({
+            label: lastCall,
             block: 0,
           });
           expect(await facts.lastResponse('missing')).toBeUndefined();

@@ -84,7 +84,7 @@ describe('native high-density compression allocations', () => {
           expect(await handler.performCompression('native-density-input')).toBe(
             PerformCompressionResult.COMPRESSED,
           );
-        });
+        }, true);
         const actual = await collectRows(history);
         expect(actual).toStrictEqual([...expected]);
         expect(await history.estimateTokensForContents(actual)).toBe(
@@ -126,34 +126,38 @@ describe('native high-density compression allocations', () => {
     },
     180_000,
   );
-  it('keeps first-call source order and every response block across uncurated holes', async () => {
-    await withNativeFallbackFixture(async ({ history, seed, durable }) => {
-      await seed(
-        (function* () {
-          for (let index = 0; index < 512; index++) yield tiedRow(index);
-        })(),
-      );
-      const overrides = { contextLimit: 1e9 };
-      const expected = await highdensityOracle(
-        history,
-        512,
-        64,
-        tiedRow,
-        overrides,
-      );
-      const { handler } = highdensitySetup(
-        history,
-        undefined,
-        undefined,
-        overrides,
-      );
-      expect(await handler.performCompression('first-call-order')).toBe(
-        PerformCompressionResult.COMPRESSED,
-      );
-      expect(await collectRows(history)).toStrictEqual([...expected]);
-      expect(await durable()).toStrictEqual(
-        await compressionValueDigest(history.streamRawHistory()),
-      );
-    });
-  }, 180_000);
+  it.each([512, 8192])(
+    'keeps first-call source order and every response block across %i rows with uncurated holes',
+    async (size) => {
+      await withNativeFallbackFixture(async ({ history, seed, durable }) => {
+        await seed(
+          (function* () {
+            for (let index = 0; index < size; index++) yield tiedRow(index);
+          })(),
+        );
+        const overrides = { contextLimit: 1e9 };
+        const expected = await highdensityOracle(
+          history,
+          size,
+          64,
+          tiedRow,
+          overrides,
+        );
+        const { handler } = highdensitySetup(
+          history,
+          undefined,
+          undefined,
+          overrides,
+        );
+        expect(await handler.performCompression('first-call-order')).toBe(
+          PerformCompressionResult.COMPRESSED,
+        );
+        expect(await collectRows(history)).toStrictEqual([...expected]);
+        expect(await durable()).toStrictEqual(
+          await compressionValueDigest(history.streamRawHistory()),
+        );
+      });
+    },
+    180_000,
+  );
 });
