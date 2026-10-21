@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { HistoryIndexedRows } from './historyMutationSnapshot.js';
 import type { CompressionInputSnapshot } from './compressionInput.js';
-import type { IContent } from './IContent.js';
+import type { IContent, MediaReferenceBlock } from './IContent.js';
 
 /**
  * The rows of a checkpoint the journal store hands out: read from the version
@@ -11,6 +11,7 @@ import type { IContent } from './IContent.js';
 export interface HistoryCheckpointRows extends AsyncIterable<IContent> {
   readonly length: number;
   humanCut?(turns: number, fromEnd: boolean): Promise<number>;
+  mediaReferences?(): AsyncIterable<MediaReferenceBlock>;
   readonly compressionInput?: Pick<
     CompressionInputSnapshot,
     'previous' | 'rows'

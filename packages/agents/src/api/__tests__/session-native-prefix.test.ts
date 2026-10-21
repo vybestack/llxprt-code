@@ -5,6 +5,7 @@ import { buildAgent, drain } from './helpers/agentHarness.js';
 import { collectAgentHistory } from './helpers/collect-agent-history.js';
 import { operationFileCreates } from '../../compression/__tests__/support/operation-file-creates.js';
 import { useTempDir } from '../../../../core/src/journal/__tests__/support/useTempDir.js';
+import { useNativePrefixBackend } from './helpers/native-prefix-backend.js';
 
 function fixtureRow(index: number): IContent {
   return {
@@ -14,6 +15,7 @@ function fixtureRow(index: number): IContent {
 }
 
 describe('native public session prefix mutations', () => {
+  useNativePrefixBackend();
   const directory = useTempDir('native-session-prefix-');
   for (const size of [3, 64, 65, 5000]) {
     it(`clears ${size} rows without operation files and preserves the initial turn`, async () => {

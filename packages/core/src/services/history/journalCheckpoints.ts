@@ -74,6 +74,7 @@ function snapshotCheckpoint(
   return {
     length: snapshot.rows,
     humanCut: (turns, fromEnd) => dump.humanCut(turns, fromEnd),
+    mediaReferences: () => dump.mediaReferences(),
     compressionInput: { previous: dump, rows: dump },
     [Symbol.asyncIterator]: () =>
       snapshotRows(snapshot, signal, resumeBoundary),

@@ -7,7 +7,10 @@ import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-
 import { HistoryMediaIndex } from '@vybestack/llxprt-code-core/storage/history-media-index.js';
 import { collectMediaReferences } from '@vybestack/llxprt-code-core/storage/media-reference-lifecycle.js';
 import { randomUUID } from 'node:crypto';
-import { NativeHistoryPrefix } from '../../core/native-history-prefix.js';
+import {
+  NativeHistoryPrefix,
+  withNativePrefixMedia,
+} from '../../core/native-history-prefix.js';
 
 interface ClearMediaScope {
   readonly references: HistoryMediaIndex;
@@ -116,22 +119,25 @@ async function rewriteClientHistory(
       const cut = await checkpoint.humanCut(turns, fromEnd);
       if (cut === checkpoint.length) return 0;
       const prefix = new NativeHistoryPrefix(history, checkpoint, cut);
-      await history.detachedValues.withRollbackCheckpoint(async (restore) => {
-        try {
-          await client.resetChat(prefix);
-        } catch (error) {
+      await withNativePrefixMedia(checkpoint, store, () =>
+        history.detachedValues.withRollbackCheckpoint(async (restore) => {
           try {
-            await restore();
-          } catch (rollbackError) {
-            throw new AggregateError(
-              [error, rollbackError],
-              'History clear and rollback failed',
-              { cause: error },
-            );
+            await client.resetChat(prefix);
+          } catch (error) {
+            try {
+              await restore();
+              await history.waitForCommit();
+            } catch (rollbackError) {
+              throw new AggregateError(
+                [error, rollbackError],
+                'History clear and rollback failed',
+                { cause: error },
+              );
+            }
+            throw error;
           }
-          throw error;
-        }
-      });
+        }),
+      );
       return checkpoint.length - cut;
     });
   }

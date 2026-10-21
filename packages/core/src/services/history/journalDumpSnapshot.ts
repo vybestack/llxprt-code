@@ -4,7 +4,11 @@ import type {
   DensityCallLookup,
 } from './compressionInput.js';
 import { DensityCallFacts } from '../../journal/densityCallFacts.js';
-import { ROW_BLOCK_TYPE, ROW_SPEAKER } from '../../journal/rowRecord.js';
+import {
+  ROW_BLOCK_TYPE,
+  ROW_FLAG,
+  ROW_SPEAKER,
+} from '../../journal/rowRecord.js';
 import { JournalFormatError } from '../../journal/errors.js';
 import { decodeStoredBlock } from './journalRowCodec.js';
 import type {
@@ -13,7 +17,11 @@ import type {
 } from './compressionChronology.js';
 import { journalCompressionSpan } from './journalCompressionSpan.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
-import type { IContent } from './IContent.js';
+import {
+  isMediaReferenceBlock,
+  type IContent,
+  type MediaReferenceBlock,
+} from './IContent.js';
 import {
   buildChronologyTrace,
   type ChronologyTraceEntry,
@@ -91,6 +99,30 @@ export class JournalDumpSnapshot implements HistoryDumpSnapshot {
       const entry = await this.snapshot.curatedAt(index);
       return this.snapshot.rowsBelow(entry.label);
     });
+  }
+
+  mediaReferences(): AsyncGenerator<MediaReferenceBlock, void, unknown> {
+    return this.readers.open(this.references());
+  }
+
+  private async *references(): AsyncGenerator<
+    MediaReferenceBlock,
+    void,
+    unknown
+  > {
+    for await (const entry of this.snapshot.entries()) {
+      this.readers.requireOpen();
+      if ((entry.flags & ROW_FLAG.hasMedia) === 0) continue;
+      const { header } = await this.snapshot.readIds(entry);
+      for (let index = 0; index < header.blocks.length; index++) {
+        if (header.blocks[index].type !== ROW_BLOCK_TYPE.media) continue;
+        const block = decodeStoredBlock(
+          await this.snapshot.readBlock(entry, index),
+          ROW_BLOCK_TYPE.media,
+        );
+        if (isMediaReferenceBlock(block)) yield block;
+      }
+    }
   }
 
   humanCut(turns: number, fromEnd: boolean): Promise<number> {

@@ -1,12 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { IContent } from './IContent.js';
-
-type Reader = AsyncGenerator<IContent, void, unknown>;
+type Reader<T> = AsyncGenerator<T, void, unknown>;
 
 export class HistoryReaderScope {
   private closed = false;
   private closing: Promise<void> | undefined;
-  private readonly readers = new Set<Reader>();
+  private readonly readers = new Set<Reader<unknown>>();
   private readonly queries = new Set<Promise<unknown>>();
 
   constructor(private readonly closedMessage: string) {}
@@ -28,8 +26,8 @@ export class HistoryReaderScope {
     }
   }
 
-  open(source: Reader): Reader {
-    const reader: Reader = {
+  open<T>(source: Reader<T>): Reader<T> {
+    const reader: Reader<T> = {
       [Symbol.asyncIterator]: () => reader,
       async [Symbol.asyncDispose]() {
         await reader.return();
