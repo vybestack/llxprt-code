@@ -1,0 +1,1680 @@
+{
+  "acceptanceLimits": {
+    "publicChat": "Runtime creation denial at ProviderNormalizationDisk occurs before the test purge/model-commit assertions; no proof of arrival at purge operation.",
+    "scaleParity": "512/8192 output content and lifetime checks do not independently compare the old eager token totals and durable mirrors at those sizes.",
+    "mediaLease": "No concurrent pending-request immutable reserved-blob lease experiment was added; this acceptance point remains open.",
+    "auditClassification": "Six SELF_CONFIRMING labels compare state captured before failures/rollback with later state; four DUP_ASSERT labels cross rollback, writer continuation or repeated-clear transitions. Retained as findings, not finding-free.",
+    "excludedFinalFailures": [
+      {
+        "name": "final-semantic-purge-disk-failure",
+        "code": 1,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-semantic-purge-disk-failure.log",
+        "logHash": "0699192592bb6fe4ab38794365c3249d5771c9d567442e531ebdd836008a3457"
+      },
+      {
+        "name": "final-gate-agents-types",
+        "code": 2,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-gate-agents-types.log",
+        "logHash": "2b496e3d79ed9e2eafc14614710a5ad3bf4fe5c78ff4aa676174a3a8817ed0ef"
+      },
+      {
+        "name": "finish-gate-agents-types",
+        "code": 2,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/finish-gate-agents-types.log",
+        "logHash": "99d9652613316b540ec3f74339de77b46a62ef4500e5ee2fd84f9195f2574e4a"
+      }
+    ],
+    "identityControlRestoredRun": {
+      "name": "restored-native-readers",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "src/core/semantic-purge-native-readers.test.ts"
+      ],
+      "extraEnv": {
+        "LLXPRT_HISTORY_BACKEND": "journal"
+      },
+      "driver": 7658,
+      "pid": 7705,
+      "start": "2026-10-21T19:44:58.400Z",
+      "end": "2026-10-21T19:44:59.020Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/restored-native-readers.log",
+      "logHash": "040786f18dbbfbc9b8983163002a55333b47d3f0dd40fe59380188861373919c",
+      "sourceHash": "da44e278365bd03fffc9b4053376db0a3280542e8a0ff20e12f4d7f9434844f9",
+      "changed": []
+    }
+  },
+  "date": "2026-10-21T19:48:41.001Z",
+  "status": "PARTIAL: native raw media purge producer migrated; complete public-chat normalization remains RED",
+  "base": "0ddadc66c33ea42a445671ff2b7a7af8672c0a61",
+  "earlyCommit": "f92964ea6",
+  "productionCommit": "5ecf4ab4de7c69239d7cda474756f0fb77619e8b",
+  "rawRoot": "tmp/p5/w26-purge-run-ak/",
+  "source": {
+    "manifest": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/finish2-semantic-purge-native-parity-source.json",
+    "hash": "a0524a9b4be39be076ee2f3e9b209e24259f5fb795c19f48e7ca0a94af4cd0bb",
+    "count": 8711,
+    "currentDifferences": []
+  },
+  "totals": {
+    "files": 26,
+    "passes": 129,
+    "failures": 0,
+    "skips": 0,
+    "assertions": 110309
+  },
+  "accepted": [
+    {
+      "name": "final-semantic-purge-native-producer",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "src/core/semantic-purge-native-producer.test.ts"
+      ],
+      "extraEnv": {
+        "LLXPRT_HISTORY_BACKEND": "journal"
+      },
+      "driver": 96757,
+      "pid": 96762,
+      "start": "2026-10-21T19:38:35.705Z",
+      "end": "2026-10-21T19:38:36.855Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-semantic-purge-native-producer.log",
+      "logHash": "e2d45b377943fcb0e6a5561071d9965543ddfb498552b52b2e3c19d37fdc373a",
+      "sourceHash": "d5b6e6591f2f5f9ff757ee45d53a8ba4df5623b41b9ba7c1654d593508f921d4",
+      "changed": [],
+      "sourceManifest": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-semantic-purge-native-producer-source.json",
+      "reusedOtherTestOnlyDifferences": [
+        "packages/agents/src/core/semantic-purge-native-parity.test.ts",
+        "packages/core/src/services/history/semantic-purge-disk-failure.test.ts"
+      ],
+      "reuseLimit": "All production and executed test bytes match. Older declaration/core-type gates exclude these two test-only changes; agents and Bun types/lint/format/graph/audit ran after corrections.",
+      "stats": {
+        "passes": 2,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 12
+      }
+    },
+    {
+      "name": "finish2-semantic-purge-native-parity",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "src/core/semantic-purge-native-parity.test.ts"
+      ],
+      "extraEnv": {
+        "LLXPRT_HISTORY_BACKEND": "journal"
+      },
+      "driver": 9657,
+      "pid": 9665,
+      "start": "2026-10-21T19:46:09.964Z",
+      "end": "2026-10-21T19:46:10.807Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/finish2-semantic-purge-native-parity.log",
+      "logHash": "8f859013a31269c0ec23bfdae0d82d5b4f83654bad6178747a3dfe3acbe271a4",
+      "sourceHash": "a0524a9b4be39be076ee2f3e9b209e24259f5fb795c19f48e7ca0a94af4cd0bb",
+      "changed": [],
+      "sourceManifest": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/finish2-semantic-purge-native-parity-source.json",
+      "reusedOtherTestOnlyDifferences": [],
+      "reuseLimit": "All production and executed test bytes match. Older declaration/core-type gates exclude these two test-only changes; agents and Bun types/lint/format/graph/audit ran after corrections.",
+      "stats": {
+        "passes": 2,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 36
+      }
+    },
+    {
+      "name": "final-semantic-purge-native-owners",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "src/core/semantic-purge-native-owners.test.ts"
+      ],
+      "extraEnv": {
+        "LLXPRT_HISTORY_BACKEND": "journal"
+      },
+      "driver": 96757,
+      "pid": 96826,
+      "start": "2026-10-21T19:38:38.571Z",
+      "end": "2026-10-21T19:39:16.031Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-semantic-purge-native-owners.log",
+      "logHash": "08f2974624b61fa5c7174516f2f493d95775e30f1d22338d23a48d48def2f5e8",
+      "sourceHash": "d5b6e6591f2f5f9ff757ee45d53a8ba4df5623b41b9ba7c1654d593508f921d4",
+      "changed": [],
+      "sourceManifest": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-semantic-purge-native-owners-source.json",
+      "reusedOtherTestOnlyDifferences": [
+        "packages/agents/src/core/semantic-purge-native-parity.test.ts",
+        "packages/core/src/services/history/semantic-purge-disk-failure.test.ts"
+      ],
+      "reuseLimit": "All production and executed test bytes match. Older declaration/core-type gates exclude these two test-only changes; agents and Bun types/lint/format/graph/audit ran after corrections.",
+      "stats": {
+        "passes": 4,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 28
+      }
+    },
+    {
+      "name": "final-semantic-purge-native-readers",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "src/core/semantic-purge-native-readers.test.ts"
+      ],
+      "extraEnv": {
+        "LLXPRT_HISTORY_BACKEND": "journal"
+      },
+      "driver": 96757,
+      "pid": 97569,
+      "start": "2026-10-21T19:39:16.251Z",
+      "end": "2026-10-21T19:39:16.900Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-semantic-purge-native-readers.log",
+      "logHash": "18e23e02a4fcd6b7fd39cbaabd41897e363f81216cc133be7d278efc94060db0",
+      "sourceHash": "d5b6e6591f2f5f9ff757ee45d53a8ba4df5623b41b9ba7c1654d593508f921d4",
+      "changed": [],
+      "sourceManifest": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-semantic-purge-native-readers-source.json",
+      "reusedOtherTestOnlyDifferences": [
+        "packages/agents/src/core/semantic-purge-native-parity.test.ts",
+        "packages/core/src/services/history/semantic-purge-disk-failure.test.ts"
+      ],
+      "reuseLimit": "All production and executed test bytes match. Older declaration/core-type gates exclude these two test-only changes; agents and Bun types/lint/format/graph/audit ran after corrections.",
+      "stats": {
+        "passes": 3,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 12
+      }
+    },
+    {
+      "name": "final-semantic-purge-native-failures",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "src/core/semantic-purge-native-failures.test.ts"
+      ],
+      "extraEnv": {
+        "LLXPRT_HISTORY_BACKEND": "journal"
+      },
+      "driver": 96757,
+      "pid": 97585,
+      "start": "2026-10-21T19:39:17.137Z",
+      "end": "2026-10-21T19:39:18.971Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-semantic-purge-native-failures.log",
+      "logHash": "5d20d42a1c704e3e37c41798349da96c0a970999cfd515c88f2e987f3039dfaa",
+      "sourceHash": "d5b6e6591f2f5f9ff757ee45d53a8ba4df5623b41b9ba7c1654d593508f921d4",
+      "changed": [],
+      "sourceManifest": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-semantic-purge-native-failures-source.json",
+      "reusedOtherTestOnlyDifferences": [
+        "packages/agents/src/core/semantic-purge-native-parity.test.ts",
+        "packages/core/src/services/history/semantic-purge-disk-failure.test.ts"
+      ],
+      "reuseLimit": "All production and executed test bytes match. Older declaration/core-type gates exclude these two test-only changes; agents and Bun types/lint/format/graph/audit ran after corrections.",
+      "stats": {
+        "passes": 3,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 24
+      }
+    },
+    {
+      "name": "final-semantic-purge-native-cost",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "src/core/semantic-purge-native-cost.test.ts"
+      ],
+      "extraEnv": {
+        "LLXPRT_HISTORY_BACKEND": "journal"
+      },
+      "driver": 96757,
+      "pid": 97625,
+      "start": "2026-10-21T19:39:19.226Z",
+      "end": "2026-10-21T19:39:25.139Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-semantic-purge-native-cost.log",
+      "logHash": "836b6a9c7f84603dafe237f09c202f07ea42ca362fa9eda7db989591e9786408",
+      "sourceHash": "d5b6e6591f2f5f9ff757ee45d53a8ba4df5623b41b9ba7c1654d593508f921d4",
+      "changed": [],
+      "sourceManifest": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-semantic-purge-native-cost-source.json",
+      "reusedOtherTestOnlyDifferences": [
+        "packages/agents/src/core/semantic-purge-native-parity.test.ts",
+        "packages/core/src/services/history/semantic-purge-disk-failure.test.ts"
+      ],
+      "reuseLimit": "All production and executed test bytes match. Older declaration/core-type gates exclude these two test-only changes; agents and Bun types/lint/format/graph/audit ran after corrections.",
+      "stats": {
+        "passes": 2,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 6
+      }
+    },
+    {
+      "name": "final-semantic-purge-native-lifetime",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "src/core/semantic-purge-native-lifetime.test.ts"
+      ],
+      "extraEnv": {
+        "LLXPRT_HISTORY_BACKEND": "journal"
+      },
+      "driver": 96757,
+      "pid": 97804,
+      "start": "2026-10-21T19:39:25.362Z",
+      "end": "2026-10-21T19:39:39.402Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-semantic-purge-native-lifetime.log",
+      "logHash": "b58244858c2ad0862793c79fb9261b9189c31b6491c2b36be6da256e8345323a",
+      "sourceHash": "d5b6e6591f2f5f9ff757ee45d53a8ba4df5623b41b9ba7c1654d593508f921d4",
+      "changed": [],
+      "sourceManifest": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-semantic-purge-native-lifetime-source.json",
+      "reusedOtherTestOnlyDifferences": [
+        "packages/agents/src/core/semantic-purge-native-parity.test.ts",
+        "packages/core/src/services/history/semantic-purge-disk-failure.test.ts"
+      ],
+      "reuseLimit": "All production and executed test bytes match. Older declaration/core-type gates exclude these two test-only changes; agents and Bun types/lint/format/graph/audit ran after corrections.",
+      "stats": {
+        "passes": 3,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 8785
+      }
+    },
+    {
+      "name": "final-semantic-purge-request-boundary",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "src/core/semantic-purge-request-boundary.test.ts"
+      ],
+      "extraEnv": {
+        "LLXPRT_HISTORY_BACKEND": "journal"
+      },
+      "driver": 96757,
+      "pid": 98118,
+      "start": "2026-10-21T19:39:39.654Z",
+      "end": "2026-10-21T19:39:40.370Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-semantic-purge-request-boundary.log",
+      "logHash": "990a59a61d43ba9e91f54ad05912e7464505ffb75c38cc878f433f6cf2e374be",
+      "sourceHash": "d5b6e6591f2f5f9ff757ee45d53a8ba4df5623b41b9ba7c1654d593508f921d4",
+      "changed": [],
+      "sourceManifest": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-semantic-purge-request-boundary-source.json",
+      "reusedOtherTestOnlyDifferences": [
+        "packages/agents/src/core/semantic-purge-native-parity.test.ts",
+        "packages/core/src/services/history/semantic-purge-disk-failure.test.ts"
+      ],
+      "reuseLimit": "All production and executed test bytes match. Older declaration/core-type gates exclude these two test-only changes; agents and Bun types/lint/format/graph/audit ran after corrections.",
+      "stats": {
+        "passes": 2,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 7
+      }
+    },
+    {
+      "name": "final-semantic-purge-request-lifecycle",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "src/core/semantic-purge-request-lifecycle.test.ts"
+      ],
+      "extraEnv": {
+        "LLXPRT_HISTORY_BACKEND": "journal"
+      },
+      "driver": 96757,
+      "pid": 98134,
+      "start": "2026-10-21T19:39:40.653Z",
+      "end": "2026-10-21T19:39:41.471Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-semantic-purge-request-lifecycle.log",
+      "logHash": "a77eb988c3bcf32989d2648170939d7c89ed73b3e196598a193c8940d9ca79e4",
+      "sourceHash": "d5b6e6591f2f5f9ff757ee45d53a8ba4df5623b41b9ba7c1654d593508f921d4",
+      "changed": [],
+      "sourceManifest": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-semantic-purge-request-lifecycle-source.json",
+      "reusedOtherTestOnlyDifferences": [
+        "packages/agents/src/core/semantic-purge-native-parity.test.ts",
+        "packages/core/src/services/history/semantic-purge-disk-failure.test.ts"
+      ],
+      "reuseLimit": "All production and executed test bytes match. Older declaration/core-type gates exclude these two test-only changes; agents and Bun types/lint/format/graph/audit ran after corrections.",
+      "stats": {
+        "passes": 4,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 14
+      }
+    },
+    {
+      "name": "final-semantic-purge-production",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "src/core/semantic-purge-production.test.ts"
+      ],
+      "extraEnv": {
+        "LLXPRT_HISTORY_BACKEND": "journal"
+      },
+      "driver": 96757,
+      "pid": 98151,
+      "start": "2026-10-21T19:39:41.762Z",
+      "end": "2026-10-21T19:40:27.655Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-semantic-purge-production.log",
+      "logHash": "915bf64ea77269deae4bea7b6a92763b36f6ca4c1504450b384cdbc259abf74e",
+      "sourceHash": "d5b6e6591f2f5f9ff757ee45d53a8ba4df5623b41b9ba7c1654d593508f921d4",
+      "changed": [],
+      "sourceManifest": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-semantic-purge-production-source.json",
+      "reusedOtherTestOnlyDifferences": [
+        "packages/agents/src/core/semantic-purge-native-parity.test.ts",
+        "packages/core/src/services/history/semantic-purge-disk-failure.test.ts"
+      ],
+      "reuseLimit": "All production and executed test bytes match. Older declaration/core-type gates exclude these two test-only changes; agents and Bun types/lint/format/graph/audit ran after corrections.",
+      "stats": {
+        "passes": 6,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 34862
+      }
+    },
+    {
+      "name": "final-semantic-purge-array-seam",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "src/core/semantic-purge-array-seam.test.ts"
+      ],
+      "extraEnv": {
+        "LLXPRT_HISTORY_BACKEND": "journal"
+      },
+      "driver": 96757,
+      "pid": 99458,
+      "start": "2026-10-21T19:40:27.917Z",
+      "end": "2026-10-21T19:41:09.635Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-semantic-purge-array-seam.log",
+      "logHash": "1ab7f1db270fb950a26aa0d97767f8564d28e8d5667157e92576f417b715f977",
+      "sourceHash": "d5b6e6591f2f5f9ff757ee45d53a8ba4df5623b41b9ba7c1654d593508f921d4",
+      "changed": [],
+      "sourceManifest": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-semantic-purge-array-seam-source.json",
+      "reusedOtherTestOnlyDifferences": [
+        "packages/agents/src/core/semantic-purge-native-parity.test.ts",
+        "packages/core/src/services/history/semantic-purge-disk-failure.test.ts"
+      ],
+      "reuseLimit": "All production and executed test bytes match. Older declaration/core-type gates exclude these two test-only changes; agents and Bun types/lint/format/graph/audit ran after corrections.",
+      "stats": {
+        "passes": 4,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 43570
+      }
+    },
+    {
+      "name": "final-semanticMediaPurgeSession",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "src/core/semanticMediaPurgeSession.test.ts"
+      ],
+      "extraEnv": {
+        "LLXPRT_HISTORY_BACKEND": "journal"
+      },
+      "driver": 96757,
+      "pid": 1793,
+      "start": "2026-10-21T19:41:09.828Z",
+      "end": "2026-10-21T19:41:10.695Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-semanticMediaPurgeSession.log",
+      "logHash": "9d892afa1d3d97724ff680a7812948677d64465d3f4d04ba5e8fcf38cc3c813d",
+      "sourceHash": "d5b6e6591f2f5f9ff757ee45d53a8ba4df5623b41b9ba7c1654d593508f921d4",
+      "changed": [],
+      "sourceManifest": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-semanticMediaPurgeSession-source.json",
+      "reusedOtherTestOnlyDifferences": [
+        "packages/agents/src/core/semantic-purge-native-parity.test.ts",
+        "packages/core/src/services/history/semantic-purge-disk-failure.test.ts"
+      ],
+      "reuseLimit": "All production and executed test bytes match. Older declaration/core-type gates exclude these two test-only changes; agents and Bun types/lint/format/graph/audit ran after corrections.",
+      "stats": {
+        "passes": 12,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 49
+      }
+    },
+    {
+      "name": "final-semantic-purge-native-compensation",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "src/services/history/semantic-purge-native-compensation.test.ts"
+      ],
+      "extraEnv": {
+        "LLXPRT_HISTORY_BACKEND": "journal"
+      },
+      "driver": 96757,
+      "pid": 1885,
+      "start": "2026-10-21T19:41:10.929Z",
+      "end": "2026-10-21T19:41:11.694Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-semantic-purge-native-compensation.log",
+      "logHash": "8c619d6e397e8c35bc5c7191a40297f19dae09422afaad31160a6d1cbbe180b4",
+      "sourceHash": "d5b6e6591f2f5f9ff757ee45d53a8ba4df5623b41b9ba7c1654d593508f921d4",
+      "changed": [],
+      "sourceManifest": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-semantic-purge-native-compensation-source.json",
+      "reusedOtherTestOnlyDifferences": [
+        "packages/agents/src/core/semantic-purge-native-parity.test.ts",
+        "packages/core/src/services/history/semantic-purge-disk-failure.test.ts"
+      ],
+      "reuseLimit": "All production and executed test bytes match. Older declaration/core-type gates exclude these two test-only changes; agents and Bun types/lint/format/graph/audit ran after corrections.",
+      "stats": {
+        "passes": 1,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 7
+      }
+    },
+    {
+      "name": "final-semantic-purge.journal",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "src/services/history/semantic-purge.journal.test.ts"
+      ],
+      "extraEnv": {
+        "LLXPRT_HISTORY_BACKEND": "journal"
+      },
+      "driver": 96757,
+      "pid": 1921,
+      "start": "2026-10-21T19:41:11.907Z",
+      "end": "2026-10-21T19:41:12.840Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-semantic-purge.journal.log",
+      "logHash": "1e9f401fac10b7ac70b2c4ea0f93586eb7004f06f3daab3c5fd9d745863b6ac3",
+      "sourceHash": "d5b6e6591f2f5f9ff757ee45d53a8ba4df5623b41b9ba7c1654d593508f921d4",
+      "changed": [],
+      "sourceManifest": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-semantic-purge.journal-source.json",
+      "reusedOtherTestOnlyDifferences": [
+        "packages/agents/src/core/semantic-purge-native-parity.test.ts",
+        "packages/core/src/services/history/semantic-purge-disk-failure.test.ts"
+      ],
+      "reuseLimit": "All production and executed test bytes match. Older declaration/core-type gates exclude these two test-only changes; agents and Bun types/lint/format/graph/audit ran after corrections.",
+      "stats": {
+        "passes": 4,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 87
+      }
+    },
+    {
+      "name": "final-semantic-purge-stream",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "src/services/history/semantic-purge-stream.test.ts"
+      ],
+      "extraEnv": {
+        "LLXPRT_HISTORY_BACKEND": "journal"
+      },
+      "driver": 96757,
+      "pid": 1982,
+      "start": "2026-10-21T19:41:13.064Z",
+      "end": "2026-10-21T19:41:50.194Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-semantic-purge-stream.log",
+      "logHash": "bf056fbf1dc4e489a1f7e988d565db339cb99d46a84c554562c78efe84b9761d",
+      "sourceHash": "d5b6e6591f2f5f9ff757ee45d53a8ba4df5623b41b9ba7c1654d593508f921d4",
+      "changed": [],
+      "sourceManifest": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-semantic-purge-stream-source.json",
+      "reusedOtherTestOnlyDifferences": [
+        "packages/agents/src/core/semantic-purge-native-parity.test.ts",
+        "packages/core/src/services/history/semantic-purge-disk-failure.test.ts"
+      ],
+      "reuseLimit": "All production and executed test bytes match. Older declaration/core-type gates exclude these two test-only changes; agents and Bun types/lint/format/graph/audit ran after corrections.",
+      "stats": {
+        "passes": 10,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 17451
+      }
+    },
+    {
+      "name": "final-semantic-purge-stream-failures",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "src/services/history/semantic-purge-stream-failures.test.ts"
+      ],
+      "extraEnv": {
+        "LLXPRT_HISTORY_BACKEND": "journal"
+      },
+      "driver": 96757,
+      "pid": 3291,
+      "start": "2026-10-21T19:41:50.639Z",
+      "end": "2026-10-21T19:41:52.215Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-semantic-purge-stream-failures.log",
+      "logHash": "a15f9ead35ed5861fe9d621703b6d35a86ffb70df1fa06c1e78242573c8fc81d",
+      "sourceHash": "d5b6e6591f2f5f9ff757ee45d53a8ba4df5623b41b9ba7c1654d593508f921d4",
+      "changed": [],
+      "sourceManifest": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-semantic-purge-stream-failures-source.json",
+      "reusedOtherTestOnlyDifferences": [
+        "packages/agents/src/core/semantic-purge-native-parity.test.ts",
+        "packages/core/src/services/history/semantic-purge-disk-failure.test.ts"
+      ],
+      "reuseLimit": "All production and executed test bytes match. Older declaration/core-type gates exclude these two test-only changes; agents and Bun types/lint/format/graph/audit ran after corrections.",
+      "stats": {
+        "passes": 8,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 28
+      }
+    },
+    {
+      "name": "final-semantic-purge-stream-lifecycle",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "src/services/history/semantic-purge-stream-lifecycle.test.ts"
+      ],
+      "extraEnv": {
+        "LLXPRT_HISTORY_BACKEND": "journal"
+      },
+      "driver": 96757,
+      "pid": 3319,
+      "start": "2026-10-21T19:41:52.504Z",
+      "end": "2026-10-21T19:41:53.661Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-semantic-purge-stream-lifecycle.log",
+      "logHash": "acb03020834dcf5c1d534d8c85e07fa2e7c3b07bc3cc717eb8fef5eed63ebda6",
+      "sourceHash": "d5b6e6591f2f5f9ff757ee45d53a8ba4df5623b41b9ba7c1654d593508f921d4",
+      "changed": [],
+      "sourceManifest": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-semantic-purge-stream-lifecycle-source.json",
+      "reusedOtherTestOnlyDifferences": [
+        "packages/agents/src/core/semantic-purge-native-parity.test.ts",
+        "packages/core/src/services/history/semantic-purge-disk-failure.test.ts"
+      ],
+      "reuseLimit": "All production and executed test bytes match. Older declaration/core-type gates exclude these two test-only changes; agents and Bun types/lint/format/graph/audit ran after corrections.",
+      "stats": {
+        "passes": 4,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 23
+      }
+    },
+    {
+      "name": "finish-semantic-purge-disk-failure",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "src/services/history/semantic-purge-disk-failure.test.ts"
+      ],
+      "extraEnv": {
+        "LLXPRT_HISTORY_BACKEND": "journal"
+      },
+      "driver": 5467,
+      "pid": 5490,
+      "start": "2026-10-21T19:43:46.939Z",
+      "end": "2026-10-21T19:43:47.657Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/finish-semantic-purge-disk-failure.log",
+      "logHash": "0e787c94a1bac5f4c9fdce31672960618e896f08a108cb5f65c8ec41baaee3b6",
+      "sourceHash": "da44e278365bd03fffc9b4053376db0a3280542e8a0ff20e12f4d7f9434844f9",
+      "changed": [],
+      "sourceManifest": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/finish-semantic-purge-disk-failure-source.json",
+      "reusedOtherTestOnlyDifferences": [
+        "packages/agents/src/core/semantic-purge-native-parity.test.ts"
+      ],
+      "reuseLimit": "All production and executed test bytes match. Older declaration/core-type gates exclude these two test-only changes; agents and Bun types/lint/format/graph/audit ran after corrections.",
+      "stats": {
+        "passes": 2,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 6
+      }
+    },
+    {
+      "name": "finish-historyBackend",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "src/services/history/historyBackend.test.ts"
+      ],
+      "extraEnv": {
+        "LLXPRT_HISTORY_BACKEND": "journal"
+      },
+      "driver": 5467,
+      "pid": 5525,
+      "start": "2026-10-21T19:43:47.872Z",
+      "end": "2026-10-21T19:43:48.514Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/finish-historyBackend.log",
+      "logHash": "1d1ec0b18d4ff91952c17e8ef9f43fe5f13ab22da1a17c7b23dfab5088df836e",
+      "sourceHash": "da44e278365bd03fffc9b4053376db0a3280542e8a0ff20e12f4d7f9434844f9",
+      "changed": [],
+      "sourceManifest": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/finish-historyBackend-source.json",
+      "reusedOtherTestOnlyDifferences": [
+        "packages/agents/src/core/semantic-purge-native-parity.test.ts"
+      ],
+      "reuseLimit": "All production and executed test bytes match. Older declaration/core-type gates exclude these two test-only changes; agents and Bun types/lint/format/graph/audit ran after corrections.",
+      "stats": {
+        "passes": 12,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 113
+      }
+    },
+    {
+      "name": "finish-journal-checkpoint-reader",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "src/services/history/journal-checkpoint-reader.test.ts"
+      ],
+      "extraEnv": {
+        "LLXPRT_HISTORY_BACKEND": "journal"
+      },
+      "driver": 5467,
+      "pid": 5544,
+      "start": "2026-10-21T19:43:48.699Z",
+      "end": "2026-10-21T19:43:49.437Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/finish-journal-checkpoint-reader.log",
+      "logHash": "f369dbd534fbaf6e80412a20ea4aed83229bfd3c881354a926c74df796b37012",
+      "sourceHash": "da44e278365bd03fffc9b4053376db0a3280542e8a0ff20e12f4d7f9434844f9",
+      "changed": [],
+      "sourceManifest": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/finish-journal-checkpoint-reader-source.json",
+      "reusedOtherTestOnlyDifferences": [
+        "packages/agents/src/core/semantic-purge-native-parity.test.ts"
+      ],
+      "reuseLimit": "All production and executed test bytes match. Older declaration/core-type gates exclude these two test-only changes; agents and Bun types/lint/format/graph/audit ran after corrections.",
+      "stats": {
+        "passes": 3,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 14
+      }
+    },
+    {
+      "name": "finish-journalStore.readerLifetime",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "src/journal/journalStore.readerLifetime.test.ts"
+      ],
+      "extraEnv": {
+        "LLXPRT_HISTORY_BACKEND": "journal"
+      },
+      "driver": 5467,
+      "pid": 5555,
+      "start": "2026-10-21T19:43:49.626Z",
+      "end": "2026-10-21T19:43:50.195Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/finish-journalStore.readerLifetime.log",
+      "logHash": "a7af7b8d1c7f746f802b20a28cb309f787f7a9ec4987d9a8066218a99447f75d",
+      "sourceHash": "da44e278365bd03fffc9b4053376db0a3280542e8a0ff20e12f4d7f9434844f9",
+      "changed": [],
+      "sourceManifest": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/finish-journalStore.readerLifetime-source.json",
+      "reusedOtherTestOnlyDifferences": [
+        "packages/agents/src/core/semantic-purge-native-parity.test.ts"
+      ],
+      "reuseLimit": "All production and executed test bytes match. Older declaration/core-type gates exclude these two test-only changes; agents and Bun types/lint/format/graph/audit ran after corrections.",
+      "stats": {
+        "passes": 11,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 29
+      }
+    },
+    {
+      "name": "finish-journalStore.readerCleanup",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "src/journal/journalStore.readerCleanup.test.ts"
+      ],
+      "extraEnv": {
+        "LLXPRT_HISTORY_BACKEND": "journal"
+      },
+      "driver": 5467,
+      "pid": 5577,
+      "start": "2026-10-21T19:43:50.411Z",
+      "end": "2026-10-21T19:43:51.015Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/finish-journalStore.readerCleanup.log",
+      "logHash": "db883118e00d0bea4cf38ede1408d28b7b9195d41eb897bebcc9055049512b9f",
+      "sourceHash": "da44e278365bd03fffc9b4053376db0a3280542e8a0ff20e12f4d7f9434844f9",
+      "changed": [],
+      "sourceManifest": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/finish-journalStore.readerCleanup-source.json",
+      "reusedOtherTestOnlyDifferences": [
+        "packages/agents/src/core/semantic-purge-native-parity.test.ts"
+      ],
+      "reuseLimit": "All production and executed test bytes match. Older declaration/core-type gates exclude these two test-only changes; agents and Bun types/lint/format/graph/audit ran after corrections.",
+      "stats": {
+        "passes": 3,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 20
+      }
+    },
+    {
+      "name": "finish-journalStore.commit",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "src/journal/journalStore.commit.test.ts"
+      ],
+      "extraEnv": {
+        "LLXPRT_HISTORY_BACKEND": "journal"
+      },
+      "driver": 5467,
+      "pid": 5597,
+      "start": "2026-10-21T19:43:51.255Z",
+      "end": "2026-10-21T19:43:51.863Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/finish-journalStore.commit.log",
+      "logHash": "8085294cfd0db3fb8a636133f45fba4dd762c022b58928f0280eab0d8a8580f9",
+      "sourceHash": "da44e278365bd03fffc9b4053376db0a3280542e8a0ff20e12f4d7f9434844f9",
+      "changed": [],
+      "sourceManifest": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/finish-journalStore.commit-source.json",
+      "reusedOtherTestOnlyDifferences": [
+        "packages/agents/src/core/semantic-purge-native-parity.test.ts"
+      ],
+      "reuseLimit": "All production and executed test bytes match. Older declaration/core-type gates exclude these two test-only changes; agents and Bun types/lint/format/graph/audit ran after corrections.",
+      "stats": {
+        "passes": 8,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 63
+      }
+    },
+    {
+      "name": "finish-detached-checkpoint.journal",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "src/services/history/detached-checkpoint.journal.test.ts"
+      ],
+      "extraEnv": {
+        "LLXPRT_HISTORY_BACKEND": "journal"
+      },
+      "driver": 5467,
+      "pid": 5611,
+      "start": "2026-10-21T19:43:52.074Z",
+      "end": "2026-10-21T19:44:06.005Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/finish-detached-checkpoint.journal.log",
+      "logHash": "f647a3db02ab981880c050a4871f86b541c0facbda0b7893f16bbdcbc6afd427",
+      "sourceHash": "da44e278365bd03fffc9b4053376db0a3280542e8a0ff20e12f4d7f9434844f9",
+      "changed": [],
+      "sourceManifest": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/finish-detached-checkpoint.journal-source.json",
+      "reusedOtherTestOnlyDifferences": [
+        "packages/agents/src/core/semantic-purge-native-parity.test.ts"
+      ],
+      "reuseLimit": "All production and executed test bytes match. Older declaration/core-type gates exclude these two test-only changes; agents and Bun types/lint/format/graph/audit ran after corrections.",
+      "stats": {
+        "passes": 4,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 49
+      }
+    },
+    {
+      "name": "finish-frozenWire.anthropic-purge-boundary",
+      "cwd": "packages/providers",
+      "command": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "src/__tests__/frozenWire.anthropic-purge-boundary.test.ts"
+      ],
+      "extraEnv": {
+        "LLXPRT_HISTORY_BACKEND": "journal"
+      },
+      "driver": 5467,
+      "pid": 5941,
+      "start": "2026-10-21T19:44:06.209Z",
+      "end": "2026-10-21T19:44:31.622Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/finish-frozenWire.anthropic-purge-boundary.log",
+      "logHash": "a94743e7904f56ba2ea6d177d91f59f197b61fc7f87a60b1d4a35dcf72107cad",
+      "sourceHash": "da44e278365bd03fffc9b4053376db0a3280542e8a0ff20e12f4d7f9434844f9",
+      "changed": [],
+      "sourceManifest": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/finish-frozenWire.anthropic-purge-boundary-source.json",
+      "reusedOtherTestOnlyDifferences": [
+        "packages/agents/src/core/semantic-purge-native-parity.test.ts"
+      ],
+      "reuseLimit": "All production and executed test bytes match. Older declaration/core-type gates exclude these two test-only changes; agents and Bun types/lint/format/graph/audit ran after corrections.",
+      "stats": {
+        "passes": 8,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 5010
+      }
+    },
+    {
+      "name": "finish-semantic-purge-body",
+      "cwd": "packages/providers",
+      "command": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "src/__tests__/semantic-purge-body.test.ts"
+      ],
+      "extraEnv": {
+        "LLXPRT_HISTORY_BACKEND": "journal"
+      },
+      "driver": 5467,
+      "pid": 7197,
+      "start": "2026-10-21T19:44:31.847Z",
+      "end": "2026-10-21T19:44:54.165Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/finish-semantic-purge-body.log",
+      "logHash": "4ce34d0ff5e5df3f29924ff7f34239112484e8927c0218c9cfd0ad66b9f23ba5",
+      "sourceHash": "da44e278365bd03fffc9b4053376db0a3280542e8a0ff20e12f4d7f9434844f9",
+      "changed": [],
+      "sourceManifest": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/finish-semantic-purge-body-source.json",
+      "reusedOtherTestOnlyDifferences": [
+        "packages/agents/src/core/semantic-purge-native-parity.test.ts"
+      ],
+      "reuseLimit": "All production and executed test bytes match. Older declaration/core-type gates exclude these two test-only changes; agents and Bun types/lint/format/graph/audit ran after corrections.",
+      "stats": {
+        "passes": 4,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 4
+      }
+    }
+  ],
+  "gates": [
+    {
+      "name": "final-gate-core-declarations",
+      "cwd": ".",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-b",
+        "packages/core/tsconfig.build.json",
+        "--emitDeclarationOnly"
+      ],
+      "extraEnv": {},
+      "driver": 3508,
+      "pid": 3521,
+      "start": "2026-10-21T19:41:57.588Z",
+      "end": "2026-10-21T19:42:01.636Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-gate-core-declarations.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceHash": "d5b6e6591f2f5f9ff757ee45d53a8ba4df5623b41b9ba7c1654d593508f921d4",
+      "changed": [],
+      "sourceManifest": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-gate-core-declarations-source.json",
+      "reusedOtherTestOnlyDifferences": [
+        "packages/agents/src/core/semantic-purge-native-parity.test.ts",
+        "packages/core/src/services/history/semantic-purge-disk-failure.test.ts"
+      ],
+      "reuseLimit": "All production and executed test bytes match. Older declaration/core-type gates exclude these two test-only changes; agents and Bun types/lint/format/graph/audit ran after corrections.",
+      "stats": {
+        "passes": 0,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 0
+      }
+    },
+    {
+      "name": "final-gate-agents-declarations",
+      "cwd": ".",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-b",
+        "packages/agents/tsconfig.build.json",
+        "--emitDeclarationOnly"
+      ],
+      "extraEnv": {},
+      "driver": 3508,
+      "pid": 3580,
+      "start": "2026-10-21T19:42:01.840Z",
+      "end": "2026-10-21T19:42:04.836Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-gate-agents-declarations.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceHash": "d5b6e6591f2f5f9ff757ee45d53a8ba4df5623b41b9ba7c1654d593508f921d4",
+      "changed": [],
+      "sourceManifest": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-gate-agents-declarations-source.json",
+      "reusedOtherTestOnlyDifferences": [
+        "packages/agents/src/core/semantic-purge-native-parity.test.ts",
+        "packages/core/src/services/history/semantic-purge-disk-failure.test.ts"
+      ],
+      "reuseLimit": "All production and executed test bytes match. Older declaration/core-type gates exclude these two test-only changes; agents and Bun types/lint/format/graph/audit ran after corrections.",
+      "stats": {
+        "passes": 0,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 0
+      }
+    },
+    {
+      "name": "final-gate-core-types",
+      "cwd": ".",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "packages/core/tsconfig.noemit.json"
+      ],
+      "extraEnv": {},
+      "driver": 3508,
+      "pid": 3629,
+      "start": "2026-10-21T19:42:05.034Z",
+      "end": "2026-10-21T19:42:12.560Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-gate-core-types.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceHash": "d5b6e6591f2f5f9ff757ee45d53a8ba4df5623b41b9ba7c1654d593508f921d4",
+      "changed": [],
+      "sourceManifest": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/final-gate-core-types-source.json",
+      "reusedOtherTestOnlyDifferences": [
+        "packages/agents/src/core/semantic-purge-native-parity.test.ts",
+        "packages/core/src/services/history/semantic-purge-disk-failure.test.ts"
+      ],
+      "reuseLimit": "All production and executed test bytes match. Older declaration/core-type gates exclude these two test-only changes; agents and Bun types/lint/format/graph/audit ran after corrections.",
+      "stats": {
+        "passes": 0,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 0
+      }
+    },
+    {
+      "name": "finish2-gate-agents-types",
+      "cwd": ".",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "packages/agents/tsconfig.noemit.json"
+      ],
+      "extraEnv": {},
+      "driver": 9681,
+      "pid": 9683,
+      "start": "2026-10-21T19:46:11.015Z",
+      "end": "2026-10-21T19:46:13.349Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/finish2-gate-agents-types.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceHash": "a0524a9b4be39be076ee2f3e9b209e24259f5fb795c19f48e7ca0a94af4cd0bb",
+      "changed": [],
+      "sourceManifest": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/finish2-gate-agents-types-source.json",
+      "reusedOtherTestOnlyDifferences": [],
+      "reuseLimit": "All production and executed test bytes match. Older declaration/core-type gates exclude these two test-only changes; agents and Bun types/lint/format/graph/audit ran after corrections.",
+      "stats": {
+        "passes": 0,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 0
+      }
+    },
+    {
+      "name": "finish2-gate-bun-types",
+      "cwd": ".",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "packages/agents/tsconfig.test-bun.json",
+        "--types",
+        "node,bun"
+      ],
+      "extraEnv": {},
+      "driver": 9681,
+      "pid": 9719,
+      "start": "2026-10-21T19:46:13.535Z",
+      "end": "2026-10-21T19:46:19.552Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/finish2-gate-bun-types.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceHash": "a0524a9b4be39be076ee2f3e9b209e24259f5fb795c19f48e7ca0a94af4cd0bb",
+      "changed": [],
+      "sourceManifest": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/finish2-gate-bun-types-source.json",
+      "reusedOtherTestOnlyDifferences": [],
+      "reuseLimit": "All production and executed test bytes match. Older declaration/core-type gates exclude these two test-only changes; agents and Bun types/lint/format/graph/audit ran after corrections.",
+      "stats": {
+        "passes": 0,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 0
+      }
+    },
+    {
+      "name": "finish2-gate-lint",
+      "cwd": ".",
+      "command": [
+        "node_modules/.bin/eslint",
+        "--max-warnings",
+        "0",
+        "packages/agents/src/compression/__tests__/support/journal-detached-history.ts",
+        "packages/core/src/services/history/historyJournalStore.ts",
+        "packages/core/src/services/history/historyBackend.test.ts",
+        "packages/core/src/services/history/semantic-purge-native-compensation.test.ts",
+        "packages/agents/src/core/semantic-purge-native-failures.test.ts",
+        "packages/agents/src/core/semantic-purge-native-cost.test.ts",
+        "packages/core/src/services/history/semantic-purge-native.ts",
+        "packages/core/src/services/history/semantic-purge-native-base.ts",
+        "packages/core/src/services/history/journalSemanticPurge.ts",
+        "packages/core/src/services/history/journalDumpSnapshot.ts",
+        "packages/core/src/services/history/journalCheckpoints.ts",
+        "packages/core/src/services/history/historyStorePort.ts",
+        "packages/core/src/services/history/journalHistoryStore.ts",
+        "packages/core/src/services/history/detachedHistoryAPI.ts",
+        "packages/core/src/services/history/semantic-purge-stream.ts",
+        "packages/agents/src/core/semanticMediaPurgeSession.ts",
+        "packages/agents/src/core/TurnProcessor.ts",
+        "packages/agents/src/core/streamResponseFinalizer.ts",
+        "packages/agents/src/core/semantic-purge-native-producer.test.ts",
+        "packages/agents/src/core/semantic-purge-native-parity.test.ts",
+        "packages/agents/src/core/semantic-purge-native-owners.test.ts",
+        "packages/agents/src/core/semantic-purge-native-readers.test.ts",
+        "packages/agents/src/core/semantic-purge-native-lifetime.test.ts",
+        "packages/agents/src/api/__tests__/semantic-purge-native-chat.test.ts",
+        "packages/core/src/services/history/semantic-purge-disk-failure.test.ts"
+      ],
+      "extraEnv": {},
+      "driver": 9681,
+      "pid": 9861,
+      "start": "2026-10-21T19:46:19.736Z",
+      "end": "2026-10-21T19:46:29.082Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/finish2-gate-lint.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceHash": "a0524a9b4be39be076ee2f3e9b209e24259f5fb795c19f48e7ca0a94af4cd0bb",
+      "changed": [],
+      "sourceManifest": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/finish2-gate-lint-source.json",
+      "reusedOtherTestOnlyDifferences": [],
+      "reuseLimit": "All production and executed test bytes match. Older declaration/core-type gates exclude these two test-only changes; agents and Bun types/lint/format/graph/audit ran after corrections.",
+      "stats": {
+        "passes": 0,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 0
+      }
+    },
+    {
+      "name": "finish2-gate-format",
+      "cwd": ".",
+      "command": [
+        "node_modules/.bin/prettier",
+        "--check",
+        "packages/agents/src/compression/__tests__/support/journal-detached-history.ts",
+        "packages/core/src/services/history/historyJournalStore.ts",
+        "packages/core/src/services/history/historyBackend.test.ts",
+        "packages/core/src/services/history/semantic-purge-native-compensation.test.ts",
+        "packages/agents/src/core/semantic-purge-native-failures.test.ts",
+        "packages/agents/src/core/semantic-purge-native-cost.test.ts",
+        "packages/core/src/services/history/semantic-purge-native.ts",
+        "packages/core/src/services/history/semantic-purge-native-base.ts",
+        "packages/core/src/services/history/journalSemanticPurge.ts",
+        "packages/core/src/services/history/journalDumpSnapshot.ts",
+        "packages/core/src/services/history/journalCheckpoints.ts",
+        "packages/core/src/services/history/historyStorePort.ts",
+        "packages/core/src/services/history/journalHistoryStore.ts",
+        "packages/core/src/services/history/detachedHistoryAPI.ts",
+        "packages/core/src/services/history/semantic-purge-stream.ts",
+        "packages/agents/src/core/semanticMediaPurgeSession.ts",
+        "packages/agents/src/core/TurnProcessor.ts",
+        "packages/agents/src/core/streamResponseFinalizer.ts",
+        "packages/agents/src/core/semantic-purge-native-producer.test.ts",
+        "packages/agents/src/core/semantic-purge-native-parity.test.ts",
+        "packages/agents/src/core/semantic-purge-native-owners.test.ts",
+        "packages/agents/src/core/semantic-purge-native-readers.test.ts",
+        "packages/agents/src/core/semantic-purge-native-lifetime.test.ts",
+        "packages/agents/src/api/__tests__/semantic-purge-native-chat.test.ts",
+        "packages/core/src/services/history/semantic-purge-disk-failure.test.ts"
+      ],
+      "extraEnv": {},
+      "driver": 9681,
+      "pid": 10125,
+      "start": "2026-10-21T19:46:29.303Z",
+      "end": "2026-10-21T19:46:29.935Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/finish2-gate-format.log",
+      "logHash": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+      "sourceHash": "a0524a9b4be39be076ee2f3e9b209e24259f5fb795c19f48e7ca0a94af4cd0bb",
+      "changed": [],
+      "sourceManifest": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/finish2-gate-format-source.json",
+      "reusedOtherTestOnlyDifferences": [],
+      "reuseLimit": "All production and executed test bytes match. Older declaration/core-type gates exclude these two test-only changes; agents and Bun types/lint/format/graph/audit ran after corrections.",
+      "stats": {
+        "passes": 0,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 0
+      }
+    },
+    {
+      "name": "finish2-gate-graph",
+      "cwd": ".",
+      "command": [
+        "bun",
+        "scripts/check-affected-test-shards.ts"
+      ],
+      "extraEnv": {},
+      "driver": 9681,
+      "pid": 10143,
+      "start": "2026-10-21T19:46:30.128Z",
+      "end": "2026-10-21T19:46:33.020Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/finish2-gate-graph.log",
+      "logHash": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67",
+      "sourceHash": "a0524a9b4be39be076ee2f3e9b209e24259f5fb795c19f48e7ca0a94af4cd0bb",
+      "changed": [],
+      "sourceManifest": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/finish2-gate-graph-source.json",
+      "reusedOtherTestOnlyDifferences": [],
+      "reuseLimit": "All production and executed test bytes match. Older declaration/core-type gates exclude these two test-only changes; agents and Bun types/lint/format/graph/audit ran after corrections.",
+      "stats": {
+        "passes": 0,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 0
+      }
+    },
+    {
+      "name": "finish2-gate-audit",
+      "cwd": ".",
+      "command": [
+        "bun",
+        "scripts/test-audit/scan.ts",
+        "tmp/p5/w26-purge-run-ak/audit"
+      ],
+      "extraEnv": {},
+      "driver": 9681,
+      "pid": 10209,
+      "start": "2026-10-21T19:46:33.360Z",
+      "end": "2026-10-21T19:46:36.788Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/finish2-gate-audit.log",
+      "logHash": "b8215e8243c721852b04a95751313a98ac69cc0af5f882b33635d879d3dbb301",
+      "sourceHash": "a0524a9b4be39be076ee2f3e9b209e24259f5fb795c19f48e7ca0a94af4cd0bb",
+      "changed": [],
+      "sourceManifest": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/finish2-gate-audit-source.json",
+      "reusedOtherTestOnlyDifferences": [],
+      "reuseLimit": "All production and executed test bytes match. Older declaration/core-type gates exclude these two test-only changes; agents and Bun types/lint/format/graph/audit ran after corrections.",
+      "stats": {
+        "passes": 0,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 0
+      }
+    }
+  ],
+  "publicChatRed": {
+    "name": "finish-public-chat-red",
+    "cwd": "packages/agents",
+    "command": [
+      "bun",
+      "test",
+      "--timeout",
+      "180000",
+      "src/api/__tests__/semantic-purge-native-chat.test.ts"
+    ],
+    "extraEnv": {
+      "LLXPRT_HISTORY_BACKEND": "journal"
+    },
+    "driver": 5467,
+    "pid": 7598,
+    "start": "2026-10-21T19:44:54.381Z",
+    "end": "2026-10-21T19:44:56.258Z",
+    "code": 1,
+    "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/finish-public-chat-red.log",
+    "logHash": "dd63c3bea1e8c0181cf613254c2632c32a2b688e30bfb02f49a897ab4af02acd",
+    "sourceHash": "da44e278365bd03fffc9b4053376db0a3280542e8a0ff20e12f4d7f9434844f9",
+    "changed": [],
+    "sourceManifest": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/finish-public-chat-red-source.json",
+    "reusedOtherTestOnlyDifferences": [
+      "packages/agents/src/core/semantic-purge-native-parity.test.ts"
+    ],
+    "reuseLimit": "All production and executed test bytes match. Older declaration/core-type gates exclude these two test-only changes; agents and Bun types/lint/format/graph/audit ran after corrections.",
+    "stats": {
+      "passes": 0,
+      "failures": 1,
+      "skips": 0,
+      "assertions": 0
+    }
+  },
+  "rootRed": {
+    "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/root-red-allocation.log",
+    "hash": "437ac363acfd302ff1b26380630d3980e8147918fa3b127b6b244e526877a6c0",
+    "scope": "Original native public SemanticMediaPurgeSession: observed two density rows/index copies, one allocation assertion failure and one runtime creation-denial error. The pre-edit exact test-file bytes were not captured; no exact-test-hash root-RED claim.",
+    "productionBase": "0ddadc66c"
+  },
+  "otherRed": [
+    {
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/cleanup-identity-red.log",
+      "hash": "c9dcfaeebe374e56fefdd493a00faf3d2c2c8fcb0af43a7a41630419919e0fd7"
+    },
+    {
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/compensation-red.log",
+      "hash": "8b0387f270c4fc74e67585d6062e19050e80264252f4c867382581600b195e72"
+    }
+  ],
+  "controls": [
+    {
+      "name": "old-purge-file",
+      "code": 1,
+      "assertionFailures": 1,
+      "originalHash": "9f65bc1f872b275e0a1874f7381f6d1d1c2f41d02b859ef4858e6d82d6950e28",
+      "mutantHash": "35418b4adbbc8dec113f90689d7d9dd3da8eccc43b523593f2d5da17af23826f",
+      "target": "packages/core/src/services/history/semantic-purge-native.ts",
+      "currentTargetHash": "9f65bc1f872b275e0a1874f7381f6d1d1c2f41d02b859ef4858e6d82d6950e28",
+      "matchesCurrent": true,
+      "execution": {
+        "name": "control-old-purge-file",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/core/semantic-purge-native-producer.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 91842,
+        "pid": 91859,
+        "start": "2026-10-21T19:36:46.311Z",
+        "end": "2026-10-21T19:36:47.212Z",
+        "code": 1,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/control-old-purge-file.log",
+        "logHash": "0317e4dee5f5fb601559fc9d48416f4ea5cb77cc9b076a71333f866436420fb2",
+        "sourceHash": "5f8edf6085b4388d2fbd817ca55d8d0137ad00b24892d77f21357be752b39457",
+        "changed": []
+      }
+    },
+    {
+      "name": "retained-outputs",
+      "code": 1,
+      "assertionFailures": 2,
+      "originalHash": "9f65bc1f872b275e0a1874f7381f6d1d1c2f41d02b859ef4858e6d82d6950e28",
+      "mutantHash": "c68c1d92cbfdfa70e8c2328152e0d83e85516772eab395d402fbe071258e5707",
+      "target": "packages/core/src/services/history/semantic-purge-native.ts",
+      "currentTargetHash": "9f65bc1f872b275e0a1874f7381f6d1d1c2f41d02b859ef4858e6d82d6950e28",
+      "matchesCurrent": true,
+      "execution": {
+        "name": "control-retained-outputs",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/core/semantic-purge-native-lifetime.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 91842,
+        "pid": 91887,
+        "start": "2026-10-21T19:36:47.511Z",
+        "end": "2026-10-21T19:36:54.476Z",
+        "code": 1,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/control-retained-outputs.log",
+        "logHash": "d28c5e026be08ea89c85674085a7275087549a4bd7bf0194aa3583d0170ad568",
+        "sourceHash": "9883d591902fc526d5b8eebb728fcc12d1c6ab36b8cc38c08f3c0c0ae1fce1e5",
+        "changed": []
+      }
+    },
+    {
+      "name": "wrong-source-owner",
+      "code": 1,
+      "assertionFailures": 4,
+      "originalHash": "9f65bc1f872b275e0a1874f7381f6d1d1c2f41d02b859ef4858e6d82d6950e28",
+      "mutantHash": "a145ce0aba82b921902d22fdfb9e8a749e7174fb084ddb5593ba3430e83a0202",
+      "target": "packages/core/src/services/history/semantic-purge-native.ts",
+      "currentTargetHash": "9f65bc1f872b275e0a1874f7381f6d1d1c2f41d02b859ef4858e6d82d6950e28",
+      "matchesCurrent": true,
+      "execution": {
+        "name": "control-wrong-source-owner",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/core/semantic-purge-native-owners.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 91842,
+        "pid": 92035,
+        "start": "2026-10-21T19:36:54.712Z",
+        "end": "2026-10-21T19:37:34.740Z",
+        "code": 1,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/control-wrong-source-owner.log",
+        "logHash": "2379fc556d6168e41b2e7dffe4885b77e6d86ff5b87b03ea2ce127c9548a4fd2",
+        "sourceHash": "7ba32432b8d676dd4a3c2686ba6a4f4d21139a665933448ee08a4b952432674a",
+        "changed": []
+      }
+    },
+    {
+      "name": "repaired-id-dedupe",
+      "code": 1,
+      "assertionFailures": 2,
+      "originalHash": "9f65bc1f872b275e0a1874f7381f6d1d1c2f41d02b859ef4858e6d82d6950e28",
+      "mutantHash": "3f5878febc78a09e08dc7615ee932beaec594533715ee5a8f57e64cbe4ff4897",
+      "target": "packages/core/src/services/history/semantic-purge-native.ts",
+      "currentTargetHash": "9f65bc1f872b275e0a1874f7381f6d1d1c2f41d02b859ef4858e6d82d6950e28",
+      "matchesCurrent": true,
+      "execution": {
+        "name": "control-repaired-id-dedupe",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/core/semantic-purge-native-parity.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 91842,
+        "pid": 93670,
+        "start": "2026-10-21T19:37:35.021Z",
+        "end": "2026-10-21T19:37:35.860Z",
+        "code": 1,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/control-repaired-id-dedupe.log",
+        "logHash": "58843ae43ee4e0d1c28e4e23c3897dff6a064de237a2a018ca8916872287b3e1",
+        "sourceHash": "c8a073678660676b61d18f606b3f02eab6a7cf19bb06af95db1a234a86c1233d",
+        "changed": []
+      }
+    },
+    {
+      "name": "extra-prefix-scan",
+      "code": 1,
+      "assertionFailures": 2,
+      "originalHash": "9f65bc1f872b275e0a1874f7381f6d1d1c2f41d02b859ef4858e6d82d6950e28",
+      "mutantHash": "652a290341391eee7eeb100e79e8e0fd0a633b50317fb7acaac4663008f64757",
+      "target": "packages/core/src/services/history/semantic-purge-native.ts",
+      "currentTargetHash": "9f65bc1f872b275e0a1874f7381f6d1d1c2f41d02b859ef4858e6d82d6950e28",
+      "matchesCurrent": true,
+      "execution": {
+        "name": "control-extra-prefix-scan",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/core/semantic-purge-native-cost.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 91842,
+        "pid": 93728,
+        "start": "2026-10-21T19:37:36.121Z",
+        "end": "2026-10-21T19:37:43.541Z",
+        "code": 1,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/control-extra-prefix-scan.log",
+        "logHash": "6628cbc5a67f60a5936e089a3a0f9247c615b5d4275d8cb373cd9520affe5d4d",
+        "sourceHash": "6a6d7d7cfb4d843d412ae99751afe3d976e734e1902197b833ffd6599d6bc823",
+        "changed": []
+      }
+    },
+    {
+      "name": "identity-wrapping",
+      "target": "packages/core/src/services/history/semantic-purge-native-base.ts",
+      "code": 1,
+      "assertionFailures": 1,
+      "originalHash": "37e73ad0596ad5ac0393d1f3c8902f6e5ec4ef129bdc9b0e3701c417d8ae098b",
+      "mutantHash": "4a8c6fe6e89d2e91249d21d89ba83f180904ac0ce51982ae4f6ede2069954e87",
+      "restoredHash": "37e73ad0596ad5ac0393d1f3c8902f6e5ec4ef129bdc9b0e3701c417d8ae098b",
+      "cmp": true,
+      "currentTargetHash": "37e73ad0596ad5ac0393d1f3c8902f6e5ec4ef129bdc9b0e3701c417d8ae098b",
+      "matchesCurrent": true,
+      "execution": {
+        "name": "control-identity-wrapping",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/core/semantic-purge-native-readers.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 7658,
+        "pid": 7664,
+        "start": "2026-10-21T19:44:57.574Z",
+        "end": "2026-10-21T19:44:58.199Z",
+        "code": 1,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-purge-run-ak/control-identity-wrapping.log",
+        "logHash": "470ecd98577986ee9cb08dc5246fcef83ba464b9431d4960bf3b92296ff6b301",
+        "sourceHash": "0d63249cdabcc052936b18b342092434e4329059a3187824f1dfdb3847bdbc23",
+        "changed": []
+      }
+    }
+  ],
+  "controlRestoration": "Each original captured, rewritten, byte-equal/cmp/SHA-256 restored. Current target equals every captured original. Control source manifests precede final session cleanup fix; the unchanged target/control tests are not silently represented as complete final-tree mutants.",
+  "lifetime": [
+    "PURGE_LIFETIME {\"size\":512,\"outputs\":511,\"samples\":3,\"peak\":1,\"final\":0}",
+    "PURGE_LIFETIME {\"size\":8192,\"outputs\":8191,\"samples\":63,\"peak\":1,\"final\":0}"
+  ],
+  "readCost": [
+    "PURGE_MUTATION_READS {\"size\":40,\"sourceRows\":40,\"totalRows\":41,\"excludes\":\"construction, selection and persistence callback\"}",
+    "PURGE_MUTATION_READS {\"size\":4000,\"sourceRows\":4000,\"totalRows\":4001,\"excludes\":\"construction, selection and persistence callback\"}"
+  ],
+  "mechanism": "Queued pinned raw service snapshot, typed lazy native media candidate, sourceOrdinal mapping past whole-row removal, awaited appendDerived with current owners, scoped reader retirement and version compensation. Existing eager policy unchanged. No new semantic predicate namespace or replacement normalizer.",
+  "readLimits": "Frontier discovery/rebasing is bounded linear row traversal. Mutation counts exclude selection, callbacks and construction. No logarithmic whole-operation or no-file-reads claim.",
+  "noFiles": "Native producer construction/publication/rollback/finalization denies file creation across roots. Whole Agent.stream remains RED at ProviderNormalizationDisk; its enabled regression is committed, not skipped. No whole-request no-scratch closure.",
+  "behaviorLimits": "Complete eager candidate/history and token parity covers media remove/summary, duplicate/empty IDs, thinking/tool blocks and repeated frontiers. Provider normalized units, pair reconstruction and complete wire parity are not newly proved. Existing provider purge tests are separate compatibility evidence.",
+  "preservation": {
+    "baseline": "tmp/p5/w26-continuous-run-ab/preserved.json",
+    "count": 1192,
+    "differences": []
+  },
+  "audit": {
+    "findings": [
+      "packages/core/src/services/history/semantic-purge-native-compensation.test.ts\t53\tnative semantic purge durable callback compensation > restores the candidate callback state when rollback media publication fails\tSELF_CONFIRMING\texpected 'candidate' computed from the same call under test: await collect(history.streamRawHistory())\tcore",
+      "packages/core/src/services/history/semantic-purge-native-compensation.test.ts\t14\tnative semantic purge durable callback compensation > restores the candidate callback state when rollback media publication fails\tDUP_ASSERT\t2x identical assertion: expect(persisted).toStrictEqual(candidate)\tcore",
+      "packages/agents/src/core/semantic-purge-native-failures.test.ts\t98\tnative semantic purge failures > (unnamed)\tSELF_CONFIRMING\texpected 'before' computed from the same call under test: await collect(history.streamRawHistory())\tagents",
+      "packages/agents/src/core/semantic-purge-native-failures.test.ts\t101\tnative semantic purge failures > (unnamed)\tSELF_CONFIRMING\texpected 'tokens' computed from the same call under test: history.getTotalTokens()\tagents",
+      "packages/agents/src/core/semantic-purge-native-failures.test.ts\t115\tnative semantic purge failures > (unnamed)\tSELF_CONFIRMING\texpected 'before' computed from the same call under test: await collect(history.streamRawHistory())\tagents",
+      "packages/agents/src/core/semantic-purge-native-failures.test.ts\t50\tnative semantic purge failures > (unnamed)\tDUP_ASSERT\t2x identical assertion: expect(await collect(history.streamRawHistory())).toStrictEqual( before, )\tagents",
+      "packages/agents/src/core/semantic-purge-native-owners.test.ts\t42\tnative semantic purge current source ownership > (unnamed)\tDUP_ASSERT\t2x identical assertion: expect(await origins(history)).toStrictEqual(before)\tagents",
+      "packages/agents/src/core/semantic-purge-native-owners.test.ts\t42\tnative semantic purge current source ownership > (unnamed)\tDUP_ASSERT\t2x identical assertion: expect(await origins(history)).toStrictEqual([])\tagents",
+      "packages/agents/src/core/semantic-purge-native-producer.test.ts\t69\tnative public semantic purge producer > (unnamed)\tSELF_CONFIRMING\texpected 'before' computed from the same call under test: await collect(history)\tagents",
+      "packages/agents/src/core/semantic-purge-native-producer.test.ts\t70\tnative public semantic purge producer > (unnamed)\tSELF_CONFIRMING\texpected 'tokens' computed from the same call under test: history.getTotalTokens()\tagents"
+    ],
+    "scope": "AST scanner flags are retained, not silently called absent. Graph validation is not shard execution."
+  },
+  "processes": {
+    "recorded": [
+      26524,
+      26311,
+      26536,
+      27375,
+      27394,
+      33582,
+      33572,
+      33621,
+      34831,
+      34817,
+      34872,
+      34917,
+      34955,
+      35955,
+      35996,
+      36030,
+      40961,
+      40958,
+      41003,
+      41046,
+      42895,
+      42891,
+      46561,
+      46556,
+      46579,
+      47822,
+      47816,
+      47834,
+      47854,
+      52037,
+      51821,
+      53519,
+      53552,
+      57956,
+      89918,
+      89860,
+      89939,
+      89979,
+      90004,
+      90099,
+      90252,
+      91859,
+      91842,
+      91887,
+      92035,
+      93670,
+      93728,
+      96762,
+      96757,
+      96801,
+      96826,
+      97569,
+      97585,
+      97625,
+      97804,
+      98118,
+      98134,
+      98151,
+      99458,
+      1793,
+      1885,
+      1921,
+      1982,
+      3291,
+      3319,
+      3355,
+      3521,
+      3508,
+      3580,
+      3629,
+      3740,
+      5469,
+      5467,
+      5490,
+      5525,
+      5544,
+      5555,
+      5577,
+      5597,
+      5611,
+      5941,
+      7197,
+      7598,
+      7664,
+      7658,
+      7705,
+      7782,
+      7779,
+      9665,
+      9657,
+      9683,
+      9681,
+      9719,
+      9861,
+      10125,
+      10143,
+      10209
+    ],
+    "live": []
+  },
+  "remaining": "Public request normalization; native provider fallback/curatedCandidate; CLI clear/restore; annotated append; normalization/cache/tails/ranges/semantic generations; structural/pending/stale capacity; LENS/live bytes and whole heap/cache/pin capacity; Phase 6 provider body/key/message/tokenizer spools/guards; W23/W25/cutover/cold Mistral. Old backend phase 9 and defaults unchanged.",
+  "historical": "Immutable 5000 normalization fixtures and 45000 provider references are not regenerated or added to fresh counts. #3917 stays separately RED, not retried or suppressed.",
+  "review": "review skipped per Andrew 2026-10-09"
+}

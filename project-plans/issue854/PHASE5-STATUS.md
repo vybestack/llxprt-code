@@ -1,3 +1,13 @@
+# Native purge producer migrated; public request normalization remains RED, 2026-10-21
+
+Early checkpoint `f92964ea6` removes native semantic-media-purge base/candidate density copies. The follow-up uses scoped pinned raw rows, current source ordinals and version compensation, including callback rollback failure. [W26 purge receipt](recovery-2026-10-19/recovered-control/W26-SOURCE-BOUND-PURGE-PROOF.json) binds exact executions and source; [status](recovery-2026-10-19/recovered-control/W26-STATUS.md) and [caller census](recovery-2026-10-19/recovered-control/W26-NATIVE-PRODUCER-CENSUS.md) distinguish producer-only acceptance from the actual `Agent.stream` failure.
+
+Source/test follow-up `5ecf4ab4de7c69239d7cda474756f0fb77619e8b` passes producer-scoped acceptance: 129 tests, zero failures/skips, 110,309 assertions across 26 complete serial files, nine scoped gates and six restored assertion controls. All 1,192 preservation hashes match and recorded execution PIDs are absent. Smaller eager/token parity, scale output lifetime and native durable rollback remain distinct proof domains; independent 512/8192 eager-token/durable parity and concurrent immutable media-lease acceptance are not closed. Audit retains six state-preservation and four cross-transition labels. No new producer family or review was started.
+
+The full public-chat creating-API denial test is enabled and RED at `ProviderNormalizationDisk`. No complete normalized request/wire, producer-wide or Phase 5 closure is claimed. Native fallback/curatedCandidate, CLI clear/restore, annotated append, structural/pending/stale capacity, normalization/cache/tails/ranges/semantic generations and global LENS/live-byte accounting remain open. Provider body spools/guards remain Phase 6. Whole heap/cache/pin capacity, W23/W25/cutover and cold Mistral remain separate. Historical normalization fixtures and provider-reference counts are unchanged. #3917 stays separately RED; defaults and phase-9 old-backend removal are unchanged. Review skipped per Andrew 2026-10-09.
+
+---
+
 # Native public prefix scratch is removed; Phase 5 remains open, 2026-10-21
 
 Final checkpoint follow-up `27d146038e5281281eb0fb019ad39679d46fe1ce` passes 71 tests/472 assertions in eleven complete serial files, with zero failures/skips and nine matching scoped gates. Four controls fail 5/4/2/1 actual assertions and restore cmp/SHA-256; two additional old-branch runtime failures are excluded from assertion evidence. All 1,192 preservation hashes match; recorded AJ worker/driver PIDs are absent. Early accept4 separately records 235 passes/62,143 assertions and is not relabeled final-source execution.

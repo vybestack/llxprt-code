@@ -1,3 +1,23 @@
+# Native semantic purge producer proof and public-chat RED, 2026-10-21
+
+[Source-bound purge receipt](W26-SOURCE-BOUND-PURGE-PROOF.json). Early implementation `f92964ea6`; source/test follow-up `5ecf4ab4de7c69239d7cda474756f0fb77619e8b`; raw root `tmp/p5/w26-purge-run-ak/`. Producer acceptance: 129 passes, zero failures/skips, 110,309 assertions in 26 complete serial files and nine scoped gates. Reused executions retain exact production/executed-test bytes and list other-test-only differences. This closes neither the complete public request path nor W26.
+
+| Obligation | Evidence and limit |
+| --- | --- |
+| Producer allocation RED | Original actual native session purge observed two density rows/index copies, then cross-root creation denial failed at their constructor. Native producer now uses a queued pinned raw snapshot and lazy typed candidate; no source file deleted. |
+| Independent behavior | Old eager oracle plus unchanged old HistoryService compare complete candidate/history and successful tokens across three remove/summary operations, duplicate/empty IDs, raw identity collisions, thinking and tool blocks. No replacement semantic pairing rule. |
+| Ownership | Actual journal origins at 3/64/65/5000, explicit unowned rows, source shift after full-row deletion, rollback and both repeated clears. `appendDerived` uses original raw source ordinals, not output rank. |
+| Lifetime/error handling | Scoped base/candidate/tagged request readers retire before snapshot close; actual output WeakRefs at 512/8192 await boundaries, unchanged bound two and full greater-than-nine-MiB text. Row-65 producer/query/abort preserve cause and prior roots; callback/media rollback failure compensates state. #3919 original files remain separate unchanged regressions. |
+| Mutation read budget | 40/4000 candidate source decodes, 41/4001 total full ROW reads during publication only. Frontier selection/rebase and callback work excluded; bounded linear passes are not logarithmic whole-operation proof. |
+| Negative controls | Old purge files, retained outputs, wrong source owners, repaired-ID dedupe, extra prefix scan and cleanup wrapping fail 1/2/4/2/2/1 assertions, respectively, and restore byte-equal/cmp/SHA-256. Retaining outputs observes 128 versus bound two. Runtime creation-denial errors are excluded from assertion counts. |
+| Still RED | Complete `Agent.stream` trigger opens `ProviderNormalizationDisk` in request preparation. The new full public-chat denial test remains tracked, enabled and RED. Do not combine producer-only green totals with that failure as full closure. |
+
+The actual public-chat RED is a runtime creation denial with zero assertions, before its purge/commit checks. No concurrent immutable pending-request media-lease proof or independent 512/8192 eager token/durable-mirror comparison is added here. Six state-preservation and four cross-transition audit labels remain classified in the receipt. All 1,192 preservation hashes match; recorded execution and inherited driver PIDs are absent.
+
+No fresh normalized-wire/45,000-reference or global heap/capacity acceptance is claimed. Remaining native CLI clear/restore, annotated append and provider fallback are in the caller census. Defaults, #3917 and phase-9 old-backend lifetime remain unchanged. Review skipped per Andrew 2026-10-09.
+
+---
+
 # Native public prefix producer proof, 2026-10-21
 
 Final source `27d146038e5281281eb0fb019ad39679d46fe1ce`: **71 passes, zero failures/skips, 472 assertions in eleven serial complete files**, nine matching gates. Early accept4 separately records 235 passes/62,143 assertions in 28 files. Four controls fail 5/4/2/1 actual assertions and restore cmp/hash; two additional old-branch runtime failures are excluded from assertion evidence; all 1,192 preservation hashes match and recorded AJ PIDs are absent. These matrices have different source boundaries and are not added together as unique final acceptance.
