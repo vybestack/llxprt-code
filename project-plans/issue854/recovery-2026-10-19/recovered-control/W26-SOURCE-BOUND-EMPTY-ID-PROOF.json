@@ -1,0 +1,10 @@
+{
+  "status": "RED before production edits",
+  "head": "1a4f58e9b8f5dfa73630eeeeca26012245056624",
+  "root": "Distinct stale ID cardinality is compared with tool-call block count. Two repeated references with raw ID empty string are both filtered, but one distinct ID differs from two calls, producing an empty replacement rather than removing the exhausted row.",
+  "oldArrayObserved": {"removals": [1], "emptyReplacementOrdinal": 0, "preservedMixedResponseBlocks": ["raw/a", "raw_a", "text"]},
+  "publicApi": "CompressionHandler.ensureDensityOptimized -> HistoryServiceCore.optimizeDensityRows -> native detached source-ordinal sink. No replaceToolResponse symbol exists at this HEAD; do not invent an API contract under that name.",
+  "rawIdContract": "AI removal targets matching IDs only within the stale source row. Tool response removal intentionally targets every exact raw ID globally, including empty string. Other blocks and other source rows survive. Provider-normalized collisions do not merge raw IDs.",
+  "red": {"log": "tmp/p5/w26-empty-id-run-ai/root-red.log", "sha256": "02614ee41ee92593b27ce1835f410b90d5f9aba59dd915bf9104df55f95eaaf9", "source": "tmp/p5/w26-empty-id-run-ai/root-red-source.json", "pass": 0, "fail": 5, "assertions": 5},
+  "scope": "Existing array optimizer shares this cardinality bug. Native admission is not weakened. New regression explicitly requires exhausted-row removal, then separately checks public values, durable bytes, owners and successful public token count against the array algorithm. Later acceptance remains pending."
+}
