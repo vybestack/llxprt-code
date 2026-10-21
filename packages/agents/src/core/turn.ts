@@ -475,6 +475,7 @@ export class Turn {
   > {
     // Handle the RETRY event
     if (streamEvent.type === StreamEventType.RETRY) {
+      this.pendingToolCalls.length = 0;
       const outcome = this.createEmptyResponseOutcome();
       yield { type: AgentEventType.Retry };
       return { action: 'continue', outcome, chunk: null };

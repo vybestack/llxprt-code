@@ -169,10 +169,10 @@ export function connectionLimitErrorFrame(): string {
     type: 'error',
     status: 400,
     error: {
-      type: 'websocket_error',
+      type: 'invalid_request_error',
       code: 'websocket_connection_limit_reached',
       message:
-        'The websocket connection was closed because it has been open for too long',
+        'Responses websocket connection limit reached (60 minutes). Create a new websocket connection to continue.',
     },
     headers: {},
   });
