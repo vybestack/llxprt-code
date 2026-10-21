@@ -13,6 +13,7 @@ import {
   chmodSync,
   writeFileSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   rmSync,
   symlinkSync,
@@ -505,6 +506,57 @@ describe('release-bound artifact graph (issue #3771)', () => {
     });
     expect(bun.error).toMatchObject({ code: 'ENOENT' });
   });
+
+  it.skipIf(process.platform !== 'darwin')(
+    'exposes native sysctl without restoring host PATH or changing Node identity',
+    () => {
+      const directory = mkdtempSync(join(tmpdir(), 'llxprt-sysctl-only-'));
+      pendingDisposals.push(() =>
+        rmSync(directory, { recursive: true, force: true }),
+      );
+      const host = spawnSync('node', ['-p', 'process.execPath'], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      expect(host.status).toBe(0);
+      const machine = spawnSync('/usr/sbin/sysctl', ['-n', 'hw.machine'], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      expect(machine.status).toBe(0);
+      expect(machine.stdout.trim().length).toBeGreaterThan(0);
+      prepareNodeOnlyRuntime(directory);
+      const env = { ...process.env, PATH: directory };
+      const identity = spawnSync('node', ['-p', 'process.execPath'], {
+        env,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      expect(identity.status).toBe(0);
+      expect(realpathSync(identity.stdout.trim())).toBe(
+        realpathSync(host.stdout.trim()),
+      );
+      const bun = spawnSync('bun', ['--version'], {
+        env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      expect(bun.error).toMatchObject({ code: 'ENOENT' });
+      const probe = spawnSync(
+        'node',
+        [
+          '-e',
+          "process.stdout.write(require('node:child_process').execFileSync('sysctl', ['-n', 'hw.machine'], {stdio: ['ignore', 'pipe', 'pipe']}))",
+        ],
+        { env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+      );
+      expect(probe.status, probe.stderr).toBe(0);
+      expect(probe.stdout).toBe(machine.stdout);
+      expect(realpathSync(join(directory, 'sysctl'))).toBe(
+        realpathSync('/usr/sbin/sysctl'),
+      );
+      expect(readdirSync(directory).sort()).toEqual(['node', 'sysctl']);
+    },
+  );
 
   const workspaceInfo = getWorkspaceInfo();
   const published = new Set(deriveNpmReleasePackages());

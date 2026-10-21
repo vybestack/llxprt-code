@@ -7,6 +7,8 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
+  accessSync,
+  constants,
   closeSync,
   cpSync,
   copyFileSync,
@@ -47,6 +49,11 @@ export function prepareNodeOnlyRuntime(directory: string): void {
   } else {
     // Keep loader-relative libraries beside the physical host executable.
     symlinkSync(nodeExecutable, join(directory, 'node'));
+  }
+  if (process.platform === 'darwin') {
+    // Packaged dependencies use sysctl for Rosetta detection; host Bun stays hidden.
+    accessSync('/usr/sbin/sysctl', constants.X_OK);
+    symlinkSync('/usr/sbin/sysctl', join(directory, 'sysctl'));
   }
 }
 
