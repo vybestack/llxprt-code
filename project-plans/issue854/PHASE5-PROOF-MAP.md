@@ -1,5 +1,19 @@
 # Phase 5 proof map
 
+## Stored cache-off Anthropic format checkpoint, 2026-10-21
+
+Implementation `0ba26cf5238260845257a32a283ea1a34d755183`; predecessor `d6dc50c83`. [PHASE5-ANTHROPIC-STORED-PROOF.json](PHASE5-ANTHROPIC-STORED-PROOF.json) binds 76 passes, zero failures/skips and 10,705 assertions across 11 serial complete-file Bun processes, eight scoped gates and five restored assertion controls. Raw receipts: `tmp/p5/anthropic-stored-finish-v`.
+
+| Obligation | Evidence and limit |
+| --- | --- |
+| Native stored arithmetic | Actual native repair facts drive cold transfer/LENS measurement, including repaired tool-result placement and last-kept chains. Frozen parity covers all 5000 independently normalized histories, not original raw bodies; raw ONE/ONE/TWO is tested separately. No reference overlay enters production measurement. |
+| Warm query versus cold work | At 40/4000 rows: combined cold construction/fill 6015/931672 physical reads, re-registration 4/4, three planning policies 4/4 with zero ROW/LENS record overlap. Discovery/setup excluded from warm measurement. This does not establish heap or 100000-call capacity. |
+| Lifecycle/settings | Three fixed auxiliary keys carry format key/gen/rev headers under the unchanged map bound. Twelve generation changes preserve old pins. Reopen/fork/compaction/offset audit, callback failure/disposal/poison recovery, captured envelope/settings and held async metadata queries pass. Plain-chat/Responses and Mistral-copy regressions pass. |
+| Fail-fast and controls | Invalid policy values/callbacks and unregistered settings refuse; unsupported history edits refuse before acknowledgement. Wrong transfer, last-kept, stale generation, unmeasured-zero and planner rescan fail real assertions and restore by cmp/hash. Native acceptance follows restoration. |
+| Provenance | 36 scoped paths match committed blobs and accepted full source inventories. All 39 recorded PIDs are absent. All 1192 preserved paths match, including 293 declarations, recovery and dirty memory. One DUP_ASSERT spans distinct compaction checkpoints; no prohibited touched finding. Graph validation is not all-affected-shard execution. |
+
+This closes the measured full-history cache-off stored-length checkpoint only. Incremental affected-holder changes, cache/tails/ranges, image/media generations, LENS/live bytes, full serialized-request/filter cost, tokens/headers, retained heap, construction capacity, cold Mistral, W23/W25/cutover and W26 remain open. Routes/default unchanged. #3917 stays separate and RED. Review skipped per Andrew 2026-10-09.
+
 ## Persisted Anthropic repair-index cost root, 2026-10-21
 
 Implementation `613319d3e`; tested-source follow-up `08da8726f`. [PHASE5-ANTHROPIC-REPAIR-COST-PROOF.json](PHASE5-ANTHROPIC-REPAIR-COST-PROOF.json) binds 23 committed source/test paths to **82 passes/149,068 assertions, zero failures/skips, five serial processes over ten files, eight gates and four restored assertion-failing controls**. Evidence: `tmp/p5/anthropic-repair-cost-finish-u`. This supersedes the earlier replay-cost limitation for the measured shapes; full native Anthropic format work remains open.

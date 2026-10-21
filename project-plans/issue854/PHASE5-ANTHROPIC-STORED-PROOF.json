@@ -1,0 +1,999 @@
+{
+  "task": "Issue 854: stored cache-off Anthropic length checkpoint, not complete Phase 5",
+  "checkedAt": "2026-10-21T07:30:17.648Z",
+  "startingCommit": "d6dc50c83",
+  "implementationCommit": "0ba26cf5238260845257a32a283ea1a34d755183",
+  "testedSourceCommit": "0ba26cf5238260845257a32a283ea1a34d755183",
+  "sources": [
+    {
+      "path": "packages/core/src/journal/formatFill.ts",
+      "sha256": "1f4f343c583c253e5999e7186dd711924845e15dba3df71393b200384173bd83",
+      "committedSha256": "1f4f343c583c253e5999e7186dd711924845e15dba3df71393b200384173bd83",
+      "commit": "0ba26cf5238260845257a32a283ea1a34d755183"
+    },
+    {
+      "path": "packages/core/src/journal/formatFillLifecycle.ts",
+      "sha256": "f29b0be51683bb93f60ea062af0441be371025d7289b847b2b4dc0dac658c384",
+      "committedSha256": "f29b0be51683bb93f60ea062af0441be371025d7289b847b2b4dc0dac658c384",
+      "commit": "0ba26cf5238260845257a32a283ea1a34d755183"
+    },
+    {
+      "path": "packages/core/src/journal/groupEdits.ts",
+      "sha256": "1b52c4dfdc3c840d451f9bef569e001de76b8f865f55748e5de7e4339def38a8",
+      "committedSha256": "1b52c4dfdc3c840d451f9bef569e001de76b8f865f55748e5de7e4339def38a8",
+      "commit": "0ba26cf5238260845257a32a283ea1a34d755183"
+    },
+    {
+      "path": "packages/core/src/journal/groupPlan.ts",
+      "sha256": "5310b519494b952ea9bb41f061605a1da26992704ab172b6ff47b3b44c3ffa59",
+      "committedSha256": "5310b519494b952ea9bb41f061605a1da26992704ab172b6ff47b3b44c3ffa59",
+      "commit": "0ba26cf5238260845257a32a283ea1a34d755183"
+    },
+    {
+      "path": "packages/core/src/journal/idFactCodec.test.ts",
+      "sha256": "07c839806f3fd9620209b24579533a4c300b93e4684c3f722a63b6919d79ed23",
+      "committedSha256": "07c839806f3fd9620209b24579533a4c300b93e4684c3f722a63b6919d79ed23",
+      "commit": "0ba26cf5238260845257a32a283ea1a34d755183"
+    },
+    {
+      "path": "packages/core/src/journal/idKeys.ts",
+      "sha256": "8d1fea5385890e4cd575d5e193dfe6d950dc443496138a01471a81438172c1da",
+      "committedSha256": "8d1fea5385890e4cd575d5e193dfe6d950dc443496138a01471a81438172c1da",
+      "commit": "0ba26cf5238260845257a32a283ea1a34d755183"
+    },
+    {
+      "path": "packages/core/src/journal/journalStore.ts",
+      "sha256": "1d9535648e1811c0988cd4b5e560a6e8a662b0b4d5cdf509188877de08b6de9c",
+      "committedSha256": "1d9535648e1811c0988cd4b5e560a6e8a662b0b4d5cdf509188877de08b6de9c",
+      "commit": "0ba26cf5238260845257a32a283ea1a34d755183"
+    },
+    {
+      "path": "packages/core/src/journal/keyedMap.ts",
+      "sha256": "37080d2f6ad65c5657c5bc4d54e8278d9bd9b4ba3fa10df433531b923cc323ee",
+      "committedSha256": "37080d2f6ad65c5657c5bc4d54e8278d9bd9b4ba3fa10df433531b923cc323ee",
+      "commit": "0ba26cf5238260845257a32a283ea1a34d755183"
+    },
+    {
+      "path": "packages/core/src/journal/nativeFactFill.ts",
+      "sha256": "20f17303071e1f18efadb58b3dc8abc20ddf2f2261b6aea8b9b7dac6955fd44b",
+      "committedSha256": "20f17303071e1f18efadb58b3dc8abc20ddf2f2261b6aea8b9b7dac6955fd44b",
+      "commit": "0ba26cf5238260845257a32a283ea1a34d755183"
+    },
+    {
+      "path": "packages/core/src/journal/nativeFactIndex.ts",
+      "sha256": "cc2c340847c10e3bbf6d01c04353ed967e42fb781b4b9330a650e835986714d7",
+      "committedSha256": "cc2c340847c10e3bbf6d01c04353ed967e42fb781b4b9330a650e835986714d7",
+      "commit": "0ba26cf5238260845257a32a283ea1a34d755183"
+    },
+    {
+      "path": "packages/core/src/journal/rowFormat.ts",
+      "sha256": "9b810c218730cc3ad4ae211e551259811f8ba0da839abc99ddb0d1b9542500e6",
+      "committedSha256": "9b810c218730cc3ad4ae211e551259811f8ba0da839abc99ddb0d1b9542500e6",
+      "commit": "0ba26cf5238260845257a32a283ea1a34d755183"
+    },
+    {
+      "path": "packages/core/src/journal/slotSummary.ts",
+      "sha256": "1b7acda64db0f0c198e51a0b199e297caccbdbfa7b321379d2302f3ffcf235af",
+      "committedSha256": "1b7acda64db0f0c198e51a0b199e297caccbdbfa7b321379d2302f3ffcf235af",
+      "commit": "0ba26cf5238260845257a32a283ea1a34d755183"
+    },
+    {
+      "path": "packages/core/src/journal/summaryComposition.ts",
+      "sha256": "17f1395d0d2fa3b31a4d3705e683a3ad20d33db81cbfdda4fe1c3c7f5cc212c9",
+      "committedSha256": "17f1395d0d2fa3b31a4d3705e683a3ad20d33db81cbfdda4fe1c3c7f5cc212c9",
+      "commit": "0ba26cf5238260845257a32a283ea1a34d755183"
+    },
+    {
+      "path": "packages/core/src/journal/versionSnapshot.ts",
+      "sha256": "3d192c29bdaf42b7907668ed94e454eac3652044a81567447d125e88222dd732",
+      "committedSha256": "3d192c29bdaf42b7907668ed94e454eac3652044a81567447d125e88222dd732",
+      "commit": "0ba26cf5238260845257a32a283ea1a34d755183"
+    },
+    {
+      "path": "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+      "sha256": "7c5de608711f2cc7a3e97f79487502403d06451adb38f9929ac5c493f3225392",
+      "committedSha256": "7c5de608711f2cc7a3e97f79487502403d06451adb38f9929ac5c493f3225392",
+      "commit": "0ba26cf5238260845257a32a283ea1a34d755183"
+    },
+    {
+      "path": "packages/core/src/services/history/journal-request-occurrences.ts",
+      "sha256": "10994db01dd5c6e31ca5fd1ad176f6b2972b960a5bf4221249a6e4bcead33c14",
+      "committedSha256": "10994db01dd5c6e31ca5fd1ad176f6b2972b960a5bf4221249a6e4bcead33c14",
+      "commit": "0ba26cf5238260845257a32a283ea1a34d755183"
+    },
+    {
+      "path": "packages/core/src/services/history/recording-primary-edits.test.ts",
+      "sha256": "c6a1b6200c0e0787c79435d1f979fc75a401a02c5ac0f62a92c52303cc8d49aa",
+      "committedSha256": "c6a1b6200c0e0787c79435d1f979fc75a401a02c5ac0f62a92c52303cc8d49aa",
+      "commit": "0ba26cf5238260845257a32a283ea1a34d755183"
+    },
+    {
+      "path": "packages/core/src/services/history/recording-primary-edits.ts",
+      "sha256": "76f4e2292b3fddb42e9ed3c49c05247d7a96aa789a2e92ce280d2c90b4943215",
+      "committedSha256": "76f4e2292b3fddb42e9ed3c49c05247d7a96aa789a2e92ce280d2c90b4943215",
+      "commit": "0ba26cf5238260845257a32a283ea1a34d755183"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-repair-fact-writer.ts",
+      "sha256": "0c8cd99ded254814067db61b1c3097478b883acb1dea234f875c2c74b3159af7",
+      "committedSha256": "0c8cd99ded254814067db61b1c3097478b883acb1dea234f875c2c74b3159af7",
+      "commit": "0ba26cf5238260845257a32a283ea1a34d755183"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-repair-index.ts",
+      "sha256": "1ab37cf19d2cf82e0437fb07929f4efb8aeba03a457443cb206436fa2609f071",
+      "committedSha256": "1ab37cf19d2cf82e0437fb07929f4efb8aeba03a457443cb206436fa2609f071",
+      "commit": "0ba26cf5238260845257a32a283ea1a34d755183"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-repair-lifecycle.test.ts",
+      "sha256": "5ac15170a52dd8e076e83276e6a0d34c9e831c80479966245e7115bfa2b347dd",
+      "committedSha256": "5ac15170a52dd8e076e83276e6a0d34c9e831c80479966245e7115bfa2b347dd",
+      "commit": "0ba26cf5238260845257a32a283ea1a34d755183"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-repair-source.ts",
+      "sha256": "0656ace57d84797b5830d5c34d4aec02beec5c73c9132b1cf807f2c40909b5e3",
+      "committedSha256": "0656ace57d84797b5830d5c34d4aec02beec5c73c9132b1cf807f2c40909b5e3",
+      "commit": "0ba26cf5238260845257a32a283ea1a34d755183"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-stored-fill.ts",
+      "sha256": "aec368b809fc35d22dcb412d7cdc7457db245a6d15b1a81a3e38c5dc1160dfc8",
+      "committedSha256": "aec368b809fc35d22dcb412d7cdc7457db245a6d15b1a81a3e38c5dc1160dfc8",
+      "commit": "0ba26cf5238260845257a32a283ea1a34d755183"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-stream-repair-cases.test.ts",
+      "sha256": "2acdf81e54d566ffd0132cbca1269b526530794c654d9af21251f393b44fd53a",
+      "committedSha256": "2acdf81e54d566ffd0132cbca1269b526530794c654d9af21251f393b44fd53a",
+      "commit": "0ba26cf5238260845257a32a283ea1a34d755183"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-stream-repair-frozen.test.ts",
+      "sha256": "f3fc9fa62908be244ec0dd6616f36b594260d7a8a59e84ee125ebaf64ddbccdb",
+      "committedSha256": "f3fc9fa62908be244ec0dd6616f36b594260d7a8a59e84ee125ebaf64ddbccdb",
+      "commit": "0ba26cf5238260845257a32a283ea1a34d755183"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-stream-repair-scale.test.ts",
+      "sha256": "554941825a7e258058c93975fc7d85c5cf2245aeeda7e7606e1a19b757ff9e26",
+      "committedSha256": "554941825a7e258058c93975fc7d85c5cf2245aeeda7e7606e1a19b757ff9e26",
+      "commit": "0ba26cf5238260845257a32a283ea1a34d755183"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-stream-repair.test.ts",
+      "sha256": "cfa0233bdacdb4025745c5142c25a3d893ca3adfd8163ae8e8cef4f58593c97f",
+      "committedSha256": "cfa0233bdacdb4025745c5142c25a3d893ca3adfd8163ae8e8cef4f58593c97f",
+      "commit": "0ba26cf5238260845257a32a283ea1a34d755183"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-stream-repair.ts",
+      "sha256": "c2c5232ce1bc58099b7b5809a36bb25b854c0aef189d6375e939dde5cd342f55",
+      "committedSha256": "c2c5232ce1bc58099b7b5809a36bb25b854c0aef189d6375e939dde5cd342f55",
+      "commit": "0ba26cf5238260845257a32a283ea1a34d755183"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-tool-repair.ts",
+      "sha256": "37d4b65ee66d2a369997f0748e2935ef6af6f245029f4fcf04e2881f05b78956",
+      "committedSha256": "37d4b65ee66d2a369997f0748e2935ef6af6f245029f4fcf04e2881f05b78956",
+      "commit": "0ba26cf5238260845257a32a283ea1a34d755183"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-unit-facts.ts",
+      "sha256": "f211643ec8d0e0dbb2a1b946b34729fc74d5a1fc25b2afd5bf148d5475588605",
+      "committedSha256": "f211643ec8d0e0dbb2a1b946b34729fc74d5a1fc25b2afd5bf148d5475588605",
+      "commit": "0ba26cf5238260845257a32a283ea1a34d755183"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-unit-transfer.ts",
+      "sha256": "413b57024f7429df960aa8b74da8d30604083cf05ddc9c94c3856c6b50f25e4f",
+      "committedSha256": "413b57024f7429df960aa8b74da8d30604083cf05ddc9c94c3856c6b50f25e4f",
+      "commit": "0ba26cf5238260845257a32a283ea1a34d755183"
+    },
+    {
+      "path": "packages/providers/src/anthropic/journal-anthropic-frozen.test.ts",
+      "sha256": "6667af9e7fff3a901176f2aad5333f2fba3ef054a655de347d6ed520c0103c1f",
+      "committedSha256": "6667af9e7fff3a901176f2aad5333f2fba3ef054a655de347d6ed520c0103c1f",
+      "commit": "0ba26cf5238260845257a32a283ea1a34d755183"
+    },
+    {
+      "path": "packages/providers/src/anthropic/journal-anthropic-length.test.ts",
+      "sha256": "1628039bbaed36f18a893cab0c0c0fa59db6d133f7e68ecea9829947a62f9f5b",
+      "committedSha256": "1628039bbaed36f18a893cab0c0c0fa59db6d133f7e68ecea9829947a62f9f5b",
+      "commit": "0ba26cf5238260845257a32a283ea1a34d755183"
+    },
+    {
+      "path": "packages/providers/src/anthropic/journal-anthropic-length.ts",
+      "sha256": "74c82e5377d4d200b95dcc7852291e1f97e5b0424406adf4e71ff4160985640e",
+      "committedSha256": "74c82e5377d4d200b95dcc7852291e1f97e5b0424406adf4e71ff4160985640e",
+      "commit": "0ba26cf5238260845257a32a283ea1a34d755183"
+    },
+    {
+      "path": "packages/providers/src/anthropic/journal-anthropic-lifecycle.test.ts",
+      "sha256": "fac4ab33d66da0b4d3375c315bf80097319d209e0df23ad9569d5cd3461af391",
+      "committedSha256": "fac4ab33d66da0b4d3375c315bf80097319d209e0df23ad9569d5cd3461af391",
+      "commit": "0ba26cf5238260845257a32a283ea1a34d755183"
+    },
+    {
+      "path": "packages/providers/src/anthropic/journal-anthropic-named.test.ts",
+      "sha256": "c1a3a269fb7bc44adf1ef7b5cc5d024a0a3a262fd29d242e733642f1a88f844d",
+      "committedSha256": "c1a3a269fb7bc44adf1ef7b5cc5d024a0a3a262fd29d242e733642f1a88f844d",
+      "commit": "0ba26cf5238260845257a32a283ea1a34d755183"
+    }
+  ],
+  "sourceInventories": [
+    {
+      "path": "tmp/p5/anthropic-stored-finish-v/precommit-27064/sources.json",
+      "sha256": "029f3b0e3ced11029660d931c2759f9785d1d6d5a1ce08596827a03bb8e47d84",
+      "entries": 8936,
+      "differences": []
+    },
+    {
+      "path": "tmp/p5/anthropic-stored-finish-v/frozen-28217/sources.json",
+      "sha256": "029f3b0e3ced11029660d931c2759f9785d1d6d5a1ce08596827a03bb8e47d84",
+      "entries": 8936,
+      "differences": []
+    },
+    {
+      "path": "tmp/p5/anthropic-stored-finish-v/native-33297/sources.json",
+      "sha256": "029f3b0e3ced11029660d931c2759f9785d1d6d5a1ce08596827a03bb8e47d84",
+      "entries": 8936,
+      "differences": []
+    },
+    {
+      "path": "tmp/p5/anthropic-stored-finish-v/extra-33591/sources.json",
+      "sha256": "029f3b0e3ced11029660d931c2759f9785d1d6d5a1ce08596827a03bb8e47d84",
+      "entries": 8936,
+      "differences": []
+    }
+  ],
+  "unchangedOracles": [
+    {
+      "path": "packages/providers/src/__tests__/support/frozenWire/normalizedRows.ts",
+      "sha256": "a858813612178d56765a8b2c0ef31fc194d67b23c63853b7366c1bbd5c2c26ac"
+    },
+    {
+      "path": "packages/providers/src/__tests__/support/frozenWire/frozenCases.ts",
+      "sha256": "ea818df95e6f8514a5c3e047a0f942ebdfbbf1f66163a27a41be78fb1f6e2d9f"
+    },
+    {
+      "path": "packages/providers/src/anthropic/message-table/__tests__/support/wireBuilderHarness.ts",
+      "sha256": "4e0f5ed8f0448517efe53fc30244d6069435592c6b08f01ff2a8ac17ca8c813d"
+    },
+    {
+      "path": "packages/providers/src/anthropic/message-table/__tests__/support/lengthModel/lengthChecks.ts",
+      "sha256": "2255f6148eb4f7115afd4d7777ac16adeafe7cb039d75890277bac90b14179ca"
+    }
+  ],
+  "acceptance": {
+    "pass": 76,
+    "fail": 0,
+    "skip": 0,
+    "assertions": 10705,
+    "processes": 11,
+    "files": 11,
+    "receipts": [
+      {
+        "name": "chat-length",
+        "cwd": "packages/providers",
+        "args": [
+          "bun",
+          "test",
+          "src/openai/journal-chat-length.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 27064,
+        "pid": 27806,
+        "start": "2026-10-21T07:22:33.511Z",
+        "finish": "2026-10-21T07:22:34.179Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-stored-finish-v/precommit-27064/chat-length.log",
+        "logHash": "2c2b59d0d6334501dd60b8888618465a9c3161048775d15cf2e66bca897b7ea0",
+        "differences": [],
+        "pass": 6,
+        "fail": 0,
+        "assertions": 62,
+        "skip": 0
+      },
+      {
+        "name": "chat-lifecycle",
+        "cwd": "packages/providers",
+        "args": [
+          "bun",
+          "test",
+          "src/openai/journal-chat-length-lifecycle.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 27064,
+        "pid": 27816,
+        "start": "2026-10-21T07:22:34.180Z",
+        "finish": "2026-10-21T07:22:34.867Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-stored-finish-v/precommit-27064/chat-lifecycle.log",
+        "logHash": "6dad9ca0e65b21d7e0952113a9d3b83c59f81d3f6a4acf29ce28bca1fc09abd5",
+        "differences": [],
+        "pass": 6,
+        "fail": 0,
+        "assertions": 51,
+        "skip": 0
+      },
+      {
+        "name": "responses-length",
+        "cwd": "packages/providers",
+        "args": [
+          "bun",
+          "test",
+          "src/openai-responses/journal-responses-length.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 27064,
+        "pid": 27835,
+        "start": "2026-10-21T07:22:34.867Z",
+        "finish": "2026-10-21T07:22:35.651Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-stored-finish-v/precommit-27064/responses-length.log",
+        "logHash": "9ad2c03a5a11f695539bdbd8197760267911474e1e52cabc016cbcb1aa01efac",
+        "differences": [],
+        "pass": 5,
+        "fail": 0,
+        "assertions": 30,
+        "skip": 0
+      },
+      {
+        "name": "responses-lifecycle",
+        "cwd": "packages/providers",
+        "args": [
+          "bun",
+          "test",
+          "src/openai-responses/journal-responses-lifecycle.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 27064,
+        "pid": 27846,
+        "start": "2026-10-21T07:22:35.652Z",
+        "finish": "2026-10-21T07:22:38.461Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-stored-finish-v/precommit-27064/responses-lifecycle.log",
+        "logHash": "e56001d9f9a0f37041a9883921cf541622cfcda7b8706b3f0849242daadf6ae1",
+        "differences": [],
+        "pass": 7,
+        "fail": 0,
+        "assertions": 62,
+        "skip": 0
+      },
+      {
+        "name": "format-tables",
+        "cwd": "packages/core",
+        "args": [
+          "bun",
+          "test",
+          "src/journal/formatTables.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 27064,
+        "pid": 27903,
+        "start": "2026-10-21T07:22:38.461Z",
+        "finish": "2026-10-21T07:22:38.750Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-stored-finish-v/precommit-27064/format-tables.log",
+        "logHash": "7c0dc5a02053ba90660903b2b7665549a293ced3ac15453e2639d6d288ef1204",
+        "differences": [],
+        "pass": 8,
+        "fail": 0,
+        "assertions": 224,
+        "skip": 0
+      },
+      {
+        "name": "frozen",
+        "cwd": "packages/providers",
+        "args": [
+          "bun",
+          "test",
+          "src/anthropic/journal-anthropic-frozen.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 28217,
+        "pid": 28221,
+        "start": "2026-10-21T07:23:02.299Z",
+        "finish": "2026-10-21T07:27:08.948Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-stored-finish-v/frozen-28217/frozen.log",
+        "logHash": "f3bbcc739f3b2e82260df1719751fc57c00d8b042072888cd07c65bee61f01e8",
+        "differences": [],
+        "pass": 11,
+        "fail": 0,
+        "assertions": 10015,
+        "skip": 0
+      },
+      {
+        "name": "named",
+        "cwd": "packages/providers",
+        "args": [
+          "bun",
+          "test",
+          "src/anthropic/journal-anthropic-named.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 33297,
+        "pid": 33299,
+        "start": "2026-10-21T07:29:23.612Z",
+        "finish": "2026-10-21T07:29:24.919Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-stored-finish-v/native-33297/named.log",
+        "logHash": "1e471dae2ba48c3e0bdbddc8be187c9729238f6b5d66df028c220f0aa193f711",
+        "differences": [],
+        "pass": 21,
+        "fail": 0,
+        "assertions": 48,
+        "skip": 0
+      },
+      {
+        "name": "native",
+        "cwd": "packages/providers",
+        "args": [
+          "bun",
+          "test",
+          "src/anthropic/journal-anthropic-length.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 33297,
+        "pid": 33315,
+        "start": "2026-10-21T07:29:24.919Z",
+        "finish": "2026-10-21T07:29:44.585Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-stored-finish-v/native-33297/native.log",
+        "logHash": "ca34623a45385acc31cea6bf9f3389aaf7aae9d018198d112e7e6c3243c3e701",
+        "differences": [],
+        "pass": 4,
+        "fail": 0,
+        "assertions": 26,
+        "skip": 0
+      },
+      {
+        "name": "lifecycle",
+        "cwd": "packages/providers",
+        "args": [
+          "bun",
+          "test",
+          "src/anthropic/journal-anthropic-lifecycle.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 33297,
+        "pid": 33581,
+        "start": "2026-10-21T07:29:44.585Z",
+        "finish": "2026-10-21T07:29:45.186Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-stored-finish-v/native-33297/lifecycle.log",
+        "logHash": "940494f0808d39936684f0648da75883c014b4872e509833697ad05075997efe",
+        "differences": [],
+        "pass": 4,
+        "fail": 0,
+        "assertions": 60,
+        "skip": 0
+      },
+      {
+        "name": "version-snapshot",
+        "cwd": "packages/core",
+        "args": [
+          "bun",
+          "test",
+          "src/journal/versionSnapshot.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 33591,
+        "pid": 33593,
+        "start": "2026-10-21T07:29:45.376Z",
+        "finish": "2026-10-21T07:29:45.846Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-stored-finish-v/extra-33591/version-snapshot.log",
+        "logHash": "4c9afb8cbeb20248586e515efe5cb6975aef00af9d8cb02ba32a4ab8bf877d4f",
+        "differences": [],
+        "pass": 2,
+        "fail": 0,
+        "assertions": 8,
+        "skip": 0
+      },
+      {
+        "name": "mistral-copy",
+        "cwd": "packages/core",
+        "args": [
+          "bun",
+          "test",
+          "src/journal/versionCopy.mistral.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 33591,
+        "pid": 33595,
+        "start": "2026-10-21T07:29:45.847Z",
+        "finish": "2026-10-21T07:29:46.334Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-stored-finish-v/extra-33591/mistral-copy.log",
+        "logHash": "ae83c96cec92c316c01b1c0af557bed2ded047f23f00c2a2c08d00f47435947e",
+        "differences": [],
+        "pass": 2,
+        "fail": 0,
+        "assertions": 119,
+        "skip": 0
+      }
+    ],
+    "domain": "All 5000 unchanged Anthropic cache-off frozen source histories after independent normalization, not original raw-body equality.",
+    "parity": {
+      "matched": 5000,
+      "thinking": 3021,
+      "repaired": 2542,
+      "chained": 1078,
+      "lastKept": 516,
+      "domain": "normalized source histories, not raw original frozen bodies",
+      "pid": 28221
+    },
+    "rawQualification": "ONE ONE TWO is separately asserted before normalization; stored parity uses independently normalized old emitter bytes.",
+    "commands": "Complete files, one Bun process per file from its package directory, unchanged --timeout 180000; no all-affected-shard or monorepo claim."
+  },
+  "gates": {
+    "count": 8,
+    "receipts": [
+      {
+        "name": "declarations-core",
+        "cwd": "packages/core",
+        "args": [
+          "bun",
+          "../../scripts/build_package.ts"
+        ],
+        "env": {
+          "LLXPRT_EMIT_DECLARATIONS_ONLY": "1"
+        },
+        "driver": 27064,
+        "pid": 27068,
+        "start": "2026-10-21T07:21:37.978Z",
+        "finish": "2026-10-21T07:21:41.823Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-stored-finish-v/precommit-27064/declarations-core.log",
+        "logHash": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127",
+        "differences": []
+      },
+      {
+        "name": "declarations-providers",
+        "cwd": "packages/providers",
+        "args": [
+          "bun",
+          "../../scripts/build_package.ts"
+        ],
+        "env": {
+          "LLXPRT_EMIT_DECLARATIONS_ONLY": "1"
+        },
+        "driver": 27064,
+        "pid": 27112,
+        "start": "2026-10-21T07:21:41.823Z",
+        "finish": "2026-10-21T07:21:44.142Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-stored-finish-v/precommit-27064/declarations-providers.log",
+        "logHash": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127",
+        "differences": []
+      },
+      {
+        "name": "types-core",
+        "args": [
+          "bunx",
+          "tsc",
+          "--noEmit",
+          "-p",
+          "packages/core/tsconfig.noemit.json"
+        ],
+        "driver": 27064,
+        "pid": 27135,
+        "start": "2026-10-21T07:21:44.143Z",
+        "finish": "2026-10-21T07:21:50.786Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-stored-finish-v/precommit-27064/types-core.log",
+        "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "differences": []
+      },
+      {
+        "name": "types-providers",
+        "args": [
+          "bunx",
+          "tsc",
+          "--noEmit",
+          "-p",
+          "packages/providers/tsconfig.noemit.json"
+        ],
+        "driver": 27064,
+        "pid": 27233,
+        "start": "2026-10-21T07:21:50.787Z",
+        "finish": "2026-10-21T07:22:00.023Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-stored-finish-v/precommit-27064/types-providers.log",
+        "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "differences": []
+      },
+      {
+        "name": "lint",
+        "args": [
+          "bunx",
+          "eslint",
+          "--max-warnings",
+          "0",
+          "packages/core/src/journal/rowFormat.ts",
+          "packages/core/src/journal/formatFill.ts",
+          "packages/core/src/journal/formatFillLifecycle.ts",
+          "packages/core/src/journal/journalStore.ts",
+          "packages/core/src/journal/versionSnapshot.ts",
+          "packages/providers/src/anthropic/anthropic-stream-repair.ts",
+          "packages/providers/src/anthropic/anthropic-stored-fill.ts",
+          "packages/providers/src/anthropic/journal-anthropic-length.ts",
+          "packages/providers/src/anthropic/journal-anthropic-length.test.ts",
+          "packages/providers/src/anthropic/journal-anthropic-lifecycle.test.ts",
+          "packages/providers/src/anthropic/journal-anthropic-frozen.test.ts",
+          "packages/providers/src/anthropic/journal-anthropic-named.test.ts"
+        ],
+        "driver": 27064,
+        "pid": 27397,
+        "start": "2026-10-21T07:22:00.023Z",
+        "finish": "2026-10-21T07:22:06.687Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-stored-finish-v/precommit-27064/lint.log",
+        "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "differences": []
+      },
+      {
+        "name": "prettier",
+        "args": [
+          "bunx",
+          "prettier",
+          "--check",
+          "packages/core/src/journal/rowFormat.ts",
+          "packages/core/src/journal/formatFill.ts",
+          "packages/core/src/journal/formatFillLifecycle.ts",
+          "packages/core/src/journal/journalStore.ts",
+          "packages/core/src/journal/versionSnapshot.ts",
+          "packages/providers/src/anthropic/anthropic-stream-repair.ts",
+          "packages/providers/src/anthropic/anthropic-stored-fill.ts",
+          "packages/providers/src/anthropic/journal-anthropic-length.ts",
+          "packages/providers/src/anthropic/journal-anthropic-length.test.ts",
+          "packages/providers/src/anthropic/journal-anthropic-lifecycle.test.ts",
+          "packages/providers/src/anthropic/journal-anthropic-frozen.test.ts",
+          "packages/providers/src/anthropic/journal-anthropic-named.test.ts"
+        ],
+        "driver": 27064,
+        "pid": 27476,
+        "start": "2026-10-21T07:22:06.687Z",
+        "finish": "2026-10-21T07:22:07.092Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-stored-finish-v/precommit-27064/prettier.log",
+        "logHash": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+        "differences": []
+      },
+      {
+        "name": "graph",
+        "args": [
+          "bun",
+          "scripts/check-affected-test-shards.ts"
+        ],
+        "driver": 27064,
+        "pid": 27480,
+        "start": "2026-10-21T07:22:07.092Z",
+        "finish": "2026-10-21T07:22:09.359Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-stored-finish-v/precommit-27064/graph.log",
+        "logHash": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67",
+        "differences": []
+      },
+      {
+        "name": "audit",
+        "args": [
+          "bun",
+          "scripts/test-audit/scan.ts",
+          "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/anthropic-stored-finish-v/precommit-27064/audit"
+        ],
+        "driver": 27064,
+        "pid": 27508,
+        "start": "2026-10-21T07:22:09.359Z",
+        "finish": "2026-10-21T07:22:12.366Z",
+        "code": 0,
+        "signal": null,
+        "log": "tmp/p5/anthropic-stored-finish-v/precommit-27064/audit.log",
+        "logHash": "b6d00d0a0152a5d854855793c1a6c7a256a0e100197bde7c67ac8c1a51476fc9",
+        "differences": []
+      }
+    ],
+    "auditFindings": [
+      "packages/providers/src/anthropic/anthropic-repair-lifecycle.test.ts\t112\tpersisted native Anthropic repair facts > maintains native decisions across append, fill, pop, fork and compaction while an old request stays pinned\tDUP_ASSERT\t2x identical assertion: expect(await output(query)).toBe(old)\tproviders",
+      "packages/providers/src/anthropic/journal-anthropic-lifecycle.test.ts\t243\tstored Anthropic generations and pinned lifetime > preserves stored correction lengths through reopen, fork and physical compaction\tDUP_ASSERT\t2x identical assertion: expect(await bytes(reopened)).toBe(expected)\tproviders"
+    ],
+    "qualification": "DUP_ASSERT findings span distinct lifecycle checkpoints. Import graph validation does not establish affected-shard test execution."
+  },
+  "readCost": {
+    "warm": [
+      {
+        "count": 40,
+        "fillReads": 6015,
+        "warmRegistrationReads": 4,
+        "reads": 4,
+        "payloadReads": 0,
+        "pid": 33315
+      },
+      {
+        "count": 4000,
+        "fillReads": 931672,
+        "warmRegistrationReads": 4,
+        "reads": 4,
+        "payloadReads": 0,
+        "pid": 33315
+      }
+    ],
+    "scope": "fillReads includes replace + native fact-index construction + cold format fill. warmRegistrationReads is measured separately. reads covers three full-history planning policies after pin setup. payloadReads intercepts every live ROW record and LENS record range; identification reads happen before the query. These are physical read calls, not retained-heap or 100000-call capacity evidence."
+  },
+  "controls": {
+    "manifests": [
+      {
+        "path": "tmp/p5/anthropic-stored-finish-v/controls-32984/manifest.json",
+        "sha256": "88b0638576cad3ea77d8bf122edea8afb0c9ca7ea0c1a1fe48dbe7b94937c07c"
+      },
+      {
+        "path": "tmp/p5/anthropic-stored-finish-v/controls-31550/manifest.json",
+        "sha256": "ecd93fb319aaf3654bd2e508b554bf27275c6d4e5b8decf4db92ecb426b5ff3e"
+      }
+    ],
+    "count": 5,
+    "results": [
+      {
+        "name": "stale-generation",
+        "from": "version.aggregate.stamp[slot].gen !== format.gen,",
+        "to": "false,",
+        "file": "journal-anthropic-named",
+        "expected": "rejects stale slot generations",
+        "path": "packages/providers/src/anthropic/journal-anthropic-length.ts",
+        "args": [
+          "bun",
+          "test",
+          "src/anthropic/journal-anthropic-named.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 32984,
+        "pid": 32986,
+        "start": "2026-10-21T07:29:00.720Z",
+        "finish": "2026-10-21T07:29:01.838Z",
+        "code": 1,
+        "assertion": true,
+        "intended": true,
+        "cmp": 0,
+        "before": "74c82e5377d4d200b95dcc7852291e1f97e5b0424406adf4e71ff4160985640e",
+        "after": "74c82e5377d4d200b95dcc7852291e1f97e5b0424406adf4e71ff4160985640e",
+        "restored": true,
+        "log": "tmp/p5/anthropic-stored-finish-v/controls-32984/stale-generation.log",
+        "logHash": "eeb3c0af55e53bdc06bc0f3217c2a18e73cc2f019dcd9a354aecf5c8fd964dc9"
+      },
+      {
+        "name": "unmeasured-zero",
+        "from": "version.aggregate.missingBase[slot] !== 0,",
+        "to": "false,",
+        "file": "journal-anthropic-named",
+        "expected": "rejects an unmeasured aggregate",
+        "path": "packages/providers/src/anthropic/journal-anthropic-length.ts",
+        "args": [
+          "bun",
+          "test",
+          "src/anthropic/journal-anthropic-named.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 32984,
+        "pid": 33008,
+        "start": "2026-10-21T07:29:01.839Z",
+        "finish": "2026-10-21T07:29:02.961Z",
+        "code": 1,
+        "assertion": true,
+        "intended": true,
+        "cmp": 0,
+        "before": "74c82e5377d4d200b95dcc7852291e1f97e5b0424406adf4e71ff4160985640e",
+        "after": "74c82e5377d4d200b95dcc7852291e1f97e5b0424406adf4e71ff4160985640e",
+        "restored": true,
+        "log": "tmp/p5/anthropic-stored-finish-v/controls-32984/unmeasured-zero.log",
+        "logHash": "c613de9e2cac69de0763916edddbce6f74d1cebb2efd372ffeb21a52e6ee8dea"
+      },
+      {
+        "name": "planner-rescan",
+        "from": "  snapshot.requireOpen();",
+        "to": "  snapshot.requireOpen();\n  for await (const entry of snapshot.entries()) await snapshot.readRow(entry);",
+        "file": "journal-anthropic-length",
+        "expected": "plans 40 rows without reading ROW or LENS payload",
+        "path": "packages/providers/src/anthropic/journal-anthropic-length.ts",
+        "args": [
+          "bun",
+          "test",
+          "src/anthropic/journal-anthropic-length.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 32984,
+        "pid": 33030,
+        "start": "2026-10-21T07:29:02.961Z",
+        "finish": "2026-10-21T07:29:23.399Z",
+        "code": 1,
+        "assertion": true,
+        "intended": true,
+        "cmp": 0,
+        "before": "74c82e5377d4d200b95dcc7852291e1f97e5b0424406adf4e71ff4160985640e",
+        "after": "74c82e5377d4d200b95dcc7852291e1f97e5b0424406adf4e71ff4160985640e",
+        "restored": true,
+        "log": "tmp/p5/anthropic-stored-finish-v/controls-32984/planner-rescan.log",
+        "logHash": "64a57b7762bedbea55bc2a6d76ca113c1ad6d4ad0550db42c5cf6b00ef9cfbbe"
+      },
+      {
+        "name": "wrong-transfer",
+        "from": "messagesBytes: measured.bytes,",
+        "to": "messagesBytes: measured.bytes + 1,",
+        "file": "journal-anthropic-named",
+        "expected": "plans independent normalized lengths",
+        "path": "packages/providers/src/anthropic/journal-anthropic-length.ts",
+        "args": [
+          "bun",
+          "test",
+          "src/anthropic/journal-anthropic-named.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 31550,
+        "pid": 31552,
+        "start": "2026-10-21T07:27:13.270Z",
+        "finish": "2026-10-21T07:27:14.340Z",
+        "code": 1,
+        "assertion": true,
+        "intended": true,
+        "cmp": 0,
+        "before": "74c82e5377d4d200b95dcc7852291e1f97e5b0424406adf4e71ff4160985640e",
+        "after": "74c82e5377d4d200b95dcc7852291e1f97e5b0424406adf4e71ff4160985640e",
+        "restored": true,
+        "log": "tmp/p5/anthropic-stored-finish-v/controls-31550/wrong-transfer.log",
+        "logHash": "9601cd25f7f80be30af2c6c866b1f98cefd03a606328ecaa8042b8fdceb5bdc6"
+      },
+      {
+        "name": "wrong-last-kept",
+        "from": "summary = decodeSlotSummary(metadata, format);",
+        "to": "summary = decodeSlotSummary(version.aggregate.summaries[slot], format);",
+        "file": "journal-anthropic-named",
+        "expected": "handles whitespace and both thinking blocks",
+        "path": "packages/providers/src/anthropic/journal-anthropic-length.ts",
+        "args": [
+          "bun",
+          "test",
+          "src/anthropic/journal-anthropic-named.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "driver": 31550,
+        "pid": 31575,
+        "start": "2026-10-21T07:27:14.340Z",
+        "finish": "2026-10-21T07:27:15.435Z",
+        "code": 1,
+        "assertion": true,
+        "intended": true,
+        "cmp": 0,
+        "before": "74c82e5377d4d200b95dcc7852291e1f97e5b0424406adf4e71ff4160985640e",
+        "after": "74c82e5377d4d200b95dcc7852291e1f97e5b0424406adf4e71ff4160985640e",
+        "restored": true,
+        "log": "tmp/p5/anthropic-stored-finish-v/controls-31550/wrong-last-kept.log",
+        "logHash": "0d9ed1bb3ef3c0a77f69b62a7798c7ecd95d58b199c97e09c1e86c99ecdb10e5",
+        "certifiedTest": "two thinking rows under allButLast, reasoning off",
+        "harnessCorrection": "The original expected label named one chain; actual 194 versus 209 byte failure is the independent two-thinking-row reasoning-off case. Original manifest preserved, no mutation/test rerun."
+      }
+    ],
+    "restoration": "Before each mutation the exact final source is required; restore only when current bytes still equal our mutant, then cmp and SHA-256. Post-restoration native acceptance uses the same committed source."
+  },
+  "behavior": {
+    "supported": "Opt-in Anthropic revision 1, explicit cache off, non-OAuth, toolNameTransform none, unsupportedMedia notice; all declared settings are exact key inputs, both reasoning flags and none/all/allButLast plus includeInContext false. Native overlays/chain decisions derive from stored repair facts, not a reference oracle.",
+    "durability": "Each ROW LENS stores 592 numeric bytes. A 296-byte last-kept root plus 16-byte key/generation/revision header occupies one fixed metadata key per slot. The existing 16384-byte KeyedMap value limit still applies. Old pins retain prior roots; reopen/fork/physical compaction and offset audit pass.",
+    "async": "Capture settings, policy/selection and envelope byte count before metadata awaits; take an independent pin hold. Invalid strip values, callback policy/envelope/settings and unregistered new settings fail instead of reusing stale or zero lengths.",
+    "mutation": "History edits on measured Anthropic versions are refused before writer admission, including reopened unattached versions. No automatic full refill on every append. This is not incremental affected-holder maintenance or ordinary mutable-session support.",
+    "memory": "The fill owns one lazy repair iterator and constant numeric summary state, folding streamed pieces from one unit at a time, including all-thinking chains. LENS and auxiliary values are numeric facts, not serialized request bodies or whole-history references. No retained-heap acceptance is claimed.",
+    "routing": "Provider routes and backend default unchanged."
+  },
+  "preservation": {
+    "path": "tmp/p5/anthropic-repair-cost-finish-u/preserved.json",
+    "sha256": "e80230bd1742f585274b87bf3b154268ec6bb6f96cb41616555a254eac7298ef",
+    "paths": 1192,
+    "unrelatedDeclarations": 293,
+    "differences": []
+  },
+  "processes": {
+    "pids": [
+      22794,
+      25132,
+      25222,
+      27061,
+      27064,
+      27068,
+      27112,
+      27135,
+      27233,
+      27397,
+      27476,
+      27480,
+      27508,
+      27541,
+      27558,
+      27799,
+      27806,
+      27816,
+      27835,
+      27846,
+      27903,
+      28217,
+      28221,
+      29162,
+      31550,
+      31552,
+      31575,
+      32982,
+      32984,
+      32986,
+      33008,
+      33030,
+      33297,
+      33299,
+      33315,
+      33581,
+      33591,
+      33593,
+      33595
+    ],
+    "live": [],
+    "serialOverlaps": [],
+    "supervisor": {
+      "path": "tmp/p5/anthropic-stored-finish-v/finish-complete.json",
+      "sha256": "83bf69f56574660aa433d5f3b4726979482713898490d7f8ac9e4a083d944a83"
+    }
+  },
+  "excluded": {
+    "inherited": "Prior run-u receipts are retained but differ from the accepted planner/tests. async-red contains real capture/pin failures and an EEXIST fixture-authoring failure; no inherited mutation was restored by this run.",
+    "authoring": [
+      "The first RED log path was missing; the empty accidentally created package-local tmp directory is left intact.",
+      "The first policy validator incorrectly refused structurally extended WireSettings; the validator now checks declared policy values without rejecting unrelated converter fields.",
+      "Initial lint found function length, missing direct test assertions and missing toThrow messages; code/test structure was fixed without rule changes.",
+      "Publication identity expectations now use independently captured snapshots. Earlier gate/native attempts remain evidence, not duplicate accepted tests."
+    ],
+    "invalidControlRuntimeExcluded": true,
+    "known3917": "Separate existing RED, not rerun, retried, suppressed or included in green scoped totals."
+  },
+  "remaining": [
+    "Incremental affected-holder maintenance and mutation invalidation/refill usability",
+    "Cache 5m/1h, pending tails and selected ranges",
+    "Stored-media/image generations, LENS recomputation and live-byte accounting",
+    "Full request serialization/LENS/filter read cost, token/stream guard and header installation",
+    "Retained heap at 10k/100k/1M and 100000-call construction capacity",
+    "Cold Mistral cost, W23 eight planning/header cases, Stage A/W25/provider cutover, W26 scratch removal"
+  ],
+  "review": "review skipped per Andrew 2026-10-09",
+  "operations": "No cleanup, stash, unrelated staging, .llxprt edit/staging, OCR, push, merge, default flip, assertion/threshold/timeout/domain reduction or enforcement change."
+}
