@@ -10,6 +10,7 @@ import { planSourceRowOccurrences } from './source-fact-planner.js';
 
 export class JournalRequestMistral {
   private readonly pending = new Map<string, MistralMapping>();
+  private empty: MistralMapping | undefined;
 
   private constructor(
     private readonly snapshot: VersionSnapshot,
@@ -62,6 +63,7 @@ export class JournalRequestMistral {
   }
 
   private async used(id: string): Promise<boolean> {
+    if (this.empty?.id === id) return true;
     for (const mapping of this.pending.values())
       if (mapping.id === id) return true;
     return (
@@ -80,6 +82,17 @@ export class JournalRequestMistral {
       id = this.snapshot.mistralCandidate(rawId, salt);
     }
     return { id, salt };
+  }
+
+  async resolve(rawId: string): Promise<MistralMapping> {
+    const observed = await this.mapping(rawId);
+    if (observed !== undefined) return observed;
+    if (rawId !== '')
+      throw new JournalFormatError(
+        'Unobserved Mistral id requires selected conversion facts',
+      );
+    this.empty ??= await this.assign(rawId);
+    return this.empty;
   }
 
   async mapping(rawId: string): Promise<MistralMapping | undefined> {

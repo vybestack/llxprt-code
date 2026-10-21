@@ -189,6 +189,8 @@ describe('trie keys', () => {
       occurrence: 4,
       kimiException: 5,
       relocation: 6,
+      mistralScopeMapping: 7,
+      mistralScopeUsed: 8,
     });
   });
 

@@ -5,6 +5,7 @@ import type { SourceRow } from './groupEdits.js';
 import type { RowDraft } from './rowDraft.js';
 import type { RowEntry } from './rowEntry.js';
 import type { Version } from './version.js';
+import type { MistralScopeFill } from './mistralScope.js';
 
 /** Rows of an existing tree that a group keeps without writing their records again: rows `[from, to)` of `source`. */
 export interface ExistingRange {
@@ -116,6 +117,7 @@ export interface GroupPlan {
   rebuilt: boolean;
   segments: Segment[] | undefined;
   mistralSlot?: number;
+  mistralScope?: MistralScopeFill;
   bookkeepingMetaRoot?: number;
   kimi?: boolean;
 }

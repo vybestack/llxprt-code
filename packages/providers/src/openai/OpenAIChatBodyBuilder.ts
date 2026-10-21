@@ -1,5 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type OpenAI from 'openai';
+import {
+  nativeMistralRow,
+  type NativeMistralResolver,
+} from './native-mistral-row.js';
 import { readInvocationPolicyValue } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import type { HistoryDumpSource } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type {
@@ -48,6 +52,7 @@ export interface ChatBodyOptions {
    * whatever backs it.
    */
   readonly toolIdStore?: ToolIdStore;
+  readonly nativeMistral?: NativeMistralResolver;
   /**
    * Rewrites the stream of block-bearing rows during conversion (for example
    * to resolve stored media). It runs once per build, only on the conversion
@@ -105,6 +110,13 @@ function createToolIdMapper(
   options: ChatBodyOptions,
 ): StreamingToolIdMapper | undefined {
   const format = options.toolFormat;
+  if (options.nativeMistral !== undefined) {
+    if (format !== 'mistral' || options.toolIdStore !== undefined)
+      throw new Error(
+        'Native Mistral resolution requires mistral format without a scratch store',
+      );
+    return undefined;
+  }
   if (format !== 'kimi' && format !== 'mistral') return undefined;
   if (options.toolIdStore === undefined)
     throw new Error(`A tool id store is required for the ${format} format`);
@@ -233,7 +245,11 @@ class ChatConversion {
     this.images.close();
   }
 
-  *convert(row: IContent, index: number): Generator<ChatMessageItem> {
+  *convert(
+    row: IContent,
+    index: number,
+    mapper = this.mapper,
+  ): Generator<ChatMessageItem> {
     if (row.speaker !== 'tool') yield* this.flushToolMedia();
     const converted = stripsThinking(
       this.settings.stripPolicy,
@@ -242,7 +258,7 @@ class ChatConversion {
     )
       ? removeThinkingFromContent(row)
       : row;
-    for (const message of this.messagesOf(converted)) {
+    for (const message of this.messagesOf(converted, mapper)) {
       if (!validToolMessage(message, this.facts.hasCalls, this.lastCallIds))
         continue;
       this.lastCallIds = nextCallIds(message, this.lastCallIds);
@@ -262,7 +278,10 @@ class ChatConversion {
     };
   }
 
-  private messagesOf(row: IContent): OpenAI.Chat.ChatCompletionMessageParam[] {
+  private messagesOf(
+    row: IContent,
+    mapper: StreamingToolIdMapper | undefined,
+  ): OpenAI.Chat.ChatCompletionMessageParam[] {
     const { includeInContext, toolFormat, config } = this.settings;
     if (row.speaker === 'human') {
       const message = processUserMessage(row);
@@ -274,8 +293,7 @@ class ChatConversion {
         includeInContext,
         toolFormat,
         (call) =>
-          this.mapper?.resolveToolCallId(call) ??
-          normalizeToOpenAIToolId(call.id),
+          mapper?.resolveToolCallId(call) ?? normalizeToOpenAIToolId(call.id),
         normalizeToolCallArguments,
       );
       return message === null ? [] : [message];
@@ -285,7 +303,7 @@ class ChatConversion {
       row,
       toolFormat ?? 'openai',
       (response) =>
-        this.mapper?.resolveToolResponseId(response) ??
+        mapper?.resolveToolResponseId(response) ??
         normalizeToOpenAIToolId(response.callId),
       buildToolResponseContent,
       config,
@@ -315,7 +333,11 @@ export async function* streamChatMessages(
     let index = -1;
     for await (const row of options.mediaStage?.(rows) ?? rows) {
       index++;
-      yield* conversion.convert(row, index);
+      const native =
+        options.nativeMistral === undefined
+          ? undefined
+          : await nativeMistralRow(row, options.nativeMistral);
+      yield* conversion.convert(row, index, native);
     }
     if (index + 1 !== facts.rowCount)
       throw new Error('Chat body rows changed between passes');

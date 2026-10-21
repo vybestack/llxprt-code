@@ -19,6 +19,8 @@ export const ID_NS = {
   kimiException: 5,
   /** An old record offset: where compaction put the record. */
   relocation: 6,
+  mistralScopeMapping: 7,
+  mistralScopeUsed: 8,
 } as const;
 
 export type IdNamespace = (typeof ID_NS)[keyof typeof ID_NS];

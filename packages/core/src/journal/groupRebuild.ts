@@ -3,7 +3,12 @@ import { EMPTY_AGGREGATE } from './aggregateComposition.js';
 import { rebuildContributions } from './contributionRebuild.js';
 import { JournalFormatError } from './errors.js';
 import { kimiEnabled, KIMI_ELIGIBLE_KEY } from './kimiOrdinals.js';
-import { decodeMistralSlots, MISTRAL_SLOTS_KEY } from './mistralMapping.js';
+import {
+  decodeMistralSlots,
+  MISTRAL_SLOTS_KEY,
+  MISTRAL_GENERATION_KEY,
+} from './mistralMapping.js';
+import { encodeDecimal } from './metaFacts.js';
 import type { RecordAppender } from './groupAppender.js';
 import {
   commitState,
@@ -246,6 +251,8 @@ export async function buildRebuilt(
     kimi,
   );
   const chainBase = await ctx.chainFor(plan.parent);
+  if (mappingSlots !== 0)
+    facts.meta.set(MISTRAL_GENERATION_KEY, encodeDecimal(ctx.commitSeq));
   const pass = new RebuildPass(ctx, plan.nextLabel, segments, appender, facts);
   const algebra = ctx.algebra(slotKindsOf(plan.base.slots));
   let tree = await bulkBuildRowTree(appender, algebra, pass.entries());

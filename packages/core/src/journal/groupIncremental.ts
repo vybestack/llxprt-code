@@ -36,6 +36,9 @@ import { editRowTree } from './rowTreeEdit.js';
 import { slotKindsOf } from './version.js';
 import { updateContributions } from './contributionChanges.js';
 import { readRowIds } from './rowReads.js';
+import { fillMistralScope } from './mistralScope.js';
+import { MISTRAL_GENERATION_KEY } from './mistralMapping.js';
+import { encodeDecimal } from './metaFacts.js';
 
 function freshOf(segments: readonly Segment[]): FreshSegment[] {
   return segments.filter(
@@ -93,12 +96,14 @@ async function incrementalFacts(
   ctx: BuildContext,
   plan: GroupPlan,
   adds: ReadonlyArray<FreshSegment | ForeignSegment>,
+  rewritesRows: boolean,
   appender: RecordAppender,
 ): Promise<
   { facts: GroupFacts | undefined; affected: ReadonlySet<bigint> } | undefined
 > {
   const affected = new Set<bigint>();
-  if (adds.length === 0) return { facts: undefined, affected };
+  if (adds.length === 0 && !rewritesRows && plan.mistralScope === undefined)
+    return { facts: undefined, affected };
   const facts = await startFacts(
     ctx.access,
     plan.base.roots,
@@ -106,6 +111,20 @@ async function incrementalFacts(
     mapReader(ctx, 'meta'),
     { appender, readGroup: ctx.readGroup },
   );
+  if (plan.mistralScope !== undefined) {
+    const candidate = ctx.idDeps.mistralCandidate;
+    if (
+      candidate === undefined ||
+      (facts.mistralSlots & (1 << plan.mistralScope.slot)) === 0
+    )
+      throw new JournalFormatError(
+        'Mistral conversion scope needs an active slot',
+      );
+    await fillMistralScope(facts.ids, plan.mistralScope, candidate);
+    return { facts, affected };
+  }
+  if (facts.mistralSlots !== 0)
+    facts.meta.set(MISTRAL_GENERATION_KEY, encodeDecimal(ctx.commitSeq));
   if (
     (facts.mistralSlots !== 0 || facts.kimi) &&
     adds.some((segment) => segment.role === 'insert')
@@ -250,6 +269,9 @@ export async function buildIncremental(
     ctx,
     plan,
     addsOf(segments),
+    segments.some(
+      (segment) => segment.kind === 'fresh' && segment.role === 'purge',
+    ),
     appender,
   );
   if (collected === undefined) return undefined;

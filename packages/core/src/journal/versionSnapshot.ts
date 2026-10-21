@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalFormatError } from './errors.js';
+import { decodeDecimal } from './metaFacts.js';
 import { KimiOrdinalQueries } from './kimiOrdinals.js';
 import type { KimiOccurrence } from './kimiFactCodec.js';
 import { KimiFactQueries, type KimiIdFact } from './kimiFactQueries.js';
@@ -7,6 +8,7 @@ import {
   assertMistralSlot,
   decodeMistralSlots,
   MISTRAL_SLOTS_KEY,
+  MISTRAL_GENERATION_KEY,
   readMistralMapping,
   type MistralMapping,
 } from './mistralMapping.js';
@@ -127,6 +129,19 @@ export class VersionSnapshot {
     );
     if ((slots & (1 << slot)) === 0)
       throw new JournalFormatError('Mistral observe mappings need a fill');
+  }
+
+  async mistralGeneration(): Promise<string> {
+    this.read.requireOpen();
+    const generation = await this.kimi.meta.get(
+      this.version?.roots.metaRoot ?? 0,
+      MISTRAL_GENERATION_KEY,
+    );
+    if (generation === undefined)
+      throw new JournalFormatError(
+        'Mistral conversion generation needs a fill',
+      );
+    return decodeDecimal(generation).toString();
   }
 
   mistralCandidate(rawId: string, salt: number): string {

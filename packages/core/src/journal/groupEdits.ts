@@ -5,6 +5,7 @@ import type { RecordAccess } from './recordAccess.js';
 import type { RowDraft } from './rowDraft.js';
 import type { RowEntry } from './rowEntry.js';
 import type { Version } from './version.js';
+import type { MistralScopeFill } from './mistralScope.js';
 
 /**
  * The index-entry fields a fill sets for one row (design 4.6 and 8.2). A fill
@@ -58,6 +59,7 @@ export interface SourceRow {
 
 /** One primitive edit of a commit group (design 4.1). The group applies them in order and commits once. */
 export type VersionEdit =
+  | ({ readonly kind: 'mistralScope' } & MistralScopeFill)
   | { readonly kind: 'kimi' }
   | { readonly kind: 'mistral'; readonly slot: number }
   /** Design 4.2: rows at the next labels, with their id facts. */

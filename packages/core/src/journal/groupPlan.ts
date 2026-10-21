@@ -227,6 +227,10 @@ async function applyEdit(
     return;
   }
   switch (edit.kind) {
+    case 'mistralScope':
+      assertMistralSlot(edit.slot);
+      plan.mistralScope = edit;
+      break;
     case 'kimi':
       startNewLineage(plan);
       plan.kimi = true;
@@ -294,6 +298,7 @@ function mutationKind(edit: VersionEdit): VersionEdit['kind'] {
   switch (edit.kind) {
     case 'kimi':
     case 'mistral':
+    case 'mistralScope':
       return 'fill';
     case 'adopt':
       return edit.placement === 'end' ? 'append' : 'insert';
@@ -354,7 +359,12 @@ export async function planGroup(
 ): Promise<GroupPlan> {
   mutationOf(edits);
   if (
-    edits.some((edit) => edit.kind === 'mistral' || edit.kind === 'kimi') &&
+    edits.some(
+      (edit) =>
+        edit.kind === 'mistral' ||
+        edit.kind === 'kimi' ||
+        edit.kind === 'mistralScope',
+    ) &&
     edits.length !== 1
   )
     throw new JournalFormatError(

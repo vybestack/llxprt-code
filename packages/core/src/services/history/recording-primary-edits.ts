@@ -49,6 +49,7 @@ export function recordingAcceptsEdits(
       case 'fill':
       case 'kimi':
       case 'mistral':
+      case 'mistralScope':
       case 'checkpoint':
       case 'deleteCheckpoint':
         return true;

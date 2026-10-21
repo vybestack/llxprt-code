@@ -1,4 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { JournalStore } from '../../journal/journalStore.js';
+import { JournalMistralSelection } from './journal-mistral-selection.js';
+import {
+  mistralPlanIds,
+  mistralRequestIdentity,
+  type MistralUnitIds,
+} from './journal-mistral-ids.js';
 import { JournalFormatError } from '../../journal/errors.js';
 import type { NormalizedFamily, OccurrenceKind } from '../../journal/idKeys.js';
 import {
@@ -233,6 +240,34 @@ export class IndexedJournalRequestSnapshot {
       const view = await prepared;
       signal?.throwIfAborted();
       return consume(view);
+    }, signal);
+  }
+
+  async mistralIdsAt(index: number): Promise<MistralUnitIds> {
+    return mistralPlanIds(this.source, await this.planAt(index));
+  }
+
+  withMistralSelection<T>(
+    store: JournalStore,
+    slot: number,
+    indices: readonly number[],
+    consume: (view: JournalMistralSelection) => T | Promise<T>,
+    signal?: AbortSignal,
+  ): Promise<T> {
+    return this.query(async () => {
+      await this.snapshot.requireMistralSlot(slot);
+      const view = await JournalMistralSelection.create(
+        this,
+        store,
+        await mistralRequestIdentity(this.snapshot, this.source),
+        slot,
+        indices,
+      );
+      try {
+        return await consume(view);
+      } finally {
+        await view.close();
+      }
     }, signal);
   }
 

@@ -14,6 +14,7 @@ import { ROW_ID_KIND, ROW_SPEAKER } from './rowRecord.js';
 import { FORMAT_SLOTS } from './slotTable.js';
 
 export const MISTRAL_SLOTS_KEY = 'mistral:slots';
+export const MISTRAL_GENERATION_KEY = 'mistral:conversion-generation-v1';
 const UTF8 = new TextEncoder();
 const DECODER = new TextDecoder('utf-8', { fatal: true });
 const SLOT_BYTES = 17;
