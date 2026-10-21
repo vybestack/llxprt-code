@@ -24,6 +24,7 @@ export const ID_NS = {
   nativeScalar: 9,
   chronology: 10,
   densityCall: 11,
+  recency: 12,
 } as const;
 
 export type IdNamespace = (typeof ID_NS)[keyof typeof ID_NS];

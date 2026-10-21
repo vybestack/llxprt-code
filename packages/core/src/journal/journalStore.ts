@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { RecencyFactPolicy } from './recencyFacts.js';
 import {
   fillNativeFacts,
   requireNativeFactWriter,
@@ -85,6 +86,7 @@ export interface JournalStoreDependencies {
   readonly journal: JournalOpenDependencies;
   readonly idDeps: IdFactDeps;
   readonly planOccurrences: OccurrencePlanner;
+  readonly recencyFactPolicy?: RecencyFactPolicy;
   /** The aggregate algebra of the row tree for a slot table. */
   readonly algebra: (kinds: SlotKinds) => RowTreeAlgebra;
   /** One capped cache each for the id trie, the meta map and the state map. */
@@ -795,6 +797,7 @@ export class JournalStore {
       hasher: this.deps.idDeps.hasher,
       idDeps: this.deps.idDeps,
       planOccurrences: this.deps.planOccurrences,
+      recencyFactPolicy: this.deps.recencyFactPolicy,
       idCache: this.idCache,
       metaCache: this.metaCache,
       stateCache: this.stateCache,

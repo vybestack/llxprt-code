@@ -21,6 +21,11 @@
 
 import * as path from 'node:path';
 import { optimizeDiskDensity } from './diskDensityOptimization.js';
+import { nativeRecencyPolicy } from './nativeRecencyPolicy.js';
+import {
+  DENSITY_RERUN_HINT_SUFFIX,
+  DENSITY_PRUNED_POINTER,
+} from '@vybestack/llxprt-code-core/services/history/densityRecencyFacts.js';
 import {
   compressHighDensityDisk,
   prepareHighDensityDisk,
@@ -58,8 +63,8 @@ export const WRITE_TOOLS = [
   'delete_line_range',
 ] as const;
 /** Shared suffix hint used in both pruned pointers and tool summaries */
-export const RERUN_HINT_SUFFIX = '— re-run to view';
-export const PRUNED_POINTER = `[Result pruned ${RERUN_HINT_SUFFIX}]`;
+export const RERUN_HINT_SUFFIX = DENSITY_RERUN_HINT_SUFFIX;
+export const PRUNED_POINTER = DENSITY_PRUNED_POINTER;
 export const FILE_INCLUSION_OPEN_REGEX = /^--- (.+) ---$/m;
 export const FILE_INCLUSION_CLOSE = '--- End of content ---';
 
@@ -627,6 +632,7 @@ function findPrunableToolResponses(
  */
 export class HighDensityStrategy implements CompressionStrategy {
   readonly optimizeRows = optimizeDiskDensity;
+  readonly nativeDensityPolicy = nativeRecencyPolicy;
   readonly diskCompressionOwnership = new RowOwnership();
   prepareDisk(
     context: Parameters<typeof prepareHighDensityDisk>[0],

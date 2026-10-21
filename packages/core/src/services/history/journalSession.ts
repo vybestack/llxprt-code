@@ -1,4 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { RECENCY_INDEX_READY } from '../../journal/recencyFacts.js';
+import { densityRecencyFactPolicy } from './densityRecencyFacts.js';
 import {
   generateDeterministicMistralId,
   normalizeToAnthropicToolId,
@@ -53,6 +55,7 @@ async function storeDependencies(
       },
     },
     planOccurrences: options.planOccurrences ?? planSourceRowOccurrences,
+    recencyFactPolicy: densityRecencyFactPolicy,
     algebra: rowAlgebra,
   };
 }
@@ -111,6 +114,12 @@ export class JournalSession {
         (await store.getMeta(DENSITY_CALL_INDEX_READY)) === undefined
       )
         await store.commit([{ kind: 'densityCalls' }]);
+      if (
+        (store.published?.rows ?? 0) > 0 &&
+        new TextDecoder().decode(await store.getMeta(RECENCY_INDEX_READY)) !==
+          densityRecencyFactPolicy.revision
+      )
+        await store.commit([{ kind: 'recency' }]);
       return new JournalSession(store, true);
     } catch (error) {
       await store.close();

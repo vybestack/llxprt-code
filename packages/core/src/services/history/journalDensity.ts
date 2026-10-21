@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { optimizeNativeDensity } from './journalNativeDensity.js';
 import { HistoryDensityRows } from './historyDensityRows.js';
 import type { HistoryDensityRequest } from './historyStorePort.js';
 import { diskDensityTransform } from './historyValueEntries.js';
@@ -18,6 +19,11 @@ export async function optimizeDensityOnJournal(
   store: JournalHistoryStore,
   request: HistoryDensityRequest,
 ): Promise<void> {
+  if (request.nativePolicy !== undefined) {
+    await optimizeNativeDensity(store, request);
+    return;
+  }
+
   await request.host.waitForTokenUpdates();
   const rows = new HistoryDensityRows(request.ownership);
   try {

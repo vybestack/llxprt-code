@@ -63,6 +63,7 @@ export interface SourceRow {
 export type VersionEdit =
   | { readonly kind: 'chronology' }
   | { readonly kind: 'densityCalls' }
+  | { readonly kind: 'recency' }
   | {
       readonly kind: 'factIndex';
       readonly registration: NativeFactIndexRegistration;

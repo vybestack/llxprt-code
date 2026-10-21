@@ -216,8 +216,10 @@ export class CompressionHandler {
       };
 
       const optimize = strategy.optimizeRows;
-      await this.historyService.optimizeDensityRows((source) =>
-        optimize(source, config),
+      const nativePolicy = strategy.nativeDensityPolicy;
+      await this.historyService.optimizeDensityRows(
+        (source) => optimize(source, config),
+        nativePolicy === undefined ? undefined : () => nativePolicy(config),
       );
       await this.historyService.waitForTokenUpdates();
     } finally {

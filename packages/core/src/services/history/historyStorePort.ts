@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import type { NativeDensityPolicy } from './nativeDensityPolicy.js';
 import type { IContent } from './IContent.js';
 import type { CurrentTurnMarker } from './historyChronology.js';
 import type { HistoryDumpSnapshot } from './historyDumpSnapshot.js';
@@ -197,6 +198,7 @@ export interface HistoryMergeRequest {
  */
 export interface HistoryDensityRequest {
   readonly optimize: DiskDensityOptimizer;
+  readonly nativePolicy?: () => NativeDensityPolicy;
   readonly ownership?: RowOwnership;
   readonly host: DetachedHistoryHost;
   readonly mutate: (previous: HistoryMutationSnapshot) => Promise<void>;

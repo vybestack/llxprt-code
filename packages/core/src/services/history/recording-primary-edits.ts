@@ -21,6 +21,19 @@ function acceptsState(
   );
 }
 
+function isStructuralFill(
+  edit: VersionEdit,
+): edit is Extract<
+  VersionEdit,
+  { kind: 'chronology' | 'densityCalls' | 'recency' }
+> {
+  return (
+    edit.kind === 'chronology' ||
+    edit.kind === 'densityCalls' ||
+    edit.kind === 'recency'
+  );
+}
+
 export function recordingAcceptsEdits(
   edits: readonly VersionEdit[],
   owner: number,
@@ -28,6 +41,7 @@ export function recordingAcceptsEdits(
   streams: boolean,
 ): boolean {
   return edits.every((edit) => {
+    if (isStructuralFill(edit)) return true;
     switch (edit.kind) {
       case 'append':
         return edit.rows.every((row) => accepts(owner, row.owner));
@@ -57,8 +71,6 @@ export function recordingAcceptsEdits(
       case 'fill':
       case 'format':
       case 'factIndex':
-      case 'chronology':
-      case 'densityCalls':
       case 'kimi':
       case 'mistral':
       case 'mistralScope':

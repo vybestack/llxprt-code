@@ -194,6 +194,7 @@ describe('trie keys', () => {
       nativeScalar: 9,
       chronology: 10,
       densityCall: 11,
+      recency: 12,
     });
   });
 

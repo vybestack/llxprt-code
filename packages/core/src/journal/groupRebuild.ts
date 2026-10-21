@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { applyStoredRecency } from './recencyFacts.js';
 import { EMPTY_AGGREGATE } from './aggregateComposition.js';
 import { rebuildContributions } from './contributionRebuild.js';
 import { JournalFormatError } from './errors.js';
@@ -176,6 +177,13 @@ class RebuildPass {
   /** Copies the row's record and applies its facts from the header and id piece, read once. */
   private async foreign(row: SourceRow): Promise<RowEntry> {
     const ids = await readRowIds(row.source, row.entry);
+    await applyStoredRecency(
+      row.source,
+      this.facts.ids,
+      this.ctx.recencyFactPolicy,
+      row.entry,
+      ids,
+    );
     await applyRowIds(this.facts, this.ctx, ids);
     return this.note(await copyForeignRow(this.appender, row, ids));
   }

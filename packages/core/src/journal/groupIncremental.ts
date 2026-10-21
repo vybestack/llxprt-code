@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { RECENCY_INDEX_READY } from './recencyFacts.js';
 import { EMPTY_AGGREGATE } from './aggregateComposition.js';
 import { ROW_ENTRY_NO_CHRONOLOGY_SEQ } from './rowEntry.js';
 import { CHRONOLOGY_INDEX_READY } from './chronologyFacts.js';
@@ -81,6 +82,7 @@ async function addFacts(
     await applyDraftRow(facts, ctx, segment.label, segment.draft);
     return true;
   }
+  if (ctx.recencyFactPolicy !== undefined) return false;
   if (segment.draft.chronologySeq !== ROW_ENTRY_NO_CHRONOLOGY_SEQ) return false;
   const occurrences = await monotoneInsertOccurrences(
     facts,
@@ -117,6 +119,17 @@ async function incrementalFacts(
   { facts: GroupFacts | undefined; affected: ReadonlySet<bigint> } | undefined
 > {
   const affected = new Set<bigint>();
+  if (
+    plan.base.rows > 0 &&
+    ctx.recencyFactPolicy !== undefined &&
+    new TextDecoder().decode(
+      await mapReader(ctx, 'meta').get(
+        plan.base.roots.metaRoot,
+        RECENCY_INDEX_READY,
+      ),
+    ) !== ctx.recencyFactPolicy.revision
+  )
+    return undefined;
   if (
     plan.base.rows > 0 &&
     ((await mapReader(ctx, 'meta').get(

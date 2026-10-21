@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { RecencyFacts, RECENCY_INDEX_READY } from './recencyFacts.js';
 import { ACTIVE_FACT_INDEX, NativeFactIndexReader } from './nativeFactIndex.js';
 import { rowFormatAuxKey } from './rowFormat.js';
 import { JournalFormatError } from './errors.js';
@@ -77,6 +78,17 @@ export class VersionSnapshot {
       idDeps,
     );
     this.kimiFacts = new KimiFactQueries(this, idDeps, this.kimi.meta);
+  }
+
+  async recencyFacts(revision: string): Promise<RecencyFacts> {
+    this.requireOpen();
+    const ready = await this.kimi.meta.get(
+      this.version?.roots.metaRoot ?? 0,
+      RECENCY_INDEX_READY,
+    );
+    if (new TextDecoder().decode(ready) !== revision)
+      throw new JournalFormatError('Recency fact policy requires a fill');
+    return new RecencyFacts(this.facts, revision);
   }
 
   async nativeFacts(scope: string): Promise<NativeFactIndexReader> {

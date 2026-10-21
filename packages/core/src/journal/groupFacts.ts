@@ -1,4 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import {
+  applyDraftRecency,
+  applyStoredRecency,
+  RECENCY_INDEX_READY,
+  type RecencyFactPolicy,
+} from './recencyFacts.js';
 import { JournalFormatError } from './errors.js';
 import {
   applyDensityCallFacts,
@@ -35,6 +41,7 @@ import type { ExistingRange, GroupPlan } from './groupPlanTypes.js';
 
 /** The seams the facts of a group need: how keys hash, the planner and the caches that cap every read. */
 export interface FactDeps {
+  readonly recencyFactPolicy?: RecencyFactPolicy;
   readonly idDeps: IdFactDeps;
   readonly planOccurrences: OccurrencePlanner;
   readonly idCache: IdNodeCache;
@@ -158,6 +165,11 @@ export async function startFacts(
   if (idRoot === 0 && metaRoot === 0) {
     meta.set(CHRONOLOGY_INDEX_READY, Uint8Array.of(1));
     meta.set(DENSITY_CALL_INDEX_READY, Uint8Array.of(1));
+    if (deps.recencyFactPolicy !== undefined)
+      meta.set(
+        RECENCY_INDEX_READY,
+        new TextEncoder().encode(deps.recencyFactPolicy.revision),
+      );
   }
   if (kimi) meta.set(KIMI_ELIGIBLE_KEY, Uint8Array.of(1));
   if (mistralSlots !== 0)
@@ -187,6 +199,7 @@ export async function applyDraftRow(
   label: bigint,
   draft: RowDraft,
 ): Promise<void> {
+  await applyDraftRecency(facts.ids, deps.recencyFactPolicy, label, draft);
   await applyChronologyFact(facts.ids, label, draft.chronologySeq, draft.flags);
   await applyRow(facts, deps, plannedFromDraft(label, draft), draft);
 }
@@ -231,7 +244,15 @@ export async function applyEntryRow(
   deps: FactDeps,
   entry: RowEntry,
 ): Promise<void> {
-  await applyRowIds(facts, deps, await readRowIds(access, entry));
+  const row = await readRowIds(access, entry);
+  await applyStoredRecency(
+    access,
+    facts.ids,
+    deps.recencyFactPolicy,
+    entry,
+    row,
+  );
+  await applyRowIds(facts, deps, row);
 }
 
 /** Records the length of the Kimi exception list when the group changed it. */

@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import type { NativeDensityPolicy } from './nativeDensityPolicy.js';
 import {
   createDetachedHistoryAPI,
   type DetachedHistoryAPI,
@@ -1023,10 +1024,14 @@ export abstract class HistoryServiceCore
    * @requirement REQ-HD-003.1, REQ-HD-003.2, REQ-HD-003.3, REQ-HD-001.6, REQ-HD-001.7
    * @pseudocode history-service.md lines 20-82
    */
-  async optimizeDensityRows(optimize: DiskDensityOptimizer): Promise<void> {
+  async optimizeDensityRows(
+    optimize: DiskDensityOptimizer,
+    nativePolicy?: () => NativeDensityPolicy,
+  ): Promise<void> {
     await this.enqueueAsynchronousHistoryMutation(() =>
       this.journal.optimizeDensity({
         optimize,
+        nativePolicy,
         ownership: this.mutationOwnership,
         host: this.detachedValues.host(),
         mutate: async (previous) => {

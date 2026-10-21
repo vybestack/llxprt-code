@@ -76,7 +76,7 @@ function denyCreation(
     throw new Error('Operation attempted to create a file or directory');
   };
   for (const spy of [...spies.directories, ...spies.writes])
-    spy.mockImplementation(denied);
+    spy.mockImplementation(Object.assign(denied, { __promisify__: denied }));
   spies.openSync.mockImplementation((path, flags, mode) => {
     if (creates(flags)) return denied();
     return originals.sync(path, flags, mode);
@@ -86,10 +86,32 @@ function denyCreation(
     return originals.promise(path, flags, mode);
   });
   spies.callbackOpen.mockImplementation(
-    (...args: Parameters<typeof fs.open>) => {
-      if (creates(args[1])) return denied();
-      return originals.callback(...args);
-    },
+    Object.assign(
+      (
+        ...args:
+          | [
+              fs.PathLike,
+              fs.OpenMode | undefined,
+              fs.Mode | undefined | null,
+              (error: NodeJS.ErrnoException | null, fd: number) => void,
+            ]
+          | [
+              fs.PathLike,
+              fs.OpenMode | undefined,
+              (error: NodeJS.ErrnoException | null, fd: number) => void,
+            ]
+          | [
+              fs.PathLike,
+              (error: NodeJS.ErrnoException | null, fd: number) => void,
+            ]
+      ) => {
+        if (creates(args[1])) return denied();
+        if (args.length === 2) return originals.callback(...args);
+        if (args.length === 3) return originals.callback(...args);
+        return originals.callback(...args);
+      },
+      { __promisify__: denied },
+    ),
   );
 }
 
