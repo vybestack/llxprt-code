@@ -18,6 +18,8 @@ import { createTurnStreamPolicy } from './__tests__/session-policy-fixture.js';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import type { ServerAgentStreamEvent } from './turn.js';
 import { Turn, AgentEventType, DEFAULT_AGENT_ID } from './turn.js';
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
+import { waitForCondition } from '../test-utils/eventLoop.js';
 import type { ChatSession } from './chatSession.js';
 import { StreamEventType } from './chatSession.js';
 import {
@@ -102,12 +104,13 @@ describe('Turn - whole-stream watchdog & run-scoped isolation (issue #2607)', ()
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     process.env = originalEnv;
   });
 
   it('whole-stream liveness: first content, repeated liveness pings spanning longer than idle threshold, then more content => NO timeout', async () => {
-    vi.useRealTimers();
+    vi.useFakeTimers();
     process.env.LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS = '200';
     const { turn } = buildTurn(undefined, 30);
 
@@ -152,9 +155,13 @@ describe('Turn - whole-stream watchdog & run-scoped isolation (issue #2607)', ()
       }
     })();
 
-    const guard = failsafe(3000);
-    await Promise.race([runPromise, guard.promise]);
-    guard.cancel();
+    expect(
+      await waitForCondition(() =>
+        events.some((event) => event.type === AgentEventType.Content),
+      ),
+    ).toBe(true);
+    await advanceTimersByTimeAsync(80);
+    await runPromise;
 
     expect(
       events.find((e) => e.type === AgentEventType.StreamIdleTimeout),

@@ -24,7 +24,7 @@ import { assembleSchedulerOwner } from '../session/assembleSchedulerOwner.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
-import { type ToolCallRequestInfo, Turn } from './turn.js';
+import { AgentEventType, type ToolCallRequestInfo, Turn } from './turn.js';
 import { type ToolExecutionConfig } from './nonInteractiveToolExecutor.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import type {
@@ -133,6 +133,8 @@ export class SubAgentScope {
 
   /** Optional callback for streaming text messages during execution */
   onMessage?: (message: string) => void;
+  /** Discards current-attempt derived output; already published progress is historical. */
+  onOutputReset?: () => void;
 
   private timeoutHandle: ReturnType<typeof setTimeout> | null = null;
 
@@ -604,11 +606,17 @@ export class SubAgentScope {
 
     let textResponse = '';
     let reportedOutputTokens: number | undefined;
-    const outputCounter = new InteractiveOutputCounter();
+    let outputCounter = new InteractiveOutputCounter();
     try {
       const stream = turn.run(blocks, abortController.signal, modelParameters);
       for await (const event of stream) {
         if (abortController.signal.aborted === true) break;
+        if (event.type === AgentEventType.Retry) {
+          textResponse = '';
+          reportedOutputTokens = undefined;
+          outputCounter = new InteractiveOutputCounter();
+          execCtx.onOutputReset?.();
+        }
         outputCounter.add(event);
         reportedOutputTokens =
           readInteractiveOutputTokens(event) ?? reportedOutputTokens;
@@ -855,6 +863,7 @@ export class SubAgentScope {
       toolsView: this.runtimeContext.tools,
       logger: this.logger,
       onMessage: this.onMessage,
+      onOutputReset: this.onOutputReset,
     };
   }
 

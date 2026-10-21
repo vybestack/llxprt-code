@@ -122,12 +122,57 @@ describe('Codex Responses WebSocket connection-lifecycle retry @issue:2771', () 
     expect(first.done).toBe(false);
     expect(first.value).toStrictEqual(textContent('partial'));
 
-    await expect(iterator.next()).rejects.toThrow(/has been open for too long/);
+    await expect(iterator.next()).rejects.toThrow(/connection limit reached/);
 
     expect(harness.sockets).toHaveLength(1);
     expect(
       harness.sockets[0].sent.filter((data) => data.length > 0),
     ).toHaveLength(1);
+  });
+
+  it('never replays an exposed tool action', async () => {
+    const harness = new SocketHarness([
+      (socket) => {
+        socket.open();
+        socket.onSend = () => {
+          socket.message(
+            frame({
+              type: 'response.output_item.added',
+              item: {
+                type: 'function_call',
+                id: 'item',
+                call_id: 'call',
+                name: 'charge',
+                arguments: '{}',
+              },
+            }),
+          );
+          socket.message(
+            frame({
+              type: 'response.function_call_arguments.done',
+              item_id: 'item',
+              arguments: '{}',
+            }),
+          );
+          socket.message(connectionLimitErrorFrame());
+        };
+      },
+    ]);
+    const iterator = createCodexResponsesWebSocketTransport({
+      openSocket: harness.openSocket,
+    }).streamResponse(request(), options());
+
+    expect((await iterator.next()).value?.blocks).toContainEqual({
+      type: 'tool_call',
+      id: 'call',
+      name: 'charge',
+      parameters: {},
+    });
+    await expect(iterator.next()).rejects.toMatchObject({
+      name: 'StreamInterruptionError',
+      cause: { status: 400 },
+    });
+    expect(harness.sockets).toHaveLength(1);
   });
 
   it('B5: abort during reconnect never retries and later requests reconnect', async () => {
