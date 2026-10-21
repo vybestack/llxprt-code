@@ -234,6 +234,7 @@ async function applyEdit(
       assertMistralSlot(edit.slot);
       plan.mistralScope = edit;
       break;
+    case 'densityCalls':
     case 'chronology':
       startNewLineage(plan);
       plan.rebuilt = true;
@@ -309,6 +310,7 @@ function mutationKind(edit: VersionEdit): VersionEdit['kind'] {
   switch (edit.kind) {
     case 'factIndex':
     case 'format':
+    case 'densityCalls':
     case 'chronology':
     case 'kimi':
     case 'mistral':

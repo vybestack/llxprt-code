@@ -1,6 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalFormatError } from './errors.js';
 import {
+  applyDensityCallFacts,
+  DENSITY_CALL_INDEX_READY,
+} from './densityCallFacts.js';
+import {
   applyChronologyFact,
   CHRONOLOGY_INDEX_READY,
 } from './chronologyFacts.js';
@@ -101,6 +105,7 @@ async function applyRow(
   row: PlannedRow,
   parent: { flags: number; parentEndpoint: bigint },
 ): Promise<void> {
+  await applyDensityCallFacts(facts.ids, row);
   const occurrences = await deps.planOccurrences(row, facts.ids.queries);
   for (const occurrence of occurrences) await facts.ids.apply(occurrence);
   if (facts.mistralSlots !== 0) {
@@ -150,8 +155,10 @@ export async function startFacts(
       'Kimi emitted facts need normalized row contributions',
     );
   const meta = new KeyedMapBatch(metaReader, metaRoot);
-  if (idRoot === 0 && metaRoot === 0)
+  if (idRoot === 0 && metaRoot === 0) {
     meta.set(CHRONOLOGY_INDEX_READY, Uint8Array.of(1));
+    meta.set(DENSITY_CALL_INDEX_READY, Uint8Array.of(1));
+  }
   if (kimi) meta.set(KIMI_ELIGIBLE_KEY, Uint8Array.of(1));
   if (mistralSlots !== 0)
     meta.set(MISTRAL_SLOTS_KEY, Uint8Array.of(mistralSlots));

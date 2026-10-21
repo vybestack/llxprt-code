@@ -58,6 +58,7 @@ export function recordingAcceptsEdits(
       case 'format':
       case 'factIndex':
       case 'chronology':
+      case 'densityCalls':
       case 'kimi':
       case 'mistral':
       case 'mistralScope':

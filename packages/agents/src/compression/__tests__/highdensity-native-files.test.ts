@@ -94,12 +94,12 @@ describe('native high-density compression allocations', () => {
           receipt.directories.filter((path) =>
             path.includes('density-decision-index-'),
           ),
-        ).toHaveLength(1);
+        ).toHaveLength(0);
         expect(
           receipt.files.filter((path) =>
             path.includes('density-decision-index-'),
           ),
-        ).toHaveLength(2);
+        ).toHaveLength(0);
         expect(await durable()).toStrictEqual(
           await compressionValueDigest(history.streamRawHistory()),
         );

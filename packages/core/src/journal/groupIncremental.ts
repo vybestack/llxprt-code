@@ -2,6 +2,10 @@
 import { EMPTY_AGGREGATE } from './aggregateComposition.js';
 import { ROW_ENTRY_NO_CHRONOLOGY_SEQ } from './rowEntry.js';
 import { CHRONOLOGY_INDEX_READY } from './chronologyFacts.js';
+import {
+  applyDensityCallFacts,
+  DENSITY_CALL_INDEX_READY,
+} from './densityCallFacts.js';
 import { JournalFormatError } from './errors.js';
 import type { RecordAppender } from './groupAppender.js';
 import {
@@ -86,6 +90,13 @@ async function addFacts(
     segment.draft,
   );
   if (occurrences === undefined) return false;
+  await applyDensityCallFacts(facts.ids, {
+    label: segment.label,
+    speaker: segment.draft.speaker,
+    flags: segment.draft.flags,
+    blockTypes: segment.draft.blocks.map((block) => block.type),
+    ids: segment.draft.ids,
+  });
   for (const occurrence of occurrences) await facts.ids.apply(occurrence);
   return true;
 }
@@ -108,10 +119,14 @@ async function incrementalFacts(
   const affected = new Set<bigint>();
   if (
     plan.base.rows > 0 &&
-    (await mapReader(ctx, 'meta').get(
+    ((await mapReader(ctx, 'meta').get(
       plan.base.roots.metaRoot,
       CHRONOLOGY_INDEX_READY,
-    )) === undefined
+    )) === undefined ||
+      (await mapReader(ctx, 'meta').get(
+        plan.base.roots.metaRoot,
+        DENSITY_CALL_INDEX_READY,
+      )) === undefined)
   )
     return undefined;
   if (adds.length === 0 && !rewritesRows && plan.mistralScope === undefined)

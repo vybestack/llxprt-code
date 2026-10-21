@@ -5,7 +5,10 @@ import type {
   ToolResponseBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
-import type { CompressionInputRows } from '@vybestack/llxprt-code-core/services/history/compressionInput.js';
+import type {
+  CompressionInputRows,
+  DensityCallLookup,
+} from '@vybestack/llxprt-code-core/services/history/compressionInput.js';
 import type { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import type { DiskTruncationContext } from './TopDownTruncationStrategy.js';
 import { DensityDiskIndex } from './densityDiskIndex.js';
@@ -58,7 +61,7 @@ async function indexCalls(
 async function tailBoundary(
   rows: CompressionInputRows,
   start: number,
-  index: DensityDiskIndex,
+  lookup: DensityCallLookup,
   owner: RowOwnership,
 ): Promise<number> {
   if (start <= 0 || start >= rows.length) return start;
@@ -67,38 +70,65 @@ async function tailBoundary(
     (await withRow(rows, start, owner, (row) => row.speaker === 'tool'))
   )
     start--;
-  return withRow(rows, start, owner, (row) => {
+  return withRow(rows, start, owner, async (row) => {
     if (start <= 0 || row.speaker !== 'ai') return start;
     const calls = row.blocks.filter((block) => block.type === 'tool_call');
-    const found = calls.some(
-      (block) => (index.get(`last:${block.id}`)?.[0] ?? -1) > start,
-    );
-    return calls.length > 0 && !found ? start + 1 : start;
+    for (const block of calls)
+      if (await lookup.hasResponseAfter(block.id, start)) return start;
+    return calls.length > 0 ? start + 1 : start;
   });
 }
 
-async function keyParam(
+async function oldDensityCalls(
   rows: CompressionInputRows,
-  index: DensityDiskIndex,
-  id: string,
   owner: RowOwnership,
+): Promise<DensityCallLookup & { close(): void }> {
+  const index = new DensityDiskIndex();
+  try {
+    await indexCalls(rows, index, owner);
+    return {
+      firstCall: async (id) => {
+        const first = index.get(`first:${id}`);
+        if (first === undefined) return undefined;
+        return withRow(rows, first[0], owner, (row) => {
+          const block = row.blocks[first[1]];
+          if (block.type !== 'tool_call')
+            throw new Error('Density call index points to a non-call block');
+          return block;
+        });
+      },
+      hasResponseAfter: async (id, position) =>
+        (index.get(`last:${id}`)?.[0] ?? -1) > position,
+      close: () => index.close(),
+    };
+  } catch (error) {
+    try {
+      index.close();
+    } catch (cleanup) {
+      throw new AggregateError(
+        [error, cleanup],
+        'Old density lookup cleanup failed',
+        { cause: error },
+      );
+    }
+    throw error;
+  }
+}
+
+async function keyParam(
+  lookup: DensityCallLookup,
+  id: string,
 ): Promise<string | undefined> {
-  const first = index.get(`first:${id}`);
-  if (first === undefined) return undefined;
-  return withRow(rows, first[0], owner, (row) => {
-    const block = row.blocks[first[1]];
-    if (block.type !== 'tool_call')
-      throw new Error('Density call index points to a non-call block');
-    const params = block.parameters;
-    if (typeof params !== 'object' || params === null) return undefined;
-    const candidate =
-      Reflect.get(params, 'file_path') ??
-      Reflect.get(params, 'absolute_path') ??
-      Reflect.get(params, 'path');
-    return typeof candidate === 'string' && candidate.length > 0
-      ? candidate
-      : undefined;
-  });
+  const block = await lookup.firstCall(id);
+  const params = block?.parameters;
+  if (typeof params !== 'object' || params === null) return undefined;
+  const candidate =
+    Reflect.get(params, 'file_path') ??
+    Reflect.get(params, 'absolute_path') ??
+    Reflect.get(params, 'path');
+  return typeof candidate === 'string' && candidate.length > 0
+    ? candidate
+    : undefined;
 }
 
 function toolSummary(
@@ -121,7 +151,7 @@ function toolSummary(
 function outputRows(
   rows: CompressionInputRows,
   tail: number,
-  index: DensityDiskIndex,
+  lookup: DensityCallLookup,
   owner: RowOwnership,
 ): CompressionInputRows {
   const readRow = (position: number): Promise<IContent> =>
@@ -136,7 +166,7 @@ function outputRows(
                 ...block,
                 result: toolSummary(
                   block,
-                  await keyParam(rows, index, block.callId, owner),
+                  await keyParam(lookup, block.callId),
                 ),
               }
             : block,
@@ -190,15 +220,15 @@ export async function prepareHighDensityDisk(
 ): Promise<HighDensityOutput> {
   const rows = context.history;
   if (rows.length === 0) return { kind: 'noop' };
-  const index = new DensityDiskIndex();
+  const lookup: DensityCallLookup & { close?: () => void } =
+    rows.densityCalls ?? (await oldDensityCalls(rows, owner));
   let closed = false;
   const close = (): void => {
     if (closed) return;
     closed = true;
-    index.close();
+    lookup.close?.();
   };
   try {
-    await indexCalls(rows, index, owner);
     const tail = await tailBoundary(
       rows,
       rows.length -
@@ -208,7 +238,7 @@ export async function prepareHighDensityDisk(
             rows.length * context.runtimeContext.ephemerals.preserveThreshold(),
           ),
         ),
-      index,
+      lookup,
       owner,
     );
     if (tail <= 0) {
@@ -220,7 +250,7 @@ export async function prepareHighDensityDisk(
         context.runtimeContext.ephemerals.contextLimit() *
         context.runtimeContext.ephemerals.densityCompressHeadroom(),
     );
-    const output = outputRows(rows, tail, index, owner);
+    const output = outputRows(rows, tail, lookup, owner);
     if (diskCandidate !== undefined) {
       for (let position = 0; position < rows.length; position++)
         diskCandidate.append(

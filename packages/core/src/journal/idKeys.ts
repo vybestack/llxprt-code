@@ -23,6 +23,7 @@ export const ID_NS = {
   mistralScopeUsed: 8,
   nativeScalar: 9,
   chronology: 10,
+  densityCall: 11,
 } as const;
 
 export type IdNamespace = (typeof ID_NS)[keyof typeof ID_NS];

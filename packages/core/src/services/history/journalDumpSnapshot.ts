@@ -1,5 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { CompressionInputSnapshot } from './compressionInput.js';
+import type {
+  CompressionInputSnapshot,
+  DensityCallLookup,
+} from './compressionInput.js';
+import { DensityCallFacts } from '../../journal/densityCallFacts.js';
+import { ROW_BLOCK_TYPE } from '../../journal/rowRecord.js';
+import { JournalFormatError } from '../../journal/errors.js';
+import { decodeStoredBlock } from './journalRowCodec.js';
 import type {
   CompressionChronologySelection,
   CompressionSpanAnnotation,
@@ -25,6 +32,37 @@ import { HistoryReaderScope } from './historyReaderScope.js';
 export class JournalDumpSnapshot implements HistoryDumpSnapshot {
   private readonly readers = new HistoryReaderScope('Dump snapshot is closed');
   private closing: Promise<void> | undefined;
+  readonly densityCalls: DensityCallLookup = {
+    firstCall: (id) =>
+      this.readers.read(async () => {
+        const at = await new DensityCallFacts(this.snapshot.facts).firstCall(
+          id,
+        );
+        if (at === undefined) return undefined;
+        const entry = await this.snapshot.entryByLabel(at.label);
+        if (entry === undefined)
+          throw new JournalFormatError('Density call points to an absent row');
+        const block = decodeStoredBlock(
+          await this.snapshot.readBlock(entry, at.block),
+          ROW_BLOCK_TYPE.tool_call,
+        );
+        if (block.type !== 'tool_call')
+          throw new JournalFormatError(
+            'Density call points to a non-call block',
+          );
+        return block;
+      }),
+    hasResponseAfter: (id, position) =>
+      this.readers.read(async () => {
+        const label = await new DensityCallFacts(
+          this.snapshot.facts,
+        ).lastResponse(id);
+        return (
+          label !== undefined &&
+          label > (await this.snapshot.curatedAt(position)).label
+        );
+      }),
+  };
 
   constructor(
     private readonly snapshot: VersionSnapshot,
