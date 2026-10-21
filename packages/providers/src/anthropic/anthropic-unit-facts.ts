@@ -94,10 +94,10 @@ function chainLength(
   return { role: 'assistant', form: 'array', blocks };
 }
 
-export function anthropicUnitFacts(
+export function projectAnthropicUnit(
   row: IContent,
   settings: RowFormatSettings,
-): AnthropicUnitFacts | undefined {
+): IContent | undefined {
   if (
     [
       settings.formatId !== 'anthropic',
@@ -140,8 +140,15 @@ export function anthropicUnitFacts(
     settings.endpoint,
     logger,
   );
-  if (kept.length === 0) return undefined;
-  const projected = kept[0];
+  return kept[0];
+}
+
+export function anthropicUnitFacts(
+  row: IContent,
+  settings: RowFormatSettings,
+): AnthropicUnitFacts | undefined {
+  const projected = projectAnthropicUnit(row, settings);
+  if (projected === undefined) return undefined;
   const options: AnthropicMessageConversionOptions = {
     isOAuth: settings.isOAuth,
     reasoningEnabled: settings.reasoningEnabled,

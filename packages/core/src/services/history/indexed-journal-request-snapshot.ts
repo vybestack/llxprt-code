@@ -208,6 +208,13 @@ export class IndexedJournalRequestSnapshot {
     }, signal);
   }
 
+  withHeld<T>(
+    consume: (view: IndexedJournalRequestSnapshot) => T | Promise<T>,
+    signal?: AbortSignal,
+  ): Promise<T> {
+    return this.query(() => consume(this), signal);
+  }
+
   withKimi<T>(
     consume: (view: JournalRequestKimi) => T | Promise<T>,
     signal?: AbortSignal,

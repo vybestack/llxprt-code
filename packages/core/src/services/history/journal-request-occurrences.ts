@@ -184,6 +184,16 @@ export class JournalRequestOccurrences {
       : this.select(this.lower + ordinal - 1);
   }
 
+  async countBefore(index: number): Promise<number> {
+    this.snapshot.requireOpen();
+    if (!Number.isInteger(index) || index < 0)
+      throw new RangeError('Occurrence prefix requires a nonnegative integer');
+    return Math.max(
+      0,
+      Math.min(this.upper, await this.indexBound(index)) - this.lower,
+    );
+  }
+
   async firstAfter(after: number): Promise<number | undefined> {
     this.snapshot.requireOpen();
     const index = Math.max(this.lower, await this.indexBound(after + 1));
