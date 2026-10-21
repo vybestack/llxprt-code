@@ -1,3 +1,24 @@
+# Native CLI prefix proof, 2026-10-21
+
+[W26-SOURCE-BOUND-CLI-PROOF.json](W26-SOURCE-BOUND-CLI-PROOF.json) binds initial `3d63f3ee0`, final production `5c0d55bcf`, 43 complete serial files with 319 passes/73,393 assertions and zero failures/skips, twelve passing commands in nine scoped categories, and five restored controls. All accepted runs match source digest `9e2f9a8789981ceb05a3b0a5288f2dad01bbe3384d32aface5d4fc08eaa1ad78`. Matching pre-commit checkpoint and final runs are reused; earlier different-source receipts are excluded. Raw root: `tmp/p5/w26-cli-run-am/`.
+
+| Obligation | Executable evidence and limit |
+| --- | --- |
+| Actual native CLI, unchanged old branch | `chat-native-prefix.test.ts`, `chatCommand.test.ts`, `chatCommand.backends.test.ts`: real command/client/history/recording path, pinned numeric cut, non-media cross-root creating-API denial. |
+| Independent scale values/tokens/state | `chat-native-prefix-parity.test.ts`: 512/8192 independent old/journal complete live and replayed durable values with exactTokenizer, tokens/offset/range/anchor/UI/recorder state after clear/restore. No raw file byte equality across formats. |
+| Current owners and full large value | CLI owners at 3/64/65/5000, owner-filtered mirrors; CLI lifecycle compares every surviving character above nine MiB. Original Agent owners, 512/8192 lifetime and above-nine-MiB files rerun unchanged. |
+| Indexed human cuts | `journal-human-cut-indexed.test.ts`: existing raw-human subtree counts, append/insert/rewrite/pop/restore/copy/reopen; selected three-query read totals 4/8 at 40/4000, existing 65536-byte cache caps. Cold fill, pins, media passes and conversion excluded. |
+| Error identity, state and lifetime | CLI lifecycle/failures/release/media plus original #3919 readerLifetime 11/29 and readerCleanup 3/20; exact primary/abort/cleanup objects, ordered aggregate causes, logical rollback and continuation. Lone post-publication release error leaves acknowledged cut published and rejects unchanged. |
+| Concurrent media | `chat-native-prefix-pending-media.test.ts`: 3/64/65 pinned current-row consumer, request-only reservation and instance lease survive clear/janitor, immutable bytes and old rows remain; awaited completion/abort release permits collection. Below provider preparation; unread-media/shared-provider lifetime unproved. |
+| Media creation classification | `chat-native-prefix-media.test.ts`: ownership-index and media-store reservation/replacement/lock files remain Phase 8; no history snapshot/candidate dump. Two metadata/reference passes remain linear. |
+| Backpressure | CLI lifetime at 512/8192: 510/8190 outputs, 3/63 samples, peak one/final zero under original bound two. Object lifetime, not retained heap. |
+| Detector sensitivity | Old CLI file, wrong human cut, wrong raw source ordinal, retained rows and early media release fail 8/8/4/2/3 actual assertions; all restore byte-equal/cmp/hash to HEAD. No ineffective/wrong-mode/runtime-only trap counted. |
+| Existing corpus and gates | Original 5000 normalization oracle rerun unchanged, 60,857 assertions. Twelve scoped commands include core/agents/CLI declarations/types, two Bun-type gates, lint, format, graph, audit. Ten pre/post-state labels and two audit duplicates spanning a live rewind under an old pin or janitor/rollback are classified, not removed. Graph validation is not shard execution. |
+
+All 1,192 preservation hashes match. Original 293 declarations/raw recovery/dirty memory are untouched; two newly emitted helper declarations remain untracked and excluded. All 124 recorded execution/control PIDs are absent. Producer closure remains open for native fallback/curatedCandidate and annotated append; public ChatSession remains unchanged and RED at ProviderNormalizationDisk. Structural/global rank maintenance, pending/stale capacity, normalization/cache/tails/ranges/semantic generations, LENS/live bytes, Phase 6/8, whole heap/cache/pin capacity and W23/W25/cutover remain open. #3917 stays separately RED without retry/suppression; defaults and Phase 9 removal are unchanged. Review skipped per Andrew 2026-10-09.
+
+---
+
 # Native purge acceptance supplement, 2026-10-21
 
 [W26-SOURCE-BOUND-PURGE-MEDIA-PROOF.json](W26-SOURCE-BOUND-PURGE-MEDIA-PROOF.json) supplements the earlier purge receipt rather than rewriting its missing-coverage statements. Early green acceptance commit: `fc81ce5a9`; production source: `5ecf4ab4d`. Raw evidence: `tmp/p5/w26-purge-media-run-al/`.
