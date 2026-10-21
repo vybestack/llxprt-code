@@ -1,0 +1,147 @@
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { spawnSync } from 'node:child_process';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+
+let outDir = '';
+beforeEach(async () => {
+  outDir = await mkdtemp(path.join(os.tmpdir(), 'tmux-input-diagnostics-'));
+});
+afterEach(async () => {
+  await rm(outDir, { recursive: true, force: true });
+});
+
+function records(text: string): Array<Record<string, unknown>> {
+  return text
+    .trim()
+    .split('\n')
+    .map((line) => {
+      const value: unknown = JSON.parse(line);
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw new Error('Expected an input diagnostic record');
+      }
+      return Object.fromEntries(Object.entries(value));
+    });
+}
+
+async function submit(
+  diagnostics: boolean,
+  fail: boolean,
+): Promise<number | null> {
+  const scriptPath = path.join(outDir, 'script.json');
+  await writeFile(
+    scriptPath,
+    JSON.stringify({
+      inputDiagnostics: diagnostics,
+      tmux: { initialWaitMs: 0 },
+      startCommand: [
+        process.execPath,
+        path.resolve('scripts/tests/fixtures/tmux-input-recorder.ts'),
+        path.join(outDir, 'received.bin'),
+      ],
+      steps: [
+        {
+          type: 'waitFor',
+          scope: 'screen',
+          contains: 'FIXTURE_READY',
+          timeoutMs: 5000,
+        },
+        {
+          type: 'line',
+          text: 'echo private-credential-value',
+          submitKeys: ['Enter'],
+          postTypeMs: 200,
+        },
+        {
+          type: 'waitFor',
+          scope: 'screen',
+          contains: fail ? 'NEVER_EMITTED' : 'NATIVE_INPUT_RECEIVED',
+          timeoutMs: fail ? 80 : 5000,
+        },
+        { type: 'key', key: 'C-d' },
+        { type: 'waitForExit', timeoutMs: 5000 },
+      ],
+    }),
+  );
+  const result = spawnSync(
+    'node',
+    ['scripts/tmux-harness.ts', '--script', scriptPath, '--out-dir', outDir],
+    {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 15000,
+    },
+  );
+  if (result.error) throw result.error;
+  return result.status;
+}
+
+describe('tmux harness input diagnostics over native terminal input', () => {
+  it('records literal delivery and one real carriage return without persisting command contents', async () => {
+    expect(await submit(true, false)).toBe(0);
+    expect((await readFile(path.join(outDir, 'received.bin'))).toString()).toBe(
+      'echo private-credential-value\r\u0004',
+    );
+    const text = await readFile(
+      path.join(outDir, 'input-diagnostics.jsonl'),
+      'utf8',
+    );
+    expect(text).not.toContain('private-credential-value');
+    const trace = records(text);
+    const lineTrace = trace.filter((row) => row['stepIndex'] === 1);
+    expect(lineTrace.map((row) => row['phase'])).toEqual([
+      'before-step',
+      'before-type',
+      'after-type',
+      'before-key',
+      'after-key',
+      'after-step',
+    ]);
+    const beforeEnter = lineTrace.find((row) => row['phase'] === 'before-key');
+    expect(beforeEnter?.['key']).toBe('Enter');
+    expect(beforeEnter?.['shellPromptVisible']).toBe(true);
+    expect(beforeEnter?.['tmux']).toMatchObject({
+      bracket_paste_flag: '1',
+      pane_in_mode: '0',
+    });
+    expect(
+      lineTrace.filter((row) => row['phase'] === 'before-key'),
+    ).toHaveLength(1);
+  }, 20000);
+
+  it('preserves the original wait failure and captures terminal state without resubmitting', async () => {
+    expect(await submit(true, true)).toBe(1);
+    const text = await readFile(
+      path.join(outDir, 'input-diagnostics.jsonl'),
+      'utf8',
+    );
+    const trace = records(text);
+    expect(trace.at(-1)).toMatchObject({ phase: 'failure', stepIndex: 2 });
+    expect(trace.filter((row) => row['phase'] === 'before-key')).toHaveLength(
+      1,
+    );
+    expect((await readFile(path.join(outDir, 'received.bin'))).toString()).toBe(
+      'echo private-credential-value\r',
+    );
+    const failure = await readFile(path.join(outDir, 'error.json'), 'utf8');
+    expect(failure).toContain('NEVER_EMITTED');
+    expect(failure).toContain('Timed out');
+  }, 20000);
+
+  it('leaves uninstrumented scenarios without a diagnostic file', async () => {
+    expect(await submit(false, false)).toBe(0);
+    await expect(
+      readFile(path.join(outDir, 'input-diagnostics.jsonl')),
+    ).rejects.toMatchObject({ code: 'ENOENT' });
+    expect((await readFile(path.join(outDir, 'received.bin'))).toString()).toBe(
+      'echo private-credential-value\r\u0004',
+    );
+  }, 20000);
+});

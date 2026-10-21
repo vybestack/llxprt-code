@@ -14,6 +14,10 @@ import path from 'node:path';
 
 import { sanitizeLabel } from './tmux-harness-helpers.ts';
 import {
+  recordInputDiagnostic,
+  type ObserveInput,
+} from './tmux-harness-input-diagnostics.ts';
+import {
   runTmux,
   tryTmux,
   sleep,
@@ -231,6 +235,7 @@ export async function assertScrollbackResults({
 // ---------------------------------------------------------------------------
 
 interface RunScriptStepsParams {
+  inputDiagnostics?: boolean;
   sessionName: string;
   outDir: string;
   steps: unknown[];
@@ -244,11 +249,28 @@ interface RunScriptStepsParams {
   };
 }
 
+function createInputObserver(
+  sessionName: string,
+  outDir: string,
+  getStepIndex: () => number,
+): ObserveInput {
+  return (phase, literal, key) =>
+    recordInputDiagnostic(
+      sessionName,
+      outDir,
+      getStepIndex(),
+      phase,
+      literal,
+      key,
+    );
+}
+
 export async function runScriptSteps({
   sessionName,
   outDir,
   steps,
   defaults,
+  inputDiagnostics = false,
 }: RunScriptStepsParams): Promise<void> {
   const scriptState: {
     historySamples: Array<{
@@ -260,9 +282,15 @@ export async function runScriptSteps({
     historySamples: [],
   };
 
+  let stepIndex = -1;
+  const observeInput: ObserveInput | undefined = inputDiagnostics
+    ? createInputObserver(sessionName, outDir, () => stepIndex)
+    : undefined;
   const sendKeys = async (keys: string[]): Promise<void> => {
     for (const key of keys) {
+      await observeInput?.('before-key', undefined, key);
       runTmux(['send-keys', '-t', sessionName, key]);
+      await observeInput?.('after-key', undefined, key);
       await sleep(120);
     }
   };
@@ -275,6 +303,7 @@ export async function runScriptSteps({
   const { executeStepDispatch } = await import('./tmux-harness-steps.ts');
 
   for (let i = 0; i < steps.length; i += 1) {
+    stepIndex = i;
     const step = steps[i];
     if (!step || typeof step !== 'object' || Array.isArray(step)) {
       throw new Error(`Invalid step at index ${i}: ${JSON.stringify(step)}`);
@@ -282,14 +311,18 @@ export async function runScriptSteps({
     const stepRecord = Object.fromEntries(Object.entries(step));
 
     try {
+      await observeInput?.('before-step');
       await executeStepDispatch(stepRecord, i, {
         sessionName,
         outDir,
         sendKeys,
         scriptState,
         defaults,
+        observeInput,
       });
+      await observeInput?.('after-step');
     } catch (error) {
+      await observeInput?.('failure');
       const message = error instanceof Error ? error.message : String(error);
       const stepLabel = sanitizeLabel(
         `${String(i).padStart(3, '0')}-error-${stepRecord.type ?? 'unknown'}`,
