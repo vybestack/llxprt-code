@@ -128,6 +128,98 @@ describe('summary output candidate allocation', () => {
       });
     });
 
+    it(`${strategy} preserves the original cancellation reason and retires an abandoned provider reader`, async () => {
+      await seededSummary(strategy, async ({ history }, setup) => {
+        const controller = new AbortController();
+        const reason = new Error('original summary cancellation');
+        const prepare = setup.runtime.prepareProviderInvocation.bind(
+          setup.runtime,
+        );
+        const invocation = spyOn(
+          setup.runtime,
+          'prepareProviderInvocation',
+        ).mockImplementation((...args) => ({
+          ...prepare(...args),
+          signal: controller.signal,
+        }));
+        let retained: AsyncGenerator<IContent, void, unknown> | undefined;
+        setup.transport.beforeSend = async (options) => {
+          if (options.requestRows === undefined)
+            throw new Error('Expected indexed summary source');
+          retained = options.requestRows.openReader();
+          for (let pulled = 0; pulled < 3; pulled++) await retained.next();
+          const indexed = await options.requestRows.readAt(2);
+          const sent: unknown = JSON.parse(setup.transport.requests[0]);
+          if (!Array.isArray(sent)) throw new Error('Expected summary rows');
+          expect(indexed).toStrictEqual(sent[2]);
+          controller.abort(reason);
+        };
+        setup.transport.failure = reason;
+        try {
+          await expect(
+            setup.handler.performCompression('abandoned-reader'),
+          ).rejects.toBe(reason);
+          if (retained === undefined)
+            throw new Error('Missing admitted reader');
+          await expect(retained.next()).rejects.toThrow('closed');
+          expect(history.getStatistics().totalMessages).toBe(512);
+        } finally {
+          invocation.mockRestore();
+        }
+      });
+    });
+
+    it(`${strategy} preserves original cancellation when request reader cleanup also fails`, async () => {
+      await seededSummary(strategy, async ({ history }, setup) => {
+        const controller = new AbortController();
+        const reason = new Error('original summary cancellation');
+        const cleanup = new Error('request reader close failed');
+        const prepare = setup.runtime.prepareProviderInvocation.bind(
+          setup.runtime,
+        );
+        const invocation = spyOn(
+          setup.runtime,
+          'prepareProviderInvocation',
+        ).mockImplementation((...args) => ({
+          ...prepare(...args),
+          signal: controller.signal,
+        }));
+        let restore = (): void => {};
+        let retained: AsyncGenerator<IContent, void, unknown> | undefined;
+        setup.transport.beforeSend = async (options) => {
+          const request = options.requestRows;
+          if (request === undefined)
+            throw new Error('Expected indexed summary source');
+          retained = request.openReader();
+          for (let pulled = 0; pulled < 3; pulled++) await retained.next();
+          const close = request.close.bind(request);
+          const fault = spyOn(request, 'close').mockImplementation(async () => {
+            await close();
+            throw cleanup;
+          });
+          restore = () => fault.mockRestore();
+          controller.abort(reason);
+        };
+        setup.transport.failure = reason;
+        try {
+          const failure: unknown = await setup.handler
+            .performCompression('reader-close-fault')
+            .catch((error: unknown) => error);
+          if (!(failure instanceof AggregateError))
+            throw new Error('Expected original and reader-close failures');
+          expect(failure.errors).toStrictEqual([reason, cleanup]);
+          expect(failure.cause).toBe(reason);
+          if (retained === undefined)
+            throw new Error('Missing admitted reader');
+          await expect(retained.next()).rejects.toThrow('closed');
+          expect(history.getStatistics().totalMessages).toBe(512);
+        } finally {
+          restore();
+          invocation.mockRestore();
+        }
+      });
+    });
+
     it(`${strategy} creates no curated input files on the public native path`, async () => {
       await seededSummary(
         strategy,

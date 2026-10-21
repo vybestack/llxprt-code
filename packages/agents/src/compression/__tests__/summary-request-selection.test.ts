@@ -120,6 +120,65 @@ describe('disk summary request selection', () => {
     expect(ownership.snapshot().peakRows).toBe(1);
   });
 
+  it('retires an admitted reader before closing the indexed source', async () => {
+    const ownership = new RowOwnership();
+    const selection = diskSummaryRequestSelection(
+      indexed(history),
+      { top: 0, bottom: 5, injection: [] },
+      'p',
+      [],
+      ownership,
+    );
+    const reader = selection.openReader();
+    for (let pulled = 0; pulled < 3; pulled++) await reader.next();
+    expect(ownership.snapshot().liveRows).toBe(1);
+    await selection.close();
+    expect(ownership.snapshot().liveRows).toBe(0);
+    await expect(selection.readAt(2)).rejects.toThrow('closed');
+    await expect(reader.next()).rejects.toThrow('closed');
+  });
+
+  it('waits for an admitted asynchronous read and preserves cancellation after I/O', async () => {
+    const controller = new AbortController();
+    const reason = new Error('cancel during source read');
+    let release: () => void = () => {};
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let enter: () => void = () => {};
+    const entered = new Promise<void>((resolve) => {
+      enter = resolve;
+    });
+    const source = indexed(history);
+    const selection = diskSummaryRequestSelection(
+      {
+        ...source,
+        async readRow(index) {
+          enter();
+          await pending;
+          return source.readRow(index);
+        },
+      },
+      { top: 0, bottom: 5, injection: [] },
+      'p',
+      [],
+      new RowOwnership(),
+    );
+    const read = selection.readAt(2, controller.signal);
+    await entered;
+    controller.abort(reason);
+    let retired = false;
+    const closing = Promise.resolve(selection.close()).then(() => {
+      retired = true;
+    });
+    await Promise.resolve();
+    expect(retired).toBe(false);
+    release();
+    await expect(read).rejects.toBe(reason);
+    await closing;
+    expect(retired).toBe(true);
+  });
+
   it('stops a pass when the signal aborts', async () => {
     const controller = new AbortController();
     const selection = diskSummaryRequestSelection(

@@ -2,6 +2,7 @@
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { CompressionIndexedRows as HistoryIndexedRows } from '@vybestack/llxprt-code-core/services/history/compressionInput.js';
 import type { CompressionContext } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import { HistoryReaderScope } from '@vybestack/llxprt-code-core/services/history/historyReaderScope.js';
 import type { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import {
   assertRowIndex,
@@ -125,30 +126,8 @@ function hasStateSnapshot(row: IContent): boolean {
   );
 }
 
-/**
- * The complete summarization request as a repeatable selection: the security
- * preamble, the compression prompt, the sanitized journal rows in
- * [plan.top, plan.bottom), the context injections and the trigger instruction.
- * Only the small framing rows live in memory; journal rows are read one at a
- * time while a reader advances and each is owned only until the next pull.
- */
-export function diskSummaryRequestSelection(
-  rows: HistoryIndexedRows,
-  plan: MiddleOutDiskPlan,
-  prompt: string,
-  injections: IContent[],
-  ownership: RowOwnership,
-): ProviderRequestSelection {
-  const tail = [...injections, ...plan.injection];
-  const promptRow: IContent = {
-    speaker: 'human',
-    blocks: [{ type: 'text', text: prompt }],
-  };
-  const count = SUMMARY_FRAME_ROWS + (plan.bottom - plan.top) + tail.length;
-  const journalEnd = 2 + (plan.bottom - plan.top);
-  const sanitizedAt = async (journalIndex: number): Promise<IContent> =>
-    sanitizeHistoryForCompression([await rows.readRow(journalIndex)])[0];
-  const triggerRow = (priorSnapshot: boolean): IContent => ({
+function summaryTriggerRow(priorSnapshot: boolean): IContent {
+  return {
     speaker: 'human',
     blocks: [
       {
@@ -165,7 +144,35 @@ export function diskSummaryRequestSelection(
         ),
       },
     ],
-  });
+  };
+}
+
+/**
+ * The complete summarization request as a repeatable selection: the security
+ * preamble, the compression prompt, the sanitized journal rows in
+ * [plan.top, plan.bottom), the context injections and the trigger instruction.
+ * Only the small framing rows live in memory; journal rows are read one at a
+ * time while a reader advances and each is owned only until the next pull.
+ */
+export function diskSummaryRequestSelection(
+  rows: HistoryIndexedRows,
+  plan: MiddleOutDiskPlan,
+  prompt: string,
+  injections: IContent[],
+  ownership: RowOwnership,
+): ProviderRequestSelection {
+  const scope = new HistoryReaderScope(
+    'Compression request selection is closed',
+  );
+  const tail = [...injections, ...plan.injection];
+  const promptRow: IContent = {
+    speaker: 'human',
+    blocks: [{ type: 'text', text: prompt }],
+  };
+  const count = SUMMARY_FRAME_ROWS + (plan.bottom - plan.top) + tail.length;
+  const journalEnd = 2 + (plan.bottom - plan.top);
+  const sanitizedAt = async (journalIndex: number): Promise<IContent> =>
+    sanitizeHistoryForCompression([await rows.readRow(journalIndex)])[0];
   // The trigger row depends on every journal row, so a random read of it scans
   // the journal once; the answer is kept for later reads.
   let scannedSnapshot: boolean | undefined;
@@ -179,37 +186,49 @@ export function diskSummaryRequestSelection(
     scannedSnapshot = found;
     return found;
   };
+  async function* readRows(
+    signal?: AbortSignal,
+  ): AsyncGenerator<IContent, void, unknown> {
+    signal?.throwIfAborted();
+    yield COMPRESSION_SECURITY_PREAMBLE;
+    yield promptRow;
+    let priorSnapshot = false;
+    for (let index = plan.top; index < plan.bottom; index++) {
+      signal?.throwIfAborted();
+      const row = await rows.readRow(index);
+      signal?.throwIfAborted();
+      priorSnapshot ||= hasStateSnapshot(row);
+      const sanitized = sanitizeHistoryForCompression([row])[0];
+      ownership.retain(sanitized);
+      try {
+        yield sanitized;
+      } finally {
+        ownership.release(sanitized);
+      }
+    }
+    yield* tail;
+    yield summaryTriggerRow(priorSnapshot);
+  }
   return {
     count,
-    async *openReader(signal) {
-      signal?.throwIfAborted();
-      yield COMPRESSION_SECURITY_PREAMBLE;
-      yield promptRow;
-      let priorSnapshot = false;
-      for (let index = plan.top; index < plan.bottom; index++) {
+    openReader: (signal) => scope.open(readRows(signal)),
+    readAt(index, signal) {
+      return scope.read(async () => {
         signal?.throwIfAborted();
-        const row = await rows.readRow(index);
-        priorSnapshot ||= hasStateSnapshot(row);
-        const sanitized = sanitizeHistoryForCompression([row])[0];
-        ownership.retain(sanitized);
-        try {
-          yield sanitized;
-        } finally {
-          ownership.release(sanitized);
+        assertRowIndex(index, count);
+        if (index === 0) return COMPRESSION_SECURITY_PREAMBLE;
+        if (index === 1) return promptRow;
+        if (index < journalEnd) {
+          const row = await sanitizedAt(plan.top + index - 2);
+          signal?.throwIfAborted();
+          return row;
         }
-      }
-      yield* tail;
-      yield triggerRow(priorSnapshot);
+        if (index < count - 1) return tail[index - journalEnd];
+        const found = await journalHasSnapshot(signal);
+        signal?.throwIfAborted();
+        return summaryTriggerRow(found);
+      });
     },
-    async readAt(index, signal) {
-      signal?.throwIfAborted();
-      assertRowIndex(index, count);
-      if (index === 0) return COMPRESSION_SECURITY_PREAMBLE;
-      if (index === 1) return promptRow;
-      if (index < journalEnd) return sanitizedAt(plan.top + index - 2);
-      if (index < count - 1) return tail[index - journalEnd];
-      return triggerRow(await journalHasSnapshot(signal));
-    },
-    close: () => undefined,
+    close: () => scope.close(),
   };
 }

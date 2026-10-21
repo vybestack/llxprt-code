@@ -3,6 +3,11 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import {
+  CompressionExecutionError,
+  isTransientCompressionError,
+} from '@vybestack/llxprt-code-core/core/compression/types.js';
+import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import {
   buildCompressionAttemptContext,
@@ -38,4 +43,51 @@ export async function countCompressionRows(
     count += 1;
   }
   return count;
+}
+
+export function throwCompressionProviderFailure(
+  strategy: string,
+  error: unknown,
+  signal: AbortSignal | undefined,
+  diagnostics: {
+    readonly finishReason?: string;
+    readonly rawStopReason?: string;
+    readonly blockTypeCounts: Readonly<Record<string, number>>;
+  },
+): never {
+  if (signal?.aborted === true) throw signal.reason;
+  const blocks =
+    Object.entries(diagnostics.blockTypeCounts)
+      .map(([type, count]) => `${type}:${count}`)
+      .join(',') || 'none';
+  throw new CompressionExecutionError(
+    strategy,
+    `LLM provider call failed: ${error instanceof Error ? error.message : String(error)} [partial diagnostics: finishReason=${diagnostics.finishReason ?? 'none'}, rawStopReason=${diagnostics.rawStopReason ?? 'none'}, blocks=${blocks}]`,
+    { isTransient: isTransientCompressionError(error) },
+  );
+}
+
+export async function withCompressionRequest<T>(
+  request: ProviderRequestSelection,
+  consume: () => Promise<T>,
+): Promise<T> {
+  let result: { readonly value: T } | { readonly error: unknown };
+  try {
+    result = { value: await consume() };
+  } catch (error) {
+    result = { error };
+  }
+  try {
+    await request.close();
+  } catch (cleanup) {
+    if ('error' in result)
+      throw new AggregateError(
+        [result.error, cleanup],
+        'Compression request cleanup failed',
+        { cause: result.error },
+      );
+    throw cleanup;
+  }
+  if ('error' in result) throw result.error;
+  return result.value;
 }

@@ -10,6 +10,7 @@ import type { HistoryDumpSnapshot } from './historyDumpSnapshot.js';
 import type { JournalReadCounters } from '../../recording/journalCounters.js';
 import { countDecodedRow } from './journalRowCounters.js';
 import { decodeStoredRow } from './journalRowCodec.js';
+import { HistoryReaderScope } from './historyReaderScope.js';
 
 /**
  * The rows of one published version for a dump. Nothing is copied: each read
@@ -17,10 +18,8 @@ import { decodeStoredRow } from './journalRowCodec.js';
  * needs no spool and keeps its version however many groups commit after it.
  */
 export class JournalDumpSnapshot implements HistoryDumpSnapshot {
-  private closed = false;
+  private readonly readers = new HistoryReaderScope('Dump snapshot is closed');
   private closing: Promise<void> | undefined;
-  /** The releases of rows a reader holds right now; close() lets them go. */
-  private readonly held = new Set<() => void>();
 
   constructor(
     private readonly snapshot: VersionSnapshot,
@@ -30,33 +29,35 @@ export class JournalDumpSnapshot implements HistoryDumpSnapshot {
   ) {}
 
   get length(): number {
-    this.assertOpen();
+    this.readers.requireOpen();
     return this.snapshot.curatedRows;
   }
 
-  async readRow(index: number): Promise<IContent> {
-    this.assertOpen();
-    const entry = await this.snapshot.curatedAt(index);
-    const row = decodeStoredRow(
-      await this.snapshot.readRow(entry),
-      this.resumeBoundary,
-    );
-    this.assertOpen();
-    return row;
+  readRow(index: number): Promise<IContent> {
+    return this.readers.read(async () => {
+      const entry = await this.snapshot.curatedAt(index);
+      return decodeStoredRow(
+        await this.snapshot.readRow(entry),
+        this.resumeBoundary,
+      );
+    });
   }
 
-  async sourceOrdinalAt(index: number): Promise<number> {
-    this.assertOpen();
-    const entry = await this.snapshot.curatedAt(index);
-    const ordinal = await this.snapshot.rowsBelow(entry.label);
-    this.assertOpen();
-    return ordinal;
+  sourceOrdinalAt(index: number): Promise<number> {
+    return this.readers.read(async () => {
+      const entry = await this.snapshot.curatedAt(index);
+      return this.snapshot.rowsBelow(entry.label);
+    });
   }
 
-  async *[Symbol.asyncIterator](): AsyncGenerator<IContent, void, unknown> {
+  [Symbol.asyncIterator](): AsyncGenerator<IContent, void, unknown> {
+    return this.readers.open(this.curated());
+  }
+
+  private async *curated(): AsyncGenerator<IContent, void, unknown> {
     for (let index = 0; index < this.length; index++) {
       const row = await this.readRow(index);
-      const release = this.hold(countDecodedRow(row, this.counters));
+      const release = countDecodedRow(row, this.counters);
       try {
         yield row;
       } finally {
@@ -65,31 +66,24 @@ export class JournalDumpSnapshot implements HistoryDumpSnapshot {
     }
   }
 
-  async *rows(): AsyncGenerator<IContent, void, unknown> {
-    this.assertOpen();
+  rows(): AsyncGenerator<IContent, void, unknown> {
+    return this.readers.open(this.raw());
+  }
+
+  private async *raw(): AsyncGenerator<IContent, void, unknown> {
     for await (const entry of this.snapshot.entries()) {
-      this.assertOpen();
+      this.readers.requireOpen();
       const row = decodeStoredRow(
         await this.snapshot.readRow(entry),
         this.resumeBoundary,
       );
-      const release = this.hold(countDecodedRow(row, this.counters));
+      const release = countDecodedRow(row, this.counters);
       try {
         yield row;
       } finally {
         release();
       }
     }
-    this.assertOpen();
-  }
-
-  /** The release of a held row, which runs once whichever of the reader and close() comes first. */
-  private hold(release: () => void): () => void {
-    const once = (): void => {
-      if (this.held.delete(once)) release();
-    };
-    this.held.add(once);
-    return once;
   }
 
   async *chronology(): AsyncGenerator<ChronologyTraceEntry, void, unknown> {
@@ -98,18 +92,25 @@ export class JournalDumpSnapshot implements HistoryDumpSnapshot {
   }
 
   close(): Promise<void> {
-    if (!this.closed) {
-      this.closed = true;
-      for (const release of [...this.held]) release();
-      this.closing = Promise.resolve(this.snapshot.close()).finally(
-        this.onClose,
-      );
-    }
-    return this.closing ?? Promise.resolve();
+    this.closing ??= this.retire();
+    return this.closing;
   }
 
-  private assertOpen(): void {
-    if (this.closed) throw new Error('Dump snapshot is closed');
+  private async retire(): Promise<void> {
+    const failures: unknown[] = [];
+    for (const close of [
+      () => this.readers.close(),
+      () => this.snapshot.close(),
+    ]) {
+      try {
+        await close();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    this.onClose();
+    if (failures.length > 0)
+      throw new AggregateError(failures, 'Dump snapshot cleanup failed');
   }
 }
 

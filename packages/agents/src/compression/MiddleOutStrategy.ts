@@ -4,6 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  throwCompressionProviderFailure,
+  withCompressionRequest,
+} from './compressionAttempt.js';
 import { bindCompressionProvider } from './utils.js';
 import { summaryOutput, type SummaryOutput } from './summaryOutput.js';
 /**
@@ -38,10 +42,8 @@ import type {
   StrategyTrigger,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import {
-  CompressionExecutionError,
   EmptySummaryError,
   PromptResolutionError,
-  isTransientCompressionError,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import { aggregateTextFromBlocks, runVerificationPass } from './utils.js';
 import { buildContinuationDirective } from '@vybestack/llxprt-code-core/core/compression/continuationDirective.js';
@@ -278,64 +280,63 @@ export class MiddleOutStrategy implements CompressionStrategy {
     let rawStopReason: string | undefined;
     const blockTypeCounts: Record<string, number> = {};
 
-    try {
-      const stream = this.bindProvider(
-        provider,
-        resolvedRuntime,
-      ).generateChatCompletion(
-        await buildCompressionChatOptions({
-          requestRows: request,
-          providerRuntime: resolvedRuntime,
-          resolvedConfig,
-          fallbackConfig: context.config,
-          resolvedOptions,
-          invocation,
-          fallbackModel: context.runtimeState.model,
-          runtimeState: context.runtimeState,
+    return withCompressionRequest(request, async () => {
+      try {
+        const stream = this.bindProvider(
           provider,
-          modelParameters: context.modelParameters,
-          source: 'MiddleOutStrategy.callProvider',
-        }),
-      );
-
-      for await (const chunk of stream) {
-        for (const block of chunk.blocks) {
-          blockTypeCounts[block.type] = (blockTypeCounts[block.type] ?? 0) + 1;
-        }
-        const result = aggregateTextFromBlocks(
-          chunk.blocks,
-          summary,
-          lastBlockWasNonText,
+          resolvedRuntime,
+        ).generateChatCompletion(
+          await buildCompressionChatOptions({
+            requestRows: request,
+            providerRuntime: resolvedRuntime,
+            resolvedConfig,
+            fallbackConfig: context.config,
+            resolvedOptions,
+            invocation,
+            fallbackModel: context.runtimeState.model,
+            runtimeState: context.runtimeState,
+            provider,
+            modelParameters: context.modelParameters,
+            source: 'MiddleOutStrategy.callProvider',
+          }),
         );
-        summary = result.text;
-        lastBlockWasNonText = result.lastBlockWasNonText;
-        if (chunk.metadata?.usage) {
-          capturedUsage = chunk.metadata.usage;
-        }
-        if (chunk.metadata?.finishReason) {
-          finishReason = chunk.metadata.finishReason;
-        }
-        if (chunk.metadata?.rawStopReason) {
-          rawStopReason = chunk.metadata.rawStopReason;
-        }
-      }
 
-      return {
-        text: summary,
-        usage: capturedUsage,
-        diagnostics: { finishReason, rawStopReason, blockTypeCounts },
-      };
-    } catch (error) {
-      const blocksSummary =
-        Object.entries(blockTypeCounts)
-          .map(([type, count]) => `${type}:${count}`)
-          .join(',') || 'none';
-      throw new CompressionExecutionError(
-        'middle-out',
-        `LLM provider call failed: ${error instanceof Error ? error.message : String(error)} [partial diagnostics: finishReason=${finishReason ?? 'none'}, rawStopReason=${rawStopReason ?? 'none'}, blocks=${blocksSummary}]`,
-        { isTransient: isTransientCompressionError(error) },
-      );
-    }
+        for await (const chunk of stream) {
+          for (const block of chunk.blocks) {
+            blockTypeCounts[block.type] =
+              (blockTypeCounts[block.type] ?? 0) + 1;
+          }
+          const result = aggregateTextFromBlocks(
+            chunk.blocks,
+            summary,
+            lastBlockWasNonText,
+          );
+          summary = result.text;
+          lastBlockWasNonText = result.lastBlockWasNonText;
+          if (chunk.metadata?.usage) {
+            capturedUsage = chunk.metadata.usage;
+          }
+          if (chunk.metadata?.finishReason) {
+            finishReason = chunk.metadata.finishReason;
+          }
+          if (chunk.metadata?.rawStopReason) {
+            rawStopReason = chunk.metadata.rawStopReason;
+          }
+        }
+
+        return {
+          text: summary,
+          usage: capturedUsage,
+          diagnostics: { finishReason, rawStopReason, blockTypeCounts },
+        };
+      } catch (error) {
+        throwCompressionProviderFailure(this.name, error, invocation?.signal, {
+          finishReason,
+          rawStopReason,
+          blockTypeCounts,
+        });
+      }
+    });
   }
 
   private summaryRows(

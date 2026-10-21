@@ -81,4 +81,62 @@ describe('journal history store dump snapshot', () => {
     await dump.close();
     await expect(reader.next()).rejects.toThrow('Dump snapshot is closed');
   });
+  it('releases the actual suspended curated row when its owner closes', async () => {
+    const store = await created('curated-close.llxj');
+    store.apply({ kind: 'content', content: row('human', 'one', 1) });
+    const input = await store.openCompressionInput();
+    const source = input.rows;
+    if (!(Symbol.asyncIterator in source))
+      throw new Error('Expected asynchronous native input');
+    const reader = source[Symbol.asyncIterator]();
+    const weak = await (async (): Promise<WeakRef<IContent>> => {
+      const result = await reader.next();
+      if (result.done === true) throw new Error('Expected a curated row');
+      return new WeakRef(result.value);
+    })();
+    await input.close();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    Bun.gc(true);
+    expect(weak.deref()).toBeUndefined();
+    await expect(reader.next()).rejects.toThrow('closed');
+    await expect(source.readRow(0)).rejects.toThrow('closed');
+    await expect(source.sourceOrdinalAt(0)).rejects.toThrow('closed');
+  });
+  it('keeps service-curated membership, raw source ordinals and immutable version together', async () => {
+    const store = await created('curated-ranks.llxj');
+    const original: IContent[] = [
+      row('human', 'head', 1),
+      { speaker: 'ai', blocks: [] },
+      { speaker: 'tool', blocks: [] },
+      row('ai', 'kept assistant', 3),
+      { speaker: 'ai', blocks: [{ type: 'text', text: '  ' }] },
+      row('human', 'tail', 2),
+    ];
+    for (const content of original) store.apply({ kind: 'content', content });
+    const input = await store.openCompressionInput();
+    try {
+      store.apply({ kind: 'rewind', itemsRemoved: 6 });
+      store.apply({
+        kind: 'content',
+        content: row('human', 'new version', 99),
+      });
+      await store.waitForDurable();
+      expect(input.rows.length).toBe(4);
+      for (const [index, ordinal] of [0, 2, 3, 5].entries()) {
+        expect(await input.rows.sourceOrdinalAt(index)).toBe(ordinal);
+        expect(await input.rows.readRow(index)).toStrictEqual(
+          original[ordinal],
+        );
+      }
+      expect(await collect(input.previous.rows())).toStrictEqual(original);
+      for (const invalid of [-1, 4, 0.5, Number.NaN]) {
+        await expect(input.rows.readRow(invalid)).rejects.toThrow(RangeError);
+        await expect(input.rows.sourceOrdinalAt(invalid)).rejects.toThrow(
+          RangeError,
+        );
+      }
+    } finally {
+      await input.close();
+    }
+  });
 });
