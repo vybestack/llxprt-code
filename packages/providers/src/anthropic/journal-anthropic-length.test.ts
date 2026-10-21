@@ -72,6 +72,34 @@ export async function fillStored(
   await session.registerRowFormat(anthropicLengthRegistration(settings));
 }
 
+interface PayloadAudit {
+  enabled: boolean;
+  reads: number;
+  ranges: Array<{ start: number; end: number }>;
+}
+async function payloadRanges(
+  session: JournalSession,
+  audit: PayloadAudit,
+): Promise<void> {
+  const pin = await session.store.snapshot();
+  const read = await session.store.openRead();
+  try {
+    for await (const entry of pin.entries()) {
+      audit.ranges.push({
+        start: entry.recordOffset,
+        end: entry.recordOffset + entry.recordLength,
+      });
+      for (const offset of entry.lensRef.filter((value) => value !== 0)) {
+        const head = await read.access.readRecordHead(offset);
+        audit.ranges.push({ start: offset, end: head.endOffset });
+      }
+    }
+  } finally {
+    await read.close();
+    await pin.close();
+  }
+}
+
 describe('native stored Anthropic length planning', () => {
   const directory = useTempDir('stored-anthropic-');
   it('persists actual native transfers and last-kept lengths for every thinking policy', async () => {
@@ -123,23 +151,60 @@ describe('native stored Anthropic length planning', () => {
   [40, 4000].forEach((count) => {
     it(`plans ${count} rows without reading ROW or LENS payload`, async () => {
       const counter = { reads: 0 };
+      const audit: PayloadAudit = { enabled: false, reads: 0, ranges: [] };
+      const dependencies = testJournalSeams(
+        { readCounter: counter },
+        1,
+        false,
+      ).dependencies;
       const session = await JournalSession.create(
         `${directory()}/read-${count}.llxj`,
         {
-          journal: testJournalSeams({ readCounter: counter }, 1, false)
-            .dependencies,
+          journal: {
+            ...dependencies,
+            open: async (path, flags) => {
+              const file = await dependencies.open(path, flags);
+              return {
+                ...file,
+                read: async (buffer, offset, length, position) => {
+                  if (
+                    audit.enabled &&
+                    audit.ranges.some(
+                      (range) =>
+                        position < range.end && position + length > range.start,
+                    )
+                  )
+                    audit.reads++;
+                  return file.read(buffer, offset, length, position);
+                },
+              };
+            },
+          },
         },
       );
       try {
+        const fillStart = counter.reads;
         await fillStored(
           session,
           Array.from({ length: count }, (_, at) =>
             at % 2 !== 0 ? thinking(`thought ${at}`) : text(`q ${at}`),
           ),
         );
+        const fillReads = counter.reads - fillStart;
+        const acknowledged = await session.store.snapshot();
+        const published = acknowledged.version;
+        await acknowledged.close();
+        const registrationStart = counter.reads;
+        await session.registerRowFormat(
+          anthropicLengthRegistration(storedSettings),
+        );
+        const warmRegistrationReads = counter.reads - registrationStart;
+        expect(session.store.published).toBe(published);
+        await payloadRanges(session, audit);
         const pin = await session.store.snapshot();
         try {
           const before = counter.reads;
+          audit.enabled = true;
           for (const strip of ['none', 'all', 'allButLast'] as const) {
             const plan = await planStoredAnthropicRequest(
               pin,
@@ -149,9 +214,11 @@ describe('native stored Anthropic length planning', () => {
             );
             expect(plan.messagesBytes).toBeGreaterThan(0);
           }
+          audit.enabled = false;
+          expect(audit.reads).toBe(0);
           expect(counter.reads - before).toBeLessThan(40);
           process.stdout.write(
-            `Stored Anthropic warm ${JSON.stringify({ count, reads: counter.reads - before, pid: process.pid })}\n`,
+            `Stored Anthropic warm ${JSON.stringify({ count, fillReads, warmRegistrationReads, reads: counter.reads - before, payloadReads: audit.reads, pid: process.pid })}\n`,
           );
         } finally {
           await pin.close();

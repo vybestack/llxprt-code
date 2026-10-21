@@ -2,7 +2,6 @@
 import { JournalFormatError } from '@vybestack/llxprt-code-core/journal/errors.js';
 import {
   captureRowFormatSettings,
-  rowFormatAuxKey,
   rowFormatKey,
   type RowFormatRegistration,
   type RowFormatSettings,
@@ -60,12 +59,48 @@ function requestLength(
   return total;
 }
 
+type RequestEnvelope = Readonly<Record<string, unknown>> & {
+  readonly model: string;
+};
+
 export async function planStoredAnthropicRequest(
+  snapshot: VersionSnapshot,
+  input: RowFormatSettings,
+  policy: RepairPolicy,
+  request: RequestEnvelope,
+  selection: Selection = {},
+): Promise<StoredAnthropicRequestPlan> {
+  const settings = captureRowFormatSettings(input);
+  if (
+    (policy.strip !== undefined &&
+      !['none', 'all', 'allButLast'].includes(policy.strip)) ||
+    (policy.includeInContext !== undefined &&
+      typeof policy.includeInContext !== 'boolean')
+  )
+    throw new JournalFormatError('Unsupported Anthropic thinking policy');
+  const envelopeBytes = requestLength(0, request);
+  const release = snapshot.hold();
+  try {
+    return await planPinned(
+      snapshot,
+      settings,
+      { ...policy },
+      request,
+      { ...selection },
+      envelopeBytes,
+    );
+  } finally {
+    await release();
+  }
+}
+
+async function planPinned(
   snapshot: VersionSnapshot,
   settings: RowFormatSettings,
   policy: RepairPolicy,
-  request: Readonly<Record<string, unknown>> & { readonly model: string },
-  selection: Selection = {},
+  request: RequestEnvelope,
+  selection: Selection,
+  envelopeBytes: number,
 ): Promise<StoredAnthropicRequestPlan> {
   snapshot.requireOpen();
   projectAnthropicUnit({ speaker: 'human', blocks: [] }, settings);
@@ -115,9 +150,7 @@ export async function planStoredAnthropicRequest(
       : decodeSlotSummary(version.aggregate.summaries[slot], format);
   const stripped = policy.includeInContext === false || policy.strip === 'all';
   if (!stripped && policy.strip === 'allButLast') {
-    const metadata = await snapshot.formatAuxiliary(
-      rowFormatAuxKey(slot, key, format.gen),
-    );
+    const metadata = await snapshot.formatAuxiliary(slot);
     if (metadata === undefined)
       throw new JournalFormatError(
         'Anthropic last-kept aggregate is unmeasured',
@@ -131,7 +164,7 @@ export async function planStoredAnthropicRequest(
     settings,
   );
   return Object.freeze({
-    contentLength: requestLength(measured.bytes, request),
+    contentLength: measured.bytes + envelopeBytes,
     messagesBytes: measured.bytes,
     messages: measured.messages,
     key,

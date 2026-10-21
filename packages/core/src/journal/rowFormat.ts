@@ -103,10 +103,6 @@ export function captureRowFormat(
   };
 }
 
-export function rowFormatAuxKey(
-  slot: number,
-  key: bigint,
-  gen: number,
-): string {
-  return `format:aux:${slot}:${key}:${gen}`;
+export function rowFormatAuxKey(slot: number): string {
+  return `format:aux:${slot}`;
 }

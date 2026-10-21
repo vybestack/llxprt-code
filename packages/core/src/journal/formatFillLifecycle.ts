@@ -58,10 +58,6 @@ export async function finishFormatFill(
   fill: RowFormatFill,
 ): Promise<BuiltGroup> {
   const bytes = await fill.finish();
-  if (bytes.byteLength > 65536)
-    throw new JournalFormatError(
-      'Format auxiliary metadata exceeds the bounded value size',
-    );
   await appender.drain();
   const reader = new KeyedMapReader(
     ctx.readGroup(appender.nextOffset),
@@ -71,7 +67,13 @@ export async function finishFormatFill(
   );
   const batch = new KeyedMapBatch(reader, built.state.metaRoot);
   const format = built.state.slots.formatSlots[slot];
-  batch.set(rowFormatAuxKey(slot, format.formatKeyHash, format.gen), bytes);
+  const value = new Uint8Array(16 + bytes.byteLength);
+  const header = new DataView(value.buffer);
+  header.setBigUint64(0, format.formatKeyHash, true);
+  header.setUint32(8, format.gen, true);
+  header.setUint32(12, format.formatRev, true);
+  value.set(bytes, 16);
+  batch.set(rowFormatAuxKey(slot), value);
   return {
     ...built,
     state: { ...built.state, metaRoot: await batch.commit(appender) },

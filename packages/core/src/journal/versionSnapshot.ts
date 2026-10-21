@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { ACTIVE_FACT_INDEX, NativeFactIndexReader } from './nativeFactIndex.js';
+import { rowFormatAuxKey } from './rowFormat.js';
 import { JournalFormatError } from './errors.js';
 import { decodeDecimal } from './metaFacts.js';
 import { KimiOrdinalQueries } from './kimiOrdinals.js';
@@ -88,9 +89,28 @@ export class VersionSnapshot {
     return new NativeFactIndexReader(this.facts, scope);
   }
 
-  formatAuxiliary(key: string): Promise<Uint8Array | undefined> {
+  async formatAuxiliary(slot: number): Promise<Uint8Array | undefined> {
     this.requireOpen();
-    return this.kimi.meta.get(this.version?.roots.metaRoot ?? 0, key);
+    const value = await this.kimi.meta.get(
+      this.version?.roots.metaRoot ?? 0,
+      rowFormatAuxKey(slot),
+    );
+    if (value === undefined) return undefined;
+    const format = this.version?.slots.formatSlots[slot];
+    if (format === undefined || value.byteLength < 16)
+      throw new JournalFormatError('Invalid format auxiliary metadata');
+    const header = new DataView(
+      value.buffer,
+      value.byteOffset,
+      value.byteLength,
+    );
+    if (
+      header.getBigUint64(0, true) !== format.formatKeyHash ||
+      header.getUint32(8, true) !== format.gen ||
+      header.getUint32(12, true) !== format.formatRev
+    )
+      throw new JournalFormatError('Format auxiliary measurement is stale');
+    return value.subarray(16);
   }
 
   normalizedId(family: 1 | 2, rawId: string): string {
