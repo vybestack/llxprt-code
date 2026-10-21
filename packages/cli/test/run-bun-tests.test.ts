@@ -950,8 +950,18 @@ writeFileSync(${JSON.stringify(marker)}, JSON.stringify({ home: process.env.HOME
 it('finishes within the runner budget', async () => { await Bun.sleep(50); });`,
       );
       process.env[PER_FILE_TIMEOUT_ENV_VAR] = '4000';
+      const startedAt = performance.now();
       const result = await runTestFile(file, childEnv);
-      expect(result.passed, result.output).toBe(true);
+      expect(
+        result.passed,
+        JSON.stringify({
+          ...result,
+          elapsedMs: performance.now() - startedAt,
+          runnerBudgetMs: fileTimeoutForFile(file),
+          childBudgetOverride: childEnv[PER_FILE_TIMEOUT_ENV_VAR],
+          childEnvMarkerExists: existsSync(marker),
+        }),
+      ).toBe(true);
       expect(result.timedOut).toBe(false);
       expect(JSON.parse(readFileSync(marker, 'utf8'))).toEqual({
         home: session.homeDir,
