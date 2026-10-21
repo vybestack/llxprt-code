@@ -621,6 +621,10 @@ export class HistoryJournalStore implements HistoryStorePort {
 
   openCompressionInput = oldCompressionInput;
 
+  async openToolResponseRanking(): Promise<undefined> {
+    return undefined;
+  }
+
   openDumpSnapshot(): Promise<HistoryDumpSnapshot> {
     return openHistoryDumpSnapshot(
       this.capturePendingFold(),

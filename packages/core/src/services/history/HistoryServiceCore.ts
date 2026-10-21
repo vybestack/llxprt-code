@@ -161,6 +161,8 @@ export abstract class HistoryServiceCore
   protected totalTokens: number = 0;
   protected baseTokenOffset: number = 0;
   protected tokenizerCache = new Map<string, ITokenizer>();
+  private rankingTokenizer: ITokenizer | undefined;
+  private rankingGeneration = randomUUID();
   protected tokenizerLock: Promise<void> = Promise.resolve();
   protected readonly tokenTickets = new HistoryTokenTickets(
     (execute) =>
@@ -336,6 +338,23 @@ export abstract class HistoryServiceCore
    * When set, getTokenizerForModel will prefer the factory over
    * constructing provider tokenizers directly.
    */
+  toolRankingRevision(model: string): string {
+    const tokenizer = this.getTokenizerForModel(
+      model,
+      this.activeTokenizationProvider,
+    );
+    if (tokenizer !== this.rankingTokenizer) {
+      this.rankingTokenizer = tokenizer;
+      this.rankingGeneration = randomUUID();
+    }
+    return JSON.stringify([
+      'tool-stub:1',
+      model,
+      this.activeTokenizationProvider,
+      this.rankingGeneration,
+    ]);
+  }
+
   setTokenizerFactory(factory: HistoryTokenizerSelection): void {
     this.runSynchronousHistoryMutation(() => {
       this.tokenizerFactory = factory;

@@ -1,4 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import {
+  fillToolRanking,
+  rankingReady,
+  type ToolRankingPolicy,
+} from './tool-ranking-fill.js';
 import type { RecencyFactPolicy } from './recencyFacts.js';
 import {
   fillNativeFacts,
@@ -150,6 +155,7 @@ interface SpineEntry {
 export class JournalStore {
   private rowFormats: readonly RegisteredRowFormat[] = [];
   private factIndex: NativeFactIndexRegistration | undefined;
+  private toolRanking: ToolRankingPolicy | undefined;
   private commitEffect: CommitEffectFactory | undefined;
 
   setCommitEffect(factory: CommitEffectFactory): void {
@@ -603,8 +609,18 @@ export class JournalStore {
       this.rowFormats,
     );
     const facts = await warmNativeFacts(this.buildContext(), edits);
-    if ((warm === undefined && facts === undefined) || before === undefined)
+    const ranking =
+      edits.length === 1 &&
+      edits[0].kind === 'toolRanking' &&
+      (await rankingReady(this.buildContext(), edits[0].policy.revision))
+        ? edits[0].policy
+        : undefined;
+    if (
+      (warm === undefined && facts === undefined && ranking === undefined) ||
+      before === undefined
+    )
       return undefined;
+    if (ranking !== undefined) this.toolRanking = ranking;
     if (warm !== undefined) this.rowFormats = warm;
     if (facts !== undefined) this.factIndex = facts;
     const read = this.readOfPublished();
@@ -628,9 +644,21 @@ export class JournalStore {
     edits: readonly VersionEdit[],
     facts: NativeFactIndexRegistration | undefined,
   ): ReturnType<typeof fillRowFormats> {
-    const indexed = await fillNativeFacts(
+    const rankingEdit = edits.find((edit) => edit.kind === 'toolRanking');
+    const ranking =
+      rankingEdit?.kind === 'toolRanking'
+        ? rankingEdit.policy
+        : this.toolRanking;
+    const ranked = await fillToolRanking(
       this.buildContext(),
       built,
+      appender,
+      edits,
+      ranking,
+    );
+    const indexed = await fillNativeFacts(
+      this.buildContext(),
+      ranked,
       appender,
       facts,
       edits,
@@ -725,6 +753,11 @@ export class JournalStore {
     this.install(trailer);
     this.rowFormats = rowFormats;
     this.factIndex = factIndex;
+    const rankingEdit = resolvedEdits.find(
+      (edit) => edit.kind === 'toolRanking',
+    );
+    if (rankingEdit?.kind === 'toolRanking')
+      this.toolRanking = rankingEdit.policy;
     this.chain = built.chainBase.push(trailer.selfOffset);
     if (built.spine !== undefined) {
       this.spineEntry = { rowRoot: trailer.rowRoot, spine: built.spine };

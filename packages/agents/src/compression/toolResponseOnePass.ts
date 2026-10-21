@@ -1,5 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import {
+  openNativeToolRanking,
+  truncateNativeToolResponses,
+} from './native-tool-ranking.js';
 import type {
   ContentBlock,
   IContent,
@@ -17,6 +21,7 @@ import {
 
 export interface OnePassTruncatorDeps {
   readonly historyService: HistoryService;
+  readonly rankingRevision: string;
   readonly logger: DebugLogger;
   readonly signal?: AbortSignal;
   /** Raw pending rows ranked beside history; never mutated. */
@@ -206,6 +211,9 @@ export async function truncateToolResponsesInOnePass(
   deps: OnePassTruncatorDeps,
   limit: number,
 ): Promise<UnifiedTruncationResult> {
+  const native = await openNativeToolRanking(deps);
+  if (native !== undefined)
+    return truncateNativeToolResponses(deps, native, limit);
   const working = deps.pendingContents.map((entry) => ({
     ...entry,
     blocks: [...entry.blocks],

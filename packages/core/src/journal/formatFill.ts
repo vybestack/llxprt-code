@@ -524,9 +524,13 @@ export async function fillRowFormats(
   if (
     assigned < 0 &&
     edits.every((item) =>
-      ['factIndex', 'setState', 'checkpoint', 'deleteCheckpoint'].includes(
-        item.kind,
-      ),
+      [
+        'toolRanking',
+        'factIndex',
+        'setState',
+        'checkpoint',
+        'deleteCheckpoint',
+      ].includes(item.kind),
     )
   )
     return { built: next, registered: registry };

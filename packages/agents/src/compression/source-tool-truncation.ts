@@ -37,6 +37,7 @@ export async function truncateSourceToolResponses<S>(
   const result = await truncateToolResponsesInOnePass(
     {
       historyService,
+      rankingRevision: historyService.toolRankingRevision(model),
       logger,
       pendingContents: await candidate.pending.read(),
       estimateBlockTokensAsync: (block) =>

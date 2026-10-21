@@ -15,6 +15,8 @@
  */
 
 import type { NativeDensityPolicy } from './nativeDensityPolicy.js';
+import type { ToolRankingPolicy } from '../../journal/tool-ranking-fill.js';
+import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { IContent } from './IContent.js';
 import type { CurrentTurnMarker } from './historyChronology.js';
 import type { HistoryDumpSnapshot } from './historyDumpSnapshot.js';
@@ -316,6 +318,7 @@ export interface HistoryStorePort {
   contextRange(accumulated: readonly RemovedInteriorSpan[]): ContextRange;
   openDumpSnapshot(): Promise<HistoryDumpSnapshot>;
   openCompressionInput(): Promise<CompressionInputSnapshot>;
+  openToolResponseRanking(policy: ToolRankingPolicy): Promise<VersionSnapshot | undefined>;
 
   // Whole operations. Each one reads the rows it needs itself, so the caller
   // holds no cursor. The journal store reads asynchronously and rejects on

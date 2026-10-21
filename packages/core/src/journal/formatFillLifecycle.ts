@@ -23,6 +23,7 @@ export function requireIncrementalFormats(
     (edit) =>
       ![
         'format',
+        'toolRanking',
         'factIndex',
         'setState',
         'checkpoint',

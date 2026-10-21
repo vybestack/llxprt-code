@@ -231,6 +231,7 @@ async function applyEdit(
       throw new JournalFormatError(
         'A prepared group must resolve before planning',
       );
+    case 'toolRanking':
     case 'factIndex':
     case 'format':
       break;
@@ -317,6 +318,7 @@ function mutationKind(edit: VersionEdit): VersionEdit['kind'] {
       throw new JournalFormatError(
         'A prepared group must resolve before planning',
       );
+    case 'toolRanking':
     case 'factIndex':
     case 'format':
     case 'recency':

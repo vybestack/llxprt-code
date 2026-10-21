@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { ToolRankingTree, TOOL_RANKING_READY } from './tool-ranking-tree.js';
 import { RecencyFacts, RECENCY_INDEX_READY } from './recencyFacts.js';
 import { ACTIVE_FACT_INDEX, NativeFactIndexReader } from './nativeFactIndex.js';
 import { rowFormatAuxKey } from './rowFormat.js';
@@ -90,6 +91,17 @@ export class VersionSnapshot {
     if (new TextDecoder().decode(ready) !== revision)
       throw new JournalFormatError('Recency fact policy requires a fill');
     return new RecencyFacts(this.facts, revision);
+  }
+
+  async toolRanking(revision: string): Promise<ToolRankingTree> {
+    this.requireOpen();
+    const ready = await this.kimi.meta.get(
+      this.version?.roots.metaRoot ?? 0,
+      TOOL_RANKING_READY,
+    );
+    if (ready === undefined || new TextDecoder().decode(ready) !== revision)
+      throw new JournalFormatError('Tool ranking policy requires a fill');
+    return new ToolRankingTree(this.facts);
   }
 
   async nativeFacts(scope: string): Promise<NativeFactIndexReader> {

@@ -59,6 +59,7 @@ const PORT_METHODS = [
   'contextRange',
   'openDumpSnapshot',
   'openCompressionInput',
+  'openToolResponseRanking',
   'dispose',
 ] as const satisfies ReadonlyArray<keyof HistoryStorePort>;
 

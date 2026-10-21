@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { ToolRankingPolicy } from '../../journal/tool-ranking-fill.js';
 import type { GroupPreparation } from '../../journal/preparedGroup.js';
 import type { EntryFill, VersionEdit } from '../../journal/groupEdits.js';
 import type { CommitAck } from '../../journal/groupWriter.js';
@@ -715,6 +716,19 @@ export class JournalHistoryStore implements HistoryStorePort {
   materialize = materializeJournalRows;
 
   openCompressionInput = journalCompressionInput;
+
+  async openToolResponseRanking(
+    policy: ToolRankingPolicy,
+  ): Promise<VersionSnapshot> {
+    await this.waitForDurable();
+    return this.exclusive(async () => {
+      const group = await this.mirrors.commit(
+        await this.topology.prepare([{ kind: 'toolRanking', policy }]),
+      );
+      await group.close();
+      return this.session.store.snapshot();
+    });
+  }
 
   async openDumpSnapshot(): Promise<JournalDumpSnapshot> {
     this.assertUsable();

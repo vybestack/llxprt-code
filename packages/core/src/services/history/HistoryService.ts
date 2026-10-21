@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import type { ToolRankingPolicy } from '../../journal/tool-ranking-fill.js';
+import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type {
   HistoryRepair,
   StagedProfileAdoption,
@@ -96,6 +98,12 @@ export class HistoryService extends HistoryServiceReads {
 
   openCompressionInput(): Promise<CompressionInputSnapshot> {
     return this.journal.openCompressionInput();
+  }
+
+  async openToolResponseRanking(
+    policy: ToolRankingPolicy,
+  ): Promise<VersionSnapshot | undefined> {
+    return this.journal.openToolResponseRanking(policy);
   }
 
   async adoptResumeBoot(

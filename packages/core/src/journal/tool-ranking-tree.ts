@@ -1,0 +1,238 @@
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { JournalFormatError } from './errors.js';
+import type { IdFactQueries } from './idFactQueries.js';
+import type { IdFactBatch } from './idFactBatch.js';
+import { ID_NS } from './idKeys.js';
+
+export const TOOL_RANKING_READY = 'history:tool-ranking:1';
+const utf8 = new TextEncoder();
+const namespace = ID_NS.nativeScalar;
+
+export interface ToolRank {
+  readonly id: number;
+  readonly label: bigint;
+  readonly ordinal: number;
+  readonly block: number;
+  readonly score: number;
+  readonly saving: number;
+}
+export interface ToolRankNode extends ToolRank {
+  readonly left: number;
+  readonly right: number;
+  readonly height: number;
+  readonly count: number;
+  readonly total: number;
+}
+function key(parts: readonly (number | string)[]): Uint8Array {
+  return utf8.encode(JSON.stringify([TOOL_RANKING_READY, ...parts]));
+}
+function view(bytes: Uint8Array): DataView {
+  return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+}
+export function rankBefore(a: ToolRank, b: ToolRank): boolean {
+  if (a.score !== b.score) return a.score > b.score;
+  if (a.ordinal !== b.ordinal) return a.ordinal > b.ordinal;
+  return a.block > b.block;
+}
+
+export class ToolRankingTree {
+  constructor(private readonly facts: IdFactQueries) {}
+
+  private async part(id: number, part: number): Promise<DataView> {
+    const bytes = await this.facts.getEntry(namespace, key(['node', id, part]));
+    if (bytes?.length !== 16)
+      throw new JournalFormatError('Missing tool ranking node');
+    return view(bytes);
+  }
+  async node(id: number): Promise<ToolRankNode> {
+    if (id === 0) throw new RangeError('Empty tool ranking child');
+    const position = await this.part(id, 0);
+    const score = await this.part(id, 1);
+    const tree = await this.part(id, 2);
+    const total = await this.part(id, 3);
+    return {
+      id,
+      label: position.getBigUint64(0, true),
+      ordinal: position.getUint32(8, true),
+      block: position.getUint32(12, true),
+      score: score.getFloat64(0, true),
+      saving: score.getFloat64(8, true),
+      left: tree.getUint32(0, true),
+      right: tree.getUint32(4, true),
+      height: tree.getUint32(8, true),
+      count: tree.getUint32(12, true),
+      total: total.getFloat64(0, true),
+    };
+  }
+  async header(): Promise<{
+    root: number;
+    count: number;
+    rows: number;
+    saving: number;
+  }> {
+    const bytes = await this.facts.getEntry(namespace, key(['header']));
+    if (bytes?.length !== 20)
+      throw new JournalFormatError('Missing tool ranking header');
+    const data = view(bytes);
+    return {
+      root: data.getUint32(0, true),
+      count: data.getUint32(4, true),
+      rows: data.getUint32(8, true),
+      saving: data.getFloat64(12, true),
+    };
+  }
+  async at(root: number, index: number): Promise<ToolRank> {
+    if (!Number.isSafeInteger(index) || index < 0)
+      throw new RangeError('Invalid tool rank');
+    let id = root;
+    let rank = index;
+    while (id !== 0) {
+      const node = await this.node(id);
+      const left = node.left === 0 ? 0 : (await this.node(node.left)).count;
+      if (rank === left) return node;
+      if (rank < left) id = node.left;
+      else {
+        rank -= left + 1;
+        id = node.right;
+      }
+    }
+    throw new RangeError('Tool rank is outside the index');
+  }
+  async *ordered(root: number): AsyncGenerator<ToolRank> {
+    if (root === 0) return;
+    const node = await this.node(root);
+    yield* this.ordered(node.left);
+    yield node;
+    yield* this.ordered(node.right);
+  }
+  async position(label: bigint, block: number): Promise<ToolRank | undefined> {
+    const bytes = await this.facts.getEntry(
+      namespace,
+      key(['position', String(label), block]),
+    );
+    if (bytes === undefined) return undefined;
+    if (bytes.length !== 4)
+      throw new JournalFormatError('Invalid tool ranking position');
+    const node = await this.node(view(bytes).getUint32(0, true));
+    return node.label === label && node.block === block ? node : undefined;
+  }
+}
+
+export class ToolRankingTreeWriter extends ToolRankingTree {
+  constructor(private readonly batch: IdFactBatch) {
+    super(batch.queries);
+  }
+
+  private async write(node: ToolRankNode): Promise<ToolRankNode> {
+    const left = node.left === 0 ? undefined : await this.node(node.left);
+    const right = node.right === 0 ? undefined : await this.node(node.right);
+    const next = {
+      ...node,
+      height: 1 + Math.max(left?.height ?? 0, right?.height ?? 0),
+      count: 1 + (left?.count ?? 0) + (right?.count ?? 0),
+      total:
+        Math.max(0, node.saving) + (left?.total ?? 0) + (right?.total ?? 0),
+    };
+    const position = new Uint8Array(16);
+    const p = view(position);
+    p.setBigUint64(0, next.label, true);
+    p.setUint32(8, next.ordinal, true);
+    p.setUint32(12, next.block, true);
+    const scores = new Uint8Array(16);
+    view(scores).setFloat64(0, next.score, true);
+    view(scores).setFloat64(8, next.saving, true);
+    const tree = new Uint8Array(16);
+    [next.left, next.right, next.height, next.count].forEach((value, at) =>
+      view(tree).setUint32(at * 4, value, true),
+    );
+    const total = new Uint8Array(16);
+    view(total).setFloat64(0, next.total, true);
+    for (const [part, bytes] of [position, scores, tree, total].entries())
+      await this.batch.setEntry(namespace, key(['node', node.id, part]), bytes);
+    return next;
+  }
+  private async rotateRight(node: ToolRankNode): Promise<ToolRankNode> {
+    const left = await this.node(node.left);
+    const down = await this.write({ ...node, left: left.right });
+    return this.write({ ...left, right: down.id });
+  }
+  private async rotateLeft(node: ToolRankNode): Promise<ToolRankNode> {
+    const right = await this.node(node.right);
+    const down = await this.write({ ...node, right: right.left });
+    return this.write({ ...right, left: down.id });
+  }
+  private async balanced(node: ToolRankNode): Promise<ToolRankNode> {
+    const left = node.left === 0 ? undefined : await this.node(node.left);
+    const right = node.right === 0 ? undefined : await this.node(node.right);
+    const balance = (left?.height ?? 0) - (right?.height ?? 0);
+    if (balance > 1 && left !== undefined) {
+      const outer = left.left === 0 ? 0 : (await this.node(left.left)).height;
+      const inner = left.right === 0 ? 0 : (await this.node(left.right)).height;
+      const adjusted =
+        inner > outer
+          ? await this.write({
+              ...node,
+              left: (await this.rotateLeft(left)).id,
+            })
+          : node;
+      return this.rotateRight(adjusted);
+    }
+    if (balance < -1 && right !== undefined) {
+      const outer =
+        right.right === 0 ? 0 : (await this.node(right.right)).height;
+      const inner = right.left === 0 ? 0 : (await this.node(right.left)).height;
+      const adjusted =
+        inner > outer
+          ? await this.write({
+              ...node,
+              right: (await this.rotateRight(right)).id,
+            })
+          : node;
+      return this.rotateLeft(adjusted);
+    }
+    return node;
+  }
+  async insert(root: number, rank: ToolRank): Promise<number> {
+    if (!Number.isFinite(rank.score) || !Number.isFinite(rank.saving))
+      throw new JournalFormatError('Tool ranking measurements must be finite');
+    if (root === 0) {
+      await this.write({
+        ...rank,
+        left: 0,
+        right: 0,
+        height: 1,
+        count: 1,
+        total: Math.max(0, rank.saving),
+      });
+      const bytes = new Uint8Array(4);
+      view(bytes).setUint32(0, rank.id, true);
+      await this.batch.setEntry(
+        namespace,
+        key(['position', String(rank.label), rank.block]),
+        bytes,
+      );
+      return rank.id;
+    }
+    const node = await this.node(root);
+    if (node.id === rank.id)
+      throw new JournalFormatError('Duplicate tool ranking identity');
+    const next = rankBefore(rank, node)
+      ? { ...node, left: await this.insert(node.left, rank) }
+      : { ...node, right: await this.insert(node.right, rank) };
+    return (await this.balanced(await this.write(next))).id;
+  }
+  async finish(
+    root: number,
+    count: number,
+    rows: number,
+    saving: number,
+  ): Promise<void> {
+    const bytes = new Uint8Array(20);
+    const data = view(bytes);
+    data.setUint32(0, root, true);
+    data.setUint32(4, count, true);
+    data.setUint32(8, rows, true);
+    data.setFloat64(12, saving, true);
+    await this.batch.setEntry(namespace, key(['header']), bytes);
+  }
+}
