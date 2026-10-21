@@ -938,7 +938,11 @@ describe('real CLI test-file child retry', () => {
     const file = join(session.root, 'budget.test.ts');
     const marker = join(session.root, 'child-env.json');
     const childEnv = buildSessionEnv(
-      { ...process.env, [PER_FILE_TIMEOUT_ENV_VAR]: '0' },
+      {
+        ...process.env,
+        [PER_FILE_TIMEOUT_ENV_VAR]: '0',
+        LLXPRT_TEST_NATIVE_PRELOAD_PHASES: '1',
+      },
       session,
     );
     try {

@@ -30,6 +30,10 @@ import {
   vi,
 } from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { traceNativePreloadPhase } from './test-utils/native-preload-phase.js';
+
+traceNativePreloadPhase('cli.body-after-static-imports');
+traceNativePreloadPhase('cli.jsdom.entry');
 
 // ---------------------------------------------------------------------------
 // JSDOM globals for React DOM components
@@ -39,6 +43,7 @@ const dom = new JSDOM('<!doctype html><html><body></body></html>', {
   runScripts: 'dangerously',
   url: 'http://localhost/',
 });
+traceNativePreloadPhase('cli.jsdom.exit');
 
 Object.assign(globalThis, {
   window: dom.window,
@@ -333,19 +338,25 @@ if (ReactInternals) {
 // ---------------------------------------------------------------------------
 // Storage isolation
 // ---------------------------------------------------------------------------
+traceNativePreloadPhase('cli.storage-import.entry');
 await import('./test-setup-storage-isolation.js');
+traceNativePreloadPhase('cli.storage-import.exit');
 
 // ---------------------------------------------------------------------------
 // Custom matchers
 // ---------------------------------------------------------------------------
+traceNativePreloadPhase('cli.matchers-import.entry');
 await import('./src/__tests__/customMatchers.js');
+traceNativePreloadPhase('cli.matchers-import.exit');
 
 // ---------------------------------------------------------------------------
 // afterEach cleanup (mirrors test-setup.ts)
 // ---------------------------------------------------------------------------
+traceNativePreloadPhase('cli.cleanup-core-import.entry');
 const { __resetCleanupStateForTesting } = await import(
   './src/utils/cleanup.js'
 );
+traceNativePreloadPhase('cli.cleanup-core-import.exit');
 
 // Bun's mock.module patches a module namespace in place and shares it with
 // this preload, so a test that mocks '@vybestack/llxprt-code-core' would
@@ -398,9 +409,11 @@ function restoreProcessListeners(eventName: ManagedProcessEvent): void {
 // reset, so it is invoked at the top of the same hook rather than registered
 // separately. Without this, a component mounted in one test stays mounted for
 // the rest of the file, leaking effects, timers and the global active stdin.
+traceNativePreloadPhase('cli.ink-import.entry');
 const { cleanup: cleanupInkRenders } = await import(
   './test-utils/ink-testing-library.js'
 );
+traceNativePreloadPhase('cli.ink-import.exit');
 
 async function runCleanupPhases(
   phases: ReadonlyArray<() => void | Promise<void>>,
@@ -441,3 +454,4 @@ afterEach(async () => {
     () => __resetCleanupStateForTesting(),
   ]);
 });
+traceNativePreloadPhase('cli.complete');
