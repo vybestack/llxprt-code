@@ -180,7 +180,7 @@ async function fillMeasurements(
   const snapshot = snapshotOf(ctx, built, appender);
   try {
     const incremental =
-      (edit !== undefined || edits.every((item) => item.kind === 'append')) &&
+      edits.every((item) => item.kind === 'append' || !sourceChange(item)) &&
       (await rankingReady(ctx, policy.revision));
     const old = incremental
       ? await tree.header()
