@@ -107,7 +107,8 @@ export class JournalDetachedPublication {
           if (this.appendProjection === undefined)
             throw new Error('Annotated append projection is not ready');
           projected = await this.appendProjection(spans);
-          if (this.retainAppendSpans) await spans.retain(projected);
+          if (this.retainAppendSpans)
+            await spans.retain(projected.slice(-SPAN_WINDOW_CAPACITY));
         }, owner.edits);
         return projected;
       });

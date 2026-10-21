@@ -30,6 +30,7 @@ export interface GroupDelta {
    * cuts is exactly as it was, so the mirror needs nothing for it.
    */
   readonly touched: readonly bigint[];
+  readonly appendedFrom?: number;
 }
 
 function lowest(values: readonly bigint[]): bigint | undefined {
@@ -81,6 +82,8 @@ export function deltaOf(
   const retains = edits.flatMap((edit) =>
     edit.kind === 'compress' ? [edit.retainFromLabel] : [],
   );
+  const rowsBefore = group.before?.rows ?? 0;
+  const streamedAppend = group.streamedAppend === true;
   return {
     identity: identityOf(group.after),
     before: group.before,
@@ -90,5 +93,6 @@ export function deltaOf(
     popFrom: lowest(cuts),
     trimBelow: highest(retains),
     touched: ascending([...group.writtenLabels, ...edits.flatMap(namedLabels)]),
+    appendedFrom: streamedAppend ? rowsBefore : undefined,
   };
 }

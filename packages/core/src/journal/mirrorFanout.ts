@@ -67,7 +67,10 @@ export class MirrorFanout {
     | { readonly error: unknown; reported: boolean }
     | undefined;
 
-  constructor(private readonly primary: JournalStore) {}
+  constructor(
+    private readonly primary: JournalStore,
+    private readonly metadataKeys: readonly string[] = [],
+  ) {}
 
   get mirrors(): number {
     return this.links.length;
@@ -156,6 +159,7 @@ export class MirrorFanout {
     const link: MirrorLink = {
       store,
       owner,
+      metadataKeys: this.metadataKeys,
       queue: Promise.resolve(),
       recorded: recorded ?? current,
       failure: undefined,

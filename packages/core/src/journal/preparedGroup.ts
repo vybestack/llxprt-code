@@ -1,19 +1,22 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalFormatError, JournalInputError } from './errors.js';
 import { bytesEqual } from './bytes.js';
-import { KeyedMapReader, KeyedMapBatch } from './keyedMap.js';
+import { KeyedMapReader } from './keyedMap.js';
+import { retainMapValue, copyPreparedMetadata } from './preparedMetadata.js';
 import type { RecordAppender } from './groupAppender.js';
 import {
   buildGroup,
   type BuildContext,
   type BuiltGroup,
 } from './groupBuild.js';
-import type { VersionEdit } from './groupEdits.js';
+import type { SourceRow, VersionEdit } from './groupEdits.js';
 import { mutationOf, planGroup } from './groupPlan.js';
 import type { GroupPlan, PlanContext } from './groupPlanTypes.js';
 import type { ReadGroup } from './idFactBatch.js';
 import type { NativeFactIndexRegistration } from './nativeFactIndex.js';
 import type { RowDraft } from './rowDraft.js';
+import type { RecordAccess } from './recordAccess.js';
+import type { MapKind } from './keyedMap.js';
 import type { Version } from './version.js';
 
 export interface PreparedGroup {
@@ -23,6 +26,12 @@ export interface PreparedGroup {
   append(
     rows: AsyncIterable<RowDraft>,
     ownerEdits: readonly VersionEdit[],
+  ): Promise<void>;
+  adopt(rows: AsyncIterable<SourceRow>, nextLabel: bigint): Promise<void>;
+  copyMetadata(
+    source: RecordAccess,
+    root: number,
+    keys: readonly string[],
   ): Promise<void>;
   retainMetadata(key: string, value: Uint8Array): Promise<void>;
 }
@@ -38,28 +47,7 @@ export interface PreparedBuild {
   readonly built: BuiltGroup | undefined;
   readonly edits: readonly VersionEdit[];
   readonly facts: NativeFactIndexRegistration | undefined;
-}
-
-async function retainMetadata(
-  ctx: BuildContext,
-  appender: RecordAppender,
-  built: BuiltGroup,
-  key: string,
-  value: Uint8Array,
-): Promise<BuiltGroup> {
-  await appender.drain();
-  const reader = new KeyedMapReader(
-    ctx.readGroup(appender.nextOffset),
-    ctx.metaCache,
-    'meta',
-    ctx.hasher,
-  );
-  const batch = new KeyedMapBatch(reader, built.state.metaRoot);
-  batch.set(key, value);
-  return {
-    ...built,
-    state: { ...built.state, metaRoot: await batch.commit(appender) },
-  };
+  readonly streamedAppend?: boolean;
 }
 
 async function sameMetadata(
@@ -180,13 +168,51 @@ class PreparedBuilder {
       ...ownerEdits,
       { kind: 'append', rows: [] },
     ];
+    await this.stream(
+      (async function* (): AsyncGenerator<VersionEdit> {
+        for await (const row of rows) yield { kind: 'append', rows: [row] };
+      })(),
+      actual,
+      ownerEdits,
+    );
+    this.result = { ...this.result, streamedAppend: true };
+  }
+
+  async adopt(
+    rows: AsyncIterable<SourceRow>,
+    nextLabel: bigint,
+  ): Promise<void> {
+    const edit = {
+      kind: 'adopt',
+      rows: [],
+      placement: 'end',
+      nextLabel,
+    } satisfies VersionEdit;
+    await this.stream(
+      (async function* (): AsyncGenerator<VersionEdit> {
+        for await (const row of rows) yield { ...edit, rows: [row] };
+      })(),
+      [edit],
+      [],
+    );
+    if (this.result.built === undefined) {
+      this.started = false;
+      await this.build([edit]);
+    }
+  }
+
+  private async stream(
+    edits: AsyncIterable<VersionEdit>,
+    actual: readonly VersionEdit[],
+    ownerEdits: readonly VersionEdit[],
+  ): Promise<void> {
     this.start(actual);
     let base = this.planning.published;
     let spine: BuiltGroup['spine'];
     let first = true;
     try {
       const facts = await this.register(actual);
-      for await (const row of rows) {
+      for await (const edit of edits) {
         await this.appender.drain();
         const access = this.ctx.readGroup(this.appender.nextOffset);
         const priorSpine = spine;
@@ -201,7 +227,7 @@ class PreparedBuilder {
         };
         const plan = await planGroup(
           { ...this.planning, access, published: base },
-          [...(first ? ownerEdits : []), { kind: 'append', rows: [row] }],
+          [...(first ? ownerEdits : []), edit],
         );
         plan.parent = this.planning.published;
         const built = await buildGroup(
@@ -222,21 +248,52 @@ class PreparedBuilder {
     }
   }
 
+  async copyMetadata(
+    source: RecordAccess,
+    root: number,
+    keys: readonly string[],
+    appender: RecordAppender,
+  ): Promise<void> {
+    if (this.result.built === undefined)
+      await this.build([{ kind: 'append', rows: [] }]);
+    const built = this.result.built;
+    if (built === undefined)
+      throw new JournalFormatError('Metadata copy needs a completed group');
+    this.result = {
+      ...this.result,
+      built: await copyPreparedMetadata(
+        this.ctx,
+        appender,
+        built,
+        source,
+        root,
+        keys,
+      ),
+    };
+  }
+
   async retain(
     key: string,
     value: Uint8Array,
     appender: RecordAppender,
+    kind: MapKind = 'meta',
   ): Promise<void> {
-    if (!this.started && (await sameMetadata(this.ctx, key, value))) return;
+    if (
+      !this.started &&
+      kind === 'meta' &&
+      (await sameMetadata(this.ctx, key, value))
+    )
+      return;
     if (!this.started) await this.build([{ kind: 'append', rows: [] }]);
     if (this.result.built === undefined)
       throw new JournalFormatError('Metadata needs a completed row group');
     this.result = {
       ...this.result,
-      built: await retainMetadata(
+      built: await retainMapValue(
         this.ctx,
         appender,
         this.result.built,
+        kind,
         key,
         value,
       ),
@@ -253,8 +310,13 @@ export async function prepareBuild(
   register: RegisterFacts,
 ): Promise<PreparedBuild> {
   const preparation = edits.find((edit) => edit.kind === 'prepared');
-  if (preparation !== undefined && edits.length !== 1)
-    throw new JournalFormatError('A prepared group is a separate operation');
+  if (
+    preparation !== undefined &&
+    edits.some((edit) => edit !== preparation && edit.kind !== 'setState')
+  )
+    throw new JournalFormatError(
+      'A prepared group only accepts accompanying state edits',
+    );
   const builder = new PreparedBuilder(
     ctx,
     planning,
@@ -274,9 +336,16 @@ export async function prepareBuild(
       read: ctx.readGroup,
       build: (actual) => builder.build(actual),
       append: (rows, ownerEdits) => builder.append(rows, ownerEdits),
+      adopt: (rows, nextLabel) => builder.adopt(rows, nextLabel),
+      copyMetadata: (source, root, keys) =>
+        builder.copyMetadata(source, root, keys, writes.appender),
       retainMetadata: (key, value) =>
         builder.retain(key, value, writes.appender),
     });
+    for (const edit of edits) {
+      if (edit.kind === 'setState')
+        await builder.retain(edit.key, edit.value, writes.appender, 'state');
+    }
   } catch (error) {
     const failure = writes.failure();
     if (failure !== undefined) throw failure.error;

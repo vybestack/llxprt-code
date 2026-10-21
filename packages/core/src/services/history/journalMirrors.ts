@@ -5,6 +5,7 @@ import type {
   JournalStore,
 } from '../../journal/journalStore.js';
 import { MirrorFanout } from '../../journal/mirrorFanout.js';
+import { JOURNAL_SPAN_WINDOW } from './journalSpanWindow.js';
 import type { JournalRecordingService } from '../../recording/journalRecordingService.js';
 import type { JournalOwners } from './journalOwners.js';
 import type { JournalSession } from './journalSession.js';
@@ -52,7 +53,7 @@ export class JournalMirrors {
     /** Shared by the mirrors of successive primaries, so a swap keeps the listeners. */
     private readonly retired: Set<() => void> = new Set(),
   ) {
-    this.fanout = new MirrorFanout(primary);
+    this.fanout = new MirrorFanout(primary, [JOURNAL_SPAN_WINDOW]);
   }
 
   get size(): number {

@@ -132,6 +132,7 @@ export interface CommittedGroup {
   readonly read: PinnedRead;
   readonly writtenLabels: readonly bigint[];
   readonly resolvedEdits?: readonly VersionEdit[];
+  readonly streamedAppend?: boolean;
   readonly unchanged?: boolean;
   close(): void | Promise<void>;
 }
@@ -700,18 +701,23 @@ export class JournalStore {
     return registration;
   }
 
-  private async runCommit(
-    edits: readonly VersionEdit[],
-  ): Promise<CommittedGroup> {
+  private assertCompactionUsable(): void {
     if (this.compactionFailure !== undefined)
       throw new JournalFormatError(
         'An earlier compaction of this journal failed',
         { cause: this.compactionFailure.error },
       );
+  }
+
+  private async runCommit(
+    edits: readonly VersionEdit[],
+  ): Promise<CommittedGroup> {
+    this.assertCompactionUsable();
     const before = this.currentVersion;
     const warm = await this.reuseRowFormat(edits);
     if (warm !== undefined) return warm;
     let resolvedEdits = edits;
+    let streamedAppend: boolean | undefined;
     let factIndex = this.factIndex;
     let plan: GroupPlan | undefined;
     let built: BuiltGroup | undefined;
@@ -733,6 +739,7 @@ export class JournalStore {
             (actual) => this.nativeFactRegistration(actual),
           );
           ({ plan, built, edits: resolvedEdits, facts: factIndex } = prepared);
+          streamedAppend = prepared.streamedAppend;
           if (built === undefined) {
             await effect?.settle(false);
             return undefined;
@@ -776,8 +783,9 @@ export class JournalStore {
       before,
       after: this.requireVersion(),
       read,
-      writtenLabels: writtenLabelsOf(plan),
+      writtenLabels: streamedAppend === true ? [] : writtenLabelsOf(plan),
       resolvedEdits,
+      streamedAppend,
       close: () => read.close(),
     };
   }

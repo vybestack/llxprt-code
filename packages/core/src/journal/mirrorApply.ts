@@ -9,13 +9,14 @@ import { acceptedRows } from './mirrorSeed.js';
 import { accepts } from './ownerRules.js';
 import type { RowEntry } from './rowEntry.js';
 import { countRowsBelow, entryByLabel } from './rowTreeQueries.js';
-import { entryAt } from './rowTreeReader.js';
+import { entryAt, iterateRowEntries } from './rowTreeReader.js';
 import type { Version } from './version.js';
 
 /** The mirror a delta is applied to: its file and the agent whose rows it holds. */
 export interface MirrorTarget {
   readonly store: JournalStore;
   readonly owner: number;
+  readonly metadataKeys?: readonly string[];
 }
 
 /** A primary version with the reads that reach its records. */
@@ -35,11 +36,29 @@ export function resyncEdits(
   pin: PinnedVersion | undefined,
 ): VersionEdit[] {
   if (pin === undefined) return [{ kind: 'clear' }];
+  if (target.metadataKeys === undefined || target.metadataKeys.length === 0)
+    return [
+      {
+        kind: 'adoptAll',
+        rows: acceptedRows(pin.access, pin.version, target.owner),
+        nextLabel: pin.version.nextLabel,
+      },
+    ];
+  const keys = target.metadataKeys;
   return [
     {
-      kind: 'adoptAll',
-      rows: acceptedRows(pin.access, pin.version, target.owner),
-      nextLabel: pin.version.nextLabel,
+      kind: 'prepared',
+      admission: [],
+      prepare: async (group) => {
+        await group.build([
+          {
+            kind: 'adoptAll',
+            rows: acceptedRows(pin.access, pin.version, target.owner),
+            nextLabel: pin.version.nextLabel,
+          },
+        ]);
+        await group.copyMetadata(pin.access, pin.version.roots.metaRoot, keys);
+      },
     },
   ];
 }
@@ -174,7 +193,26 @@ export async function mirrorEdits(
 ): Promise<VersionEdit[]> {
   const read = await target.store.openRead();
   try {
-    return await editsFor(delta, target, await stateOf(read));
+    const edits = await editsFor(delta, target, await stateOf(read));
+    const metadataChanged =
+      (target.metadataKeys?.length ?? 0) > 0 &&
+      (delta.before?.roots.metaRoot ?? 0) !== delta.after.roots.metaRoot;
+    if (!metadataChanged || edits.some((edit) => edit.kind === 'prepared'))
+      return edits;
+    return [
+      {
+        kind: 'prepared',
+        admission: [],
+        prepare: async (group) => {
+          await group.build(edits);
+          await group.copyMetadata(
+            delta.access,
+            delta.after.roots.metaRoot,
+            target.metadataKeys ?? [],
+          );
+        },
+      },
+    ];
   } finally {
     await read.close();
   }
@@ -188,6 +226,41 @@ async function editsFor(
   if (delta.resync) {
     if (delta.after.rows === 0 && mirror.rows === 0) return [];
     return resyncEdits(target, { version: delta.after, access: delta.access });
+  }
+  if (delta.appendedFrom !== undefined) {
+    const from = delta.appendedFrom;
+    return [
+      {
+        kind: 'prepared',
+        admission: [],
+        prepare: async (group) => {
+          await group.adopt(
+            (async function* (): AsyncGenerator<SourceRow> {
+              const root = rootRef(delta.after);
+              if (root === undefined)
+                throw new Error('Streamed append has no row root');
+              for await (const entry of iterateRowEntries(
+                delta.access,
+                root,
+                from,
+              )) {
+                if (accepts(target.owner, entry.owner))
+                  yield { source: delta.access, entry };
+              }
+            })(),
+            delta.after.nextLabel,
+          );
+          if (
+            (delta.before?.roots.metaRoot ?? 0) !== delta.after.roots.metaRoot
+          )
+            await group.copyMetadata(
+              delta.access,
+              delta.after.roots.metaRoot,
+              target.metadataKeys ?? [],
+            );
+        },
+      },
+    ];
   }
   const edits = await cutEdits(delta, mirror);
   const { dropped, copied } = await labelChanges(delta, target.owner);
