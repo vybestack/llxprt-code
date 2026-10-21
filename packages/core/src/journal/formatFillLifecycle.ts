@@ -30,15 +30,17 @@ export function requireIncrementalFormats(
       ].includes(edit.kind),
   );
   if (!changed) return;
+  const anthropic =
+    slots?.formatSlots.filter((format) => format.summaryKind === 'anthropic') ??
+    [];
   const hasUnattachedAnthropic =
-    slots?.formatSlots.some(
-      (format) =>
-        format.summaryKind === 'anthropic' &&
-        !registrations.some(
-          ({ registration }) =>
-            rowFormatKey(registration.settings) === format.formatKeyHash,
-        ),
-    ) === true;
+    anthropic.length > 0 &&
+    !registrations.some(({ registration }) =>
+      anthropic.some(
+        (format) =>
+          rowFormatKey(registration.settings) === format.formatKeyHash,
+      ),
+    );
   if (
     hasUnattachedAnthropic ||
     registrations.some(

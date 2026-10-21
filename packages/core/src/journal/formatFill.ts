@@ -455,6 +455,8 @@ async function fillRegisteredSlot(
   const registration = registry.find(
     (item) => item.key === format.formatKeyHash,
   )?.registration;
+  if (registration === undefined && format.summaryKind === 'anthropic')
+    return invalidateAnthropicFormats(built, format.formatKeyHash);
   if (registration === undefined)
     throw new JournalFormatError(
       'Active format measurer must be registered before changing history',

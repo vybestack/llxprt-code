@@ -67,6 +67,33 @@ async function storedRows(session: JournalSession): Promise<IContent[]> {
   for await (const stored of session.rows()) rows.push(stored.content);
   return rows;
 }
+async function matchesOldEmitter(
+  session: JournalSession,
+  rows: readonly IContent[],
+  input = settings,
+): Promise<void> {
+  const pin = await session.store.snapshot();
+  try {
+    for (const strip of ['none', 'all', 'allButLast'] as const) {
+      const expected = await emittedCandidate(
+        await normalizedRows(rows),
+        { reasoningEnabled: true, currentModel: input.model, strip },
+        {},
+      );
+      const plan = await planStoredAnthropicRequest(
+        pin,
+        input,
+        { strip },
+        { model: input.model },
+      );
+      expect(plan.messagesBytes).toBe(Buffer.byteLength(expected));
+      expect(plan.messages).toBe(JSON.parse(expected).length);
+    }
+    expect(pin.version?.aggregate.units).toBe(rows.length);
+  } finally {
+    await pin.close();
+  }
+}
 async function bytes(
   session: JournalSession,
   input = settings,
@@ -104,20 +131,26 @@ describe('native Anthropic append lifetime and invalidation', () => {
         { journal: testJournalSeams().dependencies },
       );
       try {
-        const row: IContent =
-          mutation === 'chain-thinking'
-            ? {
-                speaker: 'ai',
-                blocks: [
-                  {
-                    type: 'thinking',
-                    thought: 'old',
-                    sourceField: 'thinking',
-                    signature: 'sig',
-                  },
-                ],
-              }
-            : text('original');
+        const specialRows: Readonly<Record<string, IContent>> = {
+          'append-result': {
+            speaker: 'ai',
+            blocks: [
+              { type: 'tool_call', id: 'call_x', name: 'read', parameters: {} },
+            ],
+          },
+          'chain-thinking': {
+            speaker: 'ai',
+            blocks: [
+              {
+                type: 'thinking',
+                thought: 'old',
+                sourceField: 'thinking',
+                signature: 'sig',
+              },
+            ],
+          },
+        };
+        const row = specialRows[mutation] ?? text('original');
         await session.append([row]);
         await register(session);
         const old = await session.store.snapshot();
@@ -173,6 +206,8 @@ describe('native Anthropic append lifetime and invalidation', () => {
           await session.store.commit([edits[mutation]]);
           expect(session.store.published).not.toBe(old.version);
           await expect(bytes(session)).rejects.toThrow(/stale|unmeasured/);
+          await rejectsInvalidatedPolicies(session);
+          await session.append([text('still requires explicit refill')]);
           await rejectsInvalidatedPolicies(session);
           expect(
             await planStoredAnthropicRequest(
@@ -234,9 +269,24 @@ describe('native Anthropic append lifetime and invalidation', () => {
       try {
         await fork.append([text('fork')]);
         expect(await bytes(fork, current)).toBeGreaterThan(old.messagesBytes);
+        await matchesOldEmitter(
+          fork,
+          [text('original'), text('fork')],
+          current,
+        );
         await session.append([text('parent')]);
         expect(await bytes(session, current)).toBeGreaterThan(
           old.messagesBytes,
+        );
+        await matchesOldEmitter(
+          session,
+          [text('original'), text('parent')],
+          current,
+        );
+        await matchesOldEmitter(
+          fork,
+          [text('original'), text('fork')],
+          current,
         );
         expect(
           await planStoredAnthropicRequest(
@@ -253,6 +303,106 @@ describe('native Anthropic append lifetime and invalidation', () => {
       expect(await session.store.compact()).toBe('swapped');
       await session.append([text('after physical copy')]);
       expect(await bytes(session, current)).toBeGreaterThan(0);
+      await session.close();
+      session = await JournalSession.open(path, {
+        journal: testJournalSeams().dependencies,
+      });
+      await register(session, current);
+      const reopened = await session.store.snapshot();
+      try {
+        const before = await planStoredAnthropicRequest(
+          reopened,
+          current,
+          {},
+          { model: current.model },
+        );
+        await session.append([
+          text('reopened with only current settings attached'),
+        ]);
+        await matchesOldEmitter(
+          session,
+          [
+            text('original'),
+            text('parent'),
+            text('after physical copy'),
+            text('reopened with only current settings attached'),
+          ],
+          current,
+        );
+        const latest = await session.store.snapshot();
+        try {
+          const after = await planStoredAnthropicRequest(
+            latest,
+            current,
+            {},
+            { model: current.model },
+          );
+          expect(after.generation).toBe(before.generation);
+          await expect(
+            planStoredAnthropicRequest(
+              latest,
+              { ...settings, model: 'claude-sonnet-4-2' },
+              {},
+              { model: 'claude-sonnet-4-2' },
+            ),
+          ).rejects.toThrow(/stale|unmeasured/);
+          expect(
+            await planStoredAnthropicRequest(
+              reopened,
+              current,
+              {},
+              { model: current.model },
+            ),
+          ).toStrictEqual(before);
+        } finally {
+          await latest.close();
+        }
+      } finally {
+        await reopened.close();
+      }
+    } finally {
+      await session.close();
+    }
+  });
+  it('keeps warm empty registrations and clear/refill free of phantom units', async () => {
+    const session = await JournalSession.create(`${directory()}/empty.llxj`, {
+      journal: testJournalSeams().dependencies,
+    });
+    try {
+      await register(session);
+      await matchesOldEmitter(session, []);
+      const measured = await session.store.snapshot();
+      try {
+        await register(session);
+        expect(session.store.published).toBe(measured.version);
+      } finally {
+        await measured.close();
+      }
+      const changed = { ...settings, model: 'claude-sonnet-4-empty' };
+      await register(session, changed);
+      await matchesOldEmitter(session, [], changed);
+      await session.append([text('first')]);
+      await matchesOldEmitter(session, [text('first')], changed);
+      await session.store.commit([{ kind: 'clear' }]);
+      const stale = await session.store.snapshot();
+      try {
+        for (const strip of ['none', 'all', 'allButLast'] as const)
+          await expect(
+            planStoredAnthropicRequest(
+              stale,
+              changed,
+              { strip },
+              { model: changed.model },
+            ),
+          ).rejects.toThrow(/stale|unmeasured/);
+        expect(stale.version?.aggregate.units).toBe(0);
+      } finally {
+        await stale.close();
+      }
+      await register(session, changed);
+      await matchesOldEmitter(session, [], changed);
+      await session.append([text('after empty refill')]);
+      await matchesOldEmitter(session, [text('after empty refill')], changed);
     } finally {
       await session.close();
     }
