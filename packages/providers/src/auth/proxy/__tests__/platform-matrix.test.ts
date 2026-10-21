@@ -430,6 +430,12 @@ describe('Platform Matrix Tests (Phase 38)', () => {
       });
     });
 
+    it('preserves the Windows named-pipe namespace root in the parent fixture', () => {
+      const worstCasePath = '\\\\.\\pipe\\lxcp-99999-AAAAAAAAAAAAAAAAAAAAAA';
+      expect(path.win32.dirname(worstCasePath)).toBe('\\\\.\\pipe\\');
+      expect(path.win32.dirname(worstCasePath)).not.toBe('\\\\.\\pipe');
+    });
+
     /**
      * @requirement R3.1
      * @scenario Worst-case socket path length verification
@@ -452,7 +458,7 @@ describe('Platform Matrix Tests (Phase 38)', () => {
           })
         : path.join(resolvedTmpdir, `lc-${uid}`, `${maxPid}-${nonce}.sock`);
       expect(path.dirname(worstCasePath)).toBe(
-        isWindows ? '\\\\.\\pipe' : path.join(resolvedTmpdir, `lc-${uid}`),
+        isWindows ? '\\\\.\\pipe\\' : path.join(resolvedTmpdir, `lc-${uid}`),
       );
       expect(worstCasePath.length).toBeLessThanOrEqual(isWindows ? 256 : 104);
     });
