@@ -1,0 +1,732 @@
+{
+  "task": "issue854 native Anthropic repair-byte proof checkpoint; stored Anthropic format incomplete",
+  "productionCommit": "20707e7e861ddfc69406f9c07f6730d3bd13d3e3",
+  "testedProductionCommit": "06a3eb33cc8070c3b240cfb26a425fc2eab5853d",
+  "checkedAt": "2026-10-21T05:32:37.106Z",
+  "scope": {
+    "implemented": "Held native request supplies normalized occurrence facts and source rows. Native engine derives conversion-message grouping, consumed/moved result decisions, last-kept thinking, final messages-array bytes and numeric byte/message measurement without reference overlays.",
+    "proofOnlyFinalization": "No implementation change or new execution lane. Two existing frozen/scale test files are added unchanged with this receipt and the status/map/decision updates.",
+    "newStoredLensFields": [],
+    "newPersistedSemanticChainOrRepairFields": [],
+    "anthropicRegistration": false,
+    "fullRequestContentLengthPlanner": false,
+    "providerRoutesAndDefault": "unchanged",
+    "settings": {
+      "formatId": "anthropic",
+      "formatRev": 1,
+      "cache": "off",
+      "isOAuth": false,
+      "toolNameTransform": "none",
+      "unsupportedMedia": "notice",
+      "corpusEndpoint": "https://api.anthropic.com",
+      "corpusOutputLimits": null,
+      "corpusSupportsUrlImages": true,
+      "corpusMediaPdfEnabled": true,
+      "corpusReasoningFieldName": "reasoning_content",
+      "modelReasoningPolicyAndImageBudget": "taken from unchanged corpus inputs; independent expected output uses corresponding captured wire settings",
+      "capture": "structuredClone settings and copy repair policy before held asynchronous reads",
+      "refused": "Other format/revision, OAuth, tool-name transform, unsupported-media policy, absent/non-off cache, non-base64/non-URL stored media, and unnormalized AI-carried results",
+      "limits": "This corpus does not establish arbitrary output-limit settings, OAuth/cache variants, full request-envelope admission, media generations or every valid history. Cross-ID repair replay throws when metadata depth exceeds 16."
+    },
+    "open": [
+      "Persisted semantic conversion-message/chain/consumption summaries and Anthropic registration/LENS writer",
+      "Incremental semantic affected-holder repair before acknowledgement",
+      "Full request/envelope/header length planning and tail/selected-range corrections",
+      "Cache 5m/1h and stored-media/image generations",
+      "Anthropic generation/unmeasured-zero and native stored-format lifecycle acceptance",
+      "Repeated-ID quadratic replay/group-search cost and deeper cross-ID histories",
+      "Retained heap at 10k/100k/1M and 100000-call construction",
+      "LENS recomputation/live-byte accounting and cold Mistral performance",
+      "W23 eight planning/header cases, Stage A/W25/cutover and W26"
+    ]
+  },
+  "sources": [
+    {
+      "path": "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+      "sha256": "0fc5c404a4bbd69e1765b1639c5a4f60b200badd40f9c4f240e4af2e5aa81bfe",
+      "committed": "0fc5c404a4bbd69e1765b1639c5a4f60b200badd40f9c4f240e4af2e5aa81bfe",
+      "commitBinding": "06a3eb33cc8070c3b240cfb26a425fc2eab5853d"
+    },
+    {
+      "path": "packages/core/src/services/history/journal-request-occurrences.ts",
+      "sha256": "2d6dd90f2280f89a8a99d3d30c3240ab4ff37eee328460bf3c15e276958dab3e",
+      "committed": "2d6dd90f2280f89a8a99d3d30c3240ab4ff37eee328460bf3c15e276958dab3e",
+      "commitBinding": "06a3eb33cc8070c3b240cfb26a425fc2eab5853d"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-unit-facts.ts",
+      "sha256": "f211643ec8d0e0dbb2a1b946b34729fc74d5a1fc25b2afd5bf148d5475588605",
+      "committed": "f211643ec8d0e0dbb2a1b946b34729fc74d5a1fc25b2afd5bf148d5475588605",
+      "commitBinding": "06a3eb33cc8070c3b240cfb26a425fc2eab5853d"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-repair-source.ts",
+      "sha256": "c6cb1ce0f31b699485bccb8939a6672f3d51d9f735a833db356c2751f6cd9271",
+      "committed": "c6cb1ce0f31b699485bccb8939a6672f3d51d9f735a833db356c2751f6cd9271",
+      "commitBinding": "06a3eb33cc8070c3b240cfb26a425fc2eab5853d"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-tool-repair.ts",
+      "sha256": "8dc7132fea6285e13cb8efe4839f1e66d0e9b44c94c87d1386408a23aefcde2d",
+      "committed": "8dc7132fea6285e13cb8efe4839f1e66d0e9b44c94c87d1386408a23aefcde2d",
+      "commitBinding": "06a3eb33cc8070c3b240cfb26a425fc2eab5853d"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-stream-repair.ts",
+      "sha256": "74ff3288744f37d3d30d73a46ff7b2e790399fb509b1673d814b05e1b738a14b",
+      "committed": "74ff3288744f37d3d30d73a46ff7b2e790399fb509b1673d814b05e1b738a14b",
+      "commitBinding": "06a3eb33cc8070c3b240cfb26a425fc2eab5853d"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-stream-repair.test.ts",
+      "sha256": "b8031c8c1b5817377ee17639f7ca6f55d6f4d55a938708c42927bf4a231c5f77",
+      "committed": "b8031c8c1b5817377ee17639f7ca6f55d6f4d55a938708c42927bf4a231c5f77",
+      "commitBinding": "06a3eb33cc8070c3b240cfb26a425fc2eab5853d"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-stream-repair-cases.test.ts",
+      "sha256": "5e0b551ad8ad29847e7c5d93d7d8176efacb2e71b75148f172b5036a63a393a0",
+      "committed": "5e0b551ad8ad29847e7c5d93d7d8176efacb2e71b75148f172b5036a63a393a0",
+      "commitBinding": "06a3eb33cc8070c3b240cfb26a425fc2eab5853d"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-stream-repair-frozen.test.ts",
+      "sha256": "18f151c82689e76af649d45820f03a99992e1d50a8d39e131670c6678cb63261",
+      "commitBinding": "Existing untracked proof test added unchanged by this checkpoint"
+    },
+    {
+      "path": "packages/providers/src/anthropic/anthropic-stream-repair-scale.test.ts",
+      "sha256": "0663f1e3821ad9fad145b0ba71dfd7c2dc8cb9bf0a234987b4245176a2a2e115",
+      "commitBinding": "Existing untracked proof test added unchanged by this checkpoint"
+    }
+  ],
+  "acceptance": {
+    "passes": 63,
+    "failures": 0,
+    "skips": 0,
+    "assertions": 10226,
+    "processes": 7,
+    "files": 7,
+    "serial": true,
+    "timeout": 180000,
+    "steps": [
+      {
+        "name": "root-repair",
+        "cwd": "packages/providers",
+        "args": [
+          "bun",
+          "test",
+          "src/anthropic/anthropic-stream-repair.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "pid": 81443,
+        "driverPid": 81436,
+        "code": 0,
+        "start": "2026-10-21T05:01:07.998Z",
+        "finish": "2026-10-21T05:01:08.470Z",
+        "log": "tmp/p5/anthropic-repair-run-s/finalize/verify-81436/root-repair.log",
+        "sha256": "e2e255d7c72e443321a71493fc12906acf41baff1c5462a250b90b4e6286e346",
+        "passes": 1,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 2
+      },
+      {
+        "name": "named-repair",
+        "cwd": "packages/providers",
+        "args": [
+          "bun",
+          "test",
+          "src/anthropic/anthropic-stream-repair-cases.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "pid": 81449,
+        "driverPid": 81436,
+        "code": 0,
+        "start": "2026-10-21T05:01:08.471Z",
+        "finish": "2026-10-21T05:01:10.057Z",
+        "log": "tmp/p5/anthropic-repair-run-s/finalize/verify-81436/named-repair.log",
+        "sha256": "a5256522738cd1315593fd265b820e15c71dfed241072a49835036c6460e5ce4",
+        "passes": 20,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 53
+      },
+      {
+        "name": "scale",
+        "args": [
+          "bun",
+          "test",
+          "src/anthropic/anthropic-stream-repair-scale.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "cwd": "packages/providers",
+        "pid": 85983,
+        "driverPid": 85970,
+        "code": 0,
+        "start": "2026-10-21T05:05:23.811Z",
+        "finish": "2026-10-21T05:06:21.768Z",
+        "log": "tmp/p5/anthropic-repair-run-s/finalize/accept-85970/scale.log",
+        "logSha256": "93cf139842c6407ef4294765d1976d25ab239b0f171bf255e9862bf690d4d09f",
+        "inventoryEntries": 8923,
+        "changed": [],
+        "passes": 2,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 8
+      },
+      {
+        "name": "frozen",
+        "args": [
+          "bun",
+          "test",
+          "src/anthropic/anthropic-stream-repair-frozen.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "cwd": "packages/providers",
+        "pid": 87620,
+        "driverPid": 85970,
+        "code": 0,
+        "start": "2026-10-21T05:06:21.771Z",
+        "finish": "2026-10-21T05:31:00.510Z",
+        "log": "tmp/p5/anthropic-repair-run-s/finalize/accept-85970/frozen.log",
+        "logSha256": "3330f60cbec8199b8681957eb19a85c62cee6da5fa333d2adfbe237aa7221219",
+        "inventoryEntries": 8923,
+        "changed": [],
+        "passes": 11,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 10015
+      },
+      {
+        "file": "journal-anthropic-facts.test.ts",
+        "args": [
+          "bun",
+          "test",
+          "src/services/history/journal-anthropic-facts.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "cwd": "packages/core",
+        "pid": 10765,
+        "driverPid": 493,
+        "code": 0,
+        "start": "2026-10-21T05:31:02.418Z",
+        "finish": "2026-10-21T05:31:03.366Z",
+        "log": "tmp/p5/anthropic-repair-run-s/finalize/regressions-493/journal-anthropic-facts.test.ts.log",
+        "logSha256": "8481bef6146bbbc1ce52efc0696d11bf9ca39d86f9602d464b6850b2b6b9aa42",
+        "inventoryEntries": 8923,
+        "changed": [],
+        "passes": 6,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 26
+      },
+      {
+        "file": "journal-range-integrity.test.ts",
+        "args": [
+          "bun",
+          "test",
+          "src/services/history/journal-range-integrity.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "cwd": "packages/core",
+        "pid": 10784,
+        "driverPid": 493,
+        "code": 0,
+        "start": "2026-10-21T05:31:03.367Z",
+        "finish": "2026-10-21T05:31:03.979Z",
+        "log": "tmp/p5/anthropic-repair-run-s/finalize/regressions-493/journal-range-integrity.test.ts.log",
+        "logSha256": "eb7f744caf07185c8a0a2d3a504b54e19175543873cd477b396918187af49324",
+        "inventoryEntries": 8923,
+        "changed": [],
+        "passes": 19,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 29
+      },
+      {
+        "file": "journal-range-lifecycle.test.ts",
+        "args": [
+          "bun",
+          "test",
+          "src/services/history/journal-range-lifecycle.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "cwd": "packages/core",
+        "pid": 10792,
+        "driverPid": 493,
+        "code": 0,
+        "start": "2026-10-21T05:31:03.980Z",
+        "finish": "2026-10-21T05:31:04.575Z",
+        "log": "tmp/p5/anthropic-repair-run-s/finalize/regressions-493/journal-range-lifecycle.test.ts.log",
+        "logSha256": "ea5efad6f2752d1940d8e26e32b63d4b62087be796998734da9b1c64e05a7019",
+        "inventoryEntries": 8923,
+        "changed": [],
+        "passes": 4,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 93
+      }
+    ],
+    "corpus": {
+      "matched": 5000,
+      "thinking": 3021,
+      "repaired": 2542,
+      "chained": 1078,
+      "lastKept": 516,
+      "domain": "independently normalized frozen source histories, not original raw frozen bodies",
+      "pid": 87620,
+      "thinkingInterpretation": "reasoning-enabled histories, not count of histories containing thinking blocks",
+      "flagsOverlap": true,
+      "sourceHistories": 5000,
+      "actualNativeByteCases": 5000,
+      "rawFrozenBodyParityClaim": false,
+      "oracle": "Independent old normalizedRows(streamProviderContent) plus retained emitter and phase-zero analysis. Raw source rows enter the native journal; the resulting native normalized view supplies actual bytes, length and message count.",
+      "rawDomain": "Original raw ONE/ONE/TWO is a separate named assertion. It is not substituted for normalized-body expectations.",
+      "fixtureChanges": 0,
+      "exclusions": 0
+    },
+    "reporting": "Bun stdout pass/fail/assertion summaries, child exit codes and SHA-256 receipts. No JUnit was emitted by these commands and no JUnit-based acceptance is claimed.",
+    "scope": "Seven complete files from their package working directories; no full-monorepo or all-affected-shard execution and no both-backend claim for this final lane.",
+    "earlyNamedTestReuse": "Relevant production/dependency/named-test hashes match final source. The only hash difference in the wider early receipt is the unrelated scale-test helper; final scale test and final lint/types/format/graph/audit bind that helper."
+  },
+  "gates": {
+    "count": 8,
+    "steps": [
+      {
+        "name": "declarations-core",
+        "cwd": "packages/core",
+        "args": [
+          "bun",
+          "../../scripts/build_package.ts"
+        ],
+        "env": {
+          "LLXPRT_EMIT_DECLARATIONS_ONLY": "1"
+        },
+        "pid": 81469,
+        "driverPid": 81436,
+        "code": 0,
+        "start": "2026-10-21T05:01:10.058Z",
+        "finish": "2026-10-21T05:01:13.967Z",
+        "log": "tmp/p5/anthropic-repair-run-s/finalize/verify-81436/declarations-core.log",
+        "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127",
+        "irrelevantInventoryDifferences": [
+          {
+            "path": "packages/providers/src/anthropic/anthropic-stream-repair-scale.test.ts",
+            "sha256": "ddfadc059ba58c50f61761cc1ce266f3c69d718ebbd19a02ab7ef5fd0d07e435"
+          }
+        ],
+        "reuse": "Only the independent scale-test helper changed. No production, dependency, named-test or declaration input changed; final provider types/lint/format/graph/audit receipts cover the final helper."
+      },
+      {
+        "name": "declarations-providers",
+        "cwd": "packages/providers",
+        "args": [
+          "bun",
+          "../../scripts/build_package.ts"
+        ],
+        "env": {
+          "LLXPRT_EMIT_DECLARATIONS_ONLY": "1"
+        },
+        "pid": 81540,
+        "driverPid": 81436,
+        "code": 0,
+        "start": "2026-10-21T05:01:13.968Z",
+        "finish": "2026-10-21T05:01:16.259Z",
+        "log": "tmp/p5/anthropic-repair-run-s/finalize/verify-81436/declarations-providers.log",
+        "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127",
+        "irrelevantInventoryDifferences": [
+          {
+            "path": "packages/providers/src/anthropic/anthropic-stream-repair-scale.test.ts",
+            "sha256": "ddfadc059ba58c50f61761cc1ce266f3c69d718ebbd19a02ab7ef5fd0d07e435"
+          }
+        ],
+        "reuse": "Only the independent scale-test helper changed. No production, dependency, named-test or declaration input changed; final provider types/lint/format/graph/audit receipts cover the final helper."
+      },
+      {
+        "name": "types-core",
+        "args": [
+          "bunx",
+          "tsc",
+          "--noEmit",
+          "-p",
+          "packages/core/tsconfig.noemit.json"
+        ],
+        "pid": 81577,
+        "driverPid": 81436,
+        "code": 0,
+        "start": "2026-10-21T05:01:16.260Z",
+        "finish": "2026-10-21T05:01:22.933Z",
+        "log": "tmp/p5/anthropic-repair-run-s/finalize/verify-81436/types-core.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "irrelevantInventoryDifferences": [
+          {
+            "path": "packages/providers/src/anthropic/anthropic-stream-repair-scale.test.ts",
+            "sha256": "ddfadc059ba58c50f61761cc1ce266f3c69d718ebbd19a02ab7ef5fd0d07e435"
+          }
+        ],
+        "reuse": "Only the independent scale-test helper changed. No production, dependency, named-test or declaration input changed; final provider types/lint/format/graph/audit receipts cover the final helper."
+      },
+      {
+        "name": "types-providers",
+        "args": [
+          "bunx",
+          "tsc",
+          "--noEmit",
+          "-p",
+          "packages/providers/tsconfig.noemit.json"
+        ],
+        "pid": 83950,
+        "driverPid": 83934,
+        "code": 0,
+        "start": "2026-10-21T05:03:30.410Z",
+        "finish": "2026-10-21T05:03:32.741Z",
+        "log": "tmp/p5/anthropic-repair-run-s/finalize/verify-83934/types-providers.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "irrelevantInventoryDifferences": [],
+        "reuse": "All scoped hashes match final tested inputs"
+      },
+      {
+        "name": "lint",
+        "args": [
+          "bunx",
+          "eslint",
+          "--max-warnings",
+          "0",
+          "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+          "packages/core/src/services/history/journal-request-occurrences.ts",
+          "packages/providers/src/anthropic/anthropic-unit-facts.ts",
+          "packages/providers/src/anthropic/anthropic-repair-source.ts",
+          "packages/providers/src/anthropic/anthropic-tool-repair.ts",
+          "packages/providers/src/anthropic/anthropic-stream-repair.ts",
+          "packages/providers/src/anthropic/anthropic-stream-repair.test.ts",
+          "packages/providers/src/anthropic/anthropic-stream-repair-cases.test.ts",
+          "packages/providers/src/anthropic/anthropic-stream-repair-frozen.test.ts",
+          "packages/providers/src/anthropic/anthropic-stream-repair-scale.test.ts"
+        ],
+        "pid": 84006,
+        "driverPid": 83934,
+        "code": 0,
+        "start": "2026-10-21T05:03:32.742Z",
+        "finish": "2026-10-21T05:03:41.078Z",
+        "log": "tmp/p5/anthropic-repair-run-s/finalize/verify-83934/lint.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "irrelevantInventoryDifferences": [],
+        "reuse": "All scoped hashes match final tested inputs"
+      },
+      {
+        "name": "prettier",
+        "args": [
+          "bunx",
+          "prettier",
+          "--check",
+          "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+          "packages/core/src/services/history/journal-request-occurrences.ts",
+          "packages/providers/src/anthropic/anthropic-unit-facts.ts",
+          "packages/providers/src/anthropic/anthropic-repair-source.ts",
+          "packages/providers/src/anthropic/anthropic-tool-repair.ts",
+          "packages/providers/src/anthropic/anthropic-stream-repair.ts",
+          "packages/providers/src/anthropic/anthropic-stream-repair.test.ts",
+          "packages/providers/src/anthropic/anthropic-stream-repair-cases.test.ts",
+          "packages/providers/src/anthropic/anthropic-stream-repair-frozen.test.ts",
+          "packages/providers/src/anthropic/anthropic-stream-repair-scale.test.ts"
+        ],
+        "pid": 84142,
+        "driverPid": 83934,
+        "code": 0,
+        "start": "2026-10-21T05:03:41.079Z",
+        "finish": "2026-10-21T05:03:41.297Z",
+        "log": "tmp/p5/anthropic-repair-run-s/finalize/verify-83934/prettier.log",
+        "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+        "irrelevantInventoryDifferences": [],
+        "reuse": "All scoped hashes match final tested inputs"
+      },
+      {
+        "name": "graph",
+        "args": [
+          "bun",
+          "scripts/check-affected-test-shards.ts"
+        ],
+        "pid": 84146,
+        "driverPid": 83934,
+        "code": 0,
+        "start": "2026-10-21T05:03:41.298Z",
+        "finish": "2026-10-21T05:03:43.569Z",
+        "log": "tmp/p5/anthropic-repair-run-s/finalize/verify-83934/graph.log",
+        "sha256": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67",
+        "irrelevantInventoryDifferences": [],
+        "reuse": "All scoped hashes match final tested inputs"
+      },
+      {
+        "name": "audit",
+        "args": [
+          "bun",
+          "scripts/test-audit/scan.ts",
+          "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/anthropic-repair-run-s/finalize/verify-83934/audit"
+        ],
+        "pid": 84182,
+        "driverPid": 83934,
+        "code": 0,
+        "start": "2026-10-21T05:03:43.570Z",
+        "finish": "2026-10-21T05:03:46.451Z",
+        "log": "tmp/p5/anthropic-repair-run-s/finalize/verify-83934/audit.log",
+        "sha256": "8cebb07991e68d051eb1e9640850c555fbd9f3d1be3ae603f3c66e68307429f5",
+        "irrelevantInventoryDifferences": [],
+        "reuse": "All scoped hashes match final tested inputs"
+      }
+    ],
+    "audit": {
+      "touchedFindings": [],
+      "repositoryFindings": 2539,
+      "findings": {
+        "path": "tmp/p5/anthropic-repair-run-s/finalize/verify-83934/audit/findings.tsv",
+        "sha256": "e539d6e6cd25483cd80f27c3cd7bee7dbbd063a797b47c62c0395da848aab709"
+      },
+      "meaning": "No touched findings; existing repository findings are not cleared by this scoped checkpoint. Import-graph drift check is not affected-shard execution."
+    }
+  },
+  "controls": {
+    "accepted": [
+      {
+        "name": "wrong-consumption",
+        "file": "packages/providers/src/anthropic/anthropic-tool-repair.ts",
+        "pid": 85149,
+        "driverPid": 85146,
+        "code": 1,
+        "assertion": true,
+        "cmpExit": 0,
+        "before": "8dc7132fea6285e13cb8efe4839f1e66d0e9b44c94c87d1386408a23aefcde2d",
+        "after": "8dc7132fea6285e13cb8efe4839f1e66d0e9b44c94c87d1386408a23aefcde2d",
+        "restored": true,
+        "log": "tmp/p5/anthropic-repair-run-s/finalize/controls-85146/wrong-consumption.log",
+        "logSha256": "a15a1e34c3b4338447b84a7eea869e8d1f656550fd15ecd260c515fc82ac62a8",
+        "passes": 15,
+        "failures": 5,
+        "currentCmp": 0,
+        "currentSha256": "8dc7132fea6285e13cb8efe4839f1e66d0e9b44c94c87d1386408a23aefcde2d"
+      },
+      {
+        "name": "wrong-target",
+        "file": "packages/providers/src/anthropic/anthropic-stream-repair.ts",
+        "pid": 85169,
+        "driverPid": 85146,
+        "code": 1,
+        "assertion": true,
+        "cmpExit": 0,
+        "before": "74ff3288744f37d3d30d73a46ff7b2e790399fb509b1673d814b05e1b738a14b",
+        "after": "74ff3288744f37d3d30d73a46ff7b2e790399fb509b1673d814b05e1b738a14b",
+        "restored": true,
+        "log": "tmp/p5/anthropic-repair-run-s/finalize/controls-85146/wrong-target.log",
+        "logSha256": "1e09d024e477b723a4cf00aee0e9a7c3ad6c6070140da8057456300a632c5cab",
+        "passes": 18,
+        "failures": 2,
+        "currentCmp": 0,
+        "currentSha256": "74ff3288744f37d3d30d73a46ff7b2e790399fb509b1673d814b05e1b738a14b"
+      },
+      {
+        "name": "wrong-last-kept",
+        "file": "packages/providers/src/anthropic/anthropic-stream-repair.ts",
+        "pid": 85225,
+        "driverPid": 85146,
+        "code": 1,
+        "assertion": true,
+        "cmpExit": 0,
+        "before": "74ff3288744f37d3d30d73a46ff7b2e790399fb509b1673d814b05e1b738a14b",
+        "after": "74ff3288744f37d3d30d73a46ff7b2e790399fb509b1673d814b05e1b738a14b",
+        "restored": true,
+        "log": "tmp/p5/anthropic-repair-run-s/finalize/controls-85146/wrong-last-kept.log",
+        "logSha256": "55f097e8c1aebcf72e1c36d838a19e6af7b6cb9727474f4f08113243e16969bc",
+        "passes": 17,
+        "failures": 3,
+        "currentCmp": 0,
+        "currentSha256": "74ff3288744f37d3d30d73a46ff7b2e790399fb509b1673d814b05e1b738a14b"
+      }
+    ],
+    "scope": "Three native repair controls reject wrong consumed-result state, insertion target and last-kept chain thinking at actual byte assertions. No generation/zero-summary/persistence control is claimed."
+  },
+  "scale": {
+    "measurements": [
+      {
+        "count": 40,
+        "reads": 18948,
+        "unitReads": 952,
+        "bytes": 2970,
+        "pid": 85983
+      },
+      {
+        "count": 4000,
+        "reads": 2760776,
+        "unitReads": 92032,
+        "bytes": 297930,
+        "pid": 85983
+      }
+    ],
+    "operation": "serialize() followed by measure() against one held query, excluding journal append and initial query creation from physical-read delta; includes repair-engine construction",
+    "boundaries": "Thinking-only chain fixture, 40/4000 thinking units plus human question and assistant answer. Independent old output hashes and byte/message counts match. Unchanged bounds remain in the committed test.",
+    "warmPlanningClaim": false,
+    "retainedHeapClaim": false,
+    "remainingCost": "measure() recomputes streamed conversion facts. Prior-use replay and backward group searches remain; repeated-ID repair can be quadratic and this chain fixture does not measure that path. Cross-ID metadata replay budget is 16. Do not generalize the unit-read bound to all valid histories.",
+    "priorZeroRowClaim": "Only earlier plain-chat/Responses stored-summary planning has warm zero-ROW/LENS evidence, not this Anthropic engine.",
+    "costLocations": [
+      "packages/providers/src/anthropic/anthropic-tool-repair.ts:125 prior-use replay",
+      "packages/providers/src/anthropic/anthropic-repair-source.ts:162 preceding-unit group search",
+      "packages/providers/src/anthropic/anthropic-repair-source.ts:254 last-thinking scan",
+      "packages/providers/src/anthropic/anthropic-stream-repair.ts:197 repeated run-piece traversal"
+    ]
+  },
+  "inventory": {
+    "entries": 8923,
+    "changed": [],
+    "manifest": {
+      "path": "tmp/p5/anthropic-repair-run-s/finalize/accept-85970/sources-before.json",
+      "sha256": "ed0c44112864b9e8f4462fc2ea3b56bf8d69a719ac684f2c329c78dc2c43dc1c"
+    },
+    "afterFrozen": {
+      "path": "tmp/p5/anthropic-repair-run-s/finalize/accept-85970/sources-after-frozen.json",
+      "sha256": "ed0c44112864b9e8f4462fc2ea3b56bf8d69a719ac684f2c329c78dc2c43dc1c"
+    },
+    "boundary": "All 8923 package/script source inputs match both completion and post-documentation checks. The three tracked proof documents are outside this inventory. Only proof documentation and addition of unchanged proof tests follow acceptance."
+  },
+  "preservation": {
+    "entries": 1192,
+    "declarations": 293,
+    "changed": [],
+    "manifest": {
+      "path": "tmp/p5/anthropic-repair-run-s/preserved-before.json",
+      "sha256": "2fc57a162720c993edc992f64393d0ffba7e4432c3199011013efcf04a96302f"
+    }
+  },
+  "pids": {
+    "recorded": [
+      85964,
+      85970,
+      87620,
+      493,
+      81443,
+      81436,
+      81449,
+      85983,
+      10765,
+      10784,
+      10792,
+      81469,
+      81540,
+      81577,
+      83950,
+      83934,
+      84006,
+      84142,
+      84146,
+      84182,
+      85149,
+      85146,
+      85169,
+      85225
+    ],
+    "active": []
+  },
+  "sequencing": {
+    "acceptDriver": 85970,
+    "frozenChild": 87620,
+    "regressionDriver": 493,
+    "overlap": "Driver 493 polls the acceptance manifest without a test child until frozen success; its first child starts after the frozen receipt. No heavy overlap, pause, kill or rerun in this finalization.",
+    "drivers": [
+      {
+        "path": "tmp/p5/anthropic-repair-run-s/finalize/accept.ts",
+        "sha256": "f5041773700e58d5e82eda6fc209af8ef787b2b19f93a353a9e155bc2b38b30a"
+      },
+      {
+        "path": "tmp/p5/anthropic-repair-run-s/finalize/regressions.ts",
+        "sha256": "286b51c045c39a83f18e3b50ccc22f3661814859440ef71b47b9eb3ff5876aae"
+      },
+      {
+        "path": "tmp/p5/anthropic-repair-run-s/finalize/controls.ts",
+        "sha256": "282852471d94ceb16c12c9e5e3cf1c1a5301189e77c57e0c785b91bdd8038450"
+      }
+    ]
+  },
+  "evidenceManifests": [
+    {
+      "path": "tmp/p5/anthropic-repair-run-s/finalize/early-gates.json",
+      "sha256": "cd917a384224b1817cbdad8fab8d4b360a5ad193927363269cbde58bb690ddbb"
+    },
+    {
+      "path": "tmp/p5/anthropic-repair-run-s/finalize/accept-85970/manifest.json",
+      "sha256": "6d62623f8fb9a92a663682c051b4694d14008930867f4a4736f8c0d3b42b20ae"
+    },
+    {
+      "path": "tmp/p5/anthropic-repair-run-s/finalize/regressions-493/manifest.json",
+      "sha256": "9153065c7d4f41a164ab7df62e31eb9f689a10230dea12afee7f54ed7e949a97"
+    },
+    {
+      "path": "tmp/p5/anthropic-repair-run-s/finalize/controls-85146/manifest.json",
+      "sha256": "864c11472e7dfab04fbee12f22a67a7088d4e1a5fe886b22a55a0175096ae530"
+    }
+  ],
+  "completedValidation": {
+    "path": "tmp/p5/anthropic-repair-run-s/finalize/completed-validation.json",
+    "sha256": "ffe93d5c68162530286ab46efdc9f8e0f6afa9b2b0b28d9f6ae1e186ee42d7ad"
+  },
+  "excludedEarlierEvidence": [
+    {
+      "status": "Timed out at unchanged 180000ms in first 500-case batch under nonmatching source hashes",
+      "log": {
+        "path": "tmp/p5/anthropic-repair-run-s/frozen-first-timeout-preserved.log",
+        "sha256": "6de3ae366d5353274f5a885617f24f957691fbaca90f8108ba807751f03fabde"
+      },
+      "sourceInventory": {
+        "path": "tmp/p5/anthropic-repair-run-s/frozen-first-sources.sha",
+        "sha256": "efa78d9f4beb5074ba551f94d3ff2f396aaeda2678c8d22ccbd4d509fd45a3bf"
+      },
+      "interpretation": "Not acceptance. Small-input probe logs showed repeated native reads; later source revisions reuse normalized occurrence views. Precise causal attribution of the old timeout is not established by the retained log alone; no timeout was raised or attempt retried in this finalization."
+    },
+    {
+      "status": "Incomplete prior-source run interrupted for collision repair after 800-case progress",
+      "log": {
+        "path": "tmp/p5/anthropic-repair-run-s/frozen-second-interrupted-for-collision.log",
+        "sha256": "ad35ffc3272464035ac55958aeb386bf5fedb98fb917375ffca651a574e08020"
+      },
+      "sourceInventory": {
+        "path": "tmp/p5/anthropic-repair-run-s/frozen-second-sources.sha",
+        "sha256": "ea344dbe0a5abc3de2aa44185d961b116c77e3c75c34803287a73643033aa8d2"
+      },
+      "interpretation": "Not acceptance; collision and captured-policy fixes are already committed in 06a3eb33c."
+    },
+    {
+      "status": "Scale-test helper lint failures before unchanged-assertion extraction and explicit unconditional resource assertions",
+      "logs": [
+        {
+          "path": "tmp/p5/anthropic-repair-run-s/finalize/verify-81436/lint.log",
+          "sha256": "e2902bf806d1cb80afb20d7d3d24ce64379e4cc48dfd236477829bcd2b243ebb"
+        },
+        {
+          "path": "tmp/p5/anthropic-repair-run-s/finalize/verify-82939/lint.log",
+          "sha256": "94709a965ee36fa0634399c71054d76b87a5a4dc0228841b06ce1cc1655ea558"
+        }
+      ],
+      "interpretation": "Only final passing source-matching lint/scale receipts count."
+    },
+    {
+      "status": "Unexecuted domain-probe.ts has no result receipt",
+      "interpretation": "No deeper cross-ID history result claimed and no new probe launched."
+    },
+    {
+      "status": "Precommit proof guard initially expected three doc edits in the 8923-entry inventory",
+      "interpretation": "Inspected actual changes and doc membership: changed=[], docInputs=[]. Inventory contains package/script inputs, not these proof documents. Corrected the guard to require zero source changes; no test rerun or source modification."
+    }
+  ],
+  "separateKnownRed": "#3917 remains separately RED; not rerun, suppressed or counted green",
+  "review": "review skipped per Andrew 2026-10-09",
+  "safety": "No implementation edits, new engine/features, corpus repeat, cleanup/removal/stash, .llxprt edit/staging, unrelated declaration/recovery staging, OCR, push, merge, default change, casts/disables or weakened enforcement. All three control files cmp-equal originals and production commit.",
+  "precommitValidation": {
+    "path": "tmp/p5/anthropic-repair-run-s/finalize/proof-precommit-check.json",
+    "sha256": "2463aa73c8fe697950438a92af8562d7fef9a7e312e110526bfa002b384577ca"
+  }
+}

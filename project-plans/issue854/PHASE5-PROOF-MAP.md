@@ -1,5 +1,19 @@
 # Phase 5 proof map
 
+## Native Anthropic repair-byte checkpoint; stored format still open
+
+Engine `20707e7e861ddfc69406f9c07f6730d3bd13d3e3`; collision/settings follow-up `06a3eb33cc8070c3b240cfb26a425fc2eab5853d`. [PHASE5-ANTHROPIC-REPAIR-PROOF.json](PHASE5-ANTHROPIC-REPAIR-PROOF.json) binds ten scoped files to **63 passes/10,226 assertions, zero failures/skips, seven serial files, eight gates and three restored assertion controls**. Raw evidence: `tmp/p5/anthropic-repair-run-s/finalize`. This checkpoint adds the already tested frozen/scale proof files without changing implementation.
+
+| Obligation | Evidence and boundary |
+| --- | --- |
+| Actual native bytes | Frozen test commits raw source rows, reads the held native normalized query and compares emitted bytes/length/messages against independently normalized old output and phase zero. All 5000 inputs pass: 3021 reasoning-enabled, 2542 repaired, 1078 chained, 516 last-kept. These overlapping flags describe normalized histories, not original raw frozen-body parity. No fixture changes/exclusions. |
+| Repair and thinking state | Named cases cover consumed converted-ID collisions, later-message source consumption, target insertion, orphan results, last-kept chain whitespace and captured asynchronous policy. Original raw ONE/ONE/TWO stays a separate expectation. Wrong consumption/target/thinking mutations fail byte assertions and restore by cmp/hash. |
+| Source and serial execution | Eight files match committed `06a3eb33c` blobs; frozen/scale files match their final accepted hashes and are added unchanged here. All 8923 inventory entries matched through acceptance. PID 493 waited on the frozen receipt before its three regressions. All 24 accepted PIDs are absent. No JUnit was emitted; stdout/exit receipts establish these counts. |
+| Scale limits | At 40/4000 thinking units: physical reads 18,948/2,760,776; unit reads 952/92,032; output bytes 2970/297930. The fixture checks bounded unit work and byte parity, not warm planning or retained heap. Prior-use replay can be quadratic for repeated IDs and remains unmeasured. |
+| Gates and preservation | Eight scoped gates pass, with no touched AST-audit findings. Early named/declaration/core-type receipts reuse identical relevant inputs; only the independent scale helper changed, and final provider types/lint/format/graph/audit cover it. All 1192 preservation hashes match, including 293 declarations, raw recovery and dirty memory. Earlier timeout/interruption and authoring failures remain excluded. |
+
+No Anthropic registration/LENS persistence, semantic chain summaries, incremental holder repair, full request-length/header planner or warm zero-payload guarantee is established. Depth-16 cross-ID replay may refuse deeper histories. Tails/ranges, cache 5m/1h, image/stored-media generations, lifecycle/generation acceptance, retained heap, LENS recomputation/live bytes, cold Mistral/100000-call cost, W23/W25/cutover and W26 remain open. Zero-ROW warm planning refers only to the earlier plain-chat/Responses proofs. Provider routes/default and separately RED #3917 are unchanged. Review skipped per Andrew 2026-10-09.
+
 ## Native Anthropic occurrence repair inputs, not repair-engine acceptance
 
 Production `c4d1352eb`; tested sources `f89c794a5`. [PHASE5-ANTHROPIC-NATIVE-INPUTS-PROOF.json](PHASE5-ANTHROPIC-NATIVE-INPUTS-PROOF.json) binds four committed sources to 77 passes/39,564 assertions, eight serial files, eight gates and four restored assertion controls. Raw evidence: `tmp/p5/anthropic-native-run-r`.
