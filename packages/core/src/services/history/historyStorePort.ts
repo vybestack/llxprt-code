@@ -17,6 +17,7 @@
 import type { IContent } from './IContent.js';
 import type { CurrentTurnMarker } from './historyChronology.js';
 import type { HistoryDumpSnapshot } from './historyDumpSnapshot.js';
+import type { CompressionInputSnapshot } from './compressionInput.js';
 import type { HistoryMutationSnapshot } from './historyMutationSnapshot.js';
 import type { HistorySuffixQuery } from './historyJournalRows.js';
 import type { HistoryRowView } from './historyRowView.js';
@@ -309,6 +310,7 @@ export interface HistoryStorePort {
    */
   contextRange(accumulated: readonly RemovedInteriorSpan[]): ContextRange;
   openDumpSnapshot(): Promise<HistoryDumpSnapshot>;
+  openCompressionInput(): Promise<CompressionInputSnapshot>;
 
   // Whole operations. Each one reads the rows it needs itself, so the caller
   // holds no cursor. The journal store reads asynchronously and rejects on

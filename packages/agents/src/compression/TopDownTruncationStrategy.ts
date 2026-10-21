@@ -25,7 +25,7 @@ import type {
   StructuralNoopReason,
   StrategyTrigger,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
-import type { HistoryIndexedRows } from '@vybestack/llxprt-code-core/services/history/historyMutationSnapshot.js';
+import type { CompressionIndexedRows as HistoryIndexedRows } from '@vybestack/llxprt-code-core/services/history/compressionInput.js';
 import type { CompressionAttemptContext } from './compressionContextBuilder.js';
 import { adjustDiskToolBoundary } from './truncationDiskBoundary.js';
 
@@ -68,13 +68,13 @@ export class TopDownTruncationStrategy implements CompressionStrategy {
     let start = 0;
     // HistoryService estimates a sum of per-row costs, independent of membership.
     while (start < history.length - minKeep) {
-      tokens -= await context.estimateTokens([history.readRow(start)]);
+      tokens -= await context.estimateTokens([await history.readRow(start)]);
       start++;
       if (targetTokenCount !== undefined ? tokens <= target : tokens < target)
         break;
     }
     start = Math.min(
-      adjustDiskToolBoundary(history, start),
+      await adjustDiskToolBoundary(history, start),
       history.length - minKeep,
     );
     return {

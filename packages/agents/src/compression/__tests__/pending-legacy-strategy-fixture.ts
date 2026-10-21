@@ -32,9 +32,11 @@ export function installPendingLegacyStrategyFixture(
       return realDiskCompression.call(this, context);
     if (!isArrayStrategyDouble(strategy))
       throw new Error('Expected an array strategy double');
+    const rows = [];
+    for await (const row of context.history) rows.push(row);
     const result = await strategy.compress({
       ...context,
-      history: [...context.history],
+      history: rows,
     });
     if (result.kind === 'noop') return result;
     if (

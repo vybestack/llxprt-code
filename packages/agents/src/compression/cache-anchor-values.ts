@@ -74,7 +74,7 @@ export async function applyCompressionValuesWithAnchor(
     throw new Error('Preserved cache-anchor position exceeds candidate length');
   const anchor =
     top > 0
-      ? candidate.readRow(start + top - 1).metadata?.chronology?.seq
+      ? (await candidate.readRow(start + top - 1)).metadata?.chronology?.seq
       : undefined;
   if (
     top > 0 &&

@@ -299,3 +299,11 @@ export async function withRowView<T>(
   await view.close();
   return result;
 }
+
+export async function materializeJournalRows(this: {
+  streamRows(): AsyncIterable<IContent>;
+}): Promise<IContent[]> {
+  const rows: IContent[] = [];
+  for await (const row of this.streamRows()) rows.push(row);
+  return rows;
+}

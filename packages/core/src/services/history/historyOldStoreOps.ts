@@ -1,4 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { HistoryMediaOwner } from './historyBatchContracts.js';
+import type { HistoryJournalStore } from './historyJournalStore.js';
 import type { JournalReadCounters } from '../../recording/journalCounters.js';
 import type { PendingFoldSnapshot } from '../../recording/pendingFoldSnapshot.js';
 import { executePinnedCursorAsync } from '../../recording/synchronousHistoryCursor.js';
@@ -102,4 +104,12 @@ export function mergeOldStores(
       ),
     ),
   );
+}
+
+export async function adoptOldStoreMedia(
+  this: Pick<HistoryJournalStore, 'withReadRows'>,
+  owner: Pick<HistoryMediaOwner, 'adopt'>,
+): Promise<void> {
+  const adopt = this.withReadRows((cursor) => owner.adopt(cursor.rows()));
+  return Promise.resolve(adopt);
 }

@@ -1,3 +1,11 @@
+# Native curated-input first production checkpoint, 2026-10-21
+
+`W26-INDEXED-INPUT-PROOF.json` records the first source-bound checkpoint at base `745a8c962`: 28 passes, zero failures and 199 assertions over five complete-file processes, plus eight scoped gates and direct declaration builds. The native allocation RED is two actual assertion failures at expected zero versus one density directory. The updated full file observes zero curated-input creation attempts for both real CompressionHandler paths, preserves the cross-root observer control and both primary/close-failure assertions, and still accounts for chronology files. Independent unchanged array-oracle request/output comparisons cover 512/8192 mixed rows for each strategy. Selection tests await actual random reads, replay, early return and abort.
+
+This is an implementation checkpoint. It does not yet establish retained heap, complete lifecycle or mutation-control acceptance. The summary input owns a native version; row count/ranks use service-curation aggregates, and source ordinals are numeric ranks of source labels. It does not substitute provider-normalized units for service-curated input. Existing normalized pending queries and provider routes remain unchanged. Full receipts and source inventories are under `tmp/p5/w26-indexed-input-run-x/checkpoint`. The earlier launch-path failure created no test process; the failed declaration/type/lint authoring gates remain under the run root. No check or assertion was weakened. Review skipped per Andrew 2026-10-09.
+
+---
+
 # W26 summary-output proof, 2026-10-20
 
 Implementation commit: `4e271ebf5e0c56430f037b06c8bfdb6e753ec7fe`, based on `79a870ad8`. **507 passes, zero failures/skips, 21,274 assertions in 73 serial isolated test processes; nine gates pass.** The bounded matrix runs 21 core and 14 agents files under both outer backend settings, then the three existing ordinary-JSC memory files. Each test file has its own Bun process and package working directory. All 8,799 enumerated package/script source hashes match before/after and the final worktree. No assertion, threshold, timeout, negative control, backend default or frozen oracle changed.

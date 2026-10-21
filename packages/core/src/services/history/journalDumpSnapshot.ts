@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { CompressionInputSnapshot } from './compressionInput.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { IContent } from './IContent.js';
 import {
@@ -27,6 +28,42 @@ export class JournalDumpSnapshot implements HistoryDumpSnapshot {
     private readonly counters?: JournalReadCounters,
     private readonly onClose: () => void = () => {},
   ) {}
+
+  get length(): number {
+    this.assertOpen();
+    return this.snapshot.curatedRows;
+  }
+
+  async readRow(index: number): Promise<IContent> {
+    this.assertOpen();
+    const entry = await this.snapshot.curatedAt(index);
+    const row = decodeStoredRow(
+      await this.snapshot.readRow(entry),
+      this.resumeBoundary,
+    );
+    this.assertOpen();
+    return row;
+  }
+
+  async sourceOrdinalAt(index: number): Promise<number> {
+    this.assertOpen();
+    const entry = await this.snapshot.curatedAt(index);
+    const ordinal = await this.snapshot.rowsBelow(entry.label);
+    this.assertOpen();
+    return ordinal;
+  }
+
+  async *[Symbol.asyncIterator](): AsyncGenerator<IContent, void, unknown> {
+    for (let index = 0; index < this.length; index++) {
+      const row = await this.readRow(index);
+      const release = this.hold(countDecodedRow(row, this.counters));
+      try {
+        yield row;
+      } finally {
+        release();
+      }
+    }
+  }
 
   async *rows(): AsyncGenerator<IContent, void, unknown> {
     this.assertOpen();
@@ -74,4 +111,11 @@ export class JournalDumpSnapshot implements HistoryDumpSnapshot {
   private assertOpen(): void {
     if (this.closed) throw new Error('Dump snapshot is closed');
   }
+}
+
+export async function journalCompressionInput(this: {
+  openDumpSnapshot(): Promise<JournalDumpSnapshot>;
+}): Promise<CompressionInputSnapshot> {
+  const dump = await this.openDumpSnapshot();
+  return { previous: dump, rows: dump, close: () => dump.close() };
 }

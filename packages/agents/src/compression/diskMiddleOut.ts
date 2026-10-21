@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
+import type { CompressionInputRows } from '@vybestack/llxprt-code-core/services/history/compressionInput.js';
 import type { SummaryOutput } from './summaryOutput.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
@@ -10,7 +10,6 @@ import {
 import { MiddleOutStrategy } from './MiddleOutStrategy.js';
 import { OneShotStrategy } from './OneShotStrategy.js';
 import { TopDownTruncationStrategy } from './TopDownTruncationStrategy.js';
-import { curatedDensityRows } from './curatedCandidate.js';
 import { buildCompressionMetadata } from './compressionContextBuilder.js';
 import { applyCompressionValuesWithAnchor } from './cache-anchor-values.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -18,7 +17,7 @@ import type { HistoryDumpSource } from '@vybestack/llxprt-code-core/services/his
 
 export async function fallbackDisk(
   context: Parameters<TopDownTruncationStrategy['compressDisk']>[0] & {
-    readonly history: HistoryDensityRows;
+    readonly history: CompressionInputRows;
   },
   history: HistoryService,
   previous: HistoryDumpSource,
@@ -76,11 +75,10 @@ async function runDiskSummary(
   const metadata = await buildCompressionMetadata(...args);
   const history = args[2];
   const origin = args[7]?.historyOrigin;
-  const previous = await history.openDumpSnapshot();
-  let curated: HistoryDensityRows | undefined;
+  const input = await history.openCompressionInput();
+  const previous = input.previous;
   const attempt = async (): Promise<DiskSummaryOutcome> => {
-    curated = await curatedDensityRows(previous.rows());
-    const context = { ...metadata, history: curated };
+    const context = { ...metadata, history: input.rows };
     const strategy =
       name === 'middle-out' ? new MiddleOutStrategy() : new OneShotStrategy();
     let result: SummaryOutput;
@@ -122,7 +120,7 @@ async function runDiskSummary(
     result = { error };
   }
   const failures: unknown[] = [];
-  for (const close of [() => curated?.close(), () => previous.close()]) {
+  for (const close of [() => input.close()]) {
     try {
       await close();
     } catch (error) {

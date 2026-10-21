@@ -15,7 +15,7 @@ import {
   readMistralMapping,
   type MistralMapping,
 } from './mistralMapping.js';
-import { nextCuratedEntry } from './curatedQueries.js';
+import { nextCuratedEntry, curatedEntryAt } from './curatedQueries.js';
 import { IdFactQueries, type IdFactDeps } from './idFactQueries.js';
 import type { IdNodeCache } from './idTrieCache.js';
 import { IdTrieReader } from './idTrieReader.js';
@@ -29,6 +29,7 @@ import {
 } from './rowReads.js';
 import {
   entryByLabel,
+  countRowsBelow,
   countUnitsBelow,
   entryAtUnit,
   type IndexedUnit,
@@ -285,6 +286,24 @@ export class VersionSnapshot {
     if (root === undefined)
       throw new RangeError(`Unit ${index} of an empty snapshot`);
     return entryAtUnit(this.read.access, root, this.units, index);
+  }
+
+  get curatedRows(): number {
+    this.requireOpen();
+    return this.version?.aggregate.curated ?? 0;
+  }
+
+  curatedAt(index: number): Promise<RowEntry> {
+    this.requireOpen();
+    const root = this.rootRef();
+    if (root === undefined)
+      throw new RangeError('Curated row of an empty snapshot');
+    return curatedEntryAt(this.read.access, root, this.curatedRows, index);
+  }
+
+  rowsBelow(label: bigint): Promise<number> {
+    this.requireOpen();
+    return countRowsBelow(this.read.access, this.rootRef(), label);
   }
 
   nextCuratedAfter(label: bigint): Promise<RowEntry | undefined> {

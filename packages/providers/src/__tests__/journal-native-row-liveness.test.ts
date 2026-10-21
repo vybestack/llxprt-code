@@ -78,8 +78,8 @@ function watchedSelection(
 ): ProviderRequestSelection {
   return {
     count: selection.count,
-    readAt: (index, signal) => {
-      const row = selection.readAt(index, signal);
+    readAt: async (index, signal) => {
+      const row = await selection.readAt(index, signal);
       census.track(row);
       return row;
     },

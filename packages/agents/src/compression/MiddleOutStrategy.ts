@@ -49,6 +49,7 @@ import { buildTranscriptPathNotice } from '@vybestack/llxprt-code-core/core/comp
 import { getCompressionPrompt } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { buildCompressionChatOptions } from './compressionSystemPrompt.js';
 
+import type { CompressionInputRows } from '@vybestack/llxprt-code-core/services/history/compressionInput.js';
 import type { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import {
@@ -90,7 +91,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
 
   async compressDisk(
     context: Omit<CompressionContext, 'history'> & {
-      readonly history: HistoryDensityRows;
+      readonly history: CompressionInputRows;
     },
     candidate: HistoryDensityRows,
   ): Promise<
@@ -101,18 +102,18 @@ export class MiddleOutStrategy implements CompressionStrategy {
     if (result.kind === 'applied')
       for (let index = 0; index < result.candidate.length; index++)
         candidate.append(
-          result.candidate.readRow(index),
-          result.candidate.sourceOrdinalAt(index),
+          await result.candidate.readRow(index),
+          await result.candidate.sourceOrdinalAt(index),
         );
     return result;
   }
 
   async prepareDisk(
     context: Omit<CompressionContext, 'history'> & {
-      readonly history: HistoryDensityRows;
+      readonly history: CompressionInputRows;
     },
   ): Promise<SummaryOutput> {
-    const plan = planDiskMiddleOut(context.history, context);
+    const plan = await planDiskMiddleOut(context.history, context);
     if (plan === undefined) return { kind: 'noop' };
     const providerResult = destructureProviderResult(
       await context.resolveProvider(

@@ -58,6 +58,7 @@ const PORT_METHODS = [
   'currentTurnMarker',
   'contextRange',
   'openDumpSnapshot',
+  'openCompressionInput',
   'dispose',
 ] as const satisfies ReadonlyArray<keyof HistoryStorePort>;
 

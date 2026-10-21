@@ -47,6 +47,7 @@
  */
 
 import * as fs from 'node:fs';
+import { oldCompressionInput } from './oldCompressionInput.js';
 import {
   openHistoryDumpSnapshot,
   type HistoryDumpSnapshot,
@@ -178,6 +179,7 @@ import {
   summarizeOldStore,
   oldStoreCurrentTurnMarker,
   materializeOldStore,
+  adoptOldStoreMedia,
 } from './historyOldStoreOps.js';
 
 // ---------------------------------------------------------------------------
@@ -441,10 +443,7 @@ export class HistoryJournalStore implements HistoryStorePort {
     return Promise.resolve(repairHistoryRows(this, request));
   }
 
-  adoptMediaOwner(owner: HistoryMediaOwner): Promise<void> {
-    const adopt = this.withReadRows((cursor) => owner.adopt(cursor.rows()));
-    return Promise.resolve(adopt);
-  }
+  adoptMediaOwner = adoptOldStoreMedia;
 
   removeTail(request: HistoryRemoveTailRequest): Promise<IContent | undefined> {
     return removeHistoryTail({ journal: this, ...request });
@@ -619,6 +618,8 @@ export class HistoryJournalStore implements HistoryStorePort {
       signal,
     );
   }
+
+  openCompressionInput = oldCompressionInput;
 
   openDumpSnapshot(): Promise<HistoryDumpSnapshot> {
     return openHistoryDumpSnapshot(

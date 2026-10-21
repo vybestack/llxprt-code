@@ -15,7 +15,6 @@ import {
   type PositionedOwner,
 } from './journalHistoryEdits.js';
 import type { HistoryMediaOwner } from './historyBatchContracts.js';
-import type { HistoryDumpSnapshot } from './historyDumpSnapshot.js';
 import type {
   HistoryCompensationMark,
   HistoryStorePort,
@@ -35,7 +34,10 @@ import type {
 import { stageProfileReplacementOnJournal } from './journalProfileReplacement.js';
 import type { ConversationStatistics } from './curationDebugLogger.js';
 import type { ContextRange, RemovedInteriorSpan } from './historyEventTypes.js';
-import { JournalDumpSnapshot } from './journalDumpSnapshot.js';
+import {
+  JournalDumpSnapshot,
+  journalCompressionInput,
+} from './journalDumpSnapshot.js';
 import type { HistoryRowView } from './historyRowView.js';
 import {
   contextBoundaryOf,
@@ -46,6 +48,7 @@ import {
   lastTurnMarkerOf,
   streamSnapshotRows,
   statisticsOf,
+  materializeJournalRows,
   type ContextBoundary,
 } from './journalScalars.js';
 import type { HistorySuffixQuery } from './historyJournalRows.js';
@@ -715,14 +718,11 @@ export class JournalHistoryStore implements HistoryStorePort {
   }
 
   /** Every row; for tests and tools that need the whole history, which a send never does. */
-  async materialize(): Promise<IContent[]> {
-    const rows: IContent[] = [];
-    for await (const row of this.streamRows()) rows.push(row);
-    return rows;
-  }
+  materialize = materializeJournalRows;
 
-  /** A dump of the rows once the queue is durable; it reads the file, so it holds no row. */
-  async openDumpSnapshot(): Promise<HistoryDumpSnapshot> {
+  openCompressionInput = journalCompressionInput;
+
+  async openDumpSnapshot(): Promise<JournalDumpSnapshot> {
     this.assertUsable();
     await this.waitForDurable();
     const dump: JournalDumpSnapshot = new JournalDumpSnapshot(

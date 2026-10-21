@@ -23,6 +23,7 @@ import { estimateMergedAppendTokens } from './historyMergeRows.js';
 import type { HistoryDensityRows } from './historyDensityRows.js';
 import type { HistoryMutationSnapshot } from './historyMutationSnapshot.js';
 import type { HistoryDumpSnapshot } from './historyDumpSnapshot.js';
+import type { CompressionInputSnapshot } from './compressionInput.js';
 export type {
   HistoryDumpSource,
   HistoryDumpSnapshot,
@@ -91,6 +92,10 @@ export class HistoryService extends HistoryServiceReads {
 
   openDumpSnapshot(): Promise<HistoryDumpSnapshot> {
     return this.journal.openDumpSnapshot();
+  }
+
+  openCompressionInput(): Promise<CompressionInputSnapshot> {
+    return this.journal.openCompressionInput();
   }
 
   async adoptResumeBoot(

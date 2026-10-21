@@ -1,11 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { HistoryIndexedRows } from '@vybestack/llxprt-code-core/services/history/historyMutationSnapshot.js';
+import type { CompressionInputRows } from '@vybestack/llxprt-code-core/services/history/compressionInput.js';
 import { assertRowIndex } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 
-export interface CompressionOutputRows extends HistoryIndexedRows {
-  sourceOrdinalAt(index: number): number | undefined;
-}
+export type CompressionOutputRows = CompressionInputRows;
 
 export async function* streamCompressionOutputRows(
   candidate: CompressionOutputRows,
@@ -18,11 +16,10 @@ export async function* streamCompressionOutputRows(
 }> {
   for (let position = start; position < candidate.length; position++) {
     signal?.throwIfAborted();
-    yield {
-      row: candidate.readRow(position),
-      position,
-      sourceOrdinal: candidate.sourceOrdinalAt(position),
-    };
+    const row = await candidate.readRow(position);
+    const sourceOrdinal = await candidate.sourceOrdinalAt(position);
+    signal?.throwIfAborted();
+    yield { row, position, sourceOrdinal };
   }
 }
 
@@ -52,12 +49,12 @@ export function summaryOutput(
     top,
     candidate: {
       length,
-      *[Symbol.iterator]() {
+      async *[Symbol.asyncIterator]() {
         for (let index = 0; index < length; index++) {
           const position = sourcePosition(index);
           yield position === undefined
             ? summary[index - top]
-            : source.readRow(position);
+            : await source.readRow(position);
         }
       },
       readRow(index) {

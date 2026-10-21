@@ -38,14 +38,14 @@ function addDescriptors(
     }
   }
 }
-function descriptors(
+async function descriptors(
   table: MessageTable,
   request: Parameters<ChainResultsAppender>[0],
-): { prefix: TableMessage; media: TableMessage } {
+): Promise<{ prefix: TableMessage; media: TableMessage }> {
   const prefix = newMessage('user');
   const media = newMessage('user');
   for (let index = request.range.start; index <= request.range.end; index++) {
-    const row = request.projectedAt(index);
+    const row = await request.projectedAt(index);
     if (row !== undefined)
       addDescriptors(table, row, prefix, media, index, request.options);
   }
@@ -81,10 +81,10 @@ function hasResponses(row: IContent): boolean {
 
 export const appendDumpChainResults: ChainResultsAppender = async (request) => {
   const { table, range, options } = request;
-  const { prefix, media } = descriptors(table, request);
+  const { prefix, media } = await descriptors(table, request);
   let targetId = request.pending;
   for (let index = range.start; index <= range.end; index++) {
-    const row = request.projectedAt(index);
+    const row = await request.projectedAt(index);
     if (row === undefined || !hasResponses(row)) continue;
     if (targetId === -1) targetId = table.append({ role: 'user', content: [] });
     const target = table.messages.read(targetId);

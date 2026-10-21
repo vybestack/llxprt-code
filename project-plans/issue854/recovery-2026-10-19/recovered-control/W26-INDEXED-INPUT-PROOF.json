@@ -1,0 +1,334 @@
+{
+  "date": "2026-10-21",
+  "base": "745a8c962179d449b837708c2859879c70e9822b",
+  "scope": "First native service-curated compression input checkpoint, not W26 completion",
+  "tests": {
+    "passes": 28,
+    "failures": 0,
+    "assertions": 199,
+    "completeFiles": 5
+  },
+  "rootRed": "tmp/p5/w26-indexed-input-run-x/root-red.log",
+  "sources": {
+    "packages/agents/src/compression/MiddleOutStrategy.ts": "c7554eac4919f0d8b59b1e3bdf547225ffebb43e04e0e58bbde2cc0d2dcdd4a7",
+    "packages/agents/src/compression/OneShotStrategy.ts": "784b829d8b0276f6613bae4be5ee4a088056a9778c06e6a4da1b0f955d3d7bed",
+    "packages/agents/src/compression/TopDownTruncationStrategy.ts": "f105f954f85be4f0bcb79a4a2b171afb4b7c2301ff4e7792aee373cf35b7e2b3",
+    "packages/agents/src/compression/__tests__/pending-legacy-strategy-fixture.ts": "afc0cff4029c3e0b32261d79728e702bf8a856566c1a930dbc7b02f4c8e8a73e",
+    "packages/agents/src/compression/__tests__/summary-output-files.test.ts": "f601522772a93c623d94b62d55e991cb81aa7c2c89850532e70e21649b4d2695",
+    "packages/agents/src/compression/__tests__/summary-request-selection.test.ts": "c750a3f4e1372be3fe5af6128e7141a94f2ef96ca41d01d1dc4d801aba9d7970",
+    "packages/agents/src/compression/cache-anchor-values.ts": "54eb677e205381e6a824f7e7e65e210491043fa7a09f6d723df5e806a6214cff",
+    "packages/agents/src/compression/diskMiddleOut.ts": "047c1c4c1a3511619e68ee04a00d19eefc6c10314906a1628b2652ba183abb30",
+    "packages/agents/src/compression/diskTruncation.ts": "f173565f4d3c1f4b56d2fe95dde2240330bd5cb0e2b3db56d8f0e672d3862910",
+    "packages/agents/src/compression/middleOutDiskPlan.ts": "6c58f51c06814b07e6b494178f3bc9904b094bd2d831aaf9415190318bda4bbc",
+    "packages/agents/src/compression/summaryOutput.ts": "576722f8800db8b30da3e6e68d5e0cf340f391bdb75a4863344394800c0fd1d2",
+    "packages/agents/src/compression/truncationDiskBoundary.ts": "a354345e8dbb39055837c9b35ad9b2703b22e0678d9b300af7d4e7143256eb70",
+    "packages/core/src/journal/curatedQueries.ts": "e12df3e98fbd93894604480c7c97bec1a1b7e0c175aa31cf0462aba43c0ce042",
+    "packages/core/src/journal/versionSnapshot.ts": "8db93a6e49809968558be020e8a5cdfa8787ab76cd7d093d975afaa9787657c0",
+    "packages/core/src/services/history/HistoryService.ts": "d2965f086bbe4d796f55aac126bcf0b94e49c1241c563df652e30872f5563b51",
+    "packages/core/src/services/history/historyBackend.test.ts": "b1dc6362d18945a38a7e9cc86f7cf9fe23baab9f7667350cb9a68e12d09c7102",
+    "packages/core/src/services/history/historyJournalStore.ts": "7ee2665ecd41966cf7a3617f925974014faba965c7ac1850c8b847ac0efa2a12",
+    "packages/core/src/services/history/historyOldStoreOps.ts": "dad2112d0c29bb0344c53e2a7f52f0bef1cf392449e5b99bff9e7ca86e336085",
+    "packages/core/src/services/history/historyStorePort.ts": "5e53cf19e962517b075605ff20a80c477e46a360aefed34ba408556c29dbc764",
+    "packages/core/src/services/history/journalDumpSnapshot.ts": "07b0dfcde52c674975768450abe7c57e80c2bb48a24ca5759a47f840250e4be7",
+    "packages/core/src/services/history/journalHistoryStore.ts": "94bf8f1f521eaee32514922c8ce90cceb5279dc1a8968f5a96ab5614b20b844f",
+    "packages/core/src/services/history/journalScalars.ts": "a17ef6bef08861624337f5fbd4add706f109f6cb5c99e746a93279689bd22c7a",
+    "packages/core/src/services/history/provider-request-snapshot.ts": "3c909d7b80300e1d289210eb4d91b5ca0ea056831c2acac96f02aaef021e7cf3",
+    "packages/providers/src/__tests__/journal-native-row-liveness.test.ts": "8326c1286b9fbbf3337e8ad9c83fdefbf9699c3f21aa88424216670f8bb4b802",
+    "packages/providers/src/anthropic/anthropicDumpChainResults.ts": "bca78fa9e01857fd09e2c7b1d0c6804bbfa55a8465ab6a92b7e2e1027f9b0480",
+    "packages/providers/src/anthropic/message-table/wire-builder.ts": "2723158f345ee60ab47dbac3ab9ed8b8f166f60c828ee5ff0e8e772ceeccad0d",
+    "packages/core/src/services/history/compressionInput.ts": "e1032c3003c89e1a117622797686b72355aa9775b01f21cff3b9ed284bd407fb",
+    "packages/core/src/services/history/oldCompressionInput.ts": "27142f0887dae61926df0bde5ce7d440b424a3ff152fc21758c941a4d19b2c87"
+  },
+  "logs": {
+    "tmp/p5/w26-indexed-input-run-x/root-red.log": "617b42fa0bbc4b13d4c031b24df7d461cc035b37be944224fbd95e8e813e36b1",
+    "tmp/p5/w26-indexed-input-run-x/checkpoint/history-backend.log": "c886d1e3edfecd8e9c495a2210a13defbf9ef0b1e23301c3b4a5ff1e8d6fa8cc",
+    "tmp/p5/w26-indexed-input-run-x/checkpoint/agents-types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "tmp/p5/w26-indexed-input-run-x/checkpoint/agents-test-types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "tmp/p5/w26-indexed-input-run-x/checkpoint/initial-summary-output-files.log": "92ebce5c4bd40cc3965d8465a99eb133a6f56e7c43fa6b4b2e10e8723c0eaa66",
+    "tmp/p5/w26-indexed-input-run-x/checkpoint/prettier.log": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+    "tmp/p5/w26-indexed-input-run-x/checkpoint/lint.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "tmp/p5/w26-indexed-input-run-x/checkpoint/initial-summary-request-selection.log": "c52cc3a7204149cc0e84eb4a1790d77ef8e959e01dfd4a121bb2ffadfe63692e",
+    "tmp/p5/w26-indexed-input-run-x/checkpoint/core-types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "tmp/p5/w26-indexed-input-run-x/checkpoint/graph.log": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67",
+    "tmp/p5/w26-indexed-input-run-x/checkpoint/initial-oneshot-disk.log": "91727f8899b87726106900817671cb49b0b9c7233f57f69daf30792675a851d0",
+    "tmp/p5/w26-indexed-input-run-x/checkpoint/initial-middleout-disk.log": "c0b5bdfcefb510bdcebeb316441a56e6f25e72be1b817d1fd6154cb9945ea5fb",
+    "tmp/p5/w26-indexed-input-run-x/checkpoint/audit.log": "a32e6f88cd7647b61ccf8d0840be2db61392d51cb1f82d2de9ef6bd516bbaaf6",
+    "tmp/p5/w26-indexed-input-run-x/checkpoint/providers-types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "tmp/p5/w26-indexed-input-run-x/checkpoint-decl-agents.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "tmp/p5/w26-indexed-input-run-x/checkpoint-decl-providers.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "tmp/p5/w26-indexed-input-run-x/checkpoint-decl-core.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "gates": [
+    {
+      "name": "core-types",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "packages/core/tsconfig.noemit.json"
+      ],
+      "driver": 73879,
+      "pid": 73881,
+      "exit": 0,
+      "log": "tmp/p5/w26-indexed-input-run-x/checkpoint/core-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "providers-types",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "packages/providers/tsconfig.noemit.json"
+      ],
+      "driver": 73879,
+      "pid": 73981,
+      "exit": 0,
+      "log": "tmp/p5/w26-indexed-input-run-x/checkpoint/providers-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "agents-types",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "packages/agents/tsconfig.noemit.json"
+      ],
+      "driver": 73879,
+      "pid": 74111,
+      "exit": 0,
+      "log": "tmp/p5/w26-indexed-input-run-x/checkpoint/agents-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "agents-test-types",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "packages/agents/tsconfig.test-bun.json",
+        "--types",
+        "node,bun"
+      ],
+      "driver": 73879,
+      "pid": 74219,
+      "exit": 0,
+      "log": "tmp/p5/w26-indexed-input-run-x/checkpoint/agents-test-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "lint",
+      "command": [
+        "node",
+        "node_modules/eslint/bin/eslint.js",
+        "--max-warnings",
+        "0",
+        "packages/agents/src/compression/MiddleOutStrategy.ts",
+        "packages/agents/src/compression/OneShotStrategy.ts",
+        "packages/agents/src/compression/TopDownTruncationStrategy.ts",
+        "packages/agents/src/compression/__tests__/pending-legacy-strategy-fixture.ts",
+        "packages/agents/src/compression/__tests__/summary-output-files.test.ts",
+        "packages/agents/src/compression/__tests__/summary-request-selection.test.ts",
+        "packages/agents/src/compression/cache-anchor-values.ts",
+        "packages/agents/src/compression/diskMiddleOut.ts",
+        "packages/agents/src/compression/diskTruncation.ts",
+        "packages/agents/src/compression/middleOutDiskPlan.ts",
+        "packages/agents/src/compression/summaryOutput.ts",
+        "packages/agents/src/compression/truncationDiskBoundary.ts",
+        "packages/core/src/journal/curatedQueries.ts",
+        "packages/core/src/journal/versionSnapshot.ts",
+        "packages/core/src/services/history/HistoryService.ts",
+        "packages/core/src/services/history/historyBackend.test.ts",
+        "packages/core/src/services/history/historyJournalStore.ts",
+        "packages/core/src/services/history/historyOldStoreOps.ts",
+        "packages/core/src/services/history/historyStorePort.ts",
+        "packages/core/src/services/history/journalDumpSnapshot.ts",
+        "packages/core/src/services/history/journalHistoryStore.ts",
+        "packages/core/src/services/history/journalScalars.ts",
+        "packages/core/src/services/history/provider-request-snapshot.ts",
+        "packages/providers/src/__tests__/journal-native-row-liveness.test.ts",
+        "packages/providers/src/anthropic/anthropicDumpChainResults.ts",
+        "packages/providers/src/anthropic/message-table/wire-builder.ts",
+        "packages/core/src/services/history/compressionInput.ts",
+        "packages/core/src/services/history/oldCompressionInput.ts"
+      ],
+      "driver": 73879,
+      "pid": 74279,
+      "exit": 0,
+      "log": "tmp/p5/w26-indexed-input-run-x/checkpoint/lint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "prettier",
+      "command": [
+        "node",
+        "node_modules/prettier/bin/prettier.cjs",
+        "--check",
+        "packages/agents/src/compression/MiddleOutStrategy.ts",
+        "packages/agents/src/compression/OneShotStrategy.ts",
+        "packages/agents/src/compression/TopDownTruncationStrategy.ts",
+        "packages/agents/src/compression/__tests__/pending-legacy-strategy-fixture.ts",
+        "packages/agents/src/compression/__tests__/summary-output-files.test.ts",
+        "packages/agents/src/compression/__tests__/summary-request-selection.test.ts",
+        "packages/agents/src/compression/cache-anchor-values.ts",
+        "packages/agents/src/compression/diskMiddleOut.ts",
+        "packages/agents/src/compression/diskTruncation.ts",
+        "packages/agents/src/compression/middleOutDiskPlan.ts",
+        "packages/agents/src/compression/summaryOutput.ts",
+        "packages/agents/src/compression/truncationDiskBoundary.ts",
+        "packages/core/src/journal/curatedQueries.ts",
+        "packages/core/src/journal/versionSnapshot.ts",
+        "packages/core/src/services/history/HistoryService.ts",
+        "packages/core/src/services/history/historyBackend.test.ts",
+        "packages/core/src/services/history/historyJournalStore.ts",
+        "packages/core/src/services/history/historyOldStoreOps.ts",
+        "packages/core/src/services/history/historyStorePort.ts",
+        "packages/core/src/services/history/journalDumpSnapshot.ts",
+        "packages/core/src/services/history/journalHistoryStore.ts",
+        "packages/core/src/services/history/journalScalars.ts",
+        "packages/core/src/services/history/provider-request-snapshot.ts",
+        "packages/providers/src/__tests__/journal-native-row-liveness.test.ts",
+        "packages/providers/src/anthropic/anthropicDumpChainResults.ts",
+        "packages/providers/src/anthropic/message-table/wire-builder.ts",
+        "packages/core/src/services/history/compressionInput.ts",
+        "packages/core/src/services/history/oldCompressionInput.ts"
+      ],
+      "driver": 73879,
+      "pid": 74386,
+      "exit": 0,
+      "log": "tmp/p5/w26-indexed-input-run-x/checkpoint/prettier.log",
+      "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+    },
+    {
+      "name": "graph",
+      "command": [
+        "bun",
+        "scripts/check-affected-test-shards.ts"
+      ],
+      "driver": 73879,
+      "pid": 74393,
+      "exit": 0,
+      "log": "tmp/p5/w26-indexed-input-run-x/checkpoint/graph.log",
+      "sha256": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67"
+    },
+    {
+      "name": "audit",
+      "command": [
+        "bun",
+        "scripts/test-audit/scan.ts",
+        "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-indexed-input-run-x/checkpoint/audit"
+      ],
+      "driver": 73879,
+      "pid": 74417,
+      "exit": 0,
+      "log": "tmp/p5/w26-indexed-input-run-x/checkpoint/audit.log",
+      "sha256": "a32e6f88cd7647b61ccf8d0840be2db61392d51cb1f82d2de9ef6bd516bbaaf6"
+    }
+  ],
+  "testsReceipt": [
+    {
+      "driver": 71415,
+      "pid": 71426,
+      "command": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "src/compression/__tests__/summary-output-files.test.ts"
+      ],
+      "cwd": "packages/agents",
+      "env": {
+        "LLXPRT_HISTORY_BACKEND": "journal"
+      },
+      "log": "tmp/p5/w26-indexed-input-run-x/checkpoint/initial-summary-output-files.log",
+      "start": "2026-10-21T06:31:02.441564",
+      "exit": 0,
+      "finish": "2026-10-21T06:31:13.674820",
+      "logHash": "92ebce5c4bd40cc3965d8465a99eb133a6f56e7c43fa6b4b2e10e8723c0eaa66"
+    },
+    {
+      "driver": 71415,
+      "pid": 71585,
+      "command": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "src/compression/__tests__/summary-request-selection.test.ts"
+      ],
+      "cwd": "packages/agents",
+      "env": {
+        "LLXPRT_HISTORY_BACKEND": "journal"
+      },
+      "log": "tmp/p5/w26-indexed-input-run-x/checkpoint/initial-summary-request-selection.log",
+      "start": "2026-10-21T06:31:13.676623",
+      "exit": 0,
+      "finish": "2026-10-21T06:31:13.963922",
+      "logHash": "c52cc3a7204149cc0e84eb4a1790d77ef8e959e01dfd4a121bb2ffadfe63692e"
+    },
+    {
+      "driver": 71415,
+      "pid": 71587,
+      "command": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "src/compression/__tests__/middleout-disk.test.ts"
+      ],
+      "cwd": "packages/agents",
+      "env": {
+        "LLXPRT_HISTORY_BACKEND": "journal"
+      },
+      "log": "tmp/p5/w26-indexed-input-run-x/checkpoint/initial-middleout-disk.log",
+      "start": "2026-10-21T06:31:13.965827",
+      "exit": 0,
+      "finish": "2026-10-21T06:31:34.570041",
+      "logHash": "c0b5bdfcefb510bdcebeb316441a56e6f25e72be1b817d1fd6154cb9945ea5fb"
+    },
+    {
+      "driver": 71415,
+      "pid": 71829,
+      "command": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "src/compression/__tests__/oneshot-disk.test.ts"
+      ],
+      "cwd": "packages/agents",
+      "env": {
+        "LLXPRT_HISTORY_BACKEND": "journal"
+      },
+      "log": "tmp/p5/w26-indexed-input-run-x/checkpoint/initial-oneshot-disk.log",
+      "start": "2026-10-21T06:31:34.572058",
+      "exit": 0,
+      "finish": "2026-10-21T06:31:53.537497",
+      "logHash": "91727f8899b87726106900817671cb49b0b9c7233f57f69daf30792675a851d0"
+    }
+  ],
+  "pids": [
+    71415,
+    71426,
+    71585,
+    71587,
+    71829,
+    73879,
+    73881,
+    73981,
+    74111,
+    74219,
+    74279,
+    74386,
+    74393,
+    74417
+  ],
+  "alive": [],
+  "limits": [
+    "No retained-heap or control acceptance yet",
+    "Chronology, density/ranking, old-backend and provider spools remain",
+    "Normalized provider unit snapshot unchanged; service curated boundary deliberately preserved",
+    "Full lifecycle/memory matrix remains pending"
+  ]
+}

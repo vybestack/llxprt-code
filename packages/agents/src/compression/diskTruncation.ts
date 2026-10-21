@@ -2,6 +2,7 @@
 import { checkpointRows } from '@vybestack/llxprt-code-core/services/history/historyCheckpointRows.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { HistoryDumpSource } from '@vybestack/llxprt-code-core/services/history/historyDumpSnapshot.js';
+import type { CompressionIndexedRows } from '@vybestack/llxprt-code-core/services/history/compressionInput.js';
 import type { HistoryIndexedRows } from '@vybestack/llxprt-code-core/services/history/historyMutationSnapshot.js';
 import type { DetachedHistoryOptions } from '@vybestack/llxprt-code-core/services/history/detachedHistoryAPI.js';
 import { sanitizeProviderContentForSerialization } from '@vybestack/llxprt-code-core/services/history/historyCloneUtils.js';
@@ -20,7 +21,7 @@ import { shouldRetryCompressionError } from '@vybestack/llxprt-code-core/core/co
 
 export async function replacedSpan(
   previous: HistoryDumpSource,
-  candidate: HistoryIndexedRows,
+  candidate: CompressionIndexedRows,
   start: number,
   signal?: AbortSignal,
 ): Promise<{
@@ -38,7 +39,7 @@ export async function replacedSpan(
   try {
     for (let position = start; position < candidate.length; position++) {
       signal?.throwIfAborted();
-      const row = candidate.readRow(position);
+      const row = await candidate.readRow(position);
       const seq = row.metadata?.chronology?.seq;
       if (typeof seq === 'number') index.preserve(seq);
       if (row.metadata?.semanticMediaPurgeFrontier !== undefined)

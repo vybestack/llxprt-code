@@ -15,6 +15,7 @@ import { curatedDensityRows } from '../curatedCandidate.js';
 import { buildCompressionSystemInstruction } from '../compressionSystemPrompt.js';
 import { buildCompressionMetadata } from '../compressionContextBuilder.js';
 import { MiddleOutStrategy } from '../MiddleOutStrategy.js';
+import { JournalDumpSnapshot } from '@vybestack/llxprt-code-core/services/history/journalDumpSnapshot.js';
 import { OneShotStrategy } from '../OneShotStrategy.js';
 import {
   streamCompressionOutputRows,
@@ -95,11 +96,14 @@ describe('summary output candidate allocation', () => {
     it(`${strategy} preserves the summary failure and the cleanup failure with the primary cause`, async () => {
       await seededSummary(strategy, async ({ history }, setup) => {
         setup.transport.failure = new Error('provider refused summary');
-        const cleanup = new Error('curated descriptor close failed');
-        const close = fs.closeSync;
+        const cleanup = new Error('curated snapshot close failed');
+        const close = JournalDumpSnapshot.prototype.close;
         let injected = false;
-        const spy = spyOn(fs, 'closeSync').mockImplementation((fd) => {
-          close(fd);
+        const spy = spyOn(
+          JournalDumpSnapshot.prototype,
+          'close',
+        ).mockImplementation(async function (this: JournalDumpSnapshot) {
+          await close.call(this);
           if (!injected) {
             injected = true;
             throw cleanup;
@@ -124,7 +128,7 @@ describe('summary output candidate allocation', () => {
       });
     });
 
-    it(`${strategy} creates only its remaining curated input and chronology index on the public native path`, async () => {
+    it(`${strategy} creates no curated input files on the public native path`, async () => {
       await seededSummary(
         strategy,
         async ({ history, durable }, { handler }) => {
@@ -137,7 +141,7 @@ describe('summary output candidate allocation', () => {
             receipt.directories.filter((path) =>
               path.includes('history-density-'),
             ),
-          ).toHaveLength(1);
+          ).toHaveLength(0);
           expect(
             receipt.directories.filter((path) =>
               path.includes('compression-span-'),
@@ -152,7 +156,7 @@ describe('summary output candidate allocation', () => {
           ).toStrictEqual([]);
           expect(
             receipt.files.filter((path) => path.includes('history-density-')),
-          ).toHaveLength(2);
+          ).toHaveLength(0);
           expect(
             receipt.files.filter(
               (path) =>

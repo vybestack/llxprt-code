@@ -17,7 +17,10 @@ export interface ProviderRequestRows {
    * only that one; it is not counted by a reader's row ownership.
    * Throws a RangeError for a position outside `0..count-1`.
    */
-  readonly readAt: (index: number, signal?: AbortSignal) => IContent;
+  readonly readAt: (
+    index: number,
+    signal?: AbortSignal,
+  ) => IContent | Promise<IContent>;
 }
 
 /** Shared range rule for every `readAt` implementation. */
@@ -69,6 +72,7 @@ export function providerRequestRows(
 }
 
 export interface ProviderRequestSnapshot extends ProviderRequestSelection {
+  readonly readAt: (index: number, signal?: AbortSignal) => IContent;
   /** Pending output may be reordered, so firstOutputIndex is not a suffix boundary. */
   readonly pending: {
     readonly inputCount: number;

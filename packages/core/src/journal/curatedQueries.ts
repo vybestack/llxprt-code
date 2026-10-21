@@ -38,8 +38,20 @@ export async function nextCuratedEntry(
   total: number,
   label: bigint,
 ): Promise<RowEntry | undefined> {
-  let within = await curatedThrough(access, root, label);
+  const within = await curatedThrough(access, root, label);
   if (within === total) return undefined;
+  return curatedEntryAt(access, root, total, within);
+}
+
+export async function curatedEntryAt(
+  access: RecordAccess,
+  root: RowTreeRootRef,
+  total: number,
+  index: number,
+): Promise<RowEntry> {
+  if (!Number.isInteger(index) || index < 0 || index >= total)
+    throw new RangeError('Curated row index is out of range');
+  let within = index;
   let node = await readRowTreeNode(access, root.offset);
   while (node.kind === 'internal') {
     let next: number | undefined;

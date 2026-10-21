@@ -37,7 +37,9 @@ export interface ChainResultsRequest {
   /** The open user message of tool results the chain's results join, or -1. */
   readonly pending: number;
   /** Row `index` of the selection projected, media as stored; `undefined` when dropped. */
-  readonly projectedAt: (index: number) => IContent | undefined;
+  readonly projectedAt: (
+    index: number,
+  ) => IContent | undefined | Promise<IContent | undefined>;
   /**
    * Row `index` as the conversion pass sees it: media resolved, then
    * projected. It runs the media stage on that row again, so ask only for a
@@ -134,12 +136,12 @@ function createContext(
 }
 
 /** Row `index` of the selection, projected but with its media unresolved. */
-function projectedAt(
+async function projectedAt(
   context: BuildContext,
   index: number,
-): IContent | undefined {
+): Promise<IContent | undefined> {
   return projectRow(
-    context.rows.readAt(index, context.options.signal),
+    await context.rows.readAt(index, context.options.signal),
     context.indexProjection,
   );
 }
@@ -165,7 +167,7 @@ async function resolvedAt(
   context: BuildContext,
   index: number,
 ): Promise<IContent | undefined> {
-  const raw = context.rows.readAt(index, context.options.signal);
+  const raw = await context.rows.readAt(index, context.options.signal);
   const stage = context.options.mediaStage;
   const resolved = stage === undefined ? raw : await resolvedRow(stage, raw);
   return projectRow(resolved, context.rowProjection);
@@ -176,16 +178,16 @@ async function resolvedAt(
  * `first` at `start`, or `start` when it does not begin a run. Rows the
  * projection drops do not interrupt a run.
  */
-function chainEnd(
+async function chainEnd(
   context: BuildContext,
   start: number,
   first: IContent,
-): number {
+): Promise<number> {
   if (!startsThinkingChain(first, context.options.reasoningEnabled))
     return start;
   let end = start;
   for (let index = start + 1; index < context.rows.count; index++) {
-    const row = projectedAt(context, index);
+    const row = await projectedAt(context, index);
     if (row?.speaker === 'ai') end = index;
     else if (row !== undefined) break;
   }
@@ -215,7 +217,7 @@ async function lastThinkingGroup(context: BuildContext): Promise<number> {
         ? undefined
         : projectRow(raw, context.indexProjection);
     if (row?.speaker === 'ai') {
-      skipThrough = chainEnd(context, index, row);
+      skipThrough = await chainEnd(context, index, row);
       if (row.blocks.some((block) => block.type === 'thinking')) last = index;
     }
   }
@@ -331,13 +333,15 @@ function appendRow(
   state.pending = -1;
 }
 
-function chainHasResponses(request: ChainResultsRequest): boolean {
+async function chainHasResponses(
+  request: ChainResultsRequest,
+): Promise<boolean> {
   const { start, end } = request.range;
   for (let index = start; index <= end; index++)
     if (
-      request
-        .projectedAt(index)
-        ?.blocks.some((block) => block.type === 'tool_response') === true
+      (await request.projectedAt(index))?.blocks.some(
+        (block) => block.type === 'tool_response',
+      ) === true
     )
       return true;
   return false;
@@ -350,7 +354,7 @@ function chainHasResponses(request: ChainResultsRequest): boolean {
  * chain that carries results has its rows resolved again.
  */
 export const appendWireChainResults: ChainResultsAppender = async (request) => {
-  if (!chainHasResponses(request)) return;
+  if (!(await chainHasResponses(request))) return;
   const text: ContentBlock[] = [];
   const media: ContentBlock[] = [];
   const responses: ContentBlock[] = [];
@@ -401,7 +405,7 @@ async function chainRowAt(
   context: BuildContext,
   index: number,
 ): Promise<IContent | undefined> {
-  const raw = context.rows.readAt(index, context.options.signal);
+  const raw = await context.rows.readAt(index, context.options.signal);
   if (raw.blocks.some((block) => block.type === 'media'))
     return resolvedAt(context, index);
   return projectRow(raw, context.rowProjection);
@@ -419,7 +423,7 @@ async function appendChain(
 ): Promise<void> {
   // The merged row keeps the metadata of the last row of the run.
   const anchored =
-    projectedAt(context, range.end)?.metadata?.cacheAnchor === true;
+    (await projectedAt(context, range.end))?.metadata?.cacheAnchor === true;
   const { table } = context;
   const id = table.append({ role: 'assistant', content: [] });
   const record = table.messages.read(id);
@@ -450,7 +454,7 @@ async function appendGroup(
   lastThinking: number,
 ): Promise<void> {
   const redact = redactsGroup(context.options, index, lastThinking);
-  const end = chainEnd(context, index, row);
+  const end = await chainEnd(context, index, row);
   if (end === index) {
     appendRow(context.table, row, redact, context.options, state);
     return;

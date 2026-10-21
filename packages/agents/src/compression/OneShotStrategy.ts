@@ -63,6 +63,7 @@ function destructureProviderResult(result: CompressionProviderResult): {
   };
 }
 
+import type { CompressionInputRows } from '@vybestack/llxprt-code-core/services/history/compressionInput.js';
 import type { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { diskSummaryRequestSelection } from './middleOutDiskPlan.js';
@@ -88,7 +89,7 @@ export class OneShotStrategy implements CompressionStrategy {
 
   async compressDisk(
     context: Omit<CompressionContext, 'history'> & {
-      readonly history: HistoryDensityRows;
+      readonly history: CompressionInputRows;
     },
     candidate: HistoryDensityRows,
   ): Promise<
@@ -99,15 +100,15 @@ export class OneShotStrategy implements CompressionStrategy {
     if (result.kind === 'applied')
       for (let index = 0; index < result.candidate.length; index++)
         candidate.append(
-          result.candidate.readRow(index),
-          result.candidate.sourceOrdinalAt(index),
+          await result.candidate.readRow(index),
+          await result.candidate.sourceOrdinalAt(index),
         );
     return result;
   }
 
   async prepareDisk(
     context: Omit<CompressionContext, 'history'> & {
-      readonly history: HistoryDensityRows;
+      readonly history: CompressionInputRows;
     },
   ): Promise<SummaryOutput> {
     let bottom = Math.floor(
@@ -115,7 +116,7 @@ export class OneShotStrategy implements CompressionStrategy {
         (1 - context.runtimeContext.ephemerals.preserveThreshold()),
     );
     if (bottom < MINIMUM_COMPRESS_MESSAGES) return { kind: 'noop' };
-    bottom = adjustDiskToolBoundary(context.history, bottom);
+    bottom = await adjustDiskToolBoundary(context.history, bottom);
     if (bottom < MINIMUM_COMPRESS_MESSAGES) return { kind: 'noop' };
     const result = destructureProviderResult(
       await context.resolveProvider(
