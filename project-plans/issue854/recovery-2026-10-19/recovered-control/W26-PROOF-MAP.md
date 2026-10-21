@@ -1,3 +1,23 @@
+# Native public prefix producer proof, 2026-10-21
+
+Final source `27d146038e5281281eb0fb019ad39679d46fe1ce`: **71 passes, zero failures/skips, 472 assertions in eleven serial complete files**, nine matching gates. Early accept4 separately records 235 passes/62,143 assertions in 28 files. Four controls fail 5/4/2/1 actual assertions and restore cmp/hash; two additional old-branch runtime failures are excluded from assertion evidence; all 1,192 preservation hashes match and recorded AJ PIDs are absent. These matrices have different source boundaries and are not added together as unique final acceptance.
+
+Implementation `10bfb7fe7`; early green media/durability WIP `0368b4942`. [Source-bound receipt](W26-SOURCE-BOUND-PREFIXPRODUCER-PROOF.json), [caller census](W26-NATIVE-PRODUCER-CENSUS.md), raw root `tmp/p5/w26-producers-run-aj/`.
+
+| Obligation | Evidence and boundary |
+| --- | --- |
+| Actual public native producer | Backend-explicit Agent reset/restore tests use pinned native checkpoints and numeric cuts, no HistoryDensityRows operation snapshot. Independent old backend remains unchanged. |
+| Bytes, tokens and owners | 512/8192 old-backend semantic speaker/block bytes and deterministic successful-token totals; 3/64/65/5000 exact alternating current owners; full greater-than-nine-MiB prefix. Volatile metadata is not included in the semantic-byte comparison. |
+| Lifetime and rollback | Actual 512/8192 sink-argument WeakRefs at awaited backpressure; row-65 producer/finalization failure restores prior tokens/history and permits same-writer continuation. Original durable/mirror tests distinguish physical poisoning. No copied rollback history or whole-prefix array/map. |
+| Pin and cancellation | Three-test ownership RED; managed raw checkpoint readers count and release suspended rows, retire before their pin and consume after opener disposal. Exact abort object; original unchanged #3919 11/29 and 3/20 identity files. No descriptor reopen fallback. |
+| Selection and reads | Scalar length/no-change checks; human selection reads headers without row decoding. Two media metadata/reference passes are linear. Retained publication converts one output at a time. No logarithmic whole-operation or whole-heap claim. |
+| Negative controls | Old prefix file, wrong source ordinal, retained prefix and wrapped cleanup identity each require actual assertion failure, followed by byte equality, cmp and matching SHA-256. Exact counts/logs are in the receipt. |
+| Source and gates | Early accept4: 28 complete serial files plus nine gates. Final receipt separates that source boundary from the checkpoint follow-up and lists final gates/tests and any reused evidence. Graph validation is not shard execution. Audit findings are retained and classified. |
+
+Actual native fallback, semantic purge and CLI producers remain open, as does the annotated general-append contract. Ordinary append/merge does not activate its lazy annotation collector. Explicit disk contracts remain distinct from old-only files, which stay until phase 9. Phase 6 provider spools/request guards, structural ranking, pending/stale capacity, LENS/live-byte accounting, heap/pin/cache capacity and W23/W25/cutover remain open. Defaults are unchanged; #3917 remains separately RED without rerun/retry/suppression. No new producer family, review, cleanup, unrelated/.llxprt staging, push, merge or weaker enforcement. Review skipped per Andrew 2026-10-09.
+
+---
+
 # Empty duplicate-ID density proof, 2026-10-21
 
 RED `c51d4d224`, first fix `8f3b09761`, final source `a48994b3c`. [Receipt](W26-SOURCE-BOUND-EMPTY-ID-PROOF.json): **92 passes, zero failures/skips, 595,180 assertions in 17 unique complete serial files**, nine scoped gates, four cmp/hash-restored assertion controls. Raw root: `tmp/p5/w26-empty-id-run-ai/`. The existing cache and normalization files supply 533,294 and 60,857 assertions.

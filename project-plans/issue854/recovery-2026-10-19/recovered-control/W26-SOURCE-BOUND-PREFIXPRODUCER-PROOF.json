@@ -1,0 +1,1796 @@
+{
+  "date": "2026-10-21T19:08:59.560Z",
+  "scope": "W26 native public session prefix producer green follow-up only. No producer-wide closure.",
+  "initialCommit": "10bfb7fe7b55a4bc2cec9eac8496334b5872ecc6",
+  "earlyCommit": "0368b4942c741308f3d89cfaf230b18fbc6968f2",
+  "finalProductionCommit": "27d146038e5281281eb0fb019ad39679d46fe1ce",
+  "rawRoot": "tmp/p5/w26-producers-run-aj/",
+  "sourceManifest": {
+    "path": "tmp/p5/w26-producers-run-aj/final-source-manifest.json",
+    "hash": "668cc8229d05aabbdf8ddff7f850ec751c0286fe9f521f8c9394ed7b3181bc0a",
+    "count": 8699
+  },
+  "earlyAcceptance": {
+    "totals": {
+      "files": 28,
+      "passes": 235,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 62143
+    },
+    "records": [
+      {
+        "name": "accept4-session-native-prefix",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/api/__tests__/session-native-prefix.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 79482,
+        "pid": 80220,
+        "start": "2026-10-21T18:44:41.970Z",
+        "end": "2026-10-21T18:44:46.940Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept4-session-native-prefix.log",
+        "logHash": "ea83d260749ef400e45215f6847f73c53ca2a07bed25b8349ad6306a6ddc856c",
+        "sourceHash": "97e561caa3e59ba93ffbc61c814a2c2911a900a8e28589e5f077ff5826d4f8f8",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept4-session-native-prefix-source.json",
+        "passes": 5,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 11
+      },
+      {
+        "name": "accept4-session-native-prefix-lifecycle",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/api/__tests__/session-native-prefix-lifecycle.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 79482,
+        "pid": 80384,
+        "start": "2026-10-21T18:44:47.122Z",
+        "end": "2026-10-21T18:45:03.933Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept4-session-native-prefix-lifecycle.log",
+        "logHash": "5870a9ae9b064dcf823b8e386aa0c1d657896ef61d5ad7dc29a44b2c216fbe74",
+        "sourceHash": "97e561caa3e59ba93ffbc61c814a2c2911a900a8e28589e5f077ff5826d4f8f8",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept4-session-native-prefix-lifecycle-source.json",
+        "passes": 7,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 102
+      },
+      {
+        "name": "accept4-session-native-prefix-owners",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/api/__tests__/session-native-prefix-owners.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 79482,
+        "pid": 80675,
+        "start": "2026-10-21T18:45:04.123Z",
+        "end": "2026-10-21T18:45:36.284Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept4-session-native-prefix-owners.log",
+        "logHash": "b0bf212b69d4a82bc991670c865a5214eb8851d78bafeb14f8292cd0f8baa729",
+        "sourceHash": "97e561caa3e59ba93ffbc61c814a2c2911a900a8e28589e5f077ff5826d4f8f8",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept4-session-native-prefix-owners-source.json",
+        "passes": 4,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 24
+      },
+      {
+        "name": "accept4-journal-human-cut",
+        "cwd": "packages/core",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/services/history/journal-human-cut.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 79482,
+        "pid": 81289,
+        "start": "2026-10-21T18:45:36.470Z",
+        "end": "2026-10-21T18:46:04.166Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept4-journal-human-cut.log",
+        "logHash": "f9aedc4c37eb8f1e1f4adc13eca28a049231ec52af29a342ac16a3dfa6c0c449",
+        "sourceHash": "97e561caa3e59ba93ffbc61c814a2c2911a900a8e28589e5f077ff5826d4f8f8",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept4-journal-human-cut-source.json",
+        "passes": 6,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 51
+      },
+      {
+        "name": "accept4-session.clearConversation.behavior",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/api/__tests__/session.clearConversation.behavior.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 79482,
+        "pid": 81809,
+        "start": "2026-10-21T18:46:04.348Z",
+        "end": "2026-10-21T18:46:08.454Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept4-session.clearConversation.behavior.log",
+        "logHash": "223f924ec2769ed65572bcdebf72e6810a6342549ce9ed2a1f8292a9c60af959",
+        "sourceHash": "97e561caa3e59ba93ffbc61c814a2c2911a900a8e28589e5f077ff5826d4f8f8",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept4-session.clearConversation.behavior-source.json",
+        "passes": 21,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 96
+      },
+      {
+        "name": "accept4-session-owner-restore-checkpoint.behavior",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/api/__tests__/session-owner-restore-checkpoint.behavior.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 79482,
+        "pid": 81992,
+        "start": "2026-10-21T18:46:08.643Z",
+        "end": "2026-10-21T18:46:12.202Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept4-session-owner-restore-checkpoint.behavior.log",
+        "logHash": "0a6b516415b883c0eab6998d54ed85744cda5c193a4f5fa59e1623085a0bf7f9",
+        "sourceHash": "97e561caa3e59ba93ffbc61c814a2c2911a900a8e28589e5f077ff5826d4f8f8",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept4-session-owner-restore-checkpoint.behavior-source.json",
+        "passes": 18,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 119
+      },
+      {
+        "name": "accept4-session-background-clear.behavior",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/api/__tests__/session-background-clear.behavior.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 79482,
+        "pid": 82147,
+        "start": "2026-10-21T18:46:12.383Z",
+        "end": "2026-10-21T18:46:13.862Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept4-session-background-clear.behavior.log",
+        "logHash": "c91a6a52e6d96d2befe42bc7f764b44a1a9a4ae64f3f94109e1073dc1f545ecc",
+        "sourceHash": "97e561caa3e59ba93ffbc61c814a2c2911a900a8e28589e5f077ff5826d4f8f8",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept4-session-background-clear.behavior-source.json",
+        "passes": 4,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 12
+      },
+      {
+        "name": "accept4-session-package-export",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/api/__tests__/session-package-export.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 79482,
+        "pid": 82230,
+        "start": "2026-10-21T18:46:14.059Z",
+        "end": "2026-10-21T18:46:15.773Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept4-session-package-export.log",
+        "logHash": "56a06dd4889846b2ee8e3100e3363899c6a5b2a7b6f84833b166a61fcf868ca5",
+        "sourceHash": "97e561caa3e59ba93ffbc61c814a2c2911a900a8e28589e5f077ff5826d4f8f8",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept4-session-package-export-source.json",
+        "passes": 2,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 30
+      },
+      {
+        "name": "accept4-history-profile-adoption.journal",
+        "cwd": "packages/core",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/services/history/history-profile-adoption.journal.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 79482,
+        "pid": 82267,
+        "start": "2026-10-21T18:46:15.954Z",
+        "end": "2026-10-21T18:46:16.827Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept4-history-profile-adoption.journal.log",
+        "logHash": "5f31fddc4b302731d3226df626204dff88bf4ca29018f1bc16e28e34f4c8f660",
+        "sourceHash": "97e561caa3e59ba93ffbc61c814a2c2911a900a8e28589e5f077ff5826d4f8f8",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept4-history-profile-adoption.journal-source.json",
+        "passes": 7,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 24
+      },
+      {
+        "name": "accept4-journalHistoryStore.publishDetached",
+        "cwd": "packages/core",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/services/history/journalHistoryStore.publishDetached.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 79482,
+        "pid": 82289,
+        "start": "2026-10-21T18:46:17.026Z",
+        "end": "2026-10-21T18:46:19.055Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept4-journalHistoryStore.publishDetached.log",
+        "logHash": "83577a7b9c6bed3d721e2a19d3f6f10fea44e7ef202298da28d3f865c383db94",
+        "sourceHash": "97e561caa3e59ba93ffbc61c814a2c2911a900a8e28589e5f077ff5826d4f8f8",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept4-journalHistoryStore.publishDetached-source.json",
+        "passes": 23,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 75
+      },
+      {
+        "name": "accept4-journalHistoryStore.detachedOwners",
+        "cwd": "packages/core",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/services/history/journalHistoryStore.detachedOwners.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 79482,
+        "pid": 82318,
+        "start": "2026-10-21T18:46:19.240Z",
+        "end": "2026-10-21T18:46:23.050Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept4-journalHistoryStore.detachedOwners.log",
+        "logHash": "8cf024395cb8a14bddb334e0c5f8f22ea42161276ddd4280c2a0881d6184f6aa",
+        "sourceHash": "97e561caa3e59ba93ffbc61c814a2c2911a900a8e28589e5f077ff5826d4f8f8",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept4-journalHistoryStore.detachedOwners-source.json",
+        "passes": 13,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 21
+      },
+      {
+        "name": "accept4-journalHistoryStore.detachedMedia",
+        "cwd": "packages/core",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/services/history/journalHistoryStore.detachedMedia.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 79482,
+        "pid": 82436,
+        "start": "2026-10-21T18:46:23.230Z",
+        "end": "2026-10-21T18:46:24.115Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept4-journalHistoryStore.detachedMedia.log",
+        "logHash": "7dcb0e36222b9f877afe4339e6f1c6b8b7840b391f8e57758723b283de00204e",
+        "sourceHash": "97e561caa3e59ba93ffbc61c814a2c2911a900a8e28589e5f077ff5826d4f8f8",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept4-journalHistoryStore.detachedMedia-source.json",
+        "passes": 6,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 17
+      },
+      {
+        "name": "accept4-journalDetachedStream",
+        "cwd": "packages/core",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/services/history/journalDetachedStream.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 79482,
+        "pid": 82457,
+        "start": "2026-10-21T18:46:24.296Z",
+        "end": "2026-10-21T18:46:24.641Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept4-journalDetachedStream.log",
+        "logHash": "934bb9430291db8f2a7f9f2f1d4f68d633bd13a60b001948c43cb109beadc6c3",
+        "sourceHash": "97e561caa3e59ba93ffbc61c814a2c2911a900a8e28589e5f077ff5826d4f8f8",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept4-journalDetachedStream-source.json",
+        "passes": 5,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 16
+      },
+      {
+        "name": "accept4-detached-checkpoint.journal",
+        "cwd": "packages/core",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/services/history/detached-checkpoint.journal.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 79482,
+        "pid": 82465,
+        "start": "2026-10-21T18:46:24.823Z",
+        "end": "2026-10-21T18:46:37.134Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept4-detached-checkpoint.journal.log",
+        "logHash": "3bb95bf98686d19ed0d3c2ecc10e0574849abc2224e1b4fbd40b3dc447cc1844",
+        "sourceHash": "97e561caa3e59ba93ffbc61c814a2c2911a900a8e28589e5f077ff5826d4f8f8",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept4-detached-checkpoint.journal-source.json",
+        "passes": 4,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 49
+      },
+      {
+        "name": "accept4-journalStore.readerLifetime",
+        "cwd": "packages/core",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/journal/journalStore.readerLifetime.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 79482,
+        "pid": 82688,
+        "start": "2026-10-21T18:46:37.317Z",
+        "end": "2026-10-21T18:46:37.866Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept4-journalStore.readerLifetime.log",
+        "logHash": "414b1f205f5838f61202017697b3457906479d8713d5eeef50accae178a83e75",
+        "sourceHash": "97e561caa3e59ba93ffbc61c814a2c2911a900a8e28589e5f077ff5826d4f8f8",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept4-journalStore.readerLifetime-source.json",
+        "passes": 11,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 29
+      },
+      {
+        "name": "accept4-journalStore.readerCleanup",
+        "cwd": "packages/core",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/journal/journalStore.readerCleanup.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 79482,
+        "pid": 82705,
+        "start": "2026-10-21T18:46:38.091Z",
+        "end": "2026-10-21T18:46:38.671Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept4-journalStore.readerCleanup.log",
+        "logHash": "63c2157249809551e4a5308fc08bc2c68b6d15effaeffb84a24a43fda30bcb4e",
+        "sourceHash": "97e561caa3e59ba93ffbc61c814a2c2911a900a8e28589e5f077ff5826d4f8f8",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept4-journalStore.readerCleanup-source.json",
+        "passes": 3,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 20
+      },
+      {
+        "name": "accept4-groupWriter",
+        "cwd": "packages/core",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/journal/groupWriter.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 79482,
+        "pid": 82718,
+        "start": "2026-10-21T18:46:38.854Z",
+        "end": "2026-10-21T18:46:39.266Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept4-groupWriter.log",
+        "logHash": "74d5f5a6b74008d2ac8ff442e61c04e6f13de40abaa391b930c2d12db2d0e940",
+        "sourceHash": "97e561caa3e59ba93ffbc61c814a2c2911a900a8e28589e5f077ff5826d4f8f8",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept4-groupWriter-source.json",
+        "passes": 24,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 73
+      },
+      {
+        "name": "accept4-summary-output-files",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/compression/__tests__/summary-output-files.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 79482,
+        "pid": 82735,
+        "start": "2026-10-21T18:46:39.448Z",
+        "end": "2026-10-21T18:46:59.663Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept4-summary-output-files.log",
+        "logHash": "596330ab60ce10ea31e4f703dd380f6bb4bd3cc51e058f9d5d09ce87689ce4d9",
+        "sourceHash": "97e561caa3e59ba93ffbc61c814a2c2911a900a8e28589e5f077ff5826d4f8f8",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept4-summary-output-files-source.json",
+        "passes": 11,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 65
+      },
+      {
+        "name": "accept4-truncation-native-spans",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/compression/__tests__/truncation-native-spans.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 79482,
+        "pid": 83064,
+        "start": "2026-10-21T18:46:59.843Z",
+        "end": "2026-10-21T18:47:10.343Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept4-truncation-native-spans.log",
+        "logHash": "eb746d4164f16edc62962b3b4cf09a4b9e6d572326e99e91fe9cb8d5859727d5",
+        "sourceHash": "97e561caa3e59ba93ffbc61c814a2c2911a900a8e28589e5f077ff5826d4f8f8",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept4-truncation-native-spans-source.json",
+        "passes": 4,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 15
+      },
+      {
+        "name": "accept4-cache-anchor-native-spans",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/compression/__tests__/cache-anchor-native-spans.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 79482,
+        "pid": 83245,
+        "start": "2026-10-21T18:47:10.538Z",
+        "end": "2026-10-21T18:47:14.293Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept4-cache-anchor-native-spans.log",
+        "logHash": "ee895ac3abfc3d4ed1603948932599fd09a3bf130aa9fb33a9d8fb1bfd3aabec",
+        "sourceHash": "97e561caa3e59ba93ffbc61c814a2c2911a900a8e28589e5f077ff5826d4f8f8",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept4-cache-anchor-native-spans-source.json",
+        "passes": 4,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 28
+      },
+      {
+        "name": "accept4-continuous-native-read-write",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/compression/__tests__/continuous-native-read-write.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 79482,
+        "pid": 83327,
+        "start": "2026-10-21T18:47:14.497Z",
+        "end": "2026-10-21T18:49:04.087Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept4-continuous-native-read-write.log",
+        "logHash": "4b688eb53a4aee4eb0650c8ba92872d58dc28608a441a616c01d3021cee8c86d",
+        "sourceHash": "97e561caa3e59ba93ffbc61c814a2c2911a900a8e28589e5f077ff5826d4f8f8",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept4-continuous-native-read-write-source.json",
+        "passes": 8,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 24
+      },
+      {
+        "name": "accept4-tool-ranking-native-parity",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/compression/__tests__/tool-ranking-native-parity.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 79482,
+        "pid": 85309,
+        "start": "2026-10-21T18:49:04.273Z",
+        "end": "2026-10-21T18:53:07.268Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept4-tool-ranking-native-parity.log",
+        "logHash": "df318ba773044335ffcd1bf3767a822864bd5edb7b642a10208de59ab8a55120",
+        "sourceHash": "97e561caa3e59ba93ffbc61c814a2c2911a900a8e28589e5f077ff5826d4f8f8",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept4-tool-ranking-native-parity-source.json",
+        "passes": 6,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 42
+      },
+      {
+        "name": "accept4-normalization-unit-oracle",
+        "cwd": "packages/core",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/services/history/normalization-unit-oracle.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 79482,
+        "pid": 91015,
+        "start": "2026-10-21T18:53:07.457Z",
+        "end": "2026-10-21T18:53:23.279Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept4-normalization-unit-oracle.log",
+        "logHash": "6e9d4aea2a94ced66ed2304d6cf5ed6ff63861b2f7652a88eacc049e46199916",
+        "sourceHash": "97e561caa3e59ba93ffbc61c814a2c2911a900a8e28589e5f077ff5826d4f8f8",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept4-normalization-unit-oracle-source.json",
+        "passes": 3,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 60857
+      },
+      {
+        "name": "accept4-fallback-values.journal",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/compression/__tests__/fallback-values.journal.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 79482,
+        "pid": 91301,
+        "start": "2026-10-21T18:53:23.471Z",
+        "end": "2026-10-21T18:56:42.112Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept4-fallback-values.journal.log",
+        "logHash": "0f4939bfa962fbeb39fcfbef4210b89a3fdbfdfcbe4754c94d3f55e4258a5584",
+        "sourceHash": "97e561caa3e59ba93ffbc61c814a2c2911a900a8e28589e5f077ff5826d4f8f8",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept4-fallback-values.journal-source.json",
+        "passes": 13,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 112
+      },
+      {
+        "name": "accept4-highdensity-native-files",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/compression/__tests__/highdensity-native-files.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 79482,
+        "pid": 94294,
+        "start": "2026-10-21T18:56:42.308Z",
+        "end": "2026-10-21T18:59:16.013Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept4-highdensity-native-files.log",
+        "logHash": "2d8630588e143a0545b4375a51547d36860bed189eef83539d93cf942bfceb37",
+        "sourceHash": "97e561caa3e59ba93ffbc61c814a2c2911a900a8e28589e5f077ff5826d4f8f8",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept4-highdensity-native-files-source.json",
+        "passes": 6,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 50
+      },
+      {
+        "name": "accept4-summary-native-input-memory",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/compression/__tests__/summary-native-input-memory.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 79482,
+        "pid": 98046,
+        "start": "2026-10-21T18:59:16.199Z",
+        "end": "2026-10-21T19:00:39.893Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept4-summary-native-input-memory.log",
+        "logHash": "2416a659dbfe5e56a0b8961ddfbf401e800364f175b615d47e10d4b70276d9b9",
+        "sourceHash": "97e561caa3e59ba93ffbc61c814a2c2911a900a8e28589e5f077ff5826d4f8f8",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept4-summary-native-input-memory-source.json",
+        "passes": 4,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 117
+      },
+      {
+        "name": "accept4-journalHistoryStore.merge",
+        "cwd": "packages/core",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/services/history/journalHistoryStore.merge.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 79482,
+        "pid": 99451,
+        "start": "2026-10-21T19:00:40.078Z",
+        "end": "2026-10-21T19:00:40.753Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept4-journalHistoryStore.merge.log",
+        "logHash": "e517125a8b9fd5aaa046d8f863f506aaa36dae08c23adc60f1dd1e5755874e6e",
+        "sourceHash": "97e561caa3e59ba93ffbc61c814a2c2911a900a8e28589e5f077ff5826d4f8f8",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept4-journalHistoryStore.merge-source.json",
+        "passes": 4,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 10
+      },
+      {
+        "name": "accept4-journal-detached-no-scratch",
+        "cwd": "packages/core",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/services/history/journal-detached-no-scratch.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 79482,
+        "pid": 99458,
+        "start": "2026-10-21T19:00:40.938Z",
+        "end": "2026-10-21T19:00:41.771Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept4-journal-detached-no-scratch.log",
+        "logHash": "07aa81cf55356af3b313ce26081155fadf5e70744fb3c0865a8a443a9f60d318",
+        "sourceHash": "97e561caa3e59ba93ffbc61c814a2c2911a900a8e28589e5f077ff5826d4f8f8",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept4-journal-detached-no-scratch-source.json",
+        "passes": 9,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 54
+      }
+    ],
+    "scope": "Binds early green commit, not silently reused as unchanged final production.",
+    "sourceChangesFromEarly": [
+      "packages/agents/src/api/__tests__/session-native-prefix.test.ts",
+      "packages/core/src/services/history/journalCheckpoints.ts",
+      "packages/core/src/services/history/journalDumpSnapshot.ts",
+      "packages/core/src/services/history/journalHistoryStore.ts"
+    ]
+  },
+  "finalAcceptance": {
+    "totals": {
+      "files": 11,
+      "passes": 71,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 472
+    },
+    "records": [
+      {
+        "name": "accept5-journal-checkpoint-reader",
+        "cwd": "packages/core",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/services/history/journal-checkpoint-reader.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 4707,
+        "pid": 5608,
+        "start": "2026-10-21T19:06:26.853Z",
+        "end": "2026-10-21T19:06:27.634Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept5-journal-checkpoint-reader.log",
+        "logHash": "e72aa0cea91e49756b070edc249925df06df0dcd6ba55041dfeb9fd7add15a67",
+        "sourceHash": "92a424aefc9b15e4e23e36e92182c6ac1027b3bc1eb11d9994f0ec8f253781d6",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept5-journal-checkpoint-reader-source.json",
+        "passes": 3,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 14
+      },
+      {
+        "name": "accept5-journalStore.readerLifetime",
+        "cwd": "packages/core",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/journal/journalStore.readerLifetime.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 4707,
+        "pid": 5646,
+        "start": "2026-10-21T19:06:27.842Z",
+        "end": "2026-10-21T19:06:28.387Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept5-journalStore.readerLifetime.log",
+        "logHash": "5f79b0c72387cd4605dff30110ad008d600275e821d40f99f10a1efa74ce462c",
+        "sourceHash": "92a424aefc9b15e4e23e36e92182c6ac1027b3bc1eb11d9994f0ec8f253781d6",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept5-journalStore.readerLifetime-source.json",
+        "passes": 11,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 29
+      },
+      {
+        "name": "accept5-journalStore.readerCleanup",
+        "cwd": "packages/core",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/journal/journalStore.readerCleanup.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 4707,
+        "pid": 5660,
+        "start": "2026-10-21T19:06:28.570Z",
+        "end": "2026-10-21T19:06:29.165Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept5-journalStore.readerCleanup.log",
+        "logHash": "efef572011b178fe7091f83e9cc9a63765151c2cba8f4ee5cde5be0c8037771c",
+        "sourceHash": "92a424aefc9b15e4e23e36e92182c6ac1027b3bc1eb11d9994f0ec8f253781d6",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept5-journalStore.readerCleanup-source.json",
+        "passes": 3,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 20
+      },
+      {
+        "name": "accept5-journal-human-cut",
+        "cwd": "packages/core",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/services/history/journal-human-cut.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 4707,
+        "pid": 5683,
+        "start": "2026-10-21T19:06:29.351Z",
+        "end": "2026-10-21T19:06:55.412Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept5-journal-human-cut.log",
+        "logHash": "a7c42b4dff0f32bbf0a4221ea05521d366a0cecbba464346f447b5ee13be1c42",
+        "sourceHash": "92a424aefc9b15e4e23e36e92182c6ac1027b3bc1eb11d9994f0ec8f253781d6",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept5-journal-human-cut-source.json",
+        "passes": 6,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 51
+      },
+      {
+        "name": "accept5-detached-checkpoint.journal",
+        "cwd": "packages/core",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/services/history/detached-checkpoint.journal.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 4707,
+        "pid": 6295,
+        "start": "2026-10-21T19:06:55.594Z",
+        "end": "2026-10-21T19:07:09.251Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept5-detached-checkpoint.journal.log",
+        "logHash": "a127427c7506e16f5d908fbaec7fd22fcebd7273668ad4576a8569a202ee832d",
+        "sourceHash": "92a424aefc9b15e4e23e36e92182c6ac1027b3bc1eb11d9994f0ec8f253781d6",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept5-detached-checkpoint.journal-source.json",
+        "passes": 4,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 49
+      },
+      {
+        "name": "accept5-session-native-prefix",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/api/__tests__/session-native-prefix.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 4707,
+        "pid": 6694,
+        "start": "2026-10-21T19:07:09.449Z",
+        "end": "2026-10-21T19:07:33.778Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept5-session-native-prefix.log",
+        "logHash": "d31a5c918cc5f8a4ac3b7e1ff6bab6ddee637d7b561aee2916d5839edbd615e7",
+        "sourceHash": "92a424aefc9b15e4e23e36e92182c6ac1027b3bc1eb11d9994f0ec8f253781d6",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept5-session-native-prefix-source.json",
+        "passes": 7,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 21
+      },
+      {
+        "name": "accept5-session-native-prefix-lifecycle",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/api/__tests__/session-native-prefix-lifecycle.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 4707,
+        "pid": 7372,
+        "start": "2026-10-21T19:07:33.966Z",
+        "end": "2026-10-21T19:07:53.653Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept5-session-native-prefix-lifecycle.log",
+        "logHash": "9ed9f837896aeb6c3f5cda421ec4210613e853b17d870dba850a1e45aec0be73",
+        "sourceHash": "92a424aefc9b15e4e23e36e92182c6ac1027b3bc1eb11d9994f0ec8f253781d6",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept5-session-native-prefix-lifecycle-source.json",
+        "passes": 7,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 102
+      },
+      {
+        "name": "accept5-session-native-prefix-owners",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/api/__tests__/session-native-prefix-owners.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 4707,
+        "pid": 7970,
+        "start": "2026-10-21T19:07:53.840Z",
+        "end": "2026-10-21T19:08:25.692Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept5-session-native-prefix-owners.log",
+        "logHash": "02712b7424d1ccb16377b238789c178d6bac5343924b50663146fe4e84f3b178",
+        "sourceHash": "92a424aefc9b15e4e23e36e92182c6ac1027b3bc1eb11d9994f0ec8f253781d6",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept5-session-native-prefix-owners-source.json",
+        "passes": 4,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 24
+      },
+      {
+        "name": "accept5-session-owner-restore-checkpoint.behavior",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/api/__tests__/session-owner-restore-checkpoint.behavior.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 4707,
+        "pid": 8882,
+        "start": "2026-10-21T19:08:25.883Z",
+        "end": "2026-10-21T19:08:29.469Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept5-session-owner-restore-checkpoint.behavior.log",
+        "logHash": "24daa4b28115e4c1150ebcc4149653b5586b0e2f0634f6d5d8a30318c2aeca19",
+        "sourceHash": "92a424aefc9b15e4e23e36e92182c6ac1027b3bc1eb11d9994f0ec8f253781d6",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept5-session-owner-restore-checkpoint.behavior-source.json",
+        "passes": 18,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 119
+      },
+      {
+        "name": "accept5-truncation-native-spans",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/compression/__tests__/truncation-native-spans.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 4707,
+        "pid": 9080,
+        "start": "2026-10-21T19:08:29.658Z",
+        "end": "2026-10-21T19:08:40.671Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept5-truncation-native-spans.log",
+        "logHash": "b4678a24d7c9020ae97e35ce4c0190e1a6e64eadad7e5a16bb594b5f0c3bf70f",
+        "sourceHash": "92a424aefc9b15e4e23e36e92182c6ac1027b3bc1eb11d9994f0ec8f253781d6",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept5-truncation-native-spans-source.json",
+        "passes": 4,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 15
+      },
+      {
+        "name": "accept5-cache-anchor-native-spans",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/compression/__tests__/cache-anchor-native-spans.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 4707,
+        "pid": 9389,
+        "start": "2026-10-21T19:08:40.855Z",
+        "end": "2026-10-21T19:08:44.757Z",
+        "code": 0,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/accept5-cache-anchor-native-spans.log",
+        "logHash": "35ff4001d99b1963d523e64c39d46a8ff6ada913bb0edfad264b3c5e35b7e5f7",
+        "sourceHash": "92a424aefc9b15e4e23e36e92182c6ac1027b3bc1eb11d9994f0ec8f253781d6",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/accept5-cache-anchor-native-spans-source.json",
+        "passes": 4,
+        "failures": 0,
+        "skips": 0,
+        "assertions": 28
+      }
+    ]
+  },
+  "gates": [
+    {
+      "name": "final5-core-declarations",
+      "cwd": ".",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-b",
+        "packages/core/tsconfig.build.json",
+        "--emitDeclarationOnly"
+      ],
+      "extraEnv": {},
+      "driver": 4707,
+      "pid": 4711,
+      "start": "2026-10-21T19:05:40.577Z",
+      "end": "2026-10-21T19:05:44.437Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/final5-core-declarations.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceHash": "92a424aefc9b15e4e23e36e92182c6ac1027b3bc1eb11d9994f0ec8f253781d6",
+      "changed": [],
+      "manifest": "tmp/p5/w26-producers-run-aj/final5-core-declarations-source.json",
+      "passes": 0,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 0
+    },
+    {
+      "name": "final5-agents-declarations",
+      "cwd": ".",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-b",
+        "packages/agents/tsconfig.build.json",
+        "--emitDeclarationOnly"
+      ],
+      "extraEnv": {},
+      "driver": 4707,
+      "pid": 4797,
+      "start": "2026-10-21T19:05:44.641Z",
+      "end": "2026-10-21T19:05:47.487Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/final5-agents-declarations.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceHash": "92a424aefc9b15e4e23e36e92182c6ac1027b3bc1eb11d9994f0ec8f253781d6",
+      "changed": [],
+      "manifest": "tmp/p5/w26-producers-run-aj/final5-agents-declarations-source.json",
+      "passes": 0,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 0
+    },
+    {
+      "name": "final5-core-types",
+      "cwd": ".",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "packages/core/tsconfig.noemit.json"
+      ],
+      "extraEnv": {},
+      "driver": 4707,
+      "pid": 4871,
+      "start": "2026-10-21T19:05:47.675Z",
+      "end": "2026-10-21T19:05:55.079Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/final5-core-types.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceHash": "92a424aefc9b15e4e23e36e92182c6ac1027b3bc1eb11d9994f0ec8f253781d6",
+      "changed": [],
+      "manifest": "tmp/p5/w26-producers-run-aj/final5-core-types-source.json",
+      "passes": 0,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 0
+    },
+    {
+      "name": "final5-agents-types",
+      "cwd": ".",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "packages/agents/tsconfig.noemit.json"
+      ],
+      "extraEnv": {},
+      "driver": 4707,
+      "pid": 5027,
+      "start": "2026-10-21T19:05:55.261Z",
+      "end": "2026-10-21T19:06:05.583Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/final5-agents-types.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceHash": "92a424aefc9b15e4e23e36e92182c6ac1027b3bc1eb11d9994f0ec8f253781d6",
+      "changed": [],
+      "manifest": "tmp/p5/w26-producers-run-aj/final5-agents-types-source.json",
+      "passes": 0,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 0
+    },
+    {
+      "name": "final5-bun-types",
+      "cwd": ".",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "packages/agents/tsconfig.test-bun.json",
+        "--types",
+        "node,bun"
+      ],
+      "extraEnv": {},
+      "driver": 4707,
+      "pid": 5201,
+      "start": "2026-10-21T19:06:05.765Z",
+      "end": "2026-10-21T19:06:11.672Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/final5-bun-types.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceHash": "92a424aefc9b15e4e23e36e92182c6ac1027b3bc1eb11d9994f0ec8f253781d6",
+      "changed": [],
+      "manifest": "tmp/p5/w26-producers-run-aj/final5-bun-types-source.json",
+      "passes": 0,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 0
+    },
+    {
+      "name": "final5-lint",
+      "cwd": ".",
+      "command": [
+        "node_modules/.bin/eslint",
+        "--max-warnings",
+        "0",
+        "packages/core/src/services/history/journalHistoryStore.ts",
+        "packages/core/src/services/history/journal-checkpoint-reader.test.ts",
+        "packages/agents/src/api/__tests__/helpers/native-prefix-backend.ts",
+        "packages/core/src/services/history/historyReaderScope.ts",
+        "packages/core/src/services/history/historyCheckpointRows.ts",
+        "packages/core/src/services/history/journalCheckpoints.ts",
+        "packages/core/src/services/history/journalDumpSnapshot.ts",
+        "packages/core/src/services/history/journal-human-cut.test.ts",
+        "packages/agents/src/core/native-history-prefix.ts",
+        "packages/agents/src/core/clientResetHistory.ts",
+        "packages/agents/src/api/control/sessionHistoryClear.ts",
+        "packages/agents/src/api/__tests__/session-native-prefix.test.ts",
+        "packages/agents/src/api/__tests__/session-native-prefix-lifecycle.test.ts",
+        "packages/agents/src/api/__tests__/session-native-prefix-owners.test.ts"
+      ],
+      "extraEnv": {},
+      "driver": 4707,
+      "pid": 5272,
+      "start": "2026-10-21T19:06:11.873Z",
+      "end": "2026-10-21T19:06:19.798Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/final5-lint.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceHash": "92a424aefc9b15e4e23e36e92182c6ac1027b3bc1eb11d9994f0ec8f253781d6",
+      "changed": [],
+      "manifest": "tmp/p5/w26-producers-run-aj/final5-lint-source.json",
+      "passes": 0,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 0
+    },
+    {
+      "name": "final5-format",
+      "cwd": ".",
+      "command": [
+        "node_modules/.bin/prettier",
+        "--check",
+        "packages/core/src/services/history/journalHistoryStore.ts",
+        "packages/core/src/services/history/journal-checkpoint-reader.test.ts",
+        "packages/agents/src/api/__tests__/helpers/native-prefix-backend.ts",
+        "packages/core/src/services/history/historyReaderScope.ts",
+        "packages/core/src/services/history/historyCheckpointRows.ts",
+        "packages/core/src/services/history/journalCheckpoints.ts",
+        "packages/core/src/services/history/journalDumpSnapshot.ts",
+        "packages/core/src/services/history/journal-human-cut.test.ts",
+        "packages/agents/src/core/native-history-prefix.ts",
+        "packages/agents/src/core/clientResetHistory.ts",
+        "packages/agents/src/api/control/sessionHistoryClear.ts",
+        "packages/agents/src/api/__tests__/session-native-prefix.test.ts",
+        "packages/agents/src/api/__tests__/session-native-prefix-lifecycle.test.ts",
+        "packages/agents/src/api/__tests__/session-native-prefix-owners.test.ts"
+      ],
+      "extraEnv": {},
+      "driver": 4707,
+      "pid": 5466,
+      "start": "2026-10-21T19:06:19.985Z",
+      "end": "2026-10-21T19:06:20.462Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/final5-format.log",
+      "logHash": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+      "sourceHash": "92a424aefc9b15e4e23e36e92182c6ac1027b3bc1eb11d9994f0ec8f253781d6",
+      "changed": [],
+      "manifest": "tmp/p5/w26-producers-run-aj/final5-format-source.json",
+      "passes": 0,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 0
+    },
+    {
+      "name": "final5-graph",
+      "cwd": ".",
+      "command": [
+        "bun",
+        "scripts/check-affected-test-shards.ts"
+      ],
+      "extraEnv": {},
+      "driver": 4707,
+      "pid": 5479,
+      "start": "2026-10-21T19:06:20.647Z",
+      "end": "2026-10-21T19:06:23.226Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/final5-graph.log",
+      "logHash": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67",
+      "sourceHash": "92a424aefc9b15e4e23e36e92182c6ac1027b3bc1eb11d9994f0ec8f253781d6",
+      "changed": [],
+      "manifest": "tmp/p5/w26-producers-run-aj/final5-graph-source.json",
+      "passes": 0,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 0
+    },
+    {
+      "name": "final5-audit",
+      "cwd": ".",
+      "command": [
+        "bun",
+        "scripts/test-audit/scan.ts",
+        "tmp/p5/w26-producers-run-aj/final5-audit"
+      ],
+      "extraEnv": {},
+      "driver": 4707,
+      "pid": 5545,
+      "start": "2026-10-21T19:06:23.410Z",
+      "end": "2026-10-21T19:06:26.651Z",
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/final5-audit.log",
+      "logHash": "508b76a66b1783d63277fc0811e30f15e896bac8e985388289d3fd0d12a4b491",
+      "sourceHash": "92a424aefc9b15e4e23e36e92182c6ac1027b3bc1eb11d9994f0ec8f253781d6",
+      "changed": [],
+      "manifest": "tmp/p5/w26-producers-run-aj/final5-audit-source.json",
+      "passes": 0,
+      "failures": 0,
+      "skips": 0,
+      "assertions": 0
+    }
+  ],
+  "controls": [
+    {
+      "name": "old-prefix-file",
+      "file": "packages/agents/src/api/control/sessionHistoryClear.ts",
+      "code": 1,
+      "before": "c01bb764eb37eee1bb8ca300f8307f0f6ed3b8c9aaf322243be3eded3eba37ab",
+      "mutant": "49129e730c66e2fa923a4ac7531351a8015c7b492ecd5e276790fd0c81b8adb6",
+      "after": "c01bb764eb37eee1bb8ca300f8307f0f6ed3b8c9aaf322243be3eded3eba37ab",
+      "cmp": 0,
+      "equal": true,
+      "assertions": true,
+      "finalHash": "c01bb764eb37eee1bb8ca300f8307f0f6ed3b8c9aaf322243be3eded3eba37ab",
+      "finalCmp": 0,
+      "execution": {
+        "name": "final-control-old-prefix-file",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/api/__tests__/session-native-prefix.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 3664,
+        "pid": 3668,
+        "start": "2026-10-21T19:04:50.274Z",
+        "end": "2026-10-21T19:04:58.925Z",
+        "code": 1,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/final-control-old-prefix-file.log",
+        "logHash": "1d5f611e77168fe32f40a84a3999cb8a13f8591520d6c409e8845fd4e1e2109f",
+        "sourceHash": "ff6d8682770fcca83f9eeac418b3646c0a8eeba1fbf02da4d7ff3209450e1958",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/final-control-old-prefix-file-source.json",
+        "passes": 0,
+        "failures": 7,
+        "skips": 0,
+        "assertions": 5
+      },
+      "committedHash": "c01bb764eb37eee1bb8ca300f8307f0f6ed3b8c9aaf322243be3eded3eba37ab",
+      "matchesCommitted": true,
+      "assertionFailures": 5,
+      "otherFailures": 2,
+      "excludedRuntimeFailures": "Two added old-backend parity cases fail with Native history checkpoint lacks turn selection when the branch condition is deliberately inverted. Five original native no-file tests fail actual allocation assertions; only those five count as assertion evidence."
+    },
+    {
+      "name": "wrong-source-ordinal",
+      "file": "packages/agents/src/core/native-history-prefix.ts",
+      "code": 1,
+      "before": "722a3a810de088e2fb6b91a91a0d5d0f595802e826ee0bab12ec8d77518aa7e9",
+      "mutant": "52520ffa7f7755965485278767b62543d24806f7497e2fa034bc136ebff8dece",
+      "after": "722a3a810de088e2fb6b91a91a0d5d0f595802e826ee0bab12ec8d77518aa7e9",
+      "cmp": 0,
+      "equal": true,
+      "assertions": true,
+      "finalHash": "722a3a810de088e2fb6b91a91a0d5d0f595802e826ee0bab12ec8d77518aa7e9",
+      "finalCmp": 0,
+      "execution": {
+        "name": "final-control-wrong-source-ordinal",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/api/__tests__/session-native-prefix-owners.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 3664,
+        "pid": 3869,
+        "start": "2026-10-21T19:04:59.134Z",
+        "end": "2026-10-21T19:05:29.690Z",
+        "code": 1,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/final-control-wrong-source-ordinal.log",
+        "logHash": "dc2d9221913a6e7e7ea8a5758b5f4bafdb4bd9a582e941339b7f02a9ea2483b3",
+        "sourceHash": "b2831b3754395d922738220154a5e7ad6703d20bcf3942b3662fffda2106aa84",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/final-control-wrong-source-ordinal-source.json",
+        "passes": 0,
+        "failures": 4,
+        "skips": 0,
+        "assertions": 8
+      },
+      "committedHash": "722a3a810de088e2fb6b91a91a0d5d0f595802e826ee0bab12ec8d77518aa7e9",
+      "matchesCommitted": true,
+      "assertionFailures": 4,
+      "otherFailures": 0
+    },
+    {
+      "name": "retained-prefix",
+      "file": "packages/agents/src/core/native-history-prefix.ts",
+      "code": 1,
+      "before": "722a3a810de088e2fb6b91a91a0d5d0f595802e826ee0bab12ec8d77518aa7e9",
+      "mutant": "2d3fc4be6becaa3672ba494b828e0cdab031845d3f52fdd868b55115e3382068",
+      "after": "722a3a810de088e2fb6b91a91a0d5d0f595802e826ee0bab12ec8d77518aa7e9",
+      "cmp": 0,
+      "equal": true,
+      "assertions": true,
+      "finalHash": "722a3a810de088e2fb6b91a91a0d5d0f595802e826ee0bab12ec8d77518aa7e9",
+      "finalCmp": 0,
+      "execution": {
+        "name": "final-control-retained-prefix",
+        "cwd": "packages/agents",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/api/__tests__/session-native-prefix-lifecycle.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 3664,
+        "pid": 4434,
+        "start": "2026-10-21T19:05:29.895Z",
+        "end": "2026-10-21T19:05:39.598Z",
+        "code": 1,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/final-control-retained-prefix.log",
+        "logHash": "39060ddafecf884628f43b70d6c0977291984d296d603f6e6374e5a96d04f8e6",
+        "sourceHash": "9f02eda85c640b41f5de3f590112ede413b39dc9ab97d71cee8c67d64ff544e3",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/final-control-retained-prefix-source.json",
+        "passes": 5,
+        "failures": 2,
+        "skips": 0,
+        "assertions": 26
+      },
+      "committedHash": "722a3a810de088e2fb6b91a91a0d5d0f595802e826ee0bab12ec8d77518aa7e9",
+      "matchesCommitted": true,
+      "assertionFailures": 2,
+      "otherFailures": 0
+    },
+    {
+      "name": "failed-cleanup-identity",
+      "file": "packages/core/src/services/history/journalDumpSnapshot.ts",
+      "code": 1,
+      "before": "f71063619fb30893a671b929465e157079e05d191114dca123381e2de6107a0f",
+      "mutant": "968fa2817d7f57ef27d84677e37e93277e70000e5c0ae98ec16d67b477de8fd0",
+      "after": "f71063619fb30893a671b929465e157079e05d191114dca123381e2de6107a0f",
+      "cmp": 0,
+      "equal": true,
+      "assertions": true,
+      "finalHash": "f71063619fb30893a671b929465e157079e05d191114dca123381e2de6107a0f",
+      "finalCmp": 0,
+      "execution": {
+        "name": "final-control-failed-cleanup-identity",
+        "cwd": "packages/core",
+        "command": [
+          "bun",
+          "test",
+          "--timeout",
+          "180000",
+          "src/journal/journalStore.readerLifetime.test.ts"
+        ],
+        "extraEnv": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "driver": 3664,
+        "pid": 4695,
+        "start": "2026-10-21T19:05:39.802Z",
+        "end": "2026-10-21T19:05:40.353Z",
+        "code": 1,
+        "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/final-control-failed-cleanup-identity.log",
+        "logHash": "0ab9b4612d4825fcb6cefbe357ec071bcfd9be8b01b0b88afd1c87186561b8d4",
+        "sourceHash": "a9c3b750f359576a5bd437c8da25d2386279e9a2b1f3d0e32a48502b8779dbb1",
+        "changed": [],
+        "manifest": "tmp/p5/w26-producers-run-aj/final-control-failed-cleanup-identity-source.json",
+        "passes": 10,
+        "failures": 1,
+        "skips": 0,
+        "assertions": 28
+      },
+      "committedHash": "f71063619fb30893a671b929465e157079e05d191114dca123381e2de6107a0f",
+      "matchesCommitted": true,
+      "assertionFailures": 1,
+      "otherFailures": 0
+    }
+  ],
+  "rootRed": [
+    {
+      "name": "checkpoint-reader-root-red",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "src/services/history/journal-checkpoint-reader.test.ts"
+      ],
+      "extraEnv": {
+        "LLXPRT_HISTORY_BACKEND": "journal"
+      },
+      "driver": 99647,
+      "pid": 99653,
+      "start": "2026-10-21T19:00:55.508Z",
+      "end": "2026-10-21T19:00:56.249Z",
+      "code": 1,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/checkpoint-reader-root-red.log",
+      "logHash": "bf42b1fd1343789b5aa1f8c60e9edc12a1f4ff4fe658acc2007148ddb38b5e4a",
+      "sourceHash": "db94e6769d174d48a7de06a39d8e23a2c3098b0182376471c334b1df190e3cff",
+      "changed": [],
+      "manifest": "tmp/p5/w26-producers-run-aj/checkpoint-reader-root-red-source.json",
+      "passes": 0,
+      "failures": 3,
+      "skips": 0,
+      "assertions": 5
+    }
+  ],
+  "excludedAuthoring": [
+    {
+      "name": "prefix-old-array-parity-authoring",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "src/api/__tests__/session-native-prefix.test.ts"
+      ],
+      "extraEnv": {
+        "LLXPRT_HISTORY_BACKEND": "journal"
+      },
+      "driver": 904,
+      "pid": 912,
+      "start": "2026-10-21T19:02:02.320Z",
+      "end": "2026-10-21T19:02:26.374Z",
+      "code": 1,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-producers-run-aj/prefix-old-array-parity-authoring.log",
+      "logHash": "16e1038c9c62371af994c4ed743c762ec5222988ba094271813f9113bcd5a41c",
+      "sourceHash": "bb98ffc3c7aee18cd611921db36d61384d8e61148864ba72db61742312eff4fd",
+      "changed": [],
+      "manifest": "tmp/p5/w26-producers-run-aj/prefix-old-array-parity-authoring-source.json",
+      "passes": 6,
+      "failures": 1,
+      "skips": 0,
+      "assertions": 21
+    }
+  ],
+  "oldTokenFixture": "Independent unchanged old backend and native public API receive the same existing exactTokenizer factory before seed admission. Semantic byte comparison includes speaker and blocks, excluding volatile metadata. The uncontrolled-tokenizer authoring failure remains excluded; tokenizer production behavior is not repaired or claimed explained here.",
+  "mechanism": "Native checkpoint plus numeric source cut; current source ordinal owner via appendDerived. Version compensation, durable fanout acknowledgement, metadata/reference-only media passes. Raw checkpoint iterators now use existing reader scope and counters; admitted iterators retire before version pin release. No descriptor reopen, scratch snapshot, whole-prefix array/map or new producer family.",
+  "lifetime": [
+    "PREFIX_LIFETIME {\"size\":512,\"outputs\":510,\"samples\":3,\"peak\":1,\"final\":0}",
+    "PREFIX_LIFETIME {\"size\":8192,\"outputs\":8190,\"samples\":63,\"peak\":1,\"final\":0}"
+  ],
+  "readCost": "Human cut visits ROW metadata only; length is scalar; media reserve/release each traverse pinned metadata/reference blocks; conversion streams retained rows once. No logarithmic full-operation or aggregate-capacity claim.",
+  "noFiles": "Actual native public clear/restore and cache-anchor/truncation tests retain unchanged cross-root creating-API observation/denial. Persistent storage compaction is not operation scratch; the earlier ranking owner test holds a native pin for that boundary.",
+  "census": {
+    "path": "project-plans/issue854/recovery-2026-10-19/recovered-control/W26-NATIVE-PRODUCER-CENSUS.md",
+    "raw": "tmp/p5/w26-producers-run-aj/census.json",
+    "hash": "febb6c1805629673e97fd2210f7448778bbe7f5f2ea75808320a11d0c3230fd2",
+    "documentHash": "5fd3deca5cb95b2f01685097a4aad1bb9af0ab1f17cf4aed5c1d8d9fe0b4e916"
+  },
+  "audit": {
+    "findings": [
+      "packages/core/src/services/history/journal-checkpoint-reader.test.ts\t34\tnative checkpoint reader scope > consumes counted rows after its opener is disposed while the checkpoint still owns its pin\tDUP_ASSERT\t2x identical assertion: expect(owners.snapshot().liveRows).toBe(0)\tcore",
+      "packages/core/src/services/history/journal-checkpoint-reader.test.ts\t53\tnative checkpoint reader scope > keeps the exact cancellation reason and releases the suspended row\tDUP_ASSERT\t2x identical assertion: expect(owners.snapshot().liveRows).toBe(0)\tcore",
+      "packages/core/src/services/history/journal-human-cut.test.ts\t31\tnative checkpoint human turn selection > uses raw headers, not decoded rows or curated ranks, over %i rows\tDUP_ASSERT\t2x identical assertion: expect(await dump.humanCut(2, false)).toBe(2)\tcore"
+    ],
+    "classification": "Two zero-liveRows duplicates compare iterator completion or cancellation with callback/pin retirement. Human-cut duplicate compares held generation before/after live rewind. No touched MOCK_MIRROR/SELF_CONFIRMING/ALWAYS_TRUE/NO_ASSERT. Graph validation is not shard execution."
+  },
+  "preservation": {
+    "baseline": "tmp/p5/w26-continuous-run-ab/preserved.json",
+    "baselineHash": "e80230bd1742f585274b87bf3b154268ec6bb6f96cb41616555a254eac7298ef",
+    "checked": 1192,
+    "differences": [],
+    "priorAJ": {
+      "count": 1191,
+      "differences": []
+    },
+    "scope": "All differences are explicit; no unrelated declarations, raw recovery or memory restored/deleted."
+  },
+  "processes": {
+    "pids": [
+      56984,
+      56998,
+      57054,
+      57114,
+      57232,
+      57420,
+      57503,
+      57601,
+      57608,
+      57652,
+      57759,
+      57875,
+      63533,
+      63568,
+      63743,
+      67696,
+      67704,
+      67749,
+      67783,
+      67888,
+      68069,
+      68177,
+      68402,
+      68411,
+      68484,
+      68546,
+      68689,
+      69274,
+      70157,
+      70738,
+      70909,
+      77293,
+      77299,
+      78266,
+      78271,
+      78318,
+      78375,
+      78519,
+      78660,
+      79482,
+      79485,
+      79558,
+      79622,
+      79758,
+      79899,
+      79981,
+      80088,
+      80105,
+      80157,
+      80220,
+      80384,
+      80675,
+      81289,
+      81809,
+      81992,
+      82147,
+      82230,
+      82267,
+      82289,
+      82318,
+      82436,
+      82457,
+      82465,
+      82688,
+      82705,
+      82718,
+      82735,
+      83064,
+      83245,
+      83327,
+      85309,
+      91015,
+      91301,
+      94294,
+      98046,
+      99451,
+      99458,
+      99647,
+      99653,
+      580,
+      584,
+      904,
+      912,
+      3664,
+      3668,
+      3869,
+      4434,
+      4695,
+      4707,
+      4711,
+      4797,
+      4871,
+      5027,
+      5201,
+      5272,
+      5466,
+      5479,
+      5545,
+      5608,
+      5646,
+      5660,
+      5683,
+      6295,
+      6694,
+      7372,
+      7970,
+      8882,
+      9080,
+      9389,
+      79472,
+      79473
+    ],
+    "ps": "  PID  PPID ELAPSED COMMAND\n",
+    "scope": "ps result after completed recorded test/gate/control drivers; raw worker and supervisor IDs retained."
+  },
+  "remaining": "Actual native provider fallback/curatedCandidate, semantic purge, CLI clear/restore; annotated append API. Ordinary append/merge lazy annotation allocates nothing. Explicit native-capable disk contracts remain distinct from old-only until phase 9. Structural ranking, pending/stale-fact capacity, normalization/cache/tails/ranges/semantic generations, LENS/live bytes, whole heap/cache/pin capacity remain open. Phase 6 provider spools/request guards, W23/W25/cutover and cold Mistral remain separate.",
+  "issue3917": "Separately RED; not rerun, retried, suppressed or relabeled.",
+  "review": "review skipped per Andrew 2026-10-09",
+  "restrictions": "No cleanup, .llxprt changes/staging, unrelated staging, OCR, push, merge, defaults or enforcement changes.",
+  "originalReaderTests": [
+    {
+      "file": "packages/core/src/journal/journalStore.readerLifetime.test.ts",
+      "hash": "9744ca9d7829bddc3b2010e895ff9450cb64f89e5856d8903de6e6ae11f96b3b",
+      "unchangedFromInitialCommit": true
+    },
+    {
+      "file": "packages/core/src/journal/journalStore.readerCleanup.test.ts",
+      "hash": "caa8ad4cf7442eb2df8f22d6a02ef3743e8eeda1ae1698f989732c9a1d6d3cb0",
+      "unchangedFromInitialCommit": true
+    }
+  ]
+}
