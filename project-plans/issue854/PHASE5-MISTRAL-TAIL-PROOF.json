@@ -1054,7 +1054,8 @@
     "path": "tmp/854-notes/p5/mistral-tail-run-k/preservation-final.json",
     "sha256": "d5264695d0d3ccec19895780df1e4b4683fd369a1039850e66e2c00b498669ac",
     "entries": 16515,
-    "generatedDeclarations": 295
+    "generatedDeclarations": 293,
+    "agentDeclarationFiles": 295
   },
   "rawReceipts": {
     "tmp/854-notes/p5/mistral-tail-run-k/accepted2-old-8.xml": "1a289a727af7227d8141a866e5f4a2ce82601544dff9f7a18dd1726c2d502feb",
@@ -1081,13 +1082,14 @@
     "tmp/854-notes/p5/mistral-tail-run-k/final-providers-types-started.json": "2402ba1a69e9398ff7ec519400a9ff4308d9f8844e79bc2f65ba2d4f037254ea",
     "tmp/854-notes/p5/mistral-tail-run-k/final-journal-2-started.json": "497b0d2bd62704a40750403f25260e51557285304af5cad9452d146c3b50b8da",
     "tmp/854-notes/p5/mistral-tail-run-k/accepted2-old-2.log": "325a1e3f848e907418def993e8e66f5d43c31edf00135150193bf0597e27f968",
-    "tmp/854-notes/p5/mistral-tail-run-k/receipts.jsonl": "ef70a2ff86b9c82589d116a9d53326caf444cbe4451888b5a1d283747e307155",
+    "tmp/854-notes/p5/mistral-tail-run-k/receipts.jsonl": "7f957f19d138b2240dded2cb02cd2351b3512c0378c9cd9e646701387be4df61",
     "tmp/854-notes/p5/mistral-tail-run-k/final-journal-4.log": "0d6b097abc72e6357900092f85f79e1cdeadbc4a696dcd9ee2117b37cc001366",
     "tmp/854-notes/p5/mistral-tail-run-k/accepted2-journal-5.log": "31a6aac3463155fb73ad9186346c64a7ead00934b10038cbe3295af543ddf41d",
     "tmp/854-notes/p5/mistral-tail-run-k/final-old-3-started.json": "4d83505787e7955e98fd47c53459cf392d4e6e4ec7069bca120ff5a45ce4fd6d",
     "tmp/854-notes/p5/mistral-tail-run-k/report.ts": "d069926c4fbd8d8ac774ed8c175ea4c75497473c2a99cbd615e84238b496fb29",
     "tmp/854-notes/p5/mistral-tail-run-k/restore-wrong-raw-owner-started.json": "7d31a1bad1fca6b1f23534735006831a77f665e6707d1ebf9d1b9d4f0931bf5f",
     "tmp/854-notes/p5/mistral-tail-run-k/final-old-4-started.json": "4fd94b20726bed924a19fd90759f6ef08bc9a39ac73d08de6fc23032d65a5f6e",
+    "tmp/854-notes/p5/mistral-tail-run-k/bound-docs-prettier-started.json": "486b5bb3f54cfb26d8002c593cb8610ad54f9de262ed0fcb8cf5ac4fc044fdbc",
     "tmp/854-notes/p5/mistral-tail-run-k/control-omit-native-read-drain-started.json": "ad2e621959c6be06ff55e902cf8c6ec874a20229cedaf0777797200858c8d92b",
     "tmp/854-notes/p5/mistral-tail-run-k/final-journal-5.log": "ffeadb1e5f9bc7e0edc84f8dbd6db6b1f279adba36972a4aa53044ff28a406fd",
     "tmp/854-notes/p5/mistral-tail-run-k/accepted2-journal-4.log": "0cec78e6fe4c8e5066f21e79a7109f4f0ddde12465b87a168001ce46fc26dde1",
@@ -1095,6 +1097,7 @@
     "tmp/854-notes/p5/mistral-tail-run-k/fixed2-graph.log": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67",
     "tmp/854-notes/p5/mistral-tail-run-k/final-journal-10.log": "f19afc4f58209ab1922658c8c7d8ff8c4326b8bdfdf0742d27a575c3af279acd",
     "tmp/854-notes/p5/mistral-tail-run-k/accepted2-journal-9.xml": "76a8849fbcb61ba5ae0be75110c2d09d90a192169c5a922271a731991ecbcd5c",
+    "tmp/854-notes/p5/mistral-tail-run-k/precommit-tracked.diff": "96ffd929391a936512feeba4495881310fafee97eac43846556c014fdd153b5f",
     "tmp/854-notes/p5/mistral-tail-run-k/final-journal-8.xml": "caca52dfb48fa4e6a311a6a7d8415f85d4b75e235471d5816ad238ff2696dc2e",
     "tmp/854-notes/p5/mistral-tail-run-k/first-lint-started.json": "727aeba09d54eb632d8df734f3a99d331fa905ca3f2a7de34075768b59742be2",
     "tmp/854-notes/p5/mistral-tail-run-k/accepted2-old-7.log": "c5c4c9fad77e3c6e9911da790b3ccbdcb41d29a8a2eb2af53699aad6c6efdbb3",
@@ -1163,6 +1166,7 @@
     "tmp/854-notes/p5/mistral-tail-run-k/frozen-drain-fixed-started.json": "efdb3c39523025e070767b2a8eb823043520c949f8177082daf2d79c0ca81279",
     "tmp/854-notes/p5/mistral-tail-run-k/final-old-1.xml": "61ac48b2541f37da8b5264dc6e52da36857e211f6e5a8529e2528077603cf3b6",
     "tmp/854-notes/p5/mistral-tail-run-k/control-wrong-raw-owner.log": "f994d1481ef1d6276847b9d399b72ea9d077274a51e04f71df76dab39cc888b8",
+    "tmp/854-notes/p5/mistral-tail-run-k/precommit-staged.diff": "83f89d11ebeb176da8f3f130984863caf1e7777abf34b9ec3ad9ad40fce2c642",
     "tmp/854-notes/p5/mistral-tail-run-k/control-ignore-pending-used.log": "ae745b524e5d9293a39ffad6c1f5c93ab1a0e18200275895d00117957d1cb4aa",
     "tmp/854-notes/p5/mistral-tail-run-k/final-old-5.xml": "1684e51502b96251ae193aa2d46a1466f2169765596803623d8f4214c9b170d6",
     "tmp/854-notes/p5/mistral-tail-run-k/format-1.log": "687dd787e51fd4f239bf51bee745a63ad440577ab2dab16918430539b37169df",
@@ -1172,6 +1176,7 @@
     "tmp/854-notes/p5/mistral-tail-run-k/final-journal-8-started.json": "03da04e564c0900f231368616de25027317d5ff555776a446e5e05b7d11dcff7",
     "tmp/854-notes/p5/mistral-tail-run-k/restore-retain-all-history-ids-started.json": "1fa2a0b499ac25b84d7b34c639b52711a9a40c4172062a33a95bbcce21a4e43e",
     "tmp/854-notes/p5/mistral-tail-run-k/final-old-4.xml": "6b7afed7a2f6da667adfd368c88f7f4d2eef7a5f1aeb31d58c476a40ff9a0ce8",
+    "tmp/854-notes/p5/mistral-tail-run-k/bound-docs-prettier.log": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
     "tmp/854-notes/p5/mistral-tail-run-k/first-providers-types.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "tmp/854-notes/p5/mistral-tail-run-k/accepted2-old-6-started.json": "93759ed134b6d64c4010cf258c24132bde36c15de9c260992ff1e87ab1082979",
     "tmp/854-notes/p5/mistral-tail-run-k/final-sources.json": "8504ce8934a528434eb6da8dafa0b242dc8169a1633e8c137afa948bc680fffc",
@@ -1214,7 +1219,7 @@
     "tmp/854-notes/p5/mistral-tail-run-k/final-old-2.log": "672007742f7fcfb9b7afaf166c01e253795dd178fe504faa5049a114c34722ae",
     "tmp/854-notes/p5/mistral-tail-run-k/accepted2-journal-11.log": "1c3d194fd0487a8ad0a11600717d67b04f9a4da4c7c9b562ca8cb7151f827f04",
     "tmp/854-notes/p5/mistral-tail-run-k/accepted2-old-4-started.json": "28ae66ff80bf09b02763b6ea0b39b7c6a0b21a93a45a2df6e19b88361d211d11",
-    "tmp/854-notes/p5/mistral-tail-run-k/report-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "tmp/854-notes/p5/mistral-tail-run-k/report-final.log": "ac067ea884c8de9ef91ed2785d322f3404f50e8ce174546f2c7a0891d71c8cab",
     "tmp/854-notes/p5/mistral-tail-run-k/paths.json": "cc9f1c30d027149e183fdef60396b84592ca88b0457f019fa3b6bb956c5fb39b",
     "tmp/854-notes/p5/mistral-tail-run-k/green-observe-started.json": "d8dd4e3233443c75ea82ddd54b99669fa01c4ade7aefaed1216ebb5114b7293b",
     "tmp/854-notes/p5/mistral-tail-run-k/red-observe.log": "e01c347df2b103f162a963a23391608cbb2915189db83e0f7fc04ba964683c26",
@@ -1252,6 +1257,7 @@
     "tmp/854-notes/p5/mistral-tail-run-k/accepted2-journal-6.xml": "cd4c81aab48a9a4453181b75453f1de4582ac9a13d972a9e6bf10f8d171ef82f",
     "tmp/854-notes/p5/mistral-tail-run-k/accepted2-old-8.log": "0301f6bcaa436abb3bb94ef3e2f4ee67e6a1ae6d390b641276b3bef448430057",
     "tmp/854-notes/p5/mistral-tail-run-k/restore-ignore-pending-used-started.json": "23341b47c387c2dbd9fa980ac11fb1546b88fbda4a2407363611f6f8a829e495",
+    "tmp/854-notes/p5/mistral-tail-run-k/committed-graph-started.json": "805902ea5264426d238c2e0b4e2e3db4c8abd7bb5031730aacb8ba6a1301733b",
     "tmp/854-notes/p5/mistral-tail-run-k/accepted2-old-9.log": "5f98bc7bd7159fcdb75e4b7eb5ff4ce5134aecb0be9f6eb24c12a8f43c9f23c5",
     "tmp/854-notes/p5/mistral-tail-run-k/accepted2-journal-6-started.json": "559ab2a6de27bfb4d56a91082085bc31d4a1a8515a32cc91590730ad28ec1ec8",
     "tmp/854-notes/p5/mistral-tail-run-k/first-providers-types-started.json": "a6ae938f68a406ff347f2a0c399c139952c1eab6bdcd6d513501302811ab55d2",
@@ -1293,6 +1299,7 @@
     "tmp/854-notes/p5/mistral-tail-run-k/final-graph-started.json": "d666c2af052861bfa3116b5b8cb7eab4d25794d20a03beb63ecce06862dacd0e",
     "tmp/854-notes/p5/mistral-tail-run-k/accepted2-journal-7-started.json": "e8e2b1f93a0b16f53ccf5f83eb6356f865dbee19403faf93afad5a5f96e0762e",
     "tmp/854-notes/p5/mistral-tail-run-k/accepted-old-3-started.json": "c23e7edc1d53c03597b2b3aa13e1a5092d74b9c0c9e288030f6ec9cf3724a3a6",
+    "tmp/854-notes/p5/mistral-tail-run-k/committed-graph.log": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67",
     "tmp/854-notes/p5/mistral-tail-run-k/controls.ts": "aec3825469f5a902d30186c4cf6387a89f64735e7a72ce58a054b38847f4628b",
     "tmp/854-notes/p5/mistral-tail-run-k/final-journal-11.xml": "2b939431f2e19e28bf5c3c5209a8c52b54b6f740719bdd1a8a669f67c43605ad",
     "tmp/854-notes/p5/mistral-tail-run-k/final-journal-9.log": "758c1afce43795f30e6cb4741e88fe17bfb8fd9ab8a839dd75a46f29f36e89f1",
@@ -1439,7 +1446,11 @@
     72038,
     72037,
     72386,
-    72385
+    72385,
+    74335,
+    74334,
+    75242,
+    75241
   ],
   "livePids": [],
   "receiptLimitations": "First control rejected the intended mapped-ID assertions, but the log recognizer expected an elided source line. Its original failure and cmp/hash restoration are retained; that control was not rerun. Initial gate syntax/lint failures remain separate from final acceptance.",
@@ -1456,5 +1467,26 @@
     "capacity": "40/4000/100000 rows contain 40/4000/4000 calls. This is no proof of 100000-call construction capacity; prior Kimi 120000ms construction timeout remains open.",
     "policy": "Tail rows follow native labels. Earlier journal R1 targets for pending raw IDs already have native observe mappings; names do not change Mistral IDs. Persistent middle insertion/removal uses native rebuild. Filtered requests need fresh mapping, demonstrated by salt-1 full versus salt-0 selected converter.",
     "review": "review skipped per Andrew 2026-10-09"
+  },
+  "implementationCommit": "7ae2cf1ec7432ae3802278d38afd9a8c8660876d",
+  "committedSourceBlobsMatch": true,
+  "fullStartingInventory": {
+    "path": "tmp/854-notes/p5/mistral-tail-run-k/starting-hashes.json",
+    "entries": 16525,
+    "sha256": "205c2b74cca01e1d82d06a4a3dfe7313809d58cf8801ab8ec3924d1560ad83db"
+  },
+  "postCommitGraph": {
+    "name": "committed-graph",
+    "command": [
+      "bun",
+      "scripts/check-affected-test-shards.ts"
+    ],
+    "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+    "pid": 74335,
+    "driverPid": 74334,
+    "started": "2026-10-21T00:24:32.993Z",
+    "code": 0,
+    "finished": "2026-10-21T00:24:35.180Z",
+    "logHash": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67"
   }
 }

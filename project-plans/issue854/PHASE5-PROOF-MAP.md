@@ -2,7 +2,7 @@
 
 ## Current Mistral observe-tail checkpoint
 
-Starting HEAD `2be851cc3`. [PHASE5-MISTRAL-TAIL-PROOF.json](PHASE5-MISTRAL-TAIL-PROOF.json) binds 13 scoped source/test paths, serial acceptance and restored controls. The existing indexed request owns the pin, source and emitted affected-row view; `withMistral` adds no normalization adapter. New observed mappings retain only pending raw IDs, query native namespace 3 and preserve raw-owned VALUE validation. Actual emitted calls, not raw tail insertion order, determine assignment.
+Starting HEAD `2be851cc3`; implementation `7ae2cf1ec7432ae3802278d38afd9a8c8660876d`. [PHASE5-MISTRAL-TAIL-PROOF.json](PHASE5-MISTRAL-TAIL-PROOF.json) binds 13 scoped source/test paths, serial acceptance and restored controls. The existing indexed request owns the pin, source and emitted affected-row view; `withMistral` adds no normalization adapter. New observed mappings retain only pending raw IDs, query native namespace 3 and preserve raw-owned VALUE validation. Actual emitted calls, not raw tail insertion order, determine assignment.
 
 This is the complete pinned request's observe mapping, with three explicitly activated slots. It is not a fresh mapper over a filtered range. The selection test shows salt 1 for the complete request versus salt 0 after its first collision holder is removed. Earlier journal R1 targets already have native mappings, so a pending duplicate cannot assign them again. Persistent middle insertion/removal retains the rebuild policy. Lazy empty/unobserved-response conversion mappings and actual provider conversion-order proof are **not implemented** in this checkpoint.
 

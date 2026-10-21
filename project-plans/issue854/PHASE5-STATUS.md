@@ -1,6 +1,6 @@
 # Phase 5 Mistral observe-tail checkpoint, 2026-10-20
 
-Starting HEAD `2be851cc38e0f38795b787a3785ec07806efe99c`. This checkpoint implements request-only **observe-phase** Mistral mappings on the existing `IndexedJournalRequestSnapshot`. It does not complete lazy conversion-time fallback mapping. Provider sends still use the complete old converter and the backend default is unchanged. [PHASE5-MISTRAL-TAIL-PROOF.json](PHASE5-MISTRAL-TAIL-PROOF.json) binds the tested source and receipts.
+Implementation commit `7ae2cf1ec7432ae3802278d38afd9a8c8660876d`, starting HEAD `2be851cc38e0f38795b787a3785ec07806efe99c`. This checkpoint implements request-only **observe-phase** Mistral mappings on the existing `IndexedJournalRequestSnapshot`. It does not complete lazy conversion-time fallback mapping. Provider sends still use the complete old converter and the backend default is unchanged. [PHASE5-MISTRAL-TAIL-PROOF.json](PHASE5-MISTRAL-TAIL-PROOF.json) binds the tested source and receipts.
 
 ## Mapping policy
 
