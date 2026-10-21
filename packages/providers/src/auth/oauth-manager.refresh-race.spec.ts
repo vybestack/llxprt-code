@@ -19,6 +19,17 @@ import { KeyringTokenStore } from '@vybestack/llxprt-code-core';
 import { type KeyringAdapter } from '@vybestack/llxprt-code-storage';
 import { SecureStore } from '@vybestack/llxprt-code-storage';
 
+function createRefreshGate(): {
+  promise: Promise<void>;
+  resolve: () => void;
+} {
+  let resolve = (): void => {};
+  const promise = new Promise<void>((complete) => {
+    resolve = complete;
+  });
+  return { promise, resolve };
+}
+
 function isFulfilledOAuthToken(
   result: PromiseSettledResult<OAuthToken | null>,
 ): result is PromiseFulfilledResult<OAuthToken> {
@@ -171,12 +182,213 @@ describe('OAuthManager - Token Refresh Race Condition (Issue #1159)', () => {
       const releaseLockSpy = vi.spyOn(tokenStore, 'releaseRefreshLock');
 
       // When: We call getOAuthToken (refresh will fail)
-      await expect(oauthManager.getOAuthToken('test-provider')).rejects.toThrow(
-        'Network error',
-      );
+      const token = await oauthManager.getOAuthToken('test-provider');
 
       // Then: Lock should still be released (with bucket parameter)
+      expect(token).toBeNull();
       expect(releaseLockSpy).toHaveBeenCalledWith('test-provider', undefined);
+    });
+
+    it.each(['empty result', 'error'])(
+      'stops waiting when the refresh owner releases its lock after an %s',
+      async (failure) => {
+        const expiredToken = createToken('expired-token', -10);
+        await tokenStore.saveToken('test-provider', expiredToken);
+        const refreshStarted = createRefreshGate();
+        const refreshGate = createRefreshGate();
+        mockProvider.refreshToken = async (): Promise<OAuthToken | null> => {
+          refreshCallCount++;
+          refreshStarted.resolve();
+          await refreshGate.promise;
+          if (failure === 'error') throw new Error('Refresh unavailable');
+          return null;
+        };
+        const controller = new AbortController();
+        const work = oauthManager.createProfileOAuthWork(controller.signal);
+        const owner = oauthManager.getOAuthToken('test-provider', 'default');
+        const contender = refreshStarted.promise.then(() =>
+          work.getToken({
+            providerName: 'test-provider',
+            buckets: ['default'],
+            signal: controller.signal,
+          }),
+        );
+        let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          await refreshStarted.promise;
+          await new Promise<void>((resolve) => setTimeout(resolve, 50));
+          refreshGate.resolve();
+          await owner;
+          const result = await Promise.race([
+            contender,
+            new Promise<'still waiting'>((resolve) => {
+              deadlineTimer = setTimeout(() => resolve('still waiting'), 500);
+            }),
+          ]);
+          expect(result).toBeNull();
+          expect(refreshCallCount).toBe(1);
+          expect(await tokenStore.getToken('test-provider')).toStrictEqual(
+            expiredToken,
+          );
+          expect(await tokenStore.acquireRefreshLock('test-provider')).toBe(
+            true,
+          );
+          await tokenStore.releaseRefreshLock('test-provider');
+        } finally {
+          clearTimeout(deadlineTimer);
+          refreshGate.resolve();
+          controller.abort();
+          await Promise.allSettled([owner, contender]);
+          await work.cancelAndJoin();
+        }
+      },
+    );
+
+    it('continues to authentication when foreground provider refresh is unavailable', async () => {
+      await tokenStore.saveToken(
+        'test-provider',
+        createToken('expired-token', -10),
+      );
+      mockProvider.refreshToken = async (): Promise<OAuthToken | null> => {
+        throw new Error('Refresh unavailable');
+      };
+      const accessToken = await oauthManager.getToken(
+        'test-provider',
+        'default',
+      );
+      const storedToken = await tokenStore.getToken('test-provider', 'default');
+      expect(storedToken).not.toBeNull();
+      if (storedToken === null) throw new Error('Expected authenticated token');
+      expect(accessToken).toBe(storedToken.access_token);
+      expect(accessToken).not.toBe('expired-token');
+      expect(storedToken.expiry).toBeGreaterThan(Date.now() / 1000 + 30);
+    });
+
+    it.each([
+      { forced: false, cancelled: false },
+      { forced: true, cancelled: false },
+      { forced: false, cancelled: true },
+      { forced: true, cancelled: true },
+    ])(
+      'joins real locked refresh and preserves retirement error identity (%j)',
+      async ({ forced, cancelled }) => {
+        const expiredToken = createToken('expired-token', -10);
+        await tokenStore.saveToken('test-provider', expiredToken);
+        const entered = createRefreshGate();
+        const held = createRefreshGate();
+        const providerError = new Error(
+          'independent provider failure during retirement',
+        );
+        let operationSignal: AbortSignal | undefined;
+        mockProvider.refreshToken = async (
+          _token,
+          signal,
+        ): Promise<OAuthToken | null> => {
+          operationSignal = signal;
+          entered.resolve();
+          await held.promise;
+          if (cancelled) signal?.throwIfAborted();
+          throw providerError;
+        };
+        const pending = (
+          forced
+            ? oauthManager.forceRefreshToken(
+                'test-provider',
+                expiredToken.access_token,
+              )
+            : oauthManager.getOAuthToken('test-provider')
+        ).then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+        await entered.promise;
+        let disposed = false;
+        const retirement = oauthManager.dispose().then(
+          () => {
+            disposed = true;
+            return undefined;
+          },
+          (error: unknown) => {
+            disposed = true;
+            return error;
+          },
+        );
+        try {
+          await new Promise<void>((resolve) => setImmediate(resolve));
+          expect(operationSignal?.aborted).toBe(true);
+          expect(disposed).toBe(false);
+          expect(await tokenStore.acquireRefreshLock('test-provider')).toBe(
+            false,
+          );
+          held.resolve();
+          const expectedError = cancelled
+            ? operationSignal?.reason
+            : providerError;
+          expect(await pending).toBe(expectedError);
+          const result = await retirement;
+          expect(result).toBeInstanceOf(AggregateError);
+          if (!(result instanceof AggregateError))
+            throw new Error('Expected retirement failure');
+          expect(result.errors).toContain(expectedError);
+          expect(await tokenStore.getToken('test-provider')).toStrictEqual(
+            expiredToken,
+          );
+          expect(await tokenStore.acquireRefreshLock('test-provider')).toBe(
+            true,
+          );
+          await tokenStore.releaseRefreshLock('test-provider');
+        } finally {
+          held.resolve();
+          await pending;
+          await retirement;
+        }
+      },
+    );
+
+    it('returns null when forced provider refresh is unavailable', async () => {
+      const expiredToken = createToken('expired-token', -10);
+      await tokenStore.saveToken('test-provider', expiredToken);
+      mockProvider.refreshToken = async (): Promise<OAuthToken | null> => {
+        throw new Error('Refresh unavailable');
+      };
+      expect(
+        await oauthManager.forceRefreshToken(
+          'test-provider',
+          expiredToken.access_token,
+        ),
+      ).toBeNull();
+      expect(await tokenStore.getToken('test-provider')).toStrictEqual(
+        expiredToken,
+      );
+      expect(await tokenStore.acquireRefreshLock('test-provider')).toBe(true);
+      await tokenStore.releaseRefreshLock('test-provider');
+    });
+
+    it('preserves caller-signaled provider error identity', async () => {
+      await tokenStore.saveToken(
+        'test-provider',
+        createToken('expired-token', -10),
+      );
+      const providerError = new Error('Refresh unavailable');
+      mockProvider.refreshToken = async (): Promise<OAuthToken | null> => {
+        throw providerError;
+      };
+      const controller = new AbortController();
+      const work = oauthManager.createProfileOAuthWork(controller.signal);
+      try {
+        await expect(
+          work.getToken({
+            providerName: 'test-provider',
+            buckets: ['default'],
+            signal: controller.signal,
+          }),
+        ).rejects.toBe(providerError);
+        expect(await tokenStore.acquireRefreshLock('test-provider')).toBe(true);
+        await tokenStore.releaseRefreshLock('test-provider');
+      } finally {
+        controller.abort();
+        await work.cancelAndJoin();
+      }
     });
 
     it('should prevent concurrent refreshes when multiple requests race', async () => {

@@ -27,6 +27,7 @@ import type {
 import {
   refreshTokenUnderLock,
   performDiskCheckUnderLock,
+  type RefreshErrorPolicy,
 } from './token-refresh-helper.js';
 import {
   resolveForceRefreshBaseline,
@@ -255,6 +256,7 @@ export class TokenAccessCoordinator {
     bucketToUse: string | undefined,
     signal?: AbortSignal,
     renewals: ProactiveRenewalManager = this.proactiveRenewalManager,
+    errorPolicy: RefreshErrorPolicy = signal ? 'throw' : 'return-null',
   ): Promise<OAuthToken | null> {
     logger.debug(
       () => `[FLOW] Reading token from tokenStore for ${providerName}...`,
@@ -279,13 +281,21 @@ export class TokenAccessCoordinator {
     );
 
     if (token.expiry <= thirtySecondsFromNow) {
-      return this.refreshExpiredToken(
+      /**
+       * Handle token refresh when token is expired or expiring soon.
+       * Acquires refresh lock with TOCTOU double-check.
+       * Lock parameters: waitMs:10000 (hot path, not on user-facing single-bucket flow).
+       */
+      return refreshTokenUnderLock(
         providerName,
         bucketToUse,
         token,
         thirtySecondsFromNow,
-        signal,
+        this.tokenStore,
+        this.providerRegistry,
         renewals,
+        signal,
+        errorPolicy,
       );
     }
 
@@ -363,31 +373,6 @@ export class TokenAccessCoordinator {
     return bucketToUse;
   }
 
-  /**
-   * Handle token refresh when token is expired or expiring soon.
-   * Acquires refresh lock with TOCTOU double-check.
-   * Lock parameters: waitMs:10000 (hot path, not on user-facing single-bucket flow).
-   */
-  private async refreshExpiredToken(
-    providerName: string,
-    bucketToUse: string | undefined,
-    token: OAuthToken,
-    thirtySecondsFromNow: number,
-    signal?: AbortSignal,
-    renewals: ProactiveRenewalManager = this.proactiveRenewalManager,
-  ): Promise<OAuthToken | null> {
-    return refreshTokenUnderLock(
-      providerName,
-      bucketToUse,
-      token,
-      thirtySecondsFromNow,
-      this.tokenStore,
-      this.providerRegistry,
-      renewals,
-      signal,
-    );
-  }
-
   private async resolveEffectiveMetadata(
     providerName: string,
     explicitBucket: boolean,
@@ -409,7 +394,13 @@ export class TokenAccessCoordinator {
       ? (bucket as string)
       : await this.resolveImplicitBucket(providerName, effectiveMetadata);
     try {
-      return await this.readAndValidateToken(providerName, bucketToUse, signal);
+      return await this.readAndValidateToken(
+        providerName,
+        bucketToUse,
+        signal,
+        this.proactiveRenewalManager,
+        'return-null',
+      );
     } catch (error) {
       if (signal) throw error;
       if (
@@ -1028,7 +1019,7 @@ export class TokenAccessCoordinator {
         signal,
       );
     } catch (refreshError) {
-      if (signal) throw refreshError;
+      if (signal?.aborted === true) throw refreshError;
       rethrowIfStoreOutage(refreshError);
       logger.debug(
         () =>
