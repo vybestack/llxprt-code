@@ -235,6 +235,51 @@ describe('native format registration lifecycle', () => {
     });
   });
 
+  it('preserves the published version, old pin and original cause when a measurer fails', async () => {
+    await withSession('callback-error', async (session) => {
+      await session.append([textRow('before failure')]);
+      await session.registerRowFormat(plainChatLengthRegistration(SETTINGS));
+      const expected = textMessageLength(['before failure']);
+      const pin = await session.store.snapshot();
+      const failedSettings = { ...SETTINGS, model: 'failing-model' };
+      const failure = new Error('injected measurement failure');
+      try {
+        await expect(
+          session.registerRowFormat({
+            settings: failedSettings,
+            measure: async () => {
+              throw failure;
+            },
+          }),
+        ).rejects.toBe(failure);
+        expect(session.store.published).toStrictEqual(pin.version);
+        expect(planStoredChatMessages(pin, SETTINGS, 0, '').bytes).toBe(
+          expected,
+        );
+        expect(await planned(session)).toBe(expected);
+        expect(() =>
+          planStoredChatMessages(pin, failedSettings, 0, ''),
+        ).toThrow(/registered/);
+        await session.close();
+        const reopened = await JournalSession.open(session.path);
+        try {
+          expect(await planned(reopened)).toBe(expected);
+          await reopened.registerRowFormat(
+            plainChatLengthRegistration(SETTINGS),
+          );
+          await reopened.append([textRow('after recovery')]);
+          expect(await planned(reopened)).toBe(
+            textMessageLength(['before failure', 'after recovery']),
+          );
+        } finally {
+          await reopened.close();
+        }
+      } finally {
+        await pin.close();
+      }
+    });
+  });
+
   it('refuses stale generations and an unmeasured zero summary instead of declaring a length', async () => {
     await withSession('stale', async (session) => {
       await session.append([textRow('measured')]);

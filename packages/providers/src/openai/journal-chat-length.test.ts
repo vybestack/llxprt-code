@@ -86,7 +86,11 @@ function actualBytes(rows: readonly IContent[], system: string): Buffer {
   return Buffer.from(JSON.stringify(messages));
 }
 
-function oracleBytes(rows: readonly IContent[], system: string): Buffer {
+function oracleBytes(
+  rows: readonly IContent[],
+  system: string,
+  selected: 0 | 1 = 0,
+): Buffer {
   return Buffer.from(
     JSON.stringify([
       { role: 'system', content: system },
@@ -95,7 +99,7 @@ function oracleBytes(rows: readonly IContent[], system: string): Buffer {
         {
           invocation: {
             ephemerals: {
-              'reasoning.stripFromContext': 'none',
+              'reasoning.stripFromContext': selected === 0 ? 'none' : 'all',
               'reasoning.includeInContext': true,
             },
           },
@@ -244,6 +248,63 @@ describe('stored plain chat tools', () => {
 });
 
 describe('stored plain chat lengths', () => {
+  it('matches old conversion for both thinking variants and inline media URI bytes', async () => {
+    const session = await JournalSession.createUnlinked();
+    const rows: readonly IContent[] = [
+      ...ROWS,
+      {
+        speaker: 'human',
+        blocks: [
+          { type: 'text', text: 'image 雪\\"' },
+          {
+            type: 'media',
+            mimeType: 'image/png',
+            encoding: 'url',
+            data: 'https://example.test/雪?quote="&slash=\\',
+          },
+          {
+            type: 'media',
+            mimeType: 'application/pdf',
+            encoding: 'base64',
+            filename: '雪".pdf',
+            data: 'AQID',
+          },
+        ],
+      },
+    ];
+    try {
+      await session.registerRowFormat(plainChatLengthRegistration(SETTINGS));
+      const empty = await session.store.snapshot();
+      expect(planStoredChatMessages(empty, SETTINGS, 0, '').bytes).toBe(
+        oracleBytes([], '').byteLength,
+      );
+      await empty.close();
+      await session.append(rows);
+      const pin = await session.store.snapshot();
+      const variants: ReadonlyArray<0 | 1> = [0, 1];
+      try {
+        for (const selected of variants) {
+          const expected = oracleBytes(
+            await actualRows(session),
+            'sys 雪',
+            selected,
+          );
+          const plan = planStoredChatMessages(
+            pin,
+            SETTINGS,
+            selected,
+            'sys 雪',
+          );
+          expect(plan.bytes).toBe(expected.byteLength);
+          expect(plan.items).toBe(JSON.parse(expected.toString()).length);
+        }
+      } finally {
+        await pin.close();
+      }
+    } finally {
+      await session.close();
+    }
+  });
   it('fills real normalized contributions and plans from the pinned aggregate without decoding again', async () => {
     const session = await JournalSession.createUnlinked();
     try {
@@ -337,6 +398,44 @@ describe('stored plain chat lengths', () => {
         await verifyClone(session);
       } finally {
         await old.close();
+      }
+    } finally {
+      await session.close();
+    }
+  });
+
+  it('rejects settings without implemented plain-chat conversion at registration and planning', async () => {
+    const unsupported: readonly RowFormatSettings[] = [
+      { ...SETTINGS, formatId: 'openai-chat:openai' },
+      { ...SETTINGS, formatId: 'openai-chat:kimi' },
+      { ...SETTINGS, formatId: 'openai-chat:mistral' },
+      { ...SETTINGS, formatId: 'responses' },
+      { ...SETTINGS, formatId: 'anthropic' },
+      { ...SETTINGS, formatRev: 2 },
+      { ...SETTINGS, isOAuth: true },
+      { ...SETTINGS, toolNameTransform: 'oauth' },
+      { ...SETTINGS, supportsUrlImages: false },
+      { ...SETTINGS, reasoningEnabled: true },
+      { ...SETTINGS, reasoningFieldName: 'reasoning' },
+      { ...SETTINGS, mediaPdfEnabled: true },
+      { ...SETTINGS, unsupportedMedia: 'reject' },
+    ];
+    const session = await JournalSession.createUnlinked();
+    try {
+      await session.append(ROWS);
+      await session.registerRowFormat(plainChatLengthRegistration(SETTINGS));
+      const pin = await session.store.snapshot();
+      try {
+        for (const settings of unsupported) {
+          expect(() => plainChatLengthRegistration(settings)).toThrow(
+            /does not support/,
+          );
+          expect(() => planStoredChatMessages(pin, settings, 0, '')).toThrow(
+            /does not support/,
+          );
+        }
+      } finally {
+        await pin.close();
       }
     } finally {
       await session.close();

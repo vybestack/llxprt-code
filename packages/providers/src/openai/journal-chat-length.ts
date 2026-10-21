@@ -103,12 +103,18 @@ function factsOf(
 }
 
 function supported(settings: RowFormatSettings): void {
-  if (
-    settings.formatId !== 'openai-chat:plain' ||
-    settings.formatRev !== PLAIN_CHAT_FORMAT_REV ||
-    settings.toolNameTransform !== 'none' ||
-    settings.reasoningFieldName !== 'reasoning_content'
-  )
+  const unsupported = [
+    settings.formatId !== 'openai-chat:plain',
+    settings.formatRev !== PLAIN_CHAT_FORMAT_REV,
+    settings.isOAuth,
+    settings.toolNameTransform !== 'none',
+    !settings.supportsUrlImages,
+    settings.reasoningEnabled,
+    settings.reasoningFieldName !== 'reasoning_content',
+    settings.mediaPdfEnabled,
+    settings.unsupportedMedia !== 'notice',
+  ];
+  if (unsupported.includes(true))
     throw new JournalFormatError(
       'Plain chat length measurer does not support these converter settings',
     );
