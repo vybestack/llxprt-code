@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { appendFile } from 'node:fs/promises';
 import { testJournalSeams } from '../../journal/__tests__/support/journalFixtures.js';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
 import { encodeContentRow } from './journalRowCodec.js';
@@ -155,6 +156,7 @@ describe('persisted selected Mistral conversion facts', () => {
           },
         );
         const filledHeads = stats.heads;
+        const beforeWarm = readCounter.reads;
         await request.withMistralSelection(
           session.store,
           0,
@@ -165,6 +167,20 @@ describe('persisted selected Mistral conversion facts', () => {
         );
         expect(session.store.published?.commitSeq).toBe(3);
         expect(stats.heads - filledHeads).toBeLessThan(120);
+        const measurements = process.env['MISTRAL_CONVERSION_MEASUREMENTS'];
+        if (measurements !== undefined)
+          await appendFile(
+            measurements,
+            JSON.stringify({
+              rows: rows.length,
+              selected: indices.length,
+              coldHeads: filledHeads,
+              warmHeads: stats.heads - filledHeads,
+              warmReads: readCounter.reads - beforeWarm,
+              blocks: stats.blocks,
+              bodies: stats.bodies,
+            }) + String.fromCharCode(10),
+          );
         await expect(
           request.withMistralSelection(
             session.store,

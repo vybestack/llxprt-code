@@ -49,6 +49,11 @@ const cases: ReadonlyArray<{
     ],
   },
   {
+    name: 'Unicode raw IDs retain exact codepoint hashing and repeated-name behavior',
+    rows: [{ speaker: 'ai', blocks: [call('工具_', 'π'), call('工具_', '')] }],
+    tail: [{ speaker: 'tool', blocks: [response('工具_')] }],
+  },
+  {
     name: 'pending observed holder reserves before earlier lazy emission',
     rows: [{ speaker: 'ai', blocks: [call('')] }],
     tail: [
