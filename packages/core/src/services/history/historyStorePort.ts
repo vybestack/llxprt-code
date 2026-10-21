@@ -321,9 +321,9 @@ export interface HistoryStorePort {
    */
   contextRange(accumulated: readonly RemovedInteriorSpan[]): ContextRange;
   openDumpSnapshot(): Promise<HistoryDumpSnapshot>;
-  openSemanticPurgeSnapshot?(
+  openSemanticPurgeSnapshot(
     host: DetachedHistoryHost,
-  ): Promise<SemanticPurgeSnapshot>;
+  ): Promise<SemanticPurgeSnapshot | undefined>;
   openCompressionInput(): Promise<CompressionInputSnapshot>;
   openToolResponseRanking(
     policy: ToolRankingPolicy,

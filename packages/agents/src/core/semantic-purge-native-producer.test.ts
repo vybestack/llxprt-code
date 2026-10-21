@@ -65,11 +65,9 @@ describe('native public semantic purge producer', () => {
               rows()[2].blocks,
             ]);
             expect(after[1].metadata?.responsesStored).toBeUndefined();
-            if (deny) {
-              await attempt.rollbackCommitted();
-              expect(await collect(history)).toStrictEqual(before);
-              expect(history.getTotalTokens()).toBe(tokens);
-            }
+            await attempt.rollbackCommitted();
+            expect(await collect(history)).toStrictEqual(before);
+            expect(history.getTotalTokens()).toBe(tokens);
           } finally {
             await attempt.finalize();
           }

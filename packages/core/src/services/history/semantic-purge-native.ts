@@ -1,5 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent } from './IContent.js';
+import type { RowOwnership } from '../../recording/rowOwnership.js';
+import { HistoryReaderScope } from './historyReaderScope.js';
 import type { DetachedHistorySink } from './detachedHistoryMutation.js';
 import type { SemanticPurgeRowSource } from './semantic-purge-disk-rows.js';
 import {
@@ -33,6 +35,26 @@ function mediaId(row: IContent, index: number): string | undefined {
     : block.sourceContentId;
 }
 
+function validCoordinate(value: number): boolean {
+  return Number.isSafeInteger(value) && value >= 0;
+}
+
+function matchingImage(
+  row: IContent,
+  contentIndex: number,
+  frontier: SemanticMediaPurgeFrontier,
+): SemanticMediaPurgeBoundary | undefined {
+  for (const [blockIndex, block] of row.blocks.entries()) {
+    if (
+      (frontier.mediaId === undefined ||
+        mediaId(row, blockIndex) === frontier.mediaId) &&
+      isPurgeableImage(block, { contentIndex, blockIndex })
+    )
+      return { contentIndex, blockIndex };
+  }
+  return undefined;
+}
+
 async function frontierOf(
   snapshot: SemanticPurgeSnapshot,
   signal?: AbortSignal,
@@ -41,10 +63,8 @@ async function frontierOf(
     const frontier = row.metadata?.semanticMediaPurgeFrontier;
     if (
       frontier !== undefined &&
-      Number.isSafeInteger(frontier.contentIndex) &&
-      frontier.contentIndex >= 0 &&
-      Number.isSafeInteger(frontier.blockIndex) &&
-      frontier.blockIndex >= 0
+      validCoordinate(frontier.contentIndex) &&
+      validCoordinate(frontier.blockIndex)
     )
       return restoredFrontierValue(frontier);
   }
@@ -64,13 +84,8 @@ async function rebase(
       frontier.contentId === undefined ||
       row.metadata?.id === frontier.contentId
     ) {
-      for (let blockIndex = 0; blockIndex < row.blocks.length; blockIndex++)
-        if (
-          (frontier.mediaId === undefined ||
-            mediaId(row, blockIndex) === frontier.mediaId) &&
-          isPurgeableImage(row.blocks[blockIndex], { contentIndex, blockIndex })
-        )
-          return { contentIndex, blockIndex };
+      const match = matchingImage(row, contentIndex, frontier);
+      if (match !== undefined) return match;
     }
     contentIndex++;
   }
@@ -81,7 +96,9 @@ export class NativeSemanticPurgeCandidate
   implements SemanticPurgeResource, SemanticPurgeRowSource
 {
   readonly length: number;
-  private closed = false;
+  private readonly readers = new HistoryReaderScope(
+    'Semantic media purge transaction is closed',
+  );
 
   constructor(
     readonly snapshot: SemanticPurgeSnapshot,
@@ -89,15 +106,21 @@ export class NativeSemanticPurgeCandidate
     readonly removed: boolean,
     private readonly options: SemanticMediaPurgeOptions,
     readonly frontier: SemanticMediaPurgeFrontier,
+    private readonly ownership?: RowOwnership,
   ) {
     this.length = snapshot.length - Number(removed);
   }
 
   view(): SemanticPurgeRowSource {
-    return this;
+    return Object.freeze({
+      length: this.length,
+      streamRows: (
+        signal?: AbortSignal,
+      ): AsyncGenerator<IContent, void, unknown> => this.streamRows(signal),
+    });
   }
-  close(): void {
-    this.closed = true;
+  close(): Promise<void> {
+    return this.readers.close();
   }
 
   sourceOrdinal(index: number): number {
@@ -136,8 +159,7 @@ export class NativeSemanticPurgeCandidate
   }
 
   async readRow(index: number, annotate = true): Promise<IContent> {
-    if (this.closed)
-      throw new Error('Semantic media purge transaction is closed');
+    this.readers.requireOpen();
     const sourceOrdinal = this.sourceOrdinal(index);
     const row = this.transformed(
       await this.snapshot.readRow(sourceOrdinal),
@@ -150,15 +172,24 @@ export class NativeSemanticPurgeCandidate
     return row;
   }
 
-  async *streamRows(
+  streamRows(signal?: AbortSignal): AsyncGenerator<IContent, void, unknown> {
+    return this.readers.open(this.rows(signal));
+  }
+
+  private async *rows(
     signal?: AbortSignal,
   ): AsyncGenerator<IContent, void, unknown> {
     for (let index = 0; index < this.length; index++) {
       signal?.throwIfAborted();
-      yield await this.readRow(index);
+      const row = await this.readRow(index);
+      this.ownership?.retain(row);
+      try {
+        yield row;
+      } finally {
+        this.ownership?.release(row);
+      }
     }
-    if (this.closed)
-      throw new Error('Semantic media purge transaction is closed');
+    this.readers.requireOpen();
     signal?.throwIfAborted();
   }
 
@@ -182,10 +213,73 @@ export interface NativeSemanticPurgeSelection {
   readonly previousFrontier: SemanticMediaPurgeFrontier;
 }
 
+async function positionalFrontier(
+  candidate: NativeSemanticPurgeCandidate,
+): Promise<SemanticMediaPurgeFrontier> {
+  const contentIndex = Math.min(
+    candidate.location.contentIndex,
+    candidate.length - 1,
+  );
+  const row = await candidate.readRow(contentIndex, false);
+  if (candidate.removed)
+    return {
+      contentIndex,
+      blockIndex:
+        contentIndex === candidate.location.contentIndex
+          ? 0
+          : row.blocks.length - 1,
+    };
+  return {
+    contentIndex,
+    blockIndex: Math.min(candidate.location.blockIndex, row.blocks.length - 1),
+  };
+}
+
+function nextImage(
+  row: IContent,
+  contentIndex: number,
+  start: number,
+): SemanticMediaPurgeFrontier | undefined {
+  for (let blockIndex = start; blockIndex < row.blocks.length; blockIndex++) {
+    if (
+      isPurgeableImage(row.blocks[blockIndex], { contentIndex, blockIndex })
+    ) {
+      const contentId = row.metadata?.id;
+      const identity = mediaId(row, blockIndex);
+      return {
+        contentIndex,
+        blockIndex,
+        ...(contentId ? { contentId } : {}),
+        ...(identity ? { mediaId: identity } : {}),
+      };
+    }
+  }
+  return undefined;
+}
+
+async function candidateFrontier(
+  candidate: NativeSemanticPurgeCandidate,
+  signal?: AbortSignal,
+): Promise<SemanticMediaPurgeFrontier> {
+  if (candidate.length === 0) return { contentIndex: 0, blockIndex: 0 };
+  const positional = await positionalFrontier(candidate);
+  for (let index = positional.contentIndex; index < candidate.length; index++) {
+    signal?.throwIfAborted();
+    const match = nextImage(
+      await candidate.readRow(index, false),
+      index,
+      index === positional.contentIndex ? positional.blockIndex : 0,
+    );
+    if (match !== undefined) return match;
+  }
+  return positional;
+}
+
 export async function selectNativeSemanticPurge(
   snapshot: SemanticPurgeSnapshot,
   options: SemanticMediaPurgeOptions,
   signal?: AbortSignal,
+  ownership?: RowOwnership,
 ): Promise<NativeSemanticPurgeSelection | undefined> {
   const previousFrontier = await frontierOf(snapshot, signal);
   const start = await rebase(snapshot, previousFrontier, signal);
@@ -213,53 +307,14 @@ export async function selectNativeSemanticPurge(
     contentIndex++;
   }
   if (location === undefined) return undefined;
-  const length = snapshot.length - Number(removed);
-  let frontier: SemanticMediaPurgeFrontier = { contentIndex: 0, blockIndex: 0 };
-  if (length > 0) {
-    const index = Math.min(location.contentIndex, length - 1);
-    const draft = new NativeSemanticPurgeCandidate(
-      snapshot,
-      location,
-      removed,
-      options,
-      frontier,
-    );
-    const row = await draft.readRow(index, false);
-    const blockIndex = removed
-      ? index === location.contentIndex
-        ? 0
-        : row.blocks.length - 1
-      : Math.min(location.blockIndex, row.blocks.length - 1);
-    frontier = { contentIndex: index, blockIndex };
-    for (let at = index; at < length; at++) {
-      const value = await draft.readRow(at, false);
-      let found = false;
-      for (
-        let block = at === index ? blockIndex : 0;
-        block < value.blocks.length;
-        block++
-      ) {
-        if (
-          !isPurgeableImage(value.blocks[block], {
-            contentIndex: at,
-            blockIndex: block,
-          })
-        )
-          continue;
-        const contentId = value.metadata?.id;
-        const identity = mediaId(value, block);
-        frontier = {
-          contentIndex: at,
-          blockIndex: block,
-          ...(contentId ? { contentId } : {}),
-          ...(identity ? { mediaId: identity } : {}),
-        };
-        found = true;
-        break;
-      }
-      if (found) break;
-    }
-  }
+  const draft = new NativeSemanticPurgeCandidate(
+    snapshot,
+    location,
+    removed,
+    options,
+    { contentIndex: 0, blockIndex: 0 },
+  );
+  const frontier = await candidateFrontier(draft, signal);
   freezeSemanticPurgeValue(frontier);
   return {
     candidate: new NativeSemanticPurgeCandidate(
@@ -268,6 +323,7 @@ export async function selectNativeSemanticPurge(
       removed,
       options,
       frontier,
+      ownership,
     ),
     prefix,
     previousFrontier,

@@ -17,6 +17,7 @@ import {
 } from '@vybestack/llxprt-code-core/services/history/semantic-purge-stream.js';
 import type { SemanticPurgeRowSource } from '@vybestack/llxprt-code-core/services/history/semantic-purge-disk-rows.js';
 import type { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
+import { historyMutationFailure } from '@vybestack/llxprt-code-core/services/history/historyMutationEffects.js';
 
 export type SemanticMediaPurgeMode = 'off' | 'remove' | 'summary';
 
@@ -129,6 +130,13 @@ export class SemanticMediaPurgeAttempt {
         cachePrefixWritten,
       });
       return this.committed;
+    } catch (error) {
+      try {
+        await this.release();
+      } catch (cleanup) {
+        throw historyMutationFailure(error, [cleanup]);
+      }
+      throw error;
     } finally {
       if (!this.committed) await this.release();
     }

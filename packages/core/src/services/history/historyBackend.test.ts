@@ -58,6 +58,7 @@ const PORT_METHODS = [
   'currentTurnMarker',
   'contextRange',
   'openDumpSnapshot',
+  'openSemanticPurgeSnapshot',
   'openCompressionInput',
   'openToolResponseRanking',
   'dispose',

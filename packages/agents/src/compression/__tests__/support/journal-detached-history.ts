@@ -22,6 +22,7 @@ export function journalBackedHistory(
   const { store, host } = owned;
   const enqueue = (execute: () => Promise<void>): Promise<void> => execute();
   const detachedValues: DetachedHistoryAPI = {
+    openSemanticPurgeSnapshot: () => store.openSemanticPurgeSnapshot(host),
     host: () => host,
     withRollbackCheckpoint: (execute) =>
       store.withRollbackCheckpoint(host, enqueue, execute),

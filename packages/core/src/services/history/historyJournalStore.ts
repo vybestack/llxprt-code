@@ -624,13 +624,10 @@ export class HistoryJournalStore implements HistoryStorePort {
   async openToolResponseRanking(): Promise<undefined> {
     return undefined;
   }
+  openSemanticPurgeSnapshot = this.openToolResponseRanking;
 
-  openDumpSnapshot(): Promise<HistoryDumpSnapshot> {
-    return openHistoryDumpSnapshot(
-      this.capturePendingFold(),
-      this.attachmentCounters,
-    );
-  }
+  openDumpSnapshot = (): Promise<HistoryDumpSnapshot> =>
+    openHistoryDumpSnapshot(this.capturePendingFold(), this.attachmentCounters);
 
   async withMutationSnapshot<T>(
     execute: (snapshot: HistoryMutationSnapshot) => Promise<T>,

@@ -116,6 +116,27 @@ export function notifyDetachedRows(
   return source.retire();
 }
 
+async function openSemanticPurge(
+  journal: HistoryStorePort,
+  host: () => DetachedHistoryHost,
+  enqueue: (execute: () => Promise<void>) => Promise<void>,
+): Promise<SemanticPurgeSnapshot | undefined> {
+  const captured: { snapshot?: SemanticPurgeSnapshot } = {};
+  await enqueue(async () => {
+    captured.snapshot = await journal.openSemanticPurgeSnapshot(host());
+  });
+  const snapshot = captured.snapshot;
+  if (snapshot === undefined) return undefined;
+  return {
+    length: snapshot.length,
+    streamRows: (signal) => snapshot.streamRows(signal),
+    readRow: (index) => snapshot.readRow(index),
+    isCurrent: () => snapshot.isCurrent(),
+    restore: () => enqueue(() => snapshot.restore()),
+    close: () => snapshot.close(),
+  };
+}
+
 export function createDetachedHistoryAPI(
   history: HistoryServiceCore,
   journal: HistoryStorePort,
@@ -173,24 +194,7 @@ export function createDetachedHistoryAPI(
     enqueue(() => journal.publishDetached(task, host(), model, options));
   return {
     host,
-    openSemanticPurgeSnapshot: async () => {
-      if (journal.openSemanticPurgeSnapshot === undefined) return undefined;
-      const captured: { snapshot?: SemanticPurgeSnapshot } = {};
-      await enqueue(async () => {
-        captured.snapshot = await journal.openSemanticPurgeSnapshot?.(host());
-      });
-      const snapshot = captured.snapshot;
-      if (snapshot === undefined)
-        throw new Error('Semantic purge snapshot was not captured');
-      return {
-        length: snapshot.length,
-        streamRows: (signal) => snapshot.streamRows(signal),
-        readRow: (index) => snapshot.readRow(index),
-        isCurrent: () => snapshot.isCurrent(),
-        restore: () => enqueue(() => snapshot.restore()),
-        close: () => snapshot.close(),
-      };
-    },
+    openSemanticPurgeSnapshot: () => openSemanticPurge(journal, host, enqueue),
     withRollbackCheckpoint: (execute) =>
       journal.withRollbackCheckpoint(host(), enqueue, execute),
     withCheckpoint: (execute, signal) =>

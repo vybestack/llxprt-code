@@ -1,5 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { isDeepStrictEqual } from 'node:util';
+import { NativeSemanticPurgeBase } from './semantic-purge-native-base.js';
+import { HistoryReaderScope } from './historyReaderScope.js';
+import { historyMutationFailure } from './historyMutationEffects.js';
 import {
   selectNativeSemanticPurge,
   type NativeSemanticPurgeCandidate,
@@ -45,6 +48,9 @@ export class SemanticPurgeStreamTransaction {
     | SemanticMediaPurgeBoundaryIdentity
     | undefined;
   private closed = false;
+  private readonly readers = new HistoryReaderScope(
+    'Semantic media purge transaction is closed',
+  );
   publishedMark: HistoryMutationMark | undefined;
 
   constructor(
@@ -67,7 +73,14 @@ export class SemanticPurgeStreamTransaction {
         : new SemanticMediaPurgeBoundaryIdentity(preImageBoundary);
   }
 
-  async *requestRows(
+  requestRows(
+    explicitCacheWrite: boolean,
+    signal?: AbortSignal,
+  ): AsyncGenerator<IContent, void, unknown> {
+    return this.readers.open(this.request(explicitCacheWrite, signal));
+  }
+
+  private async *request(
     explicitCacheWrite: boolean,
     signal?: AbortSignal,
   ): AsyncGenerator<IContent, void, unknown> {
@@ -119,11 +132,20 @@ export class SemanticPurgeStreamTransaction {
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
-    try {
-      await this.candidateDisk.close();
-    } finally {
-      await this.baseDisk.close();
+    const failures: unknown[] = [];
+    for (const close of [
+      () => this.readers.close(),
+      () => this.candidateDisk.close(),
+      () => this.baseDisk.close(),
+    ]) {
+      try {
+        await close();
+      } catch (error) {
+        failures.push(error);
+      }
     }
+    if (failures.length > 0)
+      throw historyMutationFailure(failures[0], failures.slice(1));
   }
 }
 
@@ -189,6 +211,7 @@ export class SemanticMediaPurgeStreamCoordinator {
           snapshot,
           options,
           signal,
+          this.configuration.ownership,
         );
         if (selected === undefined) {
           await snapshot.close();
@@ -196,7 +219,7 @@ export class SemanticMediaPurgeStreamCoordinator {
         }
         this.currentFrontier = selected.previousFrontier;
         return new SemanticPurgeStreamTransaction(
-          { view: () => snapshot, close: () => snapshot.close() },
+          new NativeSemanticPurgeBase(snapshot, this.configuration.ownership),
           selected.candidate,
           selected.prefix,
           selected.candidate.location.contentIndex,
@@ -208,7 +231,11 @@ export class SemanticMediaPurgeStreamCoordinator {
           selected.candidate,
         );
       } catch (error) {
-        await snapshot.close();
+        try {
+          await snapshot.close();
+        } catch (cleanup) {
+          throw historyMutationFailure(error, [cleanup]);
+        }
         throw error;
       }
     }
@@ -282,6 +309,48 @@ export class SemanticMediaPurgeStreamCoordinator {
     this.currentFrontier = transaction.previousFrontier;
   }
 
+  private async rollbackNative(
+    transaction: SemanticPurgeStreamTransaction,
+    candidate: NativeSemanticPurgeCandidate,
+  ): Promise<void> {
+    const journal = this.history.detachedValues.host().journal;
+    const prior = journal.mutationMark();
+    await this.history.detachedValues.withRollbackCheckpoint(
+      async (restore) => {
+        let persisted = false;
+        try {
+          await this.configuration.persist?.(
+            transaction.base,
+            transaction.previousFrontier,
+          );
+          persisted = true;
+          await candidate.snapshot.restore();
+        } catch (error) {
+          const failures: unknown[] = [];
+          if (!journal.isCurrentMutationMark(prior)) {
+            try {
+              await restore();
+              await this.history.waitForCommit();
+            } catch (failure) {
+              failures.push(failure);
+            }
+          }
+          if (persisted) {
+            try {
+              await this.configuration.persist?.(
+                transaction.candidate,
+                transaction.nextFrontier,
+              );
+            } catch (failure) {
+              failures.push(failure);
+            }
+          }
+          throw historyMutationFailure(error, failures);
+        }
+      },
+    );
+  }
+
   private async replaceNative(
     transaction: SemanticPurgeStreamTransaction,
     rollback: boolean,
@@ -300,14 +369,10 @@ export class SemanticMediaPurgeStreamCoordinator {
       throw new Error('History changed while semantic media purge was pending');
     signal?.throwIfAborted();
     if (rollback) {
-      await this.configuration.persist?.(
-        transaction.base,
-        transaction.previousFrontier,
-      );
-      await candidate.snapshot.restore();
+      await this.rollbackNative(transaction, candidate);
       return;
     }
-    let persisted = false;
+    const state = { persisted: false };
     try {
       await this.history.detachedValues.transform(
         async (source, sink) => {
@@ -319,7 +384,7 @@ export class SemanticMediaPurgeStreamCoordinator {
             transaction.candidate,
             transaction.nextFrontier,
           );
-          persisted = true;
+          state.persisted = true;
           await candidate.publish(sink, signal);
         },
         undefined,
@@ -328,7 +393,7 @@ export class SemanticMediaPurgeStreamCoordinator {
       await this.history.waitForCommit();
       transaction.publishedMark = journal.mutationMark();
     } catch (error) {
-      if (persisted) {
+      if (state.persisted) {
         try {
           await this.configuration.persist?.(
             transaction.base,
