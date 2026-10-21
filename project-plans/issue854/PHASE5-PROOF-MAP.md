@@ -1,5 +1,20 @@
 # Phase 5 proof map
 
+## Native parentless Responses stored-summary checkpoint
+
+Implementation `eef2544c2`; follow-up `f62afa9a0894fd12b5da82c6f7d730bf9d943cc0`. [PHASE5-RESPONSES-FORMAT-PROOF.json](PHASE5-RESPONSES-FORMAT-PROOF.json) records 158 passes, zero failures/skips and 53,411 assertions across 12 serial Bun processes over 12 files, eight gates and six restored assertion controls. Raw evidence: `tmp/p5/responses-format-run-p`. Earlier Responses normalization evidence remains separate.
+
+| Obligation | Evidence and boundary |
+| --- | --- |
+| Independent bytes and state model | Native frozen test compares both routes' unchanged 5000 inputs with old converter body bytes and the validated phase-zero model. Streamed body bytes and the existing independent body-length builder agree with the stored plan. No frozen/golden fixture changes. |
+| Real writer facts | Provider registration fills native LENS/summary/PDF/generation fields in the queued commit. Indexed normalized membership repair refreshes counterpart holders. Actual append/pop/rebuild/fork/compaction and old-pin tests pass. No core-to-providers dependency. |
+| Settings and request envelope | Every declared setting is keyed; only the documented revision-1 subset is admitted. Captured output limits and both PDF policies are tested. Full typed envelope fields are measured once per request outside history. Parent/cursor/tail/input overrides and stale/unmeasured facts fail explicitly. |
+| Cold versus warm | Cold reads 722/104564 at 40/4000 rows; warm planning zero physical or ROW/LENS payload reads; append 22/32. Rescan control fails 1170 versus unchanged less-than-150 bound. No retained-heap claim. |
+| Failure and control lifetime | Original callback cause and acknowledged pin survive failure; later writes are poisoned until reopen. Six complete-file controls fail assertions and restore via cmp/hash. Interrupted 60602 mutation restored before verification, not counted as behavioral evidence. |
+| Source and filesystem preservation | 8909 source-inventory entries match; 1192 preserved paths include all 293 unrelated declarations and raw recovery. No recorded workers remain. Earlier mismatched receipts are retained but excluded from final totals. |
+
+Open: parent/cursor/range/tail corrections, Anthropic and remaining chat variants, stored-media/image generations, LENS recomputation/live bytes, tokens/guard/header installation, retained heap and 100000-call construction, cold Mistral performance, W23's eight zero-decode cases, W25/cutover and W26. Provider routes/default remain unchanged; #3917 remains separately RED without retry/suppression. Review skipped per Andrew 2026-10-09.
+
 ## Native plain-chat format/settings and stored-length checkpoint
 
 Implementation `b381acd74` starts at `0d5223237`; final source `3d0b2bdbafe14630d3bf95d974c92c4b4568542d` includes fail-fast admission and lifecycle supplements. [PHASE5-FORMAT-PROOF.json](PHASE5-FORMAT-PROOF.json) binds 15 scoped files to committed blobs, the 9063-path inventory and exact serial execution. Actual raw evidence is `tmp/p5/format-run-o`. No provider route/default changed.

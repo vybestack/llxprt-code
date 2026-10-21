@@ -1,4 +1,14 @@
-# Issue 854 decision log, 2026-10-20
+# Issue 854 decision log, 2026-10-21
+
+## Phase 5 parentless Responses stored-summary finalization, 2026-10-21
+
+Keep `eef2544c2` as the first format slice and commit the pairing/lifecycle follow-up at `f62afa9a0894fd12b5da82c6f7d730bf9d943cc0` before this proof update. Do not extend full-history pair summaries to a previous-response parent, nonzero cursor or pending tail: those selections need their own range corrections. Admit only the implemented revision-1 settings listed in `PHASE5-RESPONSES-DECISIONS.md`; preserve exact key dependencies and fail unsupported values. Count the complete typed envelope once outside history and derive input bytes from the native aggregate.
+
+The append dependency is normalized pair membership, not raw-ID equality. Compare old/tentative indexed membership and invalidate counterpart holders when presence changes. Stream repairs through the existing writer without a history-sized holder collection. Preserve original callback errors, acknowledged versions and the existing poison/reopen behavior; the passing native lifecycle test establishes that behavior without another producer change.
+
+Restore the interrupted stale-generation mutant through its exact saved original and cmp/hash before ordinary tests. Final acceptance is 158 passes, zero failures/skips and 53,411 assertions across 12 serial Bun processes over 12 files; eight gates and six assertion-failing controls pass their contracts. Separate the test byte oracle from the planner check, use an independently held pin for commit-sequence comparison, and compare caller envelope state with a clone. These keep all behavioral assertions while removing the audit's ambiguous same-call classifications. Reuse earlier unrelated proof rather than relabeling it. No bounds, timeouts, assertions or corpus domain changed.
+
+The source-bound receipt is `PHASE5-RESPONSES-FORMAT-PROOF.json`. Warm planning is aggregate-only; measured cold fill is 722/104564 physical reads at 40/4000 rows and is not a heap result. Parent/range/tail planning, Anthropic/remaining chat variants, LENS recomputation/live-byte accounting, image projection/generations, retained heap, cold Mistral performance, W23/W25/cutover/W26 remain open. Provider routes/default are unchanged, and #3917 remains separately RED without retry/suppression. All preserved files match and recorded PIDs are absent. Review skipped per Andrew 2026-10-09.
 
 ## Phase 5 first native format/settings and plain-chat lengths
 

@@ -1,0 +1,1202 @@
+{
+  "created": "2026-10-21T03:41:24.791Z",
+  "startingHead": "eef2544c29260889e1539c4d6c8269d0853114ae",
+  "implementationCommit": "f62afa9a0894fd12b5da82c6f7d730bf9d943cc0",
+  "scope": "Opt-in native full-history parentless Responses revision-1 stored-summary length planning only; provider sends and backend default unchanged.",
+  "rawEvidence": "tmp/p5/responses-format-run-p",
+  "sources": {
+    "packages/core/src/journal/rowFormat.ts": {
+      "sha256": "013a3f04289c9cc446cdd24d7714d0538a1d6180137b4c5475d2c22a3133fbf5",
+      "committed": "013a3f04289c9cc446cdd24d7714d0538a1d6180137b4c5475d2c22a3133fbf5",
+      "working": "013a3f04289c9cc446cdd24d7714d0538a1d6180137b4c5475d2c22a3133fbf5",
+      "commit": "f62afa9a0894fd12b5da82c6f7d730bf9d943cc0"
+    },
+    "packages/core/src/journal/formatFill.ts": {
+      "sha256": "e168195f2e09fe68a18c9fb30bee62b46867ab3d6df89080bd2d3a99710d838c",
+      "committed": "e168195f2e09fe68a18c9fb30bee62b46867ab3d6df89080bd2d3a99710d838c",
+      "working": "e168195f2e09fe68a18c9fb30bee62b46867ab3d6df89080bd2d3a99710d838c",
+      "commit": "f62afa9a0894fd12b5da82c6f7d730bf9d943cc0"
+    },
+    "packages/providers/src/openai-responses/OpenAIResponsesInputBuilder.ts": {
+      "sha256": "d40e96d72a919ec25eac67ea8a5af75daf8bcf48770a7c9bfa2de4f5d041b019",
+      "committed": "d40e96d72a919ec25eac67ea8a5af75daf8bcf48770a7c9bfa2de4f5d041b019",
+      "working": "d40e96d72a919ec25eac67ea8a5af75daf8bcf48770a7c9bfa2de4f5d041b019",
+      "commit": "f62afa9a0894fd12b5da82c6f7d730bf9d943cc0"
+    },
+    "packages/providers/src/openai-responses/responses-disk-body.ts": {
+      "sha256": "91c8fcfb26485caa0afd0d98a4b6184f4e7dbf8b6ba05b5dbfaf78ece8e5b6bd",
+      "committed": "91c8fcfb26485caa0afd0d98a4b6184f4e7dbf8b6ba05b5dbfaf78ece8e5b6bd",
+      "working": "91c8fcfb26485caa0afd0d98a4b6184f4e7dbf8b6ba05b5dbfaf78ece8e5b6bd",
+      "commit": "f62afa9a0894fd12b5da82c6f7d730bf9d943cc0"
+    },
+    "packages/providers/src/openai-responses/responses-unit-length.ts": {
+      "sha256": "a516ed708993dd310d26b460691021fb023f98173d800296ba58d29b10e84543",
+      "committed": "a516ed708993dd310d26b460691021fb023f98173d800296ba58d29b10e84543",
+      "working": "a516ed708993dd310d26b460691021fb023f98173d800296ba58d29b10e84543",
+      "commit": "f62afa9a0894fd12b5da82c6f7d730bf9d943cc0"
+    },
+    "packages/providers/src/openai-responses/journal-responses-length.ts": {
+      "sha256": "26b791a7a9f055da16745f529fa4b164200da32c9038796570fd0eb3d673db8f",
+      "committed": "26b791a7a9f055da16745f529fa4b164200da32c9038796570fd0eb3d673db8f",
+      "working": "26b791a7a9f055da16745f529fa4b164200da32c9038796570fd0eb3d673db8f",
+      "commit": "f62afa9a0894fd12b5da82c6f7d730bf9d943cc0"
+    },
+    "packages/providers/src/openai-responses/journal-responses-length.test.ts": {
+      "sha256": "7f1bba637bc4eb07c5b77bb76847abd6fa6bf9dfede7ebe87476d25a384faea7",
+      "committed": "7f1bba637bc4eb07c5b77bb76847abd6fa6bf9dfede7ebe87476d25a384faea7",
+      "working": "7f1bba637bc4eb07c5b77bb76847abd6fa6bf9dfede7ebe87476d25a384faea7",
+      "commit": "f62afa9a0894fd12b5da82c6f7d730bf9d943cc0"
+    },
+    "packages/core/src/journal/responsesPairChanges.ts": {
+      "sha256": "bbb3c59665210269d484cdc69a8cdc342df373b5a9f80ef21f3aa6c7444466f2",
+      "committed": "bbb3c59665210269d484cdc69a8cdc342df373b5a9f80ef21f3aa6c7444466f2",
+      "working": "bbb3c59665210269d484cdc69a8cdc342df373b5a9f80ef21f3aa6c7444466f2",
+      "commit": "f62afa9a0894fd12b5da82c6f7d730bf9d943cc0"
+    },
+    "packages/providers/src/openai-responses/journal-responses-lifecycle.test.ts": {
+      "sha256": "fb234ff339d88f12131b4bb854dd2d57a7592a53a2254292b3cf1901cd01cc69",
+      "committed": "fb234ff339d88f12131b4bb854dd2d57a7592a53a2254292b3cf1901cd01cc69",
+      "working": "fb234ff339d88f12131b4bb854dd2d57a7592a53a2254292b3cf1901cd01cc69",
+      "commit": "f62afa9a0894fd12b5da82c6f7d730bf9d943cc0"
+    },
+    "packages/providers/src/openai-responses/journal-responses-frozen.test.ts": {
+      "sha256": "588cc2bd7e9b404da3a800a88aaf121bca8113b00382f825529a44ed329b0ae7",
+      "committed": "588cc2bd7e9b404da3a800a88aaf121bca8113b00382f825529a44ed329b0ae7",
+      "working": "588cc2bd7e9b404da3a800a88aaf121bca8113b00382f825529a44ed329b0ae7",
+      "commit": "f62afa9a0894fd12b5da82c6f7d730bf9d943cc0"
+    },
+    "packages/providers/src/openai-responses/journal-responses.test-helper.ts": {
+      "sha256": "1b102c090e6dcc10ab052fe99eea7ddc2ab97317ee181f3003b25cc65ced95a7",
+      "committed": "1b102c090e6dcc10ab052fe99eea7ddc2ab97317ee181f3003b25cc65ced95a7",
+      "working": "1b102c090e6dcc10ab052fe99eea7ddc2ab97317ee181f3003b25cc65ced95a7",
+      "commit": "f62afa9a0894fd12b5da82c6f7d730bf9d943cc0"
+    },
+    "packages/providers/src/openai/journal-chat-length.test.ts": {
+      "sha256": "090e2e165973eba34bb7b40408c44ccc197af33f0a2a841f6e5657746ab903a3",
+      "committed": "090e2e165973eba34bb7b40408c44ccc197af33f0a2a841f6e5657746ab903a3",
+      "working": "090e2e165973eba34bb7b40408c44ccc197af33f0a2a841f6e5657746ab903a3",
+      "commit": "f62afa9a0894fd12b5da82c6f7d730bf9d943cc0"
+    },
+    "packages/providers/src/openai/journal-chat-length-lifecycle.test.ts": {
+      "sha256": "8816e44c6f5c5a4dad9a74ee53dfcb2066f51c98434f82923e39296e3c72cfd3",
+      "committed": "8816e44c6f5c5a4dad9a74ee53dfcb2066f51c98434f82923e39296e3c72cfd3",
+      "working": "8816e44c6f5c5a4dad9a74ee53dfcb2066f51c98434f82923e39296e3c72cfd3",
+      "commit": "f62afa9a0894fd12b5da82c6f7d730bf9d943cc0"
+    },
+    "packages/core/src/journal/groupWriter.test.ts": {
+      "sha256": "1facb50089abcf94e8dcb5be94a7940f9824965cb3f3799cfd7e58fecd4358cb",
+      "committed": "1facb50089abcf94e8dcb5be94a7940f9824965cb3f3799cfd7e58fecd4358cb",
+      "working": "1facb50089abcf94e8dcb5be94a7940f9824965cb3f3799cfd7e58fecd4358cb",
+      "commit": "f62afa9a0894fd12b5da82c6f7d730bf9d943cc0"
+    },
+    "packages/core/src/journal/summaryComposition.test.ts": {
+      "sha256": "dc9884d0230e97a53b7866a2ac6c35c9ba294296df83350994365734f8fa5119",
+      "committed": "dc9884d0230e97a53b7866a2ac6c35c9ba294296df83350994365734f8fa5119",
+      "working": "dc9884d0230e97a53b7866a2ac6c35c9ba294296df83350994365734f8fa5119",
+      "commit": "f62afa9a0894fd12b5da82c6f7d730bf9d943cc0"
+    },
+    "packages/core/src/journal/formatTables.test.ts": {
+      "sha256": "caff94bcd1f2073a128f111d6e15eed6df28d0e68e478b886cf98a694d51374a",
+      "committed": "caff94bcd1f2073a128f111d6e15eed6df28d0e68e478b886cf98a694d51374a",
+      "working": "caff94bcd1f2073a128f111d6e15eed6df28d0e68e478b886cf98a694d51374a",
+      "commit": "f62afa9a0894fd12b5da82c6f7d730bf9d943cc0"
+    },
+    "packages/core/src/journal/slotSummary.test.ts": {
+      "sha256": "1495424aacb40618031b714e7826e792d38077a851ef4f00faa4669fca84b1a0",
+      "committed": "1495424aacb40618031b714e7826e792d38077a851ef4f00faa4669fca84b1a0",
+      "working": "1495424aacb40618031b714e7826e792d38077a851ef4f00faa4669fca84b1a0",
+      "commit": "f62afa9a0894fd12b5da82c6f7d730bf9d943cc0"
+    },
+    "packages/providers/src/openai-responses/__tests__/length-model.responses.test.ts": {
+      "sha256": "224763bbc82ba61e0b9342c5edae7eca7bb5ea7ea19636d8e5be0e45052253a2",
+      "committed": "224763bbc82ba61e0b9342c5edae7eca7bb5ea7ea19636d8e5be0e45052253a2",
+      "working": "224763bbc82ba61e0b9342c5edae7eca7bb5ea7ea19636d8e5be0e45052253a2",
+      "commit": "f62afa9a0894fd12b5da82c6f7d730bf9d943cc0"
+    },
+    "packages/providers/src/openai-responses/__tests__/length-model.responses-via-openai.test.ts": {
+      "sha256": "e0021d6f8ece012a4375d75022e7e253f2a2d3dab85684daa7d7a22d5c4635b8",
+      "committed": "e0021d6f8ece012a4375d75022e7e253f2a2d3dab85684daa7d7a22d5c4635b8",
+      "working": "e0021d6f8ece012a4375d75022e7e253f2a2d3dab85684daa7d7a22d5c4635b8",
+      "commit": "f62afa9a0894fd12b5da82c6f7d730bf9d943cc0"
+    },
+    "packages/providers/src/openai-responses/__tests__/length-model.responses.counterexamples.test.ts": {
+      "sha256": "f1c3359a51d0063c8ac3ab363a93fa7673feabc1744056d6ef26a5c11de6c235",
+      "committed": "f1c3359a51d0063c8ac3ab363a93fa7673feabc1744056d6ef26a5c11de6c235",
+      "working": "f1c3359a51d0063c8ac3ab363a93fa7673feabc1744056d6ef26a5c11de6c235",
+      "commit": "f62afa9a0894fd12b5da82c6f7d730bf9d943cc0"
+    }
+  },
+  "totals": {
+    "files": 12,
+    "processes": 12,
+    "pass": 158,
+    "fail": 0,
+    "skips": 0,
+    "assertions": 53411
+  },
+  "accepted": [
+    {
+      "name": "packages_providers_src_openai-responses_journal-responses-length.test.ts",
+      "command": [
+        "bun",
+        "test",
+        "src/openai-responses/journal-responses-length.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "env": {},
+      "driverPid": 75553,
+      "childPid": 75554,
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/responses-format-run-p/75553-packages_providers_src_openai-responses_journal-responses-length.test.ts.log",
+      "logHash": "1918750e0a08bf1b0cecddf7559494b885ed71db67a3b2ba41953061e357cba2",
+      "sources": {
+        "packages/core/src/journal/rowFormat.ts": "013a3f04289c9cc446cdd24d7714d0538a1d6180137b4c5475d2c22a3133fbf5",
+        "packages/core/src/journal/formatFill.ts": "e168195f2e09fe68a18c9fb30bee62b46867ab3d6df89080bd2d3a99710d838c",
+        "packages/providers/src/openai-responses/OpenAIResponsesInputBuilder.ts": "d40e96d72a919ec25eac67ea8a5af75daf8bcf48770a7c9bfa2de4f5d041b019",
+        "packages/providers/src/openai-responses/responses-disk-body.ts": "91c8fcfb26485caa0afd0d98a4b6184f4e7dbf8b6ba05b5dbfaf78ece8e5b6bd",
+        "packages/providers/src/openai-responses/responses-unit-length.ts": "a516ed708993dd310d26b460691021fb023f98173d800296ba58d29b10e84543",
+        "packages/providers/src/openai-responses/journal-responses-length.ts": "26b791a7a9f055da16745f529fa4b164200da32c9038796570fd0eb3d673db8f",
+        "packages/providers/src/openai-responses/journal-responses-length.test.ts": "7f1bba637bc4eb07c5b77bb76847abd6fa6bf9dfede7ebe87476d25a384faea7",
+        "packages/core/src/journal/responsesPairChanges.ts": "bbb3c59665210269d484cdc69a8cdc342df373b5a9f80ef21f3aa6c7444466f2",
+        "packages/providers/src/openai-responses/journal-responses-lifecycle.test.ts": "fb234ff339d88f12131b4bb854dd2d57a7592a53a2254292b3cf1901cd01cc69",
+        "packages/providers/src/openai-responses/journal-responses-frozen.test.ts": "588cc2bd7e9b404da3a800a88aaf121bca8113b00382f825529a44ed329b0ae7",
+        "packages/providers/src/openai-responses/journal-responses.test-helper.ts": "1b102c090e6dcc10ab052fe99eea7ddc2ab97317ee181f3003b25cc65ced95a7"
+      },
+      "counts": {
+        "pass": 5,
+        "fail": 0,
+        "skip": 0,
+        "assertions": 30
+      }
+    },
+    {
+      "name": "packages_providers_src_openai-responses_journal-responses-lifecycle.test.ts",
+      "command": [
+        "bun",
+        "test",
+        "src/openai-responses/journal-responses-lifecycle.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "env": {},
+      "driverPid": 75553,
+      "childPid": 75585,
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/responses-format-run-p/75553-packages_providers_src_openai-responses_journal-responses-lifecycle.test.ts.log",
+      "logHash": "48f6e412ef0f3f2686f10b5a52b1314cb5e8aefe8a4210cf38b15aaede5bc4bc",
+      "sources": {
+        "packages/core/src/journal/rowFormat.ts": "013a3f04289c9cc446cdd24d7714d0538a1d6180137b4c5475d2c22a3133fbf5",
+        "packages/core/src/journal/formatFill.ts": "e168195f2e09fe68a18c9fb30bee62b46867ab3d6df89080bd2d3a99710d838c",
+        "packages/providers/src/openai-responses/OpenAIResponsesInputBuilder.ts": "d40e96d72a919ec25eac67ea8a5af75daf8bcf48770a7c9bfa2de4f5d041b019",
+        "packages/providers/src/openai-responses/responses-disk-body.ts": "91c8fcfb26485caa0afd0d98a4b6184f4e7dbf8b6ba05b5dbfaf78ece8e5b6bd",
+        "packages/providers/src/openai-responses/responses-unit-length.ts": "a516ed708993dd310d26b460691021fb023f98173d800296ba58d29b10e84543",
+        "packages/providers/src/openai-responses/journal-responses-length.ts": "26b791a7a9f055da16745f529fa4b164200da32c9038796570fd0eb3d673db8f",
+        "packages/providers/src/openai-responses/journal-responses-length.test.ts": "7f1bba637bc4eb07c5b77bb76847abd6fa6bf9dfede7ebe87476d25a384faea7",
+        "packages/core/src/journal/responsesPairChanges.ts": "bbb3c59665210269d484cdc69a8cdc342df373b5a9f80ef21f3aa6c7444466f2",
+        "packages/providers/src/openai-responses/journal-responses-lifecycle.test.ts": "fb234ff339d88f12131b4bb854dd2d57a7592a53a2254292b3cf1901cd01cc69",
+        "packages/providers/src/openai-responses/journal-responses-frozen.test.ts": "588cc2bd7e9b404da3a800a88aaf121bca8113b00382f825529a44ed329b0ae7",
+        "packages/providers/src/openai-responses/journal-responses.test-helper.ts": "1b102c090e6dcc10ab052fe99eea7ddc2ab97317ee181f3003b25cc65ced95a7"
+      },
+      "counts": {
+        "pass": 7,
+        "fail": 0,
+        "skip": 0,
+        "assertions": 62
+      }
+    },
+    {
+      "name": "packages_providers_src_openai-responses_journal-responses-frozen.test.ts",
+      "command": [
+        "bun",
+        "test",
+        "src/openai-responses/journal-responses-frozen.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "env": {},
+      "driverPid": 75553,
+      "childPid": 75660,
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/responses-format-run-p/75553-packages_providers_src_openai-responses_journal-responses-frozen.test.ts.log",
+      "logHash": "725d89fa59a54a7c7e210ab87bf9f4bc77aab5c52b43c45f6e94baa862489209",
+      "sources": {
+        "packages/core/src/journal/rowFormat.ts": "013a3f04289c9cc446cdd24d7714d0538a1d6180137b4c5475d2c22a3133fbf5",
+        "packages/core/src/journal/formatFill.ts": "e168195f2e09fe68a18c9fb30bee62b46867ab3d6df89080bd2d3a99710d838c",
+        "packages/providers/src/openai-responses/OpenAIResponsesInputBuilder.ts": "d40e96d72a919ec25eac67ea8a5af75daf8bcf48770a7c9bfa2de4f5d041b019",
+        "packages/providers/src/openai-responses/responses-disk-body.ts": "91c8fcfb26485caa0afd0d98a4b6184f4e7dbf8b6ba05b5dbfaf78ece8e5b6bd",
+        "packages/providers/src/openai-responses/responses-unit-length.ts": "a516ed708993dd310d26b460691021fb023f98173d800296ba58d29b10e84543",
+        "packages/providers/src/openai-responses/journal-responses-length.ts": "26b791a7a9f055da16745f529fa4b164200da32c9038796570fd0eb3d673db8f",
+        "packages/providers/src/openai-responses/journal-responses-length.test.ts": "7f1bba637bc4eb07c5b77bb76847abd6fa6bf9dfede7ebe87476d25a384faea7",
+        "packages/core/src/journal/responsesPairChanges.ts": "bbb3c59665210269d484cdc69a8cdc342df373b5a9f80ef21f3aa6c7444466f2",
+        "packages/providers/src/openai-responses/journal-responses-lifecycle.test.ts": "fb234ff339d88f12131b4bb854dd2d57a7592a53a2254292b3cf1901cd01cc69",
+        "packages/providers/src/openai-responses/journal-responses-frozen.test.ts": "588cc2bd7e9b404da3a800a88aaf121bca8113b00382f825529a44ed329b0ae7",
+        "packages/providers/src/openai-responses/journal-responses.test-helper.ts": "1b102c090e6dcc10ab052fe99eea7ddc2ab97317ee181f3003b25cc65ced95a7"
+      },
+      "counts": {
+        "pass": 22,
+        "fail": 0,
+        "skip": 0,
+        "assertions": 40022
+      }
+    },
+    {
+      "name": "packages_providers_src_openai_journal-chat-length.test.ts",
+      "command": [
+        "bun",
+        "test",
+        "src/openai/journal-chat-length.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "env": {},
+      "driverPid": 75553,
+      "childPid": 79472,
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/responses-format-run-p/75553-packages_providers_src_openai_journal-chat-length.test.ts.log",
+      "logHash": "44126b82ba3e318c44a6b2f988296cc2e5f8108fe1de87d1ee5ff4ee039829da",
+      "sources": {
+        "packages/core/src/journal/rowFormat.ts": "013a3f04289c9cc446cdd24d7714d0538a1d6180137b4c5475d2c22a3133fbf5",
+        "packages/core/src/journal/formatFill.ts": "e168195f2e09fe68a18c9fb30bee62b46867ab3d6df89080bd2d3a99710d838c",
+        "packages/providers/src/openai-responses/OpenAIResponsesInputBuilder.ts": "d40e96d72a919ec25eac67ea8a5af75daf8bcf48770a7c9bfa2de4f5d041b019",
+        "packages/providers/src/openai-responses/responses-disk-body.ts": "91c8fcfb26485caa0afd0d98a4b6184f4e7dbf8b6ba05b5dbfaf78ece8e5b6bd",
+        "packages/providers/src/openai-responses/responses-unit-length.ts": "a516ed708993dd310d26b460691021fb023f98173d800296ba58d29b10e84543",
+        "packages/providers/src/openai-responses/journal-responses-length.ts": "26b791a7a9f055da16745f529fa4b164200da32c9038796570fd0eb3d673db8f",
+        "packages/providers/src/openai-responses/journal-responses-length.test.ts": "7f1bba637bc4eb07c5b77bb76847abd6fa6bf9dfede7ebe87476d25a384faea7",
+        "packages/core/src/journal/responsesPairChanges.ts": "bbb3c59665210269d484cdc69a8cdc342df373b5a9f80ef21f3aa6c7444466f2",
+        "packages/providers/src/openai-responses/journal-responses-lifecycle.test.ts": "fb234ff339d88f12131b4bb854dd2d57a7592a53a2254292b3cf1901cd01cc69",
+        "packages/providers/src/openai-responses/journal-responses-frozen.test.ts": "588cc2bd7e9b404da3a800a88aaf121bca8113b00382f825529a44ed329b0ae7",
+        "packages/providers/src/openai-responses/journal-responses.test-helper.ts": "1b102c090e6dcc10ab052fe99eea7ddc2ab97317ee181f3003b25cc65ced95a7"
+      },
+      "counts": {
+        "pass": 6,
+        "fail": 0,
+        "skip": 0,
+        "assertions": 62
+      }
+    },
+    {
+      "name": "packages_providers_src_openai_journal-chat-length-lifecycle.test.ts",
+      "command": [
+        "bun",
+        "test",
+        "src/openai/journal-chat-length-lifecycle.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "env": {},
+      "driverPid": 75553,
+      "childPid": 79491,
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/responses-format-run-p/75553-packages_providers_src_openai_journal-chat-length-lifecycle.test.ts.log",
+      "logHash": "69e66fafad9205c1e2a04a114b3d25596bc647d1e164b2d7eab1bea71d5f04d4",
+      "sources": {
+        "packages/core/src/journal/rowFormat.ts": "013a3f04289c9cc446cdd24d7714d0538a1d6180137b4c5475d2c22a3133fbf5",
+        "packages/core/src/journal/formatFill.ts": "e168195f2e09fe68a18c9fb30bee62b46867ab3d6df89080bd2d3a99710d838c",
+        "packages/providers/src/openai-responses/OpenAIResponsesInputBuilder.ts": "d40e96d72a919ec25eac67ea8a5af75daf8bcf48770a7c9bfa2de4f5d041b019",
+        "packages/providers/src/openai-responses/responses-disk-body.ts": "91c8fcfb26485caa0afd0d98a4b6184f4e7dbf8b6ba05b5dbfaf78ece8e5b6bd",
+        "packages/providers/src/openai-responses/responses-unit-length.ts": "a516ed708993dd310d26b460691021fb023f98173d800296ba58d29b10e84543",
+        "packages/providers/src/openai-responses/journal-responses-length.ts": "26b791a7a9f055da16745f529fa4b164200da32c9038796570fd0eb3d673db8f",
+        "packages/providers/src/openai-responses/journal-responses-length.test.ts": "7f1bba637bc4eb07c5b77bb76847abd6fa6bf9dfede7ebe87476d25a384faea7",
+        "packages/core/src/journal/responsesPairChanges.ts": "bbb3c59665210269d484cdc69a8cdc342df373b5a9f80ef21f3aa6c7444466f2",
+        "packages/providers/src/openai-responses/journal-responses-lifecycle.test.ts": "fb234ff339d88f12131b4bb854dd2d57a7592a53a2254292b3cf1901cd01cc69",
+        "packages/providers/src/openai-responses/journal-responses-frozen.test.ts": "588cc2bd7e9b404da3a800a88aaf121bca8113b00382f825529a44ed329b0ae7",
+        "packages/providers/src/openai-responses/journal-responses.test-helper.ts": "1b102c090e6dcc10ab052fe99eea7ddc2ab97317ee181f3003b25cc65ced95a7"
+      },
+      "counts": {
+        "pass": 6,
+        "fail": 0,
+        "skip": 0,
+        "assertions": 51
+      }
+    },
+    {
+      "name": "packages_core_src_journal_groupWriter.test.ts",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/groupWriter.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "env": {},
+      "driverPid": 75553,
+      "childPid": 79498,
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/responses-format-run-p/75553-packages_core_src_journal_groupWriter.test.ts.log",
+      "logHash": "b53c1856c6053034b4ac6c907cf39b8882079d1a644dfe743f2f34a9915e37a0",
+      "sources": {
+        "packages/core/src/journal/rowFormat.ts": "013a3f04289c9cc446cdd24d7714d0538a1d6180137b4c5475d2c22a3133fbf5",
+        "packages/core/src/journal/formatFill.ts": "e168195f2e09fe68a18c9fb30bee62b46867ab3d6df89080bd2d3a99710d838c",
+        "packages/providers/src/openai-responses/OpenAIResponsesInputBuilder.ts": "d40e96d72a919ec25eac67ea8a5af75daf8bcf48770a7c9bfa2de4f5d041b019",
+        "packages/providers/src/openai-responses/responses-disk-body.ts": "91c8fcfb26485caa0afd0d98a4b6184f4e7dbf8b6ba05b5dbfaf78ece8e5b6bd",
+        "packages/providers/src/openai-responses/responses-unit-length.ts": "a516ed708993dd310d26b460691021fb023f98173d800296ba58d29b10e84543",
+        "packages/providers/src/openai-responses/journal-responses-length.ts": "26b791a7a9f055da16745f529fa4b164200da32c9038796570fd0eb3d673db8f",
+        "packages/providers/src/openai-responses/journal-responses-length.test.ts": "7f1bba637bc4eb07c5b77bb76847abd6fa6bf9dfede7ebe87476d25a384faea7",
+        "packages/core/src/journal/responsesPairChanges.ts": "bbb3c59665210269d484cdc69a8cdc342df373b5a9f80ef21f3aa6c7444466f2",
+        "packages/providers/src/openai-responses/journal-responses-lifecycle.test.ts": "fb234ff339d88f12131b4bb854dd2d57a7592a53a2254292b3cf1901cd01cc69",
+        "packages/providers/src/openai-responses/journal-responses-frozen.test.ts": "588cc2bd7e9b404da3a800a88aaf121bca8113b00382f825529a44ed329b0ae7",
+        "packages/providers/src/openai-responses/journal-responses.test-helper.ts": "1b102c090e6dcc10ab052fe99eea7ddc2ab97317ee181f3003b25cc65ced95a7"
+      },
+      "counts": {
+        "pass": 24,
+        "fail": 0,
+        "skip": 0,
+        "assertions": 73
+      }
+    },
+    {
+      "name": "packages_core_src_journal_summaryComposition.test.ts",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/summaryComposition.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "env": {},
+      "driverPid": 75553,
+      "childPid": 79501,
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/responses-format-run-p/75553-packages_core_src_journal_summaryComposition.test.ts.log",
+      "logHash": "54be1c47f42768971d8a6a2cc88bf8973428514382085787b04fd816211fa85b",
+      "sources": {
+        "packages/core/src/journal/rowFormat.ts": "013a3f04289c9cc446cdd24d7714d0538a1d6180137b4c5475d2c22a3133fbf5",
+        "packages/core/src/journal/formatFill.ts": "e168195f2e09fe68a18c9fb30bee62b46867ab3d6df89080bd2d3a99710d838c",
+        "packages/providers/src/openai-responses/OpenAIResponsesInputBuilder.ts": "d40e96d72a919ec25eac67ea8a5af75daf8bcf48770a7c9bfa2de4f5d041b019",
+        "packages/providers/src/openai-responses/responses-disk-body.ts": "91c8fcfb26485caa0afd0d98a4b6184f4e7dbf8b6ba05b5dbfaf78ece8e5b6bd",
+        "packages/providers/src/openai-responses/responses-unit-length.ts": "a516ed708993dd310d26b460691021fb023f98173d800296ba58d29b10e84543",
+        "packages/providers/src/openai-responses/journal-responses-length.ts": "26b791a7a9f055da16745f529fa4b164200da32c9038796570fd0eb3d673db8f",
+        "packages/providers/src/openai-responses/journal-responses-length.test.ts": "7f1bba637bc4eb07c5b77bb76847abd6fa6bf9dfede7ebe87476d25a384faea7",
+        "packages/core/src/journal/responsesPairChanges.ts": "bbb3c59665210269d484cdc69a8cdc342df373b5a9f80ef21f3aa6c7444466f2",
+        "packages/providers/src/openai-responses/journal-responses-lifecycle.test.ts": "fb234ff339d88f12131b4bb854dd2d57a7592a53a2254292b3cf1901cd01cc69",
+        "packages/providers/src/openai-responses/journal-responses-frozen.test.ts": "588cc2bd7e9b404da3a800a88aaf121bca8113b00382f825529a44ed329b0ae7",
+        "packages/providers/src/openai-responses/journal-responses.test-helper.ts": "1b102c090e6dcc10ab052fe99eea7ddc2ab97317ee181f3003b25cc65ced95a7"
+      },
+      "counts": {
+        "pass": 18,
+        "fail": 0,
+        "skip": 0,
+        "assertions": 12017
+      }
+    },
+    {
+      "name": "packages_core_src_journal_formatTables.test.ts",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/formatTables.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "env": {},
+      "driverPid": 75553,
+      "childPid": 79505,
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/responses-format-run-p/75553-packages_core_src_journal_formatTables.test.ts.log",
+      "logHash": "e0a8e56b1d095e5b984ce2c49153e84186f6de3e1d58863adca8ec81fb67eec6",
+      "sources": {
+        "packages/core/src/journal/rowFormat.ts": "013a3f04289c9cc446cdd24d7714d0538a1d6180137b4c5475d2c22a3133fbf5",
+        "packages/core/src/journal/formatFill.ts": "e168195f2e09fe68a18c9fb30bee62b46867ab3d6df89080bd2d3a99710d838c",
+        "packages/providers/src/openai-responses/OpenAIResponsesInputBuilder.ts": "d40e96d72a919ec25eac67ea8a5af75daf8bcf48770a7c9bfa2de4f5d041b019",
+        "packages/providers/src/openai-responses/responses-disk-body.ts": "91c8fcfb26485caa0afd0d98a4b6184f4e7dbf8b6ba05b5dbfaf78ece8e5b6bd",
+        "packages/providers/src/openai-responses/responses-unit-length.ts": "a516ed708993dd310d26b460691021fb023f98173d800296ba58d29b10e84543",
+        "packages/providers/src/openai-responses/journal-responses-length.ts": "26b791a7a9f055da16745f529fa4b164200da32c9038796570fd0eb3d673db8f",
+        "packages/providers/src/openai-responses/journal-responses-length.test.ts": "7f1bba637bc4eb07c5b77bb76847abd6fa6bf9dfede7ebe87476d25a384faea7",
+        "packages/core/src/journal/responsesPairChanges.ts": "bbb3c59665210269d484cdc69a8cdc342df373b5a9f80ef21f3aa6c7444466f2",
+        "packages/providers/src/openai-responses/journal-responses-lifecycle.test.ts": "fb234ff339d88f12131b4bb854dd2d57a7592a53a2254292b3cf1901cd01cc69",
+        "packages/providers/src/openai-responses/journal-responses-frozen.test.ts": "588cc2bd7e9b404da3a800a88aaf121bca8113b00382f825529a44ed329b0ae7",
+        "packages/providers/src/openai-responses/journal-responses.test-helper.ts": "1b102c090e6dcc10ab052fe99eea7ddc2ab97317ee181f3003b25cc65ced95a7"
+      },
+      "counts": {
+        "pass": 8,
+        "fail": 0,
+        "skip": 0,
+        "assertions": 224
+      }
+    },
+    {
+      "name": "packages_core_src_journal_slotSummary.test.ts",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/slotSummary.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "env": {},
+      "driverPid": 75553,
+      "childPid": 79508,
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/responses-format-run-p/75553-packages_core_src_journal_slotSummary.test.ts.log",
+      "logHash": "2d0dc9780221ad4b67f1c4e69be30068977c5107cee0b67129ac2601233ddc73",
+      "sources": {
+        "packages/core/src/journal/rowFormat.ts": "013a3f04289c9cc446cdd24d7714d0538a1d6180137b4c5475d2c22a3133fbf5",
+        "packages/core/src/journal/formatFill.ts": "e168195f2e09fe68a18c9fb30bee62b46867ab3d6df89080bd2d3a99710d838c",
+        "packages/providers/src/openai-responses/OpenAIResponsesInputBuilder.ts": "d40e96d72a919ec25eac67ea8a5af75daf8bcf48770a7c9bfa2de4f5d041b019",
+        "packages/providers/src/openai-responses/responses-disk-body.ts": "91c8fcfb26485caa0afd0d98a4b6184f4e7dbf8b6ba05b5dbfaf78ece8e5b6bd",
+        "packages/providers/src/openai-responses/responses-unit-length.ts": "a516ed708993dd310d26b460691021fb023f98173d800296ba58d29b10e84543",
+        "packages/providers/src/openai-responses/journal-responses-length.ts": "26b791a7a9f055da16745f529fa4b164200da32c9038796570fd0eb3d673db8f",
+        "packages/providers/src/openai-responses/journal-responses-length.test.ts": "7f1bba637bc4eb07c5b77bb76847abd6fa6bf9dfede7ebe87476d25a384faea7",
+        "packages/core/src/journal/responsesPairChanges.ts": "bbb3c59665210269d484cdc69a8cdc342df373b5a9f80ef21f3aa6c7444466f2",
+        "packages/providers/src/openai-responses/journal-responses-lifecycle.test.ts": "fb234ff339d88f12131b4bb854dd2d57a7592a53a2254292b3cf1901cd01cc69",
+        "packages/providers/src/openai-responses/journal-responses-frozen.test.ts": "588cc2bd7e9b404da3a800a88aaf121bca8113b00382f825529a44ed329b0ae7",
+        "packages/providers/src/openai-responses/journal-responses.test-helper.ts": "1b102c090e6dcc10ab052fe99eea7ddc2ab97317ee181f3003b25cc65ced95a7"
+      },
+      "counts": {
+        "pass": 13,
+        "fail": 0,
+        "skip": 0,
+        "assertions": 762
+      }
+    },
+    {
+      "name": "packages_providers_src_openai-responses___tests___length-model.responses.test.ts",
+      "command": [
+        "bun",
+        "test",
+        "src/openai-responses/__tests__/length-model.responses.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "env": {},
+      "driverPid": 79519,
+      "childPid": 79520,
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/responses-format-run-p/79519-packages_providers_src_openai-responses___tests___length-model.responses.test.ts.log",
+      "logHash": "9fb8bee54e5d1ca99215e612dfe06c3aec4c99057343593677bc89378f0e3af3",
+      "sources": {
+        "packages/core/src/journal/rowFormat.ts": "013a3f04289c9cc446cdd24d7714d0538a1d6180137b4c5475d2c22a3133fbf5",
+        "packages/core/src/journal/formatFill.ts": "e168195f2e09fe68a18c9fb30bee62b46867ab3d6df89080bd2d3a99710d838c",
+        "packages/providers/src/openai-responses/OpenAIResponsesInputBuilder.ts": "d40e96d72a919ec25eac67ea8a5af75daf8bcf48770a7c9bfa2de4f5d041b019",
+        "packages/providers/src/openai-responses/responses-disk-body.ts": "91c8fcfb26485caa0afd0d98a4b6184f4e7dbf8b6ba05b5dbfaf78ece8e5b6bd",
+        "packages/providers/src/openai-responses/responses-unit-length.ts": "a516ed708993dd310d26b460691021fb023f98173d800296ba58d29b10e84543",
+        "packages/providers/src/openai-responses/journal-responses-length.ts": "26b791a7a9f055da16745f529fa4b164200da32c9038796570fd0eb3d673db8f",
+        "packages/providers/src/openai-responses/journal-responses-length.test.ts": "7f1bba637bc4eb07c5b77bb76847abd6fa6bf9dfede7ebe87476d25a384faea7",
+        "packages/core/src/journal/responsesPairChanges.ts": "bbb3c59665210269d484cdc69a8cdc342df373b5a9f80ef21f3aa6c7444466f2",
+        "packages/providers/src/openai-responses/journal-responses-lifecycle.test.ts": "fb234ff339d88f12131b4bb854dd2d57a7592a53a2254292b3cf1901cd01cc69",
+        "packages/providers/src/openai-responses/journal-responses-frozen.test.ts": "588cc2bd7e9b404da3a800a88aaf121bca8113b00382f825529a44ed329b0ae7",
+        "packages/providers/src/openai-responses/journal-responses.test-helper.ts": "1b102c090e6dcc10ab052fe99eea7ddc2ab97317ee181f3003b25cc65ced95a7"
+      },
+      "counts": {
+        "pass": 10,
+        "fail": 0,
+        "skip": 0,
+        "assertions": 17
+      }
+    },
+    {
+      "name": "packages_providers_src_openai-responses___tests___length-model.responses-via-openai.test.ts",
+      "command": [
+        "bun",
+        "test",
+        "src/openai-responses/__tests__/length-model.responses-via-openai.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "env": {},
+      "driverPid": 79519,
+      "childPid": 79573,
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/responses-format-run-p/79519-packages_providers_src_openai-responses___tests___length-model.responses-via-openai.test.ts.log",
+      "logHash": "e6832e2dc80b3c48ff7abbb8bb2afd0858e841e78e6e601a5a11818d9a2404ab",
+      "sources": {
+        "packages/core/src/journal/rowFormat.ts": "013a3f04289c9cc446cdd24d7714d0538a1d6180137b4c5475d2c22a3133fbf5",
+        "packages/core/src/journal/formatFill.ts": "e168195f2e09fe68a18c9fb30bee62b46867ab3d6df89080bd2d3a99710d838c",
+        "packages/providers/src/openai-responses/OpenAIResponsesInputBuilder.ts": "d40e96d72a919ec25eac67ea8a5af75daf8bcf48770a7c9bfa2de4f5d041b019",
+        "packages/providers/src/openai-responses/responses-disk-body.ts": "91c8fcfb26485caa0afd0d98a4b6184f4e7dbf8b6ba05b5dbfaf78ece8e5b6bd",
+        "packages/providers/src/openai-responses/responses-unit-length.ts": "a516ed708993dd310d26b460691021fb023f98173d800296ba58d29b10e84543",
+        "packages/providers/src/openai-responses/journal-responses-length.ts": "26b791a7a9f055da16745f529fa4b164200da32c9038796570fd0eb3d673db8f",
+        "packages/providers/src/openai-responses/journal-responses-length.test.ts": "7f1bba637bc4eb07c5b77bb76847abd6fa6bf9dfede7ebe87476d25a384faea7",
+        "packages/core/src/journal/responsesPairChanges.ts": "bbb3c59665210269d484cdc69a8cdc342df373b5a9f80ef21f3aa6c7444466f2",
+        "packages/providers/src/openai-responses/journal-responses-lifecycle.test.ts": "fb234ff339d88f12131b4bb854dd2d57a7592a53a2254292b3cf1901cd01cc69",
+        "packages/providers/src/openai-responses/journal-responses-frozen.test.ts": "588cc2bd7e9b404da3a800a88aaf121bca8113b00382f825529a44ed329b0ae7",
+        "packages/providers/src/openai-responses/journal-responses.test-helper.ts": "1b102c090e6dcc10ab052fe99eea7ddc2ab97317ee181f3003b25cc65ced95a7"
+      },
+      "counts": {
+        "pass": 10,
+        "fail": 0,
+        "skip": 0,
+        "assertions": 17
+      }
+    },
+    {
+      "name": "packages_providers_src_openai-responses___tests___length-model.responses.counterexamples.test.ts",
+      "command": [
+        "bun",
+        "test",
+        "src/openai-responses/__tests__/length-model.responses.counterexamples.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "env": {},
+      "driverPid": 79519,
+      "childPid": 79623,
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/responses-format-run-p/79519-packages_providers_src_openai-responses___tests___length-model.responses.counterexamples.test.ts.log",
+      "logHash": "69b807b5f18fcccbc70c4c2f242d15a9157e684f386caed5d7382830623c422f",
+      "sources": {
+        "packages/core/src/journal/rowFormat.ts": "013a3f04289c9cc446cdd24d7714d0538a1d6180137b4c5475d2c22a3133fbf5",
+        "packages/core/src/journal/formatFill.ts": "e168195f2e09fe68a18c9fb30bee62b46867ab3d6df89080bd2d3a99710d838c",
+        "packages/providers/src/openai-responses/OpenAIResponsesInputBuilder.ts": "d40e96d72a919ec25eac67ea8a5af75daf8bcf48770a7c9bfa2de4f5d041b019",
+        "packages/providers/src/openai-responses/responses-disk-body.ts": "91c8fcfb26485caa0afd0d98a4b6184f4e7dbf8b6ba05b5dbfaf78ece8e5b6bd",
+        "packages/providers/src/openai-responses/responses-unit-length.ts": "a516ed708993dd310d26b460691021fb023f98173d800296ba58d29b10e84543",
+        "packages/providers/src/openai-responses/journal-responses-length.ts": "26b791a7a9f055da16745f529fa4b164200da32c9038796570fd0eb3d673db8f",
+        "packages/providers/src/openai-responses/journal-responses-length.test.ts": "7f1bba637bc4eb07c5b77bb76847abd6fa6bf9dfede7ebe87476d25a384faea7",
+        "packages/core/src/journal/responsesPairChanges.ts": "bbb3c59665210269d484cdc69a8cdc342df373b5a9f80ef21f3aa6c7444466f2",
+        "packages/providers/src/openai-responses/journal-responses-lifecycle.test.ts": "fb234ff339d88f12131b4bb854dd2d57a7592a53a2254292b3cf1901cd01cc69",
+        "packages/providers/src/openai-responses/journal-responses-frozen.test.ts": "588cc2bd7e9b404da3a800a88aaf121bca8113b00382f825529a44ed329b0ae7",
+        "packages/providers/src/openai-responses/journal-responses.test-helper.ts": "1b102c090e6dcc10ab052fe99eea7ddc2ab97317ee181f3003b25cc65ced95a7"
+      },
+      "counts": {
+        "pass": 29,
+        "fail": 0,
+        "skip": 0,
+        "assertions": 74
+      }
+    }
+  ],
+  "gates": [
+    {
+      "name": "declarations-core",
+      "command": [
+        "bun",
+        "../../scripts/build_package.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "env": {
+        "LLXPRT_EMIT_DECLARATIONS_ONLY": "1"
+      },
+      "driverPid": 79635,
+      "childPid": 79636,
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/responses-format-run-p/79635-declarations-core.log",
+      "logHash": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127",
+      "sources": {
+        "packages/core/src/journal/rowFormat.ts": "013a3f04289c9cc446cdd24d7714d0538a1d6180137b4c5475d2c22a3133fbf5",
+        "packages/core/src/journal/formatFill.ts": "e168195f2e09fe68a18c9fb30bee62b46867ab3d6df89080bd2d3a99710d838c",
+        "packages/providers/src/openai-responses/OpenAIResponsesInputBuilder.ts": "d40e96d72a919ec25eac67ea8a5af75daf8bcf48770a7c9bfa2de4f5d041b019",
+        "packages/providers/src/openai-responses/responses-disk-body.ts": "91c8fcfb26485caa0afd0d98a4b6184f4e7dbf8b6ba05b5dbfaf78ece8e5b6bd",
+        "packages/providers/src/openai-responses/responses-unit-length.ts": "a516ed708993dd310d26b460691021fb023f98173d800296ba58d29b10e84543",
+        "packages/providers/src/openai-responses/journal-responses-length.ts": "26b791a7a9f055da16745f529fa4b164200da32c9038796570fd0eb3d673db8f",
+        "packages/providers/src/openai-responses/journal-responses-length.test.ts": "7f1bba637bc4eb07c5b77bb76847abd6fa6bf9dfede7ebe87476d25a384faea7",
+        "packages/core/src/journal/responsesPairChanges.ts": "bbb3c59665210269d484cdc69a8cdc342df373b5a9f80ef21f3aa6c7444466f2",
+        "packages/providers/src/openai-responses/journal-responses-lifecycle.test.ts": "fb234ff339d88f12131b4bb854dd2d57a7592a53a2254292b3cf1901cd01cc69",
+        "packages/providers/src/openai-responses/journal-responses-frozen.test.ts": "588cc2bd7e9b404da3a800a88aaf121bca8113b00382f825529a44ed329b0ae7",
+        "packages/providers/src/openai-responses/journal-responses.test-helper.ts": "1b102c090e6dcc10ab052fe99eea7ddc2ab97317ee181f3003b25cc65ced95a7"
+      }
+    },
+    {
+      "name": "declarations-providers",
+      "command": [
+        "bun",
+        "../../scripts/build_package.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "env": {
+        "LLXPRT_EMIT_DECLARATIONS_ONLY": "1"
+      },
+      "driverPid": 79635,
+      "childPid": 79694,
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/responses-format-run-p/79635-declarations-providers.log",
+      "logHash": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127",
+      "sources": {
+        "packages/core/src/journal/rowFormat.ts": "013a3f04289c9cc446cdd24d7714d0538a1d6180137b4c5475d2c22a3133fbf5",
+        "packages/core/src/journal/formatFill.ts": "e168195f2e09fe68a18c9fb30bee62b46867ab3d6df89080bd2d3a99710d838c",
+        "packages/providers/src/openai-responses/OpenAIResponsesInputBuilder.ts": "d40e96d72a919ec25eac67ea8a5af75daf8bcf48770a7c9bfa2de4f5d041b019",
+        "packages/providers/src/openai-responses/responses-disk-body.ts": "91c8fcfb26485caa0afd0d98a4b6184f4e7dbf8b6ba05b5dbfaf78ece8e5b6bd",
+        "packages/providers/src/openai-responses/responses-unit-length.ts": "a516ed708993dd310d26b460691021fb023f98173d800296ba58d29b10e84543",
+        "packages/providers/src/openai-responses/journal-responses-length.ts": "26b791a7a9f055da16745f529fa4b164200da32c9038796570fd0eb3d673db8f",
+        "packages/providers/src/openai-responses/journal-responses-length.test.ts": "7f1bba637bc4eb07c5b77bb76847abd6fa6bf9dfede7ebe87476d25a384faea7",
+        "packages/core/src/journal/responsesPairChanges.ts": "bbb3c59665210269d484cdc69a8cdc342df373b5a9f80ef21f3aa6c7444466f2",
+        "packages/providers/src/openai-responses/journal-responses-lifecycle.test.ts": "fb234ff339d88f12131b4bb854dd2d57a7592a53a2254292b3cf1901cd01cc69",
+        "packages/providers/src/openai-responses/journal-responses-frozen.test.ts": "588cc2bd7e9b404da3a800a88aaf121bca8113b00382f825529a44ed329b0ae7",
+        "packages/providers/src/openai-responses/journal-responses.test-helper.ts": "1b102c090e6dcc10ab052fe99eea7ddc2ab97317ee181f3003b25cc65ced95a7"
+      }
+    },
+    {
+      "name": "types-core",
+      "command": [
+        "bunx",
+        "tsc",
+        "--noEmit",
+        "-p",
+        "packages/core/tsconfig.noemit.json"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "env": {},
+      "driverPid": 79635,
+      "childPid": 79717,
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/responses-format-run-p/79635-types-core.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sources": {
+        "packages/core/src/journal/rowFormat.ts": "013a3f04289c9cc446cdd24d7714d0538a1d6180137b4c5475d2c22a3133fbf5",
+        "packages/core/src/journal/formatFill.ts": "e168195f2e09fe68a18c9fb30bee62b46867ab3d6df89080bd2d3a99710d838c",
+        "packages/providers/src/openai-responses/OpenAIResponsesInputBuilder.ts": "d40e96d72a919ec25eac67ea8a5af75daf8bcf48770a7c9bfa2de4f5d041b019",
+        "packages/providers/src/openai-responses/responses-disk-body.ts": "91c8fcfb26485caa0afd0d98a4b6184f4e7dbf8b6ba05b5dbfaf78ece8e5b6bd",
+        "packages/providers/src/openai-responses/responses-unit-length.ts": "a516ed708993dd310d26b460691021fb023f98173d800296ba58d29b10e84543",
+        "packages/providers/src/openai-responses/journal-responses-length.ts": "26b791a7a9f055da16745f529fa4b164200da32c9038796570fd0eb3d673db8f",
+        "packages/providers/src/openai-responses/journal-responses-length.test.ts": "7f1bba637bc4eb07c5b77bb76847abd6fa6bf9dfede7ebe87476d25a384faea7",
+        "packages/core/src/journal/responsesPairChanges.ts": "bbb3c59665210269d484cdc69a8cdc342df373b5a9f80ef21f3aa6c7444466f2",
+        "packages/providers/src/openai-responses/journal-responses-lifecycle.test.ts": "fb234ff339d88f12131b4bb854dd2d57a7592a53a2254292b3cf1901cd01cc69",
+        "packages/providers/src/openai-responses/journal-responses-frozen.test.ts": "588cc2bd7e9b404da3a800a88aaf121bca8113b00382f825529a44ed329b0ae7",
+        "packages/providers/src/openai-responses/journal-responses.test-helper.ts": "1b102c090e6dcc10ab052fe99eea7ddc2ab97317ee181f3003b25cc65ced95a7"
+      }
+    },
+    {
+      "name": "types-providers",
+      "command": [
+        "bunx",
+        "tsc",
+        "--noEmit",
+        "-p",
+        "packages/providers/tsconfig.noemit.json"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "env": {},
+      "driverPid": 79635,
+      "childPid": 79792,
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/responses-format-run-p/79635-types-providers.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sources": {
+        "packages/core/src/journal/rowFormat.ts": "013a3f04289c9cc446cdd24d7714d0538a1d6180137b4c5475d2c22a3133fbf5",
+        "packages/core/src/journal/formatFill.ts": "e168195f2e09fe68a18c9fb30bee62b46867ab3d6df89080bd2d3a99710d838c",
+        "packages/providers/src/openai-responses/OpenAIResponsesInputBuilder.ts": "d40e96d72a919ec25eac67ea8a5af75daf8bcf48770a7c9bfa2de4f5d041b019",
+        "packages/providers/src/openai-responses/responses-disk-body.ts": "91c8fcfb26485caa0afd0d98a4b6184f4e7dbf8b6ba05b5dbfaf78ece8e5b6bd",
+        "packages/providers/src/openai-responses/responses-unit-length.ts": "a516ed708993dd310d26b460691021fb023f98173d800296ba58d29b10e84543",
+        "packages/providers/src/openai-responses/journal-responses-length.ts": "26b791a7a9f055da16745f529fa4b164200da32c9038796570fd0eb3d673db8f",
+        "packages/providers/src/openai-responses/journal-responses-length.test.ts": "7f1bba637bc4eb07c5b77bb76847abd6fa6bf9dfede7ebe87476d25a384faea7",
+        "packages/core/src/journal/responsesPairChanges.ts": "bbb3c59665210269d484cdc69a8cdc342df373b5a9f80ef21f3aa6c7444466f2",
+        "packages/providers/src/openai-responses/journal-responses-lifecycle.test.ts": "fb234ff339d88f12131b4bb854dd2d57a7592a53a2254292b3cf1901cd01cc69",
+        "packages/providers/src/openai-responses/journal-responses-frozen.test.ts": "588cc2bd7e9b404da3a800a88aaf121bca8113b00382f825529a44ed329b0ae7",
+        "packages/providers/src/openai-responses/journal-responses.test-helper.ts": "1b102c090e6dcc10ab052fe99eea7ddc2ab97317ee181f3003b25cc65ced95a7"
+      }
+    },
+    {
+      "name": "lint",
+      "command": [
+        "bunx",
+        "eslint",
+        "--max-warnings",
+        "0",
+        "packages/core/src/journal/rowFormat.ts",
+        "packages/core/src/journal/formatFill.ts",
+        "packages/providers/src/openai-responses/OpenAIResponsesInputBuilder.ts",
+        "packages/providers/src/openai-responses/responses-disk-body.ts",
+        "packages/providers/src/openai-responses/responses-unit-length.ts",
+        "packages/providers/src/openai-responses/journal-responses-length.ts",
+        "packages/providers/src/openai-responses/journal-responses-length.test.ts",
+        "packages/core/src/journal/responsesPairChanges.ts",
+        "packages/providers/src/openai-responses/journal-responses-lifecycle.test.ts",
+        "packages/providers/src/openai-responses/journal-responses-frozen.test.ts",
+        "packages/providers/src/openai-responses/journal-responses.test-helper.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "env": {},
+      "driverPid": 79635,
+      "childPid": 79969,
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/responses-format-run-p/79635-lint.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sources": {
+        "packages/core/src/journal/rowFormat.ts": "013a3f04289c9cc446cdd24d7714d0538a1d6180137b4c5475d2c22a3133fbf5",
+        "packages/core/src/journal/formatFill.ts": "e168195f2e09fe68a18c9fb30bee62b46867ab3d6df89080bd2d3a99710d838c",
+        "packages/providers/src/openai-responses/OpenAIResponsesInputBuilder.ts": "d40e96d72a919ec25eac67ea8a5af75daf8bcf48770a7c9bfa2de4f5d041b019",
+        "packages/providers/src/openai-responses/responses-disk-body.ts": "91c8fcfb26485caa0afd0d98a4b6184f4e7dbf8b6ba05b5dbfaf78ece8e5b6bd",
+        "packages/providers/src/openai-responses/responses-unit-length.ts": "a516ed708993dd310d26b460691021fb023f98173d800296ba58d29b10e84543",
+        "packages/providers/src/openai-responses/journal-responses-length.ts": "26b791a7a9f055da16745f529fa4b164200da32c9038796570fd0eb3d673db8f",
+        "packages/providers/src/openai-responses/journal-responses-length.test.ts": "7f1bba637bc4eb07c5b77bb76847abd6fa6bf9dfede7ebe87476d25a384faea7",
+        "packages/core/src/journal/responsesPairChanges.ts": "bbb3c59665210269d484cdc69a8cdc342df373b5a9f80ef21f3aa6c7444466f2",
+        "packages/providers/src/openai-responses/journal-responses-lifecycle.test.ts": "fb234ff339d88f12131b4bb854dd2d57a7592a53a2254292b3cf1901cd01cc69",
+        "packages/providers/src/openai-responses/journal-responses-frozen.test.ts": "588cc2bd7e9b404da3a800a88aaf121bca8113b00382f825529a44ed329b0ae7",
+        "packages/providers/src/openai-responses/journal-responses.test-helper.ts": "1b102c090e6dcc10ab052fe99eea7ddc2ab97317ee181f3003b25cc65ced95a7"
+      }
+    },
+    {
+      "name": "prettier",
+      "command": [
+        "bunx",
+        "prettier",
+        "--check",
+        "packages/core/src/journal/rowFormat.ts",
+        "packages/core/src/journal/formatFill.ts",
+        "packages/providers/src/openai-responses/OpenAIResponsesInputBuilder.ts",
+        "packages/providers/src/openai-responses/responses-disk-body.ts",
+        "packages/providers/src/openai-responses/responses-unit-length.ts",
+        "packages/providers/src/openai-responses/journal-responses-length.ts",
+        "packages/providers/src/openai-responses/journal-responses-length.test.ts",
+        "packages/core/src/journal/responsesPairChanges.ts",
+        "packages/providers/src/openai-responses/journal-responses-lifecycle.test.ts",
+        "packages/providers/src/openai-responses/journal-responses-frozen.test.ts",
+        "packages/providers/src/openai-responses/journal-responses.test-helper.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "env": {},
+      "driverPid": 79635,
+      "childPid": 80125,
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/responses-format-run-p/79635-prettier.log",
+      "logHash": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+      "sources": {
+        "packages/core/src/journal/rowFormat.ts": "013a3f04289c9cc446cdd24d7714d0538a1d6180137b4c5475d2c22a3133fbf5",
+        "packages/core/src/journal/formatFill.ts": "e168195f2e09fe68a18c9fb30bee62b46867ab3d6df89080bd2d3a99710d838c",
+        "packages/providers/src/openai-responses/OpenAIResponsesInputBuilder.ts": "d40e96d72a919ec25eac67ea8a5af75daf8bcf48770a7c9bfa2de4f5d041b019",
+        "packages/providers/src/openai-responses/responses-disk-body.ts": "91c8fcfb26485caa0afd0d98a4b6184f4e7dbf8b6ba05b5dbfaf78ece8e5b6bd",
+        "packages/providers/src/openai-responses/responses-unit-length.ts": "a516ed708993dd310d26b460691021fb023f98173d800296ba58d29b10e84543",
+        "packages/providers/src/openai-responses/journal-responses-length.ts": "26b791a7a9f055da16745f529fa4b164200da32c9038796570fd0eb3d673db8f",
+        "packages/providers/src/openai-responses/journal-responses-length.test.ts": "7f1bba637bc4eb07c5b77bb76847abd6fa6bf9dfede7ebe87476d25a384faea7",
+        "packages/core/src/journal/responsesPairChanges.ts": "bbb3c59665210269d484cdc69a8cdc342df373b5a9f80ef21f3aa6c7444466f2",
+        "packages/providers/src/openai-responses/journal-responses-lifecycle.test.ts": "fb234ff339d88f12131b4bb854dd2d57a7592a53a2254292b3cf1901cd01cc69",
+        "packages/providers/src/openai-responses/journal-responses-frozen.test.ts": "588cc2bd7e9b404da3a800a88aaf121bca8113b00382f825529a44ed329b0ae7",
+        "packages/providers/src/openai-responses/journal-responses.test-helper.ts": "1b102c090e6dcc10ab052fe99eea7ddc2ab97317ee181f3003b25cc65ced95a7"
+      }
+    },
+    {
+      "name": "graph",
+      "command": [
+        "bun",
+        "scripts/check-affected-test-shards.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "env": {},
+      "driverPid": 79635,
+      "childPid": 80126,
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/responses-format-run-p/79635-graph.log",
+      "logHash": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67",
+      "sources": {
+        "packages/core/src/journal/rowFormat.ts": "013a3f04289c9cc446cdd24d7714d0538a1d6180137b4c5475d2c22a3133fbf5",
+        "packages/core/src/journal/formatFill.ts": "e168195f2e09fe68a18c9fb30bee62b46867ab3d6df89080bd2d3a99710d838c",
+        "packages/providers/src/openai-responses/OpenAIResponsesInputBuilder.ts": "d40e96d72a919ec25eac67ea8a5af75daf8bcf48770a7c9bfa2de4f5d041b019",
+        "packages/providers/src/openai-responses/responses-disk-body.ts": "91c8fcfb26485caa0afd0d98a4b6184f4e7dbf8b6ba05b5dbfaf78ece8e5b6bd",
+        "packages/providers/src/openai-responses/responses-unit-length.ts": "a516ed708993dd310d26b460691021fb023f98173d800296ba58d29b10e84543",
+        "packages/providers/src/openai-responses/journal-responses-length.ts": "26b791a7a9f055da16745f529fa4b164200da32c9038796570fd0eb3d673db8f",
+        "packages/providers/src/openai-responses/journal-responses-length.test.ts": "7f1bba637bc4eb07c5b77bb76847abd6fa6bf9dfede7ebe87476d25a384faea7",
+        "packages/core/src/journal/responsesPairChanges.ts": "bbb3c59665210269d484cdc69a8cdc342df373b5a9f80ef21f3aa6c7444466f2",
+        "packages/providers/src/openai-responses/journal-responses-lifecycle.test.ts": "fb234ff339d88f12131b4bb854dd2d57a7592a53a2254292b3cf1901cd01cc69",
+        "packages/providers/src/openai-responses/journal-responses-frozen.test.ts": "588cc2bd7e9b404da3a800a88aaf121bca8113b00382f825529a44ed329b0ae7",
+        "packages/providers/src/openai-responses/journal-responses.test-helper.ts": "1b102c090e6dcc10ab052fe99eea7ddc2ab97317ee181f3003b25cc65ced95a7"
+      }
+    },
+    {
+      "name": "audit",
+      "command": [
+        "bun",
+        "scripts/test-audit/scan.ts",
+        "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/responses-format-run-p/audit-79635"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "env": {},
+      "driverPid": 79635,
+      "childPid": 80157,
+      "code": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/responses-format-run-p/79635-audit.log",
+      "logHash": "d7bcbaf7292151ed9b7ff7b89f2d6f7907271e9ed0c9e54b2a0d59fc9ae1c56c",
+      "sources": {
+        "packages/core/src/journal/rowFormat.ts": "013a3f04289c9cc446cdd24d7714d0538a1d6180137b4c5475d2c22a3133fbf5",
+        "packages/core/src/journal/formatFill.ts": "e168195f2e09fe68a18c9fb30bee62b46867ab3d6df89080bd2d3a99710d838c",
+        "packages/providers/src/openai-responses/OpenAIResponsesInputBuilder.ts": "d40e96d72a919ec25eac67ea8a5af75daf8bcf48770a7c9bfa2de4f5d041b019",
+        "packages/providers/src/openai-responses/responses-disk-body.ts": "91c8fcfb26485caa0afd0d98a4b6184f4e7dbf8b6ba05b5dbfaf78ece8e5b6bd",
+        "packages/providers/src/openai-responses/responses-unit-length.ts": "a516ed708993dd310d26b460691021fb023f98173d800296ba58d29b10e84543",
+        "packages/providers/src/openai-responses/journal-responses-length.ts": "26b791a7a9f055da16745f529fa4b164200da32c9038796570fd0eb3d673db8f",
+        "packages/providers/src/openai-responses/journal-responses-length.test.ts": "7f1bba637bc4eb07c5b77bb76847abd6fa6bf9dfede7ebe87476d25a384faea7",
+        "packages/core/src/journal/responsesPairChanges.ts": "bbb3c59665210269d484cdc69a8cdc342df373b5a9f80ef21f3aa6c7444466f2",
+        "packages/providers/src/openai-responses/journal-responses-lifecycle.test.ts": "fb234ff339d88f12131b4bb854dd2d57a7592a53a2254292b3cf1901cd01cc69",
+        "packages/providers/src/openai-responses/journal-responses-frozen.test.ts": "588cc2bd7e9b404da3a800a88aaf121bca8113b00382f825529a44ed329b0ae7",
+        "packages/providers/src/openai-responses/journal-responses.test-helper.ts": "1b102c090e6dcc10ab052fe99eea7ddc2ab97317ee181f3003b25cc65ced95a7"
+      }
+    }
+  ],
+  "controls": [
+    {
+      "name": "wrong-transfer",
+      "path": "packages/providers/src/openai-responses/responses-unit-length.ts",
+      "from": "bytes + count - 1",
+      "to": "bytes + count",
+      "test": "src/openai-responses/journal-responses-length.test.ts",
+      "pattern": "measures normalized units",
+      "command": [
+        "bun",
+        "test",
+        "src/openai-responses/journal-responses-length.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driverPid": 80181,
+      "childPid": 80182,
+      "code": 1,
+      "backup": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/responses-format-run-p/80181-wrong-transfer.original",
+      "cmpPid": 80189,
+      "cmpCode": 0,
+      "before": "a516ed708993dd310d26b460691021fb023f98173d800296ba58d29b10e84543",
+      "after": "a516ed708993dd310d26b460691021fb023f98173d800296ba58d29b10e84543",
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/responses-format-run-p/80181-wrong-transfer.log",
+      "logHash": "96c88f9a00096289bf2a3b43782e8e632327a14a6e52ec6b5d37249603cc53f5",
+      "assertionFailure": true,
+      "fullTestFile": true
+    },
+    {
+      "name": "stale-generation",
+      "path": "packages/providers/src/openai-responses/journal-responses-length.ts",
+      "from": "version.aggregate.stamp[slot].gen !== format.gen",
+      "to": "false",
+      "test": "src/openai-responses/journal-responses-lifecycle.test.ts",
+      "pattern": "rejects stale generations",
+      "command": [
+        "bun",
+        "test",
+        "src/openai-responses/journal-responses-lifecycle.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driverPid": 80181,
+      "childPid": 80190,
+      "code": 1,
+      "backup": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/responses-format-run-p/80181-stale-generation.original",
+      "cmpPid": 80223,
+      "cmpCode": 0,
+      "before": "26b791a7a9f055da16745f529fa4b164200da32c9038796570fd0eb3d673db8f",
+      "after": "26b791a7a9f055da16745f529fa4b164200da32c9038796570fd0eb3d673db8f",
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/responses-format-run-p/80181-stale-generation.log",
+      "logHash": "13f69882c574992275c60bea77e77e86b32b3109b6502ea52034a42be5c4de3e",
+      "assertionFailure": true,
+      "fullTestFile": true
+    },
+    {
+      "name": "unmeasured-zero",
+      "path": "packages/providers/src/openai-responses/journal-responses-length.ts",
+      "from": "version.aggregate.missingBase[slot] !== 0",
+      "to": "false",
+      "test": "src/openai-responses/journal-responses-lifecycle.test.ts",
+      "pattern": "rejects stale generations",
+      "command": [
+        "bun",
+        "test",
+        "src/openai-responses/journal-responses-lifecycle.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driverPid": 80181,
+      "childPid": 80224,
+      "code": 1,
+      "backup": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/responses-format-run-p/80181-unmeasured-zero.original",
+      "cmpPid": 80252,
+      "cmpCode": 0,
+      "before": "26b791a7a9f055da16745f529fa4b164200da32c9038796570fd0eb3d673db8f",
+      "after": "26b791a7a9f055da16745f529fa4b164200da32c9038796570fd0eb3d673db8f",
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/responses-format-run-p/80181-unmeasured-zero.log",
+      "logHash": "c4aba1818646bdacd9f03b8463dd99712b289f248023ddf1e2527fcb96c24a21",
+      "assertionFailure": true,
+      "fullTestFile": true
+    },
+    {
+      "name": "settings-model",
+      "path": "packages/providers/src/openai-responses/journal-responses-length.ts",
+      "from": "const key = rowFormatKey(settings);",
+      "to": "const key = rowFormatKey({ ...settings, model: 'model-a' });",
+      "test": "src/openai-responses/journal-responses-lifecycle.test.ts",
+      "pattern": "captures settings and preserves",
+      "command": [
+        "bun",
+        "test",
+        "src/openai-responses/journal-responses-lifecycle.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driverPid": 80181,
+      "childPid": 80253,
+      "code": 1,
+      "backup": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/responses-format-run-p/80181-settings-model.original",
+      "cmpPid": 80288,
+      "cmpCode": 0,
+      "before": "26b791a7a9f055da16745f529fa4b164200da32c9038796570fd0eb3d673db8f",
+      "after": "26b791a7a9f055da16745f529fa4b164200da32c9038796570fd0eb3d673db8f",
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/responses-format-run-p/80181-settings-model.log",
+      "logHash": "1abdb47ad831bdf689fed7ef8af0c6ad866a261743a15f0dd1bba4e7bcd32350",
+      "assertionFailure": true,
+      "fullTestFile": true
+    },
+    {
+      "name": "all-history-rescan",
+      "path": "packages/core/src/journal/formatFill.ts",
+      "from": "if (needsFill(child.aggregate, slot, format))",
+      "to": "if (true)",
+      "test": "src/openai-responses/journal-responses-lifecycle.test.ts",
+      "pattern": "fills 4000 rows",
+      "command": [
+        "bun",
+        "test",
+        "src/openai-responses/journal-responses-lifecycle.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driverPid": 80181,
+      "childPid": 80289,
+      "code": 1,
+      "backup": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/responses-format-run-p/80181-all-history-rescan.original",
+      "cmpPid": 80321,
+      "cmpCode": 0,
+      "before": "e168195f2e09fe68a18c9fb30bee62b46867ab3d6df89080bd2d3a99710d838c",
+      "after": "e168195f2e09fe68a18c9fb30bee62b46867ab3d6df89080bd2d3a99710d838c",
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/responses-format-run-p/80181-all-history-rescan.log",
+      "logHash": "e157805fc4a0bf364efa81d176fb5aa5deeae017e30b64e163cef388eeb024a9",
+      "assertionFailure": true,
+      "fullTestFile": true
+    },
+    {
+      "name": "pair-holder",
+      "path": "packages/core/src/journal/formatFill.ts",
+      "from": "format.summaryKind === 'responses'",
+      "to": "false",
+      "test": "src/openai-responses/journal-responses-lifecycle.test.ts",
+      "pattern": "maintains normalized-ID collision holders",
+      "command": [
+        "bun",
+        "test",
+        "src/openai-responses/journal-responses-lifecycle.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driverPid": 80181,
+      "childPid": 80322,
+      "code": 1,
+      "backup": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/responses-format-run-p/80181-pair-holder.original",
+      "cmpPid": 80362,
+      "cmpCode": 0,
+      "before": "e168195f2e09fe68a18c9fb30bee62b46867ab3d6df89080bd2d3a99710d838c",
+      "after": "e168195f2e09fe68a18c9fb30bee62b46867ab3d6df89080bd2d3a99710d838c",
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/responses-format-run-p/80181-pair-holder.log",
+      "logHash": "1cb6c4db0cd47d454dbee1006ce5e6bf8216f0d1e4d82a03cc9d6238189adaa0",
+      "assertionFailure": true,
+      "fullTestFile": true
+    }
+  ],
+  "interruptedControl": {
+    "driverPid": 60602,
+    "path": "packages/providers/src/openai-responses/journal-responses-length.ts",
+    "backup": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/responses-format-run-p/60602-stale-generation.original",
+    "before": "26b791a7a9f055da16745f529fa4b164200da32c9038796570fd0eb3d673db8f",
+    "after": "26b791a7a9f055da16745f529fa4b164200da32c9038796570fd0eb3d673db8f",
+    "cmpExit": 0,
+    "note": "Interrupted run left one stale-generation source mutation. The exact one-line diff was restored and cmp/hash checked before ordinary verification. Its incomplete log is not assertion evidence."
+  },
+  "sourceInventory": {
+    "path": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/responses-format-run-p/final-source-inventory.json",
+    "sha256": "69662257e8ffc15f648248c89accdb5b4483bccb31638ced258affe45ad0331d",
+    "count": 8909,
+    "comparison": "All entries match final source; captured during final acceptance before controls."
+  },
+  "preservation": {
+    "path": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/responses-format-run-p/preservation.json",
+    "sha256": "983efe92fc70a1b011ae0e269e0ea36c9541bcbabb45588962bf0d3c94b10ee7",
+    "paths": 1192,
+    "unrelatedDeclarations": 293,
+    "mismatches": []
+  },
+  "processes": {
+    "recorded": [
+      20775,
+      24669,
+      26429,
+      26430,
+      26632,
+      26633,
+      26754,
+      26808,
+      26892,
+      27445,
+      27446,
+      27463,
+      27464,
+      27465,
+      27475,
+      27476,
+      27700,
+      27895,
+      28155,
+      28464,
+      28465,
+      28510,
+      28530,
+      28605,
+      28943,
+      28945,
+      28999,
+      29022,
+      29104,
+      29199,
+      30116,
+      30117,
+      30156,
+      30193,
+      30261,
+      30395,
+      30564,
+      30565,
+      30603,
+      30701,
+      30702,
+      30718,
+      30719,
+      30726,
+      32162,
+      32163,
+      35695,
+      35696,
+      37128,
+      37130,
+      37158,
+      39718,
+      39719,
+      45342,
+      45343,
+      45637,
+      45777,
+      45859,
+      46423,
+      46424,
+      46513,
+      46559,
+      46709,
+      47081,
+      51287,
+      51288,
+      51419,
+      51475,
+      51658,
+      51793,
+      51902,
+      51908,
+      51980,
+      60456,
+      60457,
+      60471,
+      60602,
+      62915,
+      62918,
+      62930,
+      62956,
+      64375,
+      68071,
+      68087,
+      68090,
+      68092,
+      68096,
+      68099,
+      68113,
+      68114,
+      68221,
+      68303,
+      68332,
+      68333,
+      68446,
+      68512,
+      68598,
+      68735,
+      69610,
+      69619,
+      71223,
+      71545,
+      71546,
+      71559,
+      71560,
+      71910,
+      71911,
+      72299,
+      72300,
+      72516,
+      72517,
+      72728,
+      72730,
+      73080,
+      75467,
+      75553,
+      75554,
+      75585,
+      75660,
+      75752,
+      79472,
+      79491,
+      79498,
+      79501,
+      79505,
+      79508,
+      79519,
+      79520,
+      79573,
+      79623,
+      79635,
+      79636,
+      79694,
+      79717,
+      79792,
+      79969,
+      80125,
+      80126,
+      80157,
+      80181,
+      80182,
+      80189,
+      80190,
+      80223,
+      80224,
+      80252,
+      80253,
+      80288,
+      80289,
+      80321,
+      80322,
+      80362
+    ],
+    "active": []
+  },
+  "audit": {
+    "touchedFindings": [
+      "packages/providers/src/openai-responses/journal-responses-lifecycle.test.ts\t193\tnative Responses format lifecycle > (unnamed)\tDUP_ASSERT\t2x identical assertion: expect(counter.reads).toBe(0)\tproviders"
+    ],
+    "prohibited": []
+  },
+  "reads": [
+    {
+      "count": 40,
+      "cold": 722,
+      "warm": 0,
+      "append": 22
+    },
+    {
+      "count": 4000,
+      "cold": 104564,
+      "warm": 0,
+      "append": 32
+    }
+  ],
+  "unsupported": [
+    "previous_response_id parent and nonzero cursor",
+    "pending tails and pair-sensitive range corrections",
+    "stored-media reference projection and separate image generations",
+    "Anthropic and remaining chat-format variants",
+    "LENS recomputation and live-byte accounting",
+    "retained heap 10k/100k/1M and 100000-call construction",
+    "cold Mistral performance improvements",
+    "W23 eight large-overlimit zero-decode cases",
+    "provider header installation, cutover and default flip"
+  ],
+  "knownSeparateRed": "#3917 codec own-__proto__ case remains RED, not retried or suppressed.",
+  "review": "review skipped per Andrew 2026-10-09",
+  "evidencePolicy": "Final targeted/gate receipts supersede earlier source-mismatched receipts, including 51287 and 39718. Earlier completed normalization proof remains separate. Controls run complete test files and are excluded from green acceptance totals. All acceptance files run without test-name filtering."
+}
