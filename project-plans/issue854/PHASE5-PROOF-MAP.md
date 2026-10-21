@@ -1,6 +1,18 @@
 # Phase 5 proof map
 
-## Current Kimi fallback prefix and digit checkpoint
+## Current ROW range integrity checkpoint
+
+Version 8 implementation `bc57523d0f1fd8a7f5d123d95c9dedd8c0875312` starts at `31534370c`. The per-piece CRC layout is wired through native `encodeRowDraft`, selected block/metadata/id readers, the full-row splitter and the recording scanner. Clone/compaction preserve its bytes through the existing streamed copy. Whole-body CRCs remain independent. [PHASE5-CRC-PROOF.json](PHASE5-CRC-PROOF.json) records current source-bound execution; [PHASE5-CRC-DECISIONS.md](PHASE5-CRC-DECISIONS.md) defines the guarantee.
+
+Final source commit `e674f3c5fac34003daa2c38506ceced04ba7a175` contains the reference diagnostics and lifecycle tests. All 19 scoped hashes match that commit. `tmp/p5/crc-run-1/finalization-check.json` records the source/preservation comparisons, parsed acceptance totals, restored control comparisons and process check; its hash is in the proof receipt. Existing acceptance is reused only because all source and evidence hashes match.
+
+Effective acceptance is 603 passes, zero failures/skips and 625,252 assertions across 84 serial processes over 44 files: forty files on both backends plus four format/recovery files once. Nine gates pass. The final source inventory hashes 1569 paths with zero changes during acceptance; 19 scoped TypeScript paths are individually bound in the receipt. All 184 recorded PIDs are absent, and 1380 unrelated preservation hashes remain equal. Current counts do not reuse earlier Kimi/Mistral executions.
+
+`journal-range-integrity.test.ts` supplies the selected/unselected corruption distinction, repaired-whole-CRC mutants, header/id/meta/block/checksum damage, truncation context, exact wrong-reference locations and original CRC cause under failed pin cleanup. `journal-range-lifecycle.test.ts` verifies exactly one selected payload plus its checksum, zero other-block payload reads, owner/rebuild/reopen/clone/compaction with OffsetAudit, public version-7 refusal and scanner rejection even after the outer body CRC is repaired. Dropped piece-check and frame-metadata-check controls must fail assertions and restore with cmp/hash. Existing mutation, full-reader, crash/tail, large streaming, export/import, janitor, frozen unit/metadata/occurrence and actual converter regressions remain separate receipt entries.
+
+Unread payloads are not verified by selected-block checks. CRC-32 is for accidental corruption, not authenticated hostile input. Existing large streaming tests exercise the raw frame writer, not retained history at 10k/100k/1M. No complete format/settings/summary/LENS, heap, W26 or provider cutover claim is made; codec #3917 remains separately RED without retry.
+
+## Earlier Kimi fallback prefix and digit checkpoint
 
 Implementation `fb45ff0c10b822effebc51dd8bde58fe9e993958` starts at `3b608a885`. [PHASE5-KIMI-PREFIX-PROOF.json](PHASE5-KIMI-PREFIX-PROOF.json) binds 24 scoped source/test paths, 44 effective serial acceptance processes, seven scoped gates and restored controls. Acceptance is 200 passes, zero failures/skips and 385,020 assertions, using the final supplemental nonzero-lifecycle prefix test in place of its initial receipts. Unchanged completed lanes are not rerun.
 
@@ -10,7 +22,7 @@ All 5000 unchanged frozen inputs compare the old full normalizer, tools mapper a
 
 At 40/4000/100000 rows with 40/4000/4000 calls, preparation reads 20/33/43 heads and selected tail counters 6/9/9, with zero additional heads for the end counter. No journal payload is read except the selected native name block. The history-walk control fails `<150` at 4581 heads. Missing-prefix, consumed/written, digit-boundary and omitted-drop controls also fail actual assertions; each target restores with cmp/hash. The first invalid history mutant and a split-case expectation mismatch remain recorded but are not called behavioral proof.
 
-The selected prefix descent is O(tree depth); selected-row metadata and pending-ID holder corrections add their own work. Dense historical unmapped holders for a pending ID can be streamed per query, so uniform depth-only query cost is not proved for that case. Repeated holder rows can also be rewritten more than once during append repair. These measurements do not establish retained heap or fix the earlier 100000-call construction timeout. Full request-only digit-summary integration, holder name/token/byte remeasurement, format/settings/summary/LENS, whole-range CRC, full 10k/100k/1M heap, Stage A/W25/provider cutover, W26 and W23 dependencies remain open. Production provider routing/default and public Mistral selection policy remain unchanged. Codec #3917 remains separately RED without retry or suppression. Review skipped per Andrew 2026-10-09.
+The selected prefix descent is O(tree depth); selected-row metadata and pending-ID holder corrections add their own work. Dense historical unmapped holders for a pending ID can be streamed per query, so uniform depth-only query cost is not proved for that case. Repeated holder rows can also be rewritten more than once during append repair. These measurements do not establish retained heap or fix the earlier 100000-call construction timeout. Full request-only digit-summary integration, holder name/token/byte remeasurement, format/settings/summary/LENS, full 10k/100k/1M heap, Stage A/W25/provider cutover, W26 and W23 dependencies remain open. Production provider routing/default and public Mistral selection policy remain unchanged. Codec #3917 remains separately RED without retry or suppression. Review skipped per Andrew 2026-10-09.
 
 ## Current actual Mistral conversion checkpoint
 
