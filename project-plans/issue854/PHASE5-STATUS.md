@@ -1,3 +1,15 @@
+# Duplicate-ID admission edge passes; Phase 5 remains open, 2026-10-21
+
+RED `c51d4d224`, first fix `8f3b09761`, final source `a48994b3c`. [The receipt](recovery-2026-10-19/recovered-control/W26-SOURCE-BOUND-EMPTY-ID-PROOF.json) binds **92 passes, zero failures/skips and 595,180 assertions in 17 unique complete serial files**, nine scoped gates and four byte/cmp/hash-restored assertion controls. The original five-case RED filtered both empty-ID calls but emitted an empty replacement because one distinct ID was compared with two call occurrences. Final code counts removed occurrences, classifies surviving blocks and preserves non-tool content/current owners without weakening admission.
+
+Small public masks 1/3/5/7 match values, durable bytes and successful token counts. A separate immutable original-array diagnostic independently gives 26/25/26/25 tokens for 16 surviving rows; no token-accounting implementation changed. Native history/durable scale remains 512/8192, owners 3/64/65/5000. Unchanged 5000 frozen normalization cases, #3919 identity files and original lifetime bounds pass. The complete greater-than-nine-MiB checkpoint is reused only across unchanged core/provider/test-utils bytes with listed agents differences, outside fresh totals. See [W26 status](recovery-2026-10-19/recovered-control/W26-STATUS.md) for exact counts and boundaries.
+
+No new density operation files or repeated per-row history scan are introduced. Selected reads 23/43 at 40/4000, cold fill 920/167771, zero-growth ready repeats, 65536-byte charged per-cache limits and peak-one/final-zero output objects remain separate from whole-heap/cache/pin capacity. All 1192 preservation hashes match, including 293 declarations/raw recovery/dirty memory; all 87 recorded PIDs are absent. #3917 remains separately RED without rerun/retry/suppression.
+
+W26/Phase 5 remain open for incremental structural ranking, pending/stale-fact capacity, remaining native/other-strategy/append-only and explicit-old producers, normalization/cache/tails/ranges/semantic generations and global LENS/live bytes. Phase 6 provider body/key/message/tokenizer spools/request guards, heap/capacity, W23/W25/cutover and cold Mistral remain separate. Old backend removal stays phase 9; defaults are unchanged. No cleanup, unrelated/.llxprt staging, OCR, push, merge or weaker enforcement. Review skipped per Andrew 2026-10-09. Historical sections below retain their earlier source boundaries.
+
+---
+
 # Native read/write pruning passes scoped acceptance; Phase 5 remains open, 2026-10-21
 
 Production `91347a581` is unchanged; green WIP tests are committed at `29427b46e`. [The source-bound receipt](recovery-2026-10-19/recovered-control/W26-SOURCE-BOUND-READ-WRITE-PROOF.json) binds **109 passes, zero failures/skips and 795437 assertions across 23 unique serial complete-file Bun executions**, nine passing scoped gates and eight restored assertion controls. Cache instrumentation contributes 533294 assertions and the existing mutation model 256613. Matching completed files are reused rather than repeating the matrix.
