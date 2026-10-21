@@ -9,6 +9,11 @@ import type { RowFormatSettings } from '@vybestack/llxprt-code-core/journal/rowF
 import type { VersionEdit } from '@vybestack/llxprt-code-core/journal/groupEdits.js';
 import { JournalWriterPoisonedError } from '@vybestack/llxprt-code-core/journal/errors.js';
 import { anthropicRepairFactIndex } from './anthropic-repair-fact-writer.js';
+import { IndexedJournalRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/indexed-journal-request-snapshot.js';
+import type { VersionSnapshot } from '@vybestack/llxprt-code-core/journal/versionSnapshot.js';
+import { AnthropicStreamRepair } from './anthropic-stream-repair.js';
+import { buildCuratedHistory } from '@vybestack/llxprt-code-core/services/history/historyCuration.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import {
   anthropicLengthRegistration,
   planStoredAnthropicRequest,
@@ -67,16 +72,70 @@ async function storedRows(session: JournalSession): Promise<IContent[]> {
   for await (const stored of session.rows()) rows.push(stored.content);
   return rows;
 }
+async function rendered(
+  pin: VersionSnapshot,
+  input = settings,
+  strip: 'none' | 'all' | 'allButLast' = 'allButLast',
+): Promise<string> {
+  const query = await IndexedJournalRequestSnapshot.create(pin);
+  try {
+    const engine = await AnthropicStreamRepair.create(query, input, { strip });
+    let body = '';
+    for await (const chunk of engine.serialize()) body += chunk;
+    return body;
+  } finally {
+    await query.close();
+  }
+}
+const call = (id = 'call_round', name = 'read'): IContent => ({
+  speaker: 'ai',
+  blocks: [{ type: 'tool_call', id, name, parameters: {} }],
+});
+const response = (
+  id = 'call_round',
+  speaker: IContent['speaker'] = 'tool',
+  result: unknown = 'result',
+): IContent => ({
+  speaker,
+  blocks: [
+    {
+      type: 'tool_response',
+      callId: id,
+      toolName: 'read',
+      result,
+      isComplete: true,
+    },
+  ],
+});
+async function oldBody(
+  rows: readonly IContent[],
+  input = settings,
+): Promise<string> {
+  return emittedCandidate(
+    await normalizedRows(
+      buildCuratedHistory(new DebugLogger('held-tool-old'), rows, false),
+    ),
+    {
+      reasoningEnabled: true,
+      currentModel: input.model,
+      strip: 'allButLast',
+    },
+    {},
+  );
+}
 async function matchesOldEmitter(
   session: JournalSession,
   rows: readonly IContent[],
   input = settings,
 ): Promise<void> {
   const pin = await session.store.snapshot();
+  const normalized = await normalizedRows(
+    buildCuratedHistory(new DebugLogger('tool-append-old'), rows, false),
+  );
   try {
     for (const strip of ['none', 'all', 'allButLast'] as const) {
       const expected = await emittedCandidate(
-        await normalizedRows(rows),
+        normalized,
         { reasoningEnabled: true, currentModel: input.model, strip },
         {},
       );
@@ -88,8 +147,9 @@ async function matchesOldEmitter(
       );
       expect(plan.messagesBytes).toBe(Buffer.byteLength(expected));
       expect(plan.messages).toBe(JSON.parse(expected).length);
+      expect(await rendered(pin, input, strip)).toBe(expected);
     }
-    expect(pin.version?.aggregate.units).toBe(rows.length);
+    expect(pin.version?.aggregate.units).toBe(normalized.length);
   } finally {
     await pin.close();
   }
@@ -241,6 +301,235 @@ describe('native Anthropic append lifetime and invalidation', () => {
       }
     });
   }
+  for (const scenario of [
+    { name: 'empty-ID call', before: [text('q')], added: call('') },
+    {
+      name: 'unnamed call',
+      before: [text('q')],
+      added: call('call_round', ''),
+    },
+    {
+      name: 'non-AI call',
+      before: [text('q')],
+      added: { ...call(), speaker: 'human' } satisfies IContent,
+    },
+    { name: 'unmatched result', before: [text('q')], added: response() },
+    {
+      name: 'normalized-ID collision',
+      before: [call('hist_tool_round')],
+      added: response('toolu_round'),
+    },
+    { name: 'duplicate call', before: [call()], added: call() },
+    {
+      name: 'late first response',
+      before: [call(), text('later boundary')],
+      added: response(),
+    },
+    {
+      name: 'better late response',
+      before: [call(), response('call_round', 'tool', null)],
+      added: response(),
+    },
+    {
+      name: 'tool in a thinking chain',
+      before: [
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'thinking',
+              thought: 'chain',
+              sourceField: 'thinking',
+              signature: 'sig',
+            },
+          ],
+        } satisfies IContent,
+      ],
+      added: call(),
+    },
+  ]) {
+    it(`invalidates ${scenario.name}, preserves old pins and refills exact repaired bytes`, async () => {
+      const session = await JournalSession.create(
+        `${directory()}/${scenario.name}.llxj`,
+        { journal: testJournalSeams().dependencies },
+      );
+      try {
+        await session.append(scenario.before);
+        await register(session);
+        const old = await session.store.snapshot();
+        try {
+          const before = await oldBody(scenario.before);
+          expect(await rendered(old)).toBe(before);
+          await session.append([scenario.added]);
+          await rejectsInvalidatedPolicies(session);
+          expect(await rendered(old)).toBe(before);
+          await register(session);
+          await matchesOldEmitter(session, [
+            ...scenario.before,
+            scenario.added,
+          ]);
+        } finally {
+          await old.close();
+        }
+      } finally {
+        await session.close();
+      }
+    });
+  }
+  it('maintains real tool rounds on empty, reopened, forked and physically copied versions with held repair roots', async () => {
+    const path = `${directory()}/tool-reopen.llxj`;
+    const options = { journal: testJournalSeams().dependencies };
+    let session = await JournalSession.create(path, options);
+    await register(session);
+    await session.append([call()]);
+    await matchesOldEmitter(session, [call()]);
+    await session.close();
+    session = await JournalSession.open(path, options);
+    try {
+      await register(session);
+      for (let at = 0; at < 4; at++)
+        await register(session, { ...settings, model: `claude-tool-${at}` });
+      const current = { ...settings, model: 'claude-tool-3' };
+      const old = await session.store.snapshot();
+      const before = await oldBody([call()], current);
+      expect(await rendered(old, current)).toBe(before);
+      const plan = await planStoredAnthropicRequest(
+        old,
+        current,
+        {},
+        { model: current.model },
+      );
+      const fork = await session.cloneUnlinked({
+        unlinkedDirectory: directory(),
+      });
+      try {
+        await fork.append([response('call_round', 'tool', 'fork result')]);
+        await matchesOldEmitter(
+          fork,
+          [call(), response('call_round', 'tool', 'fork result')],
+          current,
+        );
+        await session.append([
+          response('call_round', 'human', 'parent result'),
+        ]);
+        await matchesOldEmitter(
+          session,
+          [call(), response('call_round', 'human', 'parent result')],
+          current,
+        );
+        expect(await rendered(old, current)).toBe(before);
+        expect(
+          await planStoredAnthropicRequest(
+            old,
+            current,
+            {},
+            { model: current.model },
+          ),
+        ).toStrictEqual(plan);
+      } finally {
+        await fork.close();
+        await old.close();
+      }
+      expect(await session.store.compact()).toBe('swapped');
+      await session.append([call('call_copy')]);
+      await session.append([response('call_copy')]);
+      await matchesOldEmitter(
+        session,
+        [
+          call(),
+          response('call_round', 'human', 'parent result'),
+          call('call_copy'),
+          response('call_copy'),
+        ],
+        current,
+      );
+    } finally {
+      await session.close();
+    }
+  });
+  it('keeps a pending response request-only and refuses stored tail planning', async () => {
+    const session = await JournalSession.create(
+      `${directory()}/tool-tail.llxj`,
+      { journal: testJournalSeams().dependencies },
+    );
+    try {
+      await register(session);
+      await session.append([call()]);
+      const pin = await session.store.snapshot();
+      const query = await IndexedJournalRequestSnapshot.create(pin, [
+        response(),
+      ]);
+      try {
+        const expected = await normalizedRows([call(), response()]);
+        expect(await query.readAt(1)).toStrictEqual(expected[1]);
+        expect(query.pending.inputCount).toBe(1);
+        expect(query.isPending(1)).toBe(true);
+        await expect(
+          planStoredAnthropicRequest(
+            pin,
+            settings,
+            {},
+            { model: settings.model },
+            { pendingInputCount: 1 },
+          ),
+        ).rejects.toThrow(/pending-tail/);
+        expect(session.store.published).toBe(pin.version);
+        expect(pin.rows).toBe(1);
+        await matchesOldEmitter(session, [call()]);
+      } finally {
+        await query.close();
+        await pin.close();
+      }
+    } finally {
+      await session.close();
+    }
+  });
+  it('preserves the published repair root after an actual holder measurement fails and poisons disk writes', async () => {
+    const path = `${directory()}/tool-failure.llxj`;
+    const options = { journal: testJournalSeams().dependencies };
+    const session = await JournalSession.create(path, options);
+    await register(session);
+    await session.append([call()]);
+    const original = anthropicLengthRegistration(settings);
+    const failure = new Error('actual holder measurement failure');
+    await session.registerRowFormat({
+      ...original,
+      prepareAppend: async (...args) => {
+        if (original.prepareAppend === undefined)
+          throw new Error('Missing append preparation');
+        const fill = await original.prepareAppend(...args);
+        return {
+          ...fill,
+          measure: async (...measureArgs) => {
+            await fill.measure(...measureArgs);
+            throw failure;
+          },
+        };
+      },
+    });
+    const old = await session.store.snapshot();
+    try {
+      const body = await oldBody([call()]);
+      expect(await rendered(old)).toBe(body);
+      await expect(session.append([response()])).rejects.toBe(failure);
+      expect(session.store.published).toBe(old.version);
+      expect(await rendered(old)).toBe(body);
+      await expect(session.append([text('poison')])).rejects.toBeInstanceOf(
+        JournalWriterPoisonedError,
+      );
+    } finally {
+      await old.close();
+      await session.close();
+    }
+    const reopened = await JournalSession.open(path, options);
+    try {
+      await register(reopened);
+      await reopened.append([response()]);
+      await matchesOldEmitter(reopened, [call(), response()]);
+    } finally {
+      await reopened.close();
+    }
+  });
   it('reattaches matching factories after reopen and appends independently on a fork across slot reuse', async () => {
     const path = `${directory()}/reopen.llxj`;
     let session = await JournalSession.create(path, {

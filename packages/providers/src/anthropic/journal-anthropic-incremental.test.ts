@@ -58,18 +58,118 @@ async function register(session: JournalSession): Promise<void> {
   ]);
   await session.registerRowFormat(anthropicLengthRegistration(settings));
 }
+const toolCall = (id: string, name = 'read'): IContent => ({
+  speaker: 'ai',
+  blocks: [{ type: 'tool_call', id, name, parameters: { path: '雪' } }],
+});
+const toolResult = (
+  id: string,
+  result = 'actual result 雪',
+  speaker: IContent['speaker'] = 'tool',
+): IContent => ({
+  speaker,
+  blocks: [
+    {
+      type: 'tool_response',
+      callId: id,
+      toolName: 'read',
+      result,
+      isComplete: true,
+    },
+  ],
+});
+interface PhysicalRead {
+  readonly start: number;
+  readonly end: number;
+}
+async function classifyReads(
+  session: JournalSession,
+  pin: VersionSnapshot,
+  from: number,
+  reads: readonly PhysicalRead[],
+): Promise<{
+  metadataOrHeads: number;
+  rowBodies: number;
+  lens: number;
+  historicalPayloadReads: number;
+  prefetchPayloadOverlaps: number;
+}> {
+  const rows: Array<PhysicalRead & { body: number; selected: boolean }> = [];
+  const lenses: Array<PhysicalRead & { selected: boolean }> = [];
+  const read = await session.store.openRead();
+  try {
+    let index = 0;
+    for await (const entry of pin.entries()) {
+      const selected = index++ >= from;
+      const head = await read.access.readRecordHead(entry.recordOffset);
+      rows.push({
+        start: head.offset,
+        end: head.endOffset,
+        body: head.bodyOffset,
+        selected,
+      });
+      for (const ref of entry.lensRef.filter((value) => value !== 0)) {
+        const lens = await read.access.readRecordHead(ref);
+        lenses.push({ start: ref, end: lens.endOffset, selected });
+      }
+    }
+  } finally {
+    await read.close();
+  }
+  const records = [...rows, ...lenses];
+  const startsIn = (event: PhysicalRead, range: PhysicalRead): boolean =>
+    event.start >= range.start && event.start < range.end;
+  const rowBodies = reads.filter((event) =>
+    rows.some(
+      (row) => row.selected && startsIn(event, row) && event.end > row.body,
+    ),
+  ).length;
+  const lens = reads.filter((event) =>
+    lenses.some((range) => range.selected && startsIn(event, range)),
+  ).length;
+  const historicalPayloadReads = reads.filter((event) =>
+    records.some((range) => !range.selected && startsIn(event, range)),
+  ).length;
+  const prefetchPayloadOverlaps = reads.filter(
+    (event) =>
+      !records.some((range) => startsIn(event, range)) &&
+      records.some(
+        (range) => event.start < range.end && event.end > range.start,
+      ),
+  ).length;
+  return {
+    metadataOrHeads: reads.length - rowBodies - lens - historicalPayloadReads,
+    rowBodies,
+    lens,
+    historicalPayloadReads,
+    prefetchPayloadOverlaps,
+  };
+}
+async function withSnapshot(
+  session: JournalSession,
+  consume: (pin: VersionSnapshot) => Promise<void>,
+): Promise<void> {
+  const pin = await session.store.snapshot();
+  try {
+    await consume(pin);
+  } finally {
+    await pin.close();
+  }
+}
 async function capturePayloadRanges(
   session: JournalSession,
   pin: VersionSnapshot,
   ranges: Array<{ start: number; end: number }>,
+  omitRow?: bigint,
 ): Promise<void> {
   const read = await session.store.openRead();
   try {
     for await (const entry of pin.entries()) {
-      ranges.push({
-        start: entry.recordOffset,
-        end: entry.recordOffset + entry.recordLength,
-      });
+      if (entry.label !== omitRow)
+        ranges.push({
+          start: entry.recordOffset,
+          end: entry.recordOffset + entry.recordLength,
+        });
       for (const offset of entry.lensRef.filter((value) => value !== 0)) {
         const head = await read.access.readRecordHead(offset);
         ranges.push({ start: offset, end: head.endOffset });
@@ -250,7 +350,229 @@ describe('incremental native Anthropic stored summaries', () => {
       }
     });
   }
+  for (const count of [40, 4000]) {
+    it(`maintains a real tool round after ${count} fixed-density source rows without whole fills`, async () => {
+      const counter = { reads: 0 };
+      const ranges: Array<{ start: number; end: number }> = [];
+      const audit = { enabled: false, payload: 0, holderReads: 0 };
+      const events: PhysicalRead[] = [];
+      const holder = { start: 0, end: 0 };
+      const fills = { facts: 0, format: 0 };
+      const dependencies = testJournalSeams(
+        { readCounter: counter },
+        1,
+        false,
+      ).dependencies;
+      const session = await JournalSession.create(
+        `${directory()}/tool-scale-${count}.llxj`,
+        {
+          journal: {
+            ...dependencies,
+            open: async (path, flags) => {
+              const file = await dependencies.open(path, flags);
+              return {
+                ...file,
+                read: async (buffer, offset, length, position) => {
+                  const result = await file.read(
+                    buffer,
+                    offset,
+                    length,
+                    position,
+                  );
+                  const end = position + result.bytesRead;
+                  if (
+                    audit.enabled &&
+                    ranges.some(
+                      (range) => position < range.end && end > range.start,
+                    )
+                  )
+                    audit.payload++;
+                  if (
+                    audit.enabled &&
+                    position < holder.end &&
+                    end > holder.start
+                  )
+                    audit.holderReads++;
+                  if (audit.enabled) events.push({ start: position, end });
+                  return result;
+                },
+              };
+            },
+          },
+        },
+      );
+      const rows = Array.from({ length: count / 4 }, (_, at) => [
+        text(`q-${at}`),
+        toolCall(`call_history_${at}`),
+        toolResult(`call_history_${at}`),
+        text(`answer-${at}`, 'ai'),
+      ]).flat();
+      try {
+        const coldStart = counter.reads;
+        await session.append(rows);
+        const facts = anthropicRepairFactIndex(settings);
+        await session.store.commit([
+          {
+            kind: 'factIndex',
+            registration: {
+              ...facts,
+              write: async (...args) => {
+                fills.facts++;
+                await facts.write(...args);
+              },
+            },
+          },
+        ]);
+        const format = anthropicLengthRegistration(settings);
+        await session.registerRowFormat({
+          ...format,
+          prepare: async (snapshot, input) => {
+            fills.format++;
+            if (format.prepare === undefined)
+              throw new Error('Missing format preparation');
+            return format.prepare(snapshot, input);
+          },
+        });
+        const coldReads = counter.reads - coldStart;
+        const old = await session.store.snapshot();
+        try {
+          const oldPlan = await planStoredAnthropicRequest(
+            old,
+            settings,
+            {},
+            { model: settings.model },
+          );
+          await capturePayloadRanges(session, old, ranges);
+          const call = toolCall('call_new_round');
+          const before = counter.reads;
+          audit.enabled = true;
+          await session.append([call]);
+          audit.enabled = false;
+          const callReads = counter.reads - before;
+          expect(callReads).toBeLessThan(250);
+          expect(audit.payload).toBe(0);
+          await withSnapshot(session, async (callPin) => {
+            expect(events.length).toBe(callReads);
+            const callPhysical = await classifyReads(
+              session,
+              callPin,
+              count,
+              events,
+            );
+            expect(callPhysical.rowBodies).toBeGreaterThan(0);
+            expect(callPhysical.historicalPayloadReads).toBe(0);
+            events.length = 0;
+            const callPlan = await planStoredAnthropicRequest(
+              callPin,
+              settings,
+              {},
+              { model: settings.model },
+            );
+            const entry = await callPin.entryAt(count);
+            holder.start = entry.recordOffset;
+            holder.end = entry.recordOffset + entry.recordLength;
+            ranges.length = 0;
+            await capturePayloadRanges(session, callPin, ranges, entry.label);
+            const response = toolResult('call_new_round');
+            const start = counter.reads;
+            audit.enabled = true;
+            await session.append([response]);
+            audit.enabled = false;
+            const resultReads = counter.reads - start;
+            const resultEvents = [...events];
+            expect(resultEvents.length).toBe(resultReads);
+            expect(resultReads).toBeLessThan(250);
+            expect(audit.holderReads).toBeGreaterThan(0);
+            const resultHistoricalRecordOverlaps = audit.payload;
+            audit.payload = 0;
+            expect(fills).toStrictEqual({ facts: 1, format: 1 });
+            const warm = await warmEvidence(
+              session,
+              ranges,
+              counter,
+              audit,
+              oldPlan.messagesBytes,
+            );
+            expect(
+              await planStoredAnthropicRequest(
+                callPin,
+                settings,
+                {},
+                { model: settings.model },
+              ),
+            ).toStrictEqual(callPlan);
+            expect(
+              await planStoredAnthropicRequest(
+                old,
+                settings,
+                {},
+                { model: settings.model },
+              ),
+            ).toStrictEqual(oldPlan);
+            let resultPhysical = {
+              metadataOrHeads: 0,
+              rowBodies: 0,
+              lens: 0,
+              historicalPayloadReads: 0,
+              prefetchPayloadOverlaps: 0,
+            };
+            await withSnapshot(session, async (current) => {
+              resultPhysical = await classifyReads(
+                session,
+                current,
+                count,
+                resultEvents,
+              );
+              expect(resultPhysical.metadataOrHeads).toBeLessThan(250);
+              expect(resultPhysical.rowBodies).toBeGreaterThan(0);
+              expect(resultPhysical.historicalPayloadReads).toBe(0);
+              const currentPlan = await planStoredAnthropicRequest(
+                current,
+                settings,
+                {},
+                { model: settings.model },
+              );
+              expect(currentPlan.generation).toBe(oldPlan.generation);
+              expect(currentPlan.messagesBytes).not.toBe(
+                callPlan.messagesBytes,
+              );
+            });
+            process.stdout
+              .write(`Tool append Anthropic ${JSON.stringify({ count, coldReads, callReads, resultReads, callPhysical, resultPhysical, historicalPayloadReads: resultPhysical.historicalPayloadReads, resultHistoricalRecordOverlaps, holderReads: audit.holderReads, wholeFactFills: fills.facts - 1, wholeFormatFills: fills.format - 1, ...warm, pid: process.pid })}
+`);
+            await matches(session, [...rows, call, response]);
+          });
+        } finally {
+          await old.close();
+        }
+      } finally {
+        await session.close();
+      }
+    });
+  }
   for (const scenario of [
+    {
+      name: 'escaped template input and consecutive unique rounds',
+      before: [text('q')],
+      added: [
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'hist_tool_template',
+              name: 'render_雪',
+              parameters: { template: '${value}\n"雪"', data: [1, null, true] },
+            },
+          ],
+        } satisfies IContent,
+        toolResult('hist_tool_template', '{"rendered":"雪"}'),
+        toolCall('toolu_second'),
+        toolResult('toolu_second', 'second actual result', 'human'),
+        think('next thinking'),
+        text('answer', 'ai'),
+      ],
+    },
     {
       name: 'ordinary unique call and actual response',
       before: [think('old'), text('q')],
