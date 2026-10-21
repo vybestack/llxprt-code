@@ -61,6 +61,7 @@ export interface SourceRow {
 
 /** One primitive edit of a commit group (design 4.1). The group applies them in order and commits once. */
 export type VersionEdit =
+  | { readonly kind: 'chronology' }
   | {
       readonly kind: 'factIndex';
       readonly registration: NativeFactIndexRegistration;

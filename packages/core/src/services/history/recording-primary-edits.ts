@@ -9,6 +9,18 @@ function accepts(owner: number, id: number | 'inherit'): boolean {
   return id === 'inherit' || id === 0 || id === owner;
 }
 
+function acceptsState(
+  key: string,
+  value: Uint8Array,
+  origin: string | undefined,
+): boolean {
+  return (
+    !key.startsWith(OWNER_KEY_PREFIX) ||
+    key === OWNER_NEXT_KEY ||
+    new TextDecoder().decode(value) === origin
+  );
+}
+
 export function recordingAcceptsEdits(
   edits: readonly VersionEdit[],
   owner: number,
@@ -37,11 +49,7 @@ export function recordingAcceptsEdits(
       case 'adoptAll':
         return streams;
       case 'setState':
-        return (
-          !edit.key.startsWith(OWNER_KEY_PREFIX) ||
-          edit.key === OWNER_NEXT_KEY ||
-          new TextDecoder().decode(edit.value) === origin
-        );
+        return acceptsState(edit.key, edit.value, origin);
       case 'restore':
       case 'pop':
       case 'clear':
@@ -49,6 +57,7 @@ export function recordingAcceptsEdits(
       case 'fill':
       case 'format':
       case 'factIndex':
+      case 'chronology':
       case 'kimi':
       case 'mistral':
       case 'mistralScope':

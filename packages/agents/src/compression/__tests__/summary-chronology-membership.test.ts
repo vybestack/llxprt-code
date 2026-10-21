@@ -117,4 +117,45 @@ describe('native summary chronology membership', () => {
       await session.close();
     }
   });
+  it('keeps distinct repeated-sequence source rows and every block of a multi-unit row without preserving uncurated holes', async () => {
+    const session = await JournalSession.create(
+      join(directory(), 'source-rows.llxj'),
+    );
+    const calls: IContent = {
+      speaker: 'ai',
+      blocks: [
+        { type: 'tool_call', id: 'first', name: 'read_file', parameters: {} },
+        { type: 'tool_call', id: 'second', name: 'read_file', parameters: {} },
+      ],
+      metadata: row(8, 'marker').metadata,
+    };
+    const rows = [
+      row(8, 'head'),
+      {
+        speaker: 'ai',
+        blocks: [],
+        metadata: row(42, 'uncurated').metadata,
+      } satisfies IContent,
+      calls,
+      row(2, 'removed'),
+    ];
+    await session.append(rows);
+    const dump = new JournalDumpSnapshot(await session.store.snapshot());
+    try {
+      const output = summaryOutput(dump, 2, 3, [summary]);
+      if (output.kind !== 'applied')
+        throw new Error('Expected summary descriptor');
+      expect(
+        (await replacedSpan(dump, output.candidate, 0)).span,
+      ).toStrictEqual({ fromSeq: 2, toSeq: 42, itemCount: 2 });
+      expect(await output.candidate.readRow(0)).toStrictEqual(rows[0]);
+      expect(await output.candidate.readRow(1)).toStrictEqual(calls);
+      expect(await output.candidate.sourceOrdinalAt(0)).toBe(0);
+      expect(await output.candidate.sourceOrdinalAt(1)).toBe(2);
+      expect(output.candidate.length).toBe(3);
+    } finally {
+      await dump.close();
+      await session.close();
+    }
+  });
 });

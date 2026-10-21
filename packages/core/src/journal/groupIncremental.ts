@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { EMPTY_AGGREGATE } from './aggregateComposition.js';
 import { ROW_ENTRY_NO_CHRONOLOGY_SEQ } from './rowEntry.js';
+import { CHRONOLOGY_INDEX_READY } from './chronologyFacts.js';
 import { JournalFormatError } from './errors.js';
 import type { RecordAppender } from './groupAppender.js';
 import {
@@ -105,6 +106,14 @@ async function incrementalFacts(
   { facts: GroupFacts | undefined; affected: ReadonlySet<bigint> } | undefined
 > {
   const affected = new Set<bigint>();
+  if (
+    plan.base.rows > 0 &&
+    (await mapReader(ctx, 'meta').get(
+      plan.base.roots.metaRoot,
+      CHRONOLOGY_INDEX_READY,
+    )) === undefined
+  )
+    return undefined;
   if (adds.length === 0 && !rewritesRows && plan.mistralScope === undefined)
     return { facts: undefined, affected };
   const facts = await startFacts(

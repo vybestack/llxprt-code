@@ -12,6 +12,7 @@ import { ROW_ENTRY_NO_CHRONOLOGY_SEQ } from './rowEntry.js';
 import { ROW_FLAG } from './rowRecord.js';
 import { JournalFormatError } from './errors.js';
 
+export const CHRONOLOGY_INDEX_READY = 'history:chronology-index:1';
 const utf8 = new TextEncoder();
 function key(seq: bigint, curated: boolean, ordinal: number): Uint8Array {
   return utf8.encode(`${seq}:${Number(curated)}:${ordinal}`);

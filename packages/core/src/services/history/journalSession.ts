@@ -5,6 +5,7 @@ import {
   normalizeToOpenAIToolId,
 } from '@vybestack/llxprt-code-tools';
 import type { OccurrencePlanner } from '../../journal/groupEdits.js';
+import { CHRONOLOGY_INDEX_READY } from '../../journal/chronologyFacts.js';
 import type { CommitAck } from '../../journal/groupWriter.js';
 import { sha256KeyHash } from '../../journal/idKeys.js';
 import { JournalStore } from '../../journal/journalStore.js';
@@ -94,10 +95,21 @@ export class JournalSession {
     path: string,
     options: JournalSessionOptions = {},
   ): Promise<JournalSession> {
-    return new JournalSession(
-      await JournalStore.open(path, await storeDependencies(options)),
-      true,
+    const store = await JournalStore.open(
+      path,
+      await storeDependencies(options),
     );
+    try {
+      if (
+        (store.published?.rows ?? 0) > 0 &&
+        (await store.getMeta(CHRONOLOGY_INDEX_READY)) === undefined
+      )
+        await store.commit([{ kind: 'chronology' }]);
+      return new JournalSession(store, true);
+    } catch (error) {
+      await store.close();
+      throw error;
+    }
   }
 
   /**

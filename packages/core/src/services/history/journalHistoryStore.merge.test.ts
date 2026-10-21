@@ -130,6 +130,41 @@ describe('JournalHistoryStore.mergeFrom', () => {
 
     expect(await shapes(target)).toStrictEqual([['human', 'base', 1]]);
   });
+  it('keeps distinct rows sharing a sequence through native self-merge, pop and pinned membership lookup', async () => {
+    const target = await openStore([
+      row('human', 'first', 7),
+      row('ai', 'second', 7),
+      row('tool', 'third', 2),
+    ]);
+    await target.mergeFrom(requestOf(target, []));
+    expect(await shapes(target)).toStrictEqual([
+      ['human', 'first', 7],
+      ['ai', 'second', 7],
+      ['tool', 'third', 2],
+      ['human', 'first', 7],
+      ['ai', 'second', 7],
+      ['tool', 'third', 2],
+    ]);
+    target.apply({ kind: 'rewind', itemsRemoved: 1 });
+    await target.waitForDurable();
+    const input = await target.openCompressionInput();
+    try {
+      expect(input.rows.length).toBe(5);
+      if (input.previous.compressionSpan === undefined)
+        throw new Error('Expected native chronology lookup');
+      expect(
+        (
+          await input.previous.compressionSpan(
+            { ranges: [{ from: 0, to: 4 }], generated: [] },
+            false,
+          )
+        ).span,
+      ).toStrictEqual({ fromSeq: Infinity, toSeq: -Infinity, itemCount: 0 });
+      expect(await input.rows.sourceOrdinalAt(4)).toBe(4);
+    } finally {
+      await input.close();
+    }
+  });
 });
 
 /** The journal store publishes detached groups; the mutation-snapshot arm belongs to the old store. */
