@@ -1,12 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { HistoryIndexedRows } from '@vybestack/llxprt-code-core/services/history/historyMutationSnapshot.js';
+import type { CompressionIndexedRows } from '@vybestack/llxprt-code-core/services/history/compressionInput.js';
 import { invalidateResponsesStatefulChain } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { sanitizeProviderContentForSerialization } from '@vybestack/llxprt-code-core/services/history/historyCloneUtils.js';
 import { appendCandidateRow } from './curatedCandidate.js';
 
 export interface ProviderFallbackCandidate {
-  readonly rows: HistoryIndexedRows;
+  readonly rows: CompressionIndexedRows;
   readonly start: number;
   readonly hasPendingRows: boolean;
   /**
@@ -14,7 +14,9 @@ export interface ProviderFallbackCandidate {
    * row's owner. A row with none (or a candidate without this) comes from no
    * history row and is written under the operation's origin.
    */
-  readonly sourceOrdinalAt?: (index: number) => number | undefined;
+  readonly sourceOrdinalAt?: (
+    index: number,
+  ) => number | undefined | Promise<number | undefined>;
 }
 
 export class ProviderFallbackInvariantError extends Error {}
@@ -31,13 +33,13 @@ export async function publishProviderFallbackCandidate(
     );
   await history.detachedValues.transform(async (_source, sink) => {
     for (let index = start; index < rows.length; index++) {
-      const original = rows.readRow(index);
+      const original = await rows.readRow(index);
       if (original.blocks.length === 0) continue;
       const [row] = invalidateResponsesStatefulChain([original]);
       await appendCandidateRow(
         sink,
         sanitizeProviderContentForSerialization(row),
-        sourceOrdinalAt?.(index),
+        await sourceOrdinalAt?.(index),
       );
     }
   }, model);
