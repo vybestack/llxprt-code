@@ -331,9 +331,9 @@ export class JournalHistoryStore implements HistoryStorePort {
   readonly clearIsAsynchronous = true;
 
   /** Rows once everything queued is applied; equals the published count when the queue is empty. */
-  getLength(): number {
-    return this.tentativeRows;
-  }
+  getLength = (): number => this.tentativeRows;
+
+  readonly compressionRowCount = this.getLength;
 
   apply(op: HistoryJournalOp): void {
     this.assertUsable();

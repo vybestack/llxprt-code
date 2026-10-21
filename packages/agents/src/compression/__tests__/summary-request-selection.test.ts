@@ -138,6 +138,42 @@ describe('disk summary request selection', () => {
     await expect(reader.next()).rejects.toThrow('closed');
   });
 
+  it('retires every admitted reader even when one cleanup fails', async () => {
+    const reason = new Error('first reader release failed');
+    class FaultOwnership extends RowOwnership {
+      private failed = false;
+      override release(row: object): void {
+        super.release(row);
+        if (!this.failed) {
+          this.failed = true;
+          throw reason;
+        }
+      }
+    }
+    const ownership = new FaultOwnership();
+    const selection = diskSummaryRequestSelection(
+      indexed(history),
+      { top: 0, bottom: 5, injection: [] },
+      'p',
+      [],
+      ownership,
+    );
+    const readers = [selection.openReader(), selection.openReader()];
+    for (const reader of readers)
+      for (let pulled = 0; pulled < 3; pulled++) await reader.next();
+    expect(ownership.snapshot().acquisitions).toBe(2);
+    const failure: unknown = await Promise.resolve(selection.close()).catch(
+      (error: unknown) => error,
+    );
+    expect(failure).toBeInstanceOf(AggregateError);
+    if (!(failure instanceof AggregateError))
+      throw new Error('Expected cleanup failures');
+    expect(failure.errors).toStrictEqual([reason]);
+    expect(ownership.snapshot().liveRows).toBe(0);
+    for (const reader of readers)
+      await expect(reader.next()).rejects.toThrow('closed');
+  });
+
   it('waits for an admitted asynchronous read and preserves cancellation after I/O', async () => {
     const controller = new AbortController();
     const reason = new Error('cancel during source read');

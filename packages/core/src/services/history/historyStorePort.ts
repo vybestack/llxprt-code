@@ -245,6 +245,9 @@ export interface HistoryStorePort {
    */
   readonly clearIsAsynchronous?: boolean;
 
+  /** Native aggregate count; the old store retains its streamed counting contract. */
+  readonly compressionRowCount?: () => number;
+
   // Recorder binding, fan-out and late attach.
   onRetired(listener: () => void): () => void;
   isRecorder(recorder: SessionRecordingPort): boolean;

@@ -795,6 +795,10 @@ export class HistoryService extends HistoryServiceReads {
     return this.journal.statistics();
   }
 
+  get compressionRowCount(): number | undefined {
+    return this.journal.compressionRowCount?.();
+  }
+
   /**
    * Get an ordered chronology trace: one compact, JSON-safe entry per history
    * item carrying its marker fields and structural descriptors. No message

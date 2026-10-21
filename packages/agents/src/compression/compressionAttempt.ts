@@ -37,6 +37,8 @@ export async function prepareCompressionAttempt(
 export async function countCompressionRows(
   history: HistoryService,
 ): Promise<number> {
+  const indexedCount = history.compressionRowCount;
+  if (indexedCount !== undefined) return indexedCount;
   let count = 0;
   for await (const row of history.getComprehensive()) {
     void row;
@@ -60,11 +62,13 @@ export function throwCompressionProviderFailure(
     Object.entries(diagnostics.blockTypeCounts)
       .map(([type, count]) => `${type}:${count}`)
       .join(',') || 'none';
-  throw new CompressionExecutionError(
+  const failure = new CompressionExecutionError(
     strategy,
     `LLM provider call failed: ${error instanceof Error ? error.message : String(error)} [partial diagnostics: finishReason=${diagnostics.finishReason ?? 'none'}, rawStopReason=${diagnostics.rawStopReason ?? 'none'}, blocks=${blocks}]`,
     { isTransient: isTransientCompressionError(error) },
   );
+  failure.cause = error;
+  throw failure;
 }
 
 export async function withCompressionRequest<T>(

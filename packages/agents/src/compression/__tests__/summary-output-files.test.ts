@@ -119,6 +119,7 @@ describe('summary output candidate allocation', () => {
           expect(failure.errors[0].message).toContain(
             'provider refused summary',
           );
+          expect(failure.errors[0].cause).toBe(setup.transport.failure);
           expect(failure.errors[1]).toBe(cleanup);
           expect(failure.cause).toBe(failure.errors[0]);
           expect(history.getStatistics().totalMessages).toBe(512);

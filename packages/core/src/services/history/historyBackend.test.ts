@@ -65,7 +65,7 @@ const PORT_METHODS = [
 // Fails to compile when the port gains a method this list does not name.
 const everyPortMethodListed: Exclude<
   keyof HistoryStorePort,
-  (typeof PORT_METHODS)[number] | 'clearIsAsynchronous'
+  (typeof PORT_METHODS)[number] | 'clearIsAsynchronous' | 'compressionRowCount'
 > extends never
   ? true
   : false = true;
@@ -126,6 +126,7 @@ describe('createHistoryStore', () => {
     const store = createHistoryStore({}, 'old');
     try {
       expect(store).toBeInstanceOf(HistoryJournalStore);
+      expect(store.compressionRowCount).toBeUndefined();
       for (const method of PORT_METHODS)
         expect(typeof store[method]).toBe('function');
     } finally {
@@ -171,12 +172,14 @@ describe('createHistoryStore', () => {
       for (const method of PORT_METHODS)
         expect(typeof store[method]).toBe('function');
       expect(store.getLength()).toBe(0);
+      expect(store.compressionRowCount?.()).toBe(0);
       store.apply({
         kind: 'content',
         content: { speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] },
       });
       await store.waitForCommit();
       expect(store.getLength()).toBe(1);
+      expect(store.compressionRowCount?.()).toBe(1);
       expect(store.statistics().userMessages).toBe(1);
     });
 
