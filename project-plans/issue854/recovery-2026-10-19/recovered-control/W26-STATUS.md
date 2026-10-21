@@ -1,3 +1,13 @@
+# Native high-density input first consumer, 2026-10-21
+
+Starting HEAD `286f5437310633f72bf1e550b85c1916ddb70871`. The real high-density compression runner now opens the same backend-selected compression input as middle-out/one-shot. Native service-curated ranks, row count and original raw source ordinals come from a held journal version. The planner awaits indexed row access through preparation and publication; no second normalizer or input rows/index copy is created. The old backend explicitly retains its input copy through its port implementation. Backend default is unchanged.
+
+The new public native allocation test first fails at two `history-density-*` directories versus one expected output directory, then passes with one output rows/index pair. Independent old-array history, token reduction, tool names/results, order and durable mirror parity pass. The unchanged high-density 512/8192-row array-oracle file passes all five cases. Direct agents declarations, agents types and touched-file zero-warning lint pass. Raw evidence is `tmp/p5/w26-density-run-z/input-{red,green,parity,declarations,types,lint}.log`.
+
+This is the early input checkpoint, not full W26 acceptance. High-density output rows/index, `density-decision-index-*` first-call/last-response lookup and `compression-span-*` publication membership still allocate. Runtime `journalDensity` input, optimizer replacement rows/index/decisions, tool-response ranking, nonempty density spans, other-strategy/old files and phase 6 provider request spools remain. Native generation/owner scale and cancellation controls are pending this increment's final verification. #3917 remains separate and untouched. Review skipped per Andrew 2026-10-09.
+
+---
+
 # Native summary chronology membership passes scoped acceptance, 2026-10-21
 
 First implementation `2b8bb66f8`; rebuild/test follow-up `9dd6e62d4937a4285662d120436f8d03f094398f`. Native middle-out and one-shot now use held-version chronology occurrence facts instead of creating `compression-span-*` membership directories and hashed files. The earlier curated-input and output allocation removals remain intact. No production source file was deleted or renamed; the native allocation edge is gone, while old-backend and other-strategy callers retain their contracts.

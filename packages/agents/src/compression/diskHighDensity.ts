@@ -1,5 +1,4 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { checkpointRows } from '@vybestack/llxprt-code-core/services/history/historyCheckpointRows.js';
 import { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { HistoryDumpSource } from '@vybestack/llxprt-code-core/services/history/historyDumpSnapshot.js';
@@ -11,7 +10,6 @@ import {
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import { HighDensityStrategy } from './HighDensityStrategy.js';
 import { buildCompressionMetadata } from './compressionContextBuilder.js';
-import { curatedDensityRows } from './curatedCandidate.js';
 import { publishCandidate } from './diskTruncation.js';
 import { fallbackDisk } from './diskMiddleOut.js';
 
@@ -21,19 +19,18 @@ type Outcome = {
 };
 
 async function compressPinned(
-  context: Parameters<HighDensityStrategy['compressDisk']>[0] & {
-    readonly history: HistoryDensityRows;
-  },
+  context: Parameters<HighDensityStrategy['compressDisk']>[0],
   history: HistoryService,
   previous: HistoryDumpSource,
   origin?: object,
 ): Promise<Outcome> {
   const strategy = new HighDensityStrategy();
   let candidate: HistoryDensityRows | undefined;
-  try {
-    let result: Awaited<ReturnType<HighDensityStrategy['compressDisk']>>;
+  let result: { readonly outcome: Outcome } | { readonly error: unknown };
+  const attempt = async (): Promise<Outcome> => {
+    let prepared: Awaited<ReturnType<HighDensityStrategy['compressDisk']>>;
     try {
-      result = await retryWithBackoff(
+      prepared = await retryWithBackoff(
         async () => {
           candidate?.close();
           candidate = undefined;
@@ -53,9 +50,9 @@ async function compressPinned(
         'Primary disk high-density compression failed, attempting disk truncation',
         error,
       );
-      return await fallbackDisk(context, history, previous, error, origin);
+      return fallbackDisk(context, history, previous, error, origin);
     }
-    if (result.kind === 'noop') return { outcome: 'noop' };
+    if (prepared.kind === 'noop') return { outcome: 'noop' };
     if (candidate === undefined)
       throw new Error('Missing high-density disk candidate');
     const rows = candidate;
@@ -63,16 +60,30 @@ async function compressPinned(
       history,
       previous,
       rows,
-      result.start,
+      prepared.start,
       context.runtimeState.model,
       0,
       { origin },
       (position) => rows.sourceOrdinalAt(position),
     );
     return { outcome: 'applied', summary };
-  } finally {
-    candidate?.close();
+  };
+  try {
+    result = { outcome: await attempt() };
+  } catch (error) {
+    result = { error };
   }
+  try {
+    candidate?.close();
+  } catch (error) {
+    throw new AggregateError(
+      'error' in result ? [result.error, error] : [error],
+      'High-density candidate cleanup failed',
+      { cause: 'error' in result ? result.error : undefined },
+    );
+  }
+  if ('error' in result) throw result.error;
+  return result.outcome;
 }
 
 export async function runDiskHighDensity(
@@ -80,22 +91,29 @@ export async function runDiskHighDensity(
 ): Promise<Outcome> {
   const metadata = await buildCompressionMetadata(...args);
   const history = args[2];
-  return history.detachedValues.withCheckpoint(async (checkpoint) => {
-    const previous: HistoryDumpSource = {
-      async *rows() {
-        yield* checkpointRows(checkpoint);
-      },
-    };
-    const curated = await curatedDensityRows(previous.rows());
-    try {
-      return await compressPinned(
-        { ...metadata, history: curated },
+  const input = await history.openCompressionInput();
+  let result: { readonly outcome: Outcome } | { readonly error: unknown };
+  try {
+    result = {
+      outcome: await compressPinned(
+        { ...metadata, history: input.rows },
         history,
-        previous,
+        input.previous,
         args[7]?.historyOrigin,
-      );
-    } finally {
-      curated.close();
-    }
-  });
+      ),
+    };
+  } catch (error) {
+    result = { error };
+  }
+  try {
+    await input.close();
+  } catch (error) {
+    throw new AggregateError(
+      'error' in result ? [result.error, error] : [error],
+      'High-density input cleanup failed',
+      { cause: 'error' in result ? result.error : undefined },
+    );
+  }
+  if ('error' in result) throw result.error;
+  return result.outcome;
 }
