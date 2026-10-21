@@ -1,5 +1,13 @@
 # Phase 5 proof map
 
+## Native Anthropic occurrence repair inputs, not repair-engine acceptance
+
+Production `c4d1352eb`; tested sources `f89c794a5`. [PHASE5-ANTHROPIC-NATIVE-INPUTS-PROOF.json](PHASE5-ANTHROPIC-NATIVE-INPUTS-PROOF.json) binds four committed sources to 77 passes/39,564 assertions, eight serial files, eight gates and four restored assertion controls. Raw evidence: `tmp/p5/anthropic-native-run-r`.
+
+`anthropicToolFactsAt` derives converted namespace-2 membership/prefix/successor facts and raw best/source references from the held native query, including pending overlays. Its current-unit map contains only current-unit IDs. The independent expected path normalizes and enumerates all 5000 normalization source cases; this is a different corpus from the Anthropic frozen wire bodies. Query reads are 49/83 at 40/4000 rows; the whole-history mutant reads 607/68699 and fails `<150`. Wrong namespace/prefix/best-source controls also fail assertions and restore by cmp/hash. All 1192 preserved paths match and 23 accepted PIDs are absent.
+
+This adds no LENS fields, registration, chain/message summaries, message-level consumed-result repair, native last-kept query or content-length planner. Native full-format settings/generation/lifecycle/heap acceptance, cache 5m/1h, range/tail planning and semantic affected-holder updates remain open. Existing numeric frozen-wire regression still supplies reference overlays; do not relabel it native acceptance. Provider routes/default, W23/W25/W26 and separately RED #3917 are unchanged. Review skipped per Andrew 2026-10-09.
+
 ## Anthropic numeric prerequisite, not native stored-format acceptance
 
 Commit `18efc1a7a28a300330fcf7730b9fe912a4c7fd9e`. [PHASE5-ANTHROPIC-UNIT-PROOF.json](PHASE5-ANTHROPIC-UNIT-PROOF.json) binds five TypeScript sources to seven serial complete-file tests (59 passes, zero failures/skips, 32,398 assertions), eight gates and four restored assertion controls. Raw evidence is `tmp/p5/anthropic-format-run-q`.
