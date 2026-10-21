@@ -4,7 +4,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { JournalDumpSnapshot } from '@vybestack/llxprt-code-core/services/history/journalDumpSnapshot.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import { HighDensityStrategy } from '../HighDensityStrategy.js';
-import { DensityDiskIndex } from '../densityDiskIndex.js';
+
 import { withNativeFallbackFixture } from './support/native-fallback-fixture.js';
 import {
   highdensityRow,
@@ -213,13 +213,23 @@ describe('native high-density pinned input and output lifetime', () => {
           options,
         ),
       );
-      const closeOutput = DensityDiskIndex.prototype.close;
+      const prepare = HighDensityStrategy.prototype.prepareDisk;
       const output = spyOn(
-        DensityDiskIndex.prototype,
-        'close',
-      ).mockImplementation(function (this: DensityDiskIndex) {
-        closeOutput.call(this);
-        throw outputCleanup;
+        HighDensityStrategy.prototype,
+        'prepareDisk',
+      ).mockImplementation(async function (
+        this: HighDensityStrategy,
+        context: Parameters<HighDensityStrategy['prepareDisk']>[0],
+      ): ReturnType<HighDensityStrategy['prepareDisk']> {
+        const prepared = await prepare.call(this, context);
+        if (prepared.kind === 'noop') return prepared;
+        return {
+          ...prepared,
+          close: () => {
+            prepared.close();
+            throw outputCleanup;
+          },
+        };
       });
       const closePin = JournalDumpSnapshot.prototype.close;
       const pin = spyOn(
