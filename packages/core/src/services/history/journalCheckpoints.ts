@@ -18,10 +18,23 @@ import {
   prepareMediaReplacement,
   snapshotReferences,
 } from './journalMediaReferences.js';
-import { snapshotRows } from './journalDetachedCapture.js';
+import type { JournalReadCounters } from '../../recording/journalCounters.js';
 import { JournalDumpSnapshot } from './journalDumpSnapshot.js';
 
 type Enqueue = (execute: () => Promise<void>) => Promise<void>;
+
+export function journalCheckpointReader(
+  store: JournalHistoryStore,
+  counters: () => JournalReadCounters | undefined,
+): <T>(
+  host: DetachedHistoryHost,
+  enqueue: Enqueue,
+  execute: (checkpoint: HistoryCheckpointRows) => Promise<T>,
+  signal?: AbortSignal,
+) => Promise<T> {
+  return (host, enqueue, execute, signal) =>
+    withCheckpointOnJournal(store, host, enqueue, execute, signal, counters());
+}
 
 export class JournalCheckpointLifetime {
   private holds = 0;
@@ -68,7 +81,6 @@ export class JournalCheckpointLifetime {
 function snapshotCheckpoint(
   snapshot: VersionSnapshot,
   signal: AbortSignal | undefined,
-  resumeBoundary: bigint | undefined,
   dump: JournalDumpSnapshot,
 ): HistoryCheckpointRows {
   return {
@@ -76,8 +88,7 @@ function snapshotCheckpoint(
     humanCut: (turns, fromEnd) => dump.humanCut(turns, fromEnd),
     mediaReferences: () => dump.mediaReferences(),
     compressionInput: { previous: dump, rows: dump },
-    [Symbol.asyncIterator]: () =>
-      snapshotRows(snapshot, signal, resumeBoundary),
+    [Symbol.asyncIterator]: () => dump.checkpointRows(signal),
   };
 }
 
@@ -92,6 +103,7 @@ export async function withCheckpointOnJournal<T>(
   enqueue: Enqueue,
   execute: (checkpoint: HistoryCheckpointRows) => Promise<T>,
   signal?: AbortSignal,
+  counters?: JournalReadCounters,
 ): Promise<T> {
   const captured: { snapshot?: VersionSnapshot; dump?: JournalDumpSnapshot } =
     {};
@@ -110,14 +122,10 @@ export async function withCheckpointOnJournal<T>(
     captured.dump = new JournalDumpSnapshot(
       captured.snapshot,
       store.resumeBoundary,
+      counters,
     );
     return await execute(
-      snapshotCheckpoint(
-        captured.snapshot,
-        signal,
-        store.resumeBoundary,
-        captured.dump,
-      ),
+      snapshotCheckpoint(captured.snapshot, signal, captured.dump),
     );
   } catch (error) {
     failure = { error };

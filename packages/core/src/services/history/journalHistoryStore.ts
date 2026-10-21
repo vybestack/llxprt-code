@@ -66,7 +66,7 @@ import {
 } from './journalBatchSource.js';
 import {
   JournalCheckpointLifetime,
-  withCheckpointOnJournal,
+  journalCheckpointReader,
   withRollbackCheckpointOnJournal,
 } from './journalCheckpoints.js';
 import { planToolPairingRepair } from './journalHistoryRepair.js';
@@ -86,7 +86,6 @@ import type {
   DetachedHistoryOptions,
   DetachedHistoryTask,
 } from './detachedHistoryMutation.js';
-import type { HistoryCheckpointRows } from './historyCheckpointRows.js';
 import type { JournalSession } from './journalSession.js';
 import type { JournalReadCounters } from '../../recording/journalCounters.js';
 import {
@@ -906,14 +905,7 @@ export class JournalHistoryStore implements HistoryStorePort {
   }
 
   /** A checkpoint over the rows durable now (design 4.5): the callback reads them from the saved version. */
-  withCheckpoint<T>(
-    host: DetachedHistoryHost,
-    enqueue: (execute: () => Promise<void>) => Promise<void>,
-    execute: (checkpoint: HistoryCheckpointRows) => Promise<T>,
-    signal?: AbortSignal,
-  ): Promise<T> {
-    return withCheckpointOnJournal(this, host, enqueue, execute, signal);
-  }
+  withCheckpoint = journalCheckpointReader(this, () => this.options.counters);
 
   /** A checkpoint whose `restore` is `restore(version)` of the version saved now. */
   withRollbackCheckpoint<T>(

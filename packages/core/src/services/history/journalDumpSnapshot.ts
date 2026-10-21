@@ -31,6 +31,7 @@ import type { JournalReadCounters } from '../../recording/journalCounters.js';
 import { countDecodedRow } from './journalRowCounters.js';
 import { decodeStoredRow } from './journalRowCodec.js';
 import { HistoryReaderScope } from './historyReaderScope.js';
+import { snapshotRows } from './journalDetachedCapture.js';
 
 /**
  * The rows of one published version for a dump. Nothing is copied: each read
@@ -99,6 +100,30 @@ export class JournalDumpSnapshot implements HistoryDumpSnapshot {
       const entry = await this.snapshot.curatedAt(index);
       return this.snapshot.rowsBelow(entry.label);
     });
+  }
+
+  checkpointRows(
+    signal?: AbortSignal,
+  ): AsyncGenerator<IContent, void, unknown> {
+    this.snapshot.requireOpen();
+    return this.readers.open(this.checkpoint(signal));
+  }
+
+  private async *checkpoint(
+    signal?: AbortSignal,
+  ): AsyncGenerator<IContent, void, unknown> {
+    for await (const row of snapshotRows(
+      this.snapshot,
+      signal,
+      this.resumeBoundary,
+    )) {
+      const release = countDecodedRow(row, this.counters);
+      try {
+        yield row;
+      } finally {
+        release();
+      }
+    }
   }
 
   mediaReferences(): AsyncGenerator<MediaReferenceBlock, void, unknown> {
