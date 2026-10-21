@@ -48,6 +48,7 @@ import {
   isWin,
   makeLayout,
   parseEntryOutput,
+  removeProfileFixture,
   placeBundledBun,
   placeOvenBun,
   placePlaceholder,
@@ -232,9 +233,7 @@ describe('packages/cli/bin/llxprt.mjs memory-profile dispatch (issue #3386)', ()
     tempDir = mkdtempSync(path.join(tmpdir(), 'llxprt-shim-profile-'));
   });
 
-  afterEach(() => {
-    rmSync(tempDir, { recursive: true, force: true });
-  });
+  afterEach(() => removeProfileFixture(tempDir));
 
   it('uses the same numeric limits as the memory probe', () => {
     const shim = readFileSync(shimSrc, 'utf8');

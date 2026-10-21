@@ -9,11 +9,14 @@ import {
   chmodSync,
   copyFileSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
   realpathSync,
+  rmSync,
   symlinkSync,
   writeFileSync,
+  writeSync,
 } from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -251,4 +254,111 @@ export function isNativeExecutable(stdout: string, native: string): boolean {
   const output = parseEntryOutput(stdout);
   if (output === null) throw new Error(`Missing application output: ${stdout}`);
   return realpathSync(output.exe) === realpathSync(native);
+}
+
+export function parseHandleOwners(
+  output: string,
+): Array<{ image: string; pid: number; kind: string; handle: string }> {
+  return [
+    ...output.matchAll(
+      /^(\S+)\s+pid:\s+(\d+)\s+type:\s+(\S+)\s+([\da-f]+):/gim,
+    ),
+  ].map((match) => ({
+    image: path.win32.basename(match[1] ?? ''),
+    pid: Number(match[2]),
+    kind: match[3] ?? '',
+    handle: match[4] ?? '',
+  }));
+}
+
+export function throwShimCleanupError(
+  error: unknown,
+  fixture: string,
+  deadline: number,
+): never {
+  if (
+    !isWin ||
+    !(error instanceof Error) ||
+    !('code' in error) ||
+    error.code !== 'EBUSY'
+  ) {
+    throw error;
+  }
+  const emit = (details: object): void => {
+    try {
+      writeSync(2, `shim-cleanup-lock ${JSON.stringify(details)}\n`);
+    } catch {
+      // A closed CI diagnostic stream must not replace the cleanup exception.
+    }
+  };
+  try {
+    emit({
+      phase: 'profile-afterEach',
+      fixture: path.basename(fixture),
+      pid: process.pid,
+      ppid: process.ppid,
+      at: new Date().toISOString(),
+      owner: 'unproven',
+    });
+    const directory = lstatSync(fixture, { throwIfNoEntry: false });
+    emit({
+      directory: directory && {
+        mode: directory.mode,
+        size: directory.size,
+        modified: directory.mtimeMs,
+      },
+    });
+    const probe = (command: string, args: string[]): string => {
+      const remaining = Math.floor(deadline - performance.now());
+      if (remaining <= 0) throw new Error('diagnostic budget exhausted');
+      const result = spawnSync(command, args, {
+        encoding: 'utf8',
+        timeout: Math.min(1000, remaining),
+        maxBuffer: 32 * 1024,
+        stdio: ['ignore', 'pipe', 'ignore'],
+        windowsHide: true,
+        cwd: path.dirname(fixture),
+        env: { ...process.env, LLXPRT_TEST_LOCK_PATH: fixture },
+      });
+      emit({
+        probe: path.basename(command),
+        status: result.status,
+        signal: result.signal,
+        failed: Boolean(result.error),
+      });
+      return result.status === 0 && !result.error ? result.stdout : '';
+    };
+    const script = [
+      "$ErrorActionPreference='Stop'; $needle=[regex]::Escape($env:LLXPRT_TEST_LOCK_PATH);",
+      `@(Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -eq ${process.pid} -or ($_.ProcessId -ne $PID -and ($_.ExecutablePath -match $needle -or $_.CommandLine -match $needle)) } |`,
+      "ForEach-Object { [pscustomobject]@{ pid=$_.ProcessId; ppid=$_.ParentProcessId; image=[IO.Path]::GetFileName($_.ExecutablePath); started=$_.CreationDate.ToUniversalTime().ToString('o') } }) | ConvertTo-Json -Compress",
+    ].join(' ');
+    const processes = probe('powershell.exe', [
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      script,
+    ]);
+    const processCandidates: unknown = JSON.parse(processes || '[]');
+    emit({ processCandidates });
+    const handle = Bun.which('handle.exe') ?? Bun.which('handle64.exe');
+    if (handle === null) {
+      emit({ probe: 'handles', available: false });
+    } else {
+      const result = probe(handle, ['-nobanner', fixture]);
+      emit({ handleOwners: parseHandleOwners(result) });
+    }
+  } catch {
+    emit({ probeFailed: true });
+  }
+  throw error;
+}
+
+export function removeProfileFixture(tempDir: string): void {
+  const deadline = performance.now() + 2000;
+  try {
+    rmSync(tempDir, { recursive: true, force: true });
+  } catch (error) {
+    throwShimCleanupError(error, tempDir, deadline);
+  }
 }
