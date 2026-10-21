@@ -1,3 +1,7 @@
+export {
+  NativeHistoryPrefix,
+  nativeHistoryPrefixOwner,
+} from './src/services/history/native-history-prefix.js';
 /**
  * @license
  * Copyright 2025 Google LLC

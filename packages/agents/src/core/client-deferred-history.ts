@@ -5,6 +5,7 @@
  */
 
 import type { DeferredHistorySourceOptions } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import { NativeHistoryPrefix } from '@vybestack/llxprt-code-core/services/history/native-history-prefix.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -86,6 +87,15 @@ export async function setHistoryFromSource(
   source: AsyncIterable<IContent>,
   options: DeferredHistorySourceOptions,
 ): Promise<void> {
+  if (source instanceof NativeHistoryPrefix) {
+    const history = port.chat()?.getHistoryService();
+    if (history === undefined)
+      throw new Error('History prefix requires an initialized chat');
+    await source.apply(history);
+    await discardDeferredHistory(port);
+    port.resetIdeContext();
+    return;
+  }
   await replaceClientHistorySource(source, options, port.chat() !== undefined, {
     deps: port.deps(),
     runtime: port.runtime,

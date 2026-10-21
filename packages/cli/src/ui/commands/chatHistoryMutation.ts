@@ -7,6 +7,7 @@ import {
   HistoryMediaIndex,
   collectMediaReferences,
   clientMediaStore,
+  nativeHistoryPrefixOwner,
   type IContent,
   type SessionRecordingPort,
   type AgentClientContract,
@@ -94,8 +95,7 @@ function displayRow(content: IContent): HistoryItemWithoutId {
 async function displayPrefix(
   ui: CommandContext['ui'],
   emojiSettings: EmojiFilterSettingsSource | null,
-  rows: HistoryDensityRows,
-  cut: number,
+  rows: AsyncIterable<IContent>,
   restoring: boolean,
 ): Promise<void> {
   ui.clear();
@@ -105,7 +105,7 @@ async function displayPrefix(
   }
   const emojiFilter = createEmojiFilter(resolveEmojiFilterMode(emojiSettings));
   let index = 0;
-  for await (const row of prefix(rows, cut)) {
+  for await (const row of rows) {
     for (const item of filterHistoryItems([displayRow(row)], emojiFilter))
       ui.addItem(item, index++);
   }
@@ -193,6 +193,50 @@ export async function mutateChatHistory(
   recording: SessionRecordingPort,
   turns?: number,
 ): Promise<MessageActionReturn | void> {
+  const native = nativeHistoryPrefixOwner(client.getHistoryService());
+  if (native !== undefined) {
+    return native.withPrefix(
+      turns ?? 2,
+      turns !== undefined,
+      clientMediaStore(client),
+      async (selected) => {
+        if (selected.removed === 0)
+          return {
+            type: 'message',
+            messageType: 'info',
+            content:
+              turns === undefined
+                ? 'No conversation to clear.'
+                : 'Not enough history to restore the requested number of turns.',
+          };
+        signal.throwIfAborted();
+        await assertRecordingWritable(recording);
+        await client.setHistoryFromSource(selected);
+        client.getHistoryService()?.resetCacheAnchorSeq();
+        await displayPrefix(ui, emojiSettings, selected, turns !== undefined);
+        return undefined;
+      },
+      signal,
+    );
+  }
+  return mutateOldChatHistory(
+    client,
+    ui,
+    emojiSettings,
+    signal,
+    recording,
+    turns,
+  );
+}
+
+async function mutateOldChatHistory(
+  client: AgentClientContract,
+  ui: CommandContext['ui'],
+  emojiSettings: EmojiFilterSettingsSource | null,
+  signal: AbortSignal,
+  recording: SessionRecordingPort,
+  turns?: number,
+): Promise<MessageActionReturn | void> {
   const media: SnapshotMedia = {
     references: new HistoryMediaIndex(),
     store: clientMediaStore(client),
@@ -222,7 +266,12 @@ export async function mutateChatHistory(
     await assertRecordingWritable(recording);
     await publishPrefix(client, rows, cut);
     client.getHistoryService()?.resetCacheAnchorSeq();
-    await displayPrefix(ui, emojiSettings, rows, cut, turns !== undefined);
+    await displayPrefix(
+      ui,
+      emojiSettings,
+      prefix(rows, cut),
+      turns !== undefined,
+    );
     return undefined;
   } catch (error) {
     signal.throwIfAborted();

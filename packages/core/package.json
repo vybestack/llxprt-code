@@ -955,6 +955,11 @@
       "bun": "./src/services/workspace-memory-owner.ts",
       "import": "./dist/src/services/workspace-memory-owner.js"
     },
+    "./services/history/native-history-prefix.js": {
+      "types": "./dist/src/services/history/native-history-prefix.d.ts",
+      "bun": "./src/services/history/native-history-prefix.ts",
+      "import": "./dist/src/services/history/native-history-prefix.js"
+    },
     "./services/history/historyCheckpointRows.js": {
       "types": "./dist/src/services/history/historyCheckpointRows.d.ts",
       "bun": "./src/services/history/historyCheckpointRows.ts",

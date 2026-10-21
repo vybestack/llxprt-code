@@ -7,10 +7,7 @@ import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-
 import { HistoryMediaIndex } from '@vybestack/llxprt-code-core/storage/history-media-index.js';
 import { collectMediaReferences } from '@vybestack/llxprt-code-core/storage/media-reference-lifecycle.js';
 import { randomUUID } from 'node:crypto';
-import {
-  NativeHistoryPrefix,
-  withNativePrefixMedia,
-} from '../../core/native-history-prefix.js';
+import { nativeHistoryPrefixOwner } from '@vybestack/llxprt-code-core/services/history/native-history-prefix.js';
 
 interface ClearMediaScope {
   readonly references: HistoryMediaIndex;
@@ -109,36 +106,11 @@ async function rewriteClientHistory(
   turns: number,
   fromEnd: boolean,
 ): Promise<number> {
-  const history = client.getHistoryService();
-  if (
-    history?.detachedValues.host().journal.compressionRowCount !== undefined
-  ) {
-    return history.detachedValues.withCheckpoint(async (checkpoint) => {
-      if (!('humanCut' in checkpoint) || checkpoint.humanCut === undefined)
-        throw new Error('Native history checkpoint lacks turn selection');
-      const cut = await checkpoint.humanCut(turns, fromEnd);
-      if (cut === checkpoint.length) return 0;
-      const prefix = new NativeHistoryPrefix(history, checkpoint, cut);
-      await withNativePrefixMedia(checkpoint, store, () =>
-        history.detachedValues.withRollbackCheckpoint(async (restore) => {
-          try {
-            await client.resetChat(prefix);
-          } catch (error) {
-            try {
-              await restore();
-              await history.waitForCommit();
-            } catch (rollbackError) {
-              throw new AggregateError(
-                [error, rollbackError],
-                'History clear and rollback failed',
-                { cause: error },
-              );
-            }
-            throw error;
-          }
-        }),
-      );
-      return checkpoint.length - cut;
+  const native = nativeHistoryPrefixOwner(client.getHistoryService());
+  if (native !== undefined) {
+    return native.withPrefix(turns, fromEnd, store, async (prefix) => {
+      if (prefix.removed !== 0) await client.resetChat(prefix);
+      return prefix.removed;
     });
   }
   const rows = new HistoryDensityRows();
