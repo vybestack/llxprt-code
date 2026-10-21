@@ -19,6 +19,24 @@ export interface TaskStreamingHandle {
   heartbeat: TaskHeartbeat;
 }
 
+/** Installs an output-reset relay while preserving and later restoring its owner. */
+export function installTaskOutputResetRelay(
+  scope: SubAgentScope,
+  onReset: () => void,
+): () => void {
+  const existingResetHandler = scope.onOutputReset;
+  const resetRelay = (): void => {
+    onReset();
+    existingResetHandler?.();
+  };
+  scope.onOutputReset = resetRelay;
+  return (): void => {
+    if (scope.onOutputReset === resetRelay) {
+      scope.onOutputReset = existingResetHandler;
+    }
+  };
+}
+
 /**
  * Escapes a string for use inside a double-quoted XML attribute value. The
  * ampersand MUST be replaced first so the entities produced for the other
@@ -91,8 +109,7 @@ export function setupTaskStreaming(
     xmlOutputOpen = true;
 
     const existingHandler = scope.onMessage;
-    const existingResetHandler = scope.onOutputReset;
-    const resetRelay = (): void => {
+    const restoreResetHandler = installTaskOutputResetRelay(scope, () => {
       if (xmlOutputOpen) {
         // Published progress is append-only. Mark its invalidation explicitly
         // and discard any pending CR so it cannot join the replacement attempt.
@@ -102,8 +119,7 @@ export function setupTaskStreaming(
           '\n[Subagent response interrupted. Previous attempt output is abandoned; retrying.]\n',
         );
       }
-      existingResetHandler?.();
-    };
+    });
     const relay = (message: string): void => {
       if (xmlOutputOpen) {
         heartbeat.reset();
@@ -120,12 +136,9 @@ export function setupTaskStreaming(
       if (scope.onMessage === relay) {
         scope.onMessage = existingHandler;
       }
-      if (scope.onOutputReset === resetRelay) {
-        scope.onOutputReset = existingResetHandler;
-      }
+      restoreResetHandler();
     };
     scope.onMessage = relay;
-    scope.onOutputReset = resetRelay;
   }
 
   // Start the heartbeat AFTER stream initialization so an exception during

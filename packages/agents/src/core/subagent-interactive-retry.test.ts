@@ -14,6 +14,7 @@ import {
 } from './__tests__/subagent-test-helpers.js';
 import { installResponsesLifecycleFixture } from './__tests__/responses-lifecycle-fixture.js';
 import { setupTaskStreaming } from '../tools/taskStreaming.js';
+import { setupAsyncStreaming } from '../tools/taskAsyncExecution.js';
 import { startTaskHeartbeat } from '../tools/taskHeartbeat.js';
 import type { LiveOutputUpdate } from '@vybestack/llxprt-code-tools';
 import {
@@ -318,4 +319,53 @@ describe('interactive subagent logical attempt rollback with real Responses prov
       expect(fixture.httpRequests()).toBe(0);
     });
   }
+  it('marks abandoned output through async Task streaming on a real retry', async () => {
+    const harness = new SocketHarness([
+      (socket) => {
+        socket.open();
+        socket.onSend = () => {
+          socket.message(
+            frame({ type: 'response.output_text.delta', delta: 'ABANDONED\r' }),
+          );
+          socket.message(connectionLimitErrorFrame());
+        };
+      },
+      completingWithId('replacement', '\nCompleted safely.'),
+    ]);
+    const { fixture, scope, resetSnapshots } = await createScope(harness);
+    const updates: LiveOutputUpdate[] = [];
+    const streaming = setupAsyncStreaming(
+      'retry-agent',
+      scope,
+      'retry-agent-id',
+      (update) => updates.push(update),
+    );
+
+    await scope.runInteractive(new ContextState(), {
+      schedulerFactory: () => ({
+        schedule: () => {
+          throw new Error('No external tools expected');
+        },
+      }),
+    });
+    streaming?.emitAsyncClosingSubagentTag();
+
+    const streamed = updates
+      .flatMap((update) => (update.mode === 'append' ? [update.data] : []))
+      .join('');
+    expect(streamed).toContain(
+      '[Subagent response interrupted. Previous attempt output is abandoned; retrying.]',
+    );
+    expect(streamed).toContain('ABANDONED');
+    expect(streamed).toContain('Completed safely.');
+    expect(streamed).not.toContain('\r');
+    expect(streamed).toContain(
+      '</subagent name="retry-agent" id="retry-agent-id">',
+    );
+    expect(resetSnapshots).toHaveLength(1);
+    expect(scope.output.final_message).toBe('Completed safely.');
+    expect(scope.output.final_message).not.toContain('ABANDONED');
+    expect(harness.sockets).toHaveLength(2);
+    expect(fixture.httpRequests()).toBe(0);
+  });
 });
