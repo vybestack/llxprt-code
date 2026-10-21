@@ -445,7 +445,6 @@ function assertReleaseTarballAssets(releaseTarball) {
   );
   const required = [
     'package/bin/llxprt',
-    'package/scripts/install-native-launchers.cjs',
     'package/index.ts',
     'package/package.json',
     'package/README.md',

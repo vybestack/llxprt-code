@@ -1039,7 +1039,7 @@ jobs:
           # An empty list means the API call failed, not that the PR changed
           # nothing: fail open and run the gate (mirrors doc_change_filter).
           if [[ ! -s "${files_json}" ]] || grep -Eq \
-            '^(scripts/|packages/[^/]+/run-bun-tests\.ts$|packages/[^/]+/bun-preload\.ts$|packages/auth/src/__tests__/|packages/cli/bin/|packages/(cli|core)/test/.*run-bun-tests|packages/agents/test-bun/|\.github/workflows/(ci|nightly)\.yml$|bun\.lock$|package(-lock)?\.json$|tsconfig[^/]*)' \
+            '^(scripts/|packages/[^/]+/run-bun-tests\.ts$|packages/[^/]+/bun-preload\.ts$|packages/auth/src/__tests__/|packages/cli/(bin/|src/launcher/|package\.json$)|packages/(cli|core)/test/.*run-bun-tests|packages/agents/test-bun/|\.github/workflows/(ci|nightly)\.yml$|bun\.lock$|package(-lock)?\.json$|tsconfig[^/]*)' \
             "${files_json}"; then
             echo "affected=true" >>"${GITHUB_OUTPUT}"
           else
@@ -1079,7 +1079,7 @@ jobs:
       - name: 'Run launcher shim and output-generator tests'
         if: steps.filter.outputs.affected == 'true'
         run: |-
-          bun test --preload ./scripts/tests/test-setup.ts scripts/tests/issue-2978-node-shim.bun.test.ts scripts/tests/issue-2978-oven-fallback.bun.test.ts scripts/tests/memory/output-generator.test.ts
+          bun test --preload ./scripts/tests/test-setup.ts scripts/tests/issue-2978-node-shim.bun.test.ts packages/cli/src/launcher/bun-path-resolver.test.ts scripts/tests/issue-2978-oven-fallback.bun.test.ts scripts/tests/memory/output-generator.test.ts
 
       - name: 'Run test-runner and orchestrator meta-tests'
         if: steps.filter.outputs.affected == 'true'

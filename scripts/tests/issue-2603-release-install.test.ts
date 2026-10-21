@@ -8,10 +8,14 @@ import { describe, it, expect } from 'bun:test';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
+  chmodSync,
   writeFileSync,
   readFileSync,
+  realpathSync,
   rmSync,
+  symlinkSync,
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,7 +26,9 @@ import {
   assertReleaseGraph,
   installReleaseArtifacts,
   packReleaseArtifacts,
+  prepareNodeOnlyRuntime,
   readReleaseManifest,
+  verifyInstalledGraph,
 } from './release-bound-artifact-helpers.ts';
 import {
   deriveNpmReleasePackages,
@@ -44,6 +50,15 @@ afterEach(() => {
     }
   }
 });
+
+const {
+  npmInvocation,
+}: {
+  npmInvocation: (
+    args: readonly string[],
+    options: { execPath: string },
+  ) => { command: string; args: string[] };
+} = createRequire(import.meta.url)('../lib/npm-command.cjs');
 
 const thisFile = fileURLToPath(import.meta.url);
 const repoRoot = resolve(thisFile, '..', '..', '..');
@@ -433,6 +448,64 @@ describe('rewriteOnePkgDeps does not rewrite peerDependencies', () => {
 });
 
 describe('release-bound artifact graph (issue #3771)', () => {
+  it('runs the native Node runtime with Bun absent from the isolated PATH', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'llxprt-node-only-'));
+    pendingDisposals.push(() =>
+      rmSync(directory, { recursive: true, force: true }),
+    );
+    const host = spawnSync('node', ['-p', 'process.execPath'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    expect(host.status).toBe(0);
+    const hostVersion = spawnSync(host.stdout.trim(), ['--version'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    expect(hostVersion.status).toBe(0);
+    prepareNodeOnlyRuntime(directory);
+    const env = {
+      ...process.env,
+      PATH:
+        process.platform === 'win32'
+          ? `${directory};${process.env.SystemRoot}\\System32;${process.env.SystemRoot}`
+          : directory,
+    };
+    const version = spawnSync('node', ['--version'], {
+      env,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    expect(version.stderr).toBe('');
+    expect(version.status).toBe(0);
+    expect(version.stdout).toBe(hostVersion.stdout);
+    const identity = spawnSync('node', ['-p', 'process.execPath'], {
+      env,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    expect(identity.status).toBe(0);
+    expect(realpathSync(identity.stdout.trim())).toBe(
+      realpathSync(
+        process.platform === 'win32'
+          ? join(directory, 'node.exe')
+          : host.stdout.trim(),
+      ),
+    );
+    const native = spawnSync('node', ['-p', 'Boolean(process.versions.bun)'], {
+      env,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    expect(native.status).toBe(0);
+    expect(native.stdout.trim()).toBe('false');
+    const bun = spawnSync('bun', ['--version'], {
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    expect(bun.error).toMatchObject({ code: 'ENOENT' });
+  });
+
   const workspaceInfo = getWorkspaceInfo();
   const published = new Set(deriveNpmReleasePackages());
   const manifests = [...workspaceInfo.values()].map((pkg) =>
@@ -465,8 +538,164 @@ describe('release-bound artifact graph (issue #3771)', () => {
     expect(() => assertReleaseGraph(bound, workspaceNames)).not.toThrow();
   });
 
+  it('packs release artifacts when npm emits workspace warnings on stderr', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'llxprt-pack-warning-'));
+    try {
+      const built = join(root, 'built');
+      const evidence = join(root, 'evidence');
+      const workspace = join(built, 'packages/probe');
+      mkdirSync(workspace, { recursive: true });
+      mkdirSync(join(built, 'scripts/utils'), { recursive: true });
+      mkdirSync(evidence);
+      writeFileSync(
+        join(built, 'package.json'),
+        JSON.stringify({
+          name: 'release-proof-fixture',
+          version: '1.0.0',
+          private: true,
+          workspaces: ['packages/probe'],
+        }),
+      );
+      writeFileSync(join(built, 'package-lock.json'), '{}');
+      writeFileSync(
+        join(workspace, 'package.json'),
+        JSON.stringify({
+          name: 'release-proof-warning-fixture',
+          version: '1.0.0',
+        }),
+      );
+      writeFileSync(join(workspace, '.npmrc'), 'audit=false\n');
+      const artifacts = await packReleaseArtifacts(built, repoRoot, evidence);
+      expect(artifacts).toHaveLength(1);
+      expect(artifacts[0]?.manifest.name).toBe('release-proof-warning-fixture');
+      expect(existsSync(artifacts[0]?.tarball ?? '')).toBe(true);
+      expect(
+        readFileSync(
+          join(evidence, 'pack-release-proof-warning-fixture.log'),
+          'utf8',
+        ),
+      ).toContain('ignoring workspace config');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  for (const outside of [false, true]) {
+    it(
+      outside
+        ? 'rejects an installed package escaping a symlinked consumer root'
+        : 'verifies an installed graph through a symlinked consumer root',
+      async () => {
+        const temporary = mkdtempSync(join(tmpdir(), 'llxprt-graph-alias-'));
+        const root = realpathSync(temporary);
+        try {
+          const consumer = join(root, 'consumer');
+          const alias = join(root, 'consumer-alias');
+          const evidence = join(root, 'evidence');
+          const scope = join(consumer, 'node_modules', '@vybestack');
+          mkdirSync(scope, { recursive: true });
+          mkdirSync(evidence);
+          symlinkSync(consumer, alias, 'junction');
+          const installed = join(scope, 'llxprt-code');
+          const directory = outside ? join(root, 'outside') : installed;
+          mkdirSync(directory);
+          if (outside) symlinkSync(directory, installed, 'junction');
+          const manifest = {
+            name: '@vybestack/llxprt-code',
+            version: '0.0.0-graph-alias',
+          };
+          writeFileSync(
+            join(directory, 'package.json'),
+            JSON.stringify(manifest),
+          );
+          const verification = verifyInstalledGraph(
+            [{ directory, tarball: join(root, 'unused.tgz'), manifest }],
+            alias,
+            evidence,
+            process.env,
+          );
+          if (outside) {
+            await expect(verification).rejects.toThrow(
+              `Package escaped consumer: ${join(alias, 'node_modules', manifest.name, 'package.json')}`,
+            );
+            expect(existsSync(join(evidence, 'installed-graph.json'))).toBe(
+              false,
+            );
+          } else {
+            await verification;
+            expect(
+              JSON.parse(
+                readFileSync(join(evidence, 'installed-graph.json'), 'utf8'),
+              ),
+            ).toEqual([
+              {
+                name: manifest.name,
+                version: manifest.version,
+                dependencies: {},
+              },
+            ]);
+          }
+        } finally {
+          rmSync(temporary, { recursive: true, force: true });
+        }
+      },
+    );
+  }
+
+  it('never executes consumer lifecycle scripts in local or global release proof installs', async () => {
+    const evidence = mkdtempSync(join(tmpdir(), 'llxprt-lifecycle-proof-'));
+    try {
+      const manifest = {
+        name: '@vybestack/llxprt-code',
+        version: '0.0.0-lifecycle-proof',
+        bin: { llxprt: 'probe' },
+        scripts: {
+          postinstall: 'node -e "throw new Error(\'consumer hook executed\')"',
+        },
+      };
+      writeFileSync(join(evidence, 'package.json'), JSON.stringify(manifest));
+      writeFileSync(
+        join(evidence, 'probe'),
+        '#!/usr/bin/env node\nconsole.log(process.argv.includes("--version") ? "0.0.0-lifecycle-proof" : "llxprt [promptWords...] --help");\n',
+      );
+      chmodSync(join(evidence, 'probe'), 0o755);
+      const node = Bun.which('node');
+      if (node === null) throw new Error('Node is required for npm fixtures');
+      const invocation = npmInvocation(['pack', '--ignore-scripts', '--json'], {
+        execPath: node,
+      });
+      const result = spawnSync(invocation.command, invocation.args, {
+        cwd: evidence,
+        encoding: 'utf8',
+        timeout: 30_000,
+      });
+      expect(result.status, result.stderr).toBe(0);
+      const tarball = join(
+        evidence,
+        'vybestack-llxprt-code-0.0.0-lifecycle-proof.tgz',
+      );
+
+      const help = await installReleaseArtifacts(
+        [{ directory: evidence, tarball, manifest }],
+        evidence,
+      );
+
+      expect(help).toContain('llxprt [promptWords...]');
+      for (const mode of ['local', 'global']) {
+        expect(
+          readFileSync(
+            join(evidence, mode, 'installed-version.log'),
+            'utf8',
+          ).trim(),
+        ).toBe(manifest.version);
+      }
+    } finally {
+      rmSync(evidence, { recursive: true, force: true });
+    }
+  }, 120_000);
+
   it.skipIf(!process.env.LLXPRT_RELEASE_BUILT_ROOT)(
-    'installs actual release-bound tarballs offline without workspace links and runs installed help',
+    'installs release-bound tarballs with scripts disabled locally and globally and runs installed version/help',
     async () => {
       const builtRoot = process.env.LLXPRT_RELEASE_BUILT_ROOT;
       if (!builtRoot) throw new Error('LLXPRT_RELEASE_BUILT_ROOT is required');
@@ -480,6 +709,14 @@ describe('release-bound artifact graph (issue #3771)', () => {
       const help = await installReleaseArtifacts(artifacts, evidence);
       expect(help).toContain('llxprt [promptWords...]');
       expect(help).toContain('--help');
+      for (const mode of ['local', 'global']) {
+        expect(
+          readFileSync(join(evidence, mode, 'installed-version.log'), 'utf8'),
+        ).toContain(artifacts[0]?.manifest.version ?? 'missing version');
+        expect(
+          readFileSync(join(evidence, mode, 'installed-help.log'), 'utf8'),
+        ).toContain('--help');
+      }
     },
     1_200_000,
   );

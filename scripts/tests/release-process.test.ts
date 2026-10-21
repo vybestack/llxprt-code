@@ -184,6 +184,23 @@ describe('.github/workflows/release.yml', () => {
     releaseSteps.find((s) => s.name === name) ??
     raiseMissing(`missing step: ${name}`);
 
+  it('gates every npm publish on scripts-disabled consumer proof and publishes the proven tarballs', () => {
+    const gate = stepByName('Prove scripts-disabled release consumers');
+    const gateIndex = releaseSteps.indexOf(gate);
+    const publishes = releaseSteps.filter((step) =>
+      npmReleasePackages().some((name) => step.name === `Publish ${name}`),
+    );
+    expect(publishes.length).toBeGreaterThan(0);
+    for (const step of publishes) {
+      expect(releaseSteps.indexOf(step)).toBeGreaterThan(gateIndex);
+      expect(asString(step.run)).toContain('--ignore-scripts');
+      expect(asString(step.run)).toContain('release-proof/');
+    }
+    expect(asString(gate.if)).not.toContain('is_dry_run');
+    expect(asString(gate.if)).not.toContain('is_nightly');
+    expect(asString(gate.run)).toContain('release-bound-artifact-helpers.ts');
+  });
+
   it('runs release tests and release-note generation against the pinned local model without paid-provider credentials', () => {
     const releaseNotes = stepByName('Generate Release Notes');
     const preflight = stepByName('Run Preflight Checks');
@@ -409,20 +426,20 @@ ${path.posix.join(realFixture, 'plugins/google-mcp-auth')}|install --omit=peer
   it('publishes every npm release package', () => {
     for (const packageName of npmReleasePackages()) {
       expect(releaseYml, `release.yml should publish ${packageName}`).toContain(
-        `npm publish --workspace=${packageName}`,
+        `release-proof/${packageName.replace('@', '').replace('/', '-')}-`,
       );
     }
   });
 
   it('publishes tools before core, providers, and CLI', () => {
     const toolsIndex = releaseYml.indexOf(
-      'npm publish --workspace=@vybestack/llxprt-code-tools',
+      'name: Publish @vybestack/llxprt-code-tools\n',
     );
     const providersIndex = releaseYml.indexOf(
-      'npm publish --workspace=@vybestack/llxprt-code-providers',
+      'name: Publish @vybestack/llxprt-code-providers\n',
     );
     const cliIndex = releaseYml.indexOf(
-      'npm publish --workspace=@vybestack/llxprt-code ',
+      'name: Publish @vybestack/llxprt-code\n',
     );
 
     expect(
@@ -441,37 +458,37 @@ ${path.posix.join(realFixture, 'plugins/google-mcp-auth')}|install --omit=peer
 
   it('publishes storage, auth, settings, telemetry, ide-integration, and policy before MCP, core, providers, agents, and CLI', () => {
     const storageIndex = releaseYml.indexOf(
-      'npm publish --workspace=@vybestack/llxprt-code-storage',
+      'name: Publish @vybestack/llxprt-code-storage\n',
     );
     const authIndex = releaseYml.indexOf(
-      'npm publish --workspace=@vybestack/llxprt-code-auth',
+      'name: Publish @vybestack/llxprt-code-auth\n',
     );
     const settingsIndex = releaseYml.indexOf(
-      'npm publish --workspace=@vybestack/llxprt-code-settings',
+      'name: Publish @vybestack/llxprt-code-settings\n',
     );
     const telemetryIndex = releaseYml.indexOf(
-      'npm publish --workspace=@vybestack/llxprt-code-telemetry',
+      'name: Publish @vybestack/llxprt-code-telemetry\n',
     );
     const ideIntegrationIndex = releaseYml.indexOf(
-      'npm publish --workspace=@vybestack/llxprt-code-ide-integration',
+      'name: Publish @vybestack/llxprt-code-ide-integration\n',
     );
     const policyIndex = releaseYml.indexOf(
-      'npm publish --workspace=@vybestack/llxprt-code-policy',
+      'name: Publish @vybestack/llxprt-code-policy\n',
     );
     const mcpIndex = releaseYml.indexOf(
-      'npm publish --workspace=@vybestack/llxprt-code-mcp',
+      'name: Publish @vybestack/llxprt-code-mcp\n',
     );
     const coreIndex = releaseYml.indexOf(
-      'npm publish --workspace=@vybestack/llxprt-code-core',
+      'name: Publish @vybestack/llxprt-code-core\n',
     );
     const providersIndex = releaseYml.indexOf(
-      'npm publish --workspace=@vybestack/llxprt-code-providers',
+      'name: Publish @vybestack/llxprt-code-providers\n',
     );
     const agentsIndex = releaseYml.indexOf(
-      'npm publish --workspace=@vybestack/llxprt-code-agents',
+      'name: Publish @vybestack/llxprt-code-agents\n',
     );
     const cliIndex = releaseYml.indexOf(
-      'npm publish --workspace=@vybestack/llxprt-code ',
+      'name: Publish @vybestack/llxprt-code\n',
     );
 
     expect(storageIndex).toBeGreaterThan(0);

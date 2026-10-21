@@ -50,13 +50,18 @@ jobs:
       - name: 'Install dependencies (npm ci)'
         run: 'npm ci'
 
-      # The smoke runs the behavioral checks AND the startup benchmark (as a
-      # child process using the already-installed launcher + platform bun), so
-      # no separate benchmark step is needed. The benchmark is invoked with
-      # LLXPRT_BENCH_LAUNCHER/LLXPRT_BENCH_BUN so it never repacks or
-      # reinstalls — it reuses the install the smoke already proved.
-      - name: 'Run Windows installed-command behavioral smoke + benchmark'
-        run: 'node scripts/windows-installed-command-smoke.cjs'
+      - name: 'Run consumer stdin regression'
+        run: 'bun test scripts/tests/release-consumer-invocation.test.ts'
+
+      - name: 'Prove lifecycle-disabled npm CMD and PowerShell consumers'
+        shell: bash
+        env:
+          LLXPRT_RELEASE_PROOF_DIR: '${{ runner.temp }}/release-proof'
+        run: |
+          npm run build:packages
+          npm run prepare:package
+          npm run bundle:cli
+          bun scripts/tests/release-bound-artifact-helpers.ts
 
       # Upload the small diagnostic JSON written on failure (root cause I).
       # Hosted runner temp vanishes post-job, so this small artifact (no
@@ -66,6 +71,11 @@ jobs:
         uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # ratchet:actions/upload-artifact@v7
         with:
           name: 'llxprt-win-smoke-diagnostic'
-          path: '${{ runner.temp }}/llxprt-win-smoke-diagnostic-*.json'
+          path: |
+            ${{ runner.temp }}/release-proof/*.log
+            ${{ runner.temp }}/release-proof/local/*.log
+            ${{ runner.temp }}/release-proof/local/*.json
+            ${{ runner.temp }}/release-proof/global/*.log
+            ${{ runner.temp }}/release-proof/global/*.json
           if-no-files-found: 'ignore'
           retention-days: 7

@@ -36,6 +36,17 @@ function isFulfilledOAuthToken(
   return result.status === 'fulfilled' && result.value !== null;
 }
 
+function createRefreshGate(): {
+  promise: Promise<void>;
+  resolve: () => void;
+} {
+  let release: (() => void) | undefined;
+  const promise = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { promise, resolve: (): void => release?.() };
+}
+
 function createMockKeyring(): KeyringAdapter & { store: Map<string, string> } {
   const store = new Map<string, string>();
   return {
@@ -430,7 +441,149 @@ describe('OAuthManager - Token Refresh Race Condition (Issue #1159)', () => {
       );
       expect(allSame).toBe(true);
     });
+
+    it.each(['reactive', 'proactive'])(
+      'waits for a slow %s refresh owner so every contender receives a fresh token',
+      async (ownerType) => {
+        const expiredToken = createToken('expired-token', -10);
+        await tokenStore.saveToken('test-provider', expiredToken);
+        const refreshStarted = createRefreshGate();
+        const refreshGate = createRefreshGate();
+        mockProvider.refreshToken = async (token): Promise<OAuthToken> => {
+          refreshStarted.resolve();
+          await refreshGate.promise;
+          return createToken(`${token.access_token}-renewed`);
+        };
+
+        const owner =
+          ownerType === 'proactive'
+            ? oauthManager.runProactiveRenewal('test-provider', 'default')
+            : oauthManager.getOAuthToken('test-provider', 'default');
+        const contenders: Array<Promise<OAuthToken | null>> = [];
+        try {
+          await refreshStarted.promise;
+          contenders.push(
+            oauthManager.getOAuthToken('test-provider', 'default'),
+            oauthManager.getOAuthToken('test-provider', 'default'),
+          );
+          await new Promise<void>((resolve) => setTimeout(resolve, 800));
+          refreshGate.resolve();
+          const tokens = await Promise.all(contenders);
+          for (const token of tokens) {
+            expect(token?.access_token).toBe('expired-token-renewed');
+            expect(token?.expiry).toBeGreaterThan(Date.now() / 1000 + 30);
+          }
+        } finally {
+          refreshGate.resolve();
+          await Promise.allSettled([owner, ...contenders]);
+        }
+      },
+    );
+    it.each(['empty result', 'error'])(
+      'stops waiting when the refresh owner releases its lock after an %s',
+      async (failure) => {
+        await tokenStore.saveToken(
+          'test-provider',
+          createToken('expired-token', -10),
+        );
+        const refreshStarted = createRefreshGate();
+        const refreshGate = createRefreshGate();
+        mockProvider.refreshToken = async (): Promise<OAuthToken | null> => {
+          refreshStarted.resolve();
+          await refreshGate.promise;
+          if (failure === 'error') throw new Error('Refresh unavailable');
+          return null;
+        };
+        const controller = new AbortController();
+        const work = oauthManager.createProfileOAuthWork(controller.signal);
+        const owner = oauthManager.getOAuthToken('test-provider', 'default');
+        const contender = refreshStarted.promise.then(() =>
+          work.getToken({
+            providerName: 'test-provider',
+            buckets: ['default'],
+            signal: controller.signal,
+          }),
+        );
+        let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          await refreshStarted.promise;
+          await new Promise<void>((resolve) => setTimeout(resolve, 50));
+          refreshGate.resolve();
+          await owner;
+          const result = await Promise.race([
+            contender,
+            new Promise<'still waiting'>((resolve) => {
+              deadlineTimer = setTimeout(() => resolve('still waiting'), 500);
+            }),
+          ]);
+          expect(result).toBeNull();
+        } finally {
+          clearTimeout(deadlineTimer);
+          refreshGate.resolve();
+          controller.abort();
+          await Promise.allSettled([owner, contender]);
+          await work.cancelAndJoin();
+        }
+      },
+    );
   });
+
+  it.each(['expired', 'expires while waiting'])(
+    'cancels profile polling without another read when the disk token %s',
+    async (diskTokenState) => {
+      await tokenStore.saveToken(
+        'test-provider',
+        createToken('expired-token', -10),
+      );
+      await tokenStore.acquireRefreshLock('test-provider', {
+        bucket: 'default',
+      });
+      const controller = new AbortController();
+      const reason = new DOMException('cancelled', 'AbortError');
+      const work = oauthManager.createProfileOAuthWork(controller.signal);
+      const originalGetToken = tokenStore.getToken.bind(tokenStore);
+      const now = Date.now();
+      const clock = vi.spyOn(Date, 'now');
+      let readCount = 0;
+      let readsAfterAbort = 0;
+      let abortTimer: ReturnType<typeof setTimeout> | undefined;
+      const getTokenSpy = vi.spyOn(tokenStore, 'getToken');
+      getTokenSpy.mockImplementation(async (provider, bucket) => {
+        if (controller.signal.aborted) readsAfterAbort += 1;
+        readCount += 1;
+        if (readCount === 2) {
+          if (diskTokenState === 'expires while waiting') {
+            await tokenStore.saveToken(
+              provider,
+              createToken('nearly-expired', 31),
+              bucket,
+            );
+            clock.mockReturnValue(now + 31_000);
+          }
+          abortTimer = setTimeout(() => controller.abort(reason), 0);
+        }
+        return originalGetToken(provider, bucket);
+      });
+
+      try {
+        await expect(
+          work.getToken({
+            providerName: 'test-provider',
+            buckets: ['default'],
+            signal: controller.signal,
+          }),
+        ).rejects.toBe(reason);
+        expect(readsAfterAbort).toBe(0);
+      } finally {
+        clearTimeout(abortTimer);
+        controller.abort(reason);
+        await work.cancelAndJoin();
+        getTokenSpy.mockRestore();
+        clock.mockRestore();
+        await tokenStore.releaseRefreshLock('test-provider', 'default');
+      }
+    },
+  );
 
   describe('Proactive renewal path (runProactiveRenewal)', () => {
     it('should use lock for proactive renewal', async () => {
