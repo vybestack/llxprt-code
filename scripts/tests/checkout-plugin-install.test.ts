@@ -11,6 +11,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -87,6 +88,74 @@ describe('checkout postinstall plugin contexts', () => {
     for (const release of FIRST_PARTY_RUNTIME_PLUGIN_RELEASES) {
       expect(existsSync(join(root, release.dir, 'node_modules'))).toBe(false);
     }
+  });
+
+  it('reports cleanup failure context without replacing the error or repeating deletion', () => {
+    const root = fixture(true);
+    const preload = join(root, 'cleanup-failure.ts');
+    const observed = join(root, 'cleanup-observed.json');
+    writeFileSync(
+      preload,
+      `import fs from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
+if (process.argv[1]?.endsWith('install-checkout-plugins.ts')) {
+  const remove = fs.rmSync;
+  const failure = Object.assign(new Error('fixture cleanup permission denied'), {
+    code: 'EPERM', errno: 1, syscall: 'rm',
+  });
+  let attempts = 0;
+  fs.rmSync = (...args: Parameters<typeof fs.rmSync>): void => {
+    if (String(args[0]).includes('plugin-installer-')) {
+      attempts += 1;
+      throw failure;
+    }
+    remove(...args);
+  };
+  syncBuiltinESMExports();
+  process.on('uncaughtExceptionMonitor', (error) => {
+    fs.writeFileSync(${JSON.stringify(observed)}, JSON.stringify({
+      sameError: error === failure, attempts,
+    }));
+  });
+}
+`,
+    );
+    const result = postinstall(root, {
+      PATH: '',
+      NODE_OPTIONS: `--import=${pathToFileURL(preload).href}`,
+    });
+    expect(result.status).not.toBe(0);
+    expect(JSON.parse(readFileSync(observed, 'utf8'))).toEqual({
+      sameError: true,
+      attempts: 1,
+    });
+    const prefix = '[checkout-plugin-cleanup] ';
+    const line = result.stderr
+      ?.toString()
+      .split(/\r?\n/)
+      .find((entry) => entry.startsWith(prefix));
+    expect(line).toBeDefined();
+    if (line === undefined) throw new Error('Missing cleanup failure context');
+    const diagnostic = asRecord(JSON.parse(line.slice(prefix.length)));
+    const toolRoot = diagnostic['toolRoot'];
+    expect(typeof toolRoot).toBe('string');
+    expect(diagnostic['cwd']).toBe(realpathSync(root));
+    expect(diagnostic['pid']).toEqual(expect.any(Number));
+    expect(diagnostic['parentPid']).toEqual(expect.any(Number));
+    expect(diagnostic['platform']).toBe(process.platform);
+    const commands = diagnostic['commands'];
+    if (!Array.isArray(commands)) throw new Error('Missing installer commands');
+    expect(commands).toHaveLength(1);
+    const command = asRecord(commands[0]);
+    expect(command['command']).toBe('curl');
+    expect(command['cwd']).toBe(toolRoot);
+    expect(command['status']).toBeNull();
+    expect(command['signal']).toBeNull();
+    expect(command['error']).toContain('ENOENT');
+    expect(command['args']).toContain('--output');
+    expect(result.stderr?.toString()).toContain(
+      'fixture cleanup permission denied',
+    );
   });
 
   it('fails checkout setup when the pinned installer cannot be acquired', () => {

@@ -25,13 +25,46 @@ const environment = {
   BUN_NO_INSTALL_COMPLETIONS: '1',
 };
 
+interface InstallerCommand {
+  readonly command: string;
+  readonly args: readonly string[];
+  readonly cwd: string;
+  readonly pid: number;
+  readonly startedAt: string;
+  readonly completedAt: string;
+  readonly status: number | null;
+  readonly signal: NodeJS.Signals | null;
+  readonly error: string | undefined;
+  readonly stdout: string;
+  readonly stderr: string;
+}
+
+let commands: readonly InstallerCommand[] = [];
+
 function run(command: string, args: string[], cwd: string): string {
+  const startedAt = new Date().toISOString();
   const result = spawnSync(command, args, {
     cwd,
     env: environment,
     stdio: ['ignore', 'pipe', 'pipe'],
     encoding: 'utf8',
   });
+  commands = [
+    ...commands,
+    {
+      command,
+      args,
+      cwd,
+      pid: result.pid,
+      startedAt,
+      completedAt: new Date().toISOString(),
+      status: result.status,
+      signal: result.signal,
+      error: result.error?.message,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    },
+  ];
   if (result.error !== undefined) throw result.error;
   if (result.status !== 0) {
     throw new Error(
@@ -89,5 +122,29 @@ try {
     );
   }
 } finally {
-  rmSync(toolRoot, { recursive: true, force: true });
+  cleanupInstaller();
+}
+
+function cleanupInstaller(): void {
+  try {
+    rmSync(toolRoot, { recursive: true, force: true });
+  } catch (error) {
+    try {
+      process.stderr.write(
+        `[checkout-plugin-cleanup] ${JSON.stringify({
+          toolRoot,
+          home,
+          pid: process.pid,
+          parentPid: process.ppid,
+          cwd: process.cwd(),
+          platform: process.platform,
+          commands,
+        })}
+`,
+      );
+    } catch {
+      throw error;
+    }
+    throw error;
+  }
 }
