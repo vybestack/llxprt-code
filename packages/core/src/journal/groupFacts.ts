@@ -1,5 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import {
+  applyContextSpan,
+  type ContextSpanPolicy,
+} from './contextSpanFacts.js';
+import { readStoredMetadata } from './rowRangeReads.js';
+import {
   applyDraftRecency,
   applyStoredRecency,
   RECENCY_INDEX_READY,
@@ -41,6 +46,7 @@ import type { ExistingRange, GroupPlan } from './groupPlanTypes.js';
 
 /** The seams the facts of a group need: how keys hash, the planner and the caches that cap every read. */
 export interface FactDeps {
+  readonly contextSpanPolicy?: ContextSpanPolicy;
   readonly recencyFactPolicy?: RecencyFactPolicy;
   readonly idDeps: IdFactDeps;
   readonly planOccurrences: OccurrencePlanner;
@@ -199,6 +205,8 @@ export async function applyDraftRow(
   label: bigint,
   draft: RowDraft,
 ): Promise<void> {
+  if (deps.contextSpanPolicy !== undefined)
+    await applyContextSpan(facts.ids, deps.contextSpanPolicy(draft.meta));
   await applyDraftRecency(facts.ids, deps.recencyFactPolicy, label, draft);
   await applyChronologyFact(facts.ids, label, draft.chronologySeq, draft.flags);
   await applyRow(facts, deps, plannedFromDraft(label, draft), draft);
@@ -244,6 +252,11 @@ export async function applyEntryRow(
   deps: FactDeps,
   entry: RowEntry,
 ): Promise<void> {
+  if (deps.contextSpanPolicy !== undefined)
+    await applyContextSpan(
+      facts.ids,
+      deps.contextSpanPolicy((await readStoredMetadata(access, entry)).meta),
+    );
   const row = await readRowIds(access, entry);
   await applyStoredRecency(
     access,

@@ -651,7 +651,8 @@ export class JournalHistoryStore implements HistoryStorePort {
 
   /** The boundary joined with the interior spans the service accumulated (WIRING G2). */
   contextRange(accumulated: readonly RemovedInteriorSpan[]): ContextRange {
-    return contextRangeOf(this.contextBoundary(), accumulated);
+    const summaries = this.journal?.session.store.contextSpans();
+    return contextRangeOf(this.contextBoundary(), accumulated, summaries);
   }
 
   /**

@@ -200,7 +200,7 @@ export class JournalCandidate {
         : source;
     host.chronology.stamp(row);
     this.tokens += await host.estimate([row], modelName, signal);
-    this.range.add(row);
+    this.range.add(row, false);
     this.lastSeq = row.metadata?.chronology?.seq ?? 0;
     if (appendOnly)
       await this.ctx.publication.appendOne(

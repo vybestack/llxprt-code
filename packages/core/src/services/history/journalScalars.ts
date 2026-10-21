@@ -103,10 +103,19 @@ export function contextBoundaryOf(
 export function contextRangeOf(
   boundary: ContextBoundary,
   accumulated: readonly RemovedInteriorSpan[],
+  summaries: ReadonlyArray<{
+    readonly start: number;
+    readonly end: number;
+  }> = [],
 ): ContextRange {
   return {
     ...boundary,
-    removedInterior: mergeRemovedInteriorSpans(accumulated),
+    removedInterior: mergeRemovedInteriorSpans([
+      ...accumulated,
+      ...summaries.map(
+        (span): RemovedInteriorSpan => ({ ...span, reason: 'compressed' }),
+      ),
+    ]),
   };
 }
 

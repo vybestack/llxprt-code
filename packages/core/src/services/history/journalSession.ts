@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { journalContextSpan } from './journalContextSpan.js';
 import { RECENCY_INDEX_READY } from '../../journal/recencyFacts.js';
 import { densityRecencyFactPolicy } from './densityRecencyFacts.js';
 import {
@@ -56,6 +57,7 @@ async function storeDependencies(
     },
     planOccurrences: options.planOccurrences ?? planSourceRowOccurrences,
     recencyFactPolicy: densityRecencyFactPolicy,
+    contextSpanPolicy: journalContextSpan,
     algebra: rowAlgebra,
   };
 }

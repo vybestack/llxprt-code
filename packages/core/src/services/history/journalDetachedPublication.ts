@@ -81,7 +81,6 @@ export class JournalDetachedPublication {
     | undefined;
   private annotatedOwner = 0;
   private appendProjection: AppendProjection | undefined;
-  private retainAppendSpans = false;
 
   async appendSpan(span: RemovedInteriorSpan, origin?: string): Promise<void> {
     if (this.annotated === undefined) {
@@ -107,8 +106,6 @@ export class JournalDetachedPublication {
           if (this.appendProjection === undefined)
             throw new Error('Annotated append projection is not ready');
           projected = await this.appendProjection(spans);
-          if (this.retainAppendSpans)
-            await spans.retain(projected.slice(-SPAN_WINDOW_CAPACITY));
         }, owner.edits);
         return projected;
       });
@@ -142,9 +139,11 @@ export class JournalDetachedPublication {
       return project(
         mergeRemovedInteriorSpans(accumulated).slice(-SPAN_WINDOW_CAPACITY),
       );
-    this.appendProjection = async (spans) =>
-      project(await spans.project(accumulated, []));
-    this.retainAppendSpans = retain;
+    this.appendProjection = async (spans) => {
+      const standing = await spans.project(accumulated, []);
+      if (retain) await spans.retain(standing);
+      return project(standing);
+    };
     return this.annotated.close();
   }
 

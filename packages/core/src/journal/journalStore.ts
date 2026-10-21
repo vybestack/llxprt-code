@@ -1,5 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import {
+  readContextSpans,
+  type ContextSpan,
+  type ContextSpanPolicy,
+} from './contextSpanFacts.js';
+import {
   fillToolRanking,
   warmToolRanking,
   toolRankingPolicy,
@@ -100,6 +105,7 @@ export interface JournalStoreDependencies {
   readonly idDeps: IdFactDeps;
   readonly planOccurrences: OccurrencePlanner;
   readonly recencyFactPolicy?: RecencyFactPolicy;
+  readonly contextSpanPolicy?: ContextSpanPolicy;
   /** The aggregate algebra of the row tree for a slot table. */
   readonly algebra: (kinds: SlotKinds) => RowTreeAlgebra;
   /** One capped cache each for the id trie, the meta map and the state map. */
@@ -405,6 +411,15 @@ export class JournalStore {
     this.closing = true;
     await this.tail;
     await this.writer.close();
+  }
+
+  contextSpans(): ContextSpan[] {
+    return readContextSpans(
+      this.writer.currentFile().handle.fd,
+      this.currentVersion,
+      this.deps.idDeps.hasher,
+      this.idCache,
+    );
   }
 
   /** A meta map entry of the published version. */
@@ -888,6 +903,7 @@ export class JournalStore {
       idDeps: this.deps.idDeps,
       planOccurrences: this.deps.planOccurrences,
       recencyFactPolicy: this.deps.recencyFactPolicy,
+      contextSpanPolicy: this.deps.contextSpanPolicy,
       idCache: this.idCache,
       metaCache: this.metaCache,
       stateCache: this.stateCache,

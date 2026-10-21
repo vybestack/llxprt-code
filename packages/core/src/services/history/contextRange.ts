@@ -132,7 +132,7 @@ export class ContextRangeAccumulator {
   private approximate = false;
   private removedInterior: RemovedInteriorSpan[] = [];
 
-  add(entry: IContent): void {
+  add(entry: IContent, includeSummarySpans = true): void {
     const seq = entry.metadata?.chronology?.seq ?? 0;
     if (this.totalEntries === 0) this.firstSeq = seq;
     this.lastSeq = seq;
@@ -142,7 +142,7 @@ export class ContextRangeAccumulator {
       this.removedInterior = [];
     }
     const replaced = entry.metadata?.chronologyReplaced;
-    if (!this.approximate && replaced !== undefined) {
+    if (includeSummarySpans && !this.approximate && replaced !== undefined) {
       this.removedInterior = mergeRemovedInteriorSpans([
         ...this.removedInterior,
         { start: replaced.fromSeq, end: replaced.toSeq, reason: 'compressed' },

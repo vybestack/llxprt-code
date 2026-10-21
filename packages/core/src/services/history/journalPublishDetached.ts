@@ -247,7 +247,7 @@ async function produceCandidate(
       densitySpans === undefined
         ? await publication.projectAppends(
             state.spans,
-            (projected) => candidate.range.snapshot(projected).removedInterior,
+            (projected) => [...projected],
             candidate.count > 0,
           )
         : await projectedSpans(candidate, densitySpans, state);
@@ -273,7 +273,7 @@ async function projectedSpans(
     state.spans,
     rewound === undefined ? [] : mergeRemovedInteriorSpans([rewound]),
   );
-  return candidate.range.snapshot(projected).removedInterior;
+  return projected;
 }
 
 function mediaFeed(
@@ -399,7 +399,7 @@ async function finishPublication(
   await finalizeMutationEffects(effects);
   completion.finalized = true;
   options.signal?.throwIfAborted();
-  const range = candidate.range.snapshot(spans);
+  const range = store.contextRange(spans);
   if (options.publishBatch === true || options.publishTokens === true)
     host.notifyRange(range);
   else host.notify(delta, range);
