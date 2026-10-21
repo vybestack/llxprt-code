@@ -3,6 +3,8 @@ import { describe, expect, it } from 'bun:test';
 import { testJournalSeams } from '../../journal/__tests__/support/journalFixtures.js';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
 import { JournalSession } from './journalSession.js';
+import { encodeContentRow } from './journalRowCodec.js';
+import { OffsetAudit } from '../../journal/__tests__/support/offsetAudit.js';
 import { call, response } from './__tests__/support/normalization-cases.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import { KIMI_FLAG } from '../../journal/kimiFactCodec.js';
@@ -18,8 +20,119 @@ async function fallbackIndices(
   return indices;
 }
 
+async function checkFallbackState(
+  session: JournalSession,
+  expected: number,
+): Promise<void> {
+  const pin = await session.store.snapshot();
+  try {
+    let below = 0;
+    for await (const entry of pin.entries()) {
+      expect(await pin.kimiUnmappedBelow(entry.label)).toBe(below);
+      below += entry.unmappedBlocks;
+    }
+    expect({
+      consumed: await pin.kimiUnmappedCount(),
+      rows: below,
+      written: await pin.kimiUnmappedWrittenCount(),
+      digits: await pin.kimiWrittenDigits(),
+    }).toStrictEqual({
+      consumed: expected,
+      rows: expected,
+      written: expected / 2,
+      digits: expected / 2,
+    });
+  } finally {
+    await pin.close();
+  }
+}
+
+async function auditFallbackCopy(session: JournalSession): Promise<void> {
+  const read = await session.store.openRead();
+  try {
+    if (read.version === undefined) throw new Error('Missing copied version');
+    await new OffsetAudit(read.access).walkVersion(read.version);
+  } finally {
+    await read.close();
+  }
+}
+
 describe('persisted Kimi fallback prefix changes', () => {
   const directory = useTempDir('kimi-prefix-');
+  it('preserves nonzero prefixes through owner, reopen, fork, compaction, density, pop and compression', async () => {
+    const path = `${directory()}/lifecycle.llxj`;
+    const options = { journal: testJournalSeams().dependencies };
+    const session = await JournalSession.create(path, options);
+    const row = (id: string): ReturnType<typeof encodeContentRow> =>
+      encodeContentRow(
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'keep' }, call(id, '')],
+        },
+        { owner: 0 },
+      );
+    try {
+      await session.store.commit([
+        { kind: 'replace', rows: [row('a'), row('b')] },
+      ]);
+      await session.store.commit([{ kind: 'kimi' }]);
+      await session.store.commit([
+        { kind: 'owner', changes: [{ label: 1048576n, owner: 7 }] },
+      ]);
+      await checkFallbackState(session, 4);
+    } finally {
+      await session.close();
+    }
+    const reopened = await JournalSession.open(path, options);
+    try {
+      const old = await reopened.store.snapshot();
+      try {
+        const clone = await reopened.cloneUnlinked({
+          unlinkedDirectory: directory(),
+        });
+        try {
+          expect(await clone.store.compact()).toBe('swapped');
+          await checkFallbackState(clone, 4);
+          await auditFallbackCopy(clone);
+          await clone.store.commit([
+            { kind: 'density', replacements: [], removed: [1048576n] },
+          ]);
+          await checkFallbackState(clone, 2);
+        } finally {
+          await clone.close();
+        }
+        await reopened.store.commit([
+          { kind: 'pop', cutLabel: 2097152n, expectedRemoved: 1 },
+        ]);
+        await checkFallbackState(reopened, 2);
+        expect(await old.kimiUnmappedCount()).toBe(4);
+      } finally {
+        await old.close();
+      }
+      expect(await reopened.store.compact()).toBe('swapped');
+      await checkFallbackState(reopened, 2);
+      await reopened.store.commit([
+        { kind: 'replace', rows: [row('a'), row('b'), row('c')] },
+      ]);
+      const pin = await reopened.store.snapshot();
+      const cut = (await pin.entryAt(2)).label;
+      await pin.close();
+      await reopened.store.commit([
+        {
+          kind: 'compress',
+          retainFromLabel: cut,
+          expectedReplaced: 2,
+          summary: encodeContentRow(
+            { speaker: 'human', blocks: [{ type: 'text', text: 'summary' }] },
+            { owner: 0 },
+          ),
+        },
+      ]);
+      await checkFallbackState(reopened, 2);
+    } finally {
+      await reopened.close();
+    }
+  });
   it('replaces every earlier fallback holder and other IDs row ranks when an append first maps an ID', async () => {
     const session = await JournalSession.create(`${directory()}/append.llxj`, {
       journal: testJournalSeams().dependencies,
