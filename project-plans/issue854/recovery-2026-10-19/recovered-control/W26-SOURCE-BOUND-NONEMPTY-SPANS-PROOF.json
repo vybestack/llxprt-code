@@ -1,0 +1,955 @@
+{
+  "scope": "W26 native non-append detached publication, nonempty density span sorting and bounded retained metadata. Not full W26 or heap acceptance.",
+  "date": "2026-10-21T14:01:17.197008+00:00",
+  "implementationCommit": "15560ace6454eb86591bc23824bbeb7e4df67259",
+  "priorCommits": ["a55052f3d", "12440d39d"],
+  "rawRoot": "tmp/p5/w26-spans-run-ac",
+  "counts": {
+    "pass": 176,
+    "fail": 0,
+    "skip": 0,
+    "assertions": 257797,
+    "files": 23
+  },
+  "source": {
+    "packages/agents/src/compression/__tests__/continuous-native-recency.test.ts": "a25e354209fc694931df0ce07e0efe7e7778811321f917c8171dcbd0cf3827f2",
+    "packages/core/src/journal/groupEdits.ts": "43086a505e9fdabd30badde5329dbe748eff5c1135c5aab58b18724e37b4e09d",
+    "packages/core/src/journal/groupPlan.ts": "80e72710707cca40ad8e2302e7fd5616a013f52f893bc99b477aefc7d599da54",
+    "packages/core/src/journal/groupWriter.ts": "64149431498ed6a61b84032b940bba2002b22b72c0358c230954f078ff97fe6c",
+    "packages/core/src/journal/journalStore.ts": "d185c74931ea443f40c80b3942ae347123ec9ccd03f016c8f28bb377cdd8d4f7",
+    "packages/core/src/journal/mirrorFanout.ts": "64fb752a8ecad91f5db1eba63e9d81dba00dda7c79f17ad100a36b3d14d07778",
+    "packages/core/src/journal/preparedGroup.ts": "98910070be7c0ad29a9202b6552a8b4d4ad5e59b42c40abd1dea51ecc3c2edfe",
+    "packages/core/src/services/history/historyMutationEffects.ts": "04fa86f3b19a29f21084b2baf5bd811cc3cc5531b4c23856ab412df1803d01cf",
+    "packages/core/src/services/history/journal-density-span-facts.test.ts": "d635235ab09222db66f313a86c5bbaac0f24b3a03f2858b32cd7f44a0c963255",
+    "packages/core/src/services/history/journal-density-spans.test.ts": "e4ef11e7c69b1fcc824d0da4fa82db1a751c5e73af53c88ec02103b061432346",
+    "packages/core/src/services/history/journalDensitySpans.ts": "2beeb3cc3005366aa6df2d47cd7c4731cd8a5d8d8d17a5f2244ce6336444c997",
+    "packages/core/src/services/history/journalDetachedCandidate.ts": "240238b98935ec72eac837abc7cf981262212a1a18e8231e4972e3d2b00551a1",
+    "packages/core/src/services/history/journalDetachedPublication.ts": "481d98cd0fb8ef046daaab21d73b1a38873d0ba7063829561fc785ed12de74e4",
+    "packages/core/src/services/history/journalHistoryStore.ts": "7970fce1b4d299b36223d26e5a4e9d2544f4cc868e9c765338e53ea6c2e7fd2c",
+    "packages/core/src/services/history/journalPublication.ts": "c42566586bb483c19c0f08f92128fac661661e7cb22b25d94b5c21ff554edcdb",
+    "packages/core/src/services/history/journalPublishDetached.ts": "0dfbbd6e8b3356dda67e71d85f77c2d150f9b0c3d9ae148a91dfd686e2ba5d78",
+    "packages/core/src/services/history/journalSpanWindow.ts": "b54b507202d5c6e67ad335ebdac9ba90f326f49fcd05135ee5e32959ff39d3fa",
+    "packages/core/src/services/history/recording-primary-edits.ts": "0efaaf46c96e0483d80332eb06aa0f92ce70bc07f2a549f1094223bddafa3eaa"
+  },
+  "accepted": [
+    {
+      "name": "bound3-accept-final-lint",
+      "cwd": ".",
+      "command": [
+        "bunx",
+        "eslint",
+        "--max-warnings",
+        "0",
+        "packages/agents/src/compression/__tests__/continuous-native-recency.test.ts",
+        "packages/core/src/journal/groupEdits.ts",
+        "packages/core/src/journal/groupPlan.ts",
+        "packages/core/src/journal/groupWriter.ts",
+        "packages/core/src/journal/journalStore.ts",
+        "packages/core/src/journal/mirrorFanout.ts",
+        "packages/core/src/services/history/journalDetachedCandidate.ts",
+        "packages/core/src/services/history/journalDetachedPublication.ts",
+        "packages/core/src/services/history/journalHistoryStore.ts",
+        "packages/core/src/services/history/journalPublication.ts",
+        "packages/core/src/services/history/journalPublishDetached.ts",
+        "packages/core/src/services/history/recording-primary-edits.ts",
+        "packages/core/src/journal/preparedGroup.ts",
+        "packages/core/src/services/history/journalDensitySpans.ts",
+        "packages/core/src/services/history/journal-density-spans.test.ts",
+        "packages/core/src/services/history/journalSpanWindow.ts",
+        "packages/core/src/services/history/journal-density-span-facts.test.ts",
+        "packages/core/src/services/history/historyMutationEffects.ts"
+      ],
+      "driver": 64213,
+      "pid": 64217,
+      "start": "2026-10-21T13:49:46.305Z",
+      "log": "tmp/p5/w26-spans-run-ac/bound3-accept-final-lint.log",
+      "code": 0,
+      "end": "2026-10-21T13:49:53.001Z",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceManifestHash": "c703279f68724c9e2419c91dfb49b1177725296722bc5a43d9b5af9cab9ac904",
+      "changed": []
+    },
+    {
+      "name": "bound3-accept-final-core-declarations",
+      "cwd": ".",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-b",
+        "packages/core/tsconfig.build.json",
+        "--emitDeclarationOnly"
+      ],
+      "driver": 64213,
+      "pid": 64285,
+      "start": "2026-10-21T13:49:53.002Z",
+      "log": "tmp/p5/w26-spans-run-ac/bound3-accept-final-core-declarations.log",
+      "code": 0,
+      "end": "2026-10-21T13:49:56.097Z",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceManifestHash": "c703279f68724c9e2419c91dfb49b1177725296722bc5a43d9b5af9cab9ac904",
+      "changed": []
+    },
+    {
+      "name": "bound3-accept-final-agents-declarations",
+      "cwd": ".",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-b",
+        "packages/agents/tsconfig.build.json",
+        "--emitDeclarationOnly"
+      ],
+      "driver": 64213,
+      "pid": 64318,
+      "start": "2026-10-21T13:49:56.098Z",
+      "log": "tmp/p5/w26-spans-run-ac/bound3-accept-final-agents-declarations.log",
+      "code": 0,
+      "end": "2026-10-21T13:49:58.369Z",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceManifestHash": "c703279f68724c9e2419c91dfb49b1177725296722bc5a43d9b5af9cab9ac904",
+      "changed": []
+    },
+    {
+      "name": "bound3-accept-final-core-types",
+      "cwd": ".",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "packages/core/tsconfig.noemit.json"
+      ],
+      "driver": 64213,
+      "pid": 64369,
+      "start": "2026-10-21T13:49:58.370Z",
+      "log": "tmp/p5/w26-spans-run-ac/bound3-accept-final-core-types.log",
+      "code": 0,
+      "end": "2026-10-21T13:50:04.890Z",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceManifestHash": "c703279f68724c9e2419c91dfb49b1177725296722bc5a43d9b5af9cab9ac904",
+      "changed": []
+    },
+    {
+      "name": "bound3-accept-final-agents-types",
+      "cwd": ".",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "packages/agents/tsconfig.noemit.json"
+      ],
+      "driver": 64213,
+      "pid": 64480,
+      "start": "2026-10-21T13:50:04.891Z",
+      "log": "tmp/p5/w26-spans-run-ac/bound3-accept-final-agents-types.log",
+      "code": 0,
+      "end": "2026-10-21T13:50:14.100Z",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceManifestHash": "c703279f68724c9e2419c91dfb49b1177725296722bc5a43d9b5af9cab9ac904",
+      "changed": []
+    },
+    {
+      "name": "bound3-accept-final-test-types",
+      "cwd": ".",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "packages/agents/tsconfig.test-bun.json",
+        "--types",
+        "node,bun"
+      ],
+      "driver": 64213,
+      "pid": 64637,
+      "start": "2026-10-21T13:50:14.100Z",
+      "log": "tmp/p5/w26-spans-run-ac/bound3-accept-final-test-types.log",
+      "code": 0,
+      "end": "2026-10-21T13:50:19.369Z",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceManifestHash": "c703279f68724c9e2419c91dfb49b1177725296722bc5a43d9b5af9cab9ac904",
+      "changed": []
+    },
+    {
+      "name": "bound3-accept-final-format",
+      "cwd": ".",
+      "command": [
+        "bunx",
+        "prettier",
+        "--check",
+        "packages/agents/src/compression/__tests__/continuous-native-recency.test.ts",
+        "packages/core/src/journal/groupEdits.ts",
+        "packages/core/src/journal/groupPlan.ts",
+        "packages/core/src/journal/groupWriter.ts",
+        "packages/core/src/journal/journalStore.ts",
+        "packages/core/src/journal/mirrorFanout.ts",
+        "packages/core/src/services/history/journalDetachedCandidate.ts",
+        "packages/core/src/services/history/journalDetachedPublication.ts",
+        "packages/core/src/services/history/journalHistoryStore.ts",
+        "packages/core/src/services/history/journalPublication.ts",
+        "packages/core/src/services/history/journalPublishDetached.ts",
+        "packages/core/src/services/history/recording-primary-edits.ts",
+        "packages/core/src/journal/preparedGroup.ts",
+        "packages/core/src/services/history/journalDensitySpans.ts",
+        "packages/core/src/services/history/journal-density-spans.test.ts",
+        "packages/core/src/services/history/journalSpanWindow.ts",
+        "packages/core/src/services/history/journal-density-span-facts.test.ts",
+        "packages/core/src/services/history/historyMutationEffects.ts"
+      ],
+      "driver": 64213,
+      "pid": 64711,
+      "start": "2026-10-21T13:50:19.369Z",
+      "log": "tmp/p5/w26-spans-run-ac/bound3-accept-final-format.log",
+      "code": 0,
+      "end": "2026-10-21T13:50:19.667Z",
+      "logHash": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+      "sourceManifestHash": "c703279f68724c9e2419c91dfb49b1177725296722bc5a43d9b5af9cab9ac904",
+      "changed": []
+    },
+    {
+      "name": "bound3-accept-final-graph",
+      "cwd": ".",
+      "command": ["bun", "scripts/check-affected-test-shards.ts"],
+      "driver": 64213,
+      "pid": 64713,
+      "start": "2026-10-21T13:50:19.667Z",
+      "log": "tmp/p5/w26-spans-run-ac/bound3-accept-final-graph.log",
+      "code": 0,
+      "end": "2026-10-21T13:50:21.800Z",
+      "logHash": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67",
+      "sourceManifestHash": "c703279f68724c9e2419c91dfb49b1177725296722bc5a43d9b5af9cab9ac904",
+      "changed": []
+    },
+    {
+      "name": "bound3-accept-final-audit",
+      "cwd": ".",
+      "command": [
+        "bun",
+        "scripts/test-audit/scan.ts",
+        "tmp/p5/w26-spans-run-ac/accept-final-audit"
+      ],
+      "driver": 64213,
+      "pid": 64735,
+      "start": "2026-10-21T13:50:21.800Z",
+      "log": "tmp/p5/w26-spans-run-ac/bound3-accept-final-audit.log",
+      "code": 0,
+      "end": "2026-10-21T13:50:24.609Z",
+      "logHash": "9140128d84fc90b6cf5ed5799d7972b5c9facf2b0a0b7d6465f6f10550ff72c8",
+      "sourceManifestHash": "c703279f68724c9e2419c91dfb49b1177725296722bc5a43d9b5af9cab9ac904",
+      "changed": []
+    },
+    {
+      "name": "bound3-final-span-facts",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journal-density-span-facts.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 64213,
+      "pid": 64773,
+      "start": "2026-10-21T13:50:24.609Z",
+      "log": "tmp/p5/w26-spans-run-ac/bound3-final-span-facts.log",
+      "code": 0,
+      "end": "2026-10-21T13:50:31.607Z",
+      "logHash": "02838dfde79327c5c0bdf5e528ddb14f36abb156a784deef7a48b91846bbdfeb",
+      "sourceManifestHash": "c703279f68724c9e2419c91dfb49b1177725296722bc5a43d9b5af9cab9ac904",
+      "changed": [],
+      "testSourceHash": "d635235ab09222db66f313a86c5bbaac0f24b3a03f2858b32cd7f44a0c963255"
+    },
+    {
+      "name": "bound3-final-spans",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journal-density-spans.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 64213,
+      "pid": 64857,
+      "start": "2026-10-21T13:50:31.608Z",
+      "log": "tmp/p5/w26-spans-run-ac/bound3-final-spans.log",
+      "code": 0,
+      "end": "2026-10-21T13:51:10.650Z",
+      "logHash": "c84b05a2ef1ca73bd3db47e9946469607bf6be6e3b67ff1ca81cae8aaa16a3af",
+      "sourceManifestHash": "c703279f68724c9e2419c91dfb49b1177725296722bc5a43d9b5af9cab9ac904",
+      "changed": [],
+      "testSourceHash": "e4ef11e7c69b1fcc824d0da4fa82db1a751c5e73af53c88ec02103b061432346"
+    },
+    {
+      "name": "bound3-final-public",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/continuous-native-recency.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 64213,
+      "pid": 65555,
+      "start": "2026-10-21T13:51:10.651Z",
+      "log": "tmp/p5/w26-spans-run-ac/bound3-final-public.log",
+      "code": 0,
+      "end": "2026-10-21T13:51:39.668Z",
+      "logHash": "f35db0071b11ee9731b8c760f23b2eb8851c2159bff5b98a7d5b86b774c4f7dd",
+      "sourceManifestHash": "c703279f68724c9e2419c91dfb49b1177725296722bc5a43d9b5af9cab9ac904",
+      "changed": [],
+      "testSourceHash": "a25e354209fc694931df0ce07e0efe7e7778811321f917c8171dcbd0cf3827f2"
+    },
+    {
+      "name": "bound3-regression-journal-detached-no-scratch",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journal-detached-no-scratch.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 64213,
+      "pid": 66861,
+      "start": "2026-10-21T13:51:39.669Z",
+      "log": "tmp/p5/w26-spans-run-ac/bound3-regression-journal-detached-no-scratch.log",
+      "code": 0,
+      "end": "2026-10-21T13:51:40.248Z",
+      "logHash": "a12655733da4be747b3a4e97d80bce16f700641bfc176d2259a8fa6db23e2e33",
+      "sourceManifestHash": "c703279f68724c9e2419c91dfb49b1177725296722bc5a43d9b5af9cab9ac904",
+      "changed": [],
+      "testSourceHash": "a200727e1fc2ecef1a6a19205374042211850d9430a1bbd92ec9908f9a26892d"
+    },
+    {
+      "name": "bound3-regression-journalHistoryStore.publishDetached",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journalHistoryStore.publishDetached.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 64213,
+      "pid": 66875,
+      "start": "2026-10-21T13:51:40.248Z",
+      "log": "tmp/p5/w26-spans-run-ac/bound3-regression-journalHistoryStore.publishDetached.log",
+      "code": 0,
+      "end": "2026-10-21T13:51:42.056Z",
+      "logHash": "e6db04f00502a2d728821701e58f167811cf139151594888fd9549f6b77f561b",
+      "sourceManifestHash": "c703279f68724c9e2419c91dfb49b1177725296722bc5a43d9b5af9cab9ac904",
+      "changed": [],
+      "testSourceHash": "d6f23f10317afb1560de2f41105d0800f6ef9825a8a036a3a0dc7da3b5a207de"
+    },
+    {
+      "name": "bound3-regression-journalHistoryStore.detachedOwners",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journalHistoryStore.detachedOwners.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 64213,
+      "pid": 66896,
+      "start": "2026-10-21T13:51:42.075Z",
+      "log": "tmp/p5/w26-spans-run-ac/bound3-regression-journalHistoryStore.detachedOwners.log",
+      "code": 0,
+      "end": "2026-10-21T13:51:45.566Z",
+      "logHash": "1bdb47a8bfe2a1574fe5aecca008af7ef6207b33a65992774552826fb803ed31",
+      "sourceManifestHash": "c703279f68724c9e2419c91dfb49b1177725296722bc5a43d9b5af9cab9ac904",
+      "changed": [],
+      "testSourceHash": "1d005a8caf5ae4aab5976c4d320550c090b6a5732254cf5cdcae9b9d4d6f9ca9"
+    },
+    {
+      "name": "bound3-regression-journalHistoryStore.detachedMedia",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journalHistoryStore.detachedMedia.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 64213,
+      "pid": 66944,
+      "start": "2026-10-21T13:51:45.567Z",
+      "log": "tmp/p5/w26-spans-run-ac/bound3-regression-journalHistoryStore.detachedMedia.log",
+      "code": 0,
+      "end": "2026-10-21T13:51:46.222Z",
+      "logHash": "60c644069a72afb2e237ce040b7a7322466c75c89e495d643ee107c13e80dce2",
+      "sourceManifestHash": "c703279f68724c9e2419c91dfb49b1177725296722bc5a43d9b5af9cab9ac904",
+      "changed": [],
+      "testSourceHash": "baead400dc1f652daf6f8a4ad9325eaaa3ac9aabcc5b1afb04f428c24ccb44cb"
+    },
+    {
+      "name": "bound3-regression-detached-rollback-contract.journal",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/detached-rollback-contract.journal.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 64213,
+      "pid": 66967,
+      "start": "2026-10-21T13:51:46.223Z",
+      "log": "tmp/p5/w26-spans-run-ac/bound3-regression-detached-rollback-contract.journal.log",
+      "code": 0,
+      "end": "2026-10-21T13:51:47.190Z",
+      "logHash": "55e5af2596e5d3eddd0251f4e4a7461540c21d333adee67bd3ba7b76dc50a1b2",
+      "sourceManifestHash": "c703279f68724c9e2419c91dfb49b1177725296722bc5a43d9b5af9cab9ac904",
+      "changed": [],
+      "testSourceHash": "e14012f868f745066d0bfa62d781f07c793d64814111da623a10409d4282f58c"
+    },
+    {
+      "name": "bound3-regression-detached-rollback-cancel.journal",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/detached-rollback-cancel.journal.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 64213,
+      "pid": 66977,
+      "start": "2026-10-21T13:51:47.191Z",
+      "log": "tmp/p5/w26-spans-run-ac/bound3-regression-detached-rollback-cancel.journal.log",
+      "code": 0,
+      "end": "2026-10-21T13:51:47.701Z",
+      "logHash": "3ce0212cefafcba2a42da2ec5f6b81a7b90e65c6b45fcad347b27da53763453b",
+      "sourceManifestHash": "c703279f68724c9e2419c91dfb49b1177725296722bc5a43d9b5af9cab9ac904",
+      "changed": [],
+      "testSourceHash": "f93eca5f7416b7b292c349d82ec193bf3302a102f03cc7cbb3a3117db78d3c4a"
+    },
+    {
+      "name": "bound3-regression-detached-rollback-storage.journal",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/detached-rollback-storage.journal.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 64213,
+      "pid": 66986,
+      "start": "2026-10-21T13:51:47.702Z",
+      "log": "tmp/p5/w26-spans-run-ac/bound3-regression-detached-rollback-storage.journal.log",
+      "code": 0,
+      "end": "2026-10-21T13:52:34.944Z",
+      "logHash": "fb25f91063352ff92c073395eff80bcc2980ff3495824dbc1a02359010dc27f1",
+      "sourceManifestHash": "c703279f68724c9e2419c91dfb49b1177725296722bc5a43d9b5af9cab9ac904",
+      "changed": [],
+      "testSourceHash": "427091a0af73b0f5dee43c82a322936e8ecee1075a9c72e7a18b1077896a2286"
+    },
+    {
+      "name": "bound3-regression-detached-rollback-scale.journal",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/detached-rollback-scale.journal.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 64213,
+      "pid": 72303,
+      "start": "2026-10-21T13:52:34.945Z",
+      "log": "tmp/p5/w26-spans-run-ac/bound3-regression-detached-rollback-scale.journal.log",
+      "code": 0,
+      "end": "2026-10-21T13:54:31.871Z",
+      "logHash": "b0e12c6066b453a8b60af06534f55d49fecf066ad8216e7553258bd31e3e942b",
+      "sourceManifestHash": "c703279f68724c9e2419c91dfb49b1177725296722bc5a43d9b5af9cab9ac904",
+      "changed": [],
+      "testSourceHash": "bdb043a6fa279655328b892771cdfbf781c54cd6e9bf8f218a9ae638b52d151e"
+    },
+    {
+      "name": "bound3-regression-detached-checkpoint.journal",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/detached-checkpoint.journal.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 64213,
+      "pid": 76304,
+      "start": "2026-10-21T13:54:31.872Z",
+      "log": "tmp/p5/w26-spans-run-ac/bound3-regression-detached-checkpoint.journal.log",
+      "code": 0,
+      "end": "2026-10-21T13:54:44.682Z",
+      "logHash": "6f4c0799743a0443344e1d9d61f2c84f8ba64da17ac11868544476234339a2d2",
+      "sourceManifestHash": "c703279f68724c9e2419c91dfb49b1177725296722bc5a43d9b5af9cab9ac904",
+      "changed": [],
+      "testSourceHash": "2a22ddd54aea11787e2417731d1604f3a2c0a9b766a2749b41d150e0217ed57c"
+    },
+    {
+      "name": "bound3-regression-density-span-disk",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/density-span-disk.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 64213,
+      "pid": 77111,
+      "start": "2026-10-21T13:54:44.683Z",
+      "log": "tmp/p5/w26-spans-run-ac/bound3-regression-density-span-disk.log",
+      "code": 0,
+      "end": "2026-10-21T13:54:45.265Z",
+      "logHash": "861bbca9befd089b5b4f01844aeef28fe9ff46f4621bdb5bdd78337dddc70d22",
+      "sourceManifestHash": "c703279f68724c9e2419c91dfb49b1177725296722bc5a43d9b5af9cab9ac904",
+      "changed": [],
+      "testSourceHash": "68199fe915d464d4e8c937df29cde2719633b5dd26d60b3370d89ee2daeaf6d6"
+    },
+    {
+      "name": "bound3-regression-compression-span-stream",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/compression-span-stream.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 64213,
+      "pid": 77134,
+      "start": "2026-10-21T13:54:45.266Z",
+      "log": "tmp/p5/w26-spans-run-ac/bound3-regression-compression-span-stream.log",
+      "code": 0,
+      "end": "2026-10-21T13:54:47.872Z",
+      "logHash": "d10d4a6007ad39297f1ec137e62e0ac78ad2a7154f6f2974c3b24b5c358a86a7",
+      "sourceManifestHash": "c703279f68724c9e2419c91dfb49b1177725296722bc5a43d9b5af9cab9ac904",
+      "changed": [],
+      "testSourceHash": "5abae539ede4b4964ec206a882362b0b07af17ae2323a8e80c6ad73ecb0d845c"
+    },
+    {
+      "name": "bound3-regression-compression-span-lifecycle",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/compression-span-lifecycle.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 64213,
+      "pid": 77275,
+      "start": "2026-10-21T13:54:47.872Z",
+      "log": "tmp/p5/w26-spans-run-ac/bound3-regression-compression-span-lifecycle.log",
+      "code": 0,
+      "end": "2026-10-21T13:54:49.680Z",
+      "logHash": "9118303e2bf1ef7ef28cbece6daad075df531e804ae5b0f6fca4a677f449a067",
+      "sourceManifestHash": "c703279f68724c9e2419c91dfb49b1177725296722bc5a43d9b5af9cab9ac904",
+      "changed": [],
+      "testSourceHash": "139f723180186a534a5b9c383e04188c16dbc50ae4889da4664c3b4de31b3412"
+    },
+    {
+      "name": "bound3-regression-groupWriter",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/groupWriter.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 64213,
+      "pid": 77364,
+      "start": "2026-10-21T13:54:49.681Z",
+      "log": "tmp/p5/w26-spans-run-ac/bound3-regression-groupWriter.log",
+      "code": 0,
+      "end": "2026-10-21T13:54:49.869Z",
+      "logHash": "a49006ea5439b3445a0f2e171d2b1415a13c6cd7a12afbfc6f7683fd678522de",
+      "sourceManifestHash": "c703279f68724c9e2419c91dfb49b1177725296722bc5a43d9b5af9cab9ac904",
+      "changed": [],
+      "testSourceHash": "1facb50089abcf94e8dcb5be94a7940f9824965cb3f3799cfd7e58fecd4358cb"
+    },
+    {
+      "name": "bound3-regression-journalStore.model",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/journalStore.model.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 64213,
+      "pid": 77373,
+      "start": "2026-10-21T13:54:49.869Z",
+      "log": "tmp/p5/w26-spans-run-ac/bound3-regression-journalStore.model.log",
+      "code": 0,
+      "end": "2026-10-21T13:54:53.392Z",
+      "logHash": "6698b3d68dde73109d899bbb5ff53da098506148bb4a499ae59b07f862758142",
+      "sourceManifestHash": "c703279f68724c9e2419c91dfb49b1177725296722bc5a43d9b5af9cab9ac904",
+      "changed": [],
+      "testSourceHash": "47ec37320a367718f5eb96cb750888d57eea8eaa34b94c7b5538101bcf081707"
+    },
+    {
+      "name": "bound4-regression-ownerRules",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/journalStore.ownerRules.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 80645,
+      "pid": 80648,
+      "start": "2026-10-21T13:55:57.307Z",
+      "log": "tmp/p5/w26-spans-run-ac/bound4-regression-ownerRules.log",
+      "code": 0,
+      "end": "2026-10-21T13:55:57.633Z",
+      "logHash": "62429fe40c716e4d8ec9b41b8471327cfe1c2509194bc28d2331e23bd8966901",
+      "sourceManifestHash": "c703279f68724c9e2419c91dfb49b1177725296722bc5a43d9b5af9cab9ac904",
+      "changed": [],
+      "testSourceHash": "ef0ebc1c63b46b4810695a262ca0f6958aad6bf139988bc2730ab019a4eff23a"
+    },
+    {
+      "name": "bound4-regression-versionCopy",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/versionCopy.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 80645,
+      "pid": 80657,
+      "start": "2026-10-21T13:55:57.634Z",
+      "log": "tmp/p5/w26-spans-run-ac/bound4-regression-versionCopy.log",
+      "code": 0,
+      "end": "2026-10-21T13:55:58.011Z",
+      "logHash": "65591eca37368bb762f893ec8bf441f76a2e7061facc0dcbac7258f1fecec692",
+      "sourceManifestHash": "c703279f68724c9e2419c91dfb49b1177725296722bc5a43d9b5af9cab9ac904",
+      "changed": [],
+      "testSourceHash": "4ce975745866cdd82087ce738abe1c16bb4806deedc57e0e08af0fb0fccc9161"
+    },
+    {
+      "name": "bound4-regression-recency-facts",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/recency-facts.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 80645,
+      "pid": 80660,
+      "start": "2026-10-21T13:55:58.012Z",
+      "log": "tmp/p5/w26-spans-run-ac/bound4-regression-recency-facts.log",
+      "code": 0,
+      "end": "2026-10-21T13:56:02.171Z",
+      "logHash": "c2b360c45c5426fb10baaa13976e087ddc1eba7358400291873d8a41b9504e54",
+      "sourceManifestHash": "c703279f68724c9e2419c91dfb49b1177725296722bc5a43d9b5af9cab9ac904",
+      "changed": [],
+      "testSourceHash": "47542a1ce19d5d634fad3d554a54c7e21f3cc6017137b0d0f50fab28e405b6cb"
+    },
+    {
+      "name": "bound4-regression-continuous-recency-lifecycle",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/continuous-recency-lifecycle.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 80645,
+      "pid": 80733,
+      "start": "2026-10-21T13:56:02.172Z",
+      "log": "tmp/p5/w26-spans-run-ac/bound4-regression-continuous-recency-lifecycle.log",
+      "code": 0,
+      "end": "2026-10-21T13:56:32.372Z",
+      "logHash": "b245f7ac28b1ff831ac6e5f82e340446acf3643c009dd76e57c1834c5450c1d3",
+      "sourceManifestHash": "c703279f68724c9e2419c91dfb49b1177725296722bc5a43d9b5af9cab9ac904",
+      "changed": [],
+      "testSourceHash": "6dba4426f11fe48b5ea722e23437830d0bdefa62db446893c291107522487032"
+    },
+    {
+      "name": "bound4-regression-highdensity-native-lifetime",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/highdensity-native-lifetime.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 80645,
+      "pid": 81125,
+      "start": "2026-10-21T13:56:32.373Z",
+      "log": "tmp/p5/w26-spans-run-ac/bound4-regression-highdensity-native-lifetime.log",
+      "code": 0,
+      "end": "2026-10-21T13:57:32.132Z",
+      "logHash": "2e82d572a247647da644fabaecacf7f77dd089d11e52d89811937b8767e5f0cd",
+      "sourceManifestHash": "c703279f68724c9e2419c91dfb49b1177725296722bc5a43d9b5af9cab9ac904",
+      "changed": [],
+      "testSourceHash": "f1b4b57cea93bd050d7320b6ecafc6dd5cf4327001cfa7ebc8472cc1a58855ad"
+    },
+    {
+      "name": "bound4-pins",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/journalStore.pins.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 82760,
+      "pid": 82762,
+      "start": "2026-10-21T13:58:33.792Z",
+      "log": "tmp/p5/w26-spans-run-ac/bound4-pins.log",
+      "code": 0,
+      "end": "2026-10-21T13:58:34.124Z",
+      "logHash": "1537ee875bc72d3fcea8ccd32ab70f29320f27576953ea1c2d75707619e02a15",
+      "sourceManifestHash": "c703279f68724c9e2419c91dfb49b1177725296722bc5a43d9b5af9cab9ac904",
+      "changed": [],
+      "testSourceHash": "30c9a37514ab9b42e7fc7b44e21b314ca465866c4c5f0454c34de965b2c9a33e"
+    }
+  ],
+  "failed": [
+    {
+      "name": "bound4-reader-lifetime",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/journalStore.readerLifetime.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 80645,
+      "pid": 81954,
+      "start": "2026-10-21T13:57:32.132Z",
+      "log": "tmp/p5/w26-spans-run-ac/bound4-reader-lifetime.log",
+      "code": 1,
+      "end": "2026-10-21T13:57:32.449Z",
+      "logHash": "26ee800aa2b13a46235569b4c45d469911ed1b84764a8291f8d9a5cc642ea063",
+      "sourceManifestHash": "c703279f68724c9e2419c91dfb49b1177725296722bc5a43d9b5af9cab9ac904",
+      "changed": [],
+      "issue": "https://github.com/vybestack/llxprt-code/issues/3919",
+      "counts": {
+        "pass": 10,
+        "fail": 1,
+        "assertions": 28,
+        "files": 1
+      },
+      "note": "Dump snapshot wraps a lone descriptor-close failure in AggregateError, violating the existing original-identity assertion. Retained RED, not rerun or suppressed.",
+      "testSourceHash": "9744ca9d7829bddc3b2010e895ff9450cb64f89e5856d8903de6e6ae11f96b3b"
+    }
+  ],
+  "overallPlanGreen": false,
+  "controls": [
+    {
+      "name": "old-span-file",
+      "path": "packages/core/src/services/history/journalDensitySpans.ts",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journal-density-spans.test.ts",
+        "--timeout",
+        "180000",
+        "--test-name-pattern",
+        "3 unordered"
+      ],
+      "pid": 82909,
+      "driver": 82901,
+      "start": "2026-10-21T13:58:42.457488+00:00",
+      "code": 1,
+      "assertionFailure": true,
+      "restored": true,
+      "sha256": "2beeb3cc3005366aa6df2d47cd7c4731cd8a5d8d8d17a5f2244ce6336444c997",
+      "logHash": "a9b5b9e841790cc5c964038a7c79ddc913091bd57587b769ac0135969e132d78"
+    },
+    {
+      "name": "all-incoming-array",
+      "path": "packages/core/src/services/history/journalDensitySpans.ts",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journal-density-span-facts.test.ts",
+        "--timeout",
+        "180000",
+        "--test-name-pattern",
+        "from 8192 incoming"
+      ],
+      "pid": 82916,
+      "driver": 82901,
+      "start": "2026-10-21T13:58:42.902597+00:00",
+      "code": 1,
+      "assertionFailure": true,
+      "restored": true,
+      "sha256": "2beeb3cc3005366aa6df2d47cd7c4731cd8a5d8d8d17a5f2244ce6336444c997",
+      "logHash": "e25307a13b8742adce6011c7618ceddcc2d5663c8c0e0bc92bd39f9603132f89"
+    },
+    {
+      "name": "wrong-overlap",
+      "path": "packages/core/src/services/history/journalDensitySpans.ts",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journal-density-span-facts.test.ts",
+        "--timeout",
+        "180000",
+        "--test-name-pattern",
+        "independent array merge"
+      ],
+      "pid": 82921,
+      "driver": 82901,
+      "start": "2026-10-21T13:58:43.270877+00:00",
+      "code": 1,
+      "assertionFailure": true,
+      "restored": true,
+      "sha256": "2beeb3cc3005366aa6df2d47cd7c4731cd8a5d8d8d17a5f2244ce6336444c997",
+      "logHash": "7e83340dd25ed03743e9329025f0ea89df7eeb30182b827f0e260e634a3ee276"
+    },
+    {
+      "name": "source-owner",
+      "path": "packages/core/src/services/history/journalDetachedCandidate.ts",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journal-density-spans.test.ts",
+        "--timeout",
+        "180000",
+        "--test-name-pattern",
+        "3 unordered"
+      ],
+      "pid": 82973,
+      "driver": 82901,
+      "start": "2026-10-21T13:58:46.465957+00:00",
+      "code": 1,
+      "assertionFailure": true,
+      "restored": true,
+      "sha256": "240238b98935ec72eac837abc7cf981262212a1a18e8231e4972e3d2b00551a1",
+      "logHash": "b2803572c263337feddd7ef24cf31a1b72fb3aade66329b7f33b8c8fa08e3d41"
+    },
+    {
+      "name": "projection-failure",
+      "path": "packages/core/src/services/history/journalPublishDetached.ts",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journal-density-spans.test.ts",
+        "--timeout",
+        "180000",
+        "--test-name-pattern",
+        "projection failure"
+      ],
+      "pid": 82986,
+      "driver": 82901,
+      "start": "2026-10-21T13:58:46.908056+00:00",
+      "code": 1,
+      "assertionFailure": true,
+      "restored": true,
+      "sha256": "0dfbbd6e8b3356dda67e71d85f77c2d150f9b0c3d9ae148a91dfd686e2ba5d78",
+      "logHash": "529dc9cd4b2801c6a7a2e57397172565d9f3861c4705299cd97282273b106f43"
+    }
+  ],
+  "reds": {
+    "public-red": {
+      "log": "tmp/p5/w26-spans-run-ac/public-red.log",
+      "sha256": "fcd0f05a9ac553f4c3544f5d5ece9eaef2a77604f850d0f13c07bc9aa5b4b8ba",
+      "note": "Historical source; retained as actual assertion RED, not final acceptance."
+    },
+    "metadata-red": {
+      "log": "tmp/p5/w26-spans-run-ac/metadata-red.log",
+      "sha256": "bebbc88a18152f877acedec275162854ba57e1c317cf5ebb8f5812feb5a0f984",
+      "note": "Historical source; retained as actual assertion RED, not final acceptance."
+    },
+    "accept-spans": {
+      "log": "tmp/p5/w26-spans-run-ac/accept-spans.log",
+      "sha256": "0fce6b7076adc5a66f33cd24703a4661ae496a7d462fbcdd423fd335d7b1ff48",
+      "note": "Historical source; retained as actual assertion RED, not final acceptance."
+    },
+    "span-write-poison-red": {
+      "log": "tmp/p5/w26-spans-run-ac/span-write-poison-red.log",
+      "sha256": "f587bd3f308961ef16c08b1423e610ee5fe802284deca1744e403db12e409db7",
+      "note": "Historical source; retained as actual assertion RED, not final acceptance."
+    }
+  },
+  "storage": {
+    "1025": {
+      "privateGarbageBytes": 784647,
+      "retainedWindowBytes": 15362
+    },
+    "8192": {
+      "privateGarbageBytes": 6461536,
+      "retainedWindowBytes": 15362
+    },
+    "note": "Exact observed fixtures. Private ITNODE root is not installed; compaction removes at least all private bytes. ROW aggregate excludes metadata/shared-index bytes, not a global live-byte result."
+  },
+  "reads": {
+    "40": {
+      "first": 7,
+      "repeat": 4
+    },
+    "4000": {
+      "first": 7,
+      "repeat": 4
+    },
+    "scope": "One fixed span metadata commit, then equal-metadata no-op. Excludes input row consumption, cold construction and publication admission."
+  },
+  "preservation": {
+    "count": 1192,
+    "manifest": "tmp/p5/w26-spans-run-ac/preserved-final-start.json",
+    "sha256": "e80230bd1742f585274b87bf3b154268ec6bb6f96cb41616555a254eac7298ef",
+    "matches": true
+  },
+  "processes": {
+    "pids": [
+      28597, 28599, 28604, 28707, 29035, 29073, 29100, 29181, 29323, 29409,
+      29492, 29673, 29677, 29711, 30664, 30667, 31071, 31169, 39666, 39668,
+      39763, 43119, 43127, 43198, 43286, 43459, 43658, 43756, 43761, 43790,
+      43999, 44006, 48827, 48831, 49050, 51720, 51729, 52074, 53282, 53941,
+      53956, 53983, 54032, 54043, 54057, 54060, 55642, 55646, 55741, 55791,
+      57700, 57704, 57794, 57825, 57828, 58667, 60470, 60797, 60812, 61174,
+      61375, 64213, 64217, 64285, 64318, 64369, 64480, 64500, 64637, 64711,
+      64713, 64735, 64773, 64857, 65555, 66861, 66875, 66896, 66944, 66967,
+      66977, 66986, 72303, 76304, 77111, 77134, 77275, 77364, 77373, 77539,
+      80643, 80645, 80648, 80657, 80660, 80733, 81125, 81954, 82758, 82760,
+      82762, 82900, 82901, 82909, 82916, 82921, 82973, 82986
+    ],
+    "alive": []
+  },
+  "excluded": [
+    "Initial unbound test run does not bind the then-new facts test; final bound run supersedes it.",
+    "Initial aggregate-cause RED and physical-write RED superseded by fixes.",
+    "Source-changing acceptance driver stopped after its lane and is excluded from final-source acceptance.",
+    "Wrong relative log path failed before test launch.",
+    "Known #3917 remains separate RED without rerun, suppression or retry."
+  ],
+  "limits": [
+    "64 KiB node cache is per owner, not total heap.",
+    "At most 1024 incoming buffered spans and last 1024 merged standing spans; larger input sorts in existing journal records.",
+    "Append-only detached density collector, compression-span-index, global tool ranking, native read/write/dedupe, old backend until phase 9, provider body spools and full heap remain outside scope.",
+    "Graph validation is not affected-shard execution.",
+    "Review skipped per Andrew 2026-10-09."
+  ],
+  "overallCounts": {
+    "pass": 186,
+    "fail": 1,
+    "skip": 0,
+    "assertions": 257825,
+    "files": 24
+  },
+  "documentationFinalization": {
+    "automaticCommitShell": 80643,
+    "action": "Paused parent shell while its serial child finished, then terminated only that parent to inspect documents before explicit staging. Completed only the preplanned unexecuted pins lane; did not retry the failed reader-lifetime lane.",
+    "formatScope": "Added Markdown prefixes only, preserving earlier document contents byte-for-byte; full new JSON receipt formatted.",
+    "sourceChanges": false
+  }
+}
