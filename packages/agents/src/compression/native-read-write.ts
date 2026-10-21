@@ -116,12 +116,13 @@ export function nativeReadWrite(config: DensityConfig): {
     async readWrite(row, ordinal, facts) {
       if (row.speaker !== 'ai' && row.speaker !== 'tool') return undefined;
       const stale = new Set<string>();
-      let calls = 0;
       for (const block of row.blocks) {
-        if (row.speaker === 'ai' && block.type === 'tool_call') {
-          calls++;
-          if (await facts.stale(ordinal, block.id)) stale.add(block.id);
-        }
+        if (
+          row.speaker === 'ai' &&
+          block.type === 'tool_call' &&
+          (await facts.stale(ordinal, block.id))
+        )
+          stale.add(block.id);
         if (
           row.speaker === 'tool' &&
           block.type === 'tool_response' &&
@@ -140,8 +141,7 @@ export function nativeReadWrite(config: DensityConfig): {
       if (
         row.speaker === 'tool'
           ? blocks.length === 0
-          : stale.size === calls &&
-            blocks.every(
+          : blocks.every(
               (block) => block.type === 'text' && block.text.trim() === '',
             )
       )

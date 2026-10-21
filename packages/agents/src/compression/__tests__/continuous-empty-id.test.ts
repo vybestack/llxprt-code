@@ -127,7 +127,11 @@ describe('continuous density duplicate empty raw IDs', () => {
             digestRows(expected),
           );
           expect(await durable()).toStrictEqual(
-            await compressionValueDigest(expected),
+            await compressionValueDigest(
+              (async function* () {
+                yield* expected;
+              })(),
+            ),
           );
           expect(history.getTotalTokens()).toBe(expectedTokens);
           expect(history.getTotalTokens() - beforeTokens).toBe(
