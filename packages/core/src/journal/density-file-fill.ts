@@ -1,4 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { DensityReadWriteWriter } from './density-read-write-facts.js';
+import { observeDensityTool } from './density-read-write-observer.js';
 import type { VersionSnapshot } from './versionSnapshot.js';
 import type { RowEntry } from './rowEntry.js';
 import type { VersionEdit } from './groupEdits.js';
@@ -64,12 +66,32 @@ async function* inputOccurrences(
   policy: DensityFilePolicy,
   snapshot: VersionSnapshot,
   entry: RowEntry,
-): ReturnType<DensityFilePolicy['occurrences']> {
+): ReturnType<NonNullable<DensityFilePolicy['combined']>> {
   try {
-    yield* policy.occurrences(snapshot, entry);
+    yield* (policy.combined ?? policy.occurrences)(snapshot, entry);
   } catch (error) {
     throw new JournalInputError(error);
   }
+}
+async function observeOccurrences(
+  policy: DensityFilePolicy,
+  snapshot: VersionSnapshot,
+  entry: RowEntry,
+  writer: NativeFactIndexWriter,
+  generation: readonly number[],
+  ordinal: number,
+): Promise<number> {
+  const tools = new DensityReadWriteWriter(writer, generation);
+  let duplicates = 0;
+  for await (const occurrence of inputOccurrences(policy, snapshot, entry)) {
+    if ('kind' in occurrence)
+      await observeDensityTool(tools, occurrence, ordinal);
+    else
+      duplicates += Number(
+        await observeDensityFile(writer, generation, occurrence, ordinal),
+      );
+  }
+  return duplicates;
 }
 export async function fillDensityFiles(
   ctx: BuildContext,
@@ -120,15 +142,14 @@ export async function fillDensityFiles(
   let duplicates = old?.[3] ?? 0;
   try {
     for await (const entry of snapshot.entries(ordinal)) {
-      for await (const occurrence of inputOccurrences(
+      duplicates += await observeOccurrences(
         policy,
         snapshot,
         entry,
-      )) {
-        duplicates += Number(
-          await observeDensityFile(writer, generation, occurrence, ordinal),
-        );
-      }
+        writer,
+        generation,
+        ordinal,
+      );
       ordinal++;
     }
     await writer.set(['head'], [...generation, snapshot.rows, duplicates]);

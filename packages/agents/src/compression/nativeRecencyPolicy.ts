@@ -7,16 +7,19 @@ import {
 } from '@vybestack/llxprt-code-core/services/history/densityRecencyFacts.js';
 
 import { nativeFileDedupe } from './native-file-dedupe.js';
+import { nativeReadWrite } from './native-read-write.js';
 
 export function nativeRecencyPolicy(
   config: DensityConfig,
 ): NativeDensityPolicy {
-  if (config.readWritePruning)
-    throw new Error('Native continuous read/write pruning is not implemented');
+  const readWrite = config.readWritePruning
+    ? nativeReadWrite(config)
+    : undefined;
   return {
-    files: config.fileDedupe
-      ? nativeFileDedupe(config.workspaceRoot)
-      : undefined,
+    readWrite: readWrite?.readWrite,
+    files:
+      readWrite?.files ??
+      (config.fileDedupe ? nativeFileDedupe(config.workspaceRoot) : undefined),
     factRevision: DENSITY_RECENCY_REVISION,
     retention: config.recencyPruning
       ? Math.max(1, config.recencyRetention)

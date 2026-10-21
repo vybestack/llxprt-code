@@ -11,7 +11,7 @@ interface Inclusion {
   readonly start: number;
   readonly end: number;
 }
-function* inclusions(row: IContent, root: string): Generator<Inclusion> {
+export function* inclusions(row: IContent, root: string): Generator<Inclusion> {
   if (row.speaker !== 'human') return;
   for (const [block, content] of row.blocks.entries()) {
     if (content.type !== 'text') continue;

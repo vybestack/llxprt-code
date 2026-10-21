@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { DensityReadWriteFacts } from '../../journal/density-read-write-facts.js';
 import type { DensityFileFacts } from '../../journal/density-file-facts.js';
 import type { RecencyFacts } from '../../journal/recencyFacts.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
@@ -18,6 +19,7 @@ function recencyTransform(
   facts: RecencyFacts,
   resumeBoundary: bigint | undefined,
   fileFacts: DensityFileFacts | undefined,
+  toolFacts: DensityReadWriteFacts | undefined,
 ): DetachedHistoryTransform {
   return async (_source, sink) => {
     let ordinal = 0;
@@ -26,19 +28,39 @@ function recencyTransform(
         await snapshot.readRow(entry),
         resumeBoundary,
       );
+      const readWrite =
+        toolFacts === undefined
+          ? undefined
+          : await policy.readWrite?.(row, ordinal, toolFacts);
+      if (readWrite === null) {
+        await sink.removeValue(ordinal++);
+        continue;
+      }
       const deduplicated =
         fileFacts === undefined
           ? undefined
-          : await policy.files?.replace(row, ordinal, fileFacts);
-      const recency = await policy.replace(
-        deduplicated ?? row,
-        async (block, bucket) =>
+          : await policy.files?.replace(readWrite ?? row, ordinal, fileFacts);
+      const current = deduplicated ?? readWrite ?? row;
+      const recency = await policy.replace(current, async (block, bucket) => {
+        if (toolFacts !== undefined) {
+          const value = current.blocks[block];
+          if (value.type !== 'tool_response')
+            throw new Error('Recency selected a nonresponse block');
+          const original = row.blocks.indexOf(value);
+          if (original < 0)
+            throw new Error('Read/write response identity changed');
+          return (
+            (await toolFacts.remaining(ordinal, original)) > policy.retention
+          );
+        }
+        return (
           (await facts.count(bucket)) -
             (await facts.ordinal(entry.label, block)) +
             1 >
-          policy.retention,
-      );
-      const replacement = recency ?? deduplicated;
+          policy.retention
+        );
+      });
+      const replacement = recency ?? deduplicated ?? readWrite;
       const [clean] = invalidateResponsesStatefulChain([replacement ?? row]);
       if (replacement === undefined) await sink.appendDerived(ordinal, clean);
       else await sink.appendReplacement(ordinal, clean);
@@ -61,7 +83,16 @@ async function publishRecency(
       : await snapshot.densityFiles(policy.files.facts.revision);
   const duplicates =
     fileFacts === undefined ? 0 : (await fileFacts.header())[3];
-  if (!((await facts.maximum()) > policy.retention) && duplicates === 0) return;
+  const toolFacts =
+    policy.readWrite === undefined || fileFacts === undefined
+      ? undefined
+      : new DensityReadWriteFacts(fileFacts.reader, await fileFacts.header());
+  if (
+    !((await facts.maximum()) > policy.retention) &&
+    duplicates === 0 &&
+    (toolFacts === undefined || (await toolFacts.changes()) === 0)
+  )
+    return;
   await store.publishDetached(
     {
       transform: recencyTransform(
@@ -70,6 +101,7 @@ async function publishRecency(
         facts,
         store.resumeBoundary,
         fileFacts,
+        toolFacts,
       ),
     },
     {
@@ -95,6 +127,8 @@ export async function optimizeNativeDensity(
   const policy = request.nativePolicy?.();
   if (policy === undefined)
     throw new Error('Native density policy is required');
+  if (policy.readWrite !== undefined && policy.files === undefined)
+    throw new Error('Native read/write facts are required');
   if (policy.files !== undefined)
     await (await store.openDensityFiles(policy.files.facts)).close();
   const snapshot = await store.settledSnapshot(() =>

@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { DensityToolOccurrence } from './density-read-write-facts.js';
 import type { VersionSnapshot } from './versionSnapshot.js';
 import type { RowEntry } from './rowEntry.js';
 import type { NativeFactIndexReader } from './nativeFactIndex.js';
@@ -17,6 +18,10 @@ export interface DensityFilePolicy {
     snapshot: VersionSnapshot,
     entry: RowEntry,
   ) => AsyncIterable<DensityFileOccurrence>;
+  readonly combined?: (
+    snapshot: VersionSnapshot,
+    entry: RowEntry,
+  ) => AsyncIterable<DensityFileOccurrence | DensityToolOccurrence>;
 }
 export class DensityFileFacts {
   constructor(readonly reader: NativeFactIndexReader) {}
