@@ -93,7 +93,9 @@ describe('persisted native Anthropic repair facts', () => {
       await session.store.commit([
         { kind: 'factIndex', registration: anthropicRepairFactIndex(settings) },
       ]);
-      const before = session.store.published;
+      const beforePin = await session.store.snapshot();
+      const before = beforePin.version;
+      await beforePin.close();
       const reads = counter.reads;
       await session.store.commit([
         { kind: 'factIndex', registration: anthropicRepairFactIndex(settings) },
@@ -130,7 +132,16 @@ describe('persisted native Anthropic repair facts', () => {
       const pin = await session.store.snapshot();
       const query = await IndexedJournalRequestSnapshot.create(pin);
       try {
-        const old = await output(query);
+        const old = await emittedCandidate(
+          await normalizedRows(rows),
+          {
+            reasoningEnabled: true,
+            strip: 'allButLast',
+            currentModel: settings.model,
+          },
+          {},
+        );
+        expect(await output(query)).toBe(old);
         await session.append(added);
         await matches(session, [...rows, ...added]);
         expect(await output(query)).toBe(old);

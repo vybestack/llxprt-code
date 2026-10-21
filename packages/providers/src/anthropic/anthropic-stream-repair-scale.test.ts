@@ -100,7 +100,9 @@ async function checkChain(path: string, count: number): Promise<Work> {
       { kind: 'factIndex', registration: anthropicRepairFactIndex(settings) },
     ]);
     const fillReads = counter.reads - fillStart;
-    const filledVersion = session.store.published;
+    const filledPin = await session.store.snapshot();
+    const filledVersion = filledPin.version;
+    await filledPin.close();
     const warmStart = counter.reads;
     await session.store.commit([
       { kind: 'factIndex', registration: anthropicRepairFactIndex(settings) },
@@ -235,7 +237,9 @@ async function checkRepeated(
       { kind: 'factIndex', registration: anthropicRepairFactIndex(settings) },
     ]);
     const fillReads = counter.reads - fillStart;
-    const filledVersion = session.store.published;
+    const filledPin = await session.store.snapshot();
+    const filledVersion = filledPin.version;
+    await filledPin.close();
     const warmStart = counter.reads;
     await session.store.commit([
       { kind: 'factIndex', registration: anthropicRepairFactIndex(settings) },
