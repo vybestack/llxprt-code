@@ -227,6 +227,10 @@ async function applyEdit(
     return;
   }
   switch (edit.kind) {
+    case 'prepared':
+      throw new JournalFormatError(
+        'A prepared group must resolve before planning',
+      );
     case 'factIndex':
     case 'format':
       break;
@@ -309,6 +313,10 @@ function isLineageRewrite(
  */
 function mutationKind(edit: VersionEdit): VersionEdit['kind'] {
   switch (edit.kind) {
+    case 'prepared':
+      throw new JournalFormatError(
+        'A prepared group must resolve before planning',
+      );
     case 'factIndex':
     case 'format':
     case 'recency':

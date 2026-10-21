@@ -43,6 +43,8 @@ export function recordingAcceptsEdits(
   return edits.every((edit) => {
     if (isStructuralFill(edit)) return true;
     switch (edit.kind) {
+      case 'prepared':
+        return recordingAcceptsEdits(edit.admission, owner, origin, streams);
       case 'append':
         return edit.rows.every((row) => accepts(owner, row.owner));
       case 'compress':
@@ -107,6 +109,17 @@ export function checkedRecordingEdits(
   owner: number,
 ): readonly VersionEdit[] {
   return edits.map((edit): VersionEdit => {
+    if (edit.kind === 'prepared') {
+      return {
+        ...edit,
+        prepare: (group) =>
+          edit.prepare({
+            ...group,
+            build: (actual) =>
+              group.build(checkedRecordingEdits(actual, owner)),
+          }),
+      };
+    }
     if (edit.kind === 'replace') {
       return {
         ...edit,

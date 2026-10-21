@@ -2,6 +2,7 @@
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import { mergeRemovedInteriorSpans } from './contextRange.js';
 import { DensitySpanRows } from './densitySpanRows.js';
+import { JournalDensitySpans } from './journalDensitySpans.js';
 import type {
   DetachedHistoryHost,
   DetachedHistoryOptions,
@@ -95,42 +96,26 @@ async function publishOver(
   const state = host.snapshot();
   const appendOnly = task.append === true;
   const effects: PreparedHistoryBatchEffect[] = [];
-  const densitySpans = new DensitySpanRows();
-  const origin =
-    options.origin === undefined ? undefined : historyOriginId(options.origin);
-  const owner = await store.resolveOwner(appendOnly ? undefined : origin);
-  const media = mediaFeed(host, appendOnly, effects);
-  const candidate = new JournalCandidate({
+  const prepared = await createCandidate(
     snapshot,
+    publication,
+    store,
+    task,
     host,
     modelName,
-    signal: options.signal,
-    publication,
-    densitySpans,
-    appendOnly,
-    baseTokens: appendOnly ? state.tokens : 0,
-    media,
-    owner,
-    origin,
-  });
+    options,
+    effects,
+    state,
+  );
+  const { candidate, media } = prepared;
   const scope = store.openPublication();
   const completion = { finalized: false };
   let derived: Parameters<DetachedHistoryHost['apply']> | undefined;
   let failure: { error: unknown } | undefined;
   try {
-    await candidate.seedRange();
-    await transformCandidate(
-      task,
-      snapshot,
-      candidate,
-      options.signal,
-      store.resumeBoundary,
-    );
+    derived = await prepared.produce();
     if (!appendOnly || candidate.count > 0) {
-      const spans = await projectedSpans(candidate, densitySpans, state);
-      derived = [candidate.tokens, spans];
-      await media?.close();
-      await candidate.finish();
+      const spans = derived[1];
       host.apply(candidate.tokens, spans);
       await finishPublication(store, host, candidate, spans, state.tokens, {
         effects,
@@ -161,7 +146,7 @@ async function publishOver(
   } finally {
     scope.close(false);
   }
-  closeTask(task, densitySpans, failure);
+  closeTask(task, prepared.spans(), failure);
 }
 
 /**
@@ -171,13 +156,109 @@ async function publishOver(
  * trailer aggregate has none, WIRING G2), so the compressed spans the rows name
  * enter it here, in the same set the context range event reports.
  */
+interface CandidatePreparation {
+  readonly candidate: JournalCandidate;
+  readonly media: MediaFeed | undefined;
+  spans(): DensitySpanRows | JournalDensitySpans | undefined;
+  produce(): Promise<Parameters<DetachedHistoryHost['apply']>>;
+}
+
+async function createCandidate(
+  snapshot: VersionSnapshot,
+  publication: JournalDetachedPublication,
+  store: JournalHistoryStore,
+  task: DetachedHistoryTask,
+  host: DetachedHistoryHost,
+  modelName: string | undefined,
+  options: DetachedHistoryOptions,
+  effects: PreparedHistoryBatchEffect[],
+  state: ReturnType<DetachedHistoryHost['snapshot']>,
+): Promise<CandidatePreparation> {
+  const appendOnly = task.append === true;
+  let densitySpans: DensitySpanRows | JournalDensitySpans | undefined =
+    appendOnly ? new DensitySpanRows() : undefined;
+  const origin =
+    options.origin === undefined ? undefined : historyOriginId(options.origin);
+  const owner = await store.resolveOwner(appendOnly ? undefined : origin);
+  const media = mediaFeed(host, appendOnly, effects);
+  const activeSpans = (): DensitySpanRows | JournalDensitySpans => {
+    if (densitySpans === undefined)
+      throw new Error('Span preparation is not active');
+    return densitySpans;
+  };
+  const candidate = new JournalCandidate({
+    snapshot,
+    host,
+    modelName,
+    signal: options.signal,
+    publication,
+    densitySpans: { append: (span) => activeSpans().append(span) },
+    appendOnly,
+    baseTokens: appendOnly ? state.tokens : 0,
+    media,
+    owner,
+    origin,
+  });
+  const produce = (): Promise<Parameters<DetachedHistoryHost['apply']>> =>
+    produceCandidate(
+      task,
+      snapshot,
+      candidate,
+      activeSpans(),
+      state,
+      media,
+      store.resumeBoundary,
+      options.signal,
+    );
+  return {
+    candidate,
+    media,
+    spans: () => densitySpans,
+    produce: async () => {
+      if (appendOnly) return produce();
+      const result: { value?: Parameters<DetachedHistoryHost['apply']> } = {};
+      await publication.prepare(async (group) => {
+        densitySpans = new JournalDensitySpans(group);
+        result.value = await produce();
+      }, owner.edits);
+      if (result.value === undefined)
+        throw new Error('Detached producer returned no result');
+      return result.value;
+    },
+  };
+}
+
+async function produceCandidate(
+  task: DetachedHistoryTask,
+  snapshot: VersionSnapshot,
+  candidate: JournalCandidate,
+  densitySpans: DensitySpanRows | JournalDensitySpans,
+  state: ReturnType<DetachedHistoryHost['snapshot']>,
+  media: MediaFeed | undefined,
+  resumeBoundary: bigint | undefined,
+  signal: AbortSignal | undefined,
+): Promise<Parameters<DetachedHistoryHost['apply']>> {
+  await candidate.seedRange();
+  try {
+    await transformCandidate(task, snapshot, candidate, signal, resumeBoundary);
+    const spans = await projectedSpans(candidate, densitySpans, state);
+    await media?.close();
+    await candidate.finish();
+    return [candidate.tokens, spans];
+  } catch (error) {
+    await media?.abort(error);
+    await candidate.abort(error);
+    throw error;
+  }
+}
+
 async function projectedSpans(
   candidate: JournalCandidate,
-  densitySpans: DensitySpanRows,
+  densitySpans: DensitySpanRows | JournalDensitySpans,
   state: ReturnType<DetachedHistoryHost['snapshot']>,
 ): Promise<RemovedInteriorSpan[]> {
   const rewound = await candidate.rewoundSpan();
-  const projected = densitySpans.project(
+  const projected = await densitySpans.project(
     state.spans,
     rewound === undefined ? [] : mergeRemovedInteriorSpans([rewound]),
   );
@@ -370,13 +451,13 @@ async function compensate(input: CompensationInput): Promise<unknown[]> {
 
 function closeTask(
   task: DetachedHistoryTask,
-  densitySpans: DensitySpanRows,
+  densitySpans: DensitySpanRows | JournalDensitySpans | undefined,
   failure: { error: unknown } | undefined,
 ): void {
   task.transform = undefined;
   const closing: unknown[] = [];
   try {
-    densitySpans.close();
+    if (densitySpans instanceof DensitySpanRows) densitySpans.close();
   } catch (error) {
     closing.push(error);
   }

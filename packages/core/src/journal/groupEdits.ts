@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { GroupPreparation } from './preparedGroup.js';
 import type { IdFactQueries } from './idFactQueries.js';
 import type { IdOccurrence } from './idFactUpdate.js';
 import type { RecordAccess } from './recordAccess.js';
@@ -61,6 +62,11 @@ export interface SourceRow {
 
 /** One primitive edit of a commit group (design 4.1). The group applies them in order and commits once. */
 export type VersionEdit =
+  | {
+      readonly kind: 'prepared';
+      readonly prepare: GroupPreparation;
+      readonly admission: readonly VersionEdit[];
+    }
   | { readonly kind: 'chronology' }
   | { readonly kind: 'densityCalls' }
   | { readonly kind: 'recency' }

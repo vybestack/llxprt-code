@@ -157,6 +157,17 @@ export class JournalGroupWriter {
   commitStreamedGroup(
     build: (appender: VectoredRecordAppender) => Promise<TrailerState>,
   ): Promise<CommitAck> {
+    return this.prepareGroup(build).then((ack) => {
+      if (ack === undefined) throw new Error('A commit group left no trailer');
+      return ack;
+    });
+  }
+
+  prepareGroup(
+    build: (
+      appender: VectoredRecordAppender,
+    ) => Promise<TrailerState | undefined>,
+  ): Promise<CommitAck | undefined> {
     const turn = this.queue.then(() => this.runGroup(build));
     this.queue = turn.then(noop, noop);
     return turn;
@@ -234,8 +245,10 @@ export class JournalGroupWriter {
   }
 
   private async runGroup(
-    build: (appender: VectoredRecordAppender) => Promise<TrailerState>,
-  ): Promise<CommitAck> {
+    build: (
+      appender: VectoredRecordAppender,
+    ) => Promise<TrailerState | undefined>,
+  ): Promise<CommitAck | undefined> {
     if (this.closed) throw new Error('The journal writer is closed');
     if (this.failure !== undefined) {
       throw new JournalWriterPoisonedError({ cause: this.failure.error });
@@ -244,6 +257,10 @@ export class JournalGroupWriter {
     const appender = new VectoredRecordAppender(this.handle, this.writeOffset);
     try {
       const state = await build(appender);
+      if (state === undefined) {
+        if (appender.started) await this.handle.truncate(this.writeOffset);
+        return undefined;
+      }
       const selfOffset = appender.nextOffset;
       const trailer = this.buildTrailer(state, selfOffset);
       const record = encodeTrailerRecord(trailer);

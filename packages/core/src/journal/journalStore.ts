@@ -30,10 +30,11 @@ import {
   type FileOperations,
   type SwapOutcome,
 } from './compactionSwap.js';
-import { buildGroup, mapReader, type BuildContext } from './groupBuild.js';
+import { mapReader, type BuildContext, type BuiltGroup } from './groupBuild.js';
+import type { CommitEffect } from './commitEffect.js';
 import type { OccurrencePlanner, VersionEdit } from './groupEdits.js';
 import type { RecordAppender } from './groupAppender.js';
-import { mutationOf, planGroup } from './groupPlan.js';
+import { prepareBuild } from './preparedGroup.js';
 import type { GroupPlan, PlanContext } from './groupPlanTypes.js';
 import type { CommitAck } from './groupWriter.js';
 import type { JournalGroupWriter } from './groupWriter.js';
@@ -64,7 +65,7 @@ import {
   type StoredRow,
 } from './rowReads.js';
 import { readVersionAt } from './trailerAccess.js';
-import { versionOf, type Version } from './version.js';
+import { genesisVersion, versionOf, type Version } from './version.js';
 import { VersionSnapshot } from './versionSnapshot.js';
 import {
   writeCompactionCandidate,
@@ -118,6 +119,8 @@ export interface CommittedGroup {
   readonly after: Version;
   readonly read: PinnedRead;
   readonly writtenLabels: readonly bigint[];
+  readonly resolvedEdits?: readonly VersionEdit[];
+  readonly unchanged?: boolean;
   close(): void | Promise<void>;
 }
 
@@ -620,7 +623,7 @@ export class JournalStore {
   }
 
   private async fillFormats(
-    built: Awaited<ReturnType<typeof buildGroup>>,
+    built: BuiltGroup,
     appender: RecordAppender,
     edits: readonly VersionEdit[],
     facts: NativeFactIndexRegistration | undefined,
@@ -663,53 +666,49 @@ export class JournalStore {
   private async runCommit(
     edits: readonly VersionEdit[],
   ): Promise<CommittedGroup> {
-    if (this.compactionFailure !== undefined) {
+    if (this.compactionFailure !== undefined)
       throw new JournalFormatError(
         'An earlier compaction of this journal failed',
-        {
-          cause: this.compactionFailure.error,
-        },
+        { cause: this.compactionFailure.error },
       );
-    }
-    const mutation = mutationOf(edits);
     const before = this.currentVersion;
     const warm = await this.reuseRowFormat(edits);
     if (warm !== undefined) return warm;
-    const factIndex = await this.nativeFactRegistration(edits);
-    const plan = await planGroup(this.planContext(), edits);
-    let built: Awaited<ReturnType<typeof buildGroup>> | undefined;
+    let resolvedEdits = edits;
+    let factIndex = this.factIndex;
+    let plan: GroupPlan | undefined;
+    let built: BuiltGroup | undefined;
     const effect = this.commitEffect?.({
       read: this.buildContext().readGroup,
       getState: (key) => this.getStateUnpinned(key),
     });
-    let ack: CommitAck;
+    let ack: CommitAck | undefined;
     let rowFormats = this.rowFormats;
     try {
-      ack = await this.writer.commitStreamedGroup(async (appender) => {
+      ack = await this.writer.prepareGroup(async (appender) => {
         try {
-          built = await buildGroup(
+          const prepared = await prepareBuild(
             this.buildContext(),
-            plan,
-            mutation,
+            this.planContext(),
+            edits,
+            appender,
             effect === undefined ? appender : effectAppender(appender, effect),
+            (actual) => this.nativeFactRegistration(actual),
           );
-          const filled = await this.fillFormats(
+          ({ plan, built, edits: resolvedEdits, facts: factIndex } = prepared);
+          if (built === undefined) {
+            await effect?.settle(false);
+            return undefined;
+          }
+          const filled = await this.finishBuilt(
             built,
             appender,
-            edits,
+            resolvedEdits,
             factIndex,
+            effect,
           );
           built = filled.built;
           rowFormats = filled.registered;
-          if (effect !== undefined) {
-            built = {
-              ...built,
-              state: {
-                ...built.state,
-                stateRoot: await effect.finish(built.state.stateRoot, appender),
-              },
-            };
-          }
           return built.state;
         } catch (error) {
           return rollbackEffect(effect, error);
@@ -718,8 +717,9 @@ export class JournalStore {
     } catch (error) {
       return rollbackEffect(effect, error);
     }
+    if (ack === undefined) return this.unchangedGroup();
     const trailer = this.writer.published?.trailer;
-    if (built === undefined || trailer === undefined) {
+    if (built === undefined || trailer === undefined || plan === undefined) {
       throw new JournalFormatError('A committed group left no trailer');
     }
     this.install(trailer);
@@ -738,6 +738,49 @@ export class JournalStore {
       after: this.requireVersion(),
       read,
       writtenLabels: writtenLabelsOf(plan),
+      resolvedEdits,
+      close: () => read.close(),
+    };
+  }
+
+  private async finishBuilt(
+    built: BuiltGroup,
+    appender: RecordAppender,
+    edits: readonly VersionEdit[],
+    facts: NativeFactIndexRegistration | undefined,
+    effect: CommitEffect | undefined,
+  ): ReturnType<typeof fillRowFormats> {
+    const filled = await this.fillFormats(built, appender, edits, facts);
+    if (effect === undefined) return filled;
+    return {
+      ...filled,
+      built: {
+        ...filled.built,
+        state: {
+          ...filled.built.state,
+          stateRoot: await effect.finish(
+            filled.built.state.stateRoot,
+            appender,
+          ),
+        },
+      },
+    };
+  }
+
+  private unchangedGroup(): CommittedGroup {
+    const read = this.readOfPublished();
+    const after = this.currentVersion ?? genesisVersion(FIRST_NEXT_LABEL);
+    return {
+      ack: {
+        commitSeq: after.commitSeq,
+        durableEnd: after.durableEnd,
+        groupTag: after.groupTag,
+      },
+      before: this.currentVersion,
+      after,
+      read,
+      writtenLabels: [],
+      unchanged: true,
       close: () => read.close(),
     };
   }

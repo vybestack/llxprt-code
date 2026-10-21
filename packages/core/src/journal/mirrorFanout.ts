@@ -87,8 +87,8 @@ export class MirrorFanout {
       // before the caller can close it, and release it once they have read
       // the group's records (design 4.11).
       const group = await this.primary.commitDetailed(edits);
-      if (this.links.length === 0) return group;
-      const delta = deltaOf(group, edits);
+      if (this.links.length === 0 || group.unchanged === true) return group;
+      const delta = deltaOf(group, group.resolvedEdits ?? edits);
       const release = group.read.hold();
       const applied = this.links.map((link) => this.deliver(link, delta));
       this.readReleases = Promise.all([

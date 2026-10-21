@@ -1,4 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type {
+  PreparedGroup,
+  GroupPreparation,
+} from '../../journal/preparedGroup.js';
 import type { VersionEdit } from '../../journal/groupEdits.js';
 import { JournalInputError } from '../../journal/errors.js';
 
@@ -55,6 +59,27 @@ export class JournalDetachedPublication {
   private appendOrigin: string | undefined;
   /** The failure this publication's own groups reported; compensation resolves exactly that one. */
   private failure: unknown;
+  private prepared: PreparedGroup | undefined;
+
+  async prepare(
+    prepare: GroupPreparation,
+    ownerEdits: readonly VersionEdit[],
+  ): Promise<void> {
+    try {
+      this.admittedCount++;
+      this.lastAck = await this.store.prepareDetached(async (group) => {
+        this.prepared = group;
+        try {
+          await prepare(group);
+        } finally {
+          this.prepared = undefined;
+        }
+      }, ownerEdits);
+    } catch (error) {
+      this.failure = error;
+      throw error;
+    }
+  }
 
   constructor(private readonly store: JournalHistoryStore) {
     this.mark = store.captureCompensation();
@@ -117,11 +142,12 @@ export class JournalDetachedPublication {
     try {
       signal?.throwIfAborted();
       this.admittedCount++;
-      this.lastAck = await this.store.replaceDrafts(
-        inputDrafts(rows),
-        signal,
-        ownerEdits,
-      );
+      if (this.prepared === undefined)
+        throw new Error('Detached group is not prepared');
+      await this.prepared.build([
+        ...ownerEdits,
+        { kind: 'replace', rows: inputDrafts(rows) },
+      ]);
       signal?.throwIfAborted();
     } catch (error) {
       this.failure = error;
@@ -226,6 +252,14 @@ export class JournalDetachedPublication {
 
   private async rewind(itemsRemoved: number): Promise<void> {
     this.admittedCount++;
+    if (this.prepared !== undefined) {
+      const saved = await this.mark.saved;
+      const entry = await saved.entryAt(saved.rows - itemsRemoved);
+      await this.prepared.build([
+        { kind: 'pop', cutLabel: entry.label, expectedRemoved: itemsRemoved },
+      ]);
+      return;
+    }
     this.store.apply({ kind: 'rewind', itemsRemoved });
     await this.store.waitForDurable();
     this.lastAck = this.store.lastAck;

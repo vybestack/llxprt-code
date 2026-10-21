@@ -5,7 +5,7 @@ import type { RowDraft } from '../../journal/rowDraft.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import { collectMediaReferences } from '../../storage/media-reference-lifecycle.js';
 import { ContextRangeAccumulator } from './contextRange.js';
-import type { DensitySpanRows } from './densitySpanRows.js';
+
 import type {
   DetachedHistoryHost,
   DetachedHistorySink,
@@ -36,7 +36,9 @@ export interface CandidateContext {
   readonly modelName: string | undefined;
   readonly signal: AbortSignal | undefined;
   readonly publication: JournalDetachedPublication;
-  readonly densitySpans: DensitySpanRows;
+  readonly densitySpans: {
+    append(span: RemovedInteriorSpan): void | Promise<void>;
+  };
   readonly appendOnly: boolean;
   readonly baseTokens: number;
   readonly media: PullFeed<MediaReferenceBlock, void> | undefined;
@@ -119,7 +121,7 @@ export class JournalCandidate {
               },
             },
           };
-          densitySpans.append(spanOf(entry, 'density-replaced'));
+          await densitySpans.append(spanOf(entry, 'density-replaced'));
         }
         await this.accept(row, owner);
       },
@@ -127,7 +129,7 @@ export class JournalCandidate {
         assertActive();
         const entry = await snapshot.entryAt(ordinal);
         if (entry.chronologySeq !== ROW_ENTRY_NO_CHRONOLOGY_SEQ)
-          densitySpans.append(spanOf(entry, 'density-removed'));
+          await densitySpans.append(spanOf(entry, 'density-removed'));
       },
     };
   }

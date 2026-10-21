@@ -43,14 +43,7 @@ describe('native continuous recency decision', () => {
         expect(
           files.files.filter((path) => legacyOwners.test(path)),
         ).toStrictEqual([]);
-        expect(
-          files.directories.filter(
-            (path) => !path.includes('llxprt-resolver-'),
-          ),
-        ).toStrictEqual([]);
-        expect(
-          files.files.filter((path) => !path.endsWith('/intervals')),
-        ).toStrictEqual([]);
+        expect(files).toStrictEqual({ directories: [], files: [] });
       });
     },
     180_000,

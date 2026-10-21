@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { GroupPreparation } from '../../journal/preparedGroup.js';
 import type { EntryFill, VersionEdit } from '../../journal/groupEdits.js';
 import type { CommitAck } from '../../journal/groupWriter.js';
-import type { RowDraft } from '../../journal/rowDraft.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { IContent } from './IContent.js';
 import {
@@ -93,6 +93,7 @@ import {
   ownerChangeEdits,
   type EditBuilder,
   JournalCompensationMark,
+  preparedDetachedEdit,
 } from './journalPublication.js';
 import type { JournalRecordingService } from '../../recording/journalRecordingService.js';
 import type { SessionRecordingPort } from '../../recording/recordingPort.js';
@@ -442,21 +443,14 @@ export class JournalHistoryStore implements HistoryStorePort {
     );
   }
 
-  /**
-   * The streamed `replace` group of {@link replaceStreamed} over rows that
-   * are already encoded, so a caller can carry stored rows into the new
-   * version without decoding them.
-   */
-  async replaceDrafts(
-    rows: AsyncIterable<RowDraft>,
-    signal?: AbortSignal,
-    ownerEdits: readonly VersionEdit[] = [],
+  async prepareDetached(
+    prepare: GroupPreparation,
+    ownerEdits: readonly VersionEdit[],
   ): Promise<CommitAck> {
     this.assertUsable();
-    signal?.throwIfAborted();
     return this.requireAck(
       this.enqueueTurn(undefined, () =>
-        Promise.resolve([...ownerEdits, { kind: 'replace', rows }]),
+        Promise.resolve([preparedDetachedEdit(prepare, ownerEdits)]),
       ),
     );
   }
@@ -464,7 +458,7 @@ export class JournalHistoryStore implements HistoryStorePort {
   /**
    * The owner id of `origin` for rows a caller encodes before their group
    * exists. The edits that register a new id must go in the group that
-   * writes those rows (see {@link replaceDrafts}); when no such group is
+   * writes those rows (see {@link prepareDetached}); when no such group is
    * written the caller calls {@link discardOwnerRegistration}.
    */
   resolveOwner(origin: string | undefined): Promise<ResolvedOwner> {
@@ -1059,7 +1053,7 @@ export class JournalHistoryStore implements HistoryStorePort {
             `The journal holds ${group.after.rows} rows after commit ${group.ack.commitSeq}, the history promised ${rowsAfter}`,
           );
         }
-        this.ack = group.ack;
+        if (group.unchanged !== true) this.ack = group.ack;
         return group.ack;
       } finally {
         await group.close();

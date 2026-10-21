@@ -1,5 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { INHERIT_OWNER, type VersionEdit } from '../../journal/groupEdits.js';
+import type { GroupPreparation } from '../../journal/preparedGroup.js';
+
 import type { RowDraft } from '../../journal/rowDraft.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { IContent } from './IContent.js';
@@ -16,6 +18,17 @@ import {
 import type { JournalHistoryStore } from './journalHistoryStore.js';
 import type { JournalOwners, ResolvedOwner } from './journalOwners.js';
 import { encodeContentRow } from './journalRowCodec.js';
+
+export function preparedDetachedEdit(
+  prepare: GroupPreparation,
+  ownerEdits: readonly VersionEdit[],
+): VersionEdit {
+  return {
+    kind: 'prepared',
+    prepare,
+    admission: [...ownerEdits, { kind: 'replace', rows: [] }],
+  };
+}
 
 /** Builds the edits of one queued operation against the version the previous operation published. */
 export type EditBuilder = (snapshot: VersionSnapshot) => Promise<VersionEdit[]>;
