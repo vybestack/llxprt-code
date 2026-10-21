@@ -130,26 +130,26 @@ export class SemanticMediaPurgeAttempt {
       });
       return this.committed;
     } finally {
-      if (!this.committed) this.release();
+      if (!this.committed) await this.release();
     }
   }
 
-  finalize(): void {
-    this.release();
+  finalize(): Promise<void> {
+    return this.release();
   }
 
   async rollbackCommitted(): Promise<void> {
     if (!this.committed) return;
     await this.coordinator.rollback(this.transaction);
     this.committed = false;
-    this.release();
+    await this.release();
   }
 
-  private release(): void {
+  private async release(): Promise<void> {
     if (this.released) return;
     this.released = true;
     try {
-      this.transaction.close();
+      await this.transaction.close();
     } finally {
       this.releaseAttempt();
     }
@@ -220,7 +220,7 @@ export class SemanticMediaPurgeSession {
         (requiresExplicitCacheWrite &&
           transaction.preImageBoundary === undefined)
       ) {
-        transaction?.close();
+        await transaction?.close();
         releaseAttempt();
         return undefined;
       }

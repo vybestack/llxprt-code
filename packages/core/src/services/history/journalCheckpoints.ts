@@ -185,7 +185,7 @@ export async function withRollbackCheckpointOnJournal<T>(
       if (mark === undefined || state === undefined)
         throw new Error('Detached rollback checkpoint is closed');
       const before = host.snapshot();
-      await restoreVersion(store, host, mark);
+      await restoreCheckpointVersion(store, host, mark);
       const range = new ContextRangeAccumulator();
       for await (const row of store.streamRows()) range.add(row);
       host.chronology.restore(state.chronology);
@@ -209,7 +209,7 @@ export async function withRollbackCheckpointOnJournal<T>(
  * fails the owner's effect is rolled back and the failure reported with any
  * rollback failure.
  */
-async function restoreVersion(
+export async function restoreCheckpointVersion(
   store: JournalHistoryStore,
   host: DetachedHistoryHost,
   mark: JournalMark,

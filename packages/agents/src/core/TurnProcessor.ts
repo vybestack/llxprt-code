@@ -212,7 +212,7 @@ export class TurnProcessor {
         params.recordingExecution?.historyOrigin,
       );
       await this.sendPromise;
-      semanticMediaPurge?.finalize();
+      await semanticMediaPurge?.finalize();
       return response;
     } catch (error: unknown) {
       this.sendPromise = Promise.resolve();

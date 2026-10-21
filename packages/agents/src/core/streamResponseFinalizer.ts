@@ -177,5 +177,5 @@ export async function finalizeStreamResponse(
   });
 
   await commitFinalizedStreamHistory(options, acc, preparedHistoryUserInput);
-  options.semanticMediaPurge?.finalize();
+  await options.semanticMediaPurge?.finalize();
 }

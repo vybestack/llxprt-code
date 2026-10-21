@@ -15,6 +15,7 @@
  */
 
 import type { NativeDensityPolicy } from './nativeDensityPolicy.js';
+import type { SemanticPurgeSnapshot } from './semantic-purge-native.js';
 import type {
   ToolRankingPolicy,
   ToolRankingOverlay,
@@ -320,6 +321,9 @@ export interface HistoryStorePort {
    */
   contextRange(accumulated: readonly RemovedInteriorSpan[]): ContextRange;
   openDumpSnapshot(): Promise<HistoryDumpSnapshot>;
+  openSemanticPurgeSnapshot?(
+    host: DetachedHistoryHost,
+  ): Promise<SemanticPurgeSnapshot>;
   openCompressionInput(): Promise<CompressionInputSnapshot>;
   openToolResponseRanking(
     policy: ToolRankingPolicy,

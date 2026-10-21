@@ -1,5 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { isDeepStrictEqual } from 'node:util';
+import {
+  selectNativeSemanticPurge,
+  type NativeSemanticPurgeCandidate,
+  type SemanticPurgeResource,
+} from './semantic-purge-native.js';
+import type { HistoryMutationMark } from './historyStorePort.js';
 import type { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
@@ -19,7 +25,6 @@ import {
 } from './semantic-purge-candidate.js';
 import {
   captureSemanticPurgeRows,
-  type SemanticPurgeDiskRows,
   type SemanticPurgeRowSource,
 } from './semantic-purge-disk-rows.js';
 
@@ -40,10 +45,11 @@ export class SemanticPurgeStreamTransaction {
     | SemanticMediaPurgeBoundaryIdentity
     | undefined;
   private closed = false;
+  publishedMark: HistoryMutationMark | undefined;
 
   constructor(
-    private readonly baseDisk: SemanticPurgeDiskRows,
-    private readonly candidateDisk: SemanticPurgeDiskRows,
+    private readonly baseDisk: SemanticPurgeResource,
+    private readonly candidateDisk: SemanticPurgeResource,
     readonly preImageBoundary: SemanticMediaPurgeBoundary | undefined,
     readonly changedContentIndex: number,
     readonly changedBlockIndex: number,
@@ -51,6 +57,7 @@ export class SemanticPurgeStreamTransaction {
     readonly previousFrontier: SemanticMediaPurgeFrontier,
     readonly owner: object,
     private readonly ownership?: RowOwnership,
+    readonly native?: NativeSemanticPurgeCandidate,
   ) {
     this.base = baseDisk.view();
     this.candidate = candidateDisk.view();
@@ -109,13 +116,13 @@ export class SemanticPurgeStreamTransaction {
       throw new Error('Semantic media purge transaction is closed');
   }
 
-  close(): void {
+  async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
     try {
-      this.candidateDisk.close();
+      await this.candidateDisk.close();
     } finally {
-      this.baseDisk.close();
+      await this.baseDisk.close();
     }
   }
 }
@@ -173,6 +180,38 @@ export class SemanticMediaPurgeStreamCoordinator {
     signal?: AbortSignal,
   ): Promise<SemanticPurgeStreamTransaction | undefined> {
     if (this.configuration.enabled !== true) return undefined;
+    signal?.throwIfAborted();
+    const snapshot =
+      await this.history.detachedValues.openSemanticPurgeSnapshot();
+    if (snapshot !== undefined) {
+      try {
+        const selected = await selectNativeSemanticPurge(
+          snapshot,
+          options,
+          signal,
+        );
+        if (selected === undefined) {
+          await snapshot.close();
+          return undefined;
+        }
+        this.currentFrontier = selected.previousFrontier;
+        return new SemanticPurgeStreamTransaction(
+          { view: () => snapshot, close: () => snapshot.close() },
+          selected.candidate,
+          selected.prefix,
+          selected.candidate.location.contentIndex,
+          selected.candidate.location.blockIndex,
+          selected.candidate.frontier,
+          selected.previousFrontier,
+          this.owner,
+          this.configuration.ownership,
+          selected.candidate,
+        );
+      } catch (error) {
+        await snapshot.close();
+        throw error;
+      }
+    }
     const base = await captureSemanticPurgeRows(
       this.history.streamRawHistory(signal),
       this.configuration.ownership,
@@ -243,11 +282,79 @@ export class SemanticMediaPurgeStreamCoordinator {
     this.currentFrontier = transaction.previousFrontier;
   }
 
+  private async replaceNative(
+    transaction: SemanticPurgeStreamTransaction,
+    rollback: boolean,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const candidate = transaction.native;
+    if (candidate === undefined)
+      throw new Error('Missing native semantic purge candidate');
+    const journal = this.history.detachedValues.host().journal;
+    if (
+      rollback
+        ? transaction.publishedMark === undefined ||
+          !journal.isCurrentMutationMark(transaction.publishedMark)
+        : !candidate.snapshot.isCurrent()
+    )
+      throw new Error('History changed while semantic media purge was pending');
+    signal?.throwIfAborted();
+    if (rollback) {
+      await this.configuration.persist?.(
+        transaction.base,
+        transaction.previousFrontier,
+      );
+      await candidate.snapshot.restore();
+      return;
+    }
+    let persisted = false;
+    try {
+      await this.history.detachedValues.transform(
+        async (source, sink) => {
+          if (source.length !== transaction.base.length)
+            throw new Error(
+              'History changed while semantic media purge was pending',
+            );
+          await this.configuration.persist?.(
+            transaction.candidate,
+            transaction.nextFrontier,
+          );
+          persisted = true;
+          await candidate.publish(sink, signal);
+        },
+        undefined,
+        { signal },
+      );
+      await this.history.waitForCommit();
+      transaction.publishedMark = journal.mutationMark();
+    } catch (error) {
+      if (persisted) {
+        try {
+          await this.configuration.persist?.(
+            transaction.base,
+            transaction.previousFrontier,
+          );
+        } catch (compensation) {
+          throw new AggregateError(
+            [error, compensation],
+            'Semantic media purge failed to restore durable state',
+            { cause: error },
+          );
+        }
+      }
+      throw error;
+    }
+  }
+
   private async replace(
     transaction: SemanticPurgeStreamTransaction,
     rollback: boolean,
     signal?: AbortSignal,
   ): Promise<void> {
+    if (transaction.native !== undefined) {
+      await this.replaceNative(transaction, rollback, signal);
+      return;
+    }
     const expected = rollback ? transaction.candidate : transaction.base;
     const replacement = rollback ? transaction.base : transaction.candidate;
     const frontier = rollback

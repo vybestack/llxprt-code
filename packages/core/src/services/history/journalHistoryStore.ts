@@ -1,4 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { openJournalSemanticPurge } from './journalSemanticPurge.js';
+import type { SemanticPurgeSnapshot } from './semantic-purge-native.js';
 import type { GroupPreparation } from '../../journal/preparedGroup.js';
 import type { EntryFill, VersionEdit } from '../../journal/groupEdits.js';
 import type { CommitAck } from '../../journal/groupWriter.js';
@@ -716,6 +718,12 @@ export class JournalHistoryStore implements HistoryStorePort {
   });
 
   openDensityFiles = this.openToolResponseRanking.files;
+
+  openSemanticPurgeSnapshot(
+    host: DetachedHistoryHost,
+  ): Promise<SemanticPurgeSnapshot> {
+    return openJournalSemanticPurge(this, host);
+  }
 
   async openDumpSnapshot(): Promise<JournalDumpSnapshot> {
     this.assertUsable();

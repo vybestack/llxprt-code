@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { SemanticPurgeSnapshot } from './semantic-purge-native.js';
 import type { HistoryStorePort } from './historyStorePort.js';
 import { releaseRead } from '../../journal/pinLease.js';
 import type { HistoryServiceCore } from './HistoryServiceCore.js';
@@ -28,6 +29,7 @@ export type {
 } from './detachedHistoryMutation.js';
 
 export interface DetachedHistoryAPI {
+  openSemanticPurgeSnapshot(): Promise<SemanticPurgeSnapshot | undefined>;
   /** The service-side policy a store needs to publish a detached group of its own. */
   host(): DetachedHistoryHost;
   withRollbackCheckpoint<T>(
@@ -171,6 +173,24 @@ export function createDetachedHistoryAPI(
     enqueue(() => journal.publishDetached(task, host(), model, options));
   return {
     host,
+    openSemanticPurgeSnapshot: async () => {
+      if (journal.openSemanticPurgeSnapshot === undefined) return undefined;
+      const captured: { snapshot?: SemanticPurgeSnapshot } = {};
+      await enqueue(async () => {
+        captured.snapshot = await journal.openSemanticPurgeSnapshot?.(host());
+      });
+      const snapshot = captured.snapshot;
+      if (snapshot === undefined)
+        throw new Error('Semantic purge snapshot was not captured');
+      return {
+        length: snapshot.length,
+        streamRows: (signal) => snapshot.streamRows(signal),
+        readRow: (index) => snapshot.readRow(index),
+        isCurrent: () => snapshot.isCurrent(),
+        restore: () => enqueue(() => snapshot.restore()),
+        close: () => snapshot.close(),
+      };
+    },
     withRollbackCheckpoint: (execute) =>
       journal.withRollbackCheckpoint(host(), enqueue, execute),
     withCheckpoint: (execute, signal) =>

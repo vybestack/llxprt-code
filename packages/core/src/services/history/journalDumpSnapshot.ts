@@ -84,6 +84,19 @@ export class JournalDumpSnapshot implements HistoryDumpSnapshot {
     this.readers.requireOpen();
     return this.snapshot.curatedRows;
   }
+  get rawLength(): number {
+    this.readers.requireOpen();
+    return this.snapshot.rows;
+  }
+
+  readRawRow(index: number): Promise<IContent> {
+    return this.readers.read(async () =>
+      decodeStoredRow(
+        await this.snapshot.readRow(await this.snapshot.entryAt(index)),
+        this.resumeBoundary,
+      ),
+    );
+  }
 
   readRow(index: number): Promise<IContent> {
     return this.readers.read(async () => {
