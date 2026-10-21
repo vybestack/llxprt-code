@@ -162,6 +162,7 @@ export class JournalDumpSnapshot implements HistoryDumpSnapshot {
       }
     }
     this.onClose();
+    if (failures.length === 1) throw failures[0];
     if (failures.length > 0)
       throw new AggregateError(failures, 'Dump snapshot cleanup failed');
   }
