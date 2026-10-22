@@ -1,3 +1,7 @@
+## Native continuation finalization scope, 2026-10-22
+
+The [continuation receipt](PHASE6-SOURCE-BOUND-NATIVECONTINUATION-PROOF.json) binds `6ca3e0cf0` to current hashes and records the exact five control predicates. Actual two-POST coverage is real OpenAIProvider SSE handling, not public ChatSession or nonstreaming reply execution. A dropped final tail message is not a dropped-tool-call proof; unstripped reasoning currently fails at the missing-second-POST matcher. Warm default-text planning reads are measured, but byte totals/ROW-LENS overlap and other omission-format cold costs remain unmeasured. Full native memory and the remaining Phase 5 obligations stay open.
+
 # Native plain Chat continuation now uses the captured source
 
 2026-10-22. Checkpoint `b9a808b7a` replaces the production native plain continuation spool. Expanded two-post HTTP parity is 69/0 with 759 assertions; ten lifecycle cases cover streamed/nonstreamed prepared envelopes, current tail/media boundaries and awaited disposal. [Receipt](PHASE6-SOURCE-BOUND-NATIVECONTINUATION-PROOF.json) records current gate status and five restored controls. Legacy omitReasoning retains empty assistant messages for selected thinking-only rows, so exact parity requires a captured omission-specific format rather than unconditional block stripping. That first cold fill is separate from zero-read continuation build at 40/4,000 rows.

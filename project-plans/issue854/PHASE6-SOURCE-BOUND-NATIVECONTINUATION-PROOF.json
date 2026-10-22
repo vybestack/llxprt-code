@@ -27,7 +27,9 @@
       "exit": 1,
       "assertionFailure": true,
       "logHash": "11be3bc657810330ac3388a1436788039c3ca9f9b71d2bb3bfa86fa90f6765ea",
-      "originalHash": "e45bcbd1a5c2117f8c027da821646a093b05b2bd083e032475094e094b770fd7"
+      "originalHash": "e45bcbd1a5c2117f8c027da821646a093b05b2bd083e032475094e094b770fd7",
+      "log": "tmp/p6/chat-continuation-run-bh/final-controls/control-legacy-spool.log",
+      "matchedPredicate": "No-operation-files matcher: a continuation scratch directory was attempted."
     },
     {
       "name": "wrong-reasoning",
@@ -35,7 +37,9 @@
       "exit": 1,
       "assertionFailure": true,
       "logHash": "0753ae03f99d2786c67907193013ab073e0070dbb75e35bd44782db5f4396ed0",
-      "originalHash": "e45bcbd1a5c2117f8c027da821646a093b05b2bd083e032475094e094b770fd7"
+      "originalHash": "e45bcbd1a5c2117f8c027da821646a093b05b2bd083e032475094e094b770fd7",
+      "log": "tmp/p6/chat-continuation-run-bh/final-controls/control-wrong-reasoning.log",
+      "matchedPredicate": "Two-received-requests matcher: only one request arrived. This does not independently establish wrong-reasoning byte sensitivity after a complete second POST."
     },
     {
       "name": "wrong-tail-comma",
@@ -43,7 +47,9 @@
       "exit": 1,
       "assertionFailure": true,
       "logHash": "1682a179bd6cb91e2cefbe7be883eee2cfb2636b539d01a4af3d88b5e337f213",
-      "originalHash": "e45bcbd1a5c2117f8c027da821646a093b05b2bd083e032475094e094b770fd7"
+      "originalHash": "e45bcbd1a5c2117f8c027da821646a093b05b2bd083e032475094e094b770fd7",
+      "log": "tmp/p6/chat-continuation-run-bh/final-controls/control-wrong-tail-comma.log",
+      "matchedPredicate": "Independent complete-body SHA256 matcher at unchanged length: expected ed7a91fff4632bed7925eae9083ddf889c8d6311ebdbd585bfa496e9afd0b7b2; received 53085841c777b545a42f6d68cd001a6bbc5a6819cde22604b9984bd5581f6122."
     },
     {
       "name": "dropped-tail",
@@ -51,7 +57,9 @@
       "exit": 1,
       "assertionFailure": true,
       "logHash": "1e9c1ade2383104040211dfbd290f753cd966529bc0ca734b917bee392ad418a",
-      "originalHash": "e45bcbd1a5c2117f8c027da821646a093b05b2bd083e032475094e094b770fd7"
+      "originalHash": "e45bcbd1a5c2117f8c027da821646a093b05b2bd083e032475094e094b770fd7",
+      "log": "tmp/p6/chat-continuation-run-bh/final-controls/control-dropped-tail.log",
+      "matchedPredicate": "Independent Content-Length matcher: expected 567 bytes, received 460 bytes. This control removes the final continuation tail message, not specifically the tool-call acknowledgement."
     },
     {
       "name": "source-close-first-response",
@@ -59,7 +67,9 @@
       "exit": 1,
       "assertionFailure": true,
       "logHash": "9d1ef2411dda0b6229a6b988d84f59fbf9f320eb2c6e8baf66628c0263ca2ec1",
-      "originalHash": "e45bcbd1a5c2117f8c027da821646a093b05b2bd083e032475094e094b770fd7"
+      "originalHash": "e45bcbd1a5c2117f8c027da821646a093b05b2bd083e032475094e094b770fd7",
+      "log": "tmp/p6/chat-continuation-run-bh/final-controls/control-source-close-first-response.log",
+      "matchedPredicate": "Two-received-requests matcher: only one request arrived after closing the source during initial emission."
     }
   ],
   "interruptedControls": "Two zero-length-comma controls stopped at 120s inactivity / 100s command limits and are excluded. Source restored by cmp and matching SHA256. Accepted comma control substitutes semicolon at unchanged byte length, so the actual independent HTTP SHA assertion detects it. Dropped-tail control adjusts declared length to its shortened body; independent expected bytes detect the omission.",
@@ -904,5 +914,43 @@
     "observed": "",
     "psExit": 1,
     "scope": "Final verification/control PIDs only. No sibling processes touched."
+  },
+  "finalization": {
+    "implementationHead": "6ca3e0cf06ef1329c19632ce7a1011336c7d7463",
+    "capturedPinCommit": "b9a808b7a4f5b9237f70166a852fb75983545645",
+    "sourceManifest": {
+      "path": "tmp/p6/chat-continuation-run-bh/closure-current-source.json",
+      "sha256": "07843ec0f03b8a36ebe20fa1758431afdeac0dddf2879fb71554ca09d029e74f",
+      "entries": 8116,
+      "deltaFromFinalLane": [
+        "packages/providers/src/openai/native-chat-continuation.test.ts"
+      ]
+    },
+    "builder": {
+      "log": "tmp/p6/chat-continuation-run-bh/proof-final.log",
+      "sha256": "1d9900e8e4ff453d585e7064537047c5705768e60f6177d781a6767c1b4240d7",
+      "completed": true,
+      "error": null
+    },
+    "restoration": {
+      "path": "packages/providers/src/openai/native-chat-body.ts",
+      "sha256": "e45bcbd1a5c2117f8c027da821646a093b05b2bd083e032475094e094b770fd7",
+      "equalsHead": true,
+      "equalsSavedControlOriginal": true
+    },
+    "routeScope": "Real OpenAIProvider.generateChatCompletion handles an SSE tool-only reply and performs two actual local HTTP POSTs. No public ChatSession continuation or nonstreaming first-reply execution is claimed. Six preparation cases exercise initial stream true/false envelopes only.",
+    "mediaScope": "The 69-case HTTP corpus includes historical reference media and denies operation-created files for both requests. That detects a duplicate reservation file attempt. It does not pause second-body blob reading while clearing history or independently measure continuation-specific media reclamation.",
+    "costScope": "The 40/4000 test warms the source before its measured interval, resets its actual journal read counter, then checks zero reads after warm selection/preparation, continuation build and repeated unsent release. It uses empty ephemerals/default policy and text rows. Requested/returned metadata bytes, ROW/LENS overlaps, alternate omission-format cold fill and selected-view continuation cost were not collected for this lane and remain pending. No zero-I/O claim extends to capture, cold fill or emission.",
+    "gateScope": "Thirty of 31 final-lane invocations passed; its one formatting failure is superseded only by the recorded affected pass. Some legacy-pattern test commands also selected copied recovery files; their 630/14-style totals are not single-current-file counts. Exact-path affected reruns will be recorded separately. No whole-repository pass is claimed.",
+    "negativeScope": "Five accepted controls reach actual matchers with the precise predicates above. Two interrupted comma attempts remain excluded. Specific dropped-current-tool-call byte sensitivity and complete second-POST unstripped-reasoning byte sensitivity remain unproved.",
+    "memoryScope": "Full current-source native text/tools memory acceptance and current-source array/fill/estimate/retain sensitivity remain pending after production changes. The previous tools 170000ms timeout remains RED; no protocol retry or threshold change is authorized by this receipt.",
+    "remaining": [
+      "Native continuation request logging/body dump projection is not installed.",
+      "Kimi/Mistral continuations, Responses and Anthropic remain unmigrated.",
+      "Public continuation history commitment, continuation-specific purge/preimage views, pending reference-admission HTTP lifetime, abort-during-second-body and 128MiB pretransport boundary need dedicated continuation evidence.",
+      "Full current-source native memory refresh remains open; original tools 170000ms RED is unchanged and was not retried. These bounded-tail/row tests do not establish full memory acceptance.",
+      "Media queue/crash combinations, global LENS/live-byte accounting and aggregate pin/cache/overlay/admission capacity remain open.",
+      "Separate #3917, two old durable cases, blanket compaction, public fixture and wider 609 core-test diagnostics remain unsuppressed."
+    ]
   }
 }

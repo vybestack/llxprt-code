@@ -1,3 +1,7 @@
+## Continuation proof finalized without closing W26, 2026-10-22
+
+Production `6ca3e0cf0` preserves legacy omission semantics over the pin captured by `b9a808b7a`. The [receipt](PHASE6-SOURCE-BOUND-NATIVECONTINUATION-PROOF.json) now records current source hashes, the completed builder and exact scope limits for the provider-level two-POST run, planning counters and five restored controls. Public continuation commitment, nonstreaming reply execution, concurrent-clear/abort during second-body media, dedicated body-limit proof, full memory/traps and the existing provider/log/accounting/capacity gaps remain open. Known separate REDs remain unchanged.
+
 # Native plain Chat continuation migration is implemented; W26 remains open
 
 2026-10-22. Early checkpoint `b9a808b7a` reaches the real second native HTTP request without a spool. Expanded actual-provider parity passes 69/0, 759 assertions; ten lifecycle cases and warm 40/4,000 zero-read build checks supplement it. [Receipt](PHASE6-SOURCE-BOUND-NATIVECONTINUATION-PROOF.json) records serial verification status, source hashes and restored controls. Exact legacy omitReasoning needs inclusion-disabled facts with the original strip policy to preserve empty assistant messages from thinking-only rows; necessary cold fill is captured initially and excluded from the zero-read build claim.

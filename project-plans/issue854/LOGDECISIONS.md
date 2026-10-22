@@ -1,3 +1,9 @@
+## 2026-10-22: finalize continuation evidence without promoting unexecuted coverage
+
+Keep production `6ca3e0cf0` unchanged. Preserve exact legacy omitReasoning behavior, including retained empty assistant rows, through captured inclusion-disabled facts and the original strip policy. Capture the bounded current-reply SDK tail and compose its transfer summary before comma/media finalization. Await reader retirement through the shared body interface. Kimi/Mistral keep explicit legacy routes.
+
+The [receipt](PHASE6-SOURCE-BOUND-NATIVECONTINUATION-PROOF.json) records the completed proof builder and 8,116-path current manifest. Label real provider SSE/two-POST execution separately from public ChatSession and prepared nonstreaming envelopes. Record control predicates rather than implying every mutant delivered wrong complete bytes: reasoning and early-close controls stop the second POST, dropped-tail removes the final tail message, and the comma control fails the independent hash at unchanged length. Keep unexecuted dropped-tool-call/reasoning-byte controls and metadata byte/ROW-LENS measurements pending. Reuse old gates only with explicit source comparisons; refresh affected exact-path files. Full native memory/traps and separate REDs stay open. No production edit, preservation cleanup, .llxprt staging, enforcement weakening, OCR, push, merge or default flip. Review skipped per Andrew 2026-10-09.
+
 ## 2026-10-22: preserve actual omitReasoning bytes in native continuation
 
 The native plain OpenAI production caller now captures a source-bound continuation plan during initial preparation and emits directly through the shared HTTP body surface. Its current-reply SDK tail comes from buildContinuationTail unchanged. Stored prefix and tail transfer summaries compose before media/comma finalization. Request retirement awaits outstanding continuation readers; stream finally awaits continuation release. Kimi/Mistral retain their legacy modules.

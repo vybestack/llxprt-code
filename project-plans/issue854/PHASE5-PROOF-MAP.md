@@ -1,3 +1,7 @@
+## Native continuation receipt scope correction, 2026-10-22
+
+[Finalization](PHASE6-SOURCE-BOUND-NATIVECONTINUATION-PROOF.json) supplies an 8,116-path current manifest, restored-body HEAD comparison and exact matcher/control limits for production `6ca3e0cf0`. Two actual POSTs are provider/SSE evidence only. Initial stream=false is prepared-body evidence only. The control dropping the final tail message does not prove dropped tool-call sensitivity; the reasoning control detects no second POST. Metadata bytes/ROW-LENS overlap and full current-source memory remain pending. Exact-path gate records distinguish current files from copied recovery-file selections.
+
 ## 2026-10-22: native plain Chat continuation production closure
 
 [Native continuation receipt](PHASE6-SOURCE-BOUND-NATIVECONTINUATION-PROOF.json): early green `b9a808b7a`; 69 actual two-post HTTP parity cases, ten lifecycle cases, 40/4,000 zero-descriptor-read continuation build, five restored assertion controls. Omission-specific cold format filling preserves legacy empty assistant messages from thinking-only rows; continuation build reuses captured facts and only measures the current reply's SDK tail. The receipt distinguishes prepared nonstreaming-envelope coverage from actual streaming-triggered continuation. Public continuation commit/purge/pending-reference/second-body abort/128MiB proof, other providers, native log/dump, accounting/capacity and full memory acceptance remain open. The original tools RED is unchanged.
