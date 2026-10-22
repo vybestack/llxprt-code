@@ -21,7 +21,7 @@ Rules that stay: no compatibility shims, no eslint-disable, no type-escape casts
 
 | # | Item | Done when |
 |---|---|---|
-| 1 | Kimi native request route | `kimi-provider-file-preparation.ts` no longer spools; Kimi sends stream from journal facts |
+| 1 | Kimi native request route | Done in `01b957933`: Kimi requests and estimates stream from journal facts without body spooling; publication and one-row retention tests pass |
 | 2 | OpenAI Responses native request route | Responses sends stream from journal facts, no body spool |
 | 3 | Anthropic native request route | `AnthropicSpooledRequest.ts` and `message-table/tool-id-index.ts` no longer used |
 | 4 | Native request log/dump | Logging and dumps read the journal, no body copy |
