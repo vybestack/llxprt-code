@@ -193,7 +193,15 @@ export function historyOwnerIdFor(
 }
 
 export class MediaAdmissionService {
+  private historyRelease: ((contentId: string) => Promise<void>) | undefined;
+
   constructor(private readonly store: LocalMediaStore) {}
+
+  bindHistoryRelease(release: (contentId: string) => Promise<void>): void {
+    if (this.historyRelease !== undefined)
+      throw new Error('Media admission history release is already bound');
+    this.historyRelease = release;
+  }
 
   async admitContent(
     content: IContent,
@@ -245,7 +253,10 @@ export class MediaAdmissionService {
 
   /** Releases the reservation one admitted reference holds under the given owner scope. */
   async releaseReference(contentId: string, scope?: string): Promise<void> {
-    await this.store.release(contentId, historyOwnerIdFor(contentId, scope));
+    if (scope === undefined && this.historyRelease !== undefined)
+      await this.historyRelease(contentId);
+    else
+      await this.store.release(contentId, historyOwnerIdFor(contentId, scope));
   }
 
   async releaseAdmissions(

@@ -72,6 +72,13 @@ export class HistoryMediaOwnership implements HistoryMediaOwner {
   async bindNativeMedia(journal: JournalStore): Promise<void> {
     if (this.releaseGate !== undefined)
       throw new Error('History media owner is already bound to a journal');
+    for (const reference of this.owned.values(this.ownership)) {
+      await this.store.reserve(
+        reference,
+        historyOwnerIdFor(reference.contentId),
+      );
+      this.reserved.set(reference);
+    }
     const gate = new HistoryMediaReleaseGate(
       journal,
       this.store,
@@ -82,7 +89,7 @@ export class HistoryMediaOwnership implements HistoryMediaOwner {
     this.releaseGate = gate;
   }
 
-  private releaseOwned(contentId: string): Promise<void> {
+  releaseReference(contentId: string): Promise<void> {
     return this.releaseGate === undefined
       ? this.store.release(contentId, historyOwnerIdFor(contentId))
       : this.releaseGate.release(contentId);
@@ -219,7 +226,7 @@ export class HistoryMediaOwnership implements HistoryMediaOwner {
     for (const reference of from.values(ownership ?? this.ownership)) {
       if (keep.has(reference.contentId)) continue;
       try {
-        await this.releaseOwned(reference.contentId);
+        await this.releaseReference(reference.contentId);
       } catch (error: unknown) {
         failures.push(error);
       }
@@ -325,7 +332,7 @@ export class HistoryMediaOwnership implements HistoryMediaOwner {
     for (const { contentId } of this.owned.values(ownership)) {
       if (!releaseEverything && target.has(contentId)) continue;
       try {
-        await this.releaseOwned(contentId);
+        await this.releaseReference(contentId);
         this.owned.delete(contentId);
         this.reserved.delete(contentId);
       } catch (error: unknown) {

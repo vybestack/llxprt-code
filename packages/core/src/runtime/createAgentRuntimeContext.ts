@@ -365,8 +365,10 @@ export async function registerRuntimeMediaOwner(
   context: AgentRuntimeContext,
 ): Promise<void> {
   if (context.mediaStore === undefined) return;
-  await context.history.registerMediaOwner(
-    new HistoryMediaOwnership(context.mediaStore),
+  const owner = new HistoryMediaOwnership(context.mediaStore);
+  await context.history.registerMediaOwner(owner);
+  context.mediaAdmission?.bindHistoryRelease((contentId) =>
+    owner.releaseReference(contentId),
   );
 }
 

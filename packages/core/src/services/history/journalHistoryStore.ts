@@ -81,10 +81,7 @@ import {
   captureSettledJournalSnapshot,
   openJournalToolRanking,
 } from './journal-tool-ranking.js';
-import {
-  reconcileMediaOnJournal,
-  removeTailOnJournal,
-} from './journalMediaMutations.js';
+import * as mediaMutations from './journalMediaMutations.js';
 import type {
   DetachedHistoryHost,
   DetachedHistoryOptions,
@@ -135,7 +132,10 @@ import type * as StoreTypes from './journal-history-store-types.js';
  * and a failure to open is the failure of the queue (decision D-W7-1).
  */
 export class JournalHistoryStore implements HistoryStorePort {
-  prepareCurated = prepareJournalProviderRequest(this);
+  prepareCurated = prepareJournalProviderRequest(
+    this,
+    () => this.session.store.mediaPins.hasOwner,
+  );
 
   prepareRequestFormat = nativeRequestFormatPreparation({
     exclusive: (run) => this.exclusive(run),
@@ -816,25 +816,18 @@ export class JournalHistoryStore implements HistoryStorePort {
   }
 
   /** Hands the owner every row, one at a time, once the queue is durable. */
-  async adoptMediaOwner(
-    owner: Pick<HistoryMediaOwner, 'adopt' | 'bindNativeMedia'>,
-  ): Promise<void> {
-    for await (const row of this.streamRows()) owner.adopt([row]);
-    await owner.bindNativeMedia?.(this.session.store);
-  }
-
-  get hasPinnedMediaOwner(): boolean {
-    return this.session.store.hasPinnedMediaOwner;
+  adoptMediaOwner(owner: mediaMutations.NativeMediaOwner): Promise<void> {
+    return mediaMutations.adoptOwner(this, () => this.session.store, owner);
   }
 
   /** Removes the newest row (design 4.3) and takes it back if the media effect or the observer fails. */
   removeTail(request: HistoryRemoveTailRequest): Promise<IContent | undefined> {
-    return removeTailOnJournal(this, request);
+    return mediaMutations.removeTailOnJournal(this, request);
   }
 
   /** Makes the owner hold the media of the current rows, one streamed pass. */
   reconcileMedia(owner: HistoryMediaOwner): Promise<void> {
-    return reconcileMediaOnJournal(this, owner);
+    return mediaMutations.reconcileMediaOnJournal(this, owner);
   }
 
   /** Appends the accepted rows of another history as one detached append. */

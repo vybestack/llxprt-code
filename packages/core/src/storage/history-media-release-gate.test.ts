@@ -1,18 +1,245 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import { join } from 'node:path';
 import { JournalSession } from '../services/history/journalSession.js';
 import { LocalMediaStore } from './local-media-store.js';
 import { HistoryMediaReleaseGate } from './history-media-release-gate.js';
 import { historyOwnerIdFor } from './media-admission-service.js';
-import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
+import { useTempDir as tempDirectory } from '../journal/__tests__/support/useTempDir.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { HistoryMediaOwnership } from './history-media-ownership.js';
 import { RequestMediaResolver } from './request-media-resolver.js';
+import { MediaAdmissionService } from './media-admission-service.js';
+import { setImmediate } from 'node:timers/promises';
+import { batchGate } from '../services/history/__tests__/support/addbatch-stream-test-helpers.js';
+import type { IContent } from '../services/history/IContent.js';
+import { writeFile } from 'node:fs/promises';
 
-const directory = useTempDir('native-media-gate-');
+const directory = tempDirectory('native-media-gate-');
 
 describe('version-pinned history media ownership', () => {
+  it('rejects same-length corrupt blob bytes at the selected unit with its original verification cause', async () => {
+    const history = new HistoryService({ backend: 'journal' });
+    const root = join(directory(), 'corrupt');
+    const media = new LocalMediaStore({
+      rootDirectory: root,
+      quotaBytes: 1024,
+    });
+    const bytes = new Uint8Array([4, 6, 8]);
+    const reference = await media.admit({
+      bytes,
+      mimeType: 'image/png',
+      semanticMetadata: {},
+    });
+    await history.registerMediaOwner(new HistoryMediaOwnership(media));
+    await history.addBatch([
+      {
+        speaker: 'human',
+        blocks: [reference],
+        metadata: { turnId: 'corrupt-unit' },
+      },
+    ]);
+    const source = await history.prepareCuratedForProviderSnapshot();
+    const path = join(
+      root,
+      'objects',
+      'sha256',
+      reference.contentId.slice('sha256:'.length),
+    );
+    try {
+      await writeFile(path, new Uint8Array([8, 6, 4]));
+      await expect(
+        new RequestMediaResolver(media).resolve({
+          contents: [await source.readAt(0)],
+          requestId: 'corrupt',
+          turnId: 'fallback',
+          aggregateBudgetBytes: 1024,
+          lease: source.native?.mediaLease,
+        }),
+      ).rejects.toMatchObject({
+        name: 'RequestMediaResolutionError',
+        contentId: reference.contentId,
+        turnId: 'corrupt-unit',
+        cause: expect.objectContaining({
+          name: 'MediaObjectHashMismatchError',
+        }),
+      });
+    } finally {
+      await writeFile(path, bytes);
+      await source.close();
+      await history.clear();
+      await history.waitForOwnershipSettlement();
+      await history.dispose();
+      await media.close();
+    }
+  });
+  it('retires an in-progress blob reader before releasing its history pin', async () => {
+    const history = new HistoryService({ backend: 'journal' });
+    const media = new LocalMediaStore({
+      rootDirectory: join(directory(), 'paused-read'),
+      quotaBytes: 1024,
+    });
+    const reference = await media.admit({
+      bytes: new Uint8Array([2, 4, 6]),
+      mimeType: 'image/png',
+      semanticMetadata: {},
+    });
+    await history.registerMediaOwner(new HistoryMediaOwnership(media));
+    await history.addBatch([{ speaker: 'human', blocks: [reference] }]);
+    const source = await history.prepareCuratedForProviderSnapshot();
+    const row = await source.readAt(0);
+    await history.clear();
+    await history.waitForOwnershipSettlement();
+    const entered = batchGate();
+    const resume = batchGate();
+    const read = media.readReserved.bind(media);
+    const paused = spyOn(media, 'readReserved').mockImplementation(
+      async (ref) => {
+        entered.resolve();
+        await resume.promise;
+        return read(ref);
+      },
+    );
+    const resolving = new RequestMediaResolver(media).resolve({
+      contents: [row],
+      requestId: 'paused',
+      turnId: 'unit-one',
+      aggregateBudgetBytes: 1024,
+      lease: source.native?.mediaLease,
+    });
+    const outcome = resolving.then(
+      (value) => ({ value }),
+      (error: unknown) => ({ error }),
+    );
+    await entered.promise;
+    let closed = false;
+    const closing = Promise.resolve(source.close()).then(() => {
+      closed = true;
+    });
+    try {
+      await setImmediate();
+      expect(closed).toBe(false);
+      expect(
+        (await media.reclaimUnreferenced(new Set(), Date.now())).objectsRemoved,
+      ).toBe(0);
+      resume.resolve();
+      const result = await outcome;
+      if ('value' in result) await result.value.release();
+      await closing;
+      expect(closed).toBe(true);
+      expect(
+        (await media.reclaimUnreferenced(new Set(), Date.now())).objectsRemoved,
+      ).toBe(1);
+    } finally {
+      resume.resolve();
+      paused.mockRestore();
+      const result = await outcome;
+      if ('value' in result) await result.value.release();
+      await closing;
+      await history.dispose();
+      await media.close();
+    }
+  });
+  it('does not remove a fresh history claim when an old pin drains', async () => {
+    const history = new HistoryService({ backend: 'journal' });
+    const media = new LocalMediaStore({
+      rootDirectory: join(directory(), 'readopted'),
+      quotaBytes: 1024,
+    });
+    const reference = await media.admit({
+      bytes: new Uint8Array([9, 7, 5]),
+      mimeType: 'image/png',
+      semanticMetadata: {},
+    });
+    await history.registerMediaOwner(new HistoryMediaOwnership(media));
+    const row: IContent = { speaker: 'human', blocks: [reference] };
+    await history.addBatch([row]);
+    const source = await history.prepareCuratedForProviderSnapshot();
+    try {
+      await history.clear();
+      await history.waitForOwnershipSettlement();
+      await history.addBatch([row]);
+      await source.close();
+      expect(await media.hasReservations(reference.contentId)).toBe(true);
+      expect(
+        (await media.reclaimUnreferenced(new Set(), Date.now())).objectsRemoved,
+      ).toBe(0);
+      await history.clear();
+      await history.waitForOwnershipSettlement();
+      expect(
+        (await media.reclaimUnreferenced(new Set(), Date.now())).objectsRemoved,
+      ).toBe(1);
+    } finally {
+      await source.close();
+      await history.dispose();
+      await media.close();
+    }
+  });
+  it('gates admission history releases through the same native owner', async () => {
+    const history = new HistoryService({ backend: 'journal' });
+    const media = new LocalMediaStore({
+      rootDirectory: join(directory(), 'admission'),
+      quotaBytes: 1024,
+    });
+    const reference = await media.admit({
+      bytes: new Uint8Array([5, 3, 1]),
+      mimeType: 'image/png',
+      semanticMetadata: {},
+    });
+    const owner = new HistoryMediaOwnership(media);
+    await history.registerMediaOwner(owner);
+    const admission = new MediaAdmissionService(media);
+    admission.bindHistoryRelease((id) => owner.releaseReference(id));
+    await history.addBatch([{ speaker: 'human', blocks: [reference] }]);
+    const source = await history.prepareCuratedForProviderSnapshot();
+    try {
+      await admission.releaseReference(reference.contentId);
+      expect(
+        (await media.reclaimUnreferenced(new Set(), Date.now())).objectsRemoved,
+      ).toBe(0);
+      await history.clear();
+      await history.waitForOwnershipSettlement();
+      expect(await media.readReserved(reference)).toStrictEqual(
+        new Uint8Array([5, 3, 1]),
+      );
+      await source.close();
+      expect(
+        (await media.reclaimUnreferenced(new Set(), Date.now())).objectsRemoved,
+      ).toBe(1);
+    } finally {
+      await source.close();
+      await history.dispose();
+      await media.close();
+    }
+  });
+  it('reserves existing rows before granting a native lease to a newly registered owner', async () => {
+    const history = new HistoryService({ backend: 'journal' });
+    const media = new LocalMediaStore({
+      rootDirectory: join(directory(), 'adopted'),
+      quotaBytes: 1024,
+    });
+    const reference = await media.admit({
+      bytes: new Uint8Array([8, 6, 4]),
+      mimeType: 'image/png',
+      semanticMetadata: {},
+    });
+    await history.addBatch([{ speaker: 'human', blocks: [reference] }]);
+    await history.registerMediaOwner(new HistoryMediaOwnership(media));
+    const source = await history.prepareCuratedForProviderSnapshot();
+    try {
+      expect(source.native?.mediaLease).toBeDefined();
+      expect(await media.hasReservations(reference.contentId)).toBe(true);
+      expect(
+        (await media.reclaimUnreferenced(new Set(), Date.now())).objectsRemoved,
+      ).toBe(0);
+    } finally {
+      await source.close();
+      await history.clear();
+      await history.waitForOwnershipSettlement();
+      await history.dispose();
+      await media.close();
+    }
+  });
   it('reads a native historical reference after clear and reclaims after source close', async () => {
     const history = new HistoryService({ backend: 'journal' });
     const media = new LocalMediaStore({
@@ -102,7 +329,7 @@ describe('version-pinned history media ownership', () => {
         (await media.reclaimUnreferenced(new Set(), Date.now())).objectsRemoved,
       ).toBe(0);
       for (const reference of references)
-        expect(await media.readReserved(reference)).toEqual(
+        expect(await media.readReserved(reference)).toStrictEqual(
           new Uint8Array([references.indexOf(reference) + 1, 9, 7]),
         );
       await first.close();

@@ -67,6 +67,7 @@ import { FIRST_NEXT_LABEL } from './labels.js';
 import { LineageChain, loadChain } from './lineageChain.js';
 import { createRecordAccess, type RecordAccess } from './recordAccess.js';
 import { PinLease, PinnedRead } from './pinLease.js';
+import { JournalMediaPins } from './journalMediaPins.js';
 import { PinnedIdFacts } from './pinnedIdFacts.js';
 import type { RowEntry } from './rowEntry.js';
 import type { RightSpine, RowTreeAlgebra } from './rowTreeBuilder.js';
@@ -190,27 +191,8 @@ export class JournalStore {
   private closing = false;
   /** Readers that hold a version across awaits; a swap waits for none (design 10.1). */
   private pins = 0;
-  private readonly pinnedVersions = new Map<number, number>();
-  private pinReleaseHandler: (() => void | Promise<void>) | undefined;
-  private mediaReleasePending: (() => boolean) | undefined;
+  readonly mediaPins = new JournalMediaPins();
 
-  get hasPinnedMediaOwner(): boolean {
-    return this.pinReleaseHandler !== undefined;
-  }
-
-  get oldestPinnedVersion(): number | undefined {
-    return this.pinnedVersions.keys().next().value;
-  }
-
-  setPinReleaseHandler(
-    handler: () => void | Promise<void>,
-    pending: () => boolean,
-  ): void {
-    if (this.pinReleaseHandler !== undefined)
-      throw new Error('Journal media release gate is already installed');
-    this.pinReleaseHandler = handler;
-    this.mediaReleasePending = pending;
-  }
   /** A compaction was due but a pin held it off; the last pin released evaluates the trigger again. */
   private deferredByPin = false;
   /** The file size below which the trigger is not evaluated, set after a refused swap. */
@@ -391,26 +373,16 @@ export class JournalStore {
   private newLease(): PinLease {
     const release = this.writer.retainReader();
     const version = this.currentVersion?.commitSeq ?? 0;
-    this.pinnedVersions.set(
-      version,
-      (this.pinnedVersions.get(version) ?? 0) + 1,
-    );
+    const releaseVersion = this.mediaPins.retain(version);
     this.pins += 1;
     return new PinLease(() => {
       this.pins -= 1;
-      const count = this.pinnedVersions.get(version);
-      if (count === undefined)
-        throw new Error('Journal pin version is missing');
-      if (count === 1) this.pinnedVersions.delete(version);
-      else this.pinnedVersions.set(version, count - 1);
+      releaseVersion();
       if (!this.closing && this.pins === 0 && this.deferredByPin) {
         this.deferredByPin = false;
         this.tail = this.tail.then(() => this.compactWhenIdle());
       }
-      const retired = release();
-      if (this.pinReleaseHandler === undefined) return retired;
-      const drain = this.pinReleaseHandler;
-      return Promise.resolve(retired).then(() => drain());
+      return this.mediaPins.afterReaderRelease(release);
     });
   }
 
@@ -431,7 +403,7 @@ export class JournalStore {
   compact(): Promise<SwapOutcome> {
     if (this.closing)
       return Promise.reject(new Error('The journal store is closed'));
-    if (this.pins > 0 || this.mediaReleasePending?.() === true) {
+    if (this.pins > 0 || this.mediaPins.releasePending) {
       return Promise.reject(
         new Error('A journal with a live pin cannot compact'),
       );
@@ -589,7 +561,7 @@ export class JournalStore {
     }
     const due = this.deps.compactionDue ?? compactionDue;
     if (!due(version, this.rearmAt)) return;
-    if (this.pins > 0 || this.mediaReleasePending?.() === true) {
+    if (this.pins > 0 || this.mediaPins.releasePending) {
       this.deferredByPin = true;
       return;
     }

@@ -43,6 +43,7 @@ const CORPUS_IMAGE_BYTES = new Uint8Array([1, 2, 3]);
 const MEDIA_BUDGET_BYTES = 1024 * 1024;
 
 export interface Corpus {
+  readonly store: LocalMediaStore;
   readonly binding: MediaBinding;
   readonly histories: readonly HistoryCase[];
   dispose(): Promise<void>;
@@ -60,6 +61,7 @@ export async function createCorpus(): Promise<Corpus> {
     semanticMetadata: {},
   });
   return {
+    store,
     binding: {
       resolver: new RequestMediaResolver(store),
       budgetBytes: MEDIA_BUDGET_BYTES,

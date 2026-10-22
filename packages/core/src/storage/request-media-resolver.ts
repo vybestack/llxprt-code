@@ -455,7 +455,9 @@ export class RequestMediaResolver {
       try {
         if (input.lease !== undefined) {
           input.lease.requireOpen();
-          bytes = await this.store.readReserved(entry.reference);
+          bytes = await input.lease.withRead(() =>
+            this.store.readReserved(entry.reference),
+          );
           input.lease.requireOpen();
         } else {
           bytes = await this.readReferenceBytes(

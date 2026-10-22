@@ -5,6 +5,8 @@ import { HistoryService } from '@vybestack/llxprt-code-core/services/history/His
 import { createCoreSuffixFixtureGraph } from '@vybestack/llxprt-code-core/services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
+import { HistoryMediaOwnership } from '@vybestack/llxprt-code-core/storage/history-media-ownership.js';
 import type { ProviderRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 
 export interface JournalSendFixture {
@@ -18,6 +20,7 @@ export async function journalSendFixture(
   options: {
     readonly directory?: string;
     readonly oneRowAtATime?: boolean;
+    readonly mediaStore?: LocalMediaStore;
   } = {},
 ): Promise<JournalSendFixture> {
   const parent =
@@ -46,6 +49,10 @@ export async function journalSendFixture(
       for (const row of rows) await graph.service.addBatch([row]);
       await graph.service.waitForCommit();
     } else await graph.seed(rows);
+    if (options.mediaStore !== undefined)
+      await graph.service.registerMediaOwner(
+        new HistoryMediaOwnership(options.mediaStore),
+      );
     const selection = await graph.service.prepareCuratedForProviderSnapshot(
       pending,
       {

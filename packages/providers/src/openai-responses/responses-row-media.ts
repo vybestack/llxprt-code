@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { NativeProviderFormat } from '@vybestack/llxprt-code-core/services/history/native-provider-format.js';
 import {
   assertRequestMediaBudget,
   DEFAULT_REQUEST_MEDIA_BUDGET_BYTES,
@@ -49,7 +50,7 @@ export async function* resolveRowsMedia(
   media: RowsMediaInput,
   owner: ResolvedMediaRequest,
   signal: AbortSignal | undefined,
-  native?: import('@vybestack/llxprt-code-core/services/history/native-provider-format.js').NativeProviderFormat,
+  native?: NativeProviderFormat,
 ): AsyncGenerator<IContent, void> {
   const budget =
     media.aggregateBudgetBytes ?? DEFAULT_REQUEST_MEDIA_BUDGET_BYTES;

@@ -2,6 +2,21 @@
 import { isDeepStrictEqual } from 'node:util';
 import { collectMediaReferences } from '../../storage/media-reference-lifecycle.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
+import type { JournalStore } from '../../journal/journalStore.js';
+
+export type NativeMediaOwner = Pick<
+  HistoryMediaOwner,
+  'adopt' | 'bindNativeMedia'
+>;
+
+export async function adoptOwner(
+  store: JournalHistoryStore,
+  journal: () => JournalStore,
+  owner: NativeMediaOwner,
+): Promise<void> {
+  for await (const row of store.streamRows()) owner.adopt([row]);
+  await owner.bindNativeMedia?.(journal());
+}
 import type {
   HistoryMediaOwner,
   PreparedHistoryBatchEffect,

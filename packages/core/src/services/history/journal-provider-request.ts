@@ -39,7 +39,16 @@ export class JournalProviderRequestSnapshot implements ProviderRequestSnapshot {
   ) {
     this.native = {
       ...(pinnedMediaOwner
-        ? { mediaLease: { requireOpen: () => this.requireOpen() } }
+        ? {
+            mediaLease: {
+              origin: 'native-history',
+              requireOpen: () => this.requireOpen(),
+              withRead: (consume) => {
+                this.requireOpen();
+                return this.readers.read(consume);
+              },
+            },
+          }
         : {}),
       indexed,
       withFormat: (registration, consume) =>

@@ -55,7 +55,10 @@ describe('native plain Chat frozen HTTP bodies', () => {
           media,
         ),
       );
-      const fixture = await journalSendFixture(input.rows);
+      const fixture = await journalSendFixture(input.rows, [], {
+        mediaStore:
+          input.usesMediaReferences === true ? corpus.store : undefined,
+      });
       const sink = await localWireHashSink(route);
       try {
         const created = route.createProvider();

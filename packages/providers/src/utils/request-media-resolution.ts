@@ -5,6 +5,7 @@
  */
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { PinnedMediaLease } from '@vybestack/llxprt-code-core/storage/history-media-release-gate.js';
 import {
   assertRequestMediaBudget,
   DEFAULT_REQUEST_MEDIA_BUDGET_BYTES,
@@ -141,7 +142,7 @@ export async function resolveRequestMedia(
     readonly aggregateBudgetBytes?: number;
     readonly resolver?: RequestMediaResolutionService;
     readonly reservations?: RequestMediaReservations;
-    readonly lease?: import('@vybestack/llxprt-code-core/storage/history-media-release-gate.js').PinnedMediaLease;
+    readonly lease?: PinnedMediaLease;
   },
   contents: IContent[],
   signal: AbortSignal | undefined,

@@ -68,11 +68,11 @@ describe('native plain Chat history media lease', () => {
         if (attempt === 1) {
           await history.clear();
           await history.waitForOwnershipSettlement();
-          expect(
-            (await store.reclaimUnreferenced(new Set(), Date.now()))
-              .objectsRemoved,
-          ).toBe(0);
         }
+        expect(
+          (await store.reclaimUnreferenced(new Set(), Date.now()))
+            .objectsRemoved,
+        ).toBe(0);
         const created = await operationFileCreates(async () => {
           for await (const chunk of provider.generateChatCompletion(options))
             void chunk;

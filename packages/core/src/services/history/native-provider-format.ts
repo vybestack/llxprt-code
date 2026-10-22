@@ -7,6 +7,7 @@ import type { VersionEdit } from '../../journal/groupEdits.js';
 import type { Version } from '../../journal/version.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { IndexedJournalRequestSnapshot } from './indexed-journal-request-snapshot.js';
+import type { PinnedMediaLease } from '../../storage/history-media-release-gate.js';
 
 export type PrepareNativeRequestFormat = (
   snapshot: VersionSnapshot,
@@ -14,7 +15,7 @@ export type PrepareNativeRequestFormat = (
 ) => Promise<VersionSnapshot>;
 
 export interface NativeProviderFormat {
-  readonly mediaLease?: import('../../storage/history-media-release-gate.js').PinnedMediaLease;
+  readonly mediaLease?: PinnedMediaLease;
   readonly indexed: IndexedJournalRequestSnapshot;
   withFormat<T>(
     registration: RowFormatRegistration,
