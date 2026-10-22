@@ -677,3 +677,76 @@ Two independent Bun 1.4 behaviors, both matching Node:
   upstream saw no `/open` request, so `waitFor(openRequestSeen)` timed out and the timeout error
   became the aggregate's first error (`closes an internal sibling request...`). The helper now
   strips trailing slashes before appending a non-empty suffix.
+
+## CI round 3
+
+CI on `57faaf071` passed everything except one Windows Test-Infra Gate test:
+`real CLI test-file child retry > selects the runner budget at each call while passing the session
+env to children` (`packages/cli/test/run-bun-tests.test.ts`) failed after 4373 ms. The child
+`bun test` printed `bun test v1.4.4` and the file header, then the test's 4000 ms per-file budget
+expired before its 50 ms test reported.
+
+### Baseline
+
+Same job on other runs, Bun 1.3.14 (job logs saved under `tmp/ci3932/fix3/`), against this PR's
+Bun 1.4.4 run:
+
+| Run | Bun | selects the runner budget | kills a timed-out child | reaps a timed-out child |
+| --- | --- | --- | --- | --- |
+| issue2616-final 39857397592 | 1.3.14 | 1677 ms | 4938 ms | 4020 ms |
+| issue2616-final 39788878407 | 1.3.14 | 1729 ms | 5095 ms | 4023 ms |
+| issue2616-final 39669767025 | 1.3.14 | 3365 ms | 6620 ms | 4040 ms |
+| issue3930 39867295886 | 1.4.4 | 4373 ms, failed | 5214 ms | 4019 ms |
+
+(The other three Windows gate runs on 1.3.14 skipped this step.) The test was already at 3365 ms of
+a 4000 ms budget on one 1.3.14 run, so the margin was thin before the migration. There is one
+1.4.4 data point because earlier runs of this PR failed before this step.
+
+### Cause
+
+The child is not slow because of Bun 1.4.4, the session HOME/TMPDIR redirect, the new
+`[install]` settings in `bunfig.toml`, or a freshly linked `bun.exe` (the runner spawns
+`process.execPath`, the same Bun the outer test process runs on). `runTestFile` spawns
+`bun test` with `cwd: process.cwd()`, which is `packages/cli` in the gate, so the child loads
+`packages/cli/bunfig.toml` and its preloads: `test-setup-storage-isolation.ts` and
+`bun-test-setup.ts` import `@vybestack/llxprt-code-core`, jsdom, react and ink, then
+`storage-isolation` loads `SessionPersistenceService`. For a 50 ms test that is almost all of the
+child's start-up.
+
+Measured on macOS (trivial test file spawned the way `runTestFile` does it, 5 to 6 runs each,
+`tmp/ci3932/fix3/measure.ts` and `bisect.ts`, not committed):
+
+| Child | Bun 1.4.4 | Bun 1.3.14 |
+| --- | --- | --- |
+| cwd `packages/cli`, session env, fresh session (cold transpiler cache) | 1200 to 1300 ms | 1220 to 1300 ms |
+| cwd `packages/cli`, plain env or reused session (warm cache) | 715 to 745 ms | 975 to 1030 ms |
+| cwd with no bunfig, session env | 160 to 175 ms | 165 to 170 ms |
+| session env variables applied one at a time, cwd with no bunfig | no change from 160 ms | not run |
+
+A fresh session lands 1009 files (28 MB) in `<XDG_CACHE_HOME>/bun/@t@`, Bun's runtime transpiler
+cache, because the preload graph is transpiled from scratch. The first real child in the test
+process always pays that cost, and this test is the first. Disabling the cache
+(`BUN_RUNTIME_TRANSPILER_CACHE_PATH=0`) saved about 100 ms on 1.4.4 and nothing on 1.3.14, so the
+cache writes are not the main cost; the preload graph is. The Windows runner takes 1.7 to 4.4 s
+for the same child, which fits the same cause on slower process start and file reads. I could not
+run Windows here, so the Windows share of the cost between transpiling and file access is not
+measured.
+
+The same exposure exists in `kills a timed-out child and returns the passing retry` and `reaps a
+timed-out child even when timeout notification throws`: both give a child under the same 4000 ms
+budget and need it to reach the test body, where it writes a marker, before the budget expires.
+They passed in this run because they only need start-up to finish before 4 s.
+
+### Decision
+
+The budget stays at 4000 ms and no assertion changes. Raising the budget would only add margin
+for work these tests do not care about. The three tests check runner mechanics (budget selection,
+env pass-through, kill and retry) and use a trivial child, so the preloads are not part of what they
+test. Production `runTestFile` is unchanged: real runs need the preloads, and within one session
+the warm cache already pays for them once.
+
+The test file gains `withChildCwd(dir, run)`, which sets the working directory to the scratch
+directory that holds the child's test file for the duration of the call and restores it in
+`finally`. The three timing-sensitive tests run their children through it. Bun reads `bunfig.toml`
+from the working directory, so the child starts without preloads. After the change the budget
+test takes about 160 ms on macOS (previously about 1.2 s cold), and the file passes in 10.6 s.
