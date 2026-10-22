@@ -1,6 +1,6 @@
 # W26 remains open after bounded native Chat purge/view proof
 
-2026-10-22. [Current Phase 6 status](PHASE6-STATUS.md) and [purge/view receipt](PHASE6-SOURCE-BOUND-PURGEVIEW-PROOF.json) distinguish six public ChatSession sends from 288 selected-view seam sends across four concrete view states. Current-source physical proof, affected final checks and full memory refresh are separate obligations. Broader providers, log/dump, accounting/capacity and unexecuted combined compression/media cases remain open. All earlier separate RED gates remain unsuppressed. No Phase 5/6/W26 completion or default change.
+2026-10-22. [Current Phase 6 status](PHASE6-STATUS.md) and [purge/view receipt](PHASE6-SOURCE-BOUND-PURGEVIEW-PROOF.json) distinguish six public ChatSession sends from 288 selected-view seam sends across four concrete view states. Current-source physical evidence and all 19 affected checks pass within the recorded domain. The pending-media lease file remains RED (1/6), and full memory refresh remains open. Broader providers, log/dump, accounting/capacity and unexecuted combined compression/media cases remain open. All earlier separate RED gates remain unsuppressed. No Phase 5/6/W26 completion or default change.
 
 ---
 
