@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { mergeMistralSources } from './mistral-source-merge.js';
 import { JournalFormatError } from '../../journal/errors.js';
 import type { MistralMapping } from '../../journal/mistralMapping.js';
 import {
@@ -161,45 +162,6 @@ export class JournalRequestMistral {
     if ((await base.resolve('')).id !== (await this.resolve('')).id) yield '';
   }
 
-  private async nextSource(
-    rawId: string,
-    after: bigint,
-  ): Promise<bigint | undefined> {
-    const fact = await this.snapshot.facts.fact(rawId);
-    if (fact === undefined) return undefined;
-    const target = callTarget(fact);
-    const targetLabel =
-      rawId !== '' || target?.reconstructed === true
-        ? target?.at.label
-        : undefined;
-    const result =
-      targetLabel !== undefined && targetLabel > after
-        ? targetLabel
-        : undefined;
-    let low = 1;
-    let high = fact.callCount + 1;
-    while (low < high) {
-      const middle = Math.floor((low + high) / 2);
-      const occurrence = await this.snapshot.facts.occurrence(rawId, 0, middle);
-      if (occurrence === undefined)
-        throw new JournalFormatError('Missing Mistral holder occurrence');
-      if (occurrence.at.label <= after) low = middle + 1;
-      else high = middle;
-    }
-    for (let ordinal = low; ordinal <= fact.callCount; ordinal++) {
-      const occurrence = await this.snapshot.facts.occurrence(
-        rawId,
-        0,
-        ordinal,
-      );
-      if (occurrence === undefined)
-        throw new JournalFormatError('Missing Mistral holder occurrence');
-      if (result !== undefined && occurrence.at.label >= result) return result;
-      if (occurrence.ai) return occurrence.at.label;
-    }
-    return result;
-  }
-
   private async *sourcesForId(rawId: string): AsyncGenerator<bigint> {
     const fact = await this.snapshot.facts.fact(rawId);
     if (fact === undefined) return;
@@ -233,30 +195,11 @@ export class JournalRequestMistral {
 
   async *affectedSources(): AsyncGenerator<bigint> {
     if (this.seeds.size === 0) return;
-    const changed = this.changedIds();
-    try {
-      const first = await changed.next();
-      if (first.done === true) return;
-      const second = await changed.next();
-      if (second.done === true) {
-        yield* this.sourcesForId(first.value);
-        return;
-      }
-    } finally {
-      await changed.return(undefined);
-    }
-    let after = 0n;
-    for (;;) {
-      let next: bigint | undefined;
-      for await (const rawId of this.changedIds()) {
-        const label = await this.nextSource(rawId, after);
-        if (label !== undefined && (next === undefined || label < next))
-          next = label;
-      }
-      if (next === undefined) return;
-      yield next;
-      after = next;
-    }
+    yield* mergeMistralSources(
+      this.changedIds(),
+      (rawId) => this.sourcesForId(rawId),
+      (labels) => this.source.sortedLabels(labels),
+    );
   }
 
   private remember(rawId: string, mapping: MistralMapping): void {

@@ -56,6 +56,7 @@ async function measured(session: JournalSession): Promise<{
       normalizers: { openai: (id) => id, anthropic: (id) => id },
     },
     new BoundedIdNodeCache(),
+    session.store.sortedLabels,
   );
   return { snapshot, stats };
 }

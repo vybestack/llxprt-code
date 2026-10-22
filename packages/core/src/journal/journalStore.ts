@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { journalLabelSorter } from './ordered-labels.js';
 import {
   readContextSpans,
   type ContextSpan,
@@ -516,9 +517,18 @@ export class JournalStore {
       read,
       this.deps.idDeps,
       this.idCache,
+      this.sortedLabels,
       this.writer.reader,
     );
   }
+
+  readonly sortedLabels = journalLabelSorter({
+    openRead: () => this.openRead(),
+    enqueue: (run) => this.enqueueCommit(run),
+    writer: () => this.writer,
+    context: () => ({ build: this.buildContext(), plan: this.planContext() }),
+    installed: () => this.install(this.writer.published?.trailer),
+  });
 
   prepareSnapshotFormat = pinnedFormatPreparation({
     enqueue: (run) => this.enqueueCommit(run),
@@ -916,6 +926,7 @@ export class JournalStore {
 
   private buildContext(): BuildContext {
     return {
+      sortedLabels: this.sortedLabels,
       measureFormats: this.rowFormats.length > 0,
       access: this.access,
       readGroup: groupReadAccess(this.path, this.writer, this.currentVersion),

@@ -166,6 +166,7 @@ export function snapshotOf(
     ),
     ctx.idDeps,
     ctx.idCache,
+    ctx.sortedLabels,
     file,
   );
 }

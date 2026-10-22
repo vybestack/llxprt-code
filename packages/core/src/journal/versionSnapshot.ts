@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { LabelSorter } from './ordered-labels.js';
 import { ToolRankingTree, TOOL_RANKING_READY } from './tool-ranking-tree.js';
 import {
   DensityFileFacts,
@@ -72,6 +73,7 @@ export class VersionSnapshot {
     private readonly read: PinnedRead,
     private readonly idDeps: IdFactDeps,
     private readonly idCache: IdNodeCache,
+    readonly sortedLabels: LabelSorter,
     private readonly file: object = read,
   ) {
     this.kimi = new KimiOrdinalQueries(read, idDeps.hasher);
@@ -358,6 +360,7 @@ export class VersionSnapshot {
       ),
       this.idDeps,
       this.idCache,
+      this.sortedLabels,
       this.file,
     );
   }

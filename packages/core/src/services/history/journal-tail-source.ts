@@ -72,6 +72,10 @@ function tailRow(
 }
 
 export class JournalTailSource implements JournalResponseSource {
+  sortedLabels(labels: AsyncIterable<bigint>): AsyncGenerator<bigint> {
+    return this.snapshot.sortedLabels(labels);
+  }
+
   private readonly overlay = new Map<string, IdFact>();
   private readonly tailRows: readonly TailRow[];
   readonly facts = {

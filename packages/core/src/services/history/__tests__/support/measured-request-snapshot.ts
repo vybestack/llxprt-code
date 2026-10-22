@@ -71,6 +71,7 @@ export async function measuredRequestSnapshot(
         },
       },
       new BoundedIdNodeCache(),
+      session.store.sortedLabels,
     ),
     stats,
   };
