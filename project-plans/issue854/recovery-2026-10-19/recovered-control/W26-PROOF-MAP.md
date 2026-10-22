@@ -1,3 +1,25 @@
+# Native production normalization proof, 2026-10-21
+
+[W26-SOURCE-BOUND-PRODUCTIONNORMALIZATION-PROOF.json](W26-SOURCE-BOUND-PRODUCTIONNORMALIZATION-PROOF.json) binds `c5c720fc177c0c68c1b1a7bd46dea017b7ba1359`, **229 passing tests, zero failures/skips and 69,747 assertions in 21 complete serial files, plus 13 passing scoped gates**, five restored assertion controls and source `42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a`. All final2/post commands match the final content inventory; the commit changes HEAD only.
+
+| Contract | Evidence and boundary |
+| --- | --- |
+| Production route | HistoryServiceCore.prepareCuratedForProviderSnapshot -> backend prepareCurated -> prepareJournalProviderRequest -> JournalProviderRequestSnapshot/IndexedJournalRequestSnapshot. Purge carries its native opener instead of an intermediate old normalized disk. |
+| Public send and adapters | native-normalization-chat: two real public sends with purge off/on, model commit, media/frontier state and pending input; actual materializeCallOptions, acquireRequestRows, stagedRequestRows and providerRowsOf preserve selection identity/readAt/reader values. FakeProvider replays only responses. No new builder. |
+| Units and pending coordinates | native-provider-request and four native-purge-normalization modes compare complete units/counts/pending membership/indexed values with the old oracle. The unchanged 5000-case unit corpus and 155 native-history wire goldens pass without regeneration. |
+| Caller ownership | Unchanged journal-tail-resources RED 2 pass/1 fail becomes 3 pass/0 fail by capturing encoded pending bytes before yielding; no mutable caller closure or history-prefix cache. |
+| Lifetime and bounds | Native 65-row wrapper: real readAt after history disposal, independent readers, exact abort object, one canceled lease then zero after close. Original #3919 files unchanged. Native pending 512/8192 peaks one/final zero under bound two; complete greater-than-nine-MiB value preserved. Provider forty one-MiB rows stay under nine objects. |
+| Cost | Tail header/index experiments at 40/4000/100000 retain their exact read limits and one selected block decode; no global or cold-fill capacity claim. |
+| Falsification | Old normalizer, actual converted-row retention, wrong pending mask, stale canceled-reader owner and lost neutral requestRows propagation fail actual assertions. Four mutations restore cmp/SHA256; environment trap leaves source bytes unchanged. |
+| Public RED boundary | Original semantic-purge-native-chat still enabled and RED: one-response fixture exhausted on call 2 plus lazy-directory creation assertion. No ProviderNormalizationDisk failure remains. Separate recorded-purge success permits only its media-live lock file class; Phase 8 and blanket no-file closure remain open. |
+| Compression | Existing configured scalar compression passes with explicit native backend in a separate process. This is not a combined automatic-compression/public-purge proof. |
+| AST audit | One DUP_ASSERT brackets initial normalization parity and post-append pinned-request parity. Both state-transition assertions remain. No touched MOCK_MIRROR, ALWAYS_TRUE, SELF_CONFIRMING or NO_ASSERT finding. |
+| Preservation and audit | All 1,204 preservation hashes and inherited dirty memory match; 306 unrelated declarations and raw recovery remain untouched and unstaged. All recorded verification/control PIDs are absent. #3917 is not rerun, retried or suppressed. Two explicit-old durable capture REDs and the original 8192 blanket compaction-denial RED remain separate. No review/OCR, new transport, push, merge, cleanup, default flip or weaker enforcement. Review skipped per Andrew 2026-10-09. |
+
+Phase 5/W26 remain open for actual header/token/request planning and Phase 6 body/key/message/tokenizer spools/guards, the stored-planning eight-case RED boundary, cache/tails/ranges/media semantic generations, cold structural ranking and pending/stale capacity, LENS/live bytes, whole-heap/aggregate cache/pin capacity, Phase 8 reservations, W23/W25/cutover and cold Mistral. Explicit old/disk and arbitrary iterable-override normalization remain; old whole-body oracles stay until Phase 9. Defaults are unchanged.
+
+---
+
 # 8192 pending-token compaction boundaries, 2026-10-21
 
 [W26-SOURCE-BOUND-PENDINGTOKEN-COMPACTION-PROOF.json](W26-SOURCE-BOUND-PENDINGTOKEN-COMPACTION-PROOF.json) binds **94 passes, zero failures/skips and 2,367 assertions across 18 complete serial files**, ten scoped gates, four restored controls and exact source bridges. The only reused-file inventory difference is the independent new core compaction test's explicit present-version type narrowing; that file and all gates ran fresh.

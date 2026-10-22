@@ -1,0 +1,1367 @@
+{
+  "date": "2026-10-21",
+  "status": "Supported native production request preparation and native purge use indexed request units. Scoped checks pass; Phase 5/W26 and blanket public no-file acceptance remain open.",
+  "initial": "38114d4027a9c48ee087871caef9309139b69727",
+  "earlyGreen": "4ce744e7205c5ce8ff534a91ea75c235897f7b5a",
+  "production": "c5c720fc177c0c68c1b1a7bd46dea017b7ba1359",
+  "source": {
+    "hash": "42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a",
+    "count": 9095,
+    "manifest": {
+      "path": "tmp/p5/native-normalization-run-as/final2-source.json",
+      "sha256": "d020887b61439a2551051fdac3b54ab2a480311e78fbef68df9c74cb9acc70dc"
+    },
+    "manifestHead": "4ce744e7205c5ce8ff534a91ea75c235897f7b5a",
+    "committedOwned": [
+      {
+        "path": "packages/agents/src/api/__tests__/native-normalization-chat.test.ts",
+        "sha256": "f78a4953d318fab771e5d179a6d80792c0fcc045ad061afe719d2555ef0867b0"
+      },
+      {
+        "path": "packages/agents/src/core/native-purge-normalization.test.ts",
+        "sha256": "c6ed8a73fb6c7f9bcbf49aae4ae4fd2d295ef53816b1ffb67470ad66d46fc179"
+      },
+      {
+        "path": "packages/agents/src/core/semanticMediaPurgeSession.ts",
+        "sha256": "d677df6f1180dea5d2c1c1a4ebdd5dfa50c802014efcfa88b9defc2673e95404"
+      },
+      {
+        "path": "packages/agents/src/core/source-before-model-hook.ts",
+        "sha256": "80802c8a5c886758c3195b1e692f47beac3a0bf8161136380c8f63e84e6b8d4a"
+      },
+      {
+        "path": "packages/agents/src/core/source-pending-selection.ts",
+        "sha256": "f2c493e3c5eab4cb21e962740de609c9ca946ec220921a85d212e5e6040c3c07"
+      },
+      {
+        "path": "packages/agents/src/core/streamRequestHelpers.ts",
+        "sha256": "04363e04d5831a0c5ccbfbbecba86faca2b23973442425827132f3701e13d8f2"
+      },
+      {
+        "path": "packages/core/src/services/history/HistoryServiceCore.ts",
+        "sha256": "28147bda69b8003dde84c76460de390bd4315eb44951ab1526d62a1d07c1ac28"
+      },
+      {
+        "path": "packages/core/src/services/history/detachedHistoryAPI.ts",
+        "sha256": "03118bd379f850bb0bd5fc1f9c63568bf2b3d52318dfb3346ee97441768d17f9"
+      },
+      {
+        "path": "packages/core/src/services/history/historyBackend.test.ts",
+        "sha256": "be8db18eec2c591911b0195ea4c305729c407207e963e76cf765ff3e3a4bffa6"
+      },
+      {
+        "path": "packages/core/src/services/history/historyJournalStore.ts",
+        "sha256": "04ce1f802b09a6ced1cd5d7780d61b3f90821089fd80a500f21a64060c814780"
+      },
+      {
+        "path": "packages/core/src/services/history/historyStorePort.ts",
+        "sha256": "c2c5b0f93d70e5d27f3385284904e0af7b35da5e0077a3b8b55e60e2b51d8cb6"
+      },
+      {
+        "path": "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+        "sha256": "e7bff3d7a802c741958d703555274fe021287e178b1b183605d59bb45dab0afa"
+      },
+      {
+        "path": "packages/core/src/services/history/journal-indexed-overlay.ts",
+        "sha256": "ecff7e0eada866e525fe7d8048cedc98a4513f3a5583c52841c701b2e33c7595"
+      },
+      {
+        "path": "packages/core/src/services/history/journal-provider-request.ts",
+        "sha256": "b4498ce477b6f6c42ceae7fd093e3f9d26621ff507782d95714e12dcea67f8d0"
+      },
+      {
+        "path": "packages/core/src/services/history/journal-request-projection.ts",
+        "sha256": "fd958ffe3e3252edc8bdaf81c51c535297efcf99175430b82acf51678f6ac3ae"
+      },
+      {
+        "path": "packages/core/src/services/history/journal-response-parts.ts",
+        "sha256": "6b7cb7eb7636059584fbb8beba457e4090e5d2727aff06081e96c971739fd22e"
+      },
+      {
+        "path": "packages/core/src/services/history/journal-response-source.ts",
+        "sha256": "0b74553256ccb8b02fc81875d7fabe069800946157efa51174ec3493e2c06151"
+      },
+      {
+        "path": "packages/core/src/services/history/journal-tail-source.ts",
+        "sha256": "7620a179979bd869a032ac8b9cedd0eb4b34bbe34d86c3311b7379a9d6516fe3"
+      },
+      {
+        "path": "packages/core/src/services/history/journalHistoryStore.ts",
+        "sha256": "df46dc869bcfeb50e127f31d83f93b74eeb00f6a57915e65cd237d9d52e23d79"
+      },
+      {
+        "path": "packages/core/src/services/history/journalSemanticPurge.ts",
+        "sha256": "c674a3b95a0093a181e3b9122ea717038bf9b53193eff89098b4be2aa86e6495"
+      },
+      {
+        "path": "packages/core/src/services/history/native-provider-lifetime.test.ts",
+        "sha256": "d3e86f23979571869c05c3cd8a3a554f84bc30c7588454b6fe5cf99f4236d67c"
+      },
+      {
+        "path": "packages/core/src/services/history/native-provider-request.test.ts",
+        "sha256": "c0f83bd053c4b8d7bbd4452cc0032d9bf984bcf1f52d0f174366aa9fe7a10a0f"
+      },
+      {
+        "path": "packages/core/src/services/history/native-purge-provider-request.ts",
+        "sha256": "bcf27e5815e933465bdf9678237a309b743766cf2dce02e082b0ddbf0fa73fa5"
+      },
+      {
+        "path": "packages/core/src/services/history/old-provider-request.ts",
+        "sha256": "eaad38e6ea19bef60322e752600afc06b36de8b4e651dcf135a795f663cc0482"
+      },
+      {
+        "path": "packages/core/src/services/history/provider-request-snapshot.ts",
+        "sha256": "f6f9593c36261ec1b7ce2c5d0ef517b30d0b6bbdb1c24faf43fd5df109610e64"
+      },
+      {
+        "path": "packages/core/src/services/history/semantic-purge-native.ts",
+        "sha256": "673eaaee095081af01a4dd9b522755ba3d9bcf94ec08e0cf22afd16d13ca0033"
+      },
+      {
+        "path": "packages/core/src/services/history/semantic-purge-stream.ts",
+        "sha256": "e857147646522964c18053b9177c10cb4f0ab076cc87691a5a0b9e76868b258e"
+      },
+      {
+        "path": "packages/providers/src/__tests__/journal-envelope-edge.test.ts",
+        "sha256": "b4dcd386940796bbd66d22b1f94e18836725bb4d266a0c0c095d57cc3d466e05"
+      },
+      {
+        "path": "packages/providers/src/__tests__/support/native-probe-source.ts",
+        "sha256": "d7c26953997d40288d564589acb174d3614a69a724ca0d9fff0c44adfdab6c11"
+      }
+    ],
+    "bridge": "Every final2/post command matches the final content inventory. Committing changed HEAD only, not source bytes."
+  },
+  "totals": {
+    "files": 21,
+    "pass": 229,
+    "fail": 0,
+    "assertions": 69747,
+    "gates": 13
+  },
+  "acceptedTests": [
+    {
+      "name": "final2-native-normalization-chat",
+      "cwd": "packages/agents",
+      "cmd": [
+        "bun",
+        "test",
+        "src/api/__tests__/native-normalization-chat.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "pid": 48936,
+      "driver": 48924,
+      "code": 0,
+      "signal": null,
+      "sourceHash": "42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a",
+      "changed": false,
+      "logHash": "fdb61b7b2dd1bf2f55f048abc0feb7dc09cbee84af851d454406b1ed4cfbcd0b",
+      "summary": [
+        " 2 pass",
+        " 0 fail",
+        " 34 expect() calls",
+        "Ran 2 tests across 1 file. [1386.00ms]"
+      ]
+    },
+    {
+      "name": "final2-native-purge-normalization",
+      "cwd": "packages/agents",
+      "cmd": [
+        "bun",
+        "test",
+        "src/core/native-purge-normalization.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "pid": 48969,
+      "driver": 48924,
+      "code": 0,
+      "signal": null,
+      "sourceHash": "42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a",
+      "changed": false,
+      "logHash": "95d12df2cfe99e58879ad7d6982ff5167b66fd6f0532be399d1ae8c3cde6dd82",
+      "summary": [
+        " 4 pass",
+        " 0 fail",
+        " 52 expect() calls",
+        "Ran 4 tests across 1 file. [515.00ms]"
+      ]
+    },
+    {
+      "name": "final2-native-provider-request",
+      "cwd": "packages/core",
+      "cmd": [
+        "bun",
+        "test",
+        "src/services/history/native-provider-request.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "pid": 48983,
+      "driver": 48924,
+      "code": 0,
+      "signal": null,
+      "sourceHash": "42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a",
+      "changed": false,
+      "logHash": "e762c649a5a4183489a98e5330824aa765e876e7afe2d7498757cc0dccd90b51",
+      "summary": [
+        " 1 pass",
+        " 0 fail",
+        " 14 expect() calls",
+        "Ran 1 test across 1 file. [470.00ms]"
+      ]
+    },
+    {
+      "name": "final2-native-provider-lifetime",
+      "cwd": "packages/core",
+      "cmd": [
+        "bun",
+        "test",
+        "src/services/history/native-provider-lifetime.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "pid": 49001,
+      "driver": 48924,
+      "code": 0,
+      "signal": null,
+      "sourceHash": "42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a",
+      "changed": false,
+      "logHash": "c9c323083b8bda31bdb3580e6407cb97aab3d32309bc9b205633327eaea778f6",
+      "summary": [
+        " 1 pass",
+        " 0 fail",
+        " 7 expect() calls",
+        "Ran 1 test across 1 file. [402.00ms]"
+      ]
+    },
+    {
+      "name": "final2-normalization-unit-oracle",
+      "cwd": "packages/core",
+      "cmd": [
+        "bun",
+        "test",
+        "src/services/history/normalization-unit-oracle.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "pid": 49012,
+      "driver": 48924,
+      "code": 0,
+      "signal": null,
+      "sourceHash": "42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a",
+      "changed": false,
+      "logHash": "2234f36ad924b80eb7e06d869a011951da006029af4eecddbf8a49978ff82a81",
+      "summary": [
+        " 3 pass",
+        " 0 fail",
+        " 60857 expect() calls",
+        "Ran 3 tests across 1 file. [15.40s]"
+      ]
+    },
+    {
+      "name": "final2-journal-tail-units",
+      "cwd": "packages/core",
+      "cmd": [
+        "bun",
+        "test",
+        "src/services/history/journal-tail-units.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "pid": 49227,
+      "driver": 48924,
+      "code": 0,
+      "signal": null,
+      "sourceHash": "42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a",
+      "changed": false,
+      "logHash": "6d6ff48dd558aa5c7b9604ad0aec978be6537d0b34c2146d1878743d0e593017",
+      "summary": [
+        " 9 pass",
+        " 0 fail",
+        " 9 expect() calls",
+        "Ran 9 tests across 1 file. [392.00ms]"
+      ]
+    },
+    {
+      "name": "final2-journal-tail-query-resources",
+      "cwd": "packages/core",
+      "cmd": [
+        "bun",
+        "test",
+        "src/services/history/journal-tail-query-resources.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "pid": 49246,
+      "driver": 48924,
+      "code": 0,
+      "signal": null,
+      "sourceHash": "42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a",
+      "changed": false,
+      "logHash": "f339ae3ff8f536a7ebc3148d11ea981acd9145c0f3ed38581792efa1a11741b5",
+      "summary": [
+        " 3 pass",
+        " 0 fail",
+        " 39 expect() calls",
+        "Ran 3 tests across 1 file. [6.02s]"
+      ]
+    },
+    {
+      "name": "final2-journal-orphan-resources",
+      "cwd": "packages/core",
+      "cmd": [
+        "bun",
+        "test",
+        "src/services/history/journal-orphan-resources.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "pid": 49364,
+      "driver": 48924,
+      "code": 0,
+      "signal": null,
+      "sourceHash": "42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a",
+      "changed": false,
+      "logHash": "082173438bb678310af7060d40ca78a923b8b4b6792b69b7a1f120085e026e54",
+      "summary": [
+        " 3 pass",
+        " 0 fail",
+        " 8011 expect() calls",
+        "Ran 3 tests across 1 file. [5.38s]"
+      ]
+    },
+    {
+      "name": "final2-journal-tail-resources",
+      "cwd": "packages/core",
+      "cmd": [
+        "bun",
+        "test",
+        "src/services/history/journal-tail-resources.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "pid": 49456,
+      "driver": 48924,
+      "code": 0,
+      "signal": null,
+      "sourceHash": "42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a",
+      "changed": false,
+      "logHash": "ac11697dac74f5537a5c7f3bc3878c15191e1af5d09d7fa9945a3b24f5722f3d",
+      "summary": [
+        " 3 pass",
+        " 0 fail",
+        " 5 expect() calls",
+        "Ran 3 tests across 1 file. [426.00ms]"
+      ]
+    },
+    {
+      "name": "final2-journalStore.readerLifetime",
+      "cwd": "packages/core",
+      "cmd": [
+        "bun",
+        "test",
+        "src/journal/journalStore.readerLifetime.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "pid": 49473,
+      "driver": 48924,
+      "code": 0,
+      "signal": null,
+      "sourceHash": "42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a",
+      "changed": false,
+      "logHash": "5ed3fdba49d3009c360d54d6e3f2dc962580e80f8a90147b5f21fbc19f89524b",
+      "summary": [
+        " 11 pass",
+        " 0 fail",
+        " 29 expect() calls",
+        "Ran 11 tests across 1 file. [336.00ms]"
+      ]
+    },
+    {
+      "name": "final2-journalStore.readerCleanup",
+      "cwd": "packages/core",
+      "cmd": [
+        "bun",
+        "test",
+        "src/journal/journalStore.readerCleanup.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "pid": 49483,
+      "driver": 48924,
+      "code": 0,
+      "signal": null,
+      "sourceHash": "42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a",
+      "changed": false,
+      "logHash": "1de785b627358e266f501e7ef8c6cdfabeddbb0e99300b11b804bfe57bb81437",
+      "summary": [
+        " 3 pass",
+        " 0 fail",
+        " 20 expect() calls",
+        "Ran 3 tests across 1 file. [362.00ms]"
+      ]
+    },
+    {
+      "name": "final2-stream-call-options",
+      "cwd": "packages/providers",
+      "cmd": [
+        "bun",
+        "test",
+        "src/__tests__/stream-call-options.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "pid": 49498,
+      "driver": 48924,
+      "code": 0,
+      "signal": null,
+      "sourceHash": "42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a",
+      "changed": false,
+      "logHash": "48a6a18ba19bbf2cec77d45a9dafdbaf1b7e16137ce4a5e92c67c1a8ebe66bd5",
+      "summary": [
+        " 8 pass",
+        " 0 fail",
+        " 95 expect() calls",
+        "Ran 8 tests across 1 file. [943.00ms]"
+      ]
+    },
+    {
+      "name": "final2-journal-native-row-liveness",
+      "cwd": "packages/providers",
+      "cmd": [
+        "bun",
+        "test",
+        "src/__tests__/journal-native-row-liveness.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "pid": 49523,
+      "driver": 48924,
+      "code": 0,
+      "signal": null,
+      "sourceHash": "42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a",
+      "changed": false,
+      "logHash": "cedbf68164851ba6aa831302a12520125445e0755059a74a6034ebe1ddb803a0",
+      "summary": [
+        " 4 pass",
+        " 0 fail",
+        " 36 expect() calls",
+        "Ran 4 tests across 1 file. [7.37s]"
+      ]
+    },
+    {
+      "name": "final2-journal-curated-source-failure",
+      "cwd": "packages/providers",
+      "cmd": [
+        "bun",
+        "test",
+        "src/__tests__/journal-curated-source-failure.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "pid": 49607,
+      "driver": 48924,
+      "code": 0,
+      "signal": null,
+      "sourceHash": "42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a",
+      "changed": false,
+      "logHash": "896e2801ae15f5d6c71e983ec729ae0b17fcb86a1ca317e62b7b22e341c4932b",
+      "summary": [
+        " 4 pass",
+        " 0 fail",
+        " 28 expect() calls",
+        "Ran 4 tests across 1 file. [780.00ms]"
+      ]
+    },
+    {
+      "name": "final2-journal-wire-body-golden",
+      "cwd": "packages/providers",
+      "cmd": [
+        "bun",
+        "test",
+        "src/__tests__/journal-wire-body-golden.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "pid": 49629,
+      "driver": 48924,
+      "code": 0,
+      "signal": null,
+      "sourceHash": "42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a",
+      "changed": false,
+      "logHash": "f47f4eeb622540db0cd7d60d984e6db5dbec80d40fccc050d79d72d0e19dca0d",
+      "summary": [
+        " 155 pass",
+        " 0 fail",
+        " 155 expect() calls",
+        "Ran 155 tests across 1 file. [4.51s]"
+      ]
+    },
+    {
+      "name": "final2-source-pending-selection",
+      "cwd": "packages/agents",
+      "cmd": [
+        "bun",
+        "test",
+        "src/core/source-pending-selection.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "pid": 49685,
+      "driver": 48924,
+      "code": 0,
+      "signal": null,
+      "sourceHash": "42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a",
+      "changed": false,
+      "logHash": "f0a67eee97bcb04d1bcfe53c0595f5d959b0eed60597cfd31470b9d4afdbdb47",
+      "summary": [
+        " 4 pass",
+        " 0 fail",
+        " 25 expect() calls",
+        "Ran 4 tests across 1 file. [805.00ms]"
+      ]
+    },
+    {
+      "name": "final2-source-default-no-collector",
+      "cwd": "packages/agents",
+      "cmd": [
+        "bun",
+        "test",
+        "src/core/source-default-no-collector.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "pid": 49705,
+      "driver": 48924,
+      "code": 0,
+      "signal": null,
+      "sourceHash": "42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a",
+      "changed": false,
+      "logHash": "abe9d3ddb4abf398d1d4477c0d3e98a7d74dfa464c08c7710d39442afc4eeb06",
+      "summary": [
+        " 3 pass",
+        " 0 fail",
+        " 17 expect() calls",
+        "Ran 3 tests across 1 file. [884.00ms]"
+      ]
+    },
+    {
+      "name": "final2-semantic-purge-native-producer",
+      "cwd": "packages/agents",
+      "cmd": [
+        "bun",
+        "test",
+        "src/core/semantic-purge-native-producer.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "pid": 49720,
+      "driver": 48924,
+      "code": 0,
+      "signal": null,
+      "sourceHash": "42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a",
+      "changed": false,
+      "logHash": "79c5c72c369b21252f1fa068397a36c4df97ceab15cca1744845e56ffd44be4b",
+      "summary": [
+        " 2 pass",
+        " 0 fail",
+        " 12 expect() calls",
+        "Ran 2 tests across 1 file. [450.00ms]"
+      ]
+    },
+    {
+      "name": "final2-source-compression-scalar-disk",
+      "cwd": "packages/agents",
+      "cmd": [
+        "bun",
+        "test",
+        "src/core/source-compression-scalar-disk.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "pid": 49752,
+      "driver": 48924,
+      "code": 0,
+      "signal": null,
+      "sourceHash": "42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a",
+      "changed": false,
+      "logHash": "d716b4b43facac23c45cd58fb63fc0c8c156897709b69177e5bc80a74ea5f0b4",
+      "summary": [
+        " 1 pass",
+        " 0 fail",
+        " 10 expect() calls",
+        "Ran 1 test across 1 file. [1034.00ms]"
+      ]
+    },
+    {
+      "name": "final2-pending-token-native-lifetime",
+      "cwd": "packages/agents",
+      "cmd": [
+        "bun",
+        "test",
+        "src/compression/__tests__/pending-token-native-lifetime.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "pid": 49775,
+      "driver": 48924,
+      "code": 0,
+      "signal": null,
+      "sourceHash": "42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a",
+      "changed": false,
+      "logHash": "00d3b7595a40701c6a59f0d05ad3ad5969549940862f08ef067df39e90e4824e",
+      "summary": [
+        " 2 pass",
+        " 0 fail",
+        " 280 expect() calls",
+        "Ran 2 tests across 1 file. [87.11s]"
+      ]
+    },
+    {
+      "name": "final2-pending-token-native-values",
+      "cwd": "packages/agents",
+      "cmd": [
+        "bun",
+        "test",
+        "src/compression/__tests__/pending-token-native-values.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "pid": 50988,
+      "driver": 48924,
+      "code": 0,
+      "signal": null,
+      "sourceHash": "42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a",
+      "changed": false,
+      "logHash": "d29f4a3da7eea50c1f67c2ed3aeb6bef11bf79291828ce6a13898e0e2d56afad",
+      "summary": [
+        " 3 pass",
+        " 0 fail",
+        " 12 expect() calls",
+        "Ran 3 tests across 1 file. [740.00ms]"
+      ]
+    }
+  ],
+  "gates": [
+    {
+      "name": "final2-core-decl",
+      "cwd": ".",
+      "cmd": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-b",
+        "packages/core/tsconfig.build.json",
+        "--emitDeclarationOnly"
+      ],
+      "pid": 51018,
+      "driver": 48924,
+      "code": 0,
+      "signal": null,
+      "sourceHash": "42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a",
+      "changed": false,
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": []
+    },
+    {
+      "name": "final2-core-types",
+      "cwd": ".",
+      "cmd": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "packages/core/tsconfig.noemit.json"
+      ],
+      "pid": 51079,
+      "driver": 48924,
+      "code": 0,
+      "signal": null,
+      "sourceHash": "42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a",
+      "changed": false,
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": []
+    },
+    {
+      "name": "final2-core-bun",
+      "cwd": ".",
+      "cmd": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "packages/core/tsconfig.noemit.json",
+        "--types",
+        "node,bun"
+      ],
+      "pid": 51158,
+      "driver": 48924,
+      "code": 0,
+      "signal": null,
+      "sourceHash": "42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a",
+      "changed": false,
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": []
+    },
+    {
+      "name": "final2-agents-decl",
+      "cwd": ".",
+      "cmd": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-b",
+        "packages/agents/tsconfig.build.json",
+        "--emitDeclarationOnly"
+      ],
+      "pid": 51241,
+      "driver": 48924,
+      "code": 0,
+      "signal": null,
+      "sourceHash": "42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a",
+      "changed": false,
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": []
+    },
+    {
+      "name": "final2-agents-types",
+      "cwd": ".",
+      "cmd": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "packages/agents/tsconfig.noemit.json"
+      ],
+      "pid": 51275,
+      "driver": 48924,
+      "code": 0,
+      "signal": null,
+      "sourceHash": "42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a",
+      "changed": false,
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": []
+    },
+    {
+      "name": "final2-agents-bun",
+      "cwd": ".",
+      "cmd": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "packages/agents/tsconfig.test-bun.json",
+        "--types",
+        "node,bun"
+      ],
+      "pid": 51431,
+      "driver": 48924,
+      "code": 0,
+      "signal": null,
+      "sourceHash": "42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a",
+      "changed": false,
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": []
+    },
+    {
+      "name": "final2-providers-decl",
+      "cwd": ".",
+      "cmd": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-b",
+        "packages/providers/tsconfig.build.json",
+        "--emitDeclarationOnly"
+      ],
+      "pid": 51539,
+      "driver": 48924,
+      "code": 0,
+      "signal": null,
+      "sourceHash": "42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a",
+      "changed": false,
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": []
+    },
+    {
+      "name": "final2-providers-types",
+      "cwd": ".",
+      "cmd": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "packages/providers/tsconfig.noemit.json"
+      ],
+      "pid": 51590,
+      "driver": 48924,
+      "code": 0,
+      "signal": null,
+      "sourceHash": "42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a",
+      "changed": false,
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": []
+    },
+    {
+      "name": "final2-providers-bun",
+      "cwd": ".",
+      "cmd": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "packages/providers/tsconfig.test-bun.json",
+        "--types",
+        "node,bun"
+      ],
+      "pid": 51711,
+      "driver": 48924,
+      "code": 0,
+      "signal": null,
+      "sourceHash": "42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a",
+      "changed": false,
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": []
+    },
+    {
+      "name": "final2-lint",
+      "cwd": ".",
+      "cmd": [
+        "node",
+        "node_modules/eslint/bin/eslint.js",
+        "--max-warnings",
+        "0",
+        "packages/agents/src/api/__tests__/native-normalization-chat.test.ts",
+        "packages/agents/src/core/native-purge-normalization.test.ts",
+        "packages/agents/src/core/semanticMediaPurgeSession.ts",
+        "packages/agents/src/core/source-before-model-hook.ts",
+        "packages/agents/src/core/source-pending-selection.ts",
+        "packages/agents/src/core/streamRequestHelpers.ts",
+        "packages/core/src/services/history/HistoryServiceCore.ts",
+        "packages/core/src/services/history/detachedHistoryAPI.ts",
+        "packages/core/src/services/history/historyBackend.test.ts",
+        "packages/core/src/services/history/historyJournalStore.ts",
+        "packages/core/src/services/history/historyStorePort.ts",
+        "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+        "packages/core/src/services/history/journal-indexed-overlay.ts",
+        "packages/core/src/services/history/journal-provider-request.ts",
+        "packages/core/src/services/history/journal-request-projection.ts",
+        "packages/core/src/services/history/journal-response-parts.ts",
+        "packages/core/src/services/history/journal-response-source.ts",
+        "packages/core/src/services/history/journal-tail-source.ts",
+        "packages/core/src/services/history/journalHistoryStore.ts",
+        "packages/core/src/services/history/journalSemanticPurge.ts",
+        "packages/core/src/services/history/native-provider-lifetime.test.ts",
+        "packages/core/src/services/history/native-provider-request.test.ts",
+        "packages/core/src/services/history/native-purge-provider-request.ts",
+        "packages/core/src/services/history/old-provider-request.ts",
+        "packages/core/src/services/history/provider-request-snapshot.ts",
+        "packages/core/src/services/history/semantic-purge-native.ts",
+        "packages/core/src/services/history/semantic-purge-stream.ts",
+        "packages/providers/src/__tests__/journal-envelope-edge.test.ts",
+        "packages/providers/src/__tests__/support/native-probe-source.ts"
+      ],
+      "pid": 51767,
+      "driver": 48924,
+      "code": 0,
+      "signal": null,
+      "sourceHash": "42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a",
+      "changed": false,
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": []
+    },
+    {
+      "name": "final2-format",
+      "cwd": ".",
+      "cmd": [
+        "node",
+        "node_modules/prettier/bin/prettier.cjs",
+        "--check",
+        "packages/agents/src/api/__tests__/native-normalization-chat.test.ts",
+        "packages/agents/src/core/native-purge-normalization.test.ts",
+        "packages/agents/src/core/semanticMediaPurgeSession.ts",
+        "packages/agents/src/core/source-before-model-hook.ts",
+        "packages/agents/src/core/source-pending-selection.ts",
+        "packages/agents/src/core/streamRequestHelpers.ts",
+        "packages/core/src/services/history/HistoryServiceCore.ts",
+        "packages/core/src/services/history/detachedHistoryAPI.ts",
+        "packages/core/src/services/history/historyBackend.test.ts",
+        "packages/core/src/services/history/historyJournalStore.ts",
+        "packages/core/src/services/history/historyStorePort.ts",
+        "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+        "packages/core/src/services/history/journal-indexed-overlay.ts",
+        "packages/core/src/services/history/journal-provider-request.ts",
+        "packages/core/src/services/history/journal-request-projection.ts",
+        "packages/core/src/services/history/journal-response-parts.ts",
+        "packages/core/src/services/history/journal-response-source.ts",
+        "packages/core/src/services/history/journal-tail-source.ts",
+        "packages/core/src/services/history/journalHistoryStore.ts",
+        "packages/core/src/services/history/journalSemanticPurge.ts",
+        "packages/core/src/services/history/native-provider-lifetime.test.ts",
+        "packages/core/src/services/history/native-provider-request.test.ts",
+        "packages/core/src/services/history/native-purge-provider-request.ts",
+        "packages/core/src/services/history/old-provider-request.ts",
+        "packages/core/src/services/history/provider-request-snapshot.ts",
+        "packages/core/src/services/history/semantic-purge-native.ts",
+        "packages/core/src/services/history/semantic-purge-stream.ts",
+        "packages/providers/src/__tests__/journal-envelope-edge.test.ts",
+        "packages/providers/src/__tests__/support/native-probe-source.ts"
+      ],
+      "pid": 51905,
+      "driver": 48924,
+      "code": 0,
+      "signal": null,
+      "sourceHash": "42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a",
+      "changed": false,
+      "logHash": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+      "summary": []
+    },
+    {
+      "name": "final2-graph",
+      "cwd": ".",
+      "cmd": [
+        "bun",
+        "scripts/check-affected-test-shards.ts"
+      ],
+      "pid": 51924,
+      "driver": 48924,
+      "code": 0,
+      "signal": null,
+      "sourceHash": "42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a",
+      "changed": false,
+      "logHash": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67",
+      "summary": []
+    },
+    {
+      "name": "final2-audit",
+      "cwd": ".",
+      "cmd": [
+        "bun",
+        "scripts/test-audit/scan.ts",
+        "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/native-normalization-run-as/final2-audit"
+      ],
+      "pid": 51970,
+      "driver": 48924,
+      "code": 0,
+      "signal": null,
+      "sourceHash": "42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a",
+      "changed": false,
+      "logHash": "39a9e4305167ffc5fb297cc48fb65f7751e491b17737115c24c3531c0365dc08",
+      "summary": []
+    }
+  ],
+  "additionalNativeCompression": {
+    "name": "post-native-compression",
+    "cwd": "packages/agents",
+    "cmd": [
+      "env",
+      "LLXPRT_HISTORY_BACKEND=journal",
+      "bun",
+      "test",
+      "src/core/source-compression-scalar-disk.test.ts",
+      "--timeout",
+      "180000"
+    ],
+    "pid": 52313,
+    "driver": 52307,
+    "code": 0,
+    "signal": null,
+    "sourceHash": "42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a",
+    "changed": false,
+    "logHash": "dff6f46fd0cd39535fe62ea1bde316cbcbc2eddaec07dd83c07b4923d78b1180",
+    "summary": [
+      " 1 pass",
+      " 0 fail",
+      " 10 expect() calls",
+      "Ran 1 test across 1 file. [1.52s]"
+    ]
+  },
+  "contracts": {
+    "publicNative": "Real Agent.stream/ChatSession reaches model commit with pending human input, cross-speaker tool IDs, orphan response repair, media and recording-triggered remove purge. The existing BaseProviderNormalization materializer and requestRows lease/providerRows adapters preserve selection identity and full readAt/reader row values without ProviderNormalizationDisk. This does not add a provider builder.",
+    "purge": "Four remove/summary and explicit-cache-write combinations compare complete units, counts, pending membership and indexed reads with the unchanged explicit old normalization oracle; operation-file observation is empty at this preparation boundary.",
+    "immutablePending": "The unchanged journal-tail-resources regression exposed mutable caller capture in the WIP getter. Final source stores encoded supplied pending units before yielding; it never caches the journal prefix. Test file and expectations are unchanged.",
+    "frozen": "The unchanged 5000-case normalization unit fixture and 155 native-history complete-wire golden cases pass. Wire goldens retain their existing raw-history/old-staging adapter oracle; they do not prove a new all-provider indexed transport or repeat the historical 45000-reference matrix.",
+    "lifetime": "Native wrapper verifies two real admitted reader leases, exact original abort object, one-reader retirement while its sibling remains readable, indexed readAt after history disposal, and zero rows after close. Original #3919 readerLifetime/readerCleanup files pass unchanged. Original pending-token 512/8192 backpressure peaks at one/final zero under bound two, with rank peaks 11/14 under 64; provider native 40 one-MiB rows retain bound nine. These are not whole-heap or aggregate cache/pin capacity measurements.",
+    "payload": "The unchanged full greater-than-nine-MiB pending-token value tests pass without truncating fixtures or expected output.",
+    "cost": "Unchanged tail-query resources cover 40/4000/100000 rows with header/index-only preparation and selected queries, then one selected block decode. Orphan-resource and tail ownership tests remain distinct. Pending payload bytes and current affected-ID overlays are request bounded; full capacity, cold structural refill and global accounting remain open.",
+    "curation": "HistoryServiceCore delegates at the backend port before provider consumption. Service-curated units still omit invalid AI rows while raw service history remains raw. Native-provider-request compares a blank-AI/raw-hole and cross-speaker/pending case to the old oracle; 12 backend tests passed in the early checkpoint lane.",
+    "metadata": "No request_chars, token estimator, provider body type, strict logging policy, default backend, fixture assertion, enforcement or timeout change. Legacy prepare/merge delegation uses inferred typed binds to meet the existing line-count rule; provider test helpers await the asynchronous selection port."
+  },
+  "controls": [
+    {
+      "name": "final2-control-old-normalization",
+      "path": "packages/core/src/services/history/native-purge-provider-request.ts",
+      "code": 1,
+      "assertionFailures": 1,
+      "restored": true,
+      "sha256": "bcf27e5815e933465bdf9678237a309b743766cf2dce02e082b0ddbf0fa73fa5",
+      "logHash": "046ef3374b777c92d8242a61f37b95d5538822a677521c7b3623f94652c77d0b",
+      "finalSourceRestored": true
+    },
+    {
+      "name": "final2-control-retain-all-rows",
+      "code": 1,
+      "assertionFailures": 4,
+      "restored": true,
+      "sha256": null,
+      "logHash": "f11c07688b214f256258b96b67e47fd07baf0aa6487af7058003cae415e552c4",
+      "finalSourceRestored": true
+    },
+    {
+      "name": "final2-control-wrong-pending",
+      "path": "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+      "code": 1,
+      "assertionFailures": 1,
+      "restored": true,
+      "sha256": "e7bff3d7a802c741958d703555274fe021287e178b1b183605d59bb45dab0afa",
+      "logHash": "0daccdc01b1c3fbeffbf16a1e664db193de44f5bad3497deaf9da5c1cadbb618",
+      "finalSourceRestored": true
+    },
+    {
+      "name": "final2-control-stale-reader-owner",
+      "path": "packages/core/src/services/history/journal-provider-request.ts",
+      "code": 1,
+      "assertionFailures": 1,
+      "restored": true,
+      "sha256": "b4498ce477b6f6c42ceae7fd093e3f9d26621ff507782d95714e12dcea67f8d0",
+      "logHash": "67b47d3079115287191cb17bb4b17572cac2cf3e62ceaf7cf94d1804533ba787",
+      "finalSourceRestored": true
+    },
+    {
+      "name": "final2-control-double-normalize",
+      "path": "packages/providers/src/BaseProviderNormalization.ts",
+      "code": 1,
+      "assertionFailures": 2,
+      "restored": true,
+      "sha256": "5fad6051d7e6f14b5f832b2c6f2877ce552f579f28b4119c41b3794b2521fb9b",
+      "logHash": "c3dee79c396e5acb37178f7093b2a784787ecb0952ebe29945e4ebeb0fe19ddf",
+      "finalSourceRestored": true
+    }
+  ],
+  "controlMechanism": "Four production mutations restore by cmp and SHA256; retain-all-rows uses the existing environment-triggered test trap over actual decoded native outputs in an isolated child, with unchanged source hashes. All five fail actual expectation assertions. Historical runtime-only old-route controls are excluded.",
+  "audit": {
+    "artifact": {
+      "path": "tmp/p5/native-normalization-run-as/final2-audit/findings.tsv",
+      "sha256": "a42b4d99afaba6879e8ff667e543b9ae28567c45b3d8f8ae4c95a562dd23698d"
+    },
+    "touchedFindings": [
+      "packages/core/src/services/history/native-provider-request.test.ts\t19\tnative backend provider normalization > uses the indexed request and overlays pending results without publishing them\tDUP_ASSERT\t2x identical assertion: expect(await collect(native)).toStrictEqual(await collect(old))\tcore"
+    ],
+    "classification": "The two equalities bracket a later journal append: the first checks initial normalization parity, the second checks that the held request pin remains unchanged after publication. Keep both state-transition assertions. No touched MOCK_MIRROR, ALWAYS_TRUE, SELF_CONFIRMING or NO_ASSERT finding."
+  },
+  "reds": {
+    "originalNormalizationDisk": {
+      "path": "tmp/p5/native-normalization-run-as/original-red.log",
+      "sha256": "83e688c60fd43347b57337cd1c6360a1fafe68b3c851e64fd36a71960e635933"
+    },
+    "oldRouteRuntimeControlExcluded": {
+      "path": "tmp/p5/native-normalization-run-as/control-old-route.log",
+      "sha256": "7ebb6d80bc735ce76a76d30ae29e9defa89ccc4a2edba232bc95a4caa2318b09"
+    },
+    "pendingOwnershipBeforeFix": {
+      "path": "tmp/p5/native-normalization-run-as/proof-journal-tail-resources.log",
+      "sha256": "af99938cdfe9b74e525033fc8ff8deac4fe00549a6bc1aaf556c4eb725734487"
+    },
+    "originalPublicCurrent": {
+      "name": "post-original-public-purge",
+      "cwd": "packages/agents",
+      "cmd": [
+        "bun",
+        "test",
+        "src/api/__tests__/semantic-purge-native-chat.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "pid": 52339,
+      "driver": 52307,
+      "code": 1,
+      "signal": null,
+      "sourceHash": "42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a",
+      "changed": false,
+      "logHash": "aeb46edd08b074bbd1ef8663b763470475ad33f897f382401633615ce487c2a8",
+      "summary": [
+        " 0 pass",
+        " 1 fail",
+        " 1 expect() calls",
+        "Ran 1 test across 1 file. [1239.00ms]"
+      ]
+    },
+    "originalPublicError": {
+      "path": "tmp/p5/native-normalization-run-as/post-original-public-purge-error.json",
+      "sha256": "cae2345cbf1deb42c815bdf5506d36ec0411a80e441ea430b4fbec74d6aaca17"
+    },
+    "originalPublicCause": "FakeProvider fixture exhaustion: call #2, only one turn available. Its unchanged all-creation assertion also observes lazy todos/subagents directories. It no longer fails at ProviderNormalizationDisk. The new multi-turn public proof allows only its exact media-live lock file class for recorded purge, which remains Phase 8; it does not replace or weaken the original detector.",
+    "retained": [
+      "#3917 remains separately RED, not rerun/retried/suppressed.",
+      "Two explicit-old durable capture/replay REDs at 512/8192 remain in W26-SOURCE-BOUND-ANNOTATED-APPEND-PARITY-PROOF.json.",
+      "Original blanket-creation-denial 8192 compaction RED remains unchanged in W26-SOURCE-BOUND-PENDINGTOKEN-COMPACTION-PROOF.json; paired pinned and unpinned proofs are separate."
+    ]
+  },
+  "remaining": [
+    "Native-capable arbitrary iterable overrides and explicit old/disk adapters still use the old normalization path; the native semantic-purge capability is indexed.",
+    "Actual provider header/token/request planning, body/key/message/tokenizer spools and guards remain Phase 6.",
+    "Stored planning eight-case RED boundary, header guards, cache/tails/ranges/media semantic generations, cold Mistral, W23/W25/cutover remain open.",
+    "Full cold structural ranking refill, pending/stale capacity, LENS/live-byte accounting, aggregate heap/cache/pin capacity and Phase 8 shared reservations remain open.",
+    "No combined public automatic-compression-plus-purge acceptance is claimed; explicit native scalar compression and public purge are separate executed lanes.",
+    "Old whole-body parity normalizers remain as oracles until Phase 9. Defaults and Phase 9 removal are unchanged."
+  ],
+  "census": {
+    "path": "tmp/p5/native-normalization-run-as/production-normalization-callers.txt",
+    "sha256": "a198332daa264300058e87026ddf1efea2aaeb6ecdc6a2dcae38ef426f32d12c"
+  },
+  "preservation": {
+    "count": 1204,
+    "failures": [],
+    "memory": "92b20147d09588700e203951849a9a84a2aaade0aa6d006c4b395ba84c7fb2bb",
+    "expectedMemory": "92b20147d09588700e203951849a9a84a2aaade0aa6d006c4b395ba84c7fb2bb",
+    "memoryMatches": true,
+    "declarations": 306
+  },
+  "recordedPids": [
+    32490,
+    30749,
+    17569,
+    11316,
+    49246,
+    48924,
+    52313,
+    52307,
+    51590,
+    44910,
+    43202,
+    51431,
+    52364,
+    48983,
+    44575,
+    43208,
+    33107,
+    33407,
+    39601,
+    38890,
+    40312,
+    49012,
+    39549,
+    39247,
+    34303,
+    30776,
+    52216,
+    44385,
+    39351,
+    33493,
+    31499,
+    51158,
+    31521,
+    40862,
+    32940,
+    31801,
+    44051,
+    44843,
+    49685,
+    49456,
+    31982,
+    51711,
+    14434,
+    38902,
+    43221,
+    39531,
+    49629,
+    39863,
+    31573,
+    46146,
+    46140,
+    51970,
+    49775,
+    52232,
+    49705,
+    51018,
+    39775,
+    33158,
+    31929,
+    31278,
+    18549,
+    49227,
+    52059,
+    12046,
+    39342,
+    52194,
+    49364,
+    43235,
+    49607,
+    16633,
+    14556,
+    32729,
+    31542,
+    49720,
+    49752,
+    49483,
+    39234,
+    32663,
+    47811,
+    47539,
+    17006,
+    45127,
+    12101,
+    39676,
+    38970,
+    11906,
+    44098,
+    47716,
+    51275,
+    44688,
+    40755,
+    49523,
+    47630,
+    48969,
+    49498,
+    17499,
+    34127,
+    31855,
+    51079,
+    47557,
+    39328,
+    45111,
+    48936,
+    32274,
+    49001,
+    30918,
+    39508,
+    30897,
+    39584,
+    52339,
+    31762,
+    31904,
+    31257,
+    15479,
+    50988,
+    51767,
+    38949,
+    39373,
+    51924,
+    41283,
+    51905,
+    11706,
+    51241,
+    41183,
+    30840,
+    44186,
+    34096,
+    38983,
+    44648,
+    44341,
+    45161,
+    51539,
+    52029,
+    49473,
+    30872,
+    39001,
+    39901
+  ],
+  "liveRecordedPids": [],
+  "exclusions": "Earlier source/gate failures and the mixed RED file are outside passing totals. Graph consistency is not affected-shard execution. No full-suite/build/smoke claim.",
+  "review": "review skipped per Andrew 2026-10-09",
+  "actions": "No new transport, OCR/review, push, merge, default flip, cleanup, unrelated staging, .llxprt edit or enforcement weakening.",
+  "unchangedOriginalContracts": {
+    "base": "38114d4027a9c48ee087871caef9309139b69727",
+    "files": [
+      {
+        "path": "packages/core/src/services/history/normalization-unit-oracle.test.ts",
+        "sha256": "4571ccc45aabb6f3d32fd1ed6ae426744fef7c2dfc06e90b9d1d730cb0f00544",
+        "baseUnchanged": true
+      },
+      {
+        "path": "packages/core/src/services/history/__tests__/fixtures/normalization-units.jsonl",
+        "sha256": "4699c502e99b67ea231f47884bdc2109400c4138803a16a3e5ac7418e0fa8d9e",
+        "baseUnchanged": true
+      },
+      {
+        "path": "packages/core/src/services/history/journal-tail-resources.test.ts",
+        "sha256": "50d8c0f2848fb1006b5586990c507ffa4e6d20814583223589b38166dd8f8853",
+        "baseUnchanged": true
+      },
+      {
+        "path": "packages/core/src/services/history/journal-tail-query-resources.test.ts",
+        "sha256": "effd8e05a89191d2cbaff3c3f26a901555167138361f82f24463ad9e720e3c1a",
+        "baseUnchanged": true
+      },
+      {
+        "path": "packages/core/src/journal/journalStore.readerLifetime.test.ts",
+        "sha256": "9744ca9d7829bddc3b2010e895ff9450cb64f89e5856d8903de6e6ae11f96b3b",
+        "baseUnchanged": true
+      },
+      {
+        "path": "packages/core/src/journal/journalStore.readerCleanup.test.ts",
+        "sha256": "caa8ad4cf7442eb2df8f22d6a02ef3743e8eeda1ae1698f989732c9a1d6d3cb0",
+        "baseUnchanged": true
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/pending-token-native-lifetime.test.ts",
+        "sha256": "200c02b8ed1cacc145c6d438208b555cd60f76dfe4a19c181e619f9f3661141a",
+        "baseUnchanged": true
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/pending-token-native-values.test.ts",
+        "sha256": "b082bf6e605acae3a6bd9e2333b95d9654cee61e8734dcf6887f61739beb84e0",
+        "baseUnchanged": true
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/pending-token-native-contracts.test.ts",
+        "sha256": "60e22ac2c9bdd8a058ea079e59e506bd46a5542e850a902a878b5363de1c3bec",
+        "baseUnchanged": true
+      },
+      {
+        "path": "packages/agents/src/api/__tests__/semantic-purge-native-chat.test.ts",
+        "sha256": "4c51426d00181aece4c977053d8aba75486cfdada7300e37b61bef0adfa317e3",
+        "baseUnchanged": true
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/support/operation-file-creates.ts",
+        "sha256": "a6d5bb77f7b2c578c3e930c88fab3f52bad0dc143f047d3f6485987e351e2b99",
+        "baseUnchanged": true
+      },
+      {
+        "path": "packages/providers/src/__tests__/journal-native-row-liveness.test.ts",
+        "sha256": "8326c1286b9fbbf3337e8ad9c83fdefbf9699c3f21aa88424216670f8bb4b802",
+        "baseUnchanged": true
+      },
+      {
+        "path": "packages/providers/src/__tests__/journal-wire-body-golden.test.ts",
+        "sha256": "d1046f1e32a4dafd98f3ac1df4f739de93754f56bf0c6a4100e21790fb439f02",
+        "baseUnchanged": true
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/wire-bodies/anthropic-cache-1h.json",
+        "sha256": "99b01112ca2f7830d06bfb25bb82ca0b09e7a7454b7edd6b3fea342b4c6c0b68",
+        "baseUnchanged": true
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/wire-bodies/anthropic-cache-off.json",
+        "sha256": "7cda7370720faa06f56296ec165d3a15bfad5514119390d63a5145f3f6eed2f1",
+        "baseUnchanged": true
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/wire-bodies/manifest.json",
+        "sha256": "a99bee172395334748380e09d3bd752d80f241e220622cb9ed3d1c04c655944d",
+        "baseUnchanged": true
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/wire-bodies/openai-chat-kimi.json",
+        "sha256": "be18c57678116411f75360a3c41c1824ffaa976f00c2209069c2657de5937d2d",
+        "baseUnchanged": true
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/wire-bodies/openai-chat-mistral.json",
+        "sha256": "d84f0a8fd2a2200532f2604a2a271d8a04bb6aa55351296cbdfa4517d5a2b535",
+        "baseUnchanged": true
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/wire-bodies/openai-chat-plain.json",
+        "sha256": "30177379705713bb461fef5d389a587c90a762ad2ca3857f6f196af5b3090764",
+        "baseUnchanged": true
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/wire-bodies/openai-responses-via-openai.json",
+        "sha256": "421c17fe7fdc20acf73e667f8a84aefea1273564be0f18d39ba517a918f08b46",
+        "baseUnchanged": true
+      },
+      {
+        "path": "packages/providers/src/__tests__/fixtures/wire-bodies/openai-responses.json",
+        "sha256": "0b9d625e8be45652cd1ddde29ba421d80e98c759a5ebdf42e712cb18dea6a93b",
+        "baseUnchanged": true
+      }
+    ]
+  }
+}
