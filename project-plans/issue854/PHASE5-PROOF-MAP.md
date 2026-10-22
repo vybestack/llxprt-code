@@ -1,5 +1,13 @@
 # Phase 5 proof map
 
+## Native initial plain Chat direct HTTP checkpoint, 2026-10-21
+
+[Phase 6 status](PHASE6-STATUS.md) and [PHASE6-SOURCE-BOUND-NATIVECHATPLAIN-PROOF.json](PHASE6-SOURCE-BOUND-NATIVECHATPLAIN-PROOF.json) bind implementation `f801b2dcf56a59dcf2e85c6c2b8a7ee044baccf5`: **203 passes, 450 assertions, eight complete passing files, eleven scoped gates and five restored controls**. The native no-file corpus remains 21/1, excluded from passing totals. Original frozen fixtures and #3919 reader contracts are unchanged. Real HTTP bytes/length match the old converter; reference-media reservation writes remain RED under blanket denial. Public warm preparation has zero descriptor reads at 40/4,000 rows after selection capture; cold fills and HTTP emission are separate. One-unit paused ownership/error identity is not whole-heap proof.
+
+Pending tails, last-thinking, pruned-view length planning, Kimi/Mistral and legacy continuation/key/body spools, Responses/Anthropic, tokenizer/estimate/log/dump, media accounting, heap/cache/pin capacity and global LENS/live bytes remain open. No Phase 5/W26, defaults or Phase 9 completion is claimed. #3917, old durable and original 8,192 blanket compaction REDs remain separate. Preservation remains 1,204 hashes plus inherited memory, with 306 unrelated declarations/raw recovery unstaged. Review skipped per Andrew 2026-10-09.
+
+---
+
 ## Native production request normalization, 2026-10-21
 
 [The source-bound receipt](recovery-2026-10-19/recovered-control/W26-SOURCE-BOUND-PRODUCTIONNORMALIZATION-PROOF.json) binds `c5c720fc177c0c68c1b1a7bd46dea017b7ba1359`: **229 passing tests, zero failures/skips and 69,747 assertions in 21 complete serial files, plus 13 passing scoped gates**, five restored assertion controls and unchanged preservation. [W26 proof map](recovery-2026-10-19/recovered-control/W26-PROOF-MAP.md) separates public send/adapter identity, four purge modes, 5000 frozen units, 155 wire goldens, immutable pending capture, original 512/8192 lifetime/nine-MiB values and native scalar compression. The original public all-creation detector stays RED at FakeProvider call-2 exhaustion and lazy-directory creation, beyond its former ProviderNormalizationDisk failure; the separate multi-turn purge success retains Phase 8 media-lock scope.

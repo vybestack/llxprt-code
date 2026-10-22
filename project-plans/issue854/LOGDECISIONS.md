@@ -1,3 +1,17 @@
+## 2026-10-21: native initial plain Chat direct-body checkpoint
+
+Commit the passing WIP before assembling proof: `f801b2dcf56a59dcf2e85c6c2b8a7ee044baccf5` follows `e912dba1d`. Keep initial native plain Chat separate from legacy ChatContinuation, Kimi/Mistral key/body paths, Responses/Anthropic and tokenizer/log/dump work. Native tails and last-thinking remain explicit refusals. No direct-body length proof is accepted for pruned purge views.
+
+Measure stored reference-media base64 contributions from their recorded normalized length, and run the existing media stage during actual emission. Do not weaken the corpus all-creation detector to accommodate media reservation writes. Its reference-image case remains RED while a separate real HTTP observation establishes exact 323-byte old-converter parity and records the remaining lock/reservation I/O. Do not relabel that observation as no-file acceptance.
+
+Capture strict OpenAI tool format in the hashed Chat settings. This changes the conversion key without changing persisted fact layout; old missing-field keys cannot serve the new production setting. Keep a cold-filled format snapshot owned by the request pin, serialize fills and join them before retirement. Test repeated reasoning-key changes against the old converter, unsent release, retries, one-unit backpressure and original transport error identity. A stale-key mutation must fail declared-length validation; eager retained rows must fail the independent acquisition bound.
+
+Report warm physical file ranges for actual public preparation, after selection capture and before HTTP emission. At 40/4,000 rows there are no reads, hence no ROW/LENS overlap. Record the cold fills separately: 732/104,574 reads. Do not infer retained heap or aggregate capacity from these counts. Preserve original 1/8 MiB heap obligations as pending.
+
+The source-bound receipt records 203 passes/450 assertions across eight passing complete files, eleven scoped gates and five cmp/hash-restored controls. Exclude the 21/1 mixed no-file corpus and the mistaken root filter's recovery-tree duplicate from passing totals. Exact workspace-relative original goldens pass 155/0. Keep all 1,204 preservation hashes, 306 unrelated declarations, raw recovery and inherited memory unchanged. #3917/old durable/8,192 blanket compaction REDs remain separate. No cleanup, .llxprt staging, weaker enforcement, push, merge or default flip. Review skipped per Andrew 2026-10-09.
+
+---
+
 # Keep native request preparation indexed and capture pending bytes before yielding, 2026-10-21
 
 Early green follow-up `4ce744e72` preserves the backend port cutover begun at `38114d402`. Final source `c5c720fc177c0c68c1b1a7bd46dea017b7ba1359` fixes a concrete ownership regression exposed by unchanged journal-tail-resources: the WIP stored getter re-encoded a caller-owned pending row for each access, so mutating that row after the first yield changed later request bytes. Encode supplied pending units at capture instead. This is bounded by supplied pending input and adds no history-prefix cache, copied journal or new normalizer. Keep the original test expectation and held-pin lifecycle intact.

@@ -1,3 +1,13 @@
+# Native initial plain Chat streams directly; W26 remains open, 2026-10-21
+
+Implementation `e912dba1d` and follow-up `f801b2dcf56a59dcf2e85c6c2b8a7ee044baccf5` are bound by [Phase 6 status](../../PHASE6-STATUS.md) and [the source proof](../../PHASE6-SOURCE-BOUND-NATIVECHATPLAIN-PROOF.json). The passing subset has **203 tests/450 assertions in eight files**, eleven scoped gates and five restored controls. Actual native preparation/send uses stored summary lengths and one indexed unit at a time for initial unlogged plain Chat. After selection capture, warm public preparation reads zero journal bytes at 40/4,000 rows; cold fills perform 732/104,574 reads. A retained-40 mutation fails the paused acquisition bound of one. No heap claim.
+
+The unchanged native no-file corpus remains **21 pass/one fail**, excluded from passing totals: reference-image bytes/Content-Length match the old converter, but the resolver still writes media reservations/locks. Pending-tail/last-thinking and pruned-view length planning remain unaccepted. Kimi/Mistral, legacy ChatContinuation spooling, Responses/Anthropic, tokenizer/estimate/log/dump, Phase 8 media accounting, heap/cache/pin capacity, LENS/live bytes and W23/W25/cutover remain open. Existing length append/reopen/clone/compaction checks do not certify arbitrary family maintenance. Original #3919 stays 11/29 plus 3/20. #3917, two old durable REDs and original 8,192 blanket compaction RED remain separate without retry/suppression. Defaults and Phase 9 oracles remain unchanged.
+
+All 1,204 preservation hashes and inherited dirty memory match; 306 declarations/raw recovery remain untouched and unstaged. No cleanup, default flip, enforcement weakening, push or merge. Review skipped per Andrew 2026-10-09.
+
+---
+
 # Native provider-request normalization is indexed; broader acceptance remains open, 2026-10-21
 
 Initial pin commit `38114d402` and early green follow-up `4ce744e72` are followed by `c5c720fc177c0c68c1b1a7bd46dea017b7ba1359`. [The production-normalization receipt](W26-SOURCE-BOUND-PRODUCTIONNORMALIZATION-PROOF.json) binds **229 passing tests, zero failures/skips and 69,747 assertions in 21 complete serial files, plus 13 passing scoped gates** and five restored assertion controls. Final source digest: `42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a`. Core/agents/providers declarations, strict types and Bun-test types, zero-warning lint, format, graph and AST scan pass; graph consistency is not shard execution.

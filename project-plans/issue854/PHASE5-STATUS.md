@@ -1,3 +1,11 @@
+# Native initial plain Chat has a direct body; broader acceptance remains open, 2026-10-21
+
+Transport implementation `e912dba1d` and follow-up `f801b2dcf56a59dcf2e85c6c2b8a7ee044baccf5` now prepare/send initial unlogged native plain Chat from stored length facts. [Phase 6 status](PHASE6-STATUS.md) and [the source-bound proof](PHASE6-SOURCE-BOUND-NATIVECHATPLAIN-PROOF.json) separate **203 passes/450 assertions in eight passing files**, eleven scoped gates and five restored controls from the unchanged native no-file corpus **21 pass/one fail**. Stored reference-media bytes match the old converter at HTTP, but media reservations still write. Warm public preparation at 40/4,000 rows has zero physical journal reads after selection capture; cold fills remain 732/104,574 reads. These are not heap results.
+
+Phase 5/W26/Phase 6 remain open for pending tails/last-thinking and pruned-view length planning, Kimi/Mistral keys/bodies, legacy ChatContinuation spooling, Responses/Anthropic, tokenizer/estimate and log/dump projections, media accounting, heap/cache/pin capacity, LENS/live bytes and W23/W25/cutover. Defaults and Phase 9 old oracles are unchanged. Original #3919 remains 11/29 plus 3/20; #3917, two explicit-old durable REDs and the original 8,192 blanket compaction RED remain separate without retry/suppression. All 1,204 preservation hashes and inherited memory match. No unrelated declaration/raw-recovery/.llxprt staging, cleanup, enforcement weakening, review/OCR, push or merge. Review skipped per Andrew 2026-10-09.
+
+---
+
 # Native provider-request normalization is indexed; broader acceptance remains open, 2026-10-21
 
 Initial pin commit `38114d402` and early green follow-up `4ce744e72` are followed by `c5c720fc177c0c68c1b1a7bd46dea017b7ba1359`. [The production-normalization receipt](recovery-2026-10-19/recovered-control/W26-SOURCE-BOUND-PRODUCTIONNORMALIZATION-PROOF.json) binds **229 passing tests, zero failures/skips and 69,747 assertions in 21 complete serial files, plus 13 passing scoped gates** and five restored assertion controls. Final source digest: `42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a`. Core/agents/providers declarations, strict types and Bun-test types, zero-warning lint, format, graph and AST scan pass; graph consistency is not shard execution.
