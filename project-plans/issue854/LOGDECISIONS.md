@@ -1,3 +1,15 @@
+# Observe cold ROW measurement independently of syscall batching, 2026-10-22
+
+The current task authorizes replacing the two stale physical-read minimum contracts without reducing behavioral coverage; it supersedes the earlier decision below to leave them RED pending direction. Keep production unchanged. A read window legitimately services several ROW ranges per physical call, so >N no longer proves measurement coverage. Require exact unique ordered real callback coverage and independently sized kept/stripped LENS facts for the complete original fixtures, plus independent old-converter aggregate length. Wrap the real prepared/incremental callbacks and return their facts unchanged. Do not substitute fabricated measurers, derive expectations from the native iterator, shrink fixtures or replace coverage with a >0 read check alone. Keep nonzero cold I/O, add batching upper bounds, and retain append/warm/no-file/lifetime/error-identity contracts.
+
+Checkpoint green tests early as `ba13d766f`. Correct the subsequent lint findings using the required Array<T> spelling and stricter toStrictEqual; do not alter lint enforcement. Five production mutation configurations must fail actual assertions: omitted normalized unit, empty summary despite measured LENS, stale generation, unmeasured warm facts and wrong settings. Restore original bytes after every control and check hashes. The two complete files and original #3919 files pass; 18 scoped invocations and four explicitly journal-backed environment runs pass. Resolve only the two original cold-read gate slots, leaving all 36 scoped slots green through affected runs and reuse rather than claiming a whole-suite pass.
+
+Reuse completed original text/tool three-pair/six-retention memory results only after checking all six 5032-path manifests. Production and protocol helpers match; the receipt enumerates three unrelated test differences and the new test-only helper. No memory rerun, altered sampler/GC, larger timeout, noise subtraction or threshold change. Text/tool heap growth is 199700/-958185 bytes, retained trend is 380661.667/163226.25, and all four original memory controls reject within complete protocols. Preserve individual peaks, retained readings, signed calculations and the 1 MiB limits. Keep cold read/byte cost, journal growth and absent physical write-call evidence visible.
+
+[The supplement](PHASE6-SOURCE-BOUND-COLDMEASUREMENT-PROOF.json) preserves raw/current logs, commands, PIDs, hashes and the log-summary metadata correction. [Phase 6 status](PHASE6-STATUS.md) records scope limits. Preserve all inherited hashes and leave declarations, raw recovery and .llxprt unstaged. Broader Phase 5/6/W26 scope and all separate REDs remain unchanged. No cleanup, default flip, OCR, push or merge. Review skipped per Andrew 2026-10-09.
+
+---
+
 # Cold Chat cost and original native memory protocols pass, 2026-10-22
 
 [Source-bound receipt](PHASE6-SOURCE-BOUND-CHATCOLDCOST-PROOF.json). Native memory acceptance is limited to the completed plain-Chat text/tool protocol; overall delivery and the two scoped RED gate files remain open.

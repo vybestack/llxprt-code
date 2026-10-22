@@ -1,0 +1,3213 @@
+{
+  "date": "2026-10-22",
+  "baseCommit": "b01da022c",
+  "earlyGreenCommit": "ba13d766f",
+  "status": "Both original cold measurement gate files pass in full on current source. Production and original memory protocols unchanged. Broader Phase 5/6/W26 remain open.",
+  "scope": "Test instrumentation and semantic observables only, no production changes.",
+  "rootCause": "The former >N read minimum conflated ROW coverage with positional syscall count. The fixed fill-owned read window batches several small reads while real per-ROW normalization and measurement remain required. A zero summary or skipped unit must still fail independently of syscall batching.",
+  "contract": {
+    "fixturesUnchanged": [
+      128,
+      40,
+      4000
+    ],
+    "lifecycleCoverage": [
+      128,
+      129,
+      129
+    ],
+    "observable": "Delegate the real RowFormatRegistration prepare/prepareAppend/measure callbacks, observe their returned facts unchanged, require exact count plus unique ordered ROW labels and independently JSON-sized LENS units for both kept/stripped variants. These text fixtures have exactly one unit per ROW; no expectation is derived from getNativeUnits.",
+    "independentAggregate": "Lifecycle exact serialized system/user message array; native exact complete old-converter request length from in-memory original ordinal fixture. Native length is not used to derive the oracle.",
+    "warm": "Zero reads, no extra measurements, identical independent length, no operation files; unsent release and append <150 bound retained.",
+    "coldIO": "Nonzero reads plus additional <128/<129 lifecycle and <N native upper bounds; existing cost budgets <=10N+100 and <=2N+100 unchanged. No syscall minimum is treated as semantic coverage.",
+    "unchangedBehavior": "Old pins, pop/owner/density, clone, compaction, reopen, captured settings, callback error identity, cancel/transport identity, #3919 descriptor cleanup."
+  },
+  "sources": [
+    {
+      "path": "packages/providers/src/openai/journal-chat-length-lifecycle.test.ts",
+      "sha256": "0e8294d7f9bb109e99775fc399ad2430f17bc24e3f7b5b60ba8a59eb2ab2f0d5"
+    },
+    {
+      "path": "packages/providers/src/openai/native-chat-preparation.test.ts",
+      "sha256": "b984c00f3d19b608c564423bb63fed71dee60a2fd48b0435d2a7b82f711957ca"
+    },
+    {
+      "path": "packages/providers/src/openai/__tests__/support/observeRowFormat.ts",
+      "sha256": "d55fa9a2f6644020c7f57ad8d4a0a5143d271354230f1881f61e1475b514d9a3"
+    }
+  ],
+  "sourceBridge": {
+    "freshMemoryRun": false,
+    "reason": "All production and protocol-helper bytes match all six saved 5032-path manifests. Only three unrelated tests differ: prior equivalent large-ROW final-byte indexing and the two cold-contract tests. New observer helper is test-only, imported only by the latter two tests, not the native memory harness or its dependencies.",
+    "manifests": [
+      {
+        "lane": "final-native-full-text",
+        "manifest": "tmp/p6/chat-cold-cost-run-ay/final-native-full-text.source.json",
+        "manifestSha256": "de74e7f330474ec9e0ec1406698678ec1919016fed8b6dd4fd9fa1bc3b3fe71f",
+        "pathsChecked": 5032,
+        "allProductionAndProtocolHelpersMatch": true,
+        "differences": [
+          {
+            "path": "packages/core/src/journal/row-read-window.test.ts",
+            "measuredSha256": "8b6652d969942eae95d356b9f351949638afa82d966d367c624b879f261fc044",
+            "currentSha256": "c2b04a5db6a4a78d51b7eb1ed26bbb32d61d9a88f23cd05983e96ccbdd92522e"
+          },
+          {
+            "path": "packages/providers/src/openai/journal-chat-length-lifecycle.test.ts",
+            "measuredSha256": "8816e44c6f5c5a4dad9a74ee53dfcb2066f51c98434f82923e39296e3c72cfd3",
+            "currentSha256": "0e8294d7f9bb109e99775fc399ad2430f17bc24e3f7b5b60ba8a59eb2ab2f0d5"
+          },
+          {
+            "path": "packages/providers/src/openai/native-chat-preparation.test.ts",
+            "measuredSha256": "e6b3b9ce8d5d14f0d5761104bc4d38c26b53df56e74abab2196fcae8db53a191",
+            "currentSha256": "b984c00f3d19b608c564423bb63fed71dee60a2fd48b0435d2a7b82f711957ca"
+          }
+        ]
+      },
+      {
+        "lane": "final-native-full-tools",
+        "manifest": "tmp/p6/chat-cold-cost-run-ay/final-native-full-tools.source.json",
+        "manifestSha256": "de74e7f330474ec9e0ec1406698678ec1919016fed8b6dd4fd9fa1bc3b3fe71f",
+        "pathsChecked": 5032,
+        "allProductionAndProtocolHelpersMatch": true,
+        "differences": [
+          {
+            "path": "packages/core/src/journal/row-read-window.test.ts",
+            "measuredSha256": "8b6652d969942eae95d356b9f351949638afa82d966d367c624b879f261fc044",
+            "currentSha256": "c2b04a5db6a4a78d51b7eb1ed26bbb32d61d9a88f23cd05983e96ccbdd92522e"
+          },
+          {
+            "path": "packages/providers/src/openai/journal-chat-length-lifecycle.test.ts",
+            "measuredSha256": "8816e44c6f5c5a4dad9a74ee53dfcb2066f51c98434f82923e39296e3c72cfd3",
+            "currentSha256": "0e8294d7f9bb109e99775fc399ad2430f17bc24e3f7b5b60ba8a59eb2ab2f0d5"
+          },
+          {
+            "path": "packages/providers/src/openai/native-chat-preparation.test.ts",
+            "measuredSha256": "e6b3b9ce8d5d14f0d5761104bc4d38c26b53df56e74abab2196fcae8db53a191",
+            "currentSha256": "b984c00f3d19b608c564423bb63fed71dee60a2fd48b0435d2a7b82f711957ca"
+          }
+        ]
+      },
+      {
+        "lane": "final-native-full-trap-array",
+        "manifest": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-array.source.json",
+        "manifestSha256": "de74e7f330474ec9e0ec1406698678ec1919016fed8b6dd4fd9fa1bc3b3fe71f",
+        "pathsChecked": 5032,
+        "allProductionAndProtocolHelpersMatch": true,
+        "differences": [
+          {
+            "path": "packages/core/src/journal/row-read-window.test.ts",
+            "measuredSha256": "8b6652d969942eae95d356b9f351949638afa82d966d367c624b879f261fc044",
+            "currentSha256": "c2b04a5db6a4a78d51b7eb1ed26bbb32d61d9a88f23cd05983e96ccbdd92522e"
+          },
+          {
+            "path": "packages/providers/src/openai/journal-chat-length-lifecycle.test.ts",
+            "measuredSha256": "8816e44c6f5c5a4dad9a74ee53dfcb2066f51c98434f82923e39296e3c72cfd3",
+            "currentSha256": "0e8294d7f9bb109e99775fc399ad2430f17bc24e3f7b5b60ba8a59eb2ab2f0d5"
+          },
+          {
+            "path": "packages/providers/src/openai/native-chat-preparation.test.ts",
+            "measuredSha256": "e6b3b9ce8d5d14f0d5761104bc4d38c26b53df56e74abab2196fcae8db53a191",
+            "currentSha256": "b984c00f3d19b608c564423bb63fed71dee60a2fd48b0435d2a7b82f711957ca"
+          }
+        ]
+      },
+      {
+        "lane": "final-native-full-trap-fill",
+        "manifest": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-fill.source.json",
+        "manifestSha256": "de74e7f330474ec9e0ec1406698678ec1919016fed8b6dd4fd9fa1bc3b3fe71f",
+        "pathsChecked": 5032,
+        "allProductionAndProtocolHelpersMatch": true,
+        "differences": [
+          {
+            "path": "packages/core/src/journal/row-read-window.test.ts",
+            "measuredSha256": "8b6652d969942eae95d356b9f351949638afa82d966d367c624b879f261fc044",
+            "currentSha256": "c2b04a5db6a4a78d51b7eb1ed26bbb32d61d9a88f23cd05983e96ccbdd92522e"
+          },
+          {
+            "path": "packages/providers/src/openai/journal-chat-length-lifecycle.test.ts",
+            "measuredSha256": "8816e44c6f5c5a4dad9a74ee53dfcb2066f51c98434f82923e39296e3c72cfd3",
+            "currentSha256": "0e8294d7f9bb109e99775fc399ad2430f17bc24e3f7b5b60ba8a59eb2ab2f0d5"
+          },
+          {
+            "path": "packages/providers/src/openai/native-chat-preparation.test.ts",
+            "measuredSha256": "e6b3b9ce8d5d14f0d5761104bc4d38c26b53df56e74abab2196fcae8db53a191",
+            "currentSha256": "b984c00f3d19b608c564423bb63fed71dee60a2fd48b0435d2a7b82f711957ca"
+          }
+        ]
+      },
+      {
+        "lane": "final-native-full-trap-estimate",
+        "manifest": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-estimate.source.json",
+        "manifestSha256": "de74e7f330474ec9e0ec1406698678ec1919016fed8b6dd4fd9fa1bc3b3fe71f",
+        "pathsChecked": 5032,
+        "allProductionAndProtocolHelpersMatch": true,
+        "differences": [
+          {
+            "path": "packages/core/src/journal/row-read-window.test.ts",
+            "measuredSha256": "8b6652d969942eae95d356b9f351949638afa82d966d367c624b879f261fc044",
+            "currentSha256": "c2b04a5db6a4a78d51b7eb1ed26bbb32d61d9a88f23cd05983e96ccbdd92522e"
+          },
+          {
+            "path": "packages/providers/src/openai/journal-chat-length-lifecycle.test.ts",
+            "measuredSha256": "8816e44c6f5c5a4dad9a74ee53dfcb2066f51c98434f82923e39296e3c72cfd3",
+            "currentSha256": "0e8294d7f9bb109e99775fc399ad2430f17bc24e3f7b5b60ba8a59eb2ab2f0d5"
+          },
+          {
+            "path": "packages/providers/src/openai/native-chat-preparation.test.ts",
+            "measuredSha256": "e6b3b9ce8d5d14f0d5761104bc4d38c26b53df56e74abab2196fcae8db53a191",
+            "currentSha256": "b984c00f3d19b608c564423bb63fed71dee60a2fd48b0435d2a7b82f711957ca"
+          }
+        ]
+      },
+      {
+        "lane": "final-native-full-trap-retain",
+        "manifest": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-retain.source.json",
+        "manifestSha256": "de74e7f330474ec9e0ec1406698678ec1919016fed8b6dd4fd9fa1bc3b3fe71f",
+        "pathsChecked": 5032,
+        "allProductionAndProtocolHelpersMatch": true,
+        "differences": [
+          {
+            "path": "packages/core/src/journal/row-read-window.test.ts",
+            "measuredSha256": "8b6652d969942eae95d356b9f351949638afa82d966d367c624b879f261fc044",
+            "currentSha256": "c2b04a5db6a4a78d51b7eb1ed26bbb32d61d9a88f23cd05983e96ccbdd92522e"
+          },
+          {
+            "path": "packages/providers/src/openai/journal-chat-length-lifecycle.test.ts",
+            "measuredSha256": "8816e44c6f5c5a4dad9a74ee53dfcb2066f51c98434f82923e39296e3c72cfd3",
+            "currentSha256": "0e8294d7f9bb109e99775fc399ad2430f17bc24e3f7b5b60ba8a59eb2ab2f0d5"
+          },
+          {
+            "path": "packages/providers/src/openai/native-chat-preparation.test.ts",
+            "measuredSha256": "e6b3b9ce8d5d14f0d5761104bc4d38c26b53df56e74abab2196fcae8db53a191",
+            "currentSha256": "b984c00f3d19b608c564423bb63fed71dee60a2fd48b0435d2a7b82f711957ca"
+          }
+        ]
+      }
+    ],
+    "newTestOnlyHelper": {
+      "path": "packages/providers/src/openai/__tests__/support/observeRowFormat.ts",
+      "sha256": "d55fa9a2f6644020c7f57ad8d4a0a5143d271354230f1881f61e1475b514d9a3",
+      "presentAtMeasurement": false
+    },
+    "noProductionDifferenceFromBase": true
+  },
+  "controls": [
+    {
+      "name": "skip-unit",
+      "path": "packages/providers/src/openai/journal-chat-length.ts",
+      "originalSha256": "0eecf7dd91ce01929f676e066dbb02bf8f215b383b2561217849d63d199161e0",
+      "mutantSha256": "8dd185c96daeade8a0954c6176ec838315e2d36009e50236581809daa6e17ba6",
+      "restoredSha256": "0eecf7dd91ce01929f676e066dbb02bf8f215b383b2561217849d63d199161e0",
+      "restoredEqual": true,
+      "failures": [
+        {
+          "file": "src/openai/journal-chat-length-lifecycle.test.ts",
+          "exit": 1,
+          "pid": 75700
+        },
+        {
+          "file": "src/openai/native-chat-preparation.test.ts",
+          "exit": 1,
+          "pid": 75712
+        }
+      ]
+    },
+    {
+      "name": "false-zero-summary",
+      "path": "packages/providers/src/openai/journal-chat-length.ts",
+      "originalSha256": "0eecf7dd91ce01929f676e066dbb02bf8f215b383b2561217849d63d199161e0",
+      "mutantSha256": "a6dcc0de6cf24adaf5b2c3519064adb471cef0d5b6039f8376586955bf9a8c90",
+      "restoredSha256": "0eecf7dd91ce01929f676e066dbb02bf8f215b383b2561217849d63d199161e0",
+      "restoredEqual": true,
+      "failures": [
+        {
+          "file": "src/openai/journal-chat-length-lifecycle.test.ts",
+          "exit": 1,
+          "pid": 75737
+        },
+        {
+          "file": "src/openai/native-chat-preparation.test.ts",
+          "exit": 1,
+          "pid": 75753
+        }
+      ]
+    },
+    {
+      "name": "stale-generation",
+      "path": "packages/providers/src/openai/journal-chat-length.ts",
+      "originalSha256": "0eecf7dd91ce01929f676e066dbb02bf8f215b383b2561217849d63d199161e0",
+      "mutantSha256": "3d9b6f5e4bc5090e5bf96a4a63ab1c06514d81e8c21a6f3c5499f1be7d81c2a2",
+      "restoredSha256": "0eecf7dd91ce01929f676e066dbb02bf8f215b383b2561217849d63d199161e0",
+      "restoredEqual": true,
+      "failures": [
+        {
+          "file": "src/openai/journal-chat-length-lifecycle.test.ts",
+          "exit": 1,
+          "pid": 75770
+        }
+      ]
+    },
+    {
+      "name": "false-warm-unmeasured",
+      "path": "packages/providers/src/openai/journal-chat-length.ts",
+      "originalSha256": "0eecf7dd91ce01929f676e066dbb02bf8f215b383b2561217849d63d199161e0",
+      "mutantSha256": "9c50c77b77c68f643ff38d360ea41f901b023539a06ea9ccc45a5572b94b0e09",
+      "restoredSha256": "0eecf7dd91ce01929f676e066dbb02bf8f215b383b2561217849d63d199161e0",
+      "restoredEqual": true,
+      "failures": [
+        {
+          "file": "src/openai/journal-chat-length-lifecycle.test.ts",
+          "exit": 1,
+          "pid": 75774
+        }
+      ]
+    },
+    {
+      "name": "wrong-settings",
+      "path": "packages/providers/src/openai/journal-chat-length.ts",
+      "originalSha256": "0eecf7dd91ce01929f676e066dbb02bf8f215b383b2561217849d63d199161e0",
+      "mutantSha256": "34b28496ac7d3fcba3e344caead0e474ce5dd723d97f3654fad48f7cb2820485",
+      "restoredSha256": "0eecf7dd91ce01929f676e066dbb02bf8f215b383b2561217849d63d199161e0",
+      "restoredEqual": true,
+      "failures": [
+        {
+          "file": "src/openai/journal-chat-length-lifecycle.test.ts",
+          "exit": 1,
+          "pid": 75778
+        }
+      ]
+    }
+  ],
+  "controlsInterpretation": {
+    "skipUnit": "Production omits row-1 normalized measurement while ROW callbacks still execute: per-unit LENS equality fails in both target files at original fixture sizes.",
+    "falseZeroSummary": "Real callbacks and per-unit LENS still execute but stored summary is empty: independent old-body length assertion fails, native 126 != 1676/163016. Observation counts alone cannot pass.",
+    "staleGeneration": "Removing generation validation fails existing poisoned-pin toThrow assertion.",
+    "falseWarmUnmeasured": "Accepting missingBase without validation fails existing unmeasured poisoned-pin assertion.",
+    "wrongSettings": "Ignoring format key in stored plan lookup fails existing captured-settings rejection.",
+    "restoration": "Each of five controls restores the original bytes in finally and checks SHA256; no mutated production is committed."
+  },
+  "gates": {
+    "runs": [
+      {
+        "name": "skip-unit-journal-chat-length-lifecycle.test.ts",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "test",
+          "src/openai/journal-chat-length-lifecycle.test.ts",
+          "--timeout",
+          "180000",
+          "--test-name-pattern",
+          "reads explicitly|cold fills"
+        ],
+        "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+        "pid": 75700,
+        "exit": 1,
+        "sha256": "14fefea010f4fb0ff3db549873ea573c3774e33cefcfadd2c4acf930a873da15",
+        "summary": "sort((a, b) => (a < b ? -1 : Number(a > b))),\n153 |         );\n154 |         expect(measured.map(({ lens }) => lens)).toStrictEqual(\n                                                       ^\nerror: expect(received).toStrictEqual(expected)\n\n@@ -26,34 +26,11 @@\n        ],\n      ],\n    },\n    {\n      \"revision\": 1,\n-     \"units\": [\n-       [\n-         {\n-           \"media\": [],\n-           \"messages\": [\n-             {\n-               \"bytes\": 37,\n-               \"dropped\": false,\n-             },\n-           ],\n-           \"speaker\": \"human\",\n-         },\n-         {\n-           \"media\": [],\n-           \"messages\": [\n-             {\n-               \"bytes\": 37,\n-               \"dropped\": false,\n-             },\n-           ],\n-           \"speaker\": \"human\",\n-         },\n-       ],\n-     ],\n+     \"units\": [],\n    },\n    {\n      \"revision\": 1,\n      \"units\": [\n        [\n\n- Expected  - 24\n+ Received  + 1\n\n      at expectCoverage (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/journal-chat-length-lifecycle.test.ts:154:50)\n      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/journal-chat-length-lifecycle.test.ts:174:7)\n      at async withSession (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/journal-chat-length-lifecycle.test.ts:115:13)\n      at async <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/journal-chat-length-lifecycle.test.ts:122:11)\n(fail) native format registration lifecycle > reads explicitly on cold fill, zero bytes for warm plans and bounded paths for an append [50.48ms]\n\n 0 pass\n 5 filtered out\n 1 fail\n 4 expect() calls\nRan 1 test across 1 file. [367.00ms]\n",
+        "log": "tmp/p6/chat-cold-contract-run-az/current-skip-unit-journal-chat-length-lifecycle.test.ts.log"
+      },
+      {
+        "name": "skip-unit-native-chat-preparation.test.ts",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "test",
+          "src/openai/native-chat-preparation.test.ts",
+          "--timeout",
+          "180000",
+          "--test-name-pattern",
+          "reads explicitly|cold fills"
+        ],
+        "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+        "pid": 75712,
+        "exit": 1,
+        "sha256": "eba40d9cca36cabc6c608933195bfdba713e999b9ec5e9fe88c617e17eb63f44",
+        "summary": "46 |         expect(measured.map(({ label }) => label)).toStrictEqual(\n347 |           measured\n348 |             .map(({ label }) => label)\n349 |             .sort((a, b) => (a < b ? -1 : Number(a > b))),\n350 |         );\n351 |         expect(measured.map(({ lens }) => lens)).toStrictEqual(\n                                                       ^\nerror: expect(received).toStrictEqual(expected)\n\n@@ -26,34 +26,11 @@\n        ],\n      ],\n    },\n    {\n      \"revision\": 1,\n-     \"units\": [\n-       [\n-         {\n-           \"media\": [],\n-           \"messages\": [\n-             {\n-               \"bytes\": 37,\n-               \"dropped\": false,\n-             },\n-           ],\n-           \"speaker\": \"human\",\n-         },\n-         {\n-           \"media\": [],\n-           \"messages\": [\n-             {\n-               \"bytes\": 37,\n-               \"dropped\": false,\n-             },\n-           ],\n-           \"speaker\": \"human\",\n-         },\n-       ],\n-     ],\n+     \"units\": [],\n    },\n    {\n      \"revision\": 1,\n      \"units\": [\n        [\n\n- Expected  - 24\n+ Received  + 1\n\n      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/native-chat-preparation.test.ts:351:50)\n      at async withHistory (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/native-chat-preparation.test.ts:118:13)\n      at async <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/native-chat-preparation.test.ts:284:13)\n(fail) native Chat preparation ownership and planning > cold fills %s rows, then prepares and cancels unsent warm bodies with zero physical reads or files [1039.13ms]\n\n 0 pass\n 8 filtered out\n 2 fail\n 8 expect() calls\nRan 2 tests across 1 file. [1.83s]\n",
+        "log": "tmp/p6/chat-cold-contract-run-az/current-skip-unit-native-chat-preparation.test.ts.log"
+      },
+      {
+        "name": "false-zero-summary-journal-chat-length-lifecycle.test.ts",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "test",
+          "src/openai/journal-chat-length-lifecycle.test.ts",
+          "--timeout",
+          "180000",
+          "--test-name-pattern",
+          "reads explicitly|cold fills"
+        ],
+        "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+        "pid": 75737,
+        "exit": 1,
+        "sha256": "30ab107b7af246d5ffcaf01ae67a16f8b99949afbb60f83d9973c683d94ee6d7",
+        "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/openai/journal-chat-length-lifecycle.test.ts:\n174 |       expectCoverage(texts);\n175 |       expect(counter.reads).toBeGreaterThan(0);\n176 |       expect(counter.reads).toBeLessThan(128);\n177 |       counter.reads = 0;\n178 |       const before = textMessageLength(texts);\n179 |       expect(await planned(session)).toBe(before);\n                                           ^\nerror: expect(received).toBe(expected)\n\nExpected: 5042\nReceived: 32\n\n      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/journal-chat-length-lifecycle.test.ts:179:38)\n      at async withSession (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/journal-chat-length-lifecycle.test.ts:115:13)\n      at async <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/journal-chat-length-lifecycle.test.ts:122:11)\n(fail) native format registration lifecycle > reads explicitly on cold fill, zero bytes for warm plans and bounded paths for an append [48.19ms]\n\n 0 pass\n 5 filtered out\n 1 fail\n 7 expect() calls\nRan 1 test across 1 file. [371.00ms]\n",
+        "log": "tmp/p6/chat-cold-contract-run-az/current-false-zero-summary-journal-chat-length-lifecycle.test.ts.log"
+      },
+      {
+        "name": "false-zero-summary-native-chat-preparation.test.ts",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "test",
+          "src/openai/native-chat-preparation.test.ts",
+          "--timeout",
+          "180000",
+          "--test-name-pattern",
+          "reads explicitly|cold fills"
+        ],
+        "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+        "pid": 75753,
+        "exit": 1,
+        "sha256": "73782428129f768062f872e4ad23d4689ec771e56b02803d15064696d9eda9fb",
+        "summary": "                     ^\nerror: expect(received).toBe(expected)\n\nExpected: 1676\nReceived: 126\n\n      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/native-chat-preparation.test.ts:368:40)\n      at async withHistory (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/native-chat-preparation.test.ts:118:13)\n      at async <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/native-chat-preparation.test.ts:284:13)\n(fail) native Chat preparation ownership and planning > cold fills %s rows, then prepares and cancels unsent warm bodies with zero physical reads or files [98.15ms]\n363 |               media: [],\n364 |             };\n365 |             return { revision: 1, units: [[unit, unit]] };\n366 |           }),\n367 |         );\n368 |         expect(first.spool.byteLength).toBe(expectedLength);\n                                             ^\nerror: expect(received).toBe(expected)\n\nExpected: 163016\nReceived: 126\n\n      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/native-chat-preparation.test.ts:368:40)\n      at async withHistory (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/native-chat-preparation.test.ts:118:13)\n      at async <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/native-chat-preparation.test.ts:284:13)\n(fail) native Chat preparation ownership and planning > cold fills %s rows, then prepares and cancels unsent warm bodies with zero physical reads or files [1012.07ms]\n\n 0 pass\n 8 filtered out\n 2 fail\n 10 expect() calls\nRan 2 tests across 1 file. [1.80s]\n",
+        "log": "tmp/p6/chat-cold-contract-run-az/current-false-zero-summary-native-chat-preparation.test.ts.log"
+      },
+      {
+        "name": "stale-generation-journal-chat-length-lifecycle.test.ts",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "test",
+          "src/openai/journal-chat-length-lifecycle.test.ts",
+          "--timeout",
+          "180000",
+          "--test-name-pattern",
+          "refuses stale"
+        ],
+        "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+        "pid": 75770,
+        "exit": 1,
+        "sha256": "374f57b313a120ec25db22a47441bcb78ded1549cc425c6410421a5cea1b0416",
+        "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/openai/journal-chat-length-lifecycle.test.ts:\n87 |       },\n88 |     },\n89 |     new BoundedIdNodeCache(),\n90 |   );\n91 |   try {\n92 |     expect(() => planStoredChatMessages(snapshot, SETTINGS, 0, '')).toThrow(\n                                                                         ^\nerror: expect(received).toThrow(expected)\n\nExpected pattern: /unmeasured|stale/\n\nReceived function did not throw\nReceived value: {\n  tokens: 0,\n  bytes: 69,\n  items: 2,\n  key: 13287393868757729277n,\n  generation: 2,\n  settings: {\n    formatId: \"openai-chat:plain\",\n    formatRev: 1,\n    model: \"a\",\n    endpoint: \"https://example.test/v1\",\n    isOAuth: false,\n    toolNameTransform: \"none\",\n    supportsUrlImages: true,\n    reasoningEnabled: false,\n    reasoningFieldName: \"reasoning_content\",\n    mediaPdfEnabled: false,\n    unsupportedMedia: \"notice\",\n    outputLimits: null,\n  },\n}\n\n      at assertPoisonedPin (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/journal-chat-length-lifecycle.test.ts:92:69)\n      at async <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/journal-chat-length-lifecycle.test.ts:347:13)\n      at async withSession (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/journal-chat-length-lifecycle.test.ts:115:13)\n      at async <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/journal-chat-length-lifecycle.test.ts:343:11)\n(fail) native format registration lifecycle > refuses stale generations and an unmeasured zero summary instead of declaring a length [18.90ms]\n\n 0 pass\n 5 filtered out\n 1 fail\n 2 expect() calls\nRan 1 test across 1 file. [330.00ms]\n",
+        "log": "tmp/p6/chat-cold-contract-run-az/current-stale-generation-journal-chat-length-lifecycle.test.ts.log"
+      },
+      {
+        "name": "false-warm-unmeasured-journal-chat-length-lifecycle.test.ts",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "test",
+          "src/openai/journal-chat-length-lifecycle.test.ts",
+          "--timeout",
+          "180000",
+          "--test-name-pattern",
+          "refuses stale"
+        ],
+        "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+        "pid": 75774,
+        "exit": 1,
+        "sha256": "134ccdccc52736512877b7886442ae12c9867ae472dfcbfa979948d60f3696a5",
+        "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/openai/journal-chat-length-lifecycle.test.ts:\n87 |       },\n88 |     },\n89 |     new BoundedIdNodeCache(),\n90 |   );\n91 |   try {\n92 |     expect(() => planStoredChatMessages(snapshot, SETTINGS, 0, '')).toThrow(\n                                                                         ^\nerror: expect(received).toThrow(expected)\n\nExpected pattern: /unmeasured|stale/\n\nReceived function did not throw\nReceived value: {\n  tokens: 0,\n  bytes: 32,\n  items: 1,\n  key: 13287393868757729277n,\n  generation: 1,\n  settings: {\n    formatId: \"openai-chat:plain\",\n    formatRev: 1,\n    model: \"a\",\n    endpoint: \"https://example.test/v1\",\n    isOAuth: false,\n    toolNameTransform: \"none\",\n    supportsUrlImages: true,\n    reasoningEnabled: false,\n    reasoningFieldName: \"reasoning_content\",\n    mediaPdfEnabled: false,\n    unsupportedMedia: \"notice\",\n    outputLimits: null,\n  },\n}\n\n      at assertPoisonedPin (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/journal-chat-length-lifecycle.test.ts:92:69)\n      at async <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/journal-chat-length-lifecycle.test.ts:361:13)\n      at async withSession (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/journal-chat-length-lifecycle.test.ts:115:13)\n      at async <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/journal-chat-length-lifecycle.test.ts:343:11)\n(fail) native format registration lifecycle > refuses stale generations and an unmeasured zero summary instead of declaring a length [19.76ms]\n\n 0 pass\n 5 filtered out\n 1 fail\n 3 expect() calls\nRan 1 test across 1 file. [342.00ms]\n",
+        "log": "tmp/p6/chat-cold-contract-run-az/current-false-warm-unmeasured-journal-chat-length-lifecycle.test.ts.log"
+      },
+      {
+        "name": "wrong-settings-journal-chat-length-lifecycle.test.ts",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "test",
+          "src/openai/journal-chat-length-lifecycle.test.ts",
+          "--timeout",
+          "180000",
+          "--test-name-pattern",
+          "captures settings"
+        ],
+        "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+        "pid": 75778,
+        "exit": 1,
+        "sha256": "f846f55ccc0e32aefb4e544496e9af208fd63367d9041a345a4a9e30ff52c0e3",
+        "summary": "\nsrc/openai/journal-chat-length-lifecycle.test.ts:\n267 |       await session.registerRowFormat(plainChatLengthRegistration(settings));\n268 |       expect(plan.settings.model).toBe('captured-model');\n269 |       expect(planStoredChatMessages(pin, plan.settings, 0, '').bytes).toBe(\n270 |         plan.bytes,\n271 |       );\n272 |       expect(() => planStoredChatMessages(pin, settings, 0, '')).toThrow(\n                                                                       ^\nerror: expect(received).toThrow(expected)\n\nExpected pattern: /registered/\n\nReceived function did not throw\nReceived value: {\n  tokens: 0,\n  bytes: 69,\n  items: 2,\n  key: 5174028827313268785n,\n  generation: 1,\n  settings: {\n    formatId: \"openai-chat:plain\",\n    formatRev: 1,\n    model: \"later-model\",\n    endpoint: \"https://example.test/v1\",\n    isOAuth: false,\n    toolNameTransform: \"none\",\n    supportsUrlImages: true,\n    reasoningEnabled: false,\n    reasoningFieldName: \"reasoning_content\",\n    mediaPdfEnabled: false,\n    unsupportedMedia: \"notice\",\n    outputLimits: null,\n  },\n}\n\n      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/journal-chat-length-lifecycle.test.ts:272:66)\n      at async withSession (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/journal-chat-length-lifecycle.test.ts:115:13)\n      at async <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/journal-chat-length-lifecycle.test.ts:252:11)\n(fail) native format registration lifecycle > captures settings before asynchronous registration and leaves a plan unchanged after a model change [19.15ms]\n\n 0 pass\n 5 filtered out\n 1 fail\n 3 expect() calls\nRan 1 test across 1 file. [343.00ms]\n",
+        "log": "tmp/p6/chat-cold-contract-run-az/current-wrong-settings-journal-chat-length-lifecycle.test.ts.log"
+      },
+      {
+        "name": "final-journal-chat-length-lifecycle.test.ts",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "test",
+          "src/openai/journal-chat-length-lifecycle.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+        "pid": 75785,
+        "exit": 0,
+        "sha256": "5aee5ac56cf60cee99a5d1b14843a784a48cc4de3305bcd441d6efcd4c539bf9",
+        "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/openai/journal-chat-length-lifecycle.test.ts:\n(pass) native format registration lifecycle > reads explicitly on cold fill, zero bytes for warm plans and bounded paths for an append [61.71ms]\n(pass) native format registration lifecycle > restores lengths through pop, owner edits, rebuild, clone, compaction and reopen [34.90ms]\n(pass) native format registration lifecycle > captures settings before asynchronous registration and leaves a plan unchanged after a model change [2.74ms]\n(pass) native format registration lifecycle > does not assign mapping-only and length formats conflicting meanings in one slot [2.29ms]\n(pass) native format registration lifecycle > preserves the published version, old pin and original cause when a measurer fails [9.87ms]\n(pass) native format registration lifecycle > refuses stale generations and an unmeasured zero summary instead of declaring a length [1.92ms]\n\n 6 pass\n 0 fail\n 90 expect() calls\nRan 6 tests across 1 file. [423.00ms]\n",
+        "log": "tmp/p6/chat-cold-contract-run-az/current-final-journal-chat-length-lifecycle.test.ts.log"
+      },
+      {
+        "name": "final-native-chat-preparation.test.ts",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "test",
+          "src/openai/native-chat-preparation.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+        "pid": 75788,
+        "exit": 0,
+        "sha256": "ac457050407ec8e26dc44d8d32b4bb363eefb3687791a61a24c94ec63ca7af13",
+        "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/openai/native-chat-preparation.test.ts:\n(pass) native Chat preparation ownership and planning > prepares a pending user over %s warm rows without historical reads or writes [53.43ms]\n(pass) native Chat preparation ownership and planning > prepares a pending user over %s warm rows without historical reads or writes [988.74ms]\n(pass) native Chat preparation ownership and planning > captures pending bytes once and keeps retry streams immutable across caller mutation and history append [52.23ms]\n(pass) native Chat preparation ownership and planning > holds at most one source unit under backpressure and retires it on cancel [7.94ms]\n(pass) native Chat preparation ownership and planning > holds at most one source unit under backpressure and retires it on transport-error [10.82ms]\n(pass) native Chat preparation ownership and planning > cold fills %s rows, then prepares and cancels unsent warm bodies with zero physical reads or files [9.78ms]\n(pass) native Chat preparation ownership and planning > cold fills %s rows, then prepares and cancels unsent warm bodies with zero physical reads or files [966.39ms]\n(pass) native Chat preparation ownership and planning > keys repeated preparation by captured reasoning settings against the old converter [20.80ms]\n(pass) native Chat preparation ownership and planning > reuses a cold-filled pin for fresh byte-identical streams and repeated preparation [7.50ms]\n(pass) native Chat preparation ownership and planning > preserves the explicit old continuation route and the streamed test-helper contract [5.40ms]\n\n 10 pass\n 0 fail\n 71 expect() calls\nRan 10 tests across 1 file. [2.82s]\n",
+        "log": "tmp/p6/chat-cold-contract-run-az/current-final-native-chat-preparation.test.ts.log"
+      },
+      {
+        "name": "final-journalStore.readerCleanup.test.ts",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "test",
+          "src/journal/journalStore.readerCleanup.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+        "pid": 75822,
+        "exit": 0,
+        "sha256": "a741539ab5a5854ec5237879be0bb5ef530f95196513ce1ccd5269c49e987cbc",
+        "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/journal/journalStore.readerCleanup.test.ts:\n(pass) retired reader cross-cleanup error identity > keeps the original consumer error before the original dump descriptor failure [20.91ms]\n(pass) retired reader cross-cleanup error identity > preserves readAt failure identity before final descriptor release failure [1.94ms]\n(pass) retired reader cross-cleanup error identity > still closes the descriptor when suspended dump reader cleanup fails independently [2.90ms]\n\n 3 pass\n 0 fail\n 20 expect() calls\nRan 3 tests across 1 file. [382.00ms]\n",
+        "log": "tmp/p6/chat-cold-contract-run-az/current-final-journalStore.readerCleanup.test.ts.log"
+      },
+      {
+        "name": "final-journalStore.readerLifetime.test.ts",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "test",
+          "src/journal/journalStore.readerLifetime.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+        "pid": 75828,
+        "exit": 0,
+        "sha256": "4c7638d58145bfd215de211f73888577c5adc84e6f1f772e476e75188abcd1b0",
+        "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/journal/journalStore.readerLifetime.test.ts:\n(pass) journal reader ownership across writer retirement > retires writes without waiting for readers and closes the descriptor at the final held pin [13.89ms]\n(pass) journal reader ownership across writer retirement > reports retired batch descriptor release failure after closing the file [1.04ms]\n(pass) journal reader ownership across writer retirement > reports retired dump descriptor release failure after closing the file [0.91ms]\n(pass) journal reader ownership across writer retirement > reports a fanout-held reader close failure through flush after all mirrors settle [8.04ms]\n(pass) journal reader ownership across writer retirement > closes a reader-free journal before returning [0.83ms]\n(pass) journal reader ownership across writer retirement > keeps an abort reason before a deferred descriptor-close failure [0.97ms]\n(pass) journal reader ownership across writer retirement > joins an admitted checkpoint deletion before closing while rejecting later work [1.53ms]\n(pass) journal reader ownership across writer retirement > closes immediately with no readers and preserves the original close failure [0.80ms]\n(pass) journal reader ownership across writer retirement > reports deferred descriptor close failure to the final reader release [0.72ms]\n(pass) journal reader ownership across writer retirement > keeps callback and descriptor-close failures in their original order [0.77ms]\n(pass) journal reader ownership across writer retirement > preserves the abort reason when a retired snapshot releases its descriptor [0.66ms]\n\n 11 pass\n 0 fail\n 29 expect() calls\nRan 11 tests across 1 file. [343.00ms]\n",
+        "log": "tmp/p6/chat-cold-contract-run-az/current-final-journalStore.readerLifetime.test.ts.log"
+      },
+      {
+        "name": "core-declarations",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "../../scripts/build_package.ts"
+        ],
+        "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+        "pid": 75834,
+        "exit": 0,
+        "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127",
+        "summary": "Successfully copied files.\n",
+        "log": "tmp/p6/chat-cold-contract-run-az/current-core-declarations.log"
+      },
+      {
+        "name": "providers-declarations",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "../../scripts/build_package.ts"
+        ],
+        "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+        "pid": 75878,
+        "exit": 0,
+        "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127",
+        "summary": "Successfully copied files.\n",
+        "log": "tmp/p6/chat-cold-contract-run-az/current-providers-declarations.log"
+      },
+      {
+        "name": "agents-declarations",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "../../scripts/build_package.ts"
+        ],
+        "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents",
+        "pid": 75904,
+        "exit": 0,
+        "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127",
+        "summary": "Successfully copied files.\n",
+        "log": "tmp/p6/chat-cold-contract-run-az/current-agents-declarations.log"
+      },
+      {
+        "name": "core-types",
+        "args": [
+          "node_modules/.bin/tsc",
+          "--noEmit",
+          "-p",
+          "packages/core/tsconfig.noemit.json"
+        ],
+        "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+        "pid": 75927,
+        "exit": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "summary": "",
+        "log": "tmp/p6/chat-cold-contract-run-az/current-core-types.log"
+      },
+      {
+        "name": "providers-types",
+        "args": [
+          "node_modules/.bin/tsc",
+          "--noEmit",
+          "-p",
+          "packages/providers/tsconfig.noemit.json"
+        ],
+        "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+        "pid": 75999,
+        "exit": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "summary": "",
+        "log": "tmp/p6/chat-cold-contract-run-az/current-providers-types.log"
+      },
+      {
+        "name": "agents-types",
+        "args": [
+          "node_modules/.bin/tsc",
+          "--noEmit",
+          "-p",
+          "packages/agents/tsconfig.noemit.json"
+        ],
+        "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+        "pid": 76155,
+        "exit": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "summary": "",
+        "log": "tmp/p6/chat-cold-contract-run-az/current-agents-types.log"
+      },
+      {
+        "name": "providers-bun-types",
+        "args": [
+          "node_modules/.bin/tsc",
+          "--noEmit",
+          "-p",
+          "packages/providers/tsconfig.test-bun.json",
+          "--types",
+          "bun"
+        ],
+        "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+        "pid": 76306,
+        "exit": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "summary": "",
+        "log": "tmp/p6/chat-cold-contract-run-az/current-providers-bun-types.log"
+      },
+      {
+        "name": "agents-bun-types",
+        "args": [
+          "node_modules/.bin/tsc",
+          "--noEmit",
+          "-p",
+          "packages/agents/tsconfig.test-bun.json",
+          "--types",
+          "bun"
+        ],
+        "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+        "pid": 76340,
+        "exit": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "summary": "",
+        "log": "tmp/p6/chat-cold-contract-run-az/current-agents-bun-types.log"
+      },
+      {
+        "name": "lint",
+        "args": [
+          "node_modules/.bin/eslint",
+          "--max-warnings",
+          "0",
+          "packages/providers/src/openai/journal-chat-length-lifecycle.test.ts",
+          "packages/providers/src/openai/native-chat-preparation.test.ts",
+          "packages/providers/src/openai/__tests__/support/observeRowFormat.ts"
+        ],
+        "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+        "pid": 76397,
+        "exit": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "summary": "",
+        "log": "tmp/p6/chat-cold-contract-run-az/current-lint.log"
+      },
+      {
+        "name": "format",
+        "args": [
+          "node_modules/.bin/prettier",
+          "--check",
+          "packages/providers/src/openai/journal-chat-length-lifecycle.test.ts",
+          "packages/providers/src/openai/native-chat-preparation.test.ts",
+          "packages/providers/src/openai/__tests__/support/observeRowFormat.ts"
+        ],
+        "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+        "pid": 76444,
+        "exit": 0,
+        "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+        "summary": "Checking formatting...\nAll matched files use Prettier code style!\n",
+        "log": "tmp/p6/chat-cold-contract-run-az/current-format.log"
+      },
+      {
+        "name": "graph",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "scripts/check-affected-test-shards.ts"
+        ],
+        "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+        "pid": 76449,
+        "exit": 0,
+        "sha256": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67",
+        "summary": "affected-test-shards drift guard: scanning /Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code against scripts/affected-test-shards.data.json\naffected-test-shards drift guard PASSED: checked-in graph matches real imports.\n",
+        "log": "tmp/p6/chat-cold-contract-run-az/current-graph.log"
+      },
+      {
+        "name": "audit",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "scripts/test-audit/scan.ts",
+          "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-cold-contract-run-az/current-audit"
+        ],
+        "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+        "pid": 76472,
+        "exit": 0,
+        "sha256": "614a35259ea4ff2dd48a81f95cc02f7047710ddae29cc4b64dca9983b1884231",
+        "summary": "files scanned: 4659  errors: 0\ntests: 44628  assertions: 110245  (avg 2.47 asserts/test)\nfindings: 2619\n\n== by flag ==\n   853  DUP_ASSERT\n   497  MOCK_ONLY_ORACLE\n   482  SELF_CONFIRMING\n   242  WEAK_ONLY\n   187  STRUCTURE_ONLY\n   170  MOCK_MIRROR\n    98  NO_ASSERT\n    45  SNAPSHOT_ONLY\n    25  SWALLOWED_ASSERT\n    14  ALWAYS_TRUE\n     6  SELF_COMPARE\n\n== by area ==\n   823  cli\n   532  core\n   448  agents\n   378  providers\n   123  scripts\n    64  mcp\n    61  tools\n    43  auth\n    31  telemetry\n    24  integration-tests\n    21  zed-acp\n    20  lsp\n    18  policy\n     9  ide-integration\n     8  settings\n     7  vscode-ide-companion\n     4  storage\n     3  test-utils\n\nper-file stats for 4534 files written alongside findings.tsv\n",
+        "log": "tmp/p6/chat-cold-contract-run-az/current-audit.log"
+      },
+      {
+        "name": "preservation",
+        "args": [
+          "shasum",
+          "-a",
+          "256",
+          "-c",
+          "tmp/p6/chat-tail-run-au/preserved.sha256"
+        ],
+        "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+        "pid": 76506,
+        "exit": 0,
+        "sha256": "0e4199bb6c410cc6f1e5bd39e3d87c8159795d9dc60279f003e975a7ea37b454",
+        "summary": "ivery/source-inventory.tsv: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/final-delivery/starting-inventory-files.txt: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/final-delivery/test-case-evidence.tsv: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/final-delivery/touched-audit.tsv: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/final-delivery/verified-tests.tsv: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/final-delivery/w17-remaining-files.txt: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/native-test-evidence.tsv: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/remaining-inventory-files.txt: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/source-inventory.tsv: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/starting-inventory-files.txt: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/test-case-evidence.tsv: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/verified-tests.tsv: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/w17-remaining-files.txt: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/w21/ROOT-CAUSE.md: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/w21/STATUS.md: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/w21/contract-map.md: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/w21/remaining-contracts.md: OK\nproject-plans/issue854/recovery-2026-10-19/validate-recovery.ts: OK\nproject-plans/issue854/recovery-2026-10-19/validation.json: OK\n",
+        "log": "tmp/p6/chat-cold-contract-run-az/current-preservation.log"
+      },
+      {
+        "name": "recovery-preservation",
+        "args": [
+          "shasum",
+          "-a",
+          "256",
+          "-c",
+          "tmp/p6/chat-cold-cost-run-ay/recovery-before.sha256"
+        ],
+        "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+        "pid": 76507,
+        "exit": 0,
+        "sha256": "e18a29f2d580455fe9b641230726f9fd9ea7396056e1bbb3dddff5cd2d60bcb8",
+        "summary": "project-plans/issue854/recovery-2026-10-19/validation.json: OK\n",
+        "log": "tmp/p6/chat-cold-contract-run-az/current-recovery-preservation.log"
+      }
+    ],
+    "environmentRuns": [
+      {
+        "name": "env-journal-journal-chat-length-lifecycle.test.ts",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "test",
+          "src/openai/journal-chat-length-lifecycle.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "environment": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "actualBackend": "journal: direct JournalSession or explicit HistoryService backend option; old environment does not turn these fixtures into legacy-backend tests",
+        "pid": 76509,
+        "exit": 0,
+        "sha256": "9548f99b3dca180f0727e9c947ba9d42cdd6d363846e41fb861ebfe7c6914834",
+        "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/openai/journal-chat-length-lifecycle.test.ts:\n(pass) native format registration lifecycle > reads explicitly on cold fill, zero bytes for warm plans and bounded paths for an append [61.26ms]\n(pass) native format registration lifecycle > restores lengths through pop, owner edits, rebuild, clone, compaction and reopen [35.28ms]\n(pass) native format registration lifecycle > captures settings before asynchronous registration and leaves a plan unchanged after a model change [2.64ms]\n(pass) native format registration lifecycle > does not assign mapping-only and length formats conflicting meanings in one slot [2.29ms]\n(pass) native format registration lifecycle > preserves the published version, old pin and original cause when a measurer fails [9.46ms]\n(pass) native format registration lifecycle > refuses stale generations and an unmeasured zero summary instead of declaring a length [1.88ms]\n\n 6 pass\n 0 fail\n 90 expect() calls\nRan 6 tests across 1 file. [425.00ms]\n"
+      },
+      {
+        "name": "env-journal-native-chat-preparation.test.ts",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "test",
+          "src/openai/native-chat-preparation.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "environment": {
+          "LLXPRT_HISTORY_BACKEND": "journal"
+        },
+        "actualBackend": "journal: direct JournalSession or explicit HistoryService backend option; old environment does not turn these fixtures into legacy-backend tests",
+        "pid": 76516,
+        "exit": 0,
+        "sha256": "b5ecbe689ec8a0d483372cffa73453f878b331095d8ad55a27180abaaedcef68",
+        "summary": " immutable across caller mutation and history append [52.28ms]\n(pass) native Chat preparation ownership and planning > holds at most one source unit under backpressure and retires it on cancel [8.47ms]\n(pass) native Chat preparation ownership and planning > holds at most one source unit under backpressure and retires it on transport-error [11.97ms]\n(pass) native Chat preparation ownership and planning > cold fills %s rows, then prepares and cancels unsent warm bodies with zero physical reads or files [9.82ms]\n(pass) native Chat preparation ownership and planning > cold fills %s rows, then prepares and cancels unsent warm bodies with zero physical reads or files [981.51ms]\n(pass) native Chat preparation ownership and planning > keys repeated preparation by captured reasoning settings against the old converter [13.22ms]\n(pass) native Chat preparation ownership and planning > reuses a cold-filled pin for fresh byte-identical streams and repeated preparation [4.10ms]\n(pass) native Chat preparation ownership and planning > preserves the explicit old continuation route and the streamed test-helper contract [5.32ms]\n\n 10 pass\n 0 fail\n 71 expect() calls\nRan 10 tests across 1 file. [2.83s]\n"
+      },
+      {
+        "name": "env-old-journal-chat-length-lifecycle.test.ts",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "test",
+          "src/openai/journal-chat-length-lifecycle.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "environment": {
+          "LLXPRT_HISTORY_BACKEND": "old"
+        },
+        "actualBackend": "journal: direct JournalSession or explicit HistoryService backend option; old environment does not turn these fixtures into legacy-backend tests",
+        "pid": 76555,
+        "exit": 0,
+        "sha256": "f003a7df2e2d7efbf91db4bf9ab3abe575811d0b0c4c016dba438331af5ba210",
+        "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/openai/journal-chat-length-lifecycle.test.ts:\n(pass) native format registration lifecycle > reads explicitly on cold fill, zero bytes for warm plans and bounded paths for an append [77.30ms]\n(pass) native format registration lifecycle > restores lengths through pop, owner edits, rebuild, clone, compaction and reopen [47.86ms]\n(pass) native format registration lifecycle > captures settings before asynchronous registration and leaves a plan unchanged after a model change [3.30ms]\n(pass) native format registration lifecycle > does not assign mapping-only and length formats conflicting meanings in one slot [2.56ms]\n(pass) native format registration lifecycle > preserves the published version, old pin and original cause when a measurer fails [8.86ms]\n(pass) native format registration lifecycle > refuses stale generations and an unmeasured zero summary instead of declaring a length [1.87ms]\n\n 6 pass\n 0 fail\n 90 expect() calls\nRan 6 tests across 1 file. [453.00ms]\n"
+      },
+      {
+        "name": "env-old-native-chat-preparation.test.ts",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "test",
+          "src/openai/native-chat-preparation.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "environment": {
+          "LLXPRT_HISTORY_BACKEND": "old"
+        },
+        "actualBackend": "journal: direct JournalSession or explicit HistoryService backend option; old environment does not turn these fixtures into legacy-backend tests",
+        "pid": 76565,
+        "exit": 0,
+        "sha256": "1c6ee49512b93b1f0e818f3db7ac36afcb027da5d1c4797be688f49bead70981",
+        "summary": "s immutable across caller mutation and history append [52.22ms]\n(pass) native Chat preparation ownership and planning > holds at most one source unit under backpressure and retires it on cancel [8.52ms]\n(pass) native Chat preparation ownership and planning > holds at most one source unit under backpressure and retires it on transport-error [9.39ms]\n(pass) native Chat preparation ownership and planning > cold fills %s rows, then prepares and cancels unsent warm bodies with zero physical reads or files [9.74ms]\n(pass) native Chat preparation ownership and planning > cold fills %s rows, then prepares and cancels unsent warm bodies with zero physical reads or files [977.81ms]\n(pass) native Chat preparation ownership and planning > keys repeated preparation by captured reasoning settings against the old converter [12.50ms]\n(pass) native Chat preparation ownership and planning > reuses a cold-filled pin for fresh byte-identical streams and repeated preparation [3.91ms]\n(pass) native Chat preparation ownership and planning > preserves the explicit old continuation route and the streamed test-helper contract [5.16ms]\n\n 10 pass\n 0 fail\n 71 expect() calls\nRan 10 tests across 1 file. [2.80s]\n"
+      }
+    ],
+    "allCurrentGatesGreen": true,
+    "originalGateSlots": {
+      "total": 36,
+      "effectivePassed": 36,
+      "remainingRed": 0,
+      "scope": "Resolves the two cold-contract slots plus the prior equivalent TypeScript indexing correction. Reuses unchanged original passing gates; not a new whole-suite run."
+    },
+    "metadataCorrection": "current.ts wrote prefixed logs but read unprefixed logs for summary/hash text. Child PIDs, commands and exit codes were captured from the current processes. This receipt recomputes every current summary/hash from its actual current-prefixed log and separately verifies assertion failures there; original metadata and both log sets remain preserved."
+  },
+  "audit": {
+    "touchedFindings": [
+      "packages/providers/src/openai/journal-chat-length-lifecycle.test.ts\t121\tnative format registration lifecycle > reads explicitly on cold fill, zero bytes for warm plans and bounded paths for an append\tDUP_ASSERT\t2x identical assertion: expect(counter.reads).toBeGreaterThan(0)\tproviders",
+      "packages/providers/src/openai/journal-chat-length-lifecycle.test.ts\t121\tnative format registration lifecycle > reads explicitly on cold fill, zero bytes for warm plans and bounded paths for an append\tDUP_ASSERT\t3x identical assertion: expect(counter.reads).toBe(0)\tproviders",
+      "packages/providers/src/openai/journal-chat-length-lifecycle.test.ts\t206\tnative format registration lifecycle > restores lengths through pop, owner edits, rebuild, clone, compaction and reopen\tDUP_ASSERT\t3x identical assertion: expect(await planned(session)).toBe(before)\tproviders",
+      "packages/providers/src/openai/journal-chat-length-lifecycle.test.ts\t206\tnative format registration lifecycle > restores lengths through pop, owner edits, rebuild, clone, compaction and reopen\tDUP_ASSERT\t2x identical assertion: expect(await planned(session)).toBe(after)\tproviders",
+      "packages/providers/src/openai/native-chat-preparation.test.ts\t283\tnative Chat preparation ownership and planning > cold fills %s rows, then prepares and cancels unsent warm bodies with zero physical reads or files\tDUP_ASSERT\t3x identical assertion: expect(measured).toHaveLength(size)\tproviders",
+      "packages/providers/src/openai/native-chat-preparation.test.ts\t283\tnative Chat preparation ownership and planning > cold fills %s rows, then prepares and cancels unsent warm bodies with zero physical reads or files\tDUP_ASSERT\t2x identical assertion: expect(counter.reads).toBe(0)\tproviders"
+    ],
+    "interpretation": "Only DUP_ASSERT: repeated cold/warm phase checks and unchanged mutation checks. No new forbidden audit classes."
+  },
+  "protocol": {
+    "name": "original-three-pair-native",
+    "rows": {
+      "small": 1024,
+      "large": 8192
+    },
+    "textBytes": [
+      1073412,
+      8596228
+    ],
+    "toolBytes": [
+      1470492,
+      11774659
+    ],
+    "pairs": 3,
+    "retentionSends": 6,
+    "estimate": true,
+    "boundBytes": 1048576,
+    "testTimeoutMs": 170000,
+    "commandTimeoutMs": 180000,
+    "probeDeadlineMs": 600000,
+    "warmup": "Only small prepare/estimate/HTTP send, after code aging. Large remains cold for its first measured send. Source setup precedes aging exactly as before; no native large pre-fill.",
+    "sampling": {
+      "settledWindowBytes": 65536,
+      "maxSettleRounds": 12,
+      "settleRounds": 3,
+      "codeAgingSeconds": 20,
+      "quietReadings": 3,
+      "quietIntervalMs": 500,
+      "quietMaxReadings": 30,
+      "accumulationReadings": 3,
+      "accumulationPauseMs": 100,
+      "rowInterval": 2048,
+      "bodyIntervalBytes": 1048576
+    },
+    "algorithm": "Per-send peaks use max(0, settledReading - previous quiet baseline). Growth is median(three large peaks) - median(three small peaks), signed and compared <=1048576 independently for heap and ArrayBuffers. Retention is max(Theil-Sen slope of six heaps *5, Theil-Sen slope of six ArrayBuffer readings *5), compared <=1048576. Endpoint growth is reported, not judged. No offset/noise subtraction. Partial pairs have no original gate verdict.",
+    "route": "For each successful send require exactly one actual NativeChatBody stream, exactly one production estimate with positive token count, and zero WireBodySpool creates/PromptEstimatorFiles writes. Exactly one HTTP request. Fixed independent legacy-converter hash/bytes and Content-Length. Retention sends enforce route and stable hash in the probe.",
+    "ownership": "Provider probe owns production HistoryService/journal selections; persistent ROW commits stream one row at a time. An eager test-only converter oracle runs in the parent outside measurement. No expected whole-body buffer enters provider memory. Separate sink incrementally hashes HTTP bytes and holds scalar metadata only."
+  },
+  "reusedMemory": [
+    {
+      "name": "final-native-full-text",
+      "reusedNotRerun": true,
+      "status": "PASS",
+      "memoryTrapAccepted": null,
+      "peakSends": 6,
+      "retentionSends": 6,
+      "verdict": {
+        "bytesMatchOracle": true,
+        "contentLengthMatchesBytes": true,
+        "heapGrowth": 199700,
+        "heapGrowthWithinBound": true,
+        "arrayBufferGrowth": 0,
+        "arrayBufferGrowthWithinBound": true,
+        "retainedGrowth": 380661.6666666666,
+        "retainedGrowthWithinBound": true,
+        "retainedEndpointGrowth": 567658,
+        "medians": {
+          "peakHeap": {
+            "small": 775695,
+            "large": 975395
+          },
+          "peakArrayBuffers": {
+            "small": 9024,
+            "large": 9024
+          },
+          "peakRss": {
+            "small": 528646144,
+            "large": 528678912
+          },
+          "peakLive": {
+            "small": 2,
+            "large": 1
+          }
+        }
+      },
+      "series": {
+        "small": [
+          {
+            "peakHeap": 375491,
+            "peakArrayBuffers": 9156,
+            "peakRss": 513064960,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 269288
+            }
+          },
+          {
+            "peakHeap": 775695,
+            "peakArrayBuffers": 9024,
+            "peakRss": 528646144,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 269288
+            }
+          },
+          {
+            "peakHeap": 845735,
+            "peakArrayBuffers": 9024,
+            "peakRss": 528760832,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 269288
+            }
+          }
+        ],
+        "large": [
+          {
+            "peakHeap": 2036835,
+            "peakArrayBuffers": 279658,
+            "peakRss": 528629760,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 2161640
+            }
+          },
+          {
+            "peakHeap": 961085,
+            "peakArrayBuffers": 9024,
+            "peakRss": 528678912,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 2161640
+            }
+          },
+          {
+            "peakHeap": 975395,
+            "peakArrayBuffers": 9024,
+            "peakRss": 529072128,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 2161640
+            }
+          }
+        ],
+        "accumulation": [
+          {
+            "heap": 106680493,
+            "arrayBuffers": 30723574
+          },
+          {
+            "heap": 107204442,
+            "arrayBuffers": 30723574
+          },
+          {
+            "heap": 107125437,
+            "arrayBuffers": 30723574
+          },
+          {
+            "heap": 106790841,
+            "arrayBuffers": 30723574
+          },
+          {
+            "heap": 107432839,
+            "arrayBuffers": 30723574
+          },
+          {
+            "heap": 107248151,
+            "arrayBuffers": 30723574
+          }
+        ]
+      },
+      "oracles": {
+        "small": {
+          "bytes": 1073412,
+          "sha256": "3da50735dd9871e72f2a1a02ee960c00ea2cbc36c0a91d8889a40220f7759de2"
+        },
+        "large": {
+          "bytes": 8596228,
+          "sha256": "7f4fd024a6b943136ab12a1323f40be8bdddf9fe8a2b3ce8c359d5b2efca268e"
+        }
+      },
+      "artifacts": [
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-text.jsonl.samples.jsonl",
+          "sha256": "c4056825809ee9c18a017046031b5adf9077f1668710666b226f7f3bab7d964a"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-text.jsonl.progress.jsonl",
+          "sha256": "72771b6ce1a274c42133291d524b2ead7ee7aa985b89a4f20f440c47ba944690"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-text.jsonl.accumulation.jsonl",
+          "sha256": "b7d88526e6f61dbae08490392b68937c78da213985a7b4a64c8b4e39ebdc41a2"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-text.jsonl.sink-pids.jsonl",
+          "sha256": "bbc36bc73ccb3066a7f308635342cb9d0d988cfa7d3777e1eb6f081d65f67612"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-text.jsonl.pairs.jsonl",
+          "sha256": "33af5dfc309066666e1722b6c78b1288530763065c3d9c7b705cc992e3efa0eb"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-text.log",
+          "sha256": "a40401d698f008334cc04f7a4157c222bea906a0a04589c4c6a705320f10a02d"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-text.result.json",
+          "sha256": "ced797e730b502c6e214af3e58a889b911c4b3454ebd1bdc57d1954000e2f682"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-text.source.json",
+          "sha256": "de74e7f330474ec9e0ec1406698678ec1919016fed8b6dd4fd9fa1bc3b3fe71f"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-text.jsonl.raw.jsonl",
+          "sha256": "aaae4a04dedc731dff098e3efe445a3859494fc9dfa4c9aadc960ff6bff2af95"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-text.jsonl.probe-pids.jsonl",
+          "sha256": "8551b0fc0d226db9e863045911a15e672b44978575a0ecad688a7b99db842f23"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-text.jsonl",
+          "sha256": "39a94666958cb0c345245527e0d83b4bc968ddcefcff16559d2720f9fa56b945"
+        }
+      ]
+    },
+    {
+      "name": "final-native-full-tools",
+      "reusedNotRerun": true,
+      "status": "PASS",
+      "memoryTrapAccepted": null,
+      "peakSends": 6,
+      "retentionSends": 6,
+      "verdict": {
+        "bytesMatchOracle": true,
+        "contentLengthMatchesBytes": true,
+        "heapGrowth": -958185,
+        "heapGrowthWithinBound": true,
+        "arrayBufferGrowth": 200,
+        "arrayBufferGrowthWithinBound": true,
+        "retainedGrowth": 163226.25,
+        "retainedGrowthWithinBound": true,
+        "retainedEndpointGrowth": 0,
+        "medians": {
+          "peakHeap": {
+            "small": 1280134,
+            "large": 321949
+          },
+          "peakArrayBuffers": {
+            "small": 9024,
+            "large": 9224
+          },
+          "peakRss": {
+            "small": 575422464,
+            "large": 575520768
+          },
+          "peakLive": {
+            "small": 1,
+            "large": 1
+          }
+        }
+      },
+      "series": {
+        "small": [
+          {
+            "peakHeap": 419397,
+            "peakArrayBuffers": 9024,
+            "peakRss": 566804480,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 379186
+            }
+          },
+          {
+            "peakHeap": 1431099,
+            "peakArrayBuffers": 9024,
+            "peakRss": 575422464,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 379186
+            }
+          },
+          {
+            "peakHeap": 1280134,
+            "peakArrayBuffers": 9024,
+            "peakRss": 575553536,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 379186
+            }
+          }
+        ],
+        "large": [
+          {
+            "peakHeap": 932410,
+            "peakArrayBuffers": 267754,
+            "peakRss": 575520768,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 3040473
+            }
+          },
+          {
+            "peakHeap": 294137,
+            "peakArrayBuffers": 9224,
+            "peakRss": 575471616,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 3040473
+            }
+          },
+          {
+            "peakHeap": 321949,
+            "peakArrayBuffers": 9216,
+            "peakRss": 575651840,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 3040473
+            }
+          }
+        ],
+        "accumulation": [
+          {
+            "heap": 108794430,
+            "arrayBuffers": 30716540
+          },
+          {
+            "heap": 107726652,
+            "arrayBuffers": 30716540
+          },
+          {
+            "heap": 109029748,
+            "arrayBuffers": 30716540
+          },
+          {
+            "heap": 107703382,
+            "arrayBuffers": 30716540
+          },
+          {
+            "heap": 109126925,
+            "arrayBuffers": 30716540
+          },
+          {
+            "heap": 107857233,
+            "arrayBuffers": 30716540
+          }
+        ]
+      },
+      "oracles": {
+        "small": {
+          "bytes": 1470492,
+          "sha256": "a31fc26d960da4e93be21a938a47a53fb1bfbaa3791cca5ce4e4e2d7f813f906"
+        },
+        "large": {
+          "bytes": 11774659,
+          "sha256": "fd7489eb6e0dfc6c4012b03fe0d43ab83afd86a658427ec3b33776b29b7bf836"
+        }
+      },
+      "artifacts": [
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-tools.jsonl.pairs.jsonl",
+          "sha256": "c43cecdd3d61b98a669d60662f1ef0bd3c84be05ca0e82478a114e7449ac1e42"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-tools.source.json",
+          "sha256": "de74e7f330474ec9e0ec1406698678ec1919016fed8b6dd4fd9fa1bc3b3fe71f"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-tools.result.json",
+          "sha256": "a8ac8e853a6726f5a7420d6f6abe2af6ccdcc413ec881d5741c5fd29a307c576"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-tools.jsonl",
+          "sha256": "3c76bf122562229571e0c86c60b96ab9caa91df47f082106f76c27177490bbb8"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-tools.jsonl.probe-pids.jsonl",
+          "sha256": "d68ac6da03a6595872eabeab9f2583b0f0b26a88bb6861b583fa8eb52a4cc269"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-tools.log",
+          "sha256": "378e01caa823f1c4d9bf19e727cf62a0b382f7c7fecd0614805feb452d13f84b"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-tools.jsonl.accumulation.jsonl",
+          "sha256": "91767a07b8e4de6f46dacdbd8fd469085b430555b5c4dc2f0b99d4caf4f675a8"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-tools.jsonl.raw.jsonl",
+          "sha256": "a15a4e2f8a3b20836d477337f335225bcfa966bca01a5c1a1026204fc8e2c3e6"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-tools.jsonl.progress.jsonl",
+          "sha256": "40ae9723d7bd8d7adddc0ded3501f0d546d762e7b2de18d3c697fd5a0aabd981"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-tools.jsonl.samples.jsonl",
+          "sha256": "9ae368964826b14dc96e8cafd5063634875e763e8b1ae11412a3b7226c52a47b"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-tools.jsonl.sink-pids.jsonl",
+          "sha256": "ae4b7a4b2733fd54bef2cfb014dceb46cf4a20727b8a77f03114a45fb95a0c61"
+        }
+      ]
+    },
+    {
+      "name": "final-native-full-trap-array",
+      "reusedNotRerun": true,
+      "status": "COMPLETE_MEMORY_REJECT",
+      "memoryTrapAccepted": true,
+      "peakSends": 6,
+      "retentionSends": 6,
+      "verdict": {
+        "bytesMatchOracle": true,
+        "contentLengthMatchesBytes": true,
+        "heapGrowth": 14280950,
+        "heapGrowthWithinBound": false,
+        "arrayBufferGrowth": 193,
+        "arrayBufferGrowthWithinBound": true,
+        "retainedGrowth": 0,
+        "retainedGrowthWithinBound": true,
+        "retainedEndpointGrowth": 0,
+        "medians": {
+          "peakHeap": {
+            "small": 2756920,
+            "large": 17037870
+          },
+          "peakArrayBuffers": {
+            "small": 9024,
+            "large": 9217
+          },
+          "peakRss": {
+            "small": 543637504,
+            "large": 543653888
+          },
+          "peakLive": {
+            "small": 64,
+            "large": 64
+          }
+        }
+      },
+      "series": {
+        "small": [
+          {
+            "peakHeap": 2530729,
+            "peakArrayBuffers": 18048,
+            "peakRss": 508608512,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 269288
+            }
+          },
+          {
+            "peakHeap": 2756920,
+            "peakArrayBuffers": 9024,
+            "peakRss": 543637504,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 269288
+            }
+          },
+          {
+            "peakHeap": 3366657,
+            "peakArrayBuffers": 9024,
+            "peakRss": 543719424,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 269288
+            }
+          }
+        ],
+        "large": [
+          {
+            "peakHeap": 18079653,
+            "peakArrayBuffers": 270226,
+            "peakRss": 543637504,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 2161640
+            }
+          },
+          {
+            "peakHeap": 17037870,
+            "peakArrayBuffers": 9024,
+            "peakRss": 543653888,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 2161640
+            }
+          },
+          {
+            "peakHeap": 16790338,
+            "peakArrayBuffers": 9217,
+            "peakRss": 543965184,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 2161640
+            }
+          }
+        ],
+        "accumulation": [
+          {
+            "heap": 107170725,
+            "arrayBuffers": 30723574
+          },
+          {
+            "heap": 107351171,
+            "arrayBuffers": 30723574
+          },
+          {
+            "heap": 106357534,
+            "arrayBuffers": 30723574
+          },
+          {
+            "heap": 107296190,
+            "arrayBuffers": 30723574
+          },
+          {
+            "heap": 107349741,
+            "arrayBuffers": 30723574
+          },
+          {
+            "heap": 106356694,
+            "arrayBuffers": 30723574
+          }
+        ]
+      },
+      "oracles": {
+        "small": {
+          "bytes": 1073412,
+          "sha256": "3da50735dd9871e72f2a1a02ee960c00ea2cbc36c0a91d8889a40220f7759de2"
+        },
+        "large": {
+          "bytes": 8596228,
+          "sha256": "7f4fd024a6b943136ab12a1323f40be8bdddf9fe8a2b3ce8c359d5b2efca268e"
+        }
+      },
+      "artifacts": [
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-array.jsonl.progress.jsonl",
+          "sha256": "4686367806e7d507b07f66307accd7a2951557f3923d271370df41a91db52b94"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-array.jsonl",
+          "sha256": "2f4586f70d39f9335c8f055cfd7175820f0d52c501feb54ab7afaaebe4869fc2"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-array.jsonl.accumulation.jsonl",
+          "sha256": "eaac3236cd708ed9f15ce38e31d078b83641de514baa955f2303164e9b894bc4"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-array.jsonl.samples.jsonl",
+          "sha256": "40884f53e65a54173e9f5d278adc8495f04845fda8954053bec05361c469d947"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-array.jsonl.pairs.jsonl",
+          "sha256": "3dcc6046f4cf6314ee2054e2e7e40dc250cd02f568ff2b4944a3b0e219a2004e"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-array.jsonl.sink-pids.jsonl",
+          "sha256": "615efe3edfc2a7982000313659566f86a5a737375dabef51b8ba7d5917fb90d1"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-array.jsonl.probe-pids.jsonl",
+          "sha256": "896ddd5aba67b886de1a7de2a254bd194f03d11e7380d501f769d214d86945ab"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-array.log",
+          "sha256": "2534c49624861e19f3113b61a19ec096c90d11aa38a15e833fea9e1c035a302b"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-array.jsonl.raw.jsonl",
+          "sha256": "b0cea9ef3e2fa6304c734ed8dcc2571597446b9b3f49d027b6c6956e0bf342b9"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-array.source.json",
+          "sha256": "de74e7f330474ec9e0ec1406698678ec1919016fed8b6dd4fd9fa1bc3b3fe71f"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-array.result.json",
+          "sha256": "b778aa8740be4e260a6ec8654219001d88e26fffc7aeee36d993ee467bfdab1b"
+        }
+      ]
+    },
+    {
+      "name": "final-native-full-trap-fill",
+      "reusedNotRerun": true,
+      "status": "COMPLETE_MEMORY_REJECT",
+      "memoryTrapAccepted": true,
+      "peakSends": 6,
+      "retentionSends": 6,
+      "verdict": {
+        "bytesMatchOracle": true,
+        "contentLengthMatchesBytes": true,
+        "heapGrowth": 29335854,
+        "heapGrowthWithinBound": false,
+        "arrayBufferGrowth": 193,
+        "arrayBufferGrowthWithinBound": true,
+        "retainedGrowth": 0,
+        "retainedGrowthWithinBound": true,
+        "retainedEndpointGrowth": 0,
+        "medians": {
+          "peakHeap": {
+            "small": 4958111,
+            "large": 34293965
+          },
+          "peakArrayBuffers": {
+            "small": 9024,
+            "large": 9217
+          },
+          "peakRss": {
+            "small": 585121792,
+            "large": 585859072
+          },
+          "peakLive": {
+            "small": 64,
+            "large": 64
+          }
+        }
+      },
+      "series": {
+        "small": [
+          {
+            "peakHeap": 4777334,
+            "peakArrayBuffers": 18048,
+            "peakRss": 511655936,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 269288
+            }
+          },
+          {
+            "peakHeap": 4958111,
+            "peakArrayBuffers": 9024,
+            "peakRss": 585121792,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 269288
+            }
+          },
+          {
+            "peakHeap": 5523189,
+            "peakArrayBuffers": 9024,
+            "peakRss": 585924608,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 269288
+            }
+          }
+        ],
+        "large": [
+          {
+            "peakHeap": 35190040,
+            "peakArrayBuffers": 270226,
+            "peakRss": 585072640,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 2161640
+            }
+          },
+          {
+            "peakHeap": 34293965,
+            "peakArrayBuffers": 9217,
+            "peakRss": 585859072,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 2161640
+            }
+          },
+          {
+            "peakHeap": 34022156,
+            "peakArrayBuffers": 9024,
+            "peakRss": 586022912,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 2161640
+            }
+          }
+        ],
+        "accumulation": [
+          {
+            "heap": 107326804,
+            "arrayBuffers": 30723574
+          },
+          {
+            "heap": 107436718,
+            "arrayBuffers": 30723574
+          },
+          {
+            "heap": 106400115,
+            "arrayBuffers": 30723574
+          },
+          {
+            "heap": 107405934,
+            "arrayBuffers": 30723574
+          },
+          {
+            "heap": 107288388,
+            "arrayBuffers": 30723574
+          },
+          {
+            "heap": 106414591,
+            "arrayBuffers": 30723574
+          }
+        ]
+      },
+      "oracles": {
+        "small": {
+          "bytes": 1073412,
+          "sha256": "3da50735dd9871e72f2a1a02ee960c00ea2cbc36c0a91d8889a40220f7759de2"
+        },
+        "large": {
+          "bytes": 8596228,
+          "sha256": "7f4fd024a6b943136ab12a1323f40be8bdddf9fe8a2b3ce8c359d5b2efca268e"
+        }
+      },
+      "artifacts": [
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-fill.log",
+          "sha256": "21d24a863863b0e74ebffd8b1af7cfcfc199cfe85bfbfb230cb259146dcbd61b"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-fill.jsonl.raw.jsonl",
+          "sha256": "d8a0970396820afb7110d4fb9f9840cea4f06a6941406bb0643f6d712dc65379"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-fill.jsonl.samples.jsonl",
+          "sha256": "ac43f37e78f71c9234b8e07cc3b4d0841039d55782328437f3248df38ea88167"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-fill.jsonl.sink-pids.jsonl",
+          "sha256": "ca55a78ae259dc7d58fc499f99cc072565f1779ddb0419d37c796e290e9f0beb"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-fill.jsonl.progress.jsonl",
+          "sha256": "ef1902fb1ea1de53e79643702d037ee692d77c479739015aa9679ac4d1f20aad"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-fill.jsonl.pairs.jsonl",
+          "sha256": "c9bc19c85d4cb63c6e71069ca54ee22ca8b0209d5729ba1218d9abb4eb81b500"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-fill.jsonl.probe-pids.jsonl",
+          "sha256": "6f9ebba904413145f042f002b97de99521cd72e7836b1d7ec88e73542a9e5f20"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-fill.jsonl.accumulation.jsonl",
+          "sha256": "aa81a74ccf66a2b50351391c61dc0efd83c295bb6426b3147c2ac2d4ab59bfd5"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-fill.jsonl",
+          "sha256": "d6122793fad1a240caf5ee9f991aa670b57b4230b0f3ccff5644a1de77381baf"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-fill.source.json",
+          "sha256": "de74e7f330474ec9e0ec1406698678ec1919016fed8b6dd4fd9fa1bc3b3fe71f"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-fill.result.json",
+          "sha256": "4a252760f26aa175a0ec90614658af491c0a2dc918b788770b0f7eede45e17fc"
+        }
+      ]
+    },
+    {
+      "name": "final-native-full-trap-estimate",
+      "reusedNotRerun": true,
+      "status": "COMPLETE_MEMORY_REJECT",
+      "memoryTrapAccepted": true,
+      "peakSends": 6,
+      "retentionSends": 6,
+      "verdict": {
+        "bytesMatchOracle": true,
+        "contentLengthMatchesBytes": true,
+        "heapGrowth": 14605607,
+        "heapGrowthWithinBound": false,
+        "arrayBufferGrowth": 193,
+        "arrayBufferGrowthWithinBound": true,
+        "retainedGrowth": 18871,
+        "retainedGrowthWithinBound": true,
+        "retainedEndpointGrowth": 18871,
+        "medians": {
+          "peakHeap": {
+            "small": 2549605,
+            "large": 17155212
+          },
+          "peakArrayBuffers": {
+            "small": 9024,
+            "large": 9217
+          },
+          "peakRss": {
+            "small": 554336256,
+            "large": 555155456
+          },
+          "peakLive": {
+            "small": 64,
+            "large": 64
+          }
+        }
+      },
+      "series": {
+        "small": [
+          {
+            "peakHeap": 2234227,
+            "peakArrayBuffers": 9024,
+            "peakRss": 518881280,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 269288
+            }
+          },
+          {
+            "peakHeap": 2655619,
+            "peakArrayBuffers": 9024,
+            "peakRss": 554336256,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 269288
+            }
+          },
+          {
+            "peakHeap": 2549605,
+            "peakArrayBuffers": 9024,
+            "peakRss": 555204608,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 269288
+            }
+          }
+        ],
+        "large": [
+          {
+            "peakHeap": 18120985,
+            "peakArrayBuffers": 288274,
+            "peakRss": 554156032,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 2161640
+            }
+          },
+          {
+            "peakHeap": 17155212,
+            "peakArrayBuffers": 9217,
+            "peakRss": 555155456,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 2161640
+            }
+          },
+          {
+            "peakHeap": 16422061,
+            "peakArrayBuffers": 9024,
+            "peakRss": 555401216,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 2161640
+            }
+          }
+        ],
+        "accumulation": [
+          {
+            "heap": 106698129,
+            "arrayBuffers": 30723574
+          },
+          {
+            "heap": 106556230,
+            "arrayBuffers": 30723574
+          },
+          {
+            "heap": 106835441,
+            "arrayBuffers": 30723574
+          },
+          {
+            "heap": 106404098,
+            "arrayBuffers": 30723574
+          },
+          {
+            "heap": 106634900,
+            "arrayBuffers": 30723574
+          },
+          {
+            "heap": 106717000,
+            "arrayBuffers": 30723574
+          }
+        ]
+      },
+      "oracles": {
+        "small": {
+          "bytes": 1073412,
+          "sha256": "3da50735dd9871e72f2a1a02ee960c00ea2cbc36c0a91d8889a40220f7759de2"
+        },
+        "large": {
+          "bytes": 8596228,
+          "sha256": "7f4fd024a6b943136ab12a1323f40be8bdddf9fe8a2b3ce8c359d5b2efca268e"
+        }
+      },
+      "artifacts": [
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-estimate.jsonl.sink-pids.jsonl",
+          "sha256": "282b01ed5da311adfc164578dc8271bc5c5b70de9f19998e6ac9f1ad8aa5f2d6"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-estimate.jsonl.probe-pids.jsonl",
+          "sha256": "31854ea8d39edc17d9b7bbf47ac928aab20b0974cf33aa162b11ed06b7215f95"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-estimate.jsonl.accumulation.jsonl",
+          "sha256": "2d58443dae6d94e3bae9068e30799c5d4d797ecfedaf09ea207ab80c86ffc8c4"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-estimate.jsonl.raw.jsonl",
+          "sha256": "60772e99b74a2431b9073eb0883d72d685808ff5f89823607c75e9a1527fa680"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-estimate.jsonl.progress.jsonl",
+          "sha256": "1680fb30e8c7957de586e461eaa1a33055f6540e5d5240539906602994d99dd4"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-estimate.log",
+          "sha256": "1d52b1e168f92da26588d50e950dac67e344b76e4e3499a4638d4df23c22a71f"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-estimate.jsonl",
+          "sha256": "6de899e015648c25379ec819af3bf11846a8ac1c4d73b51dfe7df4a990811e37"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-estimate.result.json",
+          "sha256": "732245fb96108318402565f6632747b268c4e4b7cb8d9872b30177f2070bd919"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-estimate.jsonl.samples.jsonl",
+          "sha256": "1f7743a13a7f98692bcf25a6278b54e0c1e0dba66bf305d631e01924af866229"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-estimate.jsonl.pairs.jsonl",
+          "sha256": "1e2bea085a653674f8e6cb192e610880ad2d7ceb730c5fa8002b302d6eb6465d"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-estimate.source.json",
+          "sha256": "de74e7f330474ec9e0ec1406698678ec1919016fed8b6dd4fd9fa1bc3b3fe71f"
+        }
+      ]
+    },
+    {
+      "name": "final-native-full-trap-retain",
+      "reusedNotRerun": true,
+      "status": "COMPLETE_MEMORY_REJECT",
+      "memoryTrapAccepted": true,
+      "peakSends": 6,
+      "retentionSends": 6,
+      "verdict": {
+        "bytesMatchOracle": true,
+        "contentLengthMatchesBytes": true,
+        "heapGrowth": 230304,
+        "heapGrowthWithinBound": true,
+        "arrayBufferGrowth": 193,
+        "arrayBufferGrowthWithinBound": true,
+        "retainedGrowth": 84675090,
+        "retainedGrowthWithinBound": false,
+        "retainedEndpointGrowth": 84798319,
+        "medians": {
+          "peakHeap": {
+            "small": 744134,
+            "large": 974438
+          },
+          "peakArrayBuffers": {
+            "small": 9024,
+            "large": 9217
+          },
+          "peakRss": {
+            "small": 524337152,
+            "large": 524337152
+          },
+          "peakLive": {
+            "small": 2,
+            "large": 2
+          }
+        }
+      },
+      "series": {
+        "small": [
+          {
+            "peakHeap": 373355,
+            "peakArrayBuffers": 9024,
+            "peakRss": 508755968,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 269288
+            }
+          },
+          {
+            "peakHeap": 744134,
+            "peakArrayBuffers": 9024,
+            "peakRss": 524337152,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 269288
+            }
+          },
+          {
+            "peakHeap": 804705,
+            "peakArrayBuffers": 9024,
+            "peakRss": 524337152,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 269288
+            }
+          }
+        ],
+        "large": [
+          {
+            "peakHeap": 2176817,
+            "peakArrayBuffers": 278986,
+            "peakRss": 524288000,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 2161640
+            }
+          },
+          {
+            "peakHeap": 948176,
+            "peakArrayBuffers": 9217,
+            "peakRss": 524337152,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 2161640
+            }
+          },
+          {
+            "peakHeap": 974438,
+            "peakArrayBuffers": 9156,
+            "peakRss": 524632064,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 2161640
+            }
+          }
+        ],
+        "accumulation": [
+          {
+            "heap": 123336832,
+            "arrayBuffers": 30723574
+          },
+          {
+            "heap": 140419939,
+            "arrayBuffers": 30723574
+          },
+          {
+            "heap": 157330097,
+            "arrayBuffers": 30723574
+          },
+          {
+            "heap": 174304782,
+            "arrayBuffers": 30723574
+          },
+          {
+            "heap": 190970473,
+            "arrayBuffers": 30723574
+          },
+          {
+            "heap": 208135151,
+            "arrayBuffers": 30723574
+          }
+        ]
+      },
+      "oracles": {
+        "small": {
+          "bytes": 1073412,
+          "sha256": "3da50735dd9871e72f2a1a02ee960c00ea2cbc36c0a91d8889a40220f7759de2"
+        },
+        "large": {
+          "bytes": 8596228,
+          "sha256": "7f4fd024a6b943136ab12a1323f40be8bdddf9fe8a2b3ce8c359d5b2efca268e"
+        }
+      },
+      "artifacts": [
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-retain.jsonl.pairs.jsonl",
+          "sha256": "29235d775b1ad5755f6125b53f177839cd55295264f0ec50d6948a186d43bb44"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-retain.result.json",
+          "sha256": "9aa3bc3729dc4dce5bba22fa5579850f15cfa531889c869c2a907e12ae7ed19e"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-retain.jsonl.sink-pids.jsonl",
+          "sha256": "18b8569cb99db7422551a861fc77402a0ca9a3cefce347f1e1791f9dfb108acd"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-retain.source.json",
+          "sha256": "de74e7f330474ec9e0ec1406698678ec1919016fed8b6dd4fd9fa1bc3b3fe71f"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-retain.jsonl.progress.jsonl",
+          "sha256": "e3878c4ca275173d8bb5e3eb8bc3e0a7c6b30643cb467e4eacdc1c4904fcc867"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-retain.log",
+          "sha256": "046e25139414ce099847dae49b14a041ffa404030d6a014b41f8f5093b54669d"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-retain.jsonl.samples.jsonl",
+          "sha256": "c2e1f4679654fc71ec157c1630466d2ba7bf702ad94c358aefd5d147f5563262"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-retain.jsonl.raw.jsonl",
+          "sha256": "bdea3fc362af73be4940ba8fea0395bdd1f432a56da9366dca88d7816479b4a4"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-retain.jsonl",
+          "sha256": "e10027a5b7cc82d19727bcf7e94bb6081bd8bcf8d3c0112d1311c0f6f9d6df81"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-retain.jsonl.probe-pids.jsonl",
+          "sha256": "d76a9fe83954d606de2f6f0347b63a71249cbf1117f239d37ec891764575303b"
+        },
+        {
+          "path": "tmp/p6/chat-cold-cost-run-ay/final-native-full-trap-retain.jsonl.accumulation.jsonl",
+          "sha256": "d97774035621f1fe4fc1f5882d66edb8edd572fe856cbf0fa9775494b1b503d3"
+        }
+      ]
+    }
+  ],
+  "costEvidence": {
+    "source": "project-plans/issue854/PHASE6-SOURCE-BOUND-CHATCOLDCOST-PROOF.json",
+    "prepare4000": {
+      "reads": 2296,
+      "requestedAndReturnedBytes": 30180032
+    },
+    "estimate4000": {
+      "reads": 2300,
+      "requestedAndReturnedBytes": 30182088
+    },
+    "firstLargeJournalGrowth": {
+      "text": 24951528,
+      "tools": 24922860
+    },
+    "ordinaryWarmJournalGrowth": 0,
+    "physicalWriteCalls": null,
+    "reason": "Prior descriptor diagnostics are reused, not inferred from tests or Darwin zero counters."
+  },
+  "preservation": {
+    "files": 1204,
+    "declarations": 306,
+    "manifest": "tmp/p6/chat-tail-run-au/preserved.sha256",
+    "currentVerification": "tmp/p6/chat-cold-contract-run-az/current-preservation.log",
+    "recoveryVerification": "tmp/p6/chat-cold-contract-run-az/current-recovery-preservation.log",
+    "inheritedLlxprtUnchangedByThisTask": true
+  },
+  "pipeline": {
+    "observedAt": "2026-10-22T06:08:06.105Z",
+    "completed": {
+      "driver": 75699,
+      "ended": "2026-10-22T06:03:04.123Z",
+      "gates": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "allGreen": true
+    },
+    "environmentCompleted": {
+      "driver": 76508,
+      "ended": "2026-10-22T06:03:10.687Z"
+    },
+    "observed": [
+      {
+        "pid": 52173,
+        "alive": false
+      },
+      {
+        "pid": 52178,
+        "alive": false
+      },
+      {
+        "pid": 52203,
+        "alive": false
+      },
+      {
+        "pid": 52501,
+        "alive": false
+      },
+      {
+        "pid": 52533,
+        "alive": false
+      },
+      {
+        "pid": 52613,
+        "alive": false
+      },
+      {
+        "pid": 53155,
+        "alive": false
+      },
+      {
+        "pid": 53196,
+        "alive": false
+      },
+      {
+        "pid": 53219,
+        "alive": false
+      },
+      {
+        "pid": 53220,
+        "alive": false
+      },
+      {
+        "pid": 53221,
+        "alive": false
+      },
+      {
+        "pid": 53250,
+        "alive": false
+      },
+      {
+        "pid": 53302,
+        "alive": false
+      },
+      {
+        "pid": 53379,
+        "alive": false
+      },
+      {
+        "pid": 53405,
+        "alive": false
+      },
+      {
+        "pid": 53434,
+        "alive": false
+      },
+      {
+        "pid": 53463,
+        "alive": false
+      },
+      {
+        "pid": 53490,
+        "alive": false
+      },
+      {
+        "pid": 53511,
+        "alive": false
+      },
+      {
+        "pid": 53540,
+        "alive": false
+      },
+      {
+        "pid": 53544,
+        "alive": false
+      },
+      {
+        "pid": 53571,
+        "alive": false
+      },
+      {
+        "pid": 53992,
+        "alive": false
+      },
+      {
+        "pid": 54030,
+        "alive": false
+      },
+      {
+        "pid": 54061,
+        "alive": false
+      },
+      {
+        "pid": 55158,
+        "alive": false
+      },
+      {
+        "pid": 55195,
+        "alive": false
+      },
+      {
+        "pid": 55287,
+        "alive": false
+      },
+      {
+        "pid": 55325,
+        "alive": false
+      },
+      {
+        "pid": 55414,
+        "alive": false
+      },
+      {
+        "pid": 55457,
+        "alive": false
+      },
+      {
+        "pid": 55499,
+        "alive": false
+      },
+      {
+        "pid": 55556,
+        "alive": false
+      },
+      {
+        "pid": 55601,
+        "alive": false
+      },
+      {
+        "pid": 55655,
+        "alive": false
+      },
+      {
+        "pid": 55740,
+        "alive": false
+      },
+      {
+        "pid": 55746,
+        "alive": false
+      },
+      {
+        "pid": 55768,
+        "alive": false
+      },
+      {
+        "pid": 56082,
+        "alive": false
+      },
+      {
+        "pid": 56115,
+        "alive": false
+      },
+      {
+        "pid": 56180,
+        "alive": false
+      },
+      {
+        "pid": 56720,
+        "alive": false
+      },
+      {
+        "pid": 56763,
+        "alive": false
+      },
+      {
+        "pid": 56851,
+        "alive": false
+      },
+      {
+        "pid": 56888,
+        "alive": false
+      },
+      {
+        "pid": 56962,
+        "alive": false
+      },
+      {
+        "pid": 56983,
+        "alive": false
+      },
+      {
+        "pid": 57015,
+        "alive": false
+      },
+      {
+        "pid": 57046,
+        "alive": false
+      },
+      {
+        "pid": 57072,
+        "alive": false
+      },
+      {
+        "pid": 57091,
+        "alive": false
+      },
+      {
+        "pid": 57118,
+        "alive": false
+      },
+      {
+        "pid": 57120,
+        "alive": false
+      },
+      {
+        "pid": 57145,
+        "alive": false
+      },
+      {
+        "pid": 57489,
+        "alive": false
+      },
+      {
+        "pid": 57521,
+        "alive": false
+      },
+      {
+        "pid": 57596,
+        "alive": false
+      },
+      {
+        "pid": 58139,
+        "alive": false
+      },
+      {
+        "pid": 58164,
+        "alive": false
+      },
+      {
+        "pid": 58233,
+        "alive": false
+      },
+      {
+        "pid": 58275,
+        "alive": false
+      },
+      {
+        "pid": 58366,
+        "alive": false
+      },
+      {
+        "pid": 58404,
+        "alive": false
+      },
+      {
+        "pid": 58439,
+        "alive": false
+      },
+      {
+        "pid": 58472,
+        "alive": false
+      },
+      {
+        "pid": 58504,
+        "alive": false
+      },
+      {
+        "pid": 58531,
+        "alive": false
+      },
+      {
+        "pid": 58557,
+        "alive": false
+      },
+      {
+        "pid": 58559,
+        "alive": false
+      },
+      {
+        "pid": 58576,
+        "alive": false
+      },
+      {
+        "pid": 58889,
+        "alive": false
+      },
+      {
+        "pid": 58942,
+        "alive": false
+      },
+      {
+        "pid": 58990,
+        "alive": false
+      },
+      {
+        "pid": 59599,
+        "alive": false
+      },
+      {
+        "pid": 59631,
+        "alive": false
+      },
+      {
+        "pid": 59690,
+        "alive": false
+      },
+      {
+        "pid": 59720,
+        "alive": false
+      },
+      {
+        "pid": 59776,
+        "alive": false
+      },
+      {
+        "pid": 59830,
+        "alive": false
+      },
+      {
+        "pid": 59897,
+        "alive": false
+      },
+      {
+        "pid": 59957,
+        "alive": false
+      },
+      {
+        "pid": 60008,
+        "alive": false
+      },
+      {
+        "pid": 60064,
+        "alive": false
+      },
+      {
+        "pid": 60100,
+        "alive": false
+      },
+      {
+        "pid": 60102,
+        "alive": false
+      },
+      {
+        "pid": 60123,
+        "alive": false
+      },
+      {
+        "pid": 60415,
+        "alive": false
+      },
+      {
+        "pid": 60473,
+        "alive": false
+      },
+      {
+        "pid": 60559,
+        "alive": false
+      },
+      {
+        "pid": 61102,
+        "alive": false
+      },
+      {
+        "pid": 61131,
+        "alive": false
+      },
+      {
+        "pid": 61175,
+        "alive": false
+      },
+      {
+        "pid": 61203,
+        "alive": false
+      },
+      {
+        "pid": 61247,
+        "alive": false
+      },
+      {
+        "pid": 61284,
+        "alive": false
+      },
+      {
+        "pid": 61324,
+        "alive": false
+      },
+      {
+        "pid": 61378,
+        "alive": false
+      },
+      {
+        "pid": 61427,
+        "alive": false
+      },
+      {
+        "pid": 61504,
+        "alive": false
+      },
+      {
+        "pid": 61560,
+        "alive": false
+      },
+      {
+        "pid": 61606,
+        "alive": false
+      },
+      {
+        "pid": 61669,
+        "alive": false
+      },
+      {
+        "pid": 61670,
+        "alive": false
+      },
+      {
+        "pid": 61671,
+        "alive": false
+      },
+      {
+        "pid": 61682,
+        "alive": false
+      },
+      {
+        "pid": 61713,
+        "alive": false
+      },
+      {
+        "pid": 61718,
+        "alive": false
+      },
+      {
+        "pid": 61731,
+        "alive": false
+      },
+      {
+        "pid": 61732,
+        "alive": false
+      },
+      {
+        "pid": 61738,
+        "alive": false
+      },
+      {
+        "pid": 61745,
+        "alive": false
+      },
+      {
+        "pid": 61910,
+        "alive": false
+      },
+      {
+        "pid": 62568,
+        "alive": false
+      },
+      {
+        "pid": 62572,
+        "alive": false
+      },
+      {
+        "pid": 62582,
+        "alive": false
+      },
+      {
+        "pid": 62693,
+        "alive": false
+      },
+      {
+        "pid": 62700,
+        "alive": false
+      },
+      {
+        "pid": 62706,
+        "alive": false
+      },
+      {
+        "pid": 62732,
+        "alive": false
+      },
+      {
+        "pid": 62781,
+        "alive": false
+      },
+      {
+        "pid": 62789,
+        "alive": false
+      },
+      {
+        "pid": 62806,
+        "alive": false
+      },
+      {
+        "pid": 62855,
+        "alive": false
+      },
+      {
+        "pid": 62861,
+        "alive": false
+      },
+      {
+        "pid": 62874,
+        "alive": false
+      },
+      {
+        "pid": 62884,
+        "alive": false
+      },
+      {
+        "pid": 62929,
+        "alive": false
+      },
+      {
+        "pid": 62979,
+        "alive": false
+      },
+      {
+        "pid": 63015,
+        "alive": false
+      },
+      {
+        "pid": 63139,
+        "alive": false
+      },
+      {
+        "pid": 63267,
+        "alive": false
+      },
+      {
+        "pid": 63375,
+        "alive": false
+      },
+      {
+        "pid": 63407,
+        "alive": false
+      },
+      {
+        "pid": 63497,
+        "alive": false
+      },
+      {
+        "pid": 63620,
+        "alive": false
+      },
+      {
+        "pid": 63621,
+        "alive": false
+      },
+      {
+        "pid": 63658,
+        "alive": false
+      },
+      {
+        "pid": 63712,
+        "alive": false
+      },
+      {
+        "pid": 64471,
+        "alive": false
+      },
+      {
+        "pid": 64476,
+        "alive": false
+      },
+      {
+        "pid": 64478,
+        "alive": false
+      },
+      {
+        "pid": 64566,
+        "alive": false
+      },
+      {
+        "pid": 64644,
+        "alive": false
+      },
+      {
+        "pid": 64654,
+        "alive": false
+      },
+      {
+        "pid": 64691,
+        "alive": false
+      },
+      {
+        "pid": 64736,
+        "alive": false
+      },
+      {
+        "pid": 74318,
+        "alive": false
+      },
+      {
+        "pid": 74319,
+        "alive": false
+      },
+      {
+        "pid": 74324,
+        "alive": false
+      },
+      {
+        "pid": 74345,
+        "alive": false
+      },
+      {
+        "pid": 74348,
+        "alive": false
+      },
+      {
+        "pid": 74368,
+        "alive": false
+      },
+      {
+        "pid": 74372,
+        "alive": false
+      },
+      {
+        "pid": 74378,
+        "alive": false
+      },
+      {
+        "pid": 74381,
+        "alive": false
+      },
+      {
+        "pid": 74387,
+        "alive": false
+      },
+      {
+        "pid": 74441,
+        "alive": false
+      },
+      {
+        "pid": 74451,
+        "alive": false
+      },
+      {
+        "pid": 74453,
+        "alive": false
+      },
+      {
+        "pid": 74525,
+        "alive": false
+      },
+      {
+        "pid": 74558,
+        "alive": false
+      },
+      {
+        "pid": 74597,
+        "alive": false
+      },
+      {
+        "pid": 74704,
+        "alive": false
+      },
+      {
+        "pid": 74813,
+        "alive": false
+      },
+      {
+        "pid": 74914,
+        "alive": false
+      },
+      {
+        "pid": 74973,
+        "alive": false
+      },
+      {
+        "pid": 75054,
+        "alive": false
+      },
+      {
+        "pid": 75173,
+        "alive": false
+      },
+      {
+        "pid": 75179,
+        "alive": false
+      },
+      {
+        "pid": 75218,
+        "alive": false
+      },
+      {
+        "pid": 75254,
+        "alive": false
+      },
+      {
+        "pid": 75255,
+        "alive": false
+      },
+      {
+        "pid": 75699,
+        "alive": false
+      },
+      {
+        "pid": 75700,
+        "alive": false
+      },
+      {
+        "pid": 75712,
+        "alive": false
+      },
+      {
+        "pid": 75737,
+        "alive": false
+      },
+      {
+        "pid": 75753,
+        "alive": false
+      },
+      {
+        "pid": 75770,
+        "alive": false
+      },
+      {
+        "pid": 75774,
+        "alive": false
+      },
+      {
+        "pid": 75778,
+        "alive": false
+      },
+      {
+        "pid": 75785,
+        "alive": false
+      },
+      {
+        "pid": 75788,
+        "alive": false
+      },
+      {
+        "pid": 75822,
+        "alive": false
+      },
+      {
+        "pid": 75828,
+        "alive": false
+      },
+      {
+        "pid": 75834,
+        "alive": false
+      },
+      {
+        "pid": 75878,
+        "alive": false
+      },
+      {
+        "pid": 75904,
+        "alive": false
+      },
+      {
+        "pid": 75927,
+        "alive": false
+      },
+      {
+        "pid": 75999,
+        "alive": false
+      },
+      {
+        "pid": 76155,
+        "alive": false
+      },
+      {
+        "pid": 76306,
+        "alive": false
+      },
+      {
+        "pid": 76340,
+        "alive": false
+      },
+      {
+        "pid": 76397,
+        "alive": false
+      },
+      {
+        "pid": 76444,
+        "alive": false
+      },
+      {
+        "pid": 76449,
+        "alive": false
+      },
+      {
+        "pid": 76472,
+        "alive": false
+      },
+      {
+        "pid": 76506,
+        "alive": false
+      },
+      {
+        "pid": 76507,
+        "alive": false
+      },
+      {
+        "pid": 76508,
+        "alive": false
+      },
+      {
+        "pid": 76509,
+        "alive": false
+      },
+      {
+        "pid": 76516,
+        "alive": false
+      },
+      {
+        "pid": 76555,
+        "alive": false
+      },
+      {
+        "pid": 76565,
+        "alive": false
+      }
+    ],
+    "activeOwnedPids": []
+  },
+  "knownSeparateRed": {
+    "file": "packages/providers/src/__tests__/native-chat-golden.test.ts",
+    "status": "21 pass / 1 fail in early check; entire mixed file excluded from passing-file totals",
+    "cause": "media-reference-image still violates existing all-creation denial. No assertion was suppressed or rerun for luck.",
+    "artifact": {
+      "path": "tmp/p6/chat-cold-cost-run-ay/early-native-chat-golden.test.ts.log",
+      "sha256": "bc1147397b347d9b9d1e079a0e176f263b2d0d4c4d554efdf6c8bd0b03c55cc5"
+    }
+  },
+  "limits": [
+    "Acceptance applies only to completed positive original-protocol lanes with completed memory-predicate controls. Timeout is not a sensitive memory control.",
+    "Last-thinking/pruned views, broader/exact estimators, Kimi/Mistral/old continuation, Responses/Anthropic native conversion, native log/dump, automatic compression round trips, reference-media reservations, global LENS/live-byte accounting and aggregate heap/cache/pin/overlay capacity remain open.",
+    "#3917 and earlier legacy durable/compaction/public-fixture REDs remain separate, enabled and unsuppressed.",
+    "No default flip, enforcement weakening, cleanup, OCR, push or merge. Review skipped per Andrew 2026-10-09."
+  ],
+  "rawDirectory": "tmp/p6/chat-cold-contract-run-az/",
+  "artifacts": [
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/env-old-native-chat-preparation.test.ts.log",
+      "sha256": "1c6ee49512b93b1f0e818f3db7ac36afcb027da5d1c4797be688f49bead70981"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/current-wrong-settings-journal-chat-length-lifecycle.test.ts.log",
+      "sha256": "f846f55ccc0e32aefb4e544496e9af208fd63367d9041a345a4a9e30ff52c0e3"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/agents-declarations.log",
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/current-controls.json",
+      "sha256": "7e9039962b624d448945638ef2ea87c9860c9953abfcd6a588754111df84a964"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/current-audit.log",
+      "sha256": "614a35259ea4ff2dd48a81f95cc02f7047710ddae29cc4b64dca9983b1884231"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/agents-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/false-zero-summary-native-chat-preparation.test.ts.log",
+      "sha256": "d8b0e2d6751c126b295bd6a782358477a4bfef4999446fea811e9b8ee4cdbfa2"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/final-journalStore.readerCleanup.test.ts.log",
+      "sha256": "4b1bacf1bc7d841a690d5bb9d83f3056aa505f52942c10cfe00c5a10369b15fe"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/skip-unit-native-chat-preparation.test.ts.log",
+      "sha256": "20c2d554c2df807892cf9cb97c8f9d5b57f69638ae8b0ee7016d405151bf6fc0"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/controls.json",
+      "sha256": "664f14dc3b3fa04b0f3adab1e1e1bb3ea128e3828669db7f311af10fca518f9a"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/current-providers-bun-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/current-agents-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/current-false-zero-summary-native-chat-preparation.test.ts.log",
+      "sha256": "73782428129f768062f872e4ad23d4689ec771e56b02803d15064696d9eda9fb"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/current-skip-unit-native-chat-preparation.test.ts.log",
+      "sha256": "eba40d9cca36cabc6c608933195bfdba713e999b9ec5e9fe88c617e17eb63f44"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/current-false-zero-summary-journal-chat-length-lifecycle.test.ts.log",
+      "sha256": "30ab107b7af246d5ffcaf01ae67a16f8b99949afbb60f83d9973c683d94ee6d7"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/format.log",
+      "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/extra-runs.json",
+      "sha256": "4fe18d6803e810443673d2d9deb00933440be2ecc38b45e465db2387a5a5f79e"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/final-native-chat-preparation.test.ts.log",
+      "sha256": "00f17a9e5ba2a52b9c9086da22e03256b23e5367fdba0f6c098dbd6812ac1b9f"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/stale-generation-journal-chat-length-lifecycle.test.ts.log",
+      "sha256": "a1b680b5d435842ad5c780c178502a0d0268c780bef2eb1d096ef7c0fdab6b0b"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/lifecycle-green.log",
+      "sha256": "59fa3d6fd61cb90f8a078ad9ee9148c0fe91cd3526db072a01233beb4f4be842"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/lint.log",
+      "sha256": "310aeeb42acc078041fa7feebd1cc35fee06102c0b1e725f96eeecc052980858"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/core-declarations.log",
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/current-agents-bun-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/current-core-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/receipt.ts",
+      "sha256": "fe581583fee07a9c828720428cc9d7b1b7627c8c232d73ee136a5c929359de50"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/agents-bun-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/core-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/graph.log",
+      "sha256": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/active.json",
+      "sha256": "5530c9848553eb9591da10deef27e99e2efdaadc42f6cb229b05b07a990dc735"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/current-recovery-preservation.log",
+      "sha256": "e18a29f2d580455fe9b641230726f9fd9ea7396056e1bbb3dddff5cd2d60bcb8"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/current-driver.log",
+      "sha256": "5cef5ec78b4e81f94c650eb8d3a11ff9a10372d0ef0dc1c7a2636a6da7c241e0"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/current-final-journalStore.readerLifetime.test.ts.log",
+      "sha256": "4c7638d58145bfd215de211f73888577c5adc84e6f1f772e476e75188abcd1b0"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/current-stale-generation-journal-chat-length-lifecycle.test.ts.log",
+      "sha256": "374f57b313a120ec25db22a47441bcb78ded1549cc425c6410421a5cea1b0416"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/final-journalStore.readerLifetime.test.ts.log",
+      "sha256": "33b69bfee7005a2374e9916f7f613a2dd7af28c38575e111feec83f2a230a9d8"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/current-providers-declarations.log",
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/skip-unit-journal-chat-length-lifecycle.test.ts.log",
+      "sha256": "a8a3ba5e11f84ba014822a148546cf697e5be9e5a95516a865488eae5cd91a50"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/env-journal-journal-chat-length-lifecycle.test.ts.log",
+      "sha256": "9548f99b3dca180f0727e9c947ba9d42cdd6d363846e41fb861ebfe7c6914834"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/extra-active.json",
+      "sha256": "89551a111e5db19108f7454795f91647f3f23fe5c47260038d8494eea8c36837"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/current-runs.json",
+      "sha256": "9641009e82c2b1a2de6c00830d7dc8037b84137ef2a98d8492f6230bba276d30"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/current-providers-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/current-active.json",
+      "sha256": "89a6873d0991959c199e6f4800c0d4f9b9767ea1465c8732db4aa63e36618b43"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/done.json",
+      "sha256": "c9637020e2347c9b69f678e55f1d98d6183ee6aa3d21d111982821ba9969a1bb"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/recovery-preservation.log",
+      "sha256": "e18a29f2d580455fe9b641230726f9fd9ea7396056e1bbb3dddff5cd2d60bcb8"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/current-false-warm-unmeasured-journal-chat-length-lifecycle.test.ts.log",
+      "sha256": "134ccdccc52736512877b7886442ae12c9867ae472dfcbfa979948d60f3696a5"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/audit.log",
+      "sha256": "614a35259ea4ff2dd48a81f95cc02f7047710ddae29cc4b64dca9983b1884231"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/providers-declarations.log",
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/current.ts",
+      "sha256": "8707a04dc7ee5023dd20326b782968a31b298109d4ba67406aa474bf7373fbd4"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/normalized-current-runs.json",
+      "sha256": "12e95bbe3fb61205fe4c75163e3c8fc911b6f6ba0c88602b7f8be64eb5b2af31"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/preservation.log",
+      "sha256": "0e4199bb6c410cc6f1e5bd39e3d87c8159795d9dc60279f003e975a7ea37b454"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/current-final-native-chat-preparation.test.ts.log",
+      "sha256": "ac457050407ec8e26dc44d8d32b4bb363eefb3687791a61a24c94ec63ca7af13"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/extra-done.json",
+      "sha256": "4c0409e7a3ee4efc5a8318c39c69933c66c8006aa5c299bcc5824edfcb64a663"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/providers-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/current-core-declarations.log",
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/current-lint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/false-warm-unmeasured-journal-chat-length-lifecycle.test.ts.log",
+      "sha256": "f5a4613eb16ce32f2a1de103befdb4cf433ff8202574c62a97fa8153bcf33030"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/current-preservation.log",
+      "sha256": "0e4199bb6c410cc6f1e5bd39e3d87c8159795d9dc60279f003e975a7ea37b454"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/delivery-format.log",
+      "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/delivery-recovery.log",
+      "sha256": "e18a29f2d580455fe9b641230726f9fd9ea7396056e1bbb3dddff5cd2d60bcb8"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/driver.log",
+      "sha256": "ae91ac76c3a9ba34b9ecb876c6e4e54b51d2f93089a2f00b76c325a7e560f00a"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/wrong-settings-journal-chat-length-lifecycle.test.ts.log",
+      "sha256": "2891f44594388ef4ae59d6f75525febc2b23d541d7da23ce51ad599a591c0d9f"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/current-agents-declarations.log",
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/delivery-preservation.log",
+      "sha256": "0e4199bb6c410cc6f1e5bd39e3d87c8159795d9dc60279f003e975a7ea37b454"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/false-zero-summary-journal-chat-length-lifecycle.test.ts.log",
+      "sha256": "03c3c3fb171c67848eb9017709d165b7e829bfd752f7b323de697fce067cf702"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/current-skip-unit-journal-chat-length-lifecycle.test.ts.log",
+      "sha256": "14fefea010f4fb0ff3db549873ea573c3774e33cefcfadd2c4acf930a873da15"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/current-graph.log",
+      "sha256": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/current-final-journal-chat-length-lifecycle.test.ts.log",
+      "sha256": "5aee5ac56cf60cee99a5d1b14843a784a48cc4de3305bcd441d6efcd4c539bf9"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/preparation-green.log",
+      "sha256": "3ee9ae3381187b8269e4bd23719371e4d368b652d5a9c03c3a1e9b40efe3fd84"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/current-format.log",
+      "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/env-old-journal-chat-length-lifecycle.test.ts.log",
+      "sha256": "f003a7df2e2d7efbf91db4bf9ab3abe575811d0b0c4c016dba438331af5ba210"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/extra-driver.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/env-journal-native-chat-preparation.test.ts.log",
+      "sha256": "b5ecbe689ec8a0d483372cffa73453f878b331095d8ad55a27180abaaedcef68"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/final-journal-chat-length-lifecycle.test.ts.log",
+      "sha256": "2f1b22fdd37a04e2483410b4101ed88bdbe9c377c55821a4bdb12890db559570"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/current-final-journalStore.readerCleanup.test.ts.log",
+      "sha256": "a741539ab5a5854ec5237879be0bb5ef530f95196513ce1ccd5269c49e987cbc"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/current-done.json",
+      "sha256": "c57f0427cd7905e9102789599e11c3e594a06f605ce75b75250fb862d5c20101"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/runs.json",
+      "sha256": "50b877bb7b75ea8fc351c953e06f30b75f739ff13e340c11779a6928db90026b"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/run.ts",
+      "sha256": "a0a2ceade31aaaf2001fe3e264345d19749a025c5b706664aad91e3bd7acf0a4"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/providers-bun-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/p6/chat-cold-contract-run-az/extra.ts",
+      "sha256": "a55f32bf1b7e0e66c9ca29d0b2c5dc494f4898591f92d82d8fa7e91d68bbc4f0"
+    }
+  ]
+}

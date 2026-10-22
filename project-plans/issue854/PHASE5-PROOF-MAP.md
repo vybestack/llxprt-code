@@ -1,3 +1,11 @@
+# Cold measurement proof supplement, 2026-10-22
+
+[PHASE6-SOURCE-BOUND-COLDMEASUREMENT-PROOF.json](PHASE6-SOURCE-BOUND-COLDMEASUREMENT-PROOF.json) maps checkpoint `ba13d766f` to exact ROW callback/LENS coverage, independent old-body lengths, five assertion-rejecting restored mutations, complete two-file greens (6/90 and 10/71), unchanged #3919 greens, 18 scoped gates and four explicit environment invocations. All 36 original gate slots are resolved through current affected runs and unchanged-source reuse, not a whole-suite rerun. Both environment settings use the explicitly journal-backed fixture.
+
+Each of six saved 5032-path manifests matches current production/protocol helpers. The supplement enumerates the three unrelated changed tests and the new observer helper, which the memory harness does not import. It reuses the completed original three-pair/six-retention positives and all four memory controls, retains every peak/retained reading, and keeps 1 MiB limits unchanged. [Phase 6 status](PHASE6-STATUS.md) records the per-lane values and remaining cost/accounting limits. Both cold-read minimum failures below are superseded; broader Phase 5/6/W26 work and the separate reference-media/#3917/old-durable/compaction/public-fixture REDs are unchanged. All inherited hashes verify; no cleanup, default flip, OCR, push or merge.
+
+---
+
 # Cold Chat cost and original native memory protocols pass, 2026-10-22
 
 [Source-bound receipt](PHASE6-SOURCE-BOUND-CHATCOLDCOST-PROOF.json). Native memory acceptance is limited to the completed plain-Chat text/tool protocol; overall delivery and the two scoped RED gate files remain open.

@@ -127,7 +127,7 @@ describe('native format registration lifecycle', () => {
         { length: 128 },
         (_, index) => `row-${index} 雪`,
       );
-      const measured: { label: bigint; lens: unknown }[] = [];
+      const measured: Array<{ label: bigint; lens: unknown }> = [];
       function registration(
         settings: RowFormatSettings,
       ): RowFormatRegistration {
@@ -146,7 +146,7 @@ describe('native format registration lifecycle', () => {
         expect(new Set(measured.map(({ label }) => label)).size).toBe(
           expected.length,
         );
-        expect(measured.map(({ label }) => label)).toEqual(
+        expect(measured.map(({ label }) => label)).toStrictEqual(
           measured
             .map(({ label }) => label)
             .sort((a, b) => (a < b ? -1 : Number(a > b))),

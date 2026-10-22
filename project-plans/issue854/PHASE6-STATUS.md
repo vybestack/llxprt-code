@@ -1,3 +1,30 @@
+# Cold measurement coverage and all 36 scoped gate slots pass, 2026-10-22
+
+[Cold-measurement supplement](PHASE6-SOURCE-BOUND-COLDMEASUREMENT-PROOF.json) closes the two cold-read contract failures reported below. Early green checkpoint: `ba13d766f`. This is test instrumentation only; production, protocol helpers, fixtures, thresholds, timeouts and defaults are unchanged. Phase 5/6/W26 remain open.
+
+The old >N physical-read minimum was intended to detect fake cold fills and distinguish them from warm reuse. It stopped measuring that property after the fill-owned window batched several ROW ranges into one syscall. The replacement delegates the real prepared/incremental measurer, observes its returned facts without replacing them, and requires exact unique ordered ROW coverage plus independently serialized per-unit kept/stripped LENS facts. All original human-text rows remain: 128 initially, 129 after append and changed-endpoint refill; native preparation retains both 40 and 4000. No expected count comes from the production native-unit iterator. Full-body length is checked independently against the old converter, not another native plan. Empty summaries cannot pass on callback counts alone.
+
+Nonzero cold reads remain required, with added upper bounds below N for these fixtures. The original append <150 bound and warm zero-read assertions remain. Warm preparation additionally requires no remeasurement, independent body length equality and no operation files. Existing lifecycle coverage for old pins, pop/owner/density, clone, compaction, reopen, captured settings and exact failure identity is retained. Native cancellation/backpressure/transport error identity is unchanged.
+
+Both complete files pass: lifecycle **6 tests / 90 assertions**, preparation **10 / 71**, zero failures or skips. The unchanged #3919 files pass **11 / 29** and **3 / 20**. Eighteen current scoped invocations pass, including core/providers/agents declarations and strict types, provider/agent Bun types, zero-warning lint, formatting, graph, audit and preservation. Four additional complete-file runs pass under both `LLXPRT_HISTORY_BACKEND=journal` and `old`; their direct JournalSession/explicit journal factory remains native in both environments. They do not establish old-backend coverage. The initial lint run found array-type spelling and non-strict equality; both were corrected, with stricter equality and no rule changes. These results resolve all 36 original gate slots by source-bound reuse plus affected runs, not a fresh whole-suite run.
+
+Five restored production mutations reject in seven focused commands: skipping row-1 fails per-unit LENS equality in both files; returning empty summaries after genuine measurements fails independent body length (native 126 instead of 1676/163016); accepting stale generations, accepting unmeasured facts and ignoring settings each fail their existing rejection assertions. Focused mutation commands are separate from complete positive-file totals. Every mutated path matches its saved original and HEAD by hash and byte comparison. Touched audit findings are only repeated phase/lifecycle assertions, with none of the forbidden classes.
+
+All six saved memory manifests were checked against current files, 5032 paths each. All production and protocol helpers match. The only differences are the earlier equivalent large-ROW indexing test and these two cold-contract tests. The new observer helper is imported only by the two tests and is absent from the memory harness. Original three-pair/1024-versus-8192/small-only-warmup/six-retention results and all four memory controls are reused explicitly, not rerun. The 1,048,576-byte limits and signed median/Theil-Sen calculations remain unchanged.
+
+| Saved positive lane | Three small heap peaks | Three large heap peaks | Heap growth | ArrayBuffer growth | Retained trend growth |
+| --- | --- | --- | --- | --- | --- |
+| Text | 375491, 775695, 845735 | 2036835, 961085, 975395 | 199700 | 0 | 380661.667 |
+| Tools | 419397, 1431099, 1280134 | 932410, 294137, 321949 | -958185 | 200 | 163226.25 |
+
+Values are bytes. The first cold text peak exceeds 1 MiB; the unchanged contract judges median large-minus-small growth, not each absolute peak. The supplement retains all six absolute retained heap/ArrayBuffer readings, each send's peaks/RSS and independent wire hashes. Text retained endpoint growth is 567658 bytes; tools is zero. Saved array/fill/estimate controls reject with heap growth 14280950/29335854/14605607; retain rejects with retained growth 84675090. Every lane completes six peak and six retention sends with matching bytes, one native stream and estimate, and zero legacy spools/estimator files.
+
+Cost evidence remains separate: at 4000 fixed-payload rows, cold prepare uses 2296 reads / 30180032 requested and returned bytes; cold estimate uses 2300 / 30182088. First-large ordinary native sends add 24951528 text / 24922860 tool journal bytes; subsequent warm sends add zero. Physical write-call counts were not collected. Zero kernel I/O counters are not substituted for them.
+
+All 1204 inherited hashes, including 306 declarations and raw recovery, verify. Owned drivers 74318/75699 and environment driver 76508, their recorded child PIDs and the previous receipt's PIDs have exited; the supplement records exact observations. No cleanup, .llxprt edits/staging, OCR, push, merge or default flip. Review skipped per Andrew 2026-10-09. Separate #3917, reference-media, two old-durable, 8192 blanket-compaction and public-fixture failures remain enabled and unmodified. Last-thinking/pruned views, broader provider/estimator coverage, log/dump, automatic compression, media reservations, LENS/live-byte accounting and aggregate cache/pin/overlay capacity remain open.
+
+---
+
 # Cold Chat cost and original native memory protocols pass, 2026-10-22
 
 [Source-bound receipt](PHASE6-SOURCE-BOUND-CHATCOLDCOST-PROOF.json). Native memory acceptance is limited to the completed plain-Chat text/tool protocol; overall delivery and the two scoped RED gate files remain open.

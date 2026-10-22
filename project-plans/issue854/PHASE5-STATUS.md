@@ -1,3 +1,11 @@
+# Cold measurement gate failures are closed, 2026-10-22
+
+`ba13d766f` checkpoints the green test instrumentation. [The supplement](PHASE6-SOURCE-BOUND-COLDMEASUREMENT-PROOF.json) and [Phase 6 status](PHASE6-STATUS.md) supersede only the two cold-read REDs below. Physical syscall counts no longer stand in for ROW coverage: genuine measurement callbacks must return independently correct kept/stripped LENS facts for all original 128/40/4000 rows, with exact old-body length, changed-settings refill, zero warm reads/remeasurement and the unchanged append bound. The two complete files pass 6/90 and 10/71; original #3919 files pass 11/29 and 3/20. Eighteen current scoped checks and four explicit environment runs pass, resolving all 36 original gate slots through affected runs and source-bound reuse. Both environment settings still use the explicitly native fixture.
+
+Five production mutations fail assertions and restore byte-for-byte. Six 5032-path manifest checks establish unchanged production/protocol helpers; three unrelated test differences and the new test-only observer are listed explicitly. Original three-pair/six-retention text and tool memory passes are reused, not rerun: heap growth 199700/-958185 bytes, ArrayBuffer growth 0/200, retained trend 380661.667/163226.25, with unchanged 1 MiB bounds and all four sensitive controls. Phase 5/6/W26 remain open for the broader scopes listed below. Separate REDs, defaults and enforcement are unchanged; inherited declarations/raw recovery/.llxprt stay unstaged. No cleanup, OCR, push or merge. Review skipped per Andrew 2026-10-09.
+
+---
+
 # Cold Chat cost and original native memory protocols pass, 2026-10-22
 
 [Source-bound receipt](PHASE6-SOURCE-BOUND-CHATCOLDCOST-PROOF.json). Native memory acceptance is limited to the completed plain-Chat text/tool protocol; overall delivery and the two scoped RED gate files remain open.

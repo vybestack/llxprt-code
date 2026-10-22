@@ -286,7 +286,7 @@ describe('native Chat preparation ownership and planning', () => {
           { length: size },
           (_, index) => `row-${index} 雪`,
         );
-        const measured: { label: bigint; lens: unknown }[] = [];
+        const measured: Array<{ label: bigint; lens: unknown }> = [];
         function observe(
           selection: ProviderRequestSelection,
         ): ProviderRequestSelection {
@@ -343,7 +343,7 @@ describe('native Chat preparation ownership and planning', () => {
         );
         expect(measured).toHaveLength(size);
         expect(new Set(measured.map(({ label }) => label)).size).toBe(size);
-        expect(measured.map(({ label }) => label)).toEqual(
+        expect(measured.map(({ label }) => label)).toStrictEqual(
           measured
             .map(({ label }) => label)
             .sort((a, b) => (a < b ? -1 : Number(a > b))),
