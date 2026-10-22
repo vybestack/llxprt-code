@@ -1,3 +1,7 @@
+## Terminal native continuation evidence, 2026-10-22
+
+[The continuation receipt](PHASE6-SOURCE-BOUND-NATIVECONTINUATION-PROOF.json) now records 34/34 fresh exact-path gates and four complete targeted files after restored controls. Two added controls reach both actual HTTP requests before the independent length matcher rejects unstripped reasoning and omitted current-reply tool calls. All 8,116 terminal source hashes and 1,204 preservation hashes match; recorded owned PIDs have exited. Earlier control limits below are historical. Public/nonstreaming continuation execution, second-body clear/abort and body-limit proof, detailed cost, full native memory/traps and the remaining phase obligations stay open. No production or enforcement change.
+
 ## 2026-10-22: finalize continuation evidence without promoting unexecuted coverage
 
 Keep production `6ca3e0cf0` unchanged. Preserve exact legacy omitReasoning behavior, including retained empty assistant rows, through captured inclusion-disabled facts and the original strip policy. Capture the bounded current-reply SDK tail and compose its transfer summary before comma/media finalization. Await reader retirement through the shared body interface. Kimi/Mistral keep explicit legacy routes.

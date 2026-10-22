@@ -1,3 +1,13 @@
+## Terminal continuation gates and controls, 2026-10-22
+
+Checkpoint `1bc479599` is followed by **34/34 passing exact-path invocations**, 726 tests and 120843 assertions. Every test invocation selects one current workspace file. Core/providers/agents declarations and ordinary/current-source Bun types, provider/agent Bun projects, zero-warning lint, Prettier, graph, audit execution and preservation pass. The unchanged 155-wire file and both 5,000-input oracle files are fresh, not inferred from earlier receipts. Audit has 2627 findings and zero scan errors; lifecycle duplicates remain enabled.
+
+Both added controls deliver two actual HTTP requests and fail the independent second-body Content-Length matcher: unstripped reasoning and omitted current-reply tool calls. They restore by cmp and HEAD/SHA256 comparison, followed by complete HTTP 69/759, lifecycle 10/80, preparation 10/77 and ordinary corpus 22/176 passes. The ordinary reference-image 323-byte guard and all-creation denial are unchanged. Earlier missing-second-POST controls and dropped-final-message scope remain recorded separately. All 8,116 source hashes match the terminal manifest; all 1,204 preservation hashes, including 306 inherited declarations, verify. Recorded owned gate/control drivers and children have exited.
+
+[The receipt](PHASE6-SOURCE-BOUND-NATIVECONTINUATION-PROOF.json) retains commands, log hashes, exact control outcomes and scope limits. Public continuation commitment, nonstreaming reply execution, concurrent-clear/abort during second-body media, dedicated body-limit proof, detailed metadata/ROW-LENS cost, full current-source memory/traps and remaining provider/log/media-queue/accounting/capacity gaps stay open. Existing tools timeout and separate REDs remain unchanged. No production change, preservation cleanup, .llxprt staging, enforcement weakening, OCR, push, merge or default flip. Review skipped per Andrew 2026-10-09.
+
+---
+
 # Native continuation proof is source-bound; remaining acceptance stays open
 
 2026-10-22. Finalization binds production `6ca3e0cf0` and captured-pin checkpoint `b9a808b7a` to an 8,116-path current manifest. The only final-lane source difference is the lifecycle test with its passing affected refresh. The proof builder completed without an error. Actual continuation covers real OpenAIProvider SSE handling and two local HTTP POSTs, not public ChatSession continuation or a nonstreaming first reply. Both requests match independent legacy bytes and Content-Length and create no operation files across 69 cases/759 assertions. Historical reference media is included; concurrent-clear second-body lifetime remains unproved.

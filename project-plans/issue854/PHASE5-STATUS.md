@@ -1,3 +1,7 @@
+## Terminal native continuation evidence, 2026-10-22
+
+[The continuation receipt](PHASE6-SOURCE-BOUND-NATIVECONTINUATION-PROOF.json) now records 34/34 fresh exact-path gates and four complete targeted files after restored controls. Two added controls reach both actual HTTP requests before the independent length matcher rejects unstripped reasoning and omitted current-reply tool calls. All 8,116 terminal source hashes and 1,204 preservation hashes match; recorded owned PIDs have exited. Earlier control limits below are historical. Public/nonstreaming continuation execution, second-body clear/abort and body-limit proof, detailed cost, full native memory/traps and the remaining phase obligations stay open. No production or enforcement change.
+
 ## Native continuation finalization scope, 2026-10-22
 
 The [continuation receipt](PHASE6-SOURCE-BOUND-NATIVECONTINUATION-PROOF.json) binds `6ca3e0cf0` to current hashes and records the exact five control predicates. Actual two-POST coverage is real OpenAIProvider SSE handling, not public ChatSession or nonstreaming reply execution. A dropped final tail message is not a dropped-tool-call proof; unstripped reasoning currently fails at the missing-second-POST matcher. Warm default-text planning reads are measured, but byte totals/ROW-LENS overlap and other omission-format cold costs remain unmeasured. Full native memory and the remaining Phase 5 obligations stay open.

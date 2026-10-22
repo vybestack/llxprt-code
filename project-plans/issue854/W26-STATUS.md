@@ -1,3 +1,7 @@
+## Terminal native continuation evidence, 2026-10-22
+
+[The continuation receipt](PHASE6-SOURCE-BOUND-NATIVECONTINUATION-PROOF.json) now records 34/34 fresh exact-path gates and four complete targeted files after restored controls. Two added controls reach both actual HTTP requests before the independent length matcher rejects unstripped reasoning and omitted current-reply tool calls. All 8,116 terminal source hashes and 1,204 preservation hashes match; recorded owned PIDs have exited. Earlier control limits below are historical. Public/nonstreaming continuation execution, second-body clear/abort and body-limit proof, detailed cost, full native memory/traps and the remaining phase obligations stay open. No production or enforcement change.
+
 ## Continuation proof finalized without closing W26, 2026-10-22
 
 Production `6ca3e0cf0` preserves legacy omission semantics over the pin captured by `b9a808b7a`. The [receipt](PHASE6-SOURCE-BOUND-NATIVECONTINUATION-PROOF.json) now records current source hashes, the completed builder and exact scope limits for the provider-level two-POST run, planning counters and five restored controls. Public continuation commitment, nonstreaming reply execution, concurrent-clear/abort during second-body media, dedicated body-limit proof, full memory/traps and the existing provider/log/accounting/capacity gaps remain open. Known separate REDs remain unchanged.
