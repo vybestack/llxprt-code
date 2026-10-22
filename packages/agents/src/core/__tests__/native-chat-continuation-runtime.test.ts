@@ -1,5 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { appendFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { StreamEventType } from '../chatSession.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
@@ -19,10 +22,7 @@ import { prepareRequestBody } from '../../../../providers/src/openai/__tests__/s
 import { rowsSelection } from '../../../../providers/src/__tests__/support/wireBodyCapture.js';
 import { createRuntimeTokenizerFactory } from '../../../../providers/src/composition/runtimeTokenizerFactory.js';
 import { operationFileCreates } from '../../compression/__tests__/support/operation-file-creates.js';
-import {
-  loggingChatSession,
-  readLoggingChatStream,
-} from './support/chat-session-logging-fixture.js';
+import { loggingChatSession } from './support/chat-session-logging-fixture.js';
 
 const calls: ContinuationToolCall[] = [
   {
@@ -62,11 +62,17 @@ describe('public native plain Chat automatic continuation HTTP', () => {
   const directory = useTempDir('native-chat-session-http-');
   it.each(
     ['none', 'all', 'allButLast'].flatMap((strip) =>
-      [false, true].map((streaming) => ({ strip, streaming })),
+      [false, true].flatMap((streaming) =>
+        ['off', 'remove', 'summary'].map((purge) => ({
+          strip,
+          streaming,
+          purge,
+        })),
+      ),
     ),
   )(
-    'continues $strip/stream=$streaming through public estimation, HTTP and durable commitment',
-    async ({ strip, streaming }) => {
+    'continues $strip/stream=$streaming/purge=$purge through public estimation, HTTP and durable commitment',
+    async ({ strip, streaming, purge }) => {
       const requests: string[] = [];
       const contentLengths: number[] = [];
       const prior = [
@@ -77,7 +83,23 @@ describe('public native plain Chat automatic continuation HTTP', () => {
             { type: 'text', text: 'older answer' },
           ],
         },
-        { speaker: 'human', blocks: [{ type: 'text', text: 'prior' }] },
+        {
+          speaker: 'human',
+          blocks: [
+            { type: 'text', text: 'prior' },
+            ...(purge === 'off'
+              ? []
+              : [
+                  {
+                    type: 'media' as const,
+                    mimeType: 'image/png',
+                    encoding: 'base64' as const,
+                    data: 'aW1hZ2U=',
+                    caption: 'image summary',
+                  },
+                ]),
+          ],
+        },
         {
           speaker: 'ai',
           blocks: [
@@ -90,6 +112,7 @@ describe('public native plain Chat automatic continuation HTTP', () => {
         import('@vybestack/llxprt-code-core/services/history/IContent.js').IContent
       >;
       const storedLengths: number[] = [];
+      const requestOrdinals: bigint[][] = [];
       const estimates: number[] = [];
       const tokenizer = createRuntimeTokenizerFactory();
       const recording = JournalRecordingService.create({
@@ -108,6 +131,10 @@ describe('public native plain Chat automatic continuation HTTP', () => {
           requests.push(await request.text());
           contentLengths.push(Number(request.headers.get('content-length')));
           storedLengths.push(history.length());
+          const ordinals: bigint[] = [];
+          for await (const row of (await recording.session()).rows())
+            ordinals.push(row.entry.chronologySeq);
+          requestOrdinals.push(ordinals);
           return reply(
             requests.length === 2,
             requests.length === 2 || streaming,
@@ -124,6 +151,7 @@ describe('public native plain Chat automatic continuation HTTP', () => {
       settings.set('reasoning.stripFromContext', strip);
       settings.set('reasoning.includeInContext', true);
       settings.set('token-usage-log', false);
+      if (purge !== 'off') settings.set('media.semantic-purge', purge);
       const provider = new OpenAIProvider('test-key', baseURL);
       provider.setRuntimeSettingsService(settings);
       const fixture = createChatSessionRuntime({
@@ -181,7 +209,14 @@ describe('public native plain Chat automatic continuation HTTP', () => {
           {
             contents: [],
             requestRows: rowsSelection([
-              ...prior,
+              ...prior.map((row) => ({
+                ...row,
+                blocks: row.blocks.flatMap((block) => {
+                  if (block.type !== 'media') return [block];
+                  if (purge === 'remove') return [];
+                  return [{ type: 'text' as const, text: 'image summary' }];
+                }),
+              })),
               {
                 speaker: 'human',
                 blocks: [{ type: 'text', text: 'new user 雪' }],
@@ -210,8 +245,7 @@ describe('public native plain Chat automatic continuation HTTP', () => {
         );
         let output = '';
         const receipt = await operationFileCreates(async () => {
-          output = await readLoggingChatStream(
-            chat,
+          for await (const event of await chat.sendMessageStream(
             {
               message: {
                 speaker: 'human',
@@ -219,10 +253,24 @@ describe('public native plain Chat automatic continuation HTTP', () => {
               },
             },
             'native-chat-session',
-          );
-        }, true);
+            {
+              transcriptPath: () => recording.getFilePath() ?? undefined,
+              persistSemanticMediaPurge: async () => undefined,
+            },
+          )) {
+            if (event.type === StreamEventType.CHUNK)
+              output += event.value.content.blocks
+                .flatMap((block) => (block.type === 'text' ? [block.text] : []))
+                .join('');
+          }
+          await chat.waitForIdle();
+        }, true).then(
+          (created) => ({ created, error: undefined }),
+          (error: unknown) => ({ created: undefined, error }),
+        );
+        expect(receipt.error).toBeUndefined();
         expect(output).toBe('terminal 雪');
-        expect(receipt).toStrictEqual({ files: [], directories: [] });
+        expect(receipt.created).toStrictEqual({ files: [], directories: [] });
         expect(requests).toHaveLength(2);
         expect(requests[1]).toBe(
           JSON.stringify({
@@ -255,6 +303,8 @@ describe('public native plain Chat automatic continuation HTTP', () => {
             : ['latest first', 'latest second'].join('\n'),
         );
         expect(storedLengths).toStrictEqual([3, 3]);
+        expect(requestOrdinals[1]).toStrictEqual(requestOrdinals[0]);
+        expect(requestOrdinals[0]).toHaveLength(3);
         expect(JSON.parse(requests[0]).model).toBe('gpt-4o');
         await history.waitForCommit();
         const committed = await history.openDumpSnapshot();
@@ -284,9 +334,37 @@ describe('public native plain Chat automatic continuation HTTP', () => {
             },
           ]);
           expect(synthetic).toStrictEqual([]);
+          const ordinals: bigint[] = [];
+          for await (const row of (await recording.session()).rows())
+            ordinals.push(row.entry.chronologySeq);
+          expect(ordinals).toHaveLength(5);
+          expect(ordinals.slice(0, 3)).toStrictEqual(requestOrdinals[0]);
+          expect(ordinals[3]).toBeGreaterThan(ordinals[2]);
+          expect(ordinals[4]).toBeGreaterThan(ordinals[3]);
+          if (process.env.CONTINUATION_PUBLIC_RECEIPT !== undefined)
+            appendFileSync(
+              process.env.CONTINUATION_PUBLIC_RECEIPT,
+              JSON.stringify(
+                {
+                  strip,
+                  streaming,
+                  purge,
+                  estimates,
+                  requestOrdinals,
+                  ordinals,
+                  bodies: requests.map((body, index) => ({
+                    length: Buffer.byteLength(body),
+                    contentLength: contentLengths[index],
+                    sha256: createHash('sha256').update(body).digest('hex'),
+                  })),
+                },
+                (_key, value: unknown) =>
+                  typeof value === 'bigint' ? value.toString() : value,
+              ) + '\n',
+            );
           expect(messages).toStrictEqual([
             'ai:older answer',
-            'human:prior',
+            purge === 'summary' ? 'human:priorimage summary' : 'human:prior',
             'ai:answer',
             'human:new user 雪',
             'ai:terminal 雪',

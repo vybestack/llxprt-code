@@ -306,7 +306,9 @@ export async function* handleNonStreamingResponse(
   if (
     choice.finish_reason === 'stop' &&
     calls.length > 0 &&
-    !blocks.some((block) => block.type === 'text' && block.text.trim()) &&
+    !blocks.some(
+      (block) => block.type === 'text' && block.text.trim().length > 0,
+    ) &&
     requestContinuation !== undefined
   ) {
     yield* requestContinuation(

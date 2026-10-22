@@ -13,6 +13,7 @@ import type {
 } from './OpenAIChatContinuation.js';
 import type { ContinuationToolCall } from './OpenAIRequestBuilder.js';
 import { aiTextContent, continuationTexts } from './OpenAIStreamChunkText.js';
+import { historyMutationFailure } from '@vybestack/llxprt-code-core/services/history/historyMutationEffects.js';
 
 /** What the continuation request needs from the request that preceded it. */
 export interface ContinuationStreamRequest {
@@ -50,7 +51,6 @@ export async function* streamContinuationAfterToolCalls(
   } = request;
   let body: ContinuationBody | undefined;
 
-  // Make a continuation request (wrap in try-catch since tools were already yielded)
   try {
     const { executeSpooledStreamingChatRequest } = await import(
       './OpenAIApiExecution.js'
@@ -85,16 +85,16 @@ export async function* streamContinuationAfterToolCalls(
       },
     );
   } catch (continuationError) {
-    // Tool calls were already successfully yielded, so log warning and continue
-    logger.warn(
-      () =>
-        `[OpenAIProvider] Continuation request failed, but tool calls were already emitted: ${continuationError instanceof Error ? continuationError.message : String(continuationError)}`,
-      {
-        model,
-        error: continuationError,
-      },
-    );
-    // Don't re-throw - tool calls were already successful
+    const failure =
+      abortSignal?.aborted === true ? abortSignal.reason : continuationError;
+    try {
+      await body?.release();
+    } catch (cleanupError) {
+      body = undefined;
+      throw historyMutationFailure(failure, [cleanupError]);
+    }
+    body = undefined;
+    throw failure;
   } finally {
     await body?.release();
   }
