@@ -56,6 +56,14 @@ export function nativeRequestFormatPreparation(host: {
         throw new Error(
           'History changed before the native request format fill',
         );
+      const mappingSlot = registration.mistralSlot;
+      if (
+        mappingSlot !== undefined &&
+        !(await snapshot.hasMistralSlot(mappingSlot))
+      )
+        await host.commit(() =>
+          Promise.resolve([{ kind: 'mistral', slot: mappingSlot }]),
+        );
       await host.commit(() =>
         Promise.resolve([{ kind: 'format', registration }]),
       );

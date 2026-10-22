@@ -519,13 +519,14 @@ export async function prepareRequest(
   };
   const nativeRows = options.requestRows;
   const body =
-    nativeRows?.native !== undefined && !usesToolIdStore(detectedFormat)
+    nativeRows?.native !== undefined && detectedFormat !== 'kimi'
       ? await prepareNativePlainRequest(
           envelope,
           nativeRows,
           options,
           use,
           rowInput,
+          detectedFormat,
         )
       : await spoolChatBody(envelope, options, detectedFormat, rowInput, use);
   return {

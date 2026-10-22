@@ -61,18 +61,22 @@ function reply(second: boolean, streaming: boolean): Response {
 describe('public native plain Chat automatic continuation HTTP', () => {
   const directory = useTempDir('native-chat-session-http-');
   it.each(
-    ['none', 'all', 'allButLast'].flatMap((strip) =>
-      [false, true].flatMap((streaming) =>
-        ['off', 'remove', 'summary'].map((purge) => ({
-          strip,
-          streaming,
-          purge,
-        })),
+    ['gpt-4o', 'mistral-large-latest'].flatMap((model) =>
+      ['none', 'all', 'allButLast'].flatMap((strip) =>
+        [false, true].flatMap((streaming) =>
+          ['off', 'remove', 'summary'].map((purge) => ({
+            model,
+            strip,
+            streaming,
+            purge,
+          })),
+        ),
       ),
     ),
   )(
-    'continues $strip/stream=$streaming/purge=$purge through public estimation, HTTP and durable commitment',
-    async ({ strip, streaming, purge }) => {
+    'continues $model/$strip/stream=$streaming/purge=$purge through public estimation, HTTP and durable commitment',
+    async ({ model, strip, streaming, purge }) => {
+      const toolFormat = model.includes('mistral') ? 'mistral' : 'openai';
       const requests: string[] = [];
       const contentLengths: number[] = [];
       const prior = [
@@ -121,7 +125,7 @@ describe('public native plain Chat automatic continuation HTTP', () => {
         chatsDir: directory(),
         workspaceDirs: [],
         provider: 'openai',
-        model: 'gpt-4o',
+        model,
       });
       const history = new HistoryService({ backend: 'journal', recording });
       const server = Bun.serve({
@@ -143,8 +147,8 @@ describe('public native plain Chat automatic continuation HTTP', () => {
       });
       const baseURL = `http://127.0.0.1:${server.port}/v1`;
       const settings = new SettingsService();
-      settings.setProviderSetting('openai', 'model', 'gpt-4o');
-      settings.set('model', 'gpt-4o');
+      settings.setProviderSetting('openai', 'model', model);
+      settings.set('model', model);
       settings.setProviderSetting('openai', 'base-url', baseURL);
       settings.setProviderSetting('openai', 'auth-key', 'test-key');
       settings.set('streaming', streaming ? 'enabled' : 'disabled');
@@ -184,7 +188,7 @@ describe('public native plain Chat automatic continuation HTTP', () => {
           runtimeId: 'native-chat-session',
           sessionId: 'native-chat-session',
           provider: 'openai',
-          model: 'gpt-4o',
+          model,
           updatedAt: Date.now(),
           baseUrl: baseURL,
         },
@@ -233,9 +237,9 @@ describe('public native plain Chat automatic continuation HTTP', () => {
                 'reasoning.includeInContext': true,
               },
             }),
-            resolved: { model: 'gpt-4o', baseURL, authToken: 'test-key' },
+            resolved: { model, baseURL, authToken: 'test-key' },
           },
-          'gpt-4o',
+          model,
           undefined,
           new DebugLogger('native-chat-reference'),
           'openai',
@@ -278,7 +282,7 @@ describe('public native plain Chat automatic continuation HTTP', () => {
             messages: buildContinuationMessages(
               calls,
               reference.messagesWithSystem,
-              'openai',
+              toolFormat,
             ),
             stream: true,
           }),
@@ -305,7 +309,7 @@ describe('public native plain Chat automatic continuation HTTP', () => {
         expect(storedLengths).toStrictEqual([3, 3]);
         expect(requestOrdinals[1]).toStrictEqual(requestOrdinals[0]);
         expect(requestOrdinals[0]).toHaveLength(3);
-        expect(JSON.parse(requests[0]).model).toBe('gpt-4o');
+        expect(JSON.parse(requests[0]).model).toBe(model);
         await history.waitForCommit();
         const committed = await history.openDumpSnapshot();
         try {

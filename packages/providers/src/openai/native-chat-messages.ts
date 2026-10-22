@@ -1,5 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type OpenAI from 'openai';
+import {
+  nativeMistralRow,
+  type NativeMistralResolver,
+} from './native-mistral-row.js';
+import type { StreamingToolIdMapper } from '@vybestack/llxprt-code-tools/ToolIdStrategy.js';
 import type {
   IContent,
   MediaBlock,
@@ -30,6 +35,7 @@ function messagesOf(
   row: IContent,
   settings: RowFormatSettings,
   pending: MediaBlock[],
+  mapper?: StreamingToolIdMapper,
 ): Array<OpenAI.Chat.ChatCompletionMessageParam | null> {
   if (row.speaker === 'human') return [processUserMessage(row)];
   if (row.speaker === 'ai')
@@ -38,14 +44,16 @@ function messagesOf(
         row,
         settings.chat?.includeInContext ?? true,
         settings.chat?.toolFormat,
-        (call) => normalizeToOpenAIToolId(call.id),
+        mapper?.resolveToolCallId ??
+          ((call) => normalizeToOpenAIToolId(call.id)),
         normalizeToolCallArguments,
       ),
     ];
   return processToolResponses(
     row,
-    'openai',
-    (response) => normalizeToOpenAIToolId(response.callId),
+    settings.chat?.toolFormat ?? 'openai',
+    mapper?.resolveToolResponseId ??
+      ((response) => normalizeToOpenAIToolId(response.callId)),
     buildToolResponseContent,
     settings.outputLimits ?? undefined,
     pending,
@@ -84,6 +92,7 @@ export async function* nativeChatMessages(
   settings: RowFormatSettings,
   strip: unknown,
   lastThinking: number,
+  resolver?: NativeMistralResolver,
 ): AsyncGenerator<Uint8Array> {
   let lastIds: readonly string[] = [];
   let pending: MediaBlock[] = [];
@@ -102,7 +111,11 @@ export async function* nativeChatMessages(
       strip === 'all' || (strip !== 'none' && index !== lastThinking);
     index++;
     const row = remove ? removeThinkingFromContent(source) : source;
-    const messages = messagesOf(row, settings, pending);
+    const mapper =
+      resolver === undefined
+        ? undefined
+        : await nativeMistralRow(row, resolver);
+    const messages = messagesOf(row, settings, pending, mapper);
     for (const message of messages) {
       if (
         message === null ||

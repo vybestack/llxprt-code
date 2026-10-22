@@ -101,7 +101,8 @@ export class NativeChatEstimateProjection {
       ...this.settings,
       chat: {
         includeInContext: this.settings.chat?.includeInContext ?? true,
-        toolFormat: 'openai',
+        ...this.settings.chat,
+        toolFormat: this.settings.chat?.toolFormat ?? 'openai',
         estimatorKey: JSON.stringify({
           contract: 'chat-unit-repeat-delta-v2',
           legacyEncoding: O200K_BASE_ASSET_REVISION,

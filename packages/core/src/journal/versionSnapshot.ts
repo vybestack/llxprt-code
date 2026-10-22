@@ -262,7 +262,7 @@ export class VersionSnapshot {
     return this.kimi.below(label);
   }
 
-  async requireMistralSlot(slot: number): Promise<void> {
+  async hasMistralSlot(slot: number): Promise<boolean> {
     this.read.requireOpen();
     assertMistralSlot(slot);
     const slots = decodeMistralSlots(
@@ -271,7 +271,11 @@ export class VersionSnapshot {
         MISTRAL_SLOTS_KEY,
       ),
     );
-    if ((slots & (1 << slot)) === 0)
+    return (slots & (1 << slot)) !== 0;
+  }
+
+  async requireMistralSlot(slot: number): Promise<void> {
+    if (!(await this.hasMistralSlot(slot)))
       throw new JournalFormatError('Mistral observe mappings need a fill');
   }
 

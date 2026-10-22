@@ -1,4 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { NativeMistralResolver } from './native-mistral-row.js';
+import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { RowFormatSettings } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
 import { readInvocationPolicyValue } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
@@ -97,6 +99,7 @@ function initialNativeChatBody(
         settings,
         strip,
         plan.lastThinking,
+        captured.resolver,
       );
       yield Buffer.from(']');
       yield tail;
@@ -106,6 +109,8 @@ function initialNativeChatBody(
 }
 
 interface CapturedNativeChatPlan {
+  readonly resolver?: NativeMistralResolver;
+  readonly releaseMapping?: () => void | Promise<void>;
   readonly plan: StoredChatMessagePlan;
   readonly stripped: StoredChatMessagePlan;
   readonly continuationSettings: RowFormatSettings;
@@ -117,6 +122,15 @@ interface CapturedNativeChatPlan {
   readonly signal: AbortSignal | undefined;
 }
 
+function reasoningStrip(options: NormalizedGenerateChatOptions): unknown {
+  return (
+    readInvocationPolicyValue(
+      options.invocation.ephemerals,
+      'reasoning.stripFromContext',
+    ) ?? 'none'
+  );
+}
+
 async function captureChatPlan(
   envelope: Readonly<Record<string, unknown>>,
   rows: ProviderRequestRows,
@@ -126,59 +140,131 @@ async function captureChatPlan(
   const native = rows.native;
   if (native === undefined)
     throw new Error('Native Chat requires indexed request rows');
-  const strip =
-    readInvocationPolicyValue(
-      options.invocation.ephemerals,
-      'reasoning.stripFromContext',
-    ) ?? 'none';
+  const strip = reasoningStrip(options);
   const selected = selectedVariant(strip);
   const system = options.systemInstruction ?? '';
-  const plan = await native.withFormat(
-    plainChatLengthRegistration(settings),
-    (snapshot) =>
-      planRequestChatMessages(
-        snapshot,
-        native.indexed,
-        settings,
-        selected,
-        system,
-      ),
-  );
-  const continuationSettings: RowFormatSettings = {
-    ...settings,
-    chat: { ...settings.chat, includeInContext: false },
-  };
-  const stripped =
-    selected === 1 || settings.chat?.includeInContext === false
-      ? plan
-      : await native.withFormat(
-          plainChatLengthRegistration(continuationSettings),
-          (snapshot) =>
-            planRequestChatMessages(
-              snapshot,
-              native.indexed,
-              continuationSettings,
-              selected,
-              system,
-            ),
+  const mapping: {
+    resolver?: NativeMistralResolver;
+    release?: () => void | Promise<void>;
+  } = {};
+  try {
+    const plan = await native.withFormat(
+      plainChatLengthRegistration(settings),
+      async (snapshot) => {
+        if (settings.chat?.toolFormat === 'mistral') {
+          mapping.resolver = await native.indexed.mistralForSnapshot(
+            snapshot,
+            2,
+          );
+        }
+        const result = await planRequestChatMessages(
+          snapshot,
+          native.indexed,
+          settings,
+          selected,
+          system,
         );
-  const { head, tail } = await envelopeParts(envelope);
-  const continuationEnvelope = await envelopeParts({
-    ...envelope,
-    stream: true,
-  });
-  const signal = getRequestSignal(options);
-  return {
-    plan,
-    stripped,
-    continuationSettings,
-    system,
-    strip,
-    head,
-    tail,
-    continuationEnvelope,
-    signal,
-  };
+        if (mapping.resolver !== undefined) mapping.release = snapshot.hold();
+        return result;
+      },
+    );
+    const continuationSettings: RowFormatSettings = {
+      ...settings,
+      chat: { ...settings.chat, includeInContext: false },
+    };
+    const stripped =
+      selected === 1 || settings.chat?.includeInContext === false
+        ? plan
+        : await native.withFormat(
+            plainChatLengthRegistration(continuationSettings),
+            (snapshot) =>
+              planRequestChatMessages(
+                snapshot,
+                native.indexed,
+                continuationSettings,
+                selected,
+                system,
+              ),
+          );
+    const { head, tail } = await envelopeParts(envelope);
+    const continuationEnvelope = await envelopeParts({
+      ...envelope,
+      stream: true,
+    });
+    const signal = getRequestSignal(options);
+    return {
+      resolver: mapping.resolver,
+      releaseMapping: mapping.release,
+      plan,
+      stripped,
+      continuationSettings,
+      system,
+      strip,
+      head,
+      tail,
+      continuationEnvelope,
+      signal,
+    };
+  } catch (error) {
+    await mapping.release?.();
+    throw error;
+  }
+}
+
+function continuationNativeChatBody(
+  rows: ProviderRequestRows,
+  rowInput: ChatRowInput,
+  captured: CapturedNativeChatPlan,
+  continuationSettings: RowFormatSettings,
+  messages: ReturnType<typeof buildContinuationTail>,
+  bytes: number,
+): NativeChatBody {
+  const { signal, system, strip, stripped, continuationEnvelope } = captured;
+  return new NativeChatBody(
+    async function* () {
+      signal?.throwIfAborted();
+      yield continuationEnvelope.head;
+      yield Buffer.from('[');
+      yield* nativeChatValue({ role: 'system', content: system });
+      const source = rows.openReader(signal);
+      yield* nativeChatMessages(
+        rowInput.mediaStage?.(source) ?? source,
+        continuationSettings,
+        strip,
+        stripped.lastThinking,
+        captured.resolver,
+      );
+      for (const message of messages) {
+        yield Buffer.from(',');
+        yield* nativeChatValue(message);
+      }
+      yield Buffer.from(']');
+      yield continuationEnvelope.tail;
+    },
+    continuationEnvelope.head.byteLength +
+      bytes +
+      continuationEnvelope.tail.byteLength,
+  );
+}
+
+async function retireNativeBodies(
+  bodies: readonly NativeChatBody[],
+  releaseMapping: CapturedNativeChatPlan['releaseMapping'],
+): Promise<void> {
+  const settled = await Promise.allSettled(
+    bodies.map((body) => body.dispose()),
+  );
+  const failures = settled.flatMap((result) =>
+    result.status === 'rejected' ? [result.reason] : [],
+  );
+  try {
+    await releaseMapping?.();
+  } catch (error) {
+    failures.push(error);
+  }
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1)
+    throw new AggregateError(failures, 'Native Chat retirement failed');
 }
 
 async function prepareNativeChatBody(
@@ -196,11 +282,16 @@ async function prepareNativeChatBody(
   const captured = await captureChatPlan(envelope, rows, options, settings);
   const { plan, signal } = captured;
   const { stripped, continuationSettings } = captured;
-  const { system, strip, continuationEnvelope } = captured;
   const continuations = new Set<NativeChatBody>();
   let closed = false;
   let closing: Promise<void> | undefined;
-  const spool = initialNativeChatBody(rows, rowInput, settings, captured);
+  let spool: NativeChatBody;
+  try {
+    spool = initialNativeChatBody(rows, rowInput, settings, captured);
+  } catch (error) {
+    await captured.releaseMapping?.();
+    throw error;
+  }
   return {
     spool,
     messageCount: plan.items,
@@ -209,32 +300,19 @@ async function prepareNativeChatBody(
         signal?.throwIfAborted();
         if (closed) throw new Error('Native Chat request was released');
         const messages = structuredClone(
-          buildContinuationTail(toolCalls, 'openai'),
+          buildContinuationTail(
+            toolCalls,
+            settings.chat?.toolFormat ?? 'openai',
+          ),
         );
         const length = appendStoredChatTail(stripped, messages);
-        const body = new NativeChatBody(
-          async function* () {
-            signal?.throwIfAborted();
-            yield continuationEnvelope.head;
-            yield Buffer.from('[');
-            yield* nativeChatValue({ role: 'system', content: system });
-            const source = rows.openReader(signal);
-            yield* nativeChatMessages(
-              rowInput.mediaStage?.(source) ?? source,
-              continuationSettings,
-              strip,
-              stripped.lastThinking,
-            );
-            for (const message of messages) {
-              yield Buffer.from(',');
-              yield* nativeChatValue(message);
-            }
-            yield Buffer.from(']');
-            yield continuationEnvelope.tail;
-          },
-          continuationEnvelope.head.byteLength +
-            length.bytes +
-            continuationEnvelope.tail.byteLength,
+        const body = continuationNativeChatBody(
+          rows,
+          rowInput,
+          captured,
+          continuationSettings,
+          messages,
+          length.bytes,
         );
         continuations.add(body);
         return {
@@ -248,10 +326,10 @@ async function prepareNativeChatBody(
     },
     release() {
       closed = true;
-      closing ??= Promise.all([
-        spool.dispose(),
-        ...Array.from(continuations, (body) => body.dispose()),
-      ]).then(() => {
+      closing ??= retireNativeBodies(
+        [spool, ...continuations],
+        captured.releaseMapping,
+      ).then(() => {
         continuations.clear();
       });
       return closing;
@@ -261,9 +339,11 @@ async function prepareNativeChatBody(
 
 function nativeChatSettings(
   options: NormalizedGenerateChatOptions,
+  toolFormat: ToolFormat,
 ): RowFormatSettings {
   return {
-    formatId: 'openai-chat:plain',
+    formatId:
+      toolFormat === 'mistral' ? 'openai-chat:mistral' : 'openai-chat:plain',
     formatRev: PLAIN_CHAT_FORMAT_REV,
     model: options.resolved.model,
     endpoint: options.resolved.baseURL ?? '',
@@ -276,7 +356,10 @@ function nativeChatSettings(
     unsupportedMedia: 'notice',
     outputLimits: parseOutputLimits(options.invocation.ephemerals),
     chat: {
-      toolFormat: 'openai',
+      toolFormat: toolFormat === 'mistral' ? 'mistral' : 'openai',
+      ...(toolFormat === 'mistral'
+        ? { mistralRevision: 'sha256-base62-salt-v1-normalizer-v1' }
+        : {}),
       includeInContext: Boolean(
         readInvocationPolicyValue(
           options.invocation.ephemerals,
@@ -293,6 +376,7 @@ export async function prepareNativePlainRequest(
   options: NormalizedGenerateChatOptions,
   use: { readonly estimate: boolean; readonly dump: boolean },
   rowInput: ChatRowInput,
+  toolFormat: ToolFormat = 'openai',
 ): Promise<
   Pick<
     RequestContext,
@@ -301,7 +385,7 @@ export async function prepareNativePlainRequest(
 > {
   if (use.dump)
     throw new Error('Native plain Chat dump projection is not installed');
-  const settings = nativeChatSettings(options);
+  const settings = nativeChatSettings(options, toolFormat);
   const body = await prepareNativeChatBody(
     envelope,
     rows,

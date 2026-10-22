@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { RecordAppender } from './groupAppender.js';
 import type { BuildContext } from './groupBuild.js';
 import type { PlanContext } from './groupPlanTypes.js';
 import type { JournalGroupWriter } from './groupWriter.js';
@@ -8,6 +9,37 @@ import { prepareBuild } from './preparedGroup.js';
 import { fillRowFormats, snapshotOf } from './formatFill.js';
 import { LineageChain } from './lineageChain.js';
 import { JournalFormatError } from './errors.js';
+
+async function prepareMapping(
+  writer: JournalGroupWriter,
+  ctx: BuildContext,
+  plan: PlanContext,
+  snapshot: VersionSnapshot,
+  registration: RowFormatRegistration,
+  appender: RecordAppender,
+): Promise<VersionSnapshot> {
+  const slot = registration.mistralSlot;
+  if (slot === undefined || (await snapshot.hasMistralSlot(slot)))
+    return snapshot;
+  const mapping = await prepareBuild(
+    ctx,
+    plan,
+    [{ kind: 'mistral', slot }],
+    appender,
+    appender,
+    async () => undefined,
+  );
+  if (mapping.built === undefined)
+    throw new JournalFormatError('Pinned Mistral fill has no built version');
+  await appender.drain();
+  return snapshotOf(
+    ctx,
+    mapping.built,
+    appender,
+    () => undefined,
+    writer.reader,
+  );
+}
 
 export async function fillPinnedFormat(
   writer: JournalGroupWriter,
@@ -21,17 +53,28 @@ export async function fillPinnedFormat(
   let measured: VersionSnapshot | undefined;
   try {
     await writer.prepareGroup(async (appender) => {
-      const published = snapshot.version;
       const ctx = {
         ...context,
-        published,
+        published: snapshot.version,
         chainFor: async () => LineageChain.NONE,
       };
-      const plan = { ...planning, published };
+      const mapped = await prepareMapping(
+        writer,
+        ctx,
+        { ...planning, published: ctx.published },
+        snapshot,
+        registration,
+        appender,
+      );
+      if (mapped !== snapshot) {
+        ctx.published = mapped.version;
+        ctx.access = ctx.readGroup(appender.nextOffset);
+        await mapped.close();
+      }
       const edits = [{ kind: 'format' as const, registration }];
       const prepared = await prepareBuild(
         ctx,
-        plan,
+        { ...planning, published: ctx.published },
         edits,
         appender,
         appender,

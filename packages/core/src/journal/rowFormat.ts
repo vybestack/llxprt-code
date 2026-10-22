@@ -27,7 +27,8 @@ export interface RowFormatSettings {
   readonly outputLimits: Readonly<OutputLimitConfig> | null;
   readonly chat?: {
     readonly includeInContext: boolean;
-    readonly toolFormat?: 'openai';
+    readonly toolFormat?: 'openai' | 'mistral';
+    readonly mistralRevision?: string;
     readonly estimatorKey?: string;
   };
   readonly anthropic?: {
@@ -73,6 +74,7 @@ export interface RowFormatRegistration {
   readonly settings: RowFormatSettings;
   readonly incremental?: 'unsupported' | 'append';
   readonly nativeFactScope?: string;
+  readonly mistralSlot?: number;
   readonly prepareAppend?: (
     snapshot: VersionSnapshot,
     settings: RowFormatSettings,
@@ -115,6 +117,7 @@ export function captureRowFormat(
     prepareAppend: registration.prepareAppend,
     incremental: registration.incremental,
     nativeFactScope: registration.nativeFactScope,
+    mistralSlot: registration.mistralSlot,
   };
 }
 

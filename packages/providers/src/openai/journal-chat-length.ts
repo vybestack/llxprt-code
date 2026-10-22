@@ -1,5 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type OpenAI from 'openai';
+import {
+  nativeMistralRow,
+  type NativeMistralResolver,
+} from './native-mistral-row.js';
+import type { StreamingToolIdMapper } from '@vybestack/llxprt-code-tools/ToolIdStrategy.js';
+import { JournalRequestMistral } from '@vybestack/llxprt-code-core/services/history/journal-request-mistral.js';
 import { measurableChatRow } from './chat-measure-media.js';
 import { JournalFormatError } from '@vybestack/llxprt-code-core/journal/errors.js';
 import {
@@ -86,6 +92,7 @@ function factsOf(
   stripped: boolean,
   settings: RowFormatSettings,
   previous: readonly string[],
+  mapper?: StreamingToolIdMapper,
 ): {
   facts: ChatUnitLengthFacts;
   lastIds: readonly string[];
@@ -105,7 +112,7 @@ function factsOf(
       unit,
       settings.chat?.includeInContext ?? true,
       settings.chat?.toolFormat,
-      (call) => normalizeToOpenAIToolId(call.id),
+      mapper?.resolveToolCallId ?? ((call) => normalizeToOpenAIToolId(call.id)),
       normalizeToolCallArguments,
     );
     if (message !== null) messages.push(message);
@@ -113,8 +120,9 @@ function factsOf(
     messages.push(
       ...processToolResponses(
         unit,
-        'openai',
-        (response) => normalizeToOpenAIToolId(response.callId),
+        settings.chat?.toolFormat ?? 'openai',
+        mapper?.resolveToolResponseId ??
+          ((response) => normalizeToOpenAIToolId(response.callId)),
         buildToolResponseContent,
         settings.outputLimits ?? undefined,
         pending,
@@ -155,7 +163,8 @@ function factsOf(
 
 function supported(settings: RowFormatSettings): void {
   const unsupported = [
-    settings.formatId !== 'openai-chat:plain',
+    settings.formatId !== 'openai-chat:plain' &&
+      settings.formatId !== 'openai-chat:mistral',
     settings.formatRev !== PLAIN_CHAT_FORMAT_REV,
     settings.isOAuth,
     settings.toolNameTransform !== 'none',
@@ -179,13 +188,23 @@ async function measure(
 ): Promise<RowLengthFacts> {
   supported(settings);
   const source = await JournalTailSource.create(snapshot, []);
-  return measurePlans(journalEntryPlans(source, entry), settings, count);
+  const resolver =
+    settings.chat?.toolFormat === 'mistral'
+      ? await JournalRequestMistral.create(snapshot, source, [], 2)
+      : undefined;
+  return measurePlans(
+    journalEntryPlans(source, entry),
+    settings,
+    count,
+    resolver,
+  );
 }
 
 async function measurePlans(
   plans: AsyncIterable<JournalResponsePlan>,
   settings: RowFormatSettings,
   count?: ChatUnitTokenMeasurer,
+  resolver?: NativeMistralResolver,
 ): Promise<RowLengthFacts> {
   let summary = identitySlotSummary('chat');
   const lens: Array<readonly [ChatUnitLengthFacts, ChatUnitLengthFacts]> = [];
@@ -197,8 +216,12 @@ async function measurePlans(
       blocks.push(block);
     }
     const row = { ...plan.header, blocks };
-    const kept = factsOf(row, false, settings, keptIds);
-    const removed = factsOf(row, true, settings, removedIds);
+    const mapper =
+      resolver === undefined
+        ? undefined
+        : await nativeMistralRow(row, resolver);
+    const kept = factsOf(row, false, settings, keptIds, mapper);
+    const removed = factsOf(row, true, settings, removedIds, mapper);
     keptIds = kept.lastIds;
     removedIds = removed.lastIds;
     lens.push([kept.facts, removed.facts]);
@@ -234,10 +257,15 @@ export function plainChatLengthRegistration(
   supported(settings);
   return {
     settings,
+    ...(settings.chat?.toolFormat === 'mistral' ? { mistralSlot: 2 } : {}),
     measure: (snapshot, entry, captured) =>
       measure(snapshot, entry, captured, count),
     prepare: async (snapshot, captured) => {
       const source = await JournalTailSource.create(snapshot, []);
+      const resolver =
+        captured.chat?.toolFormat === 'mistral'
+          ? await JournalRequestMistral.create(snapshot, source, [], 2)
+          : undefined;
       const entries = snapshot.entries();
       let following = await entries.next();
       return {
@@ -256,6 +284,7 @@ export function plainChatLengthRegistration(
             ),
             captured,
             count,
+            resolver,
           );
         },
         finish: async () => new Uint8Array(0),
@@ -266,9 +295,18 @@ export function plainChatLengthRegistration(
     },
     prepareAppend: async (snapshot, captured) => {
       const source = await JournalTailSource.create(snapshot, []);
+      const resolver =
+        captured.chat?.toolFormat === 'mistral'
+          ? await JournalRequestMistral.create(snapshot, source, [], 2)
+          : undefined;
       return {
         measure: async (_snapshot, entry) =>
-          measurePlans(journalEntryPlans(source, entry), captured, count),
+          measurePlans(
+            journalEntryPlans(source, entry),
+            captured,
+            count,
+            resolver,
+          ),
         finish: async () => new Uint8Array(0),
         close: () => undefined,
       };
@@ -401,10 +439,14 @@ export async function planRequestChatMessages(
   );
   if (slot === undefined || slot < 0)
     throw new JournalFormatError('Request format is not registered');
+  const resolver =
+    settings.chat?.toolFormat === 'mistral'
+      ? await indexed.mistralForSnapshot(snapshot, 2)
+      : undefined;
   const measure = async (
     plans: AsyncIterable<JournalResponsePlan>,
   ): Promise<SlotSummary> =>
-    (await measurePlans(plans, settings, count)).summary;
+    (await measurePlans(plans, settings, count, resolver)).summary;
   const summary = await indexed.formatSummary(snapshot, slot, measure);
   if (selected !== 2)
     return planStoredChatMessages(
