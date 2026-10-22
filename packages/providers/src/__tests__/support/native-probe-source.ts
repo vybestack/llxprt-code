@@ -88,6 +88,9 @@ export class NativeProbeSources {
       rows: () => rows(false),
       hold: () => held,
       selection: {
+        get native() {
+          return selection.native;
+        },
         count: selection.count,
         readAt: async (index, signal) => {
           const row = await selection.readAt(index, signal);
