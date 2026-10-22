@@ -3,11 +3,28 @@ import type { JournalStore } from '../journal/journalStore.js';
 import type { VersionEdit } from '../journal/groupEdits.js';
 import type { LocalMediaStore } from './local-media-store.js';
 import { historyOwnerIdFor } from './media-admission-service.js';
+import type { MediaReferenceBlock } from '../services/history/IContent.js';
 
 export interface PinnedMediaLease {
   readonly origin: 'native-history';
   requireOpen(): void;
   withRead<T>(consume: () => Promise<T>): Promise<T>;
+}
+
+export class PinnedHistoryMediaLease implements PinnedMediaLease {
+  readonly origin = 'native-history';
+
+  constructor(
+    private readonly store: LocalMediaStore,
+    private readonly references: WeakSet<MediaReferenceBlock>,
+    readonly requireOpen: () => void,
+    readonly withRead: <T>(consume: () => Promise<T>) => Promise<T>,
+  ) {}
+
+  allows(store: LocalMediaStore, reference: MediaReferenceBlock): boolean {
+    this.requireOpen();
+    return this.store === store && this.references.has(reference);
+  }
 }
 
 function scalar(bytes: Uint8Array | undefined): number {
@@ -63,6 +80,7 @@ export class HistoryMediaReleaseGate {
         return this.run(() => this.drain());
       },
       () => this.busy || this.head !== this.tail,
+      this.media,
     );
     await this.run(() => this.drain());
   }

@@ -1,5 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { LocalMediaStore } from '../storage/local-media-store.js';
+
 export class JournalMediaPins {
+  private store: LocalMediaStore | undefined;
+
+  get mediaStore(): LocalMediaStore | undefined {
+    return this.store;
+  }
   private readonly versions = new Map<number, number>();
   private releaseHandler: (() => void | Promise<void>) | undefined;
   private pending: (() => boolean) | undefined;
@@ -16,11 +23,16 @@ export class JournalMediaPins {
     return this.pending?.() === true;
   }
 
-  bind(handler: () => void | Promise<void>, pending: () => boolean): void {
+  bind(
+    handler: () => void | Promise<void>,
+    pending: () => boolean,
+    store?: LocalMediaStore,
+  ): void {
     if (this.releaseHandler !== undefined)
       throw new Error('Journal media release gate is already installed');
     this.releaseHandler = handler;
     this.pending = pending;
+    this.store = store;
   }
 
   retain(version: number): () => void {

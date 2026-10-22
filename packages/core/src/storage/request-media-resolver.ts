@@ -12,7 +12,10 @@ import {
   type MediaReferenceBlock,
 } from '../services/history/IContent.js';
 import type { LocalMediaStore } from './local-media-store.js';
-import type { PinnedMediaLease } from './history-media-release-gate.js';
+import {
+  PinnedHistoryMediaLease,
+  type PinnedMediaLease,
+} from './history-media-release-gate.js';
 import { DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES } from '../config/configTypes.js';
 
 export const DEFAULT_REQUEST_MEDIA_BUDGET_BYTES =
@@ -453,7 +456,10 @@ export class RequestMediaResolver {
       resources.readCount += 1;
       let bytes: Uint8Array;
       try {
-        if (input.lease !== undefined) {
+        if (
+          input.lease instanceof PinnedHistoryMediaLease &&
+          input.lease.allows(this.store, entry.reference)
+        ) {
           input.lease.requireOpen();
           bytes = await input.lease.withRead(() =>
             this.store.readReserved(entry.reference),

@@ -134,7 +134,7 @@ import type * as StoreTypes from './journal-history-store-types.js';
 export class JournalHistoryStore implements HistoryStorePort {
   prepareCurated = prepareJournalProviderRequest(
     this,
-    () => this.session.store.mediaPins.hasOwner,
+    () => this.session.store.mediaPins.mediaStore,
   );
 
   prepareRequestFormat = nativeRequestFormatPreparation({

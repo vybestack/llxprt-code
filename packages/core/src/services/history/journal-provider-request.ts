@@ -2,7 +2,9 @@
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 import type { JournalRequestProjection } from './journal-request-projection.js';
-import type { IContent } from './IContent.js';
+import type { IContent, MediaReferenceBlock } from './IContent.js';
+import type { LocalMediaStore } from '../../storage/local-media-store.js';
+import { PinnedHistoryMediaLease } from '../../storage/history-media-release-gate.js';
 import { HistoryReaderScope } from './historyReaderScope.js';
 import { IndexedJournalRequestSnapshot } from './indexed-journal-request-snapshot.js';
 import { historyMutationFailure } from './historyMutationEffects.js';
@@ -35,21 +37,23 @@ export class JournalProviderRequestSnapshot implements ProviderRequestSnapshot {
     private readonly prepareFormat: PrepareNativeRequestFormat | undefined,
     private readonly signal?: AbortSignal,
     private readonly ownership?: RowOwnership,
-    pinnedMediaOwner = false,
+    mediaStore: LocalMediaStore | undefined = undefined,
+    mediaReferences = new WeakSet<MediaReferenceBlock>(),
   ) {
     this.native = {
-      ...(pinnedMediaOwner
-        ? {
-            mediaLease: {
-              origin: 'native-history',
-              requireOpen: () => this.requireOpen(),
-              withRead: (consume) => {
+      ...(mediaStore === undefined
+        ? {}
+        : {
+            mediaLease: new PinnedHistoryMediaLease(
+              mediaStore,
+              mediaReferences,
+              () => this.requireOpen(),
+              (consume) => {
                 this.requireOpen();
                 return this.readers.read(consume);
               },
-            },
-          }
-        : {}),
+            ),
+          }),
       indexed,
       withFormat: (registration, consume) =>
         this.withFormat(registration, consume),
@@ -102,8 +106,9 @@ export class JournalProviderRequestSnapshot implements ProviderRequestSnapshot {
     projection?: JournalRequestProjection,
     release: () => void | Promise<void> = () => snapshot.close(),
     prepareFormat?: PrepareNativeRequestFormat,
-    pinnedMediaOwner = false,
+    mediaStore?: LocalMediaStore,
   ): Promise<JournalProviderRequestSnapshot> {
+    const mediaReferences = new WeakSet<MediaReferenceBlock>();
     let indexed: IndexedJournalRequestSnapshot | undefined;
     try {
       options.signal?.throwIfAborted();
@@ -111,6 +116,7 @@ export class JournalProviderRequestSnapshot implements ProviderRequestSnapshot {
         snapshot,
         tail,
         projection,
+        mediaStore === undefined ? undefined : mediaReferences,
       );
       options.signal?.throwIfAborted();
       return new JournalProviderRequestSnapshot(
@@ -120,7 +126,8 @@ export class JournalProviderRequestSnapshot implements ProviderRequestSnapshot {
         prepareFormat,
         options.signal,
         options.ownership,
-        pinnedMediaOwner,
+        mediaStore,
+        mediaReferences,
       );
     } catch (error) {
       const failures: unknown[] = [];

@@ -18,7 +18,12 @@ import {
 } from './journal-request-occurrences.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { IndexedUnit } from '../../journal/rowTreeQueries.js';
-import type { IContent } from './IContent.js';
+import {
+  isMediaReferenceBlock,
+  type IContent,
+  type ContentBlock,
+  type MediaReferenceBlock,
+} from './IContent.js';
 import { JournalTailSource } from './journal-tail-source.js';
 import {
   indexedOverlay,
@@ -62,12 +67,14 @@ export class IndexedJournalRequestSnapshot {
       readonly firstOutputIndex: number | undefined;
     },
     private readonly release: () => void | Promise<void>,
+    private readonly mediaReferences?: WeakSet<MediaReferenceBlock>,
   ) {}
 
   static async create(
     snapshot: VersionSnapshot,
     tail: readonly IContent[] = [],
     projection?: JournalRequestProjection,
+    mediaReferences?: WeakSet<MediaReferenceBlock>,
   ): Promise<IndexedJournalRequestSnapshot> {
     const release = snapshot.hold();
     try {
@@ -83,6 +90,7 @@ export class IndexedJournalRequestSnapshot {
           firstOutputIndex: overlay.firstOutputIndex,
         }),
         release,
+        mediaReferences,
       );
     } catch (error) {
       await releaseQueryHold(release, true);
@@ -174,12 +182,30 @@ export class IndexedJournalRequestSnapshot {
     );
   }
 
+  private captureMedia(
+    plan: JournalResponsePlan,
+    ordinal: number,
+    block: ContentBlock,
+  ): void {
+    if (
+      this.mediaReferences === undefined ||
+      !isMediaReferenceBlock(block) ||
+      this.source.isTail(plan.blocks[ordinal].at.label)
+    )
+      return;
+    Object.freeze(block.selectedObject);
+    Object.freeze(block.originalObject);
+    Object.freeze(block);
+    this.mediaReferences.add(block);
+  }
+
   async readAt(index: number, signal?: AbortSignal): Promise<IContent> {
     const plan = await this.planAt(index, signal);
     const blocks: IContent['blocks'] = [];
     for await (const block of plan.openBlocks()) {
       this.requireOpen();
       signal?.throwIfAborted();
+      this.captureMedia(plan, blocks.length, block);
       blocks.push(block);
     }
     return { ...plan.header, blocks };
@@ -194,6 +220,7 @@ export class IndexedJournalRequestSnapshot {
       for await (const block of plan.openBlocks()) {
         this.requireOpen();
         signal?.throwIfAborted();
+        this.captureMedia(plan, blocks.length, block);
         blocks.push(block);
       }
       yield { ...plan.header, blocks };

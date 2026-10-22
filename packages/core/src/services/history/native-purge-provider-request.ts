@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
+import type { LocalMediaStore } from '../../storage/local-media-store.js';
 import type { PrepareNativeRequestFormat } from './native-provider-format.js';
 import type {
   HistoryPrepareCuratedRequest,
@@ -12,7 +13,7 @@ export function prepareJournalProviderRequest(
     settledSnapshot(settle: () => Promise<void>): Promise<VersionSnapshot>;
     prepareRequestFormat: PrepareNativeRequestFormat;
   },
-  hasPinnedMediaOwner: () => boolean,
+  pinnedMediaStore: () => LocalMediaStore | undefined,
 ): (request: HistoryPrepareCuratedRequest) => Promise<ProviderRequestSnapshot> {
   return async (request) => {
     await store.waitForCommit();
@@ -30,7 +31,7 @@ export function prepareJournalProviderRequest(
       undefined,
       (snapshot, registration) =>
         store.prepareRequestFormat(snapshot, registration),
-      hasPinnedMediaOwner(),
+      pinnedMediaStore(),
     );
   };
 }

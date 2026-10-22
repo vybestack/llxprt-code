@@ -64,33 +64,7 @@ class ObservedResolver extends RequestMediaResolver {
     for (const row of input.contents) this.census.track(row);
     const resolved = await super.resolve(input);
     try {
-      const live = await this.census.sample();
-      const payloadBytes = resolved.withContents((contents) =>
-        contents.reduce(
-          (sum, row) =>
-            sum +
-            row.blocks.reduce(
-              (bytes, block) =>
-                bytes +
-                (block.type === 'text'
-                  ? Buffer.byteLength(block.text)
-                  : block.type === 'media' && block.encoding === 'base64'
-                    ? Buffer.byteLength(block.data)
-                    : 0),
-              0,
-            ),
-          0,
-        ),
-      );
-      this.census.peakPayloadBytes = Math.max(
-        this.census.peakPayloadBytes,
-        payloadBytes,
-      );
-      expect(live.rows).toBeLessThanOrEqual(2);
-      expect(live.text).toBeLessThanOrEqual(2);
-      expect(live.textBytes).toBeLessThanOrEqual(2 * payloadBytes);
-      expect(this.accounting().activeRequestCount).toBe(1);
-      expect(this.accounting().materializedNormalizedBytes).toBe(4);
+      await assertLiveResolution(this, resolved);
       return resolved;
     } catch (error) {
       await resolved.release();
@@ -99,11 +73,40 @@ class ObservedResolver extends RequestMediaResolver {
   }
 }
 
+async function assertLiveResolution(
+  resolver: ObservedResolver,
+  resolved: ResolvedMediaRequest,
+): Promise<void> {
+  const live = await resolver.census.sample();
+  const payloadBytes = resolved.withContents((contents) => {
+    let bytes = 0;
+    for (const row of contents)
+      for (const block of row.blocks) {
+        if (block.type === 'text') bytes += Buffer.byteLength(block.text);
+        if (block.type === 'media' && block.encoding === 'base64')
+          bytes += Buffer.byteLength(block.data);
+      }
+    return bytes;
+  });
+  resolver.census.peakPayloadBytes = Math.max(
+    resolver.census.peakPayloadBytes,
+    payloadBytes,
+  );
+  expect(live.rows).toBeLessThanOrEqual(2);
+  expect(live.text).toBeLessThanOrEqual(2);
+  expect(live.textBytes).toBeLessThanOrEqual(2 * payloadBytes);
+  expect(resolver.accounting().activeRequestCount).toBe(1);
+  expect(resolver.accounting().materializedNormalizedBytes).toBe(4);
+}
+
 function textAt(index: number, bytes: number): string {
   return `${index}:`.padEnd(bytes, 'x');
 }
 
-async function verifyLifetime(count: number, textBytes: number): Promise<void> {
+async function verifyLifetime(
+  count: number,
+  textBytes: number,
+): Promise<number> {
   const parent = join(
     import.meta.dir,
     '../../../../tmp/p8/native-media-lifetime-run-bb/fixtures',
@@ -210,6 +213,7 @@ async function verifyLifetime(count: number, textBytes: number): Promise<void> {
           wire: sink.requests[0],
         }) + '\n',
       );
+    return resolver.census.acquired;
   } finally {
     NativeChatBody.prototype.openStream = open;
     await sink.close();
@@ -220,6 +224,6 @@ async function verifyLifetime(count: number, textBytes: number): Promise<void> {
 
 describe('actual native historical reference-media row lifetime', () => {
   it('releases 64 historical rows with 64 KiB text while resolving one payload at a time', async () => {
-    await verifyLifetime(64, 65536);
+    expect(await verifyLifetime(64, 65536)).toBe(64);
   }, 170000);
 });
