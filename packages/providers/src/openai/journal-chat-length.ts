@@ -434,6 +434,19 @@ export function planStoredChatMessages(
   });
 }
 
+function selectChatSummary(value: SlotSummary, kept: boolean): SlotSummary {
+  if (value.kind !== 'chat')
+    throw new JournalFormatError('Expected Chat summary');
+  const index = kept ? 0 : 1;
+  return {
+    ...value,
+    variants: [value.variants[index], value.variants[index]],
+    ...(value.tokens === undefined
+      ? {}
+      : { tokens: [value.tokens[index], value.tokens[index]] as const }),
+  };
+}
+
 export async function planRequestChatMessages(
   snapshot: VersionSnapshot,
   indexed: IndexedJournalRequestSnapshot,
@@ -465,7 +478,13 @@ export async function planRequestChatMessages(
     plans: AsyncIterable<JournalResponsePlan>,
   ): Promise<SlotSummary> =>
     (await measurePlans(plans, settings, count, resolver)).summary;
-  const summary = await indexed.formatSummary(snapshot, slot, measure);
+  const summary = await indexed.formatSummary(
+    snapshot,
+    slot,
+    measure,
+    undefined,
+    resolver?.affectedSources(),
+  );
   if (selected !== 2)
     return planStoredChatMessages(
       snapshot,
@@ -486,21 +505,16 @@ export async function planRequestChatMessages(
       summary,
     );
   const target = await indexed.unitEntryAt(lastThinking);
-  const mixed = await indexed.formatSummary(snapshot, slot, measure, {
-    label: target.entry.label,
-    select(value, kept) {
-      if (value.kind !== 'chat')
-        throw new JournalFormatError('Expected Chat summary');
-      const index = kept ? 0 : 1;
-      return {
-        ...value,
-        variants: [value.variants[index], value.variants[index]],
-        ...(value.tokens === undefined
-          ? {}
-          : { tokens: [value.tokens[index], value.tokens[index]] as const }),
-      };
+  const mixed = await indexed.formatSummary(
+    snapshot,
+    slot,
+    measure,
+    {
+      label: target.entry.label,
+      select: selectChatSummary,
     },
-  });
+    resolver?.affectedSources(),
+  );
   return Object.freeze({
     ...planStoredChatMessages(snapshot, settings, 0, systemInstruction, mixed),
     lastThinking,

@@ -12,6 +12,7 @@ import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { IndexedOverlayRow } from './journal-indexed-overlay.js';
 import type { JournalTailSource } from './journal-tail-source.js';
 import { planSourceRowOccurrences } from './source-fact-planner.js';
+import { callTarget } from './journal-reconstruction.js';
 
 const CACHE_BYTES = 64 * 1024;
 const passthrough = (rawId: string): boolean => /^[a-zA-Z0-9]{9}$/.test(rawId);
@@ -126,6 +127,80 @@ export class JournalRequestMistral {
       salt++;
       if (!Number.isSafeInteger(salt + 1))
         throw new JournalFormatError('Mistral salt exhausted');
+    }
+  }
+
+  private async *changedIds(): AsyncGenerator<string> {
+    for await (const repaired of this.repairs(new Set<string>())) {
+      const previous = await this.snapshot.mistralMapping(
+        repaired.rawId,
+        this.slot,
+      );
+      if (previous !== undefined && previous.id !== repaired.mapping.id)
+        yield repaired.rawId;
+    }
+    const empty = await this.snapshot.facts.fact('');
+    if (empty === undefined) return;
+    const base = new JournalRequestMistral(
+      this.snapshot,
+      this.source,
+      this.slot,
+    );
+    if ((await base.resolve('')).id !== (await this.resolve('')).id) yield '';
+  }
+
+  private async nextSource(
+    rawId: string,
+    after: bigint,
+  ): Promise<bigint | undefined> {
+    const fact = await this.snapshot.facts.fact(rawId);
+    if (fact === undefined) return undefined;
+    const target = callTarget(fact);
+    const targetLabel =
+      rawId !== '' || target?.reconstructed === true
+        ? target?.at.label
+        : undefined;
+    const result =
+      targetLabel !== undefined && targetLabel > after
+        ? targetLabel
+        : undefined;
+    let low = 1;
+    let high = fact.callCount + 1;
+    while (low < high) {
+      const middle = Math.floor((low + high) / 2);
+      const occurrence = await this.snapshot.facts.occurrence(rawId, 0, middle);
+      if (occurrence === undefined)
+        throw new JournalFormatError('Missing Mistral holder occurrence');
+      if (occurrence.at.label <= after) low = middle + 1;
+      else high = middle;
+    }
+    for (let ordinal = low; ordinal <= fact.callCount; ordinal++) {
+      const occurrence = await this.snapshot.facts.occurrence(
+        rawId,
+        0,
+        ordinal,
+      );
+      if (occurrence === undefined)
+        throw new JournalFormatError('Missing Mistral holder occurrence');
+      if (result !== undefined && occurrence.at.label >= result) return result;
+      if (occurrence.ai) return occurrence.at.label;
+    }
+    return result;
+  }
+
+  async *affectedSources(): AsyncGenerator<bigint> {
+    if (this.seeds.size === 0) return;
+    let after = 0n;
+    for (;;) {
+      let next: bigint | undefined;
+      for await (const rawId of this.changedIds()) {
+        const label = await this.nextSource(rawId, after);
+        if (label !== undefined && (next === undefined || label < next))
+          next = label;
+      }
+      if (next === undefined) return;
+      yield next;
+      after = next;
     }
   }
 

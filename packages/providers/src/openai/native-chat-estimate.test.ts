@@ -140,6 +140,95 @@ describe('stored native Chat estimates through production preparation', () => {
     }
   }
 
+  it.each(['none', 'all', 'allButLast'])(
+    'remeasures historical lazy Mistral holders displaced by a pending reconstructed call under %s',
+    async (strip) => {
+      const base: readonly IContent[] = Array.from({ length: 3 }, () => ({
+        speaker: 'ai',
+        blocks: [{ type: 'tool_call', id: '', name: 'lookup', parameters: {} }],
+      }));
+      const tail: readonly IContent[] = [
+        textRow('pending user'),
+        {
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: '4Q3rUlnAu',
+              toolName: 'lookup',
+              result: 'done',
+            },
+          ],
+        },
+      ];
+      const model = 'mistral-large-latest';
+      const policy = {
+        'reasoning.includeInContext': true,
+        'reasoning.stripFromContext': strip,
+      };
+      const factory = createRuntimeTokenizerFactory();
+      async function count(messages: readonly unknown[]): Promise<number> {
+        const projection = projectOpenAIChatPromptEnvelope({ model, messages });
+        return (await estimatePromptEnvelope('openai', projection, factory))
+          .estimatedPromptTokens;
+      }
+      const old = await prepareRequestBody(
+        options(
+          rowsSelection(await normalizedRows([...base, ...tail])),
+          model,
+          policy,
+        ),
+        model,
+        undefined,
+        logger,
+        'openai',
+      );
+      const messages = old.requestBody.messages;
+      if (!Array.isArray(messages)) throw new Error('Missing old messages');
+      let expected = await count([messages[0]]);
+      for (const message of messages.slice(1))
+        expected +=
+          (await count([message, message])) - (await count([message]));
+      expect(JSON.stringify(messages)).toContain('RDWBIGMqO');
+      await withHistory(base, async (history) => {
+        const before = await history.prepareCuratedForProviderSnapshot([], {});
+        try {
+          const baseline = await estimate(before, model, policy, factory);
+          const selected = await history.prepareCuratedForProviderSnapshot(
+            tail,
+            {},
+          );
+          try {
+            const prepared = await prepareRequest(
+              options(selected, model, policy),
+              model,
+              undefined,
+              logger,
+              'openai',
+            );
+            try {
+              expect(await readPreparedChatBody(prepared.spool)).toStrictEqual(
+                old.requestBody,
+              );
+            } finally {
+              await prepared.release();
+            }
+            expect(await estimate(selected, model, policy, factory)).toBe(
+              expected,
+            );
+            expect(await estimate(before, model, policy, factory)).toBe(
+              baseline,
+            );
+          } finally {
+            await selected.close();
+          }
+        } finally {
+          await before.close();
+        }
+      });
+    },
+  );
+
   it('keeps emitted old-pin salted IDs after replacement and reassigns the surviving call in the new pin', async () => {
     const holder: IContent = {
       speaker: 'ai',
