@@ -44,7 +44,9 @@ describe('public native plain Chat pending user HTTP', () => {
             { type: 'text', text: 'answer' },
           ],
         },
-      ] satisfies import('@vybestack/llxprt-code-core/services/history/IContent.js').IContent[];
+      ] satisfies Array<
+        import('@vybestack/llxprt-code-core/services/history/IContent.js').IContent
+      >;
       const storedLengths: number[] = [];
       const estimates: number[] = [];
       const tokenizer = createRuntimeTokenizerFactory();

@@ -12,6 +12,7 @@ import {
 import {
   plainChatLengthRegistration,
   planStoredChatMessages,
+  PLAIN_CHAT_FORMAT_REV,
 } from './journal-chat-length.js';
 import { analyzeChat } from './__tests__/support/lengthModel/chatLengthModel.js';
 import {
@@ -24,7 +25,7 @@ import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-tools';
 
 const SETTINGS: RowFormatSettings = {
   formatId: 'openai-chat:plain',
-  formatRev: 1,
+  formatRev: PLAIN_CHAT_FORMAT_REV,
   model: 'same-class-a',
   endpoint: 'https://example.test/v1',
   isOAuth: false,
@@ -411,7 +412,7 @@ describe('stored plain chat lengths', () => {
       { ...SETTINGS, formatId: 'openai-chat:mistral' },
       { ...SETTINGS, formatId: 'responses' },
       { ...SETTINGS, formatId: 'anthropic' },
-      { ...SETTINGS, formatRev: 2 },
+      { ...SETTINGS, formatRev: PLAIN_CHAT_FORMAT_REV + 1 },
       { ...SETTINGS, isOAuth: true },
       { ...SETTINGS, toolNameTransform: 'oauth' },
       { ...SETTINGS, supportsUrlImages: false },
@@ -445,7 +446,7 @@ describe('stored plain chat lengths', () => {
   it('includes every declared setting and nested output option in the deterministic key', () => {
     const changes: readonly RowFormatSettings[] = [
       { ...SETTINGS, formatId: 'anthropic' },
-      { ...SETTINGS, formatRev: 2 },
+      { ...SETTINGS, formatRev: PLAIN_CHAT_FORMAT_REV + 1 },
       { ...SETTINGS, model: 'same-class-b' },
       { ...SETTINGS, endpoint: 'https://other.test/v1' },
       { ...SETTINGS, isOAuth: true },

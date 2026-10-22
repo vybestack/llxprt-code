@@ -67,6 +67,15 @@ async function envelopeParts(
   return { head: Buffer.concat(head), tail: Buffer.concat(tail) };
 }
 
+function selectedVariant(strip: unknown): 0 | 1 | 2 {
+  if (strip === 'none' || strip === undefined) return 0;
+  if (strip === 'all') return 1;
+  if (strip === 'allButLast') return 2;
+  throw new JournalFormatError(
+    `Invalid reasoning.stripFromContext: ${String(strip)}`,
+  );
+}
+
 async function prepareNativeChatBody(
   envelope: Readonly<Record<string, unknown>>,
   rows: ProviderRequestRows,
@@ -86,10 +95,7 @@ async function prepareNativeChatBody(
       options.invocation.ephemerals,
       'reasoning.stripFromContext',
     ) ?? 'none';
-  if (strip !== 'none' && strip !== 'all' && strip !== 'allButLast')
-    throw new JournalFormatError(
-      `Invalid reasoning.stripFromContext: ${String(strip)}`,
-    );
+  const selected = selectedVariant(strip);
   const system = options.systemInstruction ?? '';
   const plan = await native.withFormat(
     plainChatLengthRegistration(settings),
@@ -98,7 +104,7 @@ async function prepareNativeChatBody(
         snapshot,
         native.indexed,
         settings,
-        strip === 'all' ? 1 : strip === 'allButLast' ? 2 : 0,
+        selected,
         system,
       ),
   );
@@ -181,7 +187,7 @@ export async function prepareNativePlainRequest(
     options.invocation.ephemerals,
     'reasoning.stripFromContext',
   );
-  const selected = strip === 'all' ? 1 : strip === 'allButLast' ? 2 : 0;
+  const selected = selectedVariant(strip);
   const projection = use.estimate
     ? new NativeChatEstimateProjection(
         native,

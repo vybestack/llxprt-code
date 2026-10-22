@@ -141,6 +141,10 @@ export class VersionSnapshot {
     slot: number,
     from: bigint,
     to: bigint,
+    selection?: {
+      readonly label: bigint;
+      select(summary: SlotSummary, kept: boolean): SlotSummary;
+    },
   ): Promise<SlotSummary> {
     this.requireOpen();
     const version = this.version;
@@ -156,7 +160,7 @@ export class VersionSnapshot {
       version.aggregate.missingBase[slot] !== 0
     )
       throw new JournalFormatError('Range format is unmeasured or stale');
-    if (from <= 1n && to >= version.nextLabel)
+    if (selection === undefined && from <= 1n && to >= version.nextLabel)
       return decodeSlotSummary(version.aggregate.summaries[slot], format);
     return rowSummaryRange(
       this.read.access,
@@ -165,6 +169,7 @@ export class VersionSnapshot {
       format,
       from,
       to,
+      selection,
     );
   }
 

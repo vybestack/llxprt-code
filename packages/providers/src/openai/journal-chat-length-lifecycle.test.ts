@@ -25,11 +25,12 @@ import {
 import {
   plainChatLengthRegistration,
   planStoredChatMessages,
+  PLAIN_CHAT_FORMAT_REV,
 } from './journal-chat-length.js';
 
 const SETTINGS: RowFormatSettings = {
   formatId: 'openai-chat:plain',
-  formatRev: 1,
+  formatRev: PLAIN_CHAT_FORMAT_REV,
   model: 'a',
   endpoint: 'https://example.test/v1',
   isOAuth: false,

@@ -125,22 +125,7 @@ export class IndexedJournalRequestSnapshot {
           await snapshot.formatSummaryRange(slot, from, to),
           false,
         );
-      return composeSlotSummaries(
-        composeSlotSummaries(
-          selection.select(
-            await snapshot.formatSummaryRange(slot, from, label),
-            false,
-          ),
-          selection.select(
-            await snapshot.formatSummaryRange(slot, label, label + 1n),
-            true,
-          ),
-        ),
-        selection.select(
-          await snapshot.formatSummaryRange(slot, label + 1n, to),
-          false,
-        ),
-      );
+      return snapshot.formatSummaryRange(slot, from, to, selection);
     };
     let from = 1n;
     const end = snapshot.version?.nextLabel ?? 1n;

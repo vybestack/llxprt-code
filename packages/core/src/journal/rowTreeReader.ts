@@ -5,8 +5,8 @@ import type { RecordAccess } from './recordAccess.js';
 import { RECORD_KIND } from './recordKinds.js';
 import type { RowEntry } from './rowEntry.js';
 import type { RightSpine } from './rowTreeBuilder.js';
+import { FRAME_HEAD_BYTES } from './frame.js';
 import {
-  ROW_TREE_MAX_FRAME_BYTES,
   decodeRowTreeNode,
   type ChildSlot,
   type RowTreeNode,
@@ -32,11 +32,7 @@ export async function readRowTreeNode(
   access: RecordAccess,
   offset: number,
 ): Promise<RowTreeNode> {
-  const head = await access.readRecordHead(
-    offset,
-    'RTNODE',
-    ROW_TREE_MAX_FRAME_BYTES,
-  );
+  const head = await access.readRecordHead(offset, 'RTNODE', FRAME_HEAD_BYTES);
   if (head.kind !== RECORD_KIND.RTNODE || head.bodyLen !== 0) {
     throw new JournalFormatError(
       `Record at offset ${offset} is not a row tree node (kind ${head.kind}, body ${head.bodyLen})`,
