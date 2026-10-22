@@ -5,7 +5,7 @@ import type { FrameHead } from './frame.js';
 import type { RecordAccess } from './recordAccess.js';
 import { RECORD_KIND } from './recordKinds.js';
 import type { RowEntry } from './rowEntry.js';
-import { readRowIds, type StoredRow } from './rowReads.js';
+import { readRowIds, type RowIds, type StoredRow } from './rowReads.js';
 import {
   decodeRowHeader,
   validateRowAgainstBody,
@@ -34,8 +34,12 @@ export async function readStoredBlock(
   access: RecordAccess,
   entry: RowEntry,
   index: number,
+  ids?: RowIds,
 ): Promise<Uint8Array> {
-  const { head, header } = await rowHead(access, entry);
+  const { head, header } =
+    ids?.head === undefined
+      ? await rowHead(access, entry)
+      : { head: ids.head, header: ids.header };
   if (!Number.isInteger(index) || index < 0 || index >= header.blocks.length)
     throw new JournalFormatError(
       `Row ${entry.label} at offset ${entry.recordOffset}: block ${index} is absent`,
@@ -47,9 +51,14 @@ export async function readStoredBlock(
 export async function readStoredMetadata(
   access: RecordAccess,
   entry: RowEntry,
+  known?: RowIds,
 ): Promise<StoredRow> {
-  const { head, header } = await rowHead(access, entry);
-  const { rawIds } = await readRowIds(access, entry);
+  const ids = known ?? (await readRowIds(access, entry));
+  const { head, header } =
+    ids.head === undefined
+      ? await rowHead(access, entry)
+      : { head: ids.head, header: ids.header };
+  const { rawIds } = ids;
   const meta = await readRowPiece(
     access,
     head,

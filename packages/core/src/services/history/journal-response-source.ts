@@ -11,8 +11,8 @@ export interface JournalResponseSource {
   entryByLabel(label: bigint): Promise<RowEntry | undefined>;
   readIds(entry: RowEntry): Promise<RowIds>;
   readRow(entry: RowEntry): Promise<StoredRow>;
-  readBlock(entry: RowEntry, index: number): Promise<Uint8Array>;
-  readMetadata(entry: RowEntry): Promise<StoredRow>;
+  readBlock(entry: RowEntry, index: number, ids?: RowIds): Promise<Uint8Array>;
+  readMetadata(entry: RowEntry, ids?: RowIds): Promise<StoredRow>;
   readonly isTail?: (label: bigint) => boolean;
   readonly sameBlock?: (left: BlockPosition, right: BlockPosition) => boolean;
 }

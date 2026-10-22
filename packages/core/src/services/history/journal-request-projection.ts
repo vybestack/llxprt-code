@@ -174,17 +174,21 @@ export class JournalProjectedSource implements JournalRequestBase {
     return this.selected(entry) ? this.changed() : this.snapshot.readRow(entry);
   }
 
-  async readBlock(entry: RowEntry, index: number): Promise<Uint8Array> {
+  async readBlock(
+    entry: RowEntry,
+    index: number,
+    ids?: RowIds,
+  ): Promise<Uint8Array> {
     return this.selected(entry)
       ? (await this.changed()).blocks[index]
-      : this.snapshot.readBlock(entry, index);
+      : this.snapshot.readBlock(entry, index, ids);
   }
 
-  async readMetadata(entry: RowEntry): Promise<StoredRow> {
+  async readMetadata(entry: RowEntry, ids?: RowIds): Promise<StoredRow> {
     const stored =
       this.selected(entry) && this.projection.removedRow !== true
         ? await this.changed()
-        : await this.snapshot.readMetadata(entry);
+        : await this.snapshot.readMetadata(entry, ids);
     return { ...stored, blocks: [] };
   }
 }

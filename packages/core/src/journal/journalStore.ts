@@ -65,7 +65,11 @@ import {
 } from './journalWriterOpen.js';
 import { FIRST_NEXT_LABEL } from './labels.js';
 import { LineageChain, loadChain } from './lineageChain.js';
-import { createRecordAccess, type RecordAccess } from './recordAccess.js';
+import {
+  createRecordAccess,
+  groupReadAccess,
+  type RecordAccess,
+} from './recordAccess.js';
 import { PinLease, PinnedRead } from './pinLease.js';
 import { JournalMediaPins } from './journalMediaPins.js';
 import { PinnedIdFacts } from './pinnedIdFacts.js';
@@ -874,7 +878,12 @@ export class JournalStore {
   private install(trailer: Parameters<typeof versionOf>[0] | undefined): void {
     if (trailer === undefined) return;
     this.currentVersion = versionOf(trailer);
-    this.access = createRecordAccess(this.path, this.writer.reader, trailer);
+    this.access = createRecordAccess(
+      this.path,
+      this.writer.reader,
+      trailer,
+      true,
+    );
   }
 
   private requireAccess(): RecordAccess {
@@ -909,16 +918,7 @@ export class JournalStore {
     return {
       measureFormats: this.rowFormats.length > 0,
       access: this.access,
-      readGroup: (writtenEnd, windowRows) =>
-        createRecordAccess(
-          this.path,
-          this.writer.reader,
-          {
-            selfOffset: this.currentVersion?.selfOffset ?? 0,
-            durableEnd: writtenEnd,
-          },
-          windowRows,
-        ),
+      readGroup: groupReadAccess(this.path, this.writer, this.currentVersion),
       published: this.currentVersion,
       hasher: this.deps.idDeps.hasher,
       idDeps: this.deps.idDeps,

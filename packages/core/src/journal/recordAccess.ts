@@ -15,7 +15,7 @@ import {
   type PositionalReader,
 } from './positionalFile.js';
 import type { TrailerHeader } from './trailerRecord.js';
-import { rowReadWindow } from './row-read-window.js';
+import { rowReadWindow, type RowReadWindowStats } from './row-read-window.js';
 import { RECORD_KIND } from './recordKinds.js';
 
 /** What a record is called in an error when the caller does not name it. */
@@ -29,6 +29,7 @@ const DEFAULT_WHAT = 'record';
  * offset and the trailer that led to it.
  */
 export interface RecordAccess {
+  readonly rowWindowStats?: RowReadWindowStats;
   recordError(head: FrameHead, error: Error): JournalCorruptionError;
   /**
    * `prefetchBytes` is how much of the record to read with its head, for a
@@ -86,13 +87,29 @@ function validateRange(
     throw new JournalFormatError('Record body range is out of bounds');
 }
 
+export function groupReadAccess(
+  path: string,
+  writer: { readonly reader: PositionalReader },
+  version: AccessBounds | undefined,
+): (durableEnd: number, windowRows?: boolean) => RecordAccess {
+  return (durableEnd, windowRows) =>
+    createRecordAccess(
+      path,
+      writer.reader,
+      { selfOffset: version?.selfOffset ?? 0, durableEnd },
+      windowRows,
+    );
+}
+
 export function createRecordAccess(
   path: string,
   reader: PositionalReader,
   trailer: AccessBounds,
   windowRows = false,
 ): RecordAccess {
-  const rows = windowRows ? rowReadWindow(reader, trailer.durableEnd) : reader;
+  const window = windowRows
+    ? rowReadWindow(reader, trailer.durableEnd)
+    : undefined;
   const corruption = (
     what: string,
     offset: number,
@@ -113,7 +130,7 @@ export function createRecordAccess(
   ): Promise<FrameStart> => {
     try {
       return await readFrameStart(
-        what === 'ROW' ? rows : reader,
+        what === 'ROW' ? (window ?? reader) : reader,
         offset,
         trailer.durableEnd,
         prefetchBytes,
@@ -129,6 +146,7 @@ export function createRecordAccess(
     }
   };
   return {
+    rowWindowStats: window?.stats,
     recordError: (head, error) => corruption('ROW', head.offset, error),
     async readRecordHead(offset, what = DEFAULT_WHAT, prefetchBytes) {
       return (await readStart(offset, what, prefetchBytes)).head;
@@ -138,10 +156,9 @@ export function createRecordAccess(
     async readRecordRange(head, offset, length) {
       validateRange(head, offset, length, trailer.durableEnd);
       try {
-        return await (head.kind === RECORD_KIND.ROW ? rows : reader).readAt(
-          head.bodyOffset + offset,
-          length,
-        );
+        return await (
+          head.kind === RECORD_KIND.ROW ? (window ?? reader) : reader
+        ).readAt(head.bodyOffset + offset, length);
       } catch (error) {
         if (error instanceof JournalShortReadError)
           throw corruption('ROW', head.offset, error);

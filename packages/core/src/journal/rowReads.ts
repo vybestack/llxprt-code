@@ -19,6 +19,7 @@ export const ROW_START_PREFETCH_BYTES = 4096;
 
 /** A row as an index rebuild sees it: the header and the raw id strings, never a block. */
 export interface RowIds {
+  readonly head?: FrameHead;
   readonly header: RowHeader;
   /** `rawIds[i]` is the string behind `header.ids[i]`. */
   readonly rawIds: readonly string[];
@@ -66,7 +67,7 @@ export async function readRowIds(
       );
     }
   });
-  return { header, rawIds };
+  return { head, header, rawIds };
 }
 
 async function idPieceOf(

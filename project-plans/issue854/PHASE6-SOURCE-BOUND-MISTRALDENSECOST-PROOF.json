@@ -1,0 +1,1115 @@
+{
+  "date": "2026-10-22",
+  "baseline": "2d89234f4",
+  "root": "tmp/p6/chat-mistral-dense-cost-run-bn",
+  "status": "Implementation checkpoint: the measured dense single-changed-ID amplification is fixed. General many-displaced-ID enumeration remains unaccepted.",
+  "rootCause": [
+    "Each emitted affected label restarted changed-ID repair replay, re-read its fact and binary-searched source occurrence ordinals.",
+    "Each holder performed two row-tree descents for entry lookup, two for its curated successor, and range-summary traversals across numerically separated but adjacent labels.",
+    "ROW header and IDs were re-read by metadata/block access. Published access did not use the existing fill window."
+  ],
+  "changes": [
+    "Single changed-ID occurrence stream reads its fact once and advances ordinals.",
+    "Ordered selectedEntries reuses a forward row-tree path for adjacent selected rows and range-jumps for sparse gaps.",
+    "Validated RowIds carry their frame context through metadata and block retrieval.",
+    "Published reads use the existing two 16 KiB ROW windows, without increasing their capacity. Stats charge actual retained buffer lengths and one replacement-window transient.",
+    "Mapping repair replay advances a bounded frontier in claim order and restarts for backward lookups; historical solutions are not collected in a request-sized map."
+  ],
+  "bounds": {
+    "physicalReads": "affected * 15 + 300",
+    "physicalBytes": "affected * 8192 + 2097152",
+    "queries": "affected * 5 + 100",
+    "rowWindowRetainedBytes": 32768,
+    "rowWindowSerialTransientBytes": 49152,
+    "mappingCacheBytes": 65536,
+    "idNodeCacheBytes": 65536
+  },
+  "baselineCosts": [
+    {
+      "size": 40,
+      "all": false,
+      "collision": false,
+      "holders": 0,
+      "unrelated": 0,
+      "queries": 17,
+      "elapsedMs": 5.322542000000112,
+      "pid": 18574,
+      "preads": 5,
+      "bytes": 3077,
+      "kinds": {
+        "ITNODE": {
+          "reads": 2,
+          "bytes": 2048
+        },
+        "VALUE": {
+          "reads": 3,
+          "bytes": 1029
+        }
+      },
+      "repeatedReads": 0
+    },
+    {
+      "size": 40,
+      "all": false,
+      "collision": true,
+      "holders": 6,
+      "unrelated": 0,
+      "queries": 68,
+      "elapsedMs": 12.082499999999982,
+      "pid": 18574,
+      "preads": 93,
+      "bytes": 281980,
+      "kinds": {
+        "ITNODE": {
+          "reads": 2,
+          "bytes": 2048
+        },
+        "RTNODE": {
+          "reads": 48,
+          "bytes": 143232
+        },
+        "ROW": {
+          "reads": 43,
+          "bytes": 136700
+        }
+      },
+      "repeatedReads": 71
+    },
+    {
+      "size": 40,
+      "all": true,
+      "collision": false,
+      "holders": 0,
+      "unrelated": 0,
+      "queries": 17,
+      "elapsedMs": 1.6891669999999976,
+      "pid": 18574,
+      "preads": 8,
+      "bytes": 6149,
+      "kinds": {
+        "ITNODE": {
+          "reads": 5,
+          "bytes": 5120
+        },
+        "VALUE": {
+          "reads": 3,
+          "bytes": 1029
+        }
+      },
+      "repeatedReads": 0
+    },
+    {
+      "size": 40,
+      "all": true,
+      "collision": true,
+      "holders": 80,
+      "unrelated": 0,
+      "queries": 801,
+      "elapsedMs": 67.24595799999997,
+      "pid": 18574,
+      "preads": 1179,
+      "bytes": 3533366,
+      "kinds": {
+        "ITNODE": {
+          "reads": 24,
+          "bytes": 24576
+        },
+        "RTNODE": {
+          "reads": 596,
+          "bytes": 1772536
+        },
+        "ROW": {
+          "reads": 559,
+          "bytes": 1736254
+        }
+      },
+      "repeatedReads": 943
+    },
+    {
+      "size": 400,
+      "all": false,
+      "collision": false,
+      "holders": 0,
+      "unrelated": 0,
+      "queries": 17,
+      "elapsedMs": 1.401207999999997,
+      "pid": 18574,
+      "preads": 5,
+      "bytes": 3077,
+      "kinds": {
+        "ITNODE": {
+          "reads": 2,
+          "bytes": 2048
+        },
+        "VALUE": {
+          "reads": 3,
+          "bytes": 1029
+        }
+      },
+      "repeatedReads": 0
+    },
+    {
+      "size": 400,
+      "all": false,
+      "collision": true,
+      "holders": 6,
+      "unrelated": 0,
+      "queries": 68,
+      "elapsedMs": 7.158916999999974,
+      "pid": 18574,
+      "preads": 125,
+      "bytes": 479676,
+      "kinds": {
+        "ITNODE": {
+          "reads": 2,
+          "bytes": 2048
+        },
+        "RTNODE": {
+          "reads": 80,
+          "bytes": 281792
+        },
+        "ROW": {
+          "reads": 43,
+          "bytes": 195836
+        }
+      },
+      "repeatedReads": 101
+    },
+    {
+      "size": 400,
+      "all": true,
+      "collision": false,
+      "holders": 0,
+      "unrelated": 0,
+      "queries": 17,
+      "elapsedMs": 1.8193330000001424,
+      "pid": 18574,
+      "preads": 13,
+      "bytes": 11269,
+      "kinds": {
+        "ITNODE": {
+          "reads": 10,
+          "bytes": 10240
+        },
+        "VALUE": {
+          "reads": 3,
+          "bytes": 1029
+        }
+      },
+      "repeatedReads": 0
+    },
+    {
+      "size": 400,
+      "all": true,
+      "collision": true,
+      "holders": 800,
+      "unrelated": 0,
+      "queries": 9116,
+      "elapsedMs": 855.0284589999999,
+      "pid": 18574,
+      "preads": 15826,
+      "bytes": 59627426,
+      "kinds": {
+        "ITNODE": {
+          "reads": 235,
+          "bytes": 240640
+        },
+        "RTNODE": {
+          "reads": 9994,
+          "bytes": 35206096
+        },
+        "ROW": {
+          "reads": 5597,
+          "bytes": 24180690
+        }
+      },
+      "repeatedReads": 13475
+    },
+    {
+      "size": 4000,
+      "all": false,
+      "collision": false,
+      "holders": 0,
+      "unrelated": 0,
+      "queries": 17,
+      "elapsedMs": 1.5201670000001286,
+      "pid": 18574,
+      "preads": 5,
+      "bytes": 3077,
+      "kinds": {
+        "ITNODE": {
+          "reads": 2,
+          "bytes": 2048
+        },
+        "VALUE": {
+          "reads": 3,
+          "bytes": 1029
+        }
+      },
+      "repeatedReads": 0
+    },
+    {
+      "size": 4000,
+      "all": false,
+      "collision": true,
+      "holders": 6,
+      "unrelated": 0,
+      "queries": 68,
+      "elapsedMs": 7.644582999999784,
+      "pid": 18574,
+      "preads": 157,
+      "bytes": 657660,
+      "kinds": {
+        "ITNODE": {
+          "reads": 18,
+          "bytes": 160000
+        },
+        "RTNODE": {
+          "reads": 96,
+          "bytes": 301824
+        },
+        "ROW": {
+          "reads": 43,
+          "bytes": 195836
+        }
+      },
+      "repeatedReads": 131
+    },
+    {
+      "size": 4000,
+      "all": true,
+      "collision": false,
+      "holders": 0,
+      "unrelated": 0,
+      "queries": 17,
+      "elapsedMs": 5.965040999999474,
+      "pid": 18574,
+      "preads": 20,
+      "bytes": 18437,
+      "kinds": {
+        "ITNODE": {
+          "reads": 17,
+          "bytes": 17408
+        },
+        "VALUE": {
+          "reads": 3,
+          "bytes": 1029
+        }
+      },
+      "repeatedReads": 0
+    },
+    {
+      "size": 4000,
+      "all": true,
+      "collision": true,
+      "holders": 8000,
+      "unrelated": 0,
+      "queries": 103935,
+      "elapsedMs": 40780.555374999996,
+      "pid": 18574,
+      "preads": 201572,
+      "bytes": 824989362,
+      "kinds": {
+        "ITNODE": {
+          "reads": 25585,
+          "bytes": 203159040
+        },
+        "RTNODE": {
+          "reads": 119990,
+          "bytes": 374679752
+        },
+        "ROW": {
+          "reads": 55997,
+          "bytes": 247150570
+        }
+      },
+      "repeatedReads": 177567
+    }
+  ],
+  "costs": [
+    {
+      "size": 40,
+      "all": false,
+      "historicalId": "",
+      "collision": false,
+      "holders": 0,
+      "unrelated": 0,
+      "queries": 15,
+      "elapsedMs": 6.4340000000001965,
+      "rowWindowPeak": 0,
+      "rowWindowTransientPeak": 0,
+      "pid": 37628,
+      "preads": 5,
+      "bytes": 3077,
+      "kinds": {
+        "ITNODE": {
+          "reads": 2,
+          "bytes": 2048
+        },
+        "VALUE": {
+          "reads": 3,
+          "bytes": 1029
+        }
+      },
+      "repeatedReads": 0
+    },
+    {
+      "size": 40,
+      "all": false,
+      "historicalId": "",
+      "collision": true,
+      "holders": 6,
+      "unrelated": 0,
+      "queries": 22,
+      "elapsedMs": 4.840624999999818,
+      "rowWindowPeak": 16384,
+      "rowWindowTransientPeak": 16384,
+      "pid": 37628,
+      "preads": 19,
+      "bytes": 78944,
+      "kinds": {
+        "ITNODE": {
+          "reads": 2,
+          "bytes": 2048
+        },
+        "RTNODE": {
+          "reads": 12,
+          "bytes": 35808
+        },
+        "ROW": {
+          "reads": 5,
+          "bytes": 41088
+        }
+      },
+      "repeatedReads": 12
+    },
+    {
+      "size": 40,
+      "all": false,
+      "historicalId": "toolu_alpha-1",
+      "collision": false,
+      "holders": 0,
+      "unrelated": 0,
+      "queries": 8,
+      "elapsedMs": 3.151292000000012,
+      "rowWindowPeak": 0,
+      "rowWindowTransientPeak": 0,
+      "pid": 37628,
+      "preads": 7,
+      "bytes": 5125,
+      "kinds": {
+        "ITNODE": {
+          "reads": 4,
+          "bytes": 4096
+        },
+        "VALUE": {
+          "reads": 3,
+          "bytes": 1029
+        }
+      },
+      "repeatedReads": 0
+    },
+    {
+      "size": 40,
+      "all": false,
+      "historicalId": "toolu_alpha-1",
+      "collision": true,
+      "holders": 0,
+      "unrelated": 0,
+      "queries": 8,
+      "elapsedMs": 2.9882500000003347,
+      "rowWindowPeak": 16384,
+      "rowWindowTransientPeak": 16384,
+      "pid": 37628,
+      "preads": 19,
+      "bytes": 78944,
+      "kinds": {
+        "ITNODE": {
+          "reads": 2,
+          "bytes": 2048
+        },
+        "RTNODE": {
+          "reads": 12,
+          "bytes": 35808
+        },
+        "ROW": {
+          "reads": 5,
+          "bytes": 41088
+        }
+      },
+      "repeatedReads": 12
+    },
+    {
+      "size": 40,
+      "all": true,
+      "historicalId": "",
+      "collision": false,
+      "holders": 0,
+      "unrelated": 0,
+      "queries": 15,
+      "elapsedMs": 2.0020409999997355,
+      "rowWindowPeak": 0,
+      "rowWindowTransientPeak": 0,
+      "pid": 37628,
+      "preads": 8,
+      "bytes": 6149,
+      "kinds": {
+        "ITNODE": {
+          "reads": 5,
+          "bytes": 5120
+        },
+        "VALUE": {
+          "reads": 3,
+          "bytes": 1029
+        }
+      },
+      "repeatedReads": 0
+    },
+    {
+      "size": 40,
+      "all": true,
+      "historicalId": "",
+      "collision": true,
+      "holders": 80,
+      "unrelated": 0,
+      "queries": 96,
+      "elapsedMs": 18.422292000000198,
+      "rowWindowPeak": 16384,
+      "rowWindowTransientPeak": 16384,
+      "pid": 37628,
+      "preads": 49,
+      "bytes": 134464,
+      "kinds": {
+        "ITNODE": {
+          "reads": 24,
+          "bytes": 24576
+        },
+        "RTNODE": {
+          "reads": 19,
+          "bytes": 62624
+        },
+        "ROW": {
+          "reads": 6,
+          "bytes": 47264
+        }
+      },
+      "repeatedReads": 12
+    },
+    {
+      "size": 40,
+      "all": true,
+      "historicalId": "toolu_alpha-1",
+      "collision": false,
+      "holders": 0,
+      "unrelated": 0,
+      "queries": 8,
+      "elapsedMs": 1.6020410000000993,
+      "rowWindowPeak": 0,
+      "rowWindowTransientPeak": 0,
+      "pid": 37628,
+      "preads": 9,
+      "bytes": 7173,
+      "kinds": {
+        "ITNODE": {
+          "reads": 6,
+          "bytes": 6144
+        },
+        "VALUE": {
+          "reads": 3,
+          "bytes": 1029
+        }
+      },
+      "repeatedReads": 0
+    },
+    {
+      "size": 40,
+      "all": true,
+      "historicalId": "toolu_alpha-1",
+      "collision": true,
+      "holders": 0,
+      "unrelated": 0,
+      "queries": 8,
+      "elapsedMs": 1.6172919999999067,
+      "rowWindowPeak": 16384,
+      "rowWindowTransientPeak": 16384,
+      "pid": 37628,
+      "preads": 20,
+      "bytes": 79968,
+      "kinds": {
+        "ITNODE": {
+          "reads": 3,
+          "bytes": 3072
+        },
+        "RTNODE": {
+          "reads": 12,
+          "bytes": 35808
+        },
+        "ROW": {
+          "reads": 5,
+          "bytes": 41088
+        }
+      },
+      "repeatedReads": 12
+    },
+    {
+      "size": 400,
+      "all": false,
+      "historicalId": "",
+      "collision": false,
+      "holders": 0,
+      "unrelated": 0,
+      "queries": 15,
+      "elapsedMs": 3.3384580000001733,
+      "rowWindowPeak": 0,
+      "rowWindowTransientPeak": 0,
+      "pid": 37628,
+      "preads": 5,
+      "bytes": 3077,
+      "kinds": {
+        "ITNODE": {
+          "reads": 2,
+          "bytes": 2048
+        },
+        "VALUE": {
+          "reads": 3,
+          "bytes": 1029
+        }
+      },
+      "repeatedReads": 0
+    },
+    {
+      "size": 400,
+      "all": false,
+      "historicalId": "",
+      "collision": true,
+      "holders": 6,
+      "unrelated": 0,
+      "queries": 22,
+      "elapsedMs": 5.417875000000095,
+      "rowWindowPeak": 16384,
+      "rowWindowTransientPeak": 16384,
+      "pid": 37628,
+      "preads": 27,
+      "bytes": 128368,
+      "kinds": {
+        "ITNODE": {
+          "reads": 2,
+          "bytes": 2048
+        },
+        "RTNODE": {
+          "reads": 20,
+          "bytes": 70448
+        },
+        "ROW": {
+          "reads": 5,
+          "bytes": 55872
+        }
+      },
+      "repeatedReads": 18
+    },
+    {
+      "size": 400,
+      "all": false,
+      "historicalId": "toolu_alpha-1",
+      "collision": false,
+      "holders": 0,
+      "unrelated": 0,
+      "queries": 8,
+      "elapsedMs": 3.706709000000046,
+      "rowWindowPeak": 0,
+      "rowWindowTransientPeak": 0,
+      "pid": 37628,
+      "preads": 7,
+      "bytes": 5125,
+      "kinds": {
+        "ITNODE": {
+          "reads": 4,
+          "bytes": 4096
+        },
+        "VALUE": {
+          "reads": 3,
+          "bytes": 1029
+        }
+      },
+      "repeatedReads": 0
+    },
+    {
+      "size": 400,
+      "all": false,
+      "historicalId": "toolu_alpha-1",
+      "collision": true,
+      "holders": 0,
+      "unrelated": 0,
+      "queries": 8,
+      "elapsedMs": 3.814292000000023,
+      "rowWindowPeak": 16384,
+      "rowWindowTransientPeak": 16384,
+      "pid": 37628,
+      "preads": 27,
+      "bytes": 128368,
+      "kinds": {
+        "ITNODE": {
+          "reads": 2,
+          "bytes": 2048
+        },
+        "RTNODE": {
+          "reads": 20,
+          "bytes": 70448
+        },
+        "ROW": {
+          "reads": 5,
+          "bytes": 55872
+        }
+      },
+      "repeatedReads": 18
+    },
+    {
+      "size": 400,
+      "all": true,
+      "historicalId": "",
+      "collision": false,
+      "holders": 0,
+      "unrelated": 0,
+      "queries": 15,
+      "elapsedMs": 3.462999999999738,
+      "rowWindowPeak": 0,
+      "rowWindowTransientPeak": 0,
+      "pid": 37628,
+      "preads": 13,
+      "bytes": 11269,
+      "kinds": {
+        "ITNODE": {
+          "reads": 10,
+          "bytes": 10240
+        },
+        "VALUE": {
+          "reads": 3,
+          "bytes": 1029
+        }
+      },
+      "repeatedReads": 0
+    },
+    {
+      "size": 400,
+      "all": true,
+      "historicalId": "",
+      "collision": true,
+      "holders": 800,
+      "unrelated": 0,
+      "queries": 816,
+      "elapsedMs": 128.74512499999946,
+      "rowWindowPeak": 32768,
+      "rowWindowTransientPeak": 49152,
+      "pid": 37628,
+      "preads": 375,
+      "bytes": 961112,
+      "kinds": {
+        "ITNODE": {
+          "reads": 235,
+          "bytes": 240640
+        },
+        "RTNODE": {
+          "reads": 123,
+          "bytes": 507944
+        },
+        "ROW": {
+          "reads": 17,
+          "bytes": 212528
+        }
+      },
+      "repeatedReads": 16
+    },
+    {
+      "size": 400,
+      "all": true,
+      "historicalId": "toolu_alpha-1",
+      "collision": false,
+      "holders": 0,
+      "unrelated": 0,
+      "queries": 8,
+      "elapsedMs": 4.460291999999754,
+      "rowWindowPeak": 0,
+      "rowWindowTransientPeak": 0,
+      "pid": 37628,
+      "preads": 13,
+      "bytes": 11269,
+      "kinds": {
+        "ITNODE": {
+          "reads": 10,
+          "bytes": 10240
+        },
+        "VALUE": {
+          "reads": 3,
+          "bytes": 1029
+        }
+      },
+      "repeatedReads": 0
+    },
+    {
+      "size": 400,
+      "all": true,
+      "historicalId": "toolu_alpha-1",
+      "collision": true,
+      "holders": 0,
+      "unrelated": 0,
+      "queries": 8,
+      "elapsedMs": 5.265625,
+      "rowWindowPeak": 16384,
+      "rowWindowTransientPeak": 16384,
+      "pid": 37628,
+      "preads": 30,
+      "bytes": 131440,
+      "kinds": {
+        "ITNODE": {
+          "reads": 5,
+          "bytes": 5120
+        },
+        "RTNODE": {
+          "reads": 20,
+          "bytes": 70448
+        },
+        "ROW": {
+          "reads": 5,
+          "bytes": 55872
+        }
+      },
+      "repeatedReads": 18
+    },
+    {
+      "size": 4000,
+      "all": false,
+      "historicalId": "",
+      "collision": false,
+      "holders": 0,
+      "unrelated": 0,
+      "queries": 15,
+      "elapsedMs": 6.078375000000051,
+      "rowWindowPeak": 0,
+      "rowWindowTransientPeak": 0,
+      "pid": 37628,
+      "preads": 5,
+      "bytes": 3077,
+      "kinds": {
+        "ITNODE": {
+          "reads": 2,
+          "bytes": 2048
+        },
+        "VALUE": {
+          "reads": 3,
+          "bytes": 1029
+        }
+      },
+      "repeatedReads": 0
+    },
+    {
+      "size": 4000,
+      "all": false,
+      "historicalId": "",
+      "collision": true,
+      "holders": 6,
+      "unrelated": 0,
+      "queries": 22,
+      "elapsedMs": 6.539582999999766,
+      "rowWindowPeak": 16384,
+      "rowWindowTransientPeak": 16384,
+      "pid": 37628,
+      "preads": 35,
+      "bytes": 172864,
+      "kinds": {
+        "ITNODE": {
+          "reads": 6,
+          "bytes": 41536
+        },
+        "RTNODE": {
+          "reads": 24,
+          "bytes": 75456
+        },
+        "ROW": {
+          "reads": 5,
+          "bytes": 55872
+        }
+      },
+      "repeatedReads": 24
+    },
+    {
+      "size": 4000,
+      "all": false,
+      "historicalId": "toolu_alpha-1",
+      "collision": false,
+      "holders": 0,
+      "unrelated": 0,
+      "queries": 8,
+      "elapsedMs": 4.986625000001368,
+      "rowWindowPeak": 0,
+      "rowWindowTransientPeak": 0,
+      "pid": 37628,
+      "preads": 7,
+      "bytes": 5125,
+      "kinds": {
+        "ITNODE": {
+          "reads": 4,
+          "bytes": 4096
+        },
+        "VALUE": {
+          "reads": 3,
+          "bytes": 1029
+        }
+      },
+      "repeatedReads": 0
+    },
+    {
+      "size": 4000,
+      "all": false,
+      "historicalId": "toolu_alpha-1",
+      "collision": true,
+      "holders": 0,
+      "unrelated": 0,
+      "queries": 8,
+      "elapsedMs": 5.434084000000439,
+      "rowWindowPeak": 16384,
+      "rowWindowTransientPeak": 16384,
+      "pid": 37628,
+      "preads": 35,
+      "bytes": 172864,
+      "kinds": {
+        "ITNODE": {
+          "reads": 6,
+          "bytes": 41536
+        },
+        "RTNODE": {
+          "reads": 24,
+          "bytes": 75456
+        },
+        "ROW": {
+          "reads": 5,
+          "bytes": 55872
+        }
+      },
+      "repeatedReads": 24
+    },
+    {
+      "size": 4000,
+      "all": true,
+      "historicalId": "",
+      "collision": false,
+      "holders": 0,
+      "unrelated": 0,
+      "queries": 15,
+      "elapsedMs": 16.73633300000074,
+      "rowWindowPeak": 0,
+      "rowWindowTransientPeak": 0,
+      "pid": 37628,
+      "preads": 20,
+      "bytes": 18437,
+      "kinds": {
+        "ITNODE": {
+          "reads": 17,
+          "bytes": 17408
+        },
+        "VALUE": {
+          "reads": 3,
+          "bytes": 1029
+        }
+      },
+      "repeatedReads": 0
+    },
+    {
+      "size": 4000,
+      "all": true,
+      "historicalId": "",
+      "collision": true,
+      "holders": 8000,
+      "unrelated": 0,
+      "queries": 8016,
+      "elapsedMs": 1925.2262919999994,
+      "rowWindowPeak": 32768,
+      "rowWindowTransientPeak": 49152,
+      "pid": 37628,
+      "preads": 6834,
+      "bytes": 12211784,
+      "kinds": {
+        "ITNODE": {
+          "reads": 5601,
+          "bytes": 5779664
+        },
+        "RTNODE": {
+          "reads": 1094,
+          "bytes": 4582952
+        },
+        "ROW": {
+          "reads": 139,
+          "bytes": 1849168
+        }
+      },
+      "repeatedReads": 2749
+    },
+    {
+      "size": 4000,
+      "all": true,
+      "historicalId": "toolu_alpha-1",
+      "collision": false,
+      "holders": 0,
+      "unrelated": 0,
+      "queries": 8,
+      "elapsedMs": 9.672624999999243,
+      "rowWindowPeak": 0,
+      "rowWindowTransientPeak": 0,
+      "pid": 37628,
+      "preads": 18,
+      "bytes": 16389,
+      "kinds": {
+        "ITNODE": {
+          "reads": 15,
+          "bytes": 15360
+        },
+        "VALUE": {
+          "reads": 3,
+          "bytes": 1029
+        }
+      },
+      "repeatedReads": 0
+    },
+    {
+      "size": 4000,
+      "all": true,
+      "historicalId": "toolu_alpha-1",
+      "collision": true,
+      "holders": 0,
+      "unrelated": 0,
+      "queries": 8,
+      "elapsedMs": 16.681540999998106,
+      "rowWindowPeak": 16384,
+      "rowWindowTransientPeak": 16384,
+      "pid": 37628,
+      "preads": 40,
+      "bytes": 177984,
+      "kinds": {
+        "ITNODE": {
+          "reads": 11,
+          "bytes": 46656
+        },
+        "RTNODE": {
+          "reads": 24,
+          "bytes": 75456
+        },
+        "ROW": {
+          "reads": 5,
+          "bytes": 55872
+        }
+      },
+      "repeatedReads": 24
+    }
+  ],
+  "correctness": "12 fixed-size cost cases pass independent old-converter body length and per-unit token totals. 15000 unchanged production byte/length/token comparisons passed before formatting and cleanup-return correction; a final source-matching gate run follows.",
+  "sourceManifest": [
+    {
+      "path": "packages/core/src/journal/journalStore.ts",
+      "sha256": "91c70e50ce7534597ccd7f967db576235eda639bf1540fe37f5baaee7bb4803d"
+    },
+    {
+      "path": "packages/core/src/journal/pinLease.ts",
+      "sha256": "3cedbd6ad30b91462b55984117db292c19cf5430bdd71fb970f38ce64072cd39"
+    },
+    {
+      "path": "packages/core/src/journal/recordAccess.ts",
+      "sha256": "8fc897d2bb26113fc70b2458b32b824ea74c525a76ed243db6b0bfb9e70f2b78"
+    },
+    {
+      "path": "packages/core/src/journal/row-read-window.ts",
+      "sha256": "e3540f0ec311b36f358999da35a4c09da1167280821071a5aa14741f346b666f"
+    },
+    {
+      "path": "packages/core/src/journal/rowRangeReads.ts",
+      "sha256": "2fc1520ae358465d2b420e1ea0cc1311db7fc5542176af0da9cdb3536c336431"
+    },
+    {
+      "path": "packages/core/src/journal/rowReads.ts",
+      "sha256": "de4489c03cba8f7b8ee7d9108c192acefefca037706e6af8cf3f19b938424a86"
+    },
+    {
+      "path": "packages/core/src/journal/versionSnapshot.ts",
+      "sha256": "8d66b46a869cb6122a0669c3cc4a75fa1385b50a28fe39f4e3ded09416daf171"
+    },
+    {
+      "path": "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+      "sha256": "15237dbf5250b811a6735f856d2fef7f537d5c57daaf2013a51536def58370eb"
+    },
+    {
+      "path": "packages/core/src/services/history/journal-request-mistral.ts",
+      "sha256": "12afdfcc8feaa3e76962d43943ce589eac7be8673a4203e6e04546f630d1fdc0"
+    },
+    {
+      "path": "packages/core/src/services/history/journal-request-projection.ts",
+      "sha256": "8744cabe862c0d7545a8878625ebc2b9115ba421c1ad5867337c82342097550d"
+    },
+    {
+      "path": "packages/core/src/services/history/journal-response-parts.ts",
+      "sha256": "8270dff6fe62bfb316c712f0c7acfdb3e3b15f1eccd88de9932fb33e30a6a247"
+    },
+    {
+      "path": "packages/core/src/services/history/journal-response-source.ts",
+      "sha256": "bf7ccb9fa22a4348358a3af5d0c29132cbc6f2909b67a4f4f150c4a237f23f77"
+    },
+    {
+      "path": "packages/core/src/services/history/journal-tail-source.ts",
+      "sha256": "19061ff993031f09a86a70b44e430c6ef7a565c35ecde777b6e73d8c39f3fb12"
+    },
+    {
+      "path": "packages/providers/src/openai/__tests__/native-mistral-holder-cost.test.ts",
+      "sha256": "09a940d76cf16813c855d4dfa4fe51e6cb7221505789dddc42f13678af1f99e3"
+    }
+  ],
+  "receipts": [
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/red.log",
+      "sha256": "63f871a0952644c07a2624d62089c4a8cb452f8b5b8f99f743966dd570f64ac1"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/red-reads.jsonl",
+      "sha256": "67592f4b00e735f8b16f83a736938294cb785627f49984510ec4405da212855f"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/red-summary.json",
+      "sha256": "1479b3307032d578a4a0774501ab6b18fb452e9f1733ae6ccfc5b5cf129cfc34"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/green1.log",
+      "sha256": "9136f7e91f33bed0681ef46d837dfb5c986a9a489b9460d8906248f5a9a1603a"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/green2.log",
+      "sha256": "ed007da9fcc4d93975a1133af1122eeb52326854a8ccb85d4d6a551eb9af8e95"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/checkpoint-cost.log",
+      "sha256": "bbea84cdb33daaae7cb6bdfe72ec56f2ca368993e30e939c16e2788653be0063"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/checkpoint-reads.jsonl",
+      "sha256": "7bb101aa63581246eab4e365d0924f7d614c87021dc762045c2f7802282a6c11"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/core-types-checkpoint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/frozen15k.log",
+      "sha256": "065efece35bb54395070d6474c3df7a0304321df1c4573b5ee4e9372c892e5a9"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/occupied.log",
+      "sha256": "0e3be11a3eda9d464dac3b219920b55d449bf7b2b4f415babf5fed9ca6fb889c"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/preservation.json",
+      "sha256": "4bfe75666547df38d61b4ee82e3de9ba94bc8d59785d953c7c2a136e87efe9fe"
+    }
+  ],
+  "limits": [
+    "The multi-changed-ID branch still replays changedIds and nextSource per selected label; no universal many-displacement complexity acceptance.",
+    "The nonempty cost control preserves an earlier hashed owner when a later passthrough appears; it is not an arbitrary historical nonempty collision-chain displacement proof.",
+    "No new complete retained-memory, 100000-call capacity or fused cold-fill acceptance. Original tools 170000ms memory RED remains open.",
+    "Original #3917, two durable cases, blanket compaction/public fixture and wider 609 test-type REDs remain separate and unsuppressed. Kimi, Responses, Anthropic, log/dump and aggregate accounting remain open."
+  ],
+  "review": "review skipped per Andrew 2026-10-09"
+}

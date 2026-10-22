@@ -22,6 +22,15 @@ export class JournalRequestMistral {
   private readonly cache = new Map<string, MistralMapping>();
   private cacheBytes = 0;
   private empty: MistralMapping | undefined;
+  private repairCursor:
+    | AsyncGenerator<{
+        rawId: string;
+        mapping: MistralMapping;
+        claim: MistralClaim;
+      }>
+    | undefined;
+  private repairPosition: MistralClaim | undefined;
+  private repairMapping: MistralMapping | undefined;
 
   private constructor(
     private readonly snapshot: VersionSnapshot,
@@ -80,9 +89,11 @@ export class JournalRequestMistral {
   }
 
   /** Each insertion has one displacement frontier and at most one newly occupied terminal ID. */
-  private async *repairs(
-    terminal: Set<string>,
-  ): AsyncGenerator<{ rawId: string; mapping: MistralMapping }> {
+  private async *repairs(terminal: Set<string>): AsyncGenerator<{
+    rawId: string;
+    mapping: MistralMapping;
+    claim: MistralClaim;
+  }> {
     const queue = new Map(this.seeds);
     while (queue.size !== 0) {
       let current: MistralClaim | undefined;
@@ -94,6 +105,7 @@ export class JournalRequestMistral {
       queue.delete(current.rawId);
       yield {
         rawId: current.rawId,
+        claim: current,
         mapping: await this.repairClaim(current, queue, terminal),
       };
     }
@@ -188,8 +200,51 @@ export class JournalRequestMistral {
     return result;
   }
 
+  private async *sourcesForId(rawId: string): AsyncGenerator<bigint> {
+    const fact = await this.snapshot.facts.fact(rawId);
+    if (fact === undefined) return;
+    const target = callTarget(fact);
+    let targetLabel =
+      rawId !== '' || target?.reconstructed === true
+        ? target?.at.label
+        : undefined;
+    let previous = 0n;
+    for (let ordinal = 1; ordinal <= fact.callCount; ordinal++) {
+      const occurrence = await this.snapshot.facts.occurrence(
+        rawId,
+        0,
+        ordinal,
+      );
+      if (occurrence === undefined)
+        throw new JournalFormatError('Missing Mistral holder occurrence');
+      if (!occurrence.ai) continue;
+      if (targetLabel !== undefined && targetLabel <= occurrence.at.label) {
+        if (targetLabel > previous) yield targetLabel;
+        previous = targetLabel;
+        targetLabel = undefined;
+      }
+      if (occurrence.at.label > previous) {
+        yield occurrence.at.label;
+        previous = occurrence.at.label;
+      }
+    }
+    if (targetLabel !== undefined && targetLabel > previous) yield targetLabel;
+  }
+
   async *affectedSources(): AsyncGenerator<bigint> {
     if (this.seeds.size === 0) return;
+    const changed = this.changedIds();
+    try {
+      const first = await changed.next();
+      if (first.done === true) return;
+      const second = await changed.next();
+      if (second.done === true) {
+        yield* this.sourcesForId(first.value);
+        return;
+      }
+    } finally {
+      await changed.return(undefined);
+    }
     let after = 0n;
     for (;;) {
       let next: bigint | undefined;
@@ -244,13 +299,35 @@ export class JournalRequestMistral {
     this.snapshot.requireOpen();
     const cached = this.cache.get(rawId);
     if (cached !== undefined) return cached;
-    if (this.seeds.size !== 0) {
-      for await (const repaired of this.repairs(new Set<string>())) {
-        if (repaired.rawId === rawId) {
-          this.remember(rawId, repaired.mapping);
-          return repaired.mapping;
-        }
-      }
+    if (this.seeds.size === 0 || rawId === '')
+      return this.snapshot.mistralMapping(rawId, this.slot);
+    const claim =
+      this.seeds.get(rawId) ??
+      (await readMistralClaim(this.snapshot, 'raw', this.slot, rawId));
+    if (claim === undefined)
+      return this.snapshot.mistralMapping(rawId, this.slot);
+    if (this.repairPosition?.rawId === rawId) return this.repairMapping;
+    if (
+      this.repairPosition !== undefined &&
+      compareMistralClaims(claim, this.repairPosition) < 0
+    ) {
+      await this.repairCursor?.return(undefined);
+      this.repairCursor = undefined;
+      this.repairPosition = undefined;
+      this.repairMapping = undefined;
+    }
+    this.repairCursor ??= this.repairs(new Set<string>());
+    while (
+      this.repairPosition === undefined ||
+      compareMistralClaims(this.repairPosition, claim) <= 0
+    ) {
+      const next = await this.repairCursor.next();
+      if (next.done === true) break;
+      const repaired = next.value;
+      this.repairPosition = repaired.claim;
+      this.repairMapping = repaired.mapping;
+      this.remember(repaired.rawId, repaired.mapping);
+      if (repaired.rawId === rawId) return repaired.mapping;
     }
     return this.snapshot.mistralMapping(rawId, this.slot);
   }

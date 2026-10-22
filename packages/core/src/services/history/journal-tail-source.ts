@@ -211,16 +211,21 @@ export class JournalTailSource implements JournalResponseSource {
       : this.base.readRow(entry);
   }
 
-  async readBlock(entry: RowEntry, index: number): Promise<Uint8Array> {
-    if (!this.isTail(entry.label)) return this.base.readBlock(entry, index);
+  async readBlock(
+    entry: RowEntry,
+    index: number,
+    ids?: RowIds,
+  ): Promise<Uint8Array> {
+    if (!this.isTail(entry.label))
+      return this.base.readBlock(entry, index, ids);
     const blocks = this.tailAt(entry.label).stored.blocks;
     if (!Number.isInteger(index) || index < 0 || index >= blocks.length)
       throw new JournalFormatError('Tail source block is absent');
     return blocks[index];
   }
 
-  async readMetadata(entry: RowEntry): Promise<StoredRow> {
-    if (!this.isTail(entry.label)) return this.base.readMetadata(entry);
+  async readMetadata(entry: RowEntry, ids?: RowIds): Promise<StoredRow> {
+    if (!this.isTail(entry.label)) return this.base.readMetadata(entry, ids);
     return { ...this.tailAt(entry.label).stored, blocks: [] };
   }
 

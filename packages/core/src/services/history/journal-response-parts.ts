@@ -103,7 +103,9 @@ export async function responsePartMetadata(
         reason: 'extracted_tool_call_from_tool_message',
       },
     };
-  const row = decodeStoredRow(await snapshot.readMetadata(part.entry));
+  const row = decodeStoredRow(
+    await snapshot.readMetadata(part.entry, part.ids),
+  );
   return snapshot.header?.(row, part.entry) ?? row;
 }
 
@@ -121,7 +123,7 @@ export async function responseBlockAt(
     throw new JournalFormatError('Response source block is absent');
   const index = part.indices[at.block];
   return decodeStoredBlock(
-    await snapshot.readBlock(part.entry, index),
+    await snapshot.readBlock(part.entry, index, part.ids),
     part.ids.header.blocks[index].type,
   );
 }

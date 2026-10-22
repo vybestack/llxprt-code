@@ -140,12 +140,17 @@ export class IndexedJournalRequestSnapshot {
       return snapshot.formatSummaryRange(slot, from, to, selection);
     };
     let from = 1n;
+    let followingLabel: bigint | undefined;
     const end = snapshot.version?.nextLabel ?? 1n;
     let summary = await snapshot.formatSummaryRange(slot, 0n, 0n);
-    for await (const entry of this.formatEntries(additionalSources)) {
-      if (entry.label > from)
+    for await (const { entry, nextEntry } of this.formatEntries(
+      additionalSources,
+    )) {
+      if (entry.label > from && entry.label !== followingLabel)
         summary = composeSlotSummaries(summary, await range(from, entry.label));
-      const measured = await measure(journalEntryPlans(this.source, entry));
+      const measured = await measure(
+        journalEntryPlans(this.source, entry, nextEntry),
+      );
       summary = composeSlotSummaries(
         summary,
         selection === undefined
@@ -153,6 +158,7 @@ export class IndexedJournalRequestSnapshot {
           : selection.select(measured, entry.label === selection.label),
       );
       from = entry.label + 1n;
+      followingLabel = nextEntry?.label;
     }
     if (from < end)
       summary = composeSlotSummaries(summary, await range(from, end));
@@ -161,9 +167,12 @@ export class IndexedJournalRequestSnapshot {
 
   private async *formatEntries(
     additional?: AsyncIterable<bigint>,
-  ): AsyncGenerator<IndexedOverlayRow['entry']> {
+  ): AsyncGenerator<{
+    readonly entry: IndexedOverlayRow['entry'];
+    readonly nextEntry?: IndexedOverlayRow['entry'] | null;
+  }> {
     async function* empty(): AsyncGenerator<bigint> {}
-    const extra = (additional ?? empty())[Symbol.asyncIterator]();
+    const extra = this.snapshot.selectedEntries(additional ?? empty());
     let index = 0;
     try {
       let next = await extra.next();
@@ -171,31 +180,28 @@ export class IndexedJournalRequestSnapshot {
         const row = index < this.rows.length ? this.rows[index] : undefined;
         if (
           row !== undefined &&
-          (next.done === true || row.entry.label <= next.value)
+          (next.done === true || row.entry.label <= next.value.entry.label)
         ) {
           next =
-            next.done !== true && row.entry.label === next.value
+            next.done !== true && row.entry.label === next.value.entry.label
               ? await extra.next()
               : next;
           index++;
-          yield row.entry;
+          yield { entry: row.entry };
         } else if (next.done !== true) {
-          yield await this.requiredSourceEntry(next.value);
+          yield {
+            entry: next.value.entry,
+            nextEntry:
+              next.value.nextEntry ??
+              (await this.source.nextCuratedAfter(next.value.entry.label)) ??
+              null,
+          };
           next = await extra.next();
         }
       }
     } finally {
-      await extra.return?.();
+      await extra.return(undefined);
     }
-  }
-
-  private async requiredSourceEntry(
-    label: bigint,
-  ): Promise<IndexedOverlayRow['entry']> {
-    const entry = await this.source.entryByLabel(label);
-    if (entry === undefined)
-      throw new JournalFormatError('Mistral holder source is absent');
-    return entry;
   }
 
   unitEntryAt(index: number): Promise<IndexedUnit> {

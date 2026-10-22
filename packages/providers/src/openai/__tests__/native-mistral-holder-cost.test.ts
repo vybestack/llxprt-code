@@ -12,7 +12,12 @@ import {
   plainChatLengthRegistration,
   planRequestChatMessages,
 } from '../journal-chat-length.js';
-import { legacyUnitTokens } from './support/mistral-unit-token-oracle.js';
+import {
+  legacyUnitTokens,
+  oldMistralUnitTokens,
+} from './support/mistral-unit-token-oracle.js';
+import { oldTailUnits } from '../../../../core/src/services/history/__tests__/support/tail-query-oracle.js';
+import { buildMessagesWithReasoning } from '../OpenAIRequestBuilder.js';
 import {
   RECORD_KIND,
   isRecordKind,
@@ -38,6 +43,7 @@ interface PhysicalRead {
   readonly position: number;
   readonly length: number;
   readonly kind: string;
+  readonly caller: string;
 }
 function physicalAudit(): {
   readonly dependencies: ReturnType<typeof testJournalSeams>['dependencies'];
@@ -94,7 +100,12 @@ function physicalAudit(): {
                 [...frames.entries()].find(
                   ([start, value]) => position > start && position < value.end,
                 )?.[1];
-              reads.push({ position, length, kind: frame?.kind ?? 'other' });
+              reads.push({
+                position,
+                length: result.bytesRead,
+                kind: frame?.kind ?? 'other',
+                caller: new Error().stack ?? '',
+              });
             }
             return result;
           },
@@ -104,30 +115,50 @@ function physicalAudit(): {
   };
 }
 
+function pendingCollision(
+  collision: boolean,
+  historicalId: string,
+): readonly IContent[] {
+  const displacedId = historicalId === '' ? '4Q3rUlnAu' : '4SftZvDMX';
+  return [
+    {
+      speaker: 'tool',
+      blocks: [
+        {
+          type: 'tool_response',
+          callId: collision ? displacedId : 'neutral',
+          toolName: 'pending',
+          result: 'done',
+        },
+      ],
+    },
+  ];
+}
+
 async function measuredCollision(
   pin: VersionSnapshot,
   collision: boolean,
+  historicalId: string,
   measure: (messages: readonly unknown[]) => Promise<number>,
+  expected: { readonly bytes: number; readonly tokens: number },
 ): Promise<void> {
   const receipt = await operationFileCreates(async () => {
-    const request = await IndexedJournalRequestSnapshot.create(pin, [
-      {
-        speaker: 'tool',
-        blocks: [
-          {
-            type: 'tool_response',
-            callId: collision ? '4Q3rUlnAu' : 'neutral',
-            toolName: 'pending',
-            result: 'done',
-          },
-        ],
-      },
-    ]);
+    const request = await IndexedJournalRequestSnapshot.create(
+      pin,
+      pendingCollision(collision, historicalId),
+    );
     try {
-      expect(
-        (await planRequestChatMessages(pin, request, settings, 0, '', measure))
-          .tokens,
-      ).toBeGreaterThan(0);
+      const plan = await planRequestChatMessages(
+        pin,
+        request,
+        settings,
+        0,
+        '',
+        measure,
+      );
+      expect({ bytes: plan.bytes, tokens: plan.tokens }).toStrictEqual(
+        expected,
+      );
     } finally {
       await request.close();
     }
@@ -136,7 +167,7 @@ async function measuredCollision(
 }
 function recordCost(
   audit: ReturnType<typeof physicalAudit>,
-  data: Record<string, number | boolean>,
+  data: Record<string, number | boolean | string>,
 ): void {
   const kinds: Record<string, number> = {};
   for (const read of audit.reads)
@@ -158,10 +189,18 @@ function recordCost(
 describe('Mistral physical holder correction costs', () => {
   const directory = useTempDir('mistral-holder-cost-');
   it.each(
-    [40, 4000].flatMap((size) => [false, true].map((all) => ({ size, all }))),
+    [40, 400, 4000].flatMap((size) =>
+      [false, true].flatMap((all) =>
+        ['', 'toolu_alpha-1'].map((historicalId) => ({
+          size,
+          all,
+          historicalId,
+        })),
+      ),
+    ),
   )(
-    'charges every positional read for $size rows all=$all',
-    async ({ size, all }) => {
+    'charges every positional read for $size rows all=$all id=$historicalId',
+    async ({ size, all, historicalId }) => {
       const audit = physicalAudit();
       const session = await JournalSession.create(`${directory()}/cost.llxj`, {
         journal: audit.dependencies,
@@ -173,7 +212,7 @@ describe('Mistral physical holder correction costs', () => {
               blocks: [
                 {
                   type: 'tool_call',
-                  id: '',
+                  id: historicalId,
                   name: `holder-${index}`,
                   parameters: {},
                 },
@@ -200,15 +239,71 @@ describe('Mistral physical holder correction costs', () => {
         const pin = await session.store.snapshot();
         try {
           for (const collision of [false, true]) {
+            const units = await oldTailUnits(
+              rows,
+              pendingCollision(collision, historicalId),
+            );
+            const expected = {
+              bytes: Buffer.byteLength(
+                JSON.stringify([
+                  { role: 'system', content: '' },
+                  ...buildMessagesWithReasoning(
+                    [...units],
+                    {
+                      invocation: {
+                        ephemerals: { 'reasoning.includeInContext': true },
+                      },
+                    },
+                    'mistral',
+                    undefined,
+                  ),
+                ]),
+              ),
+              tokens: await oldMistralUnitTokens(units, 'none'),
+            };
             holders = 0;
             unrelated = 0;
+            const lookups = pin.facts.lookups;
+            const started = performance.now();
             audit.start();
-            await measuredCollision(pin, collision, measure);
+            await measuredCollision(
+              pin,
+              collision,
+              historicalId,
+              measure,
+              expected,
+            );
             audit.stop();
+            const elapsedMs = performance.now() - started;
+            const queries = pin.facts.lookups - lookups;
             expect(unrelated).toBe(0);
-            const affected = all ? size : 3;
+            const holderCount = all ? size : 3;
+            const affected = historicalId === '' ? holderCount : 0;
             expect(holders).toBe(collision ? affected * 2 : 0);
-            recordCost(audit, { size, all, collision, holders, unrelated });
+            recordCost(audit, {
+              size,
+              all,
+              historicalId,
+              collision,
+              holders,
+              unrelated,
+              queries,
+              elapsedMs,
+              rowWindowPeak: pin.rowWindowStats?.peakRetainedBytes ?? 0,
+              rowWindowTransientPeak:
+                pin.rowWindowStats?.peakTransientBytes ?? 0,
+            });
+            expect(pin.rowWindowStats?.peakRetainedBytes).toBeLessThanOrEqual(
+              32768,
+            );
+            expect(pin.rowWindowStats?.peakTransientBytes).toBeLessThanOrEqual(
+              49152,
+            );
+            expect(queries).toBeLessThanOrEqual(affected * 5 + 100);
+            expect(audit.reads.length).toBeLessThanOrEqual(affected * 15 + 300);
+            expect(
+              audit.reads.reduce((sum, read) => sum + read.length, 0),
+            ).toBeLessThanOrEqual(affected * 8192 + 2 * 1024 * 1024);
           }
         } finally {
           await pin.close();

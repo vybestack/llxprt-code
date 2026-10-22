@@ -31,6 +31,8 @@ import type { IdNodeCache } from './idTrieCache.js';
 import { IdTrieReader } from './idTrieReader.js';
 import { PinnedRead, PinLease } from './pinLease.js';
 import type { RowEntry } from './rowEntry.js';
+import { ROW_FLAG } from './rowRecord.js';
+import type { RowReadWindowStats } from './row-read-window.js';
 import {
   readRowIds,
   readStoredRow,
@@ -370,6 +372,13 @@ export class VersionSnapshot {
     return this.read.version?.rows ?? 0;
   }
 
+  get rowWindowStats(): RowReadWindowStats | undefined {
+    this.requireOpen();
+    return this.version === undefined
+      ? undefined
+      : this.read.access.rowWindowStats;
+  }
+
   async humanCut(turns: number, fromEnd: boolean): Promise<number> {
     this.requireOpen();
     if (!Number.isSafeInteger(turns) || turns < 0)
@@ -443,6 +452,38 @@ export class VersionSnapshot {
     yield* iterateRowEntries(this.read.access, root, from);
   }
 
+  async *selectedEntries(labels: AsyncIterable<bigint>): AsyncGenerator<{
+    readonly entry: RowEntry;
+    readonly nextEntry: RowEntry | null;
+  }> {
+    let entries: AsyncGenerator<RowEntry> | undefined;
+    let following: IteratorResult<RowEntry> | undefined;
+    try {
+      for await (const label of labels) {
+        this.requireOpen();
+        if (following?.done !== false || following.value.label !== label) {
+          await entries?.return(undefined);
+          entries = this.entries(await this.rowsBelow(label));
+          following = await entries.next();
+        }
+        if (following.done === true || following.value.label !== label)
+          throw new JournalFormatError('Selected source row is absent');
+        const entry = following.value;
+        following = await entries?.next();
+        const next = following?.done === false ? following.value : undefined;
+        yield {
+          entry,
+          nextEntry:
+            next !== undefined && (next.flags & ROW_FLAG.curated) !== 0
+              ? next
+              : ((await this.nextCuratedAfter(label)) ?? null),
+        };
+      }
+    } finally {
+      await entries?.return(undefined);
+    }
+  }
+
   /** The `index`-th live row (0-based). */
   entryAt(index: number): Promise<RowEntry> {
     const root = this.rootRef();
@@ -466,12 +507,14 @@ export class VersionSnapshot {
     return readStoredRow(this.read.access, entry);
   }
 
-  readBlock(entry: RowEntry, index: number): Promise<Uint8Array> {
-    return readStoredBlock(this.read.access, entry, index);
+  readBlock(entry: RowEntry, index: number, ids?: RowIds): Promise<Uint8Array> {
+    this.requireOpen();
+    return readStoredBlock(this.read.access, entry, index, ids);
   }
 
-  readMetadata(entry: RowEntry): Promise<StoredRow> {
-    return readStoredMetadata(this.read.access, entry);
+  readMetadata(entry: RowEntry, ids?: RowIds): Promise<StoredRow> {
+    this.requireOpen();
+    return readStoredMetadata(this.read.access, entry, ids);
   }
 
   requireOpen(): void {
