@@ -239,24 +239,56 @@ const PRIVILEGE_MARKERS = [
   /\bNODE_AUTH_TOKEN\b/,
   /\bNPM_TOKEN\b/,
   /\bnpm\s+(?:publish|login|adduser)\b/,
+  // Any secret other than the per-run GITHUB_TOKEN, including indexed
+  // lookups such as `secrets[vars.KEY_VAR_NAME]`.
+  /\bsecrets\s*(?:\[|\.(?!GITHUB_TOKEN\b))/,
+  /^secrets:\s*inherit\b/m,
 ];
 
 /**
- * A job is privileged when it can mint an OIDC token, logs in to a registry,
- * or handles publish credentials. Detection looks at the serialized job plus
- * the workflow-level permissions, so a new job gains the protection without
- * being listed here.
+ * A job's effective permissions: a job-level `permissions` block replaces the
+ * workflow-level one entirely, and the workflow-level block is inherited when
+ * the job declares none.
+ */
+function effectivePermissions(
+  workflowPermissions: unknown,
+  job: Record<string, unknown>,
+): unknown {
+  return 'permissions' in job ? job['permissions'] : workflowPermissions;
+}
+
+function grantsWriteAccess(permissions: unknown): boolean {
+  if (permissions === 'write-all') {
+    return true;
+  }
+  if (typeof permissions !== 'object' || permissions === null) {
+    return false;
+  }
+  return Object.values(permissions).some((level) => level === 'write');
+}
+
+/**
+ * A job is privileged when its effective permissions grant any write scope
+ * (including `id-token: write`), when it passes or reads secrets other than
+ * GITHUB_TOKEN, when it logs in to a registry, or when it handles publish
+ * credentials. Detection looks at the parsed job, so a new job gains the
+ * protection without being listed here.
  */
 function isPrivilegedJob(
   workflowPermissions: unknown,
   job: Record<string, unknown>,
 ): boolean {
-  const serialized = yaml.dump({ workflowPermissions, job });
+  if (grantsWriteAccess(effectivePermissions(workflowPermissions, job))) {
+    return true;
+  }
+  // A job-level `permissions` block replaces the workflow-level one, so only
+  // the job text is searched for the remaining markers.
+  const serialized = yaml.dump(job);
   return PRIVILEGE_MARKERS.some((marker) => marker.test(serialized));
 }
 
-function loadWorkflowJobs(file: string): WorkflowJob[] {
-  const workflow = asRecord(yaml.load(readText('.github', 'workflows', file)));
+function workflowJobsFrom(file: string, workflowText: string): WorkflowJob[] {
+  const workflow = asRecord(yaml.load(workflowText));
   const jobs = asOptionalRecord(workflow['jobs']) ?? {};
   return Object.entries(jobs).map(([name, value]) => {
     const job = asRecord(value);
@@ -272,6 +304,10 @@ function loadWorkflowJobs(file: string): WorkflowJob[] {
         .filter((run): run is string => typeof run === 'string'),
     };
   });
+}
+
+function loadWorkflowJobs(file: string): WorkflowJob[] {
+  return workflowJobsFrom(file, readText('.github', 'workflows', file));
 }
 
 /** Joins shell line continuations and drops comment lines. */
@@ -361,6 +397,159 @@ describe('isPrivilegedJob', () => {
       ),
     ).toBe(false);
   });
+
+  it('inherits workflow-level write permissions when the job declares none', () => {
+    const workflowPermissions = { checks: 'write', contents: 'read' };
+    expect(
+      isPrivilegedJob(workflowPermissions, { steps: [{ run: 'true' }] }),
+    ).toBe(true);
+  });
+
+  it('lets a job-level permissions block replace the workflow-level one', () => {
+    const workflowPermissions = { checks: 'write', statuses: 'write' };
+    expect(
+      isPrivilegedJob(workflowPermissions, {
+        permissions: { contents: 'read' },
+      }),
+    ).toBe(false);
+    expect(isPrivilegedJob(workflowPermissions, { permissions: {} })).toBe(
+      false,
+    );
+    expect(
+      isPrivilegedJob(
+        { contents: 'read' },
+        { permissions: { issues: 'write', contents: 'read' } },
+      ),
+    ).toBe(true);
+  });
+
+  it('treats write-all as privileged and read-all as not', () => {
+    expect(isPrivilegedJob('write-all', {})).toBe(true);
+    expect(isPrivilegedJob(undefined, { permissions: 'write-all' })).toBe(true);
+    expect(isPrivilegedJob('read-all', {})).toBe(false);
+  });
+
+  it('flags secrets other than GITHUB_TOKEN, however they are referenced', () => {
+    const withSecret = (value: string) => ({
+      permissions: { contents: 'read' },
+      steps: [{ env: { KEY: value } }],
+    });
+    expect(
+      isPrivilegedJob(undefined, withSecret('${{ secrets.PROVIDER_KEY }}')),
+    ).toBe(true);
+    expect(
+      isPrivilegedJob(
+        undefined,
+        withSecret('${{ secrets[vars.KEY_VAR_NAME] }}'),
+      ),
+    ).toBe(true);
+    expect(
+      isPrivilegedJob(undefined, {
+        permissions: { contents: 'read' },
+        uses: './.github/workflows/reusable.yml',
+        secrets: 'inherit',
+      }),
+    ).toBe(true);
+    expect(
+      isPrivilegedJob(undefined, withSecret('${{ secrets.GITHUB_TOKEN }}')),
+    ).toBe(false);
+  });
+});
+
+/** Returns the text of one top-level job, from its key to the next job. */
+function jobSection(workflowText: string, jobName: string): string {
+  const start = workflowText.indexOf(`\n  ${jobName}:\n`);
+  expect(start, `job ${jobName} exists`).toBeGreaterThanOrEqual(0);
+  const rest = workflowText.slice(start + 1);
+  const next = rest.slice(1).search(/\n {2}[A-Za-z0-9_-]+:\n/);
+  return next === -1 ? rest : rest.slice(0, next + 1);
+}
+
+/** Applies `mutate` to one job's text without touching the file on disk. */
+function mutateJob(
+  workflowText: string,
+  jobName: string,
+  mutate: (section: string) => string,
+): string {
+  const section = jobSection(workflowText, jobName);
+  const mutated = mutate(section);
+  expect(mutated, `mutation changes ${jobName}`).not.toBe(section);
+  return workflowText.replace(section, mutated);
+}
+
+function lifecycleViolations(
+  file: string,
+  workflowText: string,
+  jobName: string,
+): string[] {
+  const job = workflowJobsFrom(file, workflowText).find(
+    (candidate) => candidate.name === jobName,
+  );
+  expect(job, `${file} defines ${jobName}`).toBeDefined();
+  expect(job?.privileged, `${file} job ${jobName} is privileged`).toBe(true);
+  return (job?.runScripts ?? []).flatMap((script) =>
+    findLifecycleScriptViolations(script),
+  );
+}
+
+describe('nightly.yml privileged jobs', () => {
+  const nightly = readText('.github', 'workflows', 'nightly.yml');
+  const nightlyJobs = workflowJobsFrom('nightly.yml', nightly);
+  const hardenedJobs = ['windows_ci', 'macos_ci', 'e2e_full'];
+  const installFlag = 'npm ci --ignore-scripts';
+
+  it('classifies jobs inheriting checks/statuses write as privileged', () => {
+    const privileged = nightlyJobs
+      .filter((job) => job.privileged)
+      .map((job) => job.name);
+    for (const name of [...hardenedJobs, 'macos_secure_store']) {
+      expect(privileged, `${name} inherits workflow write scopes`).toContain(
+        name,
+      );
+    }
+  });
+
+  it('keeps the read-only install-behavior jobs unprivileged by their own permissions', () => {
+    const workflow = asRecord(yaml.load(nightly));
+    const jobs = asRecord(workflow['jobs']);
+    for (const name of ['windows_bun_native_smoke', 'cli_bundle_launch']) {
+      const job = asRecord(jobs[name]);
+      expect(job['permissions'], `${name} permissions`).toEqual({
+        contents: 'read',
+      });
+      expect(yaml.dump(job), `${name} secrets`).not.toMatch(/\bsecrets\b/);
+      const classified = nightlyJobs.find(
+        (candidate) => candidate.name === name,
+      );
+      expect(classified?.privileged, `${name} is unprivileged`).toBe(false);
+    }
+  });
+
+  it('has no lifecycle-script violations in the checked-in workflow', () => {
+    for (const name of hardenedJobs) {
+      expect(lifecycleViolations('nightly.yml', nightly, name)).toEqual([]);
+    }
+  });
+
+  for (const name of hardenedJobs) {
+    it(`detects npm rebuild restored in ${name}`, () => {
+      const mutated = mutateJob(nightly, name, (section) =>
+        section.replace(installFlag, `${installFlag} && npm rebuild bun`),
+      );
+      expect(lifecycleViolations('nightly.yml', mutated, name)).toEqual([
+        expect.stringContaining('npm rebuild bun'),
+      ]);
+    });
+
+    it(`detects --ignore-scripts dropped from the install in ${name}`, () => {
+      const mutated = mutateJob(nightly, name, (section) =>
+        section.replace(installFlag, 'npm ci'),
+      );
+      expect(lifecycleViolations('nightly.yml', mutated, name)).toEqual([
+        'npm ci',
+      ]);
+    });
+  }
 });
 
 describe('privileged workflows do not run third-party install scripts', () => {
@@ -378,14 +567,12 @@ describe('privileged workflows do not run third-party install scripts', () => {
   });
 
   it('privileged jobs never rebuild or install with lifecycle scripts enabled', () => {
-    for (const job of privilegedJobs) {
-      for (const script of job.runScripts) {
-        expect(
-          findLifecycleScriptViolations(script),
-          `${job.file} job ${job.name}`,
-        ).toEqual([]);
-      }
-    }
+    const violations = privilegedJobs.flatMap((job) =>
+      job.runScripts
+        .flatMap((script) => findLifecycleScriptViolations(script))
+        .map((command) => `${job.file} job ${job.name}: ${command}`),
+    );
+    expect(violations).toEqual([]);
   });
 
   it('privileged dependency installs run the repository Bun linker', () => {

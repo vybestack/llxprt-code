@@ -750,3 +750,27 @@ directory that holds the child's test file for the duration of the call and rest
 `finally`. The three timing-sensitive tests run their children through it. Bun reads `bunfig.toml`
 from the working directory, so the child starts without preloads. After the change the budget
 test takes about 160 ms on macOS (previously about 1.2 s cold), and the file passes in 10.6 s.
+
+## Guard coverage for nightly privileged jobs
+
+`scripts/tests/supply-chain-pins.test.ts` classified every `nightly.yml` job as unprivileged. The
+workflow grants `checks: write` and `statuses: write` at the workflow level, which jobs without their
+own `permissions` block inherit, and `e2e_full` carries provider API keys. Neither matched the old
+text markers, so restoring `npm rebuild bun` or dropping `--ignore-scripts` there went unnoticed.
+
+`isPrivilegedJob` now computes each job's effective permissions (a job-level block replaces the
+workflow-level one, which is inherited otherwise) and treats a job as privileged when they include
+any `write` scope or `write-all`, or when the job references a secret other than `GITHUB_TOKEN`
+(`secrets.X`, `secrets[...]`, `secrets: inherit`), on top of the registry-login and publish markers.
+`windows_bun_native_smoke` and `cli_bundle_launch` stay unprivileged because each declares
+`permissions: {contents: read}` and references no secrets; a test asserts that rather than exempting
+them by name. New tests cover the permission logic and mutate `windows_ci`, `macos_ci` and `e2e_full`
+in memory (restoring `npm rebuild bun`, dropping `--ignore-scripts`) to prove detection.
+
+The stricter rule newly flagged three jobs that ran `npm ci` or a global `npm install` with
+lifecycle scripts: `smoke-test.yml` (`issues: write`), `_evals-run.yml` (provider API key), and
+`issue-planner.yml` (`issues: write`, API keys). The first two now use `npm ci --ignore-scripts`
+followed by `node scripts/link-bun-runtime.ts` and `node scripts/postinstall.cjs`; the planner's
+global install of the nightly package uses `--ignore-scripts`, as Luther's does. Note that a job
+with no `permissions` anywhere falls back to the repository default token scope, which this guard
+cannot see.

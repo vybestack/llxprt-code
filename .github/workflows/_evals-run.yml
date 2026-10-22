@@ -45,7 +45,12 @@ jobs:
           bun-version-file: '.bun-version'
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Link lockfile-installed Bun and apply dependency patches
+        run: |-
+          node scripts/link-bun-runtime.ts
+          node scripts/postinstall.cjs
 
       - name: Create logs directory
         run: mkdir -p evals/logs
