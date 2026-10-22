@@ -58,5 +58,6 @@ export async function selfResponsePlan(
     await responsePartMetadata(source, part),
     blocks,
     source.isTail?.(part.entry.label) === true,
+    part,
   );
 }

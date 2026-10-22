@@ -9,11 +9,15 @@ import type { JournalTailSource } from './journal-tail-source.js';
 export async function* journalEntryPlans(
   source: JournalTailSource,
   entry: RowEntry,
+  nextEntry?: RowEntry | null,
 ): AsyncGenerator<JournalResponsePlan> {
   async function* entries(): AsyncGenerator<RowEntry> {
     yield entry;
-    const next = await source.nextCuratedAfter(entry.label);
-    if (next !== undefined) yield next;
+    const next =
+      nextEntry === undefined
+        ? await source.nextCuratedAfter(entry.label)
+        : nextEntry;
+    if (next !== undefined && next !== null) yield next;
   }
   const parts = completedResponseParts(source, entries());
   try {

@@ -67,11 +67,13 @@ export async function* responseParts(
 export async function responsePartAt(
   snapshot: JournalResponseSource,
   at: BlockPosition,
+  known?: ResponsePart,
 ): Promise<ResponsePart> {
-  const entry = await snapshot.entryByLabel(at.label);
+  const local = known?.entry.label === at.label ? known : undefined;
+  const entry = local?.entry ?? (await snapshot.entryByLabel(at.label));
   if (entry === undefined)
     throw new JournalFormatError('Response source row is absent');
-  const part = parts(entry, await snapshot.readIds(entry)).find(
+  const part = parts(entry, local?.ids ?? (await snapshot.readIds(entry))).find(
     (candidate) => candidate.part === at.part,
   );
   if (part === undefined)
@@ -108,8 +110,9 @@ export async function responsePartMetadata(
 export async function responseBlockAt(
   snapshot: JournalResponseSource,
   at: BlockPosition,
+  known?: ResponsePart,
 ): Promise<ContentBlock> {
-  const part = await responsePartAt(snapshot, at);
+  const part = await responsePartAt(snapshot, at, known);
   if (
     !Number.isInteger(at.block) ||
     at.block < 0 ||

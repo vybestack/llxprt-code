@@ -3,7 +3,10 @@ import { JournalFormatError } from '../../journal/errors.js';
 import type { BlockPosition } from '../../journal/idFactCodec.js';
 import type { ContentBlock, IContent } from './IContent.js';
 import { sanitizeProviderContentForSerialization } from './historyCloneUtils.js';
-import { responseBlockAt } from './journal-response-parts.js';
+import {
+  responseBlockAt,
+  type ResponsePart,
+} from './journal-response-parts.js';
 import type { JournalResponseSource } from './journal-response-source.js';
 
 export interface JournalBlockReference {
@@ -22,8 +25,9 @@ export interface JournalResponsePlan {
 async function resolveBlock(
   source: JournalResponseSource,
   ref: JournalBlockReference,
+  known?: ResponsePart,
 ): Promise<ContentBlock> {
-  const block = await responseBlockAt(source, ref.at);
+  const block = await responseBlockAt(source, ref.at, known);
   if (ref.kind === 'source') return block;
   if (ref.kind === 'response') {
     if (block.type !== 'tool_response' || block.callId !== ref.id)
@@ -60,6 +64,7 @@ export function responsePlan(
   header: IContent,
   blocks: readonly JournalBlockReference[],
   pending: boolean,
+  known?: ResponsePart,
 ): JournalResponsePlan {
   return {
     header: sanitizeProviderContentForSerialization(header),
@@ -67,7 +72,7 @@ export function responsePlan(
     pending,
     async *openBlocks() {
       for (const ref of blocks) {
-        const block = await resolveBlock(source, ref);
+        const block = await resolveBlock(source, ref, known);
         yield sanitizeProviderContentForSerialization({
           speaker: header.speaker,
           blocks: [block],

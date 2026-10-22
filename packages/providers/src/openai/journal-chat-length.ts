@@ -18,6 +18,7 @@ import {
 } from '@vybestack/llxprt-code-core/journal/summaryComposition.js';
 import { journalEntryPlans } from '@vybestack/llxprt-code-core/services/history/journal-entry-plans.js';
 import { JournalTailSource } from '@vybestack/llxprt-code-core/services/history/journal-tail-source.js';
+import { ROW_FLAG } from '@vybestack/llxprt-code-core/journal/rowRecord.js';
 import type { JournalResponsePlan } from '@vybestack/llxprt-code-core/services/history/journal-response-plan.js';
 import type { IndexedJournalRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/indexed-journal-request-snapshot.js';
 import type { SlotSummary } from '@vybestack/llxprt-code-core/journal/slotSummary.js';
@@ -226,6 +227,43 @@ export function plainChatLengthRegistration(
     settings,
     measure: (snapshot, entry, captured) =>
       measure(snapshot, entry, captured, count),
+    prepare: async (snapshot, captured) => {
+      const source = await JournalTailSource.create(snapshot, []);
+      const entries = snapshot.entries();
+      let following = await entries.next();
+      return {
+        measure: async (_snapshot, entry) => {
+          while (
+            following.done !== true &&
+            (following.value.label <= entry.label ||
+              (following.value.flags & ROW_FLAG.curated) === 0)
+          )
+            following = await entries.next();
+          return measurePlans(
+            journalEntryPlans(
+              source,
+              entry,
+              following.done === true ? null : following.value,
+            ),
+            captured,
+            count,
+          );
+        },
+        finish: async () => new Uint8Array(0),
+        close: async () => {
+          await entries.return(undefined);
+        },
+      };
+    },
+    prepareAppend: async (snapshot, captured) => {
+      const source = await JournalTailSource.create(snapshot, []);
+      return {
+        measure: async (_snapshot, entry) =>
+          measurePlans(journalEntryPlans(source, entry), captured, count),
+        finish: async () => new Uint8Array(0),
+        close: () => undefined,
+      };
+    },
   };
 }
 
