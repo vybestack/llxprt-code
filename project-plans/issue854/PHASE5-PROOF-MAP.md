@@ -1,5 +1,11 @@
 # Phase 5 proof map
 
+## Native plain Chat estimate checkpoint, 2026-10-22
+
+[The Chat-estimate receipt](PHASE6-SOURCE-BOUND-CHATESTIMATE-PROOF.json) binds the production public HTTP success introduced in `81bb8e34c`, the bounded per-unit boundary correction, serial tests, model/tokenizer keys, warm summary queries, original reader lifetimes and restored assertion controls. It supersedes the public estimate-refusal RED below only for supported legacy-family native plain Chat. Follow-up `58625ed98` commits the boundary correction, differential tests and public committed-row/model assertions. The unchanged 155 wire goldens and both 5,000-case oracles remain independent fixtures. Physical 40/4,000-row warm preparation plus mandatory estimation reads zero historical ROW/LENS payloads after selection capture; cold fill, capture, discovery and emission are outside that interval. The existing green 1/8 MiB log measures the legacy route because its wrapper drops `selection.native`, so native memory acceptance remains open. The reference-image blanket no-file file remains RED and excluded from passing-file totals. Compression policy boundary decisions do not establish an automatic-compression round trip. Exact/nonlegacy families, dump/log/last-thinking/pruned views, other provider bodies, media/accounting and final heap/capacity work remain open; no Phase 5/W26/default cutover claim.
+
+---
+
 ## Captured pending-tail Chat provider checkpoint, 2026-10-22
 
 [The pending-tail receipt](PHASE6-SOURCE-BOUND-CHATTAIL-PROOF.json) binds product commit `d9eab7404`, source hashes, final serial tests, scoped gates and five restored mutation controls. The direct HTTP file passes 17 tests/102 assertions against the independent old converter under blanket creation denial. Stored range composition measures existing changed-holder plans and the captured pending overlay, without persisting pending input or converting the entire prefix. Warm 40/4,000 neutral-user preparation, immutable retry bytes and one-unit ownership have separate receipts and do not establish affected-holder discovery, aggregate capacity or retained heap.
