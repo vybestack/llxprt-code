@@ -22,13 +22,15 @@ Rules that stay: no compatibility shims, no eslint-disable, no type-escape casts
 | # | Item | Done when |
 |---|---|---|
 | 1 | Kimi native request route | Done in `01b957933`: Kimi requests and estimates stream from journal facts without body spooling; publication and one-row retention tests pass |
-| 2 | OpenAI Responses native request route | Stateless done in `4dc55e707`. Remaining: stateful (`previous_response_id`) sends still project text into per-segment disk files |
+| 2 | OpenAI Responses native request route | Done: stateless in `4dc55e707`, stateful in `be3ecbcda`. Journal-backed sends, estimates, parentless recovery and caller input overrides no longer use per-segment disk projection |
 | 3 | Anthropic native request route | `AnthropicSpooledRequest.ts` and `message-table/tool-id-index.ts` no longer used |
 | 4 | Native request log/dump | Logging and dumps read the journal, no body copy |
 | 5 | Tool-heavy memory test | Passes inside its existing 170,000 ms budget |
 | 6 | Default flip and deletion | `journal` is the default; old JSONL backend, `historyBackendSelect.ts`, `WireBodySpool`, `KeyedRowIndex` and old-only scratch code deleted |
 | 7 | Branch cleanup | PR diff contains product code, tests, fixtures and the design doc, not proof receipts or evidence logs |
 | 8 | Ship | test, lint, typecheck, format, build, lunahigh smoke; PR; CI green |
+
+Journal-backed Responses requests no longer use disk prompt projection. The non-native Responses route still uses `serializeResponsesPromptEnvelope` for the old backend. Anthropic journal requests still spool their body and estimator prompt files through `AnthropicSpooledRequest.ts`; that remains item 3.
 
 ## Known failures tracked separately
 
