@@ -141,6 +141,7 @@ export async function resolveRequestMedia(
     readonly aggregateBudgetBytes?: number;
     readonly resolver?: RequestMediaResolutionService;
     readonly reservations?: RequestMediaReservations;
+    readonly lease?: import('@vybestack/llxprt-code-core/storage/history-media-release-gate.js').PinnedMediaLease;
   },
   contents: IContent[],
   signal: AbortSignal | undefined,
@@ -170,6 +171,7 @@ export async function resolveRequestMedia(
     ...(media.reservations === undefined
       ? {}
       : { reservations: media.reservations }),
+    ...(media.lease === undefined ? {} : { lease: media.lease }),
     ...(signal === undefined ? {} : { signal }),
   });
 }

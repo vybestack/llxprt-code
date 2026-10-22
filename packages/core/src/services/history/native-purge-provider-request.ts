@@ -11,6 +11,7 @@ export function prepareJournalProviderRequest(
   store: Pick<HistoryStorePort, 'streamRows' | 'waitForCommit'> & {
     settledSnapshot(settle: () => Promise<void>): Promise<VersionSnapshot>;
     prepareRequestFormat: PrepareNativeRequestFormat;
+    readonly hasPinnedMediaOwner: boolean;
   },
 ): (request: HistoryPrepareCuratedRequest) => Promise<ProviderRequestSnapshot> {
   return async (request) => {
@@ -29,6 +30,7 @@ export function prepareJournalProviderRequest(
       undefined,
       (snapshot, registration) =>
         store.prepareRequestFormat(snapshot, registration),
+      store.hasPinnedMediaOwner,
     );
   };
 }

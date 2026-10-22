@@ -29,6 +29,8 @@ import { historyOwnerIdFor } from './media-admission-service.js';
 import type { LocalMediaStore } from './local-media-store.js';
 import { HistoryMediaIndex } from './history-media-index.js';
 import type { RowOwnership } from '../recording/rowOwnership.js';
+import type { JournalStore } from '../journal/journalStore.js';
+import { HistoryMediaReleaseGate } from './history-media-release-gate.js';
 
 interface TrackedMediaReservation {
   readonly contentId: string;
@@ -63,7 +65,28 @@ export class HistoryMediaOwnership implements HistoryMediaOwner {
   private retired: HistoryMediaIndex | undefined;
   private ownership: RowOwnership | undefined;
 
+  private releaseGate: HistoryMediaReleaseGate | undefined;
+
   constructor(private readonly store: LocalMediaStore) {}
+
+  async bindNativeMedia(journal: JournalStore): Promise<void> {
+    if (this.releaseGate !== undefined)
+      throw new Error('History media owner is already bound to a journal');
+    const gate = new HistoryMediaReleaseGate(
+      journal,
+      this.store,
+      (contentId) =>
+        this.owned.has(contentId) || this.pending?.has(contentId) === true,
+    );
+    await gate.open();
+    this.releaseGate = gate;
+  }
+
+  private releaseOwned(contentId: string): Promise<void> {
+    return this.releaseGate === undefined
+      ? this.store.release(contentId, historyOwnerIdFor(contentId))
+      : this.releaseGate.release(contentId);
+  }
 
   prepareReplacement(input: {
     readonly previous: Iterable<IContent> & { readonly length: number };
@@ -122,9 +145,14 @@ export class HistoryMediaOwnership implements HistoryMediaOwner {
         }
       },
       rollback: async () => {
-        await this.releaseDifference(next, previous, ownership);
-        next.close();
         this.pending = undefined;
+        try {
+          await this.releaseDifference(next, previous, ownership);
+          next.close();
+        } catch (error) {
+          this.pending = next;
+          throw error;
+        }
       },
       finalize: async () => {
         this.owned = next;
@@ -164,10 +192,13 @@ export class HistoryMediaOwnership implements HistoryMediaOwner {
         }
       },
       rollback: async () => {
-        this.pending = added;
-        await this.releaseDifference(added, this.owned, ownership);
-        added.close();
-        this.pending = undefined;
+        try {
+          await this.releaseDifference(added, this.owned, ownership);
+          added.close();
+        } catch (error) {
+          this.pending = added;
+          throw error;
+        }
       },
       finalize: () => {
         for (const reference of added.values(ownership ?? this.ownership)) {
@@ -188,13 +219,15 @@ export class HistoryMediaOwnership implements HistoryMediaOwner {
     for (const reference of from.values(ownership ?? this.ownership)) {
       if (keep.has(reference.contentId)) continue;
       try {
-        await this.store.release(
-          reference.contentId,
-          historyOwnerIdFor(reference.contentId),
-        );
+        await this.releaseOwned(reference.contentId);
       } catch (error: unknown) {
         failures.push(error);
       }
+    }
+    try {
+      await this.releaseGate?.settle();
+    } catch (error) {
+      failures.push(error);
     }
     throwOwnershipFailures(failures);
   }
@@ -292,7 +325,7 @@ export class HistoryMediaOwnership implements HistoryMediaOwner {
     for (const { contentId } of this.owned.values(ownership)) {
       if (!releaseEverything && target.has(contentId)) continue;
       try {
-        await this.store.release(contentId, historyOwnerIdFor(contentId));
+        await this.releaseOwned(contentId);
         this.owned.delete(contentId);
         this.reserved.delete(contentId);
       } catch (error: unknown) {
@@ -314,6 +347,11 @@ export class HistoryMediaOwnership implements HistoryMediaOwner {
     if (releaseEverything && failures.length === 0) {
       this.owned.close();
       this.reserved.close();
+    }
+    try {
+      await this.releaseGate?.settle();
+    } catch (error) {
+      failures.push(error);
     }
     throwOwnershipFailures(failures);
   }

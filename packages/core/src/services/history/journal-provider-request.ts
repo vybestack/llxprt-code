@@ -35,8 +35,12 @@ export class JournalProviderRequestSnapshot implements ProviderRequestSnapshot {
     private readonly prepareFormat: PrepareNativeRequestFormat | undefined,
     private readonly signal?: AbortSignal,
     private readonly ownership?: RowOwnership,
+    pinnedMediaOwner = false,
   ) {
     this.native = {
+      ...(pinnedMediaOwner
+        ? { mediaLease: { requireOpen: () => this.requireOpen() } }
+        : {}),
       indexed,
       withFormat: (registration, consume) =>
         this.withFormat(registration, consume),
@@ -89,6 +93,7 @@ export class JournalProviderRequestSnapshot implements ProviderRequestSnapshot {
     projection?: JournalRequestProjection,
     release: () => void | Promise<void> = () => snapshot.close(),
     prepareFormat?: PrepareNativeRequestFormat,
+    pinnedMediaOwner = false,
   ): Promise<JournalProviderRequestSnapshot> {
     let indexed: IndexedJournalRequestSnapshot | undefined;
     try {
@@ -106,6 +111,7 @@ export class JournalProviderRequestSnapshot implements ProviderRequestSnapshot {
         prepareFormat,
         options.signal,
         options.ownership,
+        pinnedMediaOwner,
       );
     } catch (error) {
       const failures: unknown[] = [];

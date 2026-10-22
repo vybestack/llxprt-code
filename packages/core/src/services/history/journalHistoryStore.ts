@@ -817,9 +817,14 @@ export class JournalHistoryStore implements HistoryStorePort {
 
   /** Hands the owner every row, one at a time, once the queue is durable. */
   async adoptMediaOwner(
-    owner: Pick<HistoryMediaOwner, 'adopt'>,
+    owner: Pick<HistoryMediaOwner, 'adopt' | 'bindNativeMedia'>,
   ): Promise<void> {
     for await (const row of this.streamRows()) owner.adopt([row]);
+    await owner.bindNativeMedia?.(this.session.store);
+  }
+
+  get hasPinnedMediaOwner(): boolean {
+    return this.session.store.hasPinnedMediaOwner;
   }
 
   /** Removes the newest row (design 4.3) and takes it back if the media effect or the observer fails. */

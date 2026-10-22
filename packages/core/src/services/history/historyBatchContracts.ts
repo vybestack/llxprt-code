@@ -20,6 +20,7 @@
  */
 
 import type { IContent, MediaReferenceBlock } from './IContent.js';
+import type { JournalStore } from '../../journal/journalStore.js';
 
 import type { HistoryDensityRows } from './historyDensityRows.js';
 import {
@@ -110,6 +111,7 @@ export interface HistoryOwnedMediaReservation {
  * Registered via {@link HistoryService.registerMediaOwner}.
  */
 export interface HistoryMediaOwner {
+  bindNativeMedia?(journal: JournalStore): Promise<void>;
   /**
    * Reserves the media of rows appended to the history, streamed as the rows
    * are written, without reading the rows already there. `rollback` releases

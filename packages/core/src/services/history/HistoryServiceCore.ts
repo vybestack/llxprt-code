@@ -267,13 +267,19 @@ export abstract class HistoryServiceCore
     historyOverride?: Iterable<IContent> | AsyncIterable<IContent>,
   ): Promise<ProviderRequestSnapshot> {
     await this.waitForCommit();
-    return this.journal.prepareCurated({
-      tail: tailContents,
-      options,
-      logger: this.logger,
-      isCompressing: this.isCompressing,
-      historyOverride,
+    let snapshot: ProviderRequestSnapshot | undefined;
+    await this.enqueueAsynchronousHistoryMutation(async () => {
+      snapshot = await this.journal.prepareCurated({
+        tail: tailContents,
+        options,
+        logger: this.logger,
+        isCompressing: this.isCompressing,
+        historyOverride,
+      });
     });
+    if (snapshot === undefined)
+      throw new Error('Provider snapshot was not pinned');
+    return snapshot;
   }
 
   /** Attach the journal store after construction (foreground wiring order). */

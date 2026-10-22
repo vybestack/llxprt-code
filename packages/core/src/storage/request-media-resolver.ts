@@ -12,6 +12,7 @@ import {
   type MediaReferenceBlock,
 } from '../services/history/IContent.js';
 import type { LocalMediaStore } from './local-media-store.js';
+import type { PinnedMediaLease } from './history-media-release-gate.js';
 import { DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES } from '../config/configTypes.js';
 
 export const DEFAULT_REQUEST_MEDIA_BUDGET_BYTES =
@@ -29,6 +30,7 @@ export interface RequestMediaResolutionInput {
    * trip, and every reservation is released by `reservations.release()`.
    */
   readonly reservations?: RequestMediaReservations;
+  readonly lease?: PinnedMediaLease;
 }
 
 /** Reservations a streamed request holds across its rows, released together. */
@@ -451,7 +453,17 @@ export class RequestMediaResolver {
       resources.readCount += 1;
       let bytes: Uint8Array;
       try {
-        bytes = await this.readReferenceBytes(entry.reference, resources, held);
+        if (input.lease !== undefined) {
+          input.lease.requireOpen();
+          bytes = await this.store.readReserved(entry.reference);
+          input.lease.requireOpen();
+        } else {
+          bytes = await this.readReferenceBytes(
+            entry.reference,
+            resources,
+            held,
+          );
+        }
       } catch (error) {
         throw new RequestMediaResolutionError(
           entry.reference.contentId,

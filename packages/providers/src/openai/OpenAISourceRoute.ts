@@ -129,5 +129,6 @@ export function chatMediaStage(
   owner: ResolvedMediaRequest,
 ): NonNullable<ChatRowInput['mediaStage']> {
   const signal = getRequestSignal(options);
-  return (rows) => resolveRowsMedia(rows, media, owner, signal);
+  return (rows) =>
+    resolveRowsMedia(rows, media, owner, signal, options.requestRows?.native);
 }

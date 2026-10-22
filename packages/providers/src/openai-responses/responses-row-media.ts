@@ -49,16 +49,27 @@ export async function* resolveRowsMedia(
   media: RowsMediaInput,
   owner: ResolvedMediaRequest,
   signal: AbortSignal | undefined,
+  native?: import('@vybestack/llxprt-code-core/services/history/native-provider-format.js').NativeProviderFormat,
 ): AsyncGenerator<IContent, void> {
   const budget =
     media.aggregateBudgetBytes ?? DEFAULT_REQUEST_MEDIA_BUDGET_BYTES;
   let used = 0;
+  let index = 0;
   let reservations: RequestMediaReservations | undefined;
   for await (const row of rows) {
+    const lease =
+      native?.mediaLease !== undefined && !native.indexed.isPending(index)
+        ? native.mediaLease
+        : undefined;
+    index++;
     const bytes = rowMediaBytes(row);
     const remaining = budget - used;
     used += bytes;
-    if (reservations === undefined && hasReference(row)) {
+    if (
+      lease === undefined &&
+      reservations === undefined &&
+      hasReference(row)
+    ) {
       reservations = media.resolver?.openReservations(media.requestId);
       if (reservations !== undefined) {
         const opened = reservations;
@@ -66,7 +77,13 @@ export async function* resolveRowsMedia(
       }
     }
     if (bytes === 0) yield row;
-    else yield* resolveRow(row, { ...media, reservations }, remaining, signal);
+    else
+      yield* resolveRow(
+        row,
+        { ...media, reservations, lease },
+        remaining,
+        signal,
+      );
   }
 }
 

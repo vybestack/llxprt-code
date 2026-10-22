@@ -14,6 +14,7 @@ export type PrepareNativeRequestFormat = (
 ) => Promise<VersionSnapshot>;
 
 export interface NativeProviderFormat {
+  readonly mediaLease?: import('../../storage/history-media-release-gate.js').PinnedMediaLease;
   readonly indexed: IndexedJournalRequestSnapshot;
   withFormat<T>(
     registration: RowFormatRegistration,
