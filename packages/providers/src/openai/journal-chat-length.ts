@@ -165,6 +165,8 @@ function supported(settings: RowFormatSettings): void {
   const unsupported = [
     settings.formatId !== 'openai-chat:plain' &&
       settings.formatId !== 'openai-chat:mistral',
+    (settings.formatId === 'openai-chat:mistral') !==
+      (settings.chat?.toolFormat === 'mistral'),
     settings.formatRev !== PLAIN_CHAT_FORMAT_REV,
     settings.isOAuth,
     settings.toolNameTransform !== 'none',

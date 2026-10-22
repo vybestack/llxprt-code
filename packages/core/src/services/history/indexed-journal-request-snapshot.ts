@@ -339,9 +339,13 @@ export class IndexedJournalRequestSnapshot {
   async mistralForSnapshot(
     snapshot: VersionSnapshot,
     slot: number,
-  ): Promise<JournalRequestMistral> {
-    this.requireOpen();
-    return JournalRequestMistral.create(snapshot, this.source, this.rows, slot);
+  ): Promise<Pick<JournalRequestMistral, 'resolve'>> {
+    const view = await this.query(() =>
+      JournalRequestMistral.create(snapshot, this.source, this.rows, slot),
+    );
+    return {
+      resolve: (rawId) => this.query(() => view.resolve(rawId)),
+    };
   }
 
   withMistral<T>(

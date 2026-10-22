@@ -24,8 +24,6 @@ import {
 } from './support/wireBodyCapture.js';
 import { normalizedRows } from './support/frozenWire/normalizedRows.js';
 
-const route = WIRE_ROUTES.find((item) => item.id === 'openai-chat-plain');
-if (route === undefined) throw new Error('Missing plain Chat route');
 const call = {
   id: 'call_current',
   type: 'function',
@@ -61,102 +59,113 @@ const cases = [
   ...corpus.histories,
 ];
 
-describe('native plain Chat continuation over actual HTTP', () => {
-  beforeAll(() => setSystemTime(new Date(PINNED_CLOCK)));
+describe('native Chat plain and Mistral routes', () => {
   afterAll(async () => {
     setSystemTime();
     await corpus.dispose();
   });
-  for (const { history, strip } of cases.flatMap((history) =>
-    ['none', 'all', 'allButLast'].map((strip) => ({ history, strip })),
-  )) {
-    it(`${history.id}/${strip} sends both old-converter bodies without operation files`, async () => {
-      const input = {
-        ...history,
-        ephemerals: {
-          ...('ephemerals' in history ? history.ephemerals : {}),
-          streaming: 'enabled',
-          'reasoning.includeInContext': true,
-          'reasoning.stripFromContext': strip,
-        },
-      };
-      const reference =
-        'usesMediaReferences' in history &&
-        history.usesMediaReferences === true;
-      const provider = (): ReturnType<typeof route.createProvider> => {
-        const created = route.createProvider();
-        return reference
-          ? bindProviderMedia(
-              created,
-              corpus.binding.resolver,
-              corpus.binding.budgetBytes,
-            )
-          : created;
-      };
-      const expected: CapturedWireRequest[] = [];
-      let oraclePosts = 0;
-      const restore = installFakeTransport(
-        { ...route, respond: () => reply(oraclePosts++ !== 0) },
-        expected,
-      );
-      try {
-        const options = buildHistoryCallOptions(
-          route,
-          { ...input, rows: await normalizedRows(history.rows) },
-          'rows',
-          new SettingsService(),
-        );
-        for await (const chunk of provider().generateChatCompletion(options))
-          void chunk;
-      } finally {
-        restore();
-      }
-      expect(expected).toHaveLength(2);
-      let posts = 0;
-      const sink = await localWireHashSink({
-        ...route,
-        respond: () => reply(posts++ !== 0),
-      });
-      const fixture = await journalSendFixture(history.rows, [], {
-        directory: 'tmp/p6/chat-continuation-run-bh/fixtures',
-        mediaStore: reference ? corpus.store : undefined,
-      });
-      const output: IContent[] = [];
-      try {
-        const options = buildHistoryCallOptions(
-          sink.route,
-          input,
-          'rows',
-          new SettingsService(),
-          fixture.selection,
-        );
-        const receipt = await operationFileCreates(async () => {
-          for await (const chunk of provider().generateChatCompletion(options))
-            output.push(chunk);
-        }, true);
-        expect(receipt).toStrictEqual({ files: [], directories: [] });
-        expect(sink.requests).toHaveLength(2);
-        for (const [index, actual] of sink.requests.entries()) {
-          const bytes = expected[index].bytes;
-          expect(actual.contentLength).toBe(String(bytes.byteLength));
-          expect(actual.bytes).toBe(bytes.byteLength);
-          expect(actual.sha256).toBe(
-            createHash('sha256').update(bytes).digest('hex'),
+  WIRE_ROUTES.filter(
+    (item) =>
+      item.id === 'openai-chat-plain' || item.id === 'openai-chat-mistral',
+  ).forEach((route) => {
+    describe(`native ${route.id} continuation over actual HTTP`, () => {
+      beforeAll(() => setSystemTime(new Date(PINNED_CLOCK)));
+      for (const { history, strip } of cases.flatMap((history) =>
+        ['none', 'all', 'allButLast'].map((strip) => ({ history, strip })),
+      )) {
+        it(`${history.id}/${strip} sends both old-converter bodies without operation files`, async () => {
+          const input = {
+            ...history,
+            ephemerals: {
+              ...('ephemerals' in history ? history.ephemerals : {}),
+              streaming: 'enabled',
+              'reasoning.includeInContext': true,
+              'reasoning.stripFromContext': strip,
+            },
+          };
+          const reference =
+            'usesMediaReferences' in history &&
+            history.usesMediaReferences === true;
+          const provider = (): ReturnType<typeof route.createProvider> => {
+            const created = route.createProvider();
+            return reference
+              ? bindProviderMedia(
+                  created,
+                  corpus.binding.resolver,
+                  corpus.binding.budgetBytes,
+                )
+              : created;
+          };
+          const expected: CapturedWireRequest[] = [];
+          let oraclePosts = 0;
+          const restore = installFakeTransport(
+            { ...route, respond: () => reply(oraclePosts++ !== 0) },
+            expected,
           );
-        }
-        const blocks = output.flatMap((chunk) => chunk.blocks);
-        expect(
-          blocks.filter((block) => block.type === 'tool_call'),
-        ).toHaveLength(1);
-        expect(
-          blocks
-            .flatMap((block) => (block.type === 'text' ? [block.text] : []))
-            .join(''),
-        ).toBe('terminal 雪');
-      } finally {
-        await sink.close();
-        await fixture.close();
+          try {
+            const options = buildHistoryCallOptions(
+              route,
+              { ...input, rows: await normalizedRows(history.rows) },
+              'rows',
+              new SettingsService(),
+            );
+            for await (const chunk of provider().generateChatCompletion(
+              options,
+            ))
+              void chunk;
+          } finally {
+            restore();
+          }
+          expect(expected).toHaveLength(2);
+          let posts = 0;
+          const sink = await localWireHashSink({
+            ...route,
+            respond: () => reply(posts++ !== 0),
+          });
+          const fixture = await journalSendFixture(history.rows, [], {
+            directory: 'tmp/p6/chat-mistral-run-bj/fixtures',
+            mediaStore: reference ? corpus.store : undefined,
+          });
+          const output: IContent[] = [];
+          try {
+            const options = buildHistoryCallOptions(
+              sink.route,
+              input,
+              'rows',
+              new SettingsService(),
+              fixture.selection,
+            );
+            const receipt = await operationFileCreates(async () => {
+              for await (const chunk of provider().generateChatCompletion(
+                options,
+              ))
+                output.push(chunk);
+            }, true);
+            expect(receipt).toStrictEqual({ files: [], directories: [] });
+            expect(sink.requests).toHaveLength(2);
+            for (const [index, actual] of sink.requests.entries()) {
+              const bytes = expected[index].bytes;
+              expect(actual.contentLength).toBe(String(bytes.byteLength));
+              expect(actual.bytes).toBe(bytes.byteLength);
+              expect(actual.sha256).toBe(
+                createHash('sha256').update(bytes).digest('hex'),
+              );
+            }
+            const blocks = output.flatMap((chunk) => chunk.blocks);
+            expect(
+              blocks.filter((block) => block.type === 'tool_call'),
+            ).toHaveLength(1);
+            expect(
+              blocks
+                .flatMap((block) => (block.type === 'text' ? [block.text] : []))
+                .join(''),
+            ).toBe('terminal 雪');
+          } finally {
+            await sink.close();
+            await fixture.close();
+          }
+        });
       }
     });
-  }
+  });
 });

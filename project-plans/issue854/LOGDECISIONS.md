@@ -1,3 +1,11 @@
+## 2026-10-22: use measured-pin Mistral mappings in the production native route
+
+Use the existing raw-ID/salt facts and JournalRequestMistral pending overlay, injected through the bounded NativeMistralRow adapter into native message conversion and stored measurement. Do not normalize IDs again or retain a whole-history ID map. A captured measured pin outlives awaited body-reader retirement; borrowed resolution also retires with its indexed request. Reuse first-request history mappings for continuation, and keep the old continuation tail's raw SDK IDs and Mistral names.
+
+Reserve mapping slot 2 on first activation. Allow only the registration that declares this mapping slot to store its length summary there, so initial, omission and token keys can all remain warm. Preserve the old mapping-only occupied-slot refusal. Reject mismatched format/toolFormat settings instead of reusing plain facts. Keep mapping rebuild from raw ID pieces and separate bounded cold wire/token fills explicit; a merged cold pass and earlier-tail scope refill are unfinished. These constraints fail fast and never fall back to scratch indexes or spools. The new route is implemented within the receipt's executed domain, not closed for every Mistral history. See [the source-bound receipt](PHASE6-SOURCE-BOUND-NATIVEMISTRAL-PROOF.json). Phase 5/6/W26 remain open.
+
+---
+
 ## Terminal native continuation evidence, 2026-10-22
 
 [The continuation receipt](PHASE6-SOURCE-BOUND-NATIVECONTINUATION-PROOF.json) now records 34/34 fresh exact-path gates and four complete targeted files after restored controls. Two added controls reach both actual HTTP requests before the independent length matcher rejects unstripped reasoning and omitted current-reply tool calls. All 8,116 terminal source hashes and 1,204 preservation hashes match; recorded owned PIDs have exited. Earlier control limits below are historical. Public/nonstreaming continuation execution, second-body clear/abort and body-limit proof, detailed cost, full native memory/traps and the remaining phase obligations stay open. No production or enforcement change.

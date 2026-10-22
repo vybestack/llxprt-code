@@ -1,0 +1,3150 @@
+{
+  "date": "2026-10-22",
+  "baseline": "aff5d0411",
+  "earlyGreen": "77da911709b9020a5e9ed0c592ac933096b5992a",
+  "root": "tmp/p6/chat-mistral-run-bj",
+  "scope": "Production native OpenAI Chat Mistral indexed direct body, mandatory stored estimate and automatic continuation within the executed domain. Phase 5/6/W26 remain open.",
+  "rootCause": "Production selected legacy spoolChatBody for every format requiring ToolIdStore. Native Chat emission and measurements hard-coded plain IDs and tool result format; measured-pin mapping facts were not borrowed into either path.",
+  "red": {
+    "initial": "red.log: 0 pass / 9 fail at WireBodySpool.create under creation denial",
+    "purge": "public-initial.log: selected purge pins failed before mapping activation/read-extent repair; complete 36-case public refresh now passes.",
+    "warm": "planning-red.log: Mistral 40/4000 capture overlapped ROW/LENS 106/10666 times because two available length slots evicted one of three keys",
+    "borrow": "borrow-red.log: closed-request resolve unexpectedly fulfilled"
+  },
+  "implementation": [
+    "Mistral detection uses the existing model/tool-format resolution. Kimi remains explicitly legacy. Native Mistral never falls back to a scratch index or body/estimator spool.",
+    "Mapping activation persists the existing versioned raw-ID/salt facts in slot 2. The measured snapshot supplies the existing JournalRequestMistral bounded pending overlay and NativeMistralRow per-unit adapter to both serialization and six-state measurement. Core imports no provider implementation.",
+    "Native request capture holds the measured mapping pin until awaited initial/continuation body retirement. Borrowed resolve queries also require the original indexed request to remain open. New-pin replacement reassigns alpha from salted 4Uq1sY29c to 4SftZvDMX while old emitted bytes stay unchanged.",
+    "Format keys include Mistral toolFormat, hash/salt/normalizer revision, model, endpoint, reasoning, output limits and estimator identity. Mismatched Mistral format with plain settings is rejected. Only a registration explicitly using the mapping slot can share its length slot; ordinary mapping-only reservations remain unavailable to other registrations.",
+    "Continuation reuses the captured history mapper. The bounded current SDK reply tail uses the unchanged old builder, including raw current-reply IDs and Mistral tool names. It does not remap the reply IDs with a fresh history map.",
+    "Cold first activation rebuilds mapping facts from raw journal ID pieces, followed by bounded length/converter fills and a distinct token-format fill. This is not a single merged cold mapping/length/token pass. Active registrations retain the existing incremental append hooks."
+  ],
+  "summary": {
+    "tests": 1230,
+    "files": 35,
+    "gates": 50,
+    "publicMistralCases": 18,
+    "mistralEstimateRange": [
+      49,
+      168
+    ]
+  },
+  "testCounts": [
+    {
+      "file": "native-chat-mistral-send.test.ts",
+      "pass": 30,
+      "fail": 0
+    },
+    {
+      "file": "native-chat-estimate.test.ts",
+      "pass": 103,
+      "fail": 0
+    },
+    {
+      "file": "journal-mistral-tail-pins.test.ts",
+      "pass": 5,
+      "fail": 0
+    },
+    {
+      "file": "journal-mistral-mapping.test.ts",
+      "pass": 5,
+      "fail": 0
+    },
+    {
+      "file": "journal-mistral-lifecycle.test.ts",
+      "pass": 4,
+      "fail": 0
+    },
+    {
+      "file": "journal-mistral-tail.test.ts",
+      "pass": 5,
+      "fail": 0
+    },
+    {
+      "file": "journal-mistral-tail-lifecycle.test.ts",
+      "pass": 2,
+      "fail": 0
+    },
+    {
+      "file": "journal-mistral-tail-resources.test.ts",
+      "pass": 4,
+      "fail": 0
+    },
+    {
+      "file": "versionCopy.mistral.test.ts",
+      "pass": 2,
+      "fail": 0
+    },
+    {
+      "file": "mistral-native-conversion.test.ts",
+      "pass": 3,
+      "fail": 0
+    },
+    {
+      "file": "mistral-native-frozen.test.ts",
+      "pass": 1,
+      "fail": 0
+    },
+    {
+      "file": "length-model.chat.mistral.test.ts",
+      "pass": 10,
+      "fail": 0
+    },
+    {
+      "file": "length-model.chat.plain.test.ts",
+      "pass": 9,
+      "fail": 0
+    },
+    {
+      "file": "native-chat-continuation-runtime.test.ts",
+      "pass": 36,
+      "fail": 0
+    },
+    {
+      "file": "native-chat-continuation-lifetime.test.ts",
+      "pass": 8,
+      "fail": 0
+    },
+    {
+      "file": "native-chat-continuation-refusal.test.ts",
+      "pass": 2,
+      "fail": 0
+    },
+    {
+      "file": "native-chat-continuation-reads.test.ts",
+      "pass": 4,
+      "fail": 0
+    },
+    {
+      "file": "native-chat-continuation-transport.test.ts",
+      "pass": 2,
+      "fail": 0
+    },
+    {
+      "file": "native-chat-continuation-http.test.ts",
+      "pass": 138,
+      "fail": 0
+    },
+    {
+      "file": "native-chat-continuation.test.ts",
+      "pass": 10,
+      "fail": 0
+    },
+    {
+      "file": "native-chat-preparation.test.ts",
+      "pass": 10,
+      "fail": 0
+    },
+    {
+      "file": "native-chat-golden.test.ts",
+      "pass": 44,
+      "fail": 0
+    },
+    {
+      "file": "OpenAIChatContinuation.test.ts",
+      "pass": 14,
+      "fail": 0
+    },
+    {
+      "file": "journal-chat-length.test.ts",
+      "pass": 6,
+      "fail": 0
+    },
+    {
+      "file": "journal-chat-length-lifecycle.test.ts",
+      "pass": 7,
+      "fail": 0
+    },
+    {
+      "file": "native-chat-media-lease.test.ts",
+      "pass": 2,
+      "fail": 0
+    },
+    {
+      "file": "native-chat-session-http.test.ts",
+      "pass": 3,
+      "fail": 0
+    },
+    {
+      "file": "native-chat-purge-http.test.ts",
+      "pass": 6,
+      "fail": 0
+    },
+    {
+      "file": "native-purge-view-http.test.ts",
+      "pass": 96,
+      "fail": 0
+    },
+    {
+      "file": "journalStore.readerLifetime.test.ts",
+      "pass": 11,
+      "fail": 0
+    },
+    {
+      "file": "journalStore.readerCleanup.test.ts",
+      "pass": 3,
+      "fail": 0
+    },
+    {
+      "file": "wireBodyGolden.test.ts",
+      "pass": 630,
+      "fail": 0
+    },
+    {
+      "file": "native-media-queue-reopen.test.ts",
+      "pass": 5,
+      "fail": 0
+    },
+    {
+      "file": "progressive-json-body.test.ts",
+      "pass": 5,
+      "fail": 0
+    },
+    {
+      "file": "OpenAIProvider.continuationTiming.test.ts",
+      "pass": 5,
+      "fail": 0
+    }
+  ],
+  "sourceManifest": [
+    {
+      "path": "packages/agents/src/core/__tests__/native-chat-continuation-runtime.test.ts",
+      "sha256": "17a3eb11d7625a7d69201318b0e59f1126287bf07b413f8d0a09a8722ad14f8d"
+    },
+    {
+      "path": "packages/core/src/journal/formatFill.ts",
+      "sha256": "4ac3760ddf07adf4b97b70cc42822a209772c3a3e97451eaf55eb6e8fd6205ec"
+    },
+    {
+      "path": "packages/core/src/journal/pinned-format-fill.ts",
+      "sha256": "4efc433798dde8ab23b5430965417b29ea83c247ec04e950c0548997f5c108a5"
+    },
+    {
+      "path": "packages/core/src/journal/rowFormat.ts",
+      "sha256": "3195d8760c45ce60845ecc98754eb393f239d42e0e2537bdd060d78135623899"
+    },
+    {
+      "path": "packages/core/src/journal/versionSnapshot.ts",
+      "sha256": "279021e8cb01bcc4411623760ca33bd687ebfc456eb59b9c7083bbd732e39165"
+    },
+    {
+      "path": "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+      "sha256": "a0955e4f02aaf25119f4bef47d0131666b6d6996494d79ee695a3632faebcba0"
+    },
+    {
+      "path": "packages/core/src/services/history/journal-mistral-tail-pins.test.ts",
+      "sha256": "932d3848fe452d6759dd7d5bfae43f16306b5290455c41ebcc6fc2585e70fd24"
+    },
+    {
+      "path": "packages/core/src/services/history/native-provider-format.ts",
+      "sha256": "86976dc7c74841081a05224016f351b6d4a701778fd3f7bdad2f29bc02a33963"
+    },
+    {
+      "path": "packages/providers/src/__tests__/native-chat-continuation-http.test.ts",
+      "sha256": "78561a41e6eb783cf5aceaaa8bd97473c612d75cdfd0b0f88453d1903928fd3a"
+    },
+    {
+      "path": "packages/providers/src/__tests__/native-chat-continuation-refusal.test.ts",
+      "sha256": "924179e013007ec660a8c9755579c9830abf3f7ff59e02040eaab3ece4fc43e8"
+    },
+    {
+      "path": "packages/providers/src/__tests__/native-chat-golden.test.ts",
+      "sha256": "39a69e5ba84f29490c944855c8110496a15b7b48041f305d44cfc7129b91dadd"
+    },
+    {
+      "path": "packages/providers/src/__tests__/native-chat-mistral-send.test.ts",
+      "sha256": "9b9765d0d968bf4c72caed4d68f23938c7beceda75f86cae253732c25e0ef19f"
+    },
+    {
+      "path": "packages/providers/src/openai/OpenAIRequestPreparation.ts",
+      "sha256": "636078755a81780706123620ada76de3806e0f4908052ab047745bd71954dba2"
+    },
+    {
+      "path": "packages/providers/src/openai/journal-chat-length.ts",
+      "sha256": "91b6ef6cdfdd0f44c379e7b70be012e36b768573f22a130156fc6de8e068247a"
+    },
+    {
+      "path": "packages/providers/src/openai/native-chat-body.ts",
+      "sha256": "6003c78cde68aafb1f008f3756fd080eaa01abb3b7da1dfcfff3a0c64f18582f"
+    },
+    {
+      "path": "packages/providers/src/openai/native-chat-continuation-reads.test.ts",
+      "sha256": "fa670818ae3d3caffb48d2103abb4abfab585be40486f176f43a0353a991feb3"
+    },
+    {
+      "path": "packages/providers/src/openai/native-chat-estimate.test.ts",
+      "sha256": "9c923e304c4ef655d76211a3d150014f6e890a4d53fb8657241737e550770593"
+    },
+    {
+      "path": "packages/providers/src/openai/native-chat-estimate.ts",
+      "sha256": "44cbf624406df535cad25e99c642a389a9529dfc0698b12094a2a561d55ce6c0"
+    },
+    {
+      "path": "packages/providers/src/openai/native-chat-messages.ts",
+      "sha256": "5d45bc663c09d442d0af14789928465e8f55125de9e6306d99bcf206c83dbcaa"
+    }
+  ],
+  "gates": [
+    {
+      "name": "native-chat-mistral-send.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/__tests__/native-chat-mistral-send.test.ts"
+      ],
+      "pid": 1499,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/refresh/native-chat-mistral-send.test.ts.log",
+      "sha256": "1859e407fef7392d3fff82141f4b7a52f925c90ec77599c8f135636407bf26fa"
+    },
+    {
+      "name": "native-chat-estimate.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/openai/native-chat-estimate.test.ts"
+      ],
+      "pid": 1535,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/refresh/native-chat-estimate.test.ts.log",
+      "sha256": "0fbe030044279a66970dccffbfa94de939e22fe9c20d3fda60851ac66fb8b9c2"
+    },
+    {
+      "name": "journal-mistral-tail-pins.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/core/src/services/history/journal-mistral-tail-pins.test.ts"
+      ],
+      "pid": 1657,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/refresh/journal-mistral-tail-pins.test.ts.log",
+      "sha256": "7ea170ea2bd794490bfe06d7c83d90442b59d12c2738d8217d5c63d99db28981"
+    },
+    {
+      "name": "journal-mistral-mapping.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/core/src/services/history/journal-mistral-mapping.test.ts"
+      ],
+      "pid": 91403,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/final/journal-mistral-mapping.test.ts.log",
+      "sha256": "0fd0f19d93b9d652875c3f93c1fd4f91b719020cb954fe4a645e60d61598492a"
+    },
+    {
+      "name": "journal-mistral-lifecycle.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/core/src/services/history/journal-mistral-lifecycle.test.ts"
+      ],
+      "pid": 91410,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/final/journal-mistral-lifecycle.test.ts.log",
+      "sha256": "dc60d6a8f05f9e965fed64efca51d6b6b37c792753557482a345f1f7b2bd341c"
+    },
+    {
+      "name": "journal-mistral-tail.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/core/src/services/history/journal-mistral-tail.test.ts"
+      ],
+      "pid": 91533,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/final/journal-mistral-tail.test.ts.log",
+      "sha256": "7cd137a049140a5bcf0e61ddbf251121825fbaabc9d1866064a80a662117ce1f"
+    },
+    {
+      "name": "journal-mistral-tail-lifecycle.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/core/src/services/history/journal-mistral-tail-lifecycle.test.ts"
+      ],
+      "pid": 91558,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/final/journal-mistral-tail-lifecycle.test.ts.log",
+      "sha256": "5f5d0a7317b17abb38166ef794b316671d32640f8e04aad36c277ff6dcc94ff6"
+    },
+    {
+      "name": "journal-mistral-tail-resources.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/core/src/services/history/journal-mistral-tail-resources.test.ts"
+      ],
+      "pid": 91565,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/final/journal-mistral-tail-resources.test.ts.log",
+      "sha256": "5622475e47ee102e283c7fdf7bdc5492f1ae04a505beafa1d04572b8c48c5e38"
+    },
+    {
+      "name": "versionCopy.mistral.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/core/src/journal/versionCopy.mistral.test.ts"
+      ],
+      "pid": 91765,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/final/versionCopy.mistral.test.ts.log",
+      "sha256": "807f8819ce887b389ec1aa54767de443a130fed21e30dbc37edd70d9eae45f06"
+    },
+    {
+      "name": "mistral-native-conversion.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/openai/__tests__/mistral-native-conversion.test.ts"
+      ],
+      "pid": 91771,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/final/mistral-native-conversion.test.ts.log",
+      "sha256": "5248e6a6d1e9a0ab9760199f01d13842216eac12d7955b62d1aed5b21d43e852"
+    },
+    {
+      "name": "mistral-native-frozen.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/openai/__tests__/mistral-native-frozen.test.ts"
+      ],
+      "pid": 91774,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/final/mistral-native-frozen.test.ts.log",
+      "sha256": "45366f444069dc595f5830f1ff7eed98c127213bb158c574bd625edf3a785b80"
+    },
+    {
+      "name": "length-model.chat.mistral.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/openai/__tests__/length-model.chat.mistral.test.ts"
+      ],
+      "pid": 92227,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/final/length-model.chat.mistral.test.ts.log",
+      "sha256": "4311ac5240510c7e53f0d1efe3ff08e38645107aa64cfeb8dd7c9935460b2106"
+    },
+    {
+      "name": "length-model.chat.plain.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/openai/__tests__/length-model.chat.plain.test.ts"
+      ],
+      "pid": 92387,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/final/length-model.chat.plain.test.ts.log",
+      "sha256": "a2ad744b9344fb6984b29b2173a90340c683ff5ee670cf34519a787850bc71cc"
+    },
+    {
+      "name": "native-chat-continuation-runtime.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/agents/src/core/__tests__/native-chat-continuation-runtime.test.ts"
+      ],
+      "pid": 1663,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/refresh/native-chat-continuation-runtime.test.ts.log",
+      "sha256": "90d7fb79f96a107b5041b64a4fc442161d2f111a2f5763ed443e9780f447de0b"
+    },
+    {
+      "name": "native-chat-continuation-lifetime.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/__tests__/native-chat-continuation-lifetime.test.ts"
+      ],
+      "pid": 92787,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/final/native-chat-continuation-lifetime.test.ts.log",
+      "sha256": "deaa45441af492e78f39e760b07f3a08d0c4517a36f92b490b2787228b85bc6e"
+    },
+    {
+      "name": "native-chat-continuation-refusal.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/__tests__/native-chat-continuation-refusal.test.ts"
+      ],
+      "pid": 1710,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/refresh/native-chat-continuation-refusal.test.ts.log",
+      "sha256": "b95f93dece1dcd944a39452492b319da60a10ed5d4127d307f165c6a172bc49d"
+    },
+    {
+      "name": "native-chat-continuation-reads.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/openai/native-chat-continuation-reads.test.ts"
+      ],
+      "pid": 1931,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/refresh/native-chat-continuation-reads.test.ts.log",
+      "sha256": "c73cf76b175610433f787820824b63eb2164ec6a3ef250aafe167a5d9bd978a7"
+    },
+    {
+      "name": "native-chat-continuation-transport.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/openai/native-chat-continuation-transport.test.ts"
+      ],
+      "pid": 94499,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/final/native-chat-continuation-transport.test.ts.log",
+      "sha256": "f35fa0194bd051473a818261398db8c143f5f3425873adc2f6006625383af0dc"
+    },
+    {
+      "name": "native-chat-continuation-http.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "packages/providers/src/__tests__/native-chat-continuation-http.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 2609,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/refresh/native-chat-continuation-http.test.ts.log",
+      "sha256": "53f9be4ef9be2a53ec481a2817d34b19845041b6204b43be7830d141e3b39fc7"
+    },
+    {
+      "name": "native-chat-continuation.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "packages/providers/src/openai/native-chat-continuation.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 94881,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/final/native-chat-continuation.test.ts.log",
+      "sha256": "6f9eb999a3b26e1641044a5c4701b6ff0541c74892556b50214554243a13b3fa"
+    },
+    {
+      "name": "native-chat-preparation.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "packages/providers/src/openai/native-chat-preparation.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 94964,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/final/native-chat-preparation.test.ts.log",
+      "sha256": "23a312ec13a34b77bc5265264a56f6a159f92f7e556ca5db54c69262aa3e9cc2"
+    },
+    {
+      "name": "native-chat-golden.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "packages/providers/src/__tests__/native-chat-golden.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 3113,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/refresh/native-chat-golden.test.ts.log",
+      "sha256": "d60677affd9ac34cc8f1dacb79a00cb79cb150d74fe30ebfca34d9a265fb1e82"
+    },
+    {
+      "name": "OpenAIChatContinuation.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "packages/providers/src/openai/OpenAIChatContinuation.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 95129,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/final/OpenAIChatContinuation.test.ts.log",
+      "sha256": "47b3ed8849ac1fc4a8db7f8157183f010d3534326f1ba792255cabe40dbe2404"
+    },
+    {
+      "name": "journal-chat-length.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "packages/providers/src/openai/journal-chat-length.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 3155,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/refresh/journal-chat-length.test.ts.log",
+      "sha256": "261f288d7e875506bc12ce81626ae6ed53645db7f2658ba1bf82c9aacfd9f0f0"
+    },
+    {
+      "name": "journal-chat-length-lifecycle.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "packages/providers/src/openai/journal-chat-length-lifecycle.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 95257,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/final/journal-chat-length-lifecycle.test.ts.log",
+      "sha256": "b9c3df57285013e35572bff0de25f1551789df67213f7359c32652e3b4a5c2df"
+    },
+    {
+      "name": "native-chat-media-lease.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "packages/providers/src/__tests__/native-chat-media-lease.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 95302,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/final/native-chat-media-lease.test.ts.log",
+      "sha256": "6d389313665c69bf4aed59ab8cf8cfc397d85a892de995845d875559d0d3cedf"
+    },
+    {
+      "name": "native-chat-session-http.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "packages/agents/src/core/__tests__/native-chat-session-http.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 95387,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/final/native-chat-session-http.test.ts.log",
+      "sha256": "9186c6374fd4f4b994d89bdd7f6728c466d638999a11893a2c2be606eb5f1075"
+    },
+    {
+      "name": "native-chat-purge-http.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "packages/agents/src/core/__tests__/native-chat-purge-http.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 95468,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/final/native-chat-purge-http.test.ts.log",
+      "sha256": "29cd2b95afd6238f08534b9e0a6ba5ea127fa3e51b8b00c9a36d0ddfdcdb3f70"
+    },
+    {
+      "name": "native-purge-view-http.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "packages/agents/src/core/native-purge-view-http.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 95520,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/final/native-purge-view-http.test.ts.log",
+      "sha256": "05cad0ea90069095ca20ed78070023c942ac940cc66e510df8e2db901d3e9e31"
+    },
+    {
+      "name": "journalStore.readerLifetime.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "packages/core/src/journal/journalStore.readerLifetime.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 95741,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/final/journalStore.readerLifetime.test.ts.log",
+      "sha256": "a351c3114638416c377aaab93a673197ec6b8053003cc84e0e7ade93903021b5"
+    },
+    {
+      "name": "journalStore.readerCleanup.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "packages/core/src/journal/journalStore.readerCleanup.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 95756,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/final/journalStore.readerCleanup.test.ts.log",
+      "sha256": "dd7081a0bc2a803e248b0bc1f3c41dbefe5fb6ae27dbce739d4d4b9f55aaf4b0"
+    },
+    {
+      "name": "wireBodyGolden.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "packages/providers/src/__tests__/wireBodyGolden.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 95779,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/final/wireBodyGolden.test.ts.log",
+      "sha256": "462eeaaf0900babca16d76ab26507aab50bd20eb834348e16943428aaa56c2b8"
+    },
+    {
+      "name": "native-media-queue-reopen.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/core/src/storage/native-media-queue-reopen.test.ts"
+      ],
+      "pid": 95870,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/final/native-media-queue-reopen.test.ts.log",
+      "sha256": "565b176427bb8f1724df2f0a54ddb2ab70feaf5f3819147ec3f3e4df37f21e62"
+    },
+    {
+      "name": "progressive-json-body.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/utils/progressive-json-body.test.ts"
+      ],
+      "pid": 95883,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/final/progressive-json-body.test.ts.log",
+      "sha256": "b7b4b33618df36d2015bd6315248d10009752e6ade82402d27f2fb5ba53abfb7"
+    },
+    {
+      "name": "OpenAIProvider.continuationTiming.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/openai/__tests__/OpenAIProvider.continuationTiming.test.ts"
+      ],
+      "pid": 95887,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/final/OpenAIProvider.continuationTiming.test.ts.log",
+      "sha256": "89d485cd805d7c29a0b1ae4acc0d5d696ba3ca32d96e0e6c4b99fbf4ca14f85e"
+    },
+    {
+      "name": "core-declarations",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "../../scripts/build_package.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 3167,
+      "exit": 0,
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127",
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/refresh/core-declarations.log"
+    },
+    {
+      "name": "providers-declarations",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "../../scripts/build_package.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "pid": 3306,
+      "exit": 0,
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127",
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/refresh/providers-declarations.log"
+    },
+    {
+      "name": "agents-declarations",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "../../scripts/build_package.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents",
+      "pid": 3521,
+      "exit": 0,
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127",
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/refresh/agents-declarations.log"
+    },
+    {
+      "name": "core-types",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/core/tsconfig.noemit.json"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 3553,
+      "exit": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/refresh/core-types.log"
+    },
+    {
+      "name": "providers-types",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/providers/tsconfig.noemit.json"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 3684,
+      "exit": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/refresh/providers-types.log"
+    },
+    {
+      "name": "agents-types",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/agents/tsconfig.noemit.json"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 4425,
+      "exit": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/refresh/agents-types.log"
+    },
+    {
+      "name": "providers-bun-types",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/providers/tsconfig.test-bun.json",
+        "--types",
+        "bun"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 5408,
+      "exit": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/refresh/providers-bun-types.log"
+    },
+    {
+      "name": "agents-bun-types",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/agents/tsconfig.test-bun.json",
+        "--types",
+        "bun"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 5549,
+      "exit": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/refresh/agents-bun-types.log"
+    },
+    {
+      "name": "providers-current-bun-types",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/providers/tsconfig.noemit.json",
+        "--types",
+        "bun"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 5841,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/refresh/providers-current-bun-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "agents-current-bun-types",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/agents/tsconfig.noemit.json",
+        "--types",
+        "bun"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 6235,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/refresh/agents-current-bun-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "lint",
+      "args": [
+        "node_modules/.bin/eslint",
+        "--max-warnings",
+        "0",
+        "packages/agents/src/core/__tests__/native-chat-continuation-runtime.test.ts",
+        "packages/core/src/journal/formatFill.ts",
+        "packages/core/src/journal/pinned-format-fill.ts",
+        "packages/core/src/journal/rowFormat.ts",
+        "packages/core/src/journal/versionSnapshot.ts",
+        "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+        "packages/core/src/services/history/journal-mistral-tail-pins.test.ts",
+        "packages/core/src/services/history/native-provider-format.ts",
+        "packages/providers/src/__tests__/native-chat-continuation-http.test.ts",
+        "packages/providers/src/__tests__/native-chat-golden.test.ts",
+        "packages/providers/src/__tests__/native-chat-mistral-send.test.ts",
+        "packages/providers/src/openai/OpenAIRequestPreparation.ts",
+        "packages/providers/src/openai/journal-chat-length.ts",
+        "packages/providers/src/openai/native-chat-body.ts",
+        "packages/providers/src/openai/native-chat-continuation-reads.test.ts",
+        "packages/providers/src/openai/native-chat-estimate.test.ts",
+        "packages/providers/src/openai/native-chat-estimate.ts",
+        "packages/providers/src/openai/native-chat-messages.ts"
+      ],
+      "pid": 6266,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/refresh/lint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "format",
+      "args": [
+        "node_modules/.bin/prettier",
+        "--check",
+        "packages/agents/src/core/__tests__/native-chat-continuation-runtime.test.ts",
+        "packages/core/src/journal/formatFill.ts",
+        "packages/core/src/journal/pinned-format-fill.ts",
+        "packages/core/src/journal/rowFormat.ts",
+        "packages/core/src/journal/versionSnapshot.ts",
+        "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+        "packages/core/src/services/history/journal-mistral-tail-pins.test.ts",
+        "packages/core/src/services/history/native-provider-format.ts",
+        "packages/providers/src/__tests__/native-chat-continuation-http.test.ts",
+        "packages/providers/src/__tests__/native-chat-golden.test.ts",
+        "packages/providers/src/__tests__/native-chat-mistral-send.test.ts",
+        "packages/providers/src/openai/OpenAIRequestPreparation.ts",
+        "packages/providers/src/openai/journal-chat-length.ts",
+        "packages/providers/src/openai/native-chat-body.ts",
+        "packages/providers/src/openai/native-chat-continuation-reads.test.ts",
+        "packages/providers/src/openai/native-chat-estimate.test.ts",
+        "packages/providers/src/openai/native-chat-estimate.ts",
+        "packages/providers/src/openai/native-chat-messages.ts"
+      ],
+      "pid": 6484,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/refresh/format.log",
+      "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+    },
+    {
+      "name": "graph",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "scripts/check-affected-test-shards.ts"
+      ],
+      "pid": 6491,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/refresh/graph.log",
+      "sha256": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67"
+    },
+    {
+      "name": "audit",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "scripts/test-audit/scan.ts",
+        "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/refresh/audit"
+      ],
+      "pid": 6529,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/refresh/audit.log",
+      "sha256": "c4530ae46f048014198758612b13e4533376eb6846904d6224fb3763c40329cf"
+    },
+    {
+      "name": "preservation",
+      "args": [
+        "shasum",
+        "-a",
+        "256",
+        "-c",
+        "tmp/p6/chat-tail-run-au/preserved.sha256"
+      ],
+      "pid": 6570,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-run-bj/refresh/preservation.log",
+      "sha256": "0e4199bb6c410cc6f1e5bd39e3d87c8159795d9dc60279f003e975a7ea37b454"
+    }
+  ],
+  "controls": [
+    {
+      "name": "wrong-collision-winner",
+      "exit": 1,
+      "assertionFailure": true,
+      "logSha256": "1ed4cc34bb56f841613c3f700ccd6a3631849a38030f2468688f41934db3b68d",
+      "restored": [
+        {
+          "path": "packages/providers/src/openai/native-mistral-row.ts",
+          "sha256": "4d5b46eb17ceaa87284dc30b07b0ac952ea0e089d1da6c5a312927c16ffc3bf8",
+          "restored": true
+        }
+      ],
+      "summary": "k.requests[0].bytes).toBe(expected.length);\n205 |         expect(sink.requests[0].sha256).toBe(expected.sha256);\n                                              ^\nerror: expect(received).toBe(expected)\n\nExpected: \"b7feafa43fa090a445dc6f2d6184b57be123342de0580e6740faf6ffa99c1e22\"\nReceived: \"936ff984931e73597087ec90bc8b96fadd4e234b1b91feb7dcfb3af2d7c22261\"\n\n      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/__tests__/native-chat-mistral-send.test.ts:205:41)\n(fail) native Mistral production HTTP > matches old Mistral bytes without operation files for history 6/allButLast [55.56ms]\n(pass) native Mistral production HTTP > matches old Mistral bytes without operation files for history 7/none [30.73ms]\n(pass) native Mistral production HTTP > matches old Mistral bytes without operation files for history 7/all [29.00ms]\n(pass) native Mistral production HTTP > matches old Mistral bytes without operation files for history 7/allButLast [36.74ms]\n(pass) native Mistral production HTTP > matches old Mistral bytes without operation files for history 8/none [32.21ms]\n(pass) native Mistral production HTTP > matches old Mistral bytes without operation files for history 8/all [33.31ms]\n(pass) native Mistral production HTTP > matches old Mistral bytes without operation files for history 8/allButLast [33.20ms]\n(pass) native Mistral production HTTP > matches old Mistral bytes without operation files for history 9/none [68.60ms]\n(pass) native Mistral production HTTP > matches old Mistral bytes without operation files for history 9/all [38.30ms]\n(pass) native Mistral production HTTP > matches old Mistral bytes without operation files for history 9/allButLast [79.18ms]\n\n 18 pass\n 12 fail\n 138 expect() calls\nRan 30 tests across 1 file. [2.33s]\n"
+    },
+    {
+      "name": "stale-rebuild-mapping",
+      "exit": 1,
+      "assertionFailure": true,
+      "logSha256": "acb1ca21b8ed2dc07ca28a374ea005188de89e714578cce2ed424cb4ac52db4a",
+      "restored": [
+        {
+          "path": "packages/core/src/journal/mistralMapping.ts",
+          "sha256": "2d9064c5056b3f24055c7b47236cb2d6b9a579d18c1feae38b0e25d3f70cacee",
+          "restored": true
+        }
+      ],
+      "summary": "rough production preparation > matches the old eager token oracle for cache-tail-thinking with captured system/tools and inline media [6.88ms]\n(pass) stored native Chat estimates through production preparation > matches the old eager token oracle for cache-media-purge-boundary with captured system/tools and inline media [10.04ms]\n(pass) stored native Chat estimates through production preparation > matches the old eager token oracle for responses-stateful-parent with captured system/tools and inline media [9.13ms]\n(pass) stored native Chat estimates through production preparation > matches the old eager token oracle for blockless-row with captured system/tools and inline media [10.92ms]\n(pass) stored native Chat estimates through production preparation > matches the old eager token oracle for many-images with captured system/tools and inline media [8.77ms]\n(pass) stored native Chat estimates through production preparation > matches the old eager token oracle for embedded-data-uri with captured system/tools and inline media [13.43ms]\n(pass) stored native Chat estimates through production preparation > preserves scoped estimate failure behavior for abort and permits a fresh pin [5.85ms]\n(pass) stored native Chat estimates through production preparation > preserves scoped estimate failure behavior for dispose and permits a fresh pin [20.23ms]\n(pass) stored native Chat estimates through production preparation > preserves scoped estimate failure behavior for tokenizer-failure and permits a fresh pin [5.83ms]\n\n1 tests failed:\n(fail) stored native Chat estimates through production preparation > keeps emitted old-pin salted IDs after replacement and reassigns the surviving call in the new pin [150.04ms]\n\n 102 pass\n 1 fail\n 214 expect() calls\nRan 103 tests across 1 file. [5.97s]\n"
+    },
+    {
+      "name": "forced-legacy-files",
+      "exit": 1,
+      "assertionFailure": true,
+      "logSha256": "b958f1751fc555091abde24708def5133a9d706163ad9a944f84cf91571bde44",
+      "restored": [
+        {
+          "path": "packages/providers/src/openai/OpenAIRequestPreparation.ts",
+          "sha256": "636078755a81780706123620ada76de3806e0f4908052ab047745bd71954dba2",
+          "restored": true
+        },
+        {
+          "path": "packages/providers/src/__tests__/native-chat-mistral-send.test.ts",
+          "sha256": "9b9765d0d968bf4c72caed4d68f23938c7beceda75f86cae253732c25e0ef19f",
+          "restored": true
+        }
+      ],
+      "summary": "tes without operation files for history 9/all [27.67ms]\n197 |         );\n198 |         const receipt = await operationFileCreates(async () => {\n199 |           for await (const chunk of provider.generateChatCompletion(options))\n200 |             void chunk;\n201 |         }, false);\n202 |         expect(receipt).toStrictEqual({ files: [], directories: [] });\n                              ^\nerror: expect(received).toStrictEqual(expected)\n\n  {\n-   \"directories\": [],\n-   \"files\": [],\n+   \"directories\": [\n+     \"/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/llxprt-scratch-99798-m64xFm/openai-chat-\",\n+     \"/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/llxprt-scratch-99798-m64xFm/tool-ids-\",\n+     \"/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/llxprt-scratch-99798-m64xFm/llxprt-dump-scratch-\",\n+   ],\n+   \"files\": [\n+     \"/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/llxprt-scratch-99798-m64xFm/openai-chat-Kya4c5/body\",\n+     \"/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/llxprt-scratch-99798-m64xFm/tool-ids-hhg1Tq/index\",\n+     \"/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/llxprt-scratch-99798-m64xFm/tool-ids-hhg1Tq/values\",\n+     \"/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/llxprt-scratch-99798-m64xFm/llxprt-dump-scratch-GoVI0A/data\",\n+     \"/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/llxprt-scratch-99798-m64xFm/llxprt-dump-scratch-GoVI0A/index\",\n+   ],\n  }\n\n- Expected  - 2\n+ Received  + 12\n\n      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/__tests__/native-chat-mistral-send.test.ts:202:25)\n(fail) native Mistral production HTTP > matches old Mistral bytes without operation files for history 9/allButLast [28.85ms]\n\n 0 pass\n 30 fail\n 30 expect() calls\nRan 30 tests across 1 file. [1398.00ms]\n"
+    },
+    {
+      "name": "wrong-tail-format",
+      "exit": 1,
+      "assertionFailure": true,
+      "logSha256": "55c6a54b5ea693bb80ed38d5b1d85009bcd27574a730c983465b3fdd5ec2337a",
+      "restored": [
+        {
+          "path": "packages/providers/src/openai/native-chat-body.ts",
+          "sha256": "6003c78cde68aafb1f008f3756fd080eaa01abb3b7da1dfcfff3a0c64f18582f",
+          "restored": true
+        }
+      ],
+      "summary": "inuation over actual HTTP > cache-media-purge-boundary/none sends both old-converter bodies without operation files [26.59ms]\n(fail) native Chat plain and Mistral routes > native openai-chat-mistral continuation over actual HTTP > cache-media-purge-boundary/all sends both old-converter bodies without operation files [24.36ms]\n(fail) native Chat plain and Mistral routes > native openai-chat-mistral continuation over actual HTTP > cache-media-purge-boundary/allButLast sends both old-converter bodies without operation files [28.04ms]\n(fail) native Chat plain and Mistral routes > native openai-chat-mistral continuation over actual HTTP > responses-stateful-parent/none sends both old-converter bodies without operation files [30.82ms]\n(fail) native Chat plain and Mistral routes > native openai-chat-mistral continuation over actual HTTP > responses-stateful-parent/all sends both old-converter bodies without operation files [37.38ms]\n(fail) native Chat plain and Mistral routes > native openai-chat-mistral continuation over actual HTTP > responses-stateful-parent/allButLast sends both old-converter bodies without operation files [35.14ms]\n(fail) native Chat plain and Mistral routes > native openai-chat-mistral continuation over actual HTTP > blockless-row/none sends both old-converter bodies without operation files [28.68ms]\n(fail) native Chat plain and Mistral routes > native openai-chat-mistral continuation over actual HTTP > blockless-row/all sends both old-converter bodies without operation files [29.34ms]\n(fail) native Chat plain and Mistral routes > native openai-chat-mistral continuation over actual HTTP > blockless-row/allButLast sends both old-converter bodies without operation files [33.07ms]\n\n 69 pass\n 69 fail\n 1242 expect() calls\nRan 138 tests across 1 file. [5.50s]\n"
+    },
+    {
+      "name": "dropped-result-id",
+      "exit": 1,
+      "assertionFailure": true,
+      "logSha256": "4e106704224a75968bdf93e67748c19367637d1aea417047f2d4b5e061d60b39",
+      "restored": [
+        {
+          "path": "packages/providers/src/openai/native-mistral-row.ts",
+          "sha256": "4d5b46eb17ceaa87284dc30b07b0ac952ea0e089d1da6c5a312927c16ffc3bf8",
+          "restored": true
+        }
+      ],
+      "summary": "mous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/__tests__/native-chat-mistral-send.test.ts:204:40)\n(fail) native Mistral production HTTP > matches old Mistral bytes without operation files for history 9/none [64.72ms]\n199 |           for await (const chunk of provider.generateChatCompletion(options))\n200 |             void chunk;\n201 |         }, true);\n202 |         expect(receipt).toStrictEqual({ files: [], directories: [] });\n203 |         expect(sink.requests).toHaveLength(1);\n204 |         expect(sink.requests[0].bytes).toBe(expected.length);\n                                             ^\nerror: expect(received).toBe(expected)\n\nExpected: 1147\nReceived: 683\n\n      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/__tests__/native-chat-mistral-send.test.ts:204:40)\n(fail) native Mistral production HTTP > matches old Mistral bytes without operation files for history 9/all [49.28ms]\n199 |           for await (const chunk of provider.generateChatCompletion(options))\n200 |             void chunk;\n201 |         }, true);\n202 |         expect(receipt).toStrictEqual({ files: [], directories: [] });\n203 |         expect(sink.requests).toHaveLength(1);\n204 |         expect(sink.requests[0].bytes).toBe(expected.length);\n                                             ^\nerror: expect(received).toBe(expected)\n\nExpected: 1147\nReceived: 683\n\n      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/__tests__/native-chat-mistral-send.test.ts:204:40)\n(fail) native Mistral production HTTP > matches old Mistral bytes without operation files for history 9/allButLast [50.59ms]\n\n 3 pass\n 27 fail\n 96 expect() calls\nRan 30 tests across 1 file. [1.93s]\n"
+    },
+    {
+      "name": "escaped-borrowed-mapping",
+      "exit": 1,
+      "assertionFailure": true,
+      "logSha256": "41d41868e227b9507ee173906b6694ea45cba0cf0e9560001ae2cf6963c17649",
+      "restored": [
+        {
+          "path": "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+          "sha256": "a0955e4f02aaf25119f4bef47d0131666b6d6996494d79ee695a3632faebcba0",
+          "restored": true
+        }
+      ],
+      "summary": "bun test v1.3.14 (0d9b296a)\n\npackages/core/src/services/history/journal-mistral-tail-pins.test.ts:\n23 |       const request = await IndexedJournalRequestSnapshot.create(pin);\n24 |       try {\n25 |         const borrowed = await request.mistralForSnapshot(pin, 0);\n26 |         expect((await borrowed.resolve('toolu_alpha-1')).id).toBe('4SftZvDMX');\n27 |         await request.close();\n28 |         await expect(borrowed.resolve('toolu_alpha-1')).rejects.toThrow(\n                                                                     ^\nerror: \n\nExpected promise that rejects\nReceived promise that resolved: Promise { <resolved> }\n\n      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/journal-mistral-tail-pins.test.ts:28:65)\n(fail) request Mistral pin and pending isolation > retires a borrowed measured mapping when its request closes while the underlying pin stays open [23.49ms]\n(pass) request Mistral pin and pending isolation > holds callback ownership across closed openers and isolates concurrent pending views [4.66ms]\n(pass) request Mistral pin and pending isolation > preserves the primary callback failure over final release [2.24ms]\n(pass) request Mistral pin and pending isolation > preserves the primary abort failure over final release [2.05ms]\n(pass) request Mistral pin and pending isolation > preserves a preparation read failure over final release [1.25ms]\n\n 4 pass\n 1 fail\n 15 expect() calls\nRan 5 tests across 1 file. [219.00ms]\n"
+    },
+    {
+      "name": "wrong-stored-token-count",
+      "exit": 1,
+      "assertionFailure": true,
+      "logSha256": "c343f98cc208c60f65dce928091a0ffb870fcad83ce332b9d5db97b506a58ba1",
+      "restored": [
+        {
+          "path": "packages/providers/src/openai/native-chat-estimate.ts",
+          "sha256": "44cbf624406df535cad25e99c642a389a9529dfc0698b12094a2a561d55ce6c0",
+          "restored": true
+        }
+      ],
+      "summary": "enai/native-chat-estimate.test.ts:455:13)\n(fail) stored native Chat estimates through production preparation > matches the old eager token oracle for many-images with captured system/tools and inline media [11.42ms]\n464 |             policy,\n465 |             createRuntimeTokenizerFactory(),\n466 |             fixed,\n467 |           );\n468 |           expect(tokens).toBeGreaterThan(0);\n469 |           expect(Math.abs(tokens - expected)).toBeLessThanOrEqual(\n                                                    ^\nerror: expect(received).toBeLessThanOrEqual(expected)\n\nExpected: <= 16\nReceived: 400\n\n      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/native-chat-estimate.test.ts:469:47)\n      at async withHistory (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/native-chat-estimate.test.ts:136:13)\n      at async <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/native-chat-estimate.test.ts:455:13)\n(fail) stored native Chat estimates through production preparation > matches the old eager token oracle for embedded-data-uri with captured system/tools and inline media [11.33ms]\n(pass) stored native Chat estimates through production preparation > preserves scoped estimate failure behavior for abort and permits a fresh pin [6.45ms]\n(pass) stored native Chat estimates through production preparation > preserves scoped estimate failure behavior for dispose and permits a fresh pin [8.67ms]\n(pass) stored native Chat estimates through production preparation > preserves scoped estimate failure behavior for tokenizer-failure and permits a fresh pin [3.93ms]\n\n 6 pass\n 97 fail\n 210 expect() calls\nRan 103 tests across 1 file. [5.28s]\n"
+    }
+  ],
+  "planning": {
+    "pid": 1931,
+    "results": [
+      {
+        "size": 40,
+        "model": "gpt-4o",
+        "interval": "After first selection/cold fills; warm prepareRequest capture interval separate from continuation.build and unsent release; excludes HTTP emission",
+        "planned": {
+          "firstBytes": 1939,
+          "secondBytes": 2080
+        },
+        "payloadOverlaps": 0,
+        "capturePayloadOverlaps": 0,
+        "captureRequestedBytes": 78376,
+        "secondRequestedBytes": 0,
+        "captureReads": [
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-fNlSKI/session-2026-10-22T12-33-09-5cf40558-e584-4610-a4ec-7f94a28dd252-last-thinkin.llxj",
+            "fd": 497,
+            "position": 254216,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-fNlSKI/session-2026-10-22T12-33-09-5cf40558-e584-4610-a4ec-7f94a28dd252-last-thinkin.llxj",
+            "fd": 497,
+            "position": 254236,
+            "requested": 6176,
+            "returned": 6176
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-fNlSKI/session-2026-10-22T12-33-09-5cf40558-e584-4610-a4ec-7f94a28dd252-last-thinkin.llxj",
+            "fd": 497,
+            "position": 223988,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-fNlSKI/session-2026-10-22T12-33-09-5cf40558-e584-4610-a4ec-7f94a28dd252-last-thinkin.llxj",
+            "fd": 497,
+            "position": 224008,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-fNlSKI/session-2026-10-22T12-33-09-5cf40558-e584-4610-a4ec-7f94a28dd252-last-thinkin.llxj",
+            "fd": 497,
+            "position": 254216,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-fNlSKI/session-2026-10-22T12-33-09-5cf40558-e584-4610-a4ec-7f94a28dd252-last-thinkin.llxj",
+            "fd": 497,
+            "position": 254236,
+            "requested": 6176,
+            "returned": 6176
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-fNlSKI/session-2026-10-22T12-33-09-5cf40558-e584-4610-a4ec-7f94a28dd252-last-thinkin.llxj",
+            "fd": 497,
+            "position": 202473,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-fNlSKI/session-2026-10-22T12-33-09-5cf40558-e584-4610-a4ec-7f94a28dd252-last-thinkin.llxj",
+            "fd": 497,
+            "position": 202493,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-fNlSKI/session-2026-10-22T12-33-09-5cf40558-e584-4610-a4ec-7f94a28dd252-last-thinkin.llxj",
+            "fd": 497,
+            "position": 223988,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-fNlSKI/session-2026-10-22T12-33-09-5cf40558-e584-4610-a4ec-7f94a28dd252-last-thinkin.llxj",
+            "fd": 497,
+            "position": 224008,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-fNlSKI/session-2026-10-22T12-33-09-5cf40558-e584-4610-a4ec-7f94a28dd252-last-thinkin.llxj",
+            "fd": 497,
+            "position": 254216,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-fNlSKI/session-2026-10-22T12-33-09-5cf40558-e584-4610-a4ec-7f94a28dd252-last-thinkin.llxj",
+            "fd": 497,
+            "position": 254236,
+            "requested": 6176,
+            "returned": 6176
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-fNlSKI/session-2026-10-22T12-33-09-5cf40558-e584-4610-a4ec-7f94a28dd252-last-thinkin.llxj",
+            "fd": 497,
+            "position": 223988,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-fNlSKI/session-2026-10-22T12-33-09-5cf40558-e584-4610-a4ec-7f94a28dd252-last-thinkin.llxj",
+            "fd": 497,
+            "position": 224008,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-fNlSKI/session-2026-10-22T12-33-09-5cf40558-e584-4610-a4ec-7f94a28dd252-last-thinkin.llxj",
+            "fd": 497,
+            "position": 254216,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-fNlSKI/session-2026-10-22T12-33-09-5cf40558-e584-4610-a4ec-7f94a28dd252-last-thinkin.llxj",
+            "fd": 497,
+            "position": 254236,
+            "requested": 6176,
+            "returned": 6176
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-fNlSKI/session-2026-10-22T12-33-09-5cf40558-e584-4610-a4ec-7f94a28dd252-last-thinkin.llxj",
+            "fd": 497,
+            "position": 202473,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-fNlSKI/session-2026-10-22T12-33-09-5cf40558-e584-4610-a4ec-7f94a28dd252-last-thinkin.llxj",
+            "fd": 497,
+            "position": 202493,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-fNlSKI/session-2026-10-22T12-33-09-5cf40558-e584-4610-a4ec-7f94a28dd252-last-thinkin.llxj",
+            "fd": 497,
+            "position": 223988,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-fNlSKI/session-2026-10-22T12-33-09-5cf40558-e584-4610-a4ec-7f94a28dd252-last-thinkin.llxj",
+            "fd": 497,
+            "position": 224008,
+            "requested": 8912,
+            "returned": 8912
+          }
+        ],
+        "reads": []
+      },
+      {
+        "size": 40,
+        "model": "mistral-large-latest",
+        "interval": "After first selection/cold fills; warm prepareRequest capture interval separate from continuation.build and unsent release; excludes HTTP emission",
+        "planned": {
+          "firstBytes": 1953,
+          "secondBytes": 2110
+        },
+        "payloadOverlaps": 0,
+        "capturePayloadOverlaps": 0,
+        "captureRequestedBytes": 81453,
+        "secondRequestedBytes": 0,
+        "captureReads": [
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-YMGSFb/session-2026-10-22T12-33-10-0ab187c8-78f1-4e81-b1f3-818d94c2ec62-last-thinkin.llxj",
+            "fd": 497,
+            "position": 381495,
+            "requested": 1024,
+            "returned": 1024
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-YMGSFb/session-2026-10-22T12-33-10-0ab187c8-78f1-4e81-b1f3-818d94c2ec62-last-thinkin.llxj",
+            "fd": 497,
+            "position": 319466,
+            "requested": 1024,
+            "returned": 1024
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-YMGSFb/session-2026-10-22T12-33-10-0ab187c8-78f1-4e81-b1f3-818d94c2ec62-last-thinkin.llxj",
+            "fd": 497,
+            "position": 194985,
+            "requested": 1024,
+            "returned": 1024
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-YMGSFb/session-2026-10-22T12-33-10-0ab187c8-78f1-4e81-b1f3-818d94c2ec62-last-thinkin.llxj",
+            "fd": 497,
+            "position": 195018,
+            "requested": 1,
+            "returned": 1
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-YMGSFb/session-2026-10-22T12-33-10-0ab187c8-78f1-4e81-b1f3-818d94c2ec62-last-thinkin.llxj",
+            "fd": 497,
+            "position": 195019,
+            "requested": 4,
+            "returned": 4
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-YMGSFb/session-2026-10-22T12-33-10-0ab187c8-78f1-4e81-b1f3-818d94c2ec62-last-thinkin.llxj",
+            "fd": 497,
+            "position": 375189,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-YMGSFb/session-2026-10-22T12-33-10-0ab187c8-78f1-4e81-b1f3-818d94c2ec62-last-thinkin.llxj",
+            "fd": 497,
+            "position": 375209,
+            "requested": 6176,
+            "returned": 6176
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-YMGSFb/session-2026-10-22T12-33-10-0ab187c8-78f1-4e81-b1f3-818d94c2ec62-last-thinkin.llxj",
+            "fd": 497,
+            "position": 344961,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-YMGSFb/session-2026-10-22T12-33-10-0ab187c8-78f1-4e81-b1f3-818d94c2ec62-last-thinkin.llxj",
+            "fd": 497,
+            "position": 344981,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-YMGSFb/session-2026-10-22T12-33-10-0ab187c8-78f1-4e81-b1f3-818d94c2ec62-last-thinkin.llxj",
+            "fd": 497,
+            "position": 375189,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-YMGSFb/session-2026-10-22T12-33-10-0ab187c8-78f1-4e81-b1f3-818d94c2ec62-last-thinkin.llxj",
+            "fd": 497,
+            "position": 375209,
+            "requested": 6176,
+            "returned": 6176
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-YMGSFb/session-2026-10-22T12-33-10-0ab187c8-78f1-4e81-b1f3-818d94c2ec62-last-thinkin.llxj",
+            "fd": 497,
+            "position": 323446,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-YMGSFb/session-2026-10-22T12-33-10-0ab187c8-78f1-4e81-b1f3-818d94c2ec62-last-thinkin.llxj",
+            "fd": 497,
+            "position": 323466,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-YMGSFb/session-2026-10-22T12-33-10-0ab187c8-78f1-4e81-b1f3-818d94c2ec62-last-thinkin.llxj",
+            "fd": 497,
+            "position": 344961,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-YMGSFb/session-2026-10-22T12-33-10-0ab187c8-78f1-4e81-b1f3-818d94c2ec62-last-thinkin.llxj",
+            "fd": 497,
+            "position": 344981,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-YMGSFb/session-2026-10-22T12-33-10-0ab187c8-78f1-4e81-b1f3-818d94c2ec62-last-thinkin.llxj",
+            "fd": 497,
+            "position": 375189,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-YMGSFb/session-2026-10-22T12-33-10-0ab187c8-78f1-4e81-b1f3-818d94c2ec62-last-thinkin.llxj",
+            "fd": 497,
+            "position": 375209,
+            "requested": 6176,
+            "returned": 6176
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-YMGSFb/session-2026-10-22T12-33-10-0ab187c8-78f1-4e81-b1f3-818d94c2ec62-last-thinkin.llxj",
+            "fd": 497,
+            "position": 344961,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-YMGSFb/session-2026-10-22T12-33-10-0ab187c8-78f1-4e81-b1f3-818d94c2ec62-last-thinkin.llxj",
+            "fd": 497,
+            "position": 344981,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-YMGSFb/session-2026-10-22T12-33-10-0ab187c8-78f1-4e81-b1f3-818d94c2ec62-last-thinkin.llxj",
+            "fd": 497,
+            "position": 375189,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-YMGSFb/session-2026-10-22T12-33-10-0ab187c8-78f1-4e81-b1f3-818d94c2ec62-last-thinkin.llxj",
+            "fd": 497,
+            "position": 375209,
+            "requested": 6176,
+            "returned": 6176
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-YMGSFb/session-2026-10-22T12-33-10-0ab187c8-78f1-4e81-b1f3-818d94c2ec62-last-thinkin.llxj",
+            "fd": 497,
+            "position": 323446,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-YMGSFb/session-2026-10-22T12-33-10-0ab187c8-78f1-4e81-b1f3-818d94c2ec62-last-thinkin.llxj",
+            "fd": 497,
+            "position": 323466,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-YMGSFb/session-2026-10-22T12-33-10-0ab187c8-78f1-4e81-b1f3-818d94c2ec62-last-thinkin.llxj",
+            "fd": 497,
+            "position": 344961,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-YMGSFb/session-2026-10-22T12-33-10-0ab187c8-78f1-4e81-b1f3-818d94c2ec62-last-thinkin.llxj",
+            "fd": 497,
+            "position": 344981,
+            "requested": 8912,
+            "returned": 8912
+          }
+        ],
+        "reads": []
+      },
+      {
+        "size": 4000,
+        "model": "gpt-4o",
+        "interval": "After first selection/cold fills; warm prepareRequest capture interval separate from continuation.build and unsent release; excludes HTTP emission",
+        "planned": {
+          "firstBytes": 163319,
+          "secondBytes": 163420
+        },
+        "payloadOverlaps": 0,
+        "capturePayloadOverlaps": 0,
+        "captureRequestedBytes": 267376,
+        "secondRequestedBytes": 0,
+        "captureReads": [
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 27966013,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 27966033,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 25097441,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 25097461,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 24991569,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 24991589,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 24918073,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 24918093,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 27966013,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 27966033,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 22764334,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 22764354,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 21986630,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 21986650,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 21891614,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 21891634,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 25097441,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 25097461,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 24309846,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 24309866,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 24204934,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 24204954,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 24991569,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 24991589,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 24886662,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 24886682,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 24918073,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 24918093,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 27966013,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 27966033,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 25097441,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 25097461,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 24991569,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 24991589,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 24918073,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 24918093,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 27966013,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 27966033,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 22764334,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 22764354,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 21986630,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 21986650,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 21891614,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 21891634,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 25097441,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 25097461,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 24309846,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 24309866,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 24204934,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 24204954,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 24991569,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 24991589,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 24886662,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 24886682,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 24918073,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-CLS14R/session-2026-10-22T12-33-10-a3325582-67f4-4fa3-b9b1-7e58e9ad549c-last-thinkin.llxj",
+            "fd": 497,
+            "position": 24918093,
+            "requested": 8912,
+            "returned": 8912
+          }
+        ],
+        "reads": []
+      },
+      {
+        "size": 4000,
+        "model": "mistral-large-latest",
+        "interval": "After first selection/cold fills; warm prepareRequest capture interval separate from continuation.build and unsent release; excludes HTTP emission",
+        "planned": {
+          "firstBytes": 163333,
+          "secondBytes": 163450
+        },
+        "payloadOverlaps": 0,
+        "capturePayloadOverlaps": 0,
+        "captureRequestedBytes": 270453,
+        "secondRequestedBytes": 0,
+        "captureReads": [
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 42037327,
+            "requested": 1024,
+            "returned": 1024
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 35948946,
+            "requested": 1024,
+            "returned": 1024
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 23771761,
+            "requested": 1024,
+            "returned": 1024
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 23771794,
+            "requested": 1,
+            "returned": 1
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 23771795,
+            "requested": 4,
+            "returned": 4
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 42027325,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 42027345,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 39158753,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 39158773,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 39052881,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 39052901,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 38979385,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 38979405,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 42027325,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 42027345,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 36825646,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 36825666,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 36047942,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 36047962,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 35952926,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 35952946,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 39158753,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 39158773,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 38371158,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 38371178,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 38266246,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 38266266,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 39052881,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 39052901,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 38947974,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 38947994,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 38979385,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 38979405,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 42027325,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 42027345,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 39158753,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 39158773,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 39052881,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 39052901,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 38979385,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 38979405,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 42027325,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 42027345,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 36825646,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 36825666,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 36047942,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 36047962,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 35952926,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 35952946,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 39158753,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 39158773,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 38371158,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 38371178,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 38266246,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 38266266,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 39052881,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 39052901,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 38947974,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 38947994,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 38979385,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-F6F3I4/session-2026-10-22T12-33-12-5573357a-335e-43a1-b042-f2ecac58db92-last-thinkin.llxj",
+            "fd": 497,
+            "position": 38979405,
+            "requested": 8912,
+            "returned": 8912
+          }
+        ],
+        "reads": []
+      }
+    ]
+  },
+  "publicMistral": [
+    {
+      "strip": "none",
+      "streaming": false,
+      "purge": "off",
+      "estimates": [
+        165
+      ],
+      "requestOrdinals": [
+        [
+          "1",
+          "2",
+          "3"
+        ],
+        [
+          "1",
+          "2",
+          "3"
+        ]
+      ],
+      "ordinals": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "bodies": [
+        {
+          "length": 731,
+          "contentLength": 731,
+          "sha256": "e8181e2216783654ad0fd71631e4e8dbd33bddfa53a4a91dce1cbdf28e1a7d54"
+        },
+        {
+          "length": 643,
+          "contentLength": 643,
+          "sha256": "98678fd16379cd4d0d8f158dded3954757765a31b266572a7ff524ff3bb87369"
+        }
+      ]
+    },
+    {
+      "strip": "none",
+      "streaming": false,
+      "purge": "remove",
+      "estimates": [
+        165
+      ],
+      "requestOrdinals": [
+        [
+          "1",
+          "2",
+          "3"
+        ],
+        [
+          "1",
+          "2",
+          "3"
+        ]
+      ],
+      "ordinals": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "bodies": [
+        {
+          "length": 731,
+          "contentLength": 731,
+          "sha256": "e8181e2216783654ad0fd71631e4e8dbd33bddfa53a4a91dce1cbdf28e1a7d54"
+        },
+        {
+          "length": 643,
+          "contentLength": 643,
+          "sha256": "98678fd16379cd4d0d8f158dded3954757765a31b266572a7ff524ff3bb87369"
+        }
+      ]
+    },
+    {
+      "strip": "none",
+      "streaming": false,
+      "purge": "summary",
+      "estimates": [
+        168
+      ],
+      "requestOrdinals": [
+        [
+          "1",
+          "2",
+          "3"
+        ],
+        [
+          "1",
+          "2",
+          "3"
+        ]
+      ],
+      "ordinals": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "bodies": [
+        {
+          "length": 746,
+          "contentLength": 746,
+          "sha256": "994255d6ff9e5cc12c3b6eca4e42c337b3aa74511ea69e67e77ab13e29af282a"
+        },
+        {
+          "length": 658,
+          "contentLength": 658,
+          "sha256": "274216cb1d76d52989eb433d15be12fab85d7de6837ac868eabd8d52513b5c7a"
+        }
+      ]
+    },
+    {
+      "strip": "none",
+      "streaming": true,
+      "purge": "off",
+      "estimates": [
+        165
+      ],
+      "requestOrdinals": [
+        [
+          "1",
+          "2",
+          "3"
+        ],
+        [
+          "1",
+          "2",
+          "3"
+        ]
+      ],
+      "ordinals": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "bodies": [
+        {
+          "length": 770,
+          "contentLength": 770,
+          "sha256": "7758ec0f8bf93516ff2609e767672c2c9ef532c8d8661b28debcb473ae8c1c47"
+        },
+        {
+          "length": 683,
+          "contentLength": 683,
+          "sha256": "0d1fd2a0f8793128b95bc5ef74ec429885e99c308ec2d52a43e7cacacedf3ad0"
+        }
+      ]
+    },
+    {
+      "strip": "none",
+      "streaming": true,
+      "purge": "remove",
+      "estimates": [
+        165
+      ],
+      "requestOrdinals": [
+        [
+          "1",
+          "2",
+          "3"
+        ],
+        [
+          "1",
+          "2",
+          "3"
+        ]
+      ],
+      "ordinals": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "bodies": [
+        {
+          "length": 770,
+          "contentLength": 770,
+          "sha256": "7758ec0f8bf93516ff2609e767672c2c9ef532c8d8661b28debcb473ae8c1c47"
+        },
+        {
+          "length": 683,
+          "contentLength": 683,
+          "sha256": "0d1fd2a0f8793128b95bc5ef74ec429885e99c308ec2d52a43e7cacacedf3ad0"
+        }
+      ]
+    },
+    {
+      "strip": "none",
+      "streaming": true,
+      "purge": "summary",
+      "estimates": [
+        168
+      ],
+      "requestOrdinals": [
+        [
+          "1",
+          "2",
+          "3"
+        ],
+        [
+          "1",
+          "2",
+          "3"
+        ]
+      ],
+      "ordinals": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "bodies": [
+        {
+          "length": 785,
+          "contentLength": 785,
+          "sha256": "9a0408f9623e3d50eb08ec5080d2e7bbaed9231a4bd09447ada35d317641ebf1"
+        },
+        {
+          "length": 698,
+          "contentLength": 698,
+          "sha256": "dd346aab235d7b4047b0e434b958f6af76ec08942a9fcfe7eb7ac5d7d8603f91"
+        }
+      ]
+    },
+    {
+      "strip": "all",
+      "streaming": false,
+      "purge": "off",
+      "estimates": [
+        49
+      ],
+      "requestOrdinals": [
+        [
+          "1",
+          "2",
+          "3"
+        ],
+        [
+          "1",
+          "2",
+          "3"
+        ]
+      ],
+      "ordinals": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "bodies": [
+        {
+          "length": 258,
+          "contentLength": 258,
+          "sha256": "4a62448c9a9251cf1b92ebc8aae8c7ab4d320f444beb8e16195b09f5d3e312b9"
+        },
+        {
+          "length": 643,
+          "contentLength": 643,
+          "sha256": "98678fd16379cd4d0d8f158dded3954757765a31b266572a7ff524ff3bb87369"
+        }
+      ]
+    },
+    {
+      "strip": "all",
+      "streaming": false,
+      "purge": "remove",
+      "estimates": [
+        49
+      ],
+      "requestOrdinals": [
+        [
+          "1",
+          "2",
+          "3"
+        ],
+        [
+          "1",
+          "2",
+          "3"
+        ]
+      ],
+      "ordinals": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "bodies": [
+        {
+          "length": 258,
+          "contentLength": 258,
+          "sha256": "4a62448c9a9251cf1b92ebc8aae8c7ab4d320f444beb8e16195b09f5d3e312b9"
+        },
+        {
+          "length": 643,
+          "contentLength": 643,
+          "sha256": "98678fd16379cd4d0d8f158dded3954757765a31b266572a7ff524ff3bb87369"
+        }
+      ]
+    },
+    {
+      "strip": "all",
+      "streaming": false,
+      "purge": "summary",
+      "estimates": [
+        52
+      ],
+      "requestOrdinals": [
+        [
+          "1",
+          "2",
+          "3"
+        ],
+        [
+          "1",
+          "2",
+          "3"
+        ]
+      ],
+      "ordinals": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "bodies": [
+        {
+          "length": 273,
+          "contentLength": 273,
+          "sha256": "9cfb72b866e93a9adbd0d0d2e3ad07ddfa94631cb50ddaf66d8466d418425e94"
+        },
+        {
+          "length": 658,
+          "contentLength": 658,
+          "sha256": "274216cb1d76d52989eb433d15be12fab85d7de6837ac868eabd8d52513b5c7a"
+        }
+      ]
+    },
+    {
+      "strip": "all",
+      "streaming": true,
+      "purge": "off",
+      "estimates": [
+        49
+      ],
+      "requestOrdinals": [
+        [
+          "1",
+          "2",
+          "3"
+        ],
+        [
+          "1",
+          "2",
+          "3"
+        ]
+      ],
+      "ordinals": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "bodies": [
+        {
+          "length": 297,
+          "contentLength": 297,
+          "sha256": "c1f1d0f6c6c7d4e14fb599601f5953b50d278a5c87cfb296356c12edc6435f37"
+        },
+        {
+          "length": 683,
+          "contentLength": 683,
+          "sha256": "0d1fd2a0f8793128b95bc5ef74ec429885e99c308ec2d52a43e7cacacedf3ad0"
+        }
+      ]
+    },
+    {
+      "strip": "all",
+      "streaming": true,
+      "purge": "remove",
+      "estimates": [
+        49
+      ],
+      "requestOrdinals": [
+        [
+          "1",
+          "2",
+          "3"
+        ],
+        [
+          "1",
+          "2",
+          "3"
+        ]
+      ],
+      "ordinals": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "bodies": [
+        {
+          "length": 297,
+          "contentLength": 297,
+          "sha256": "c1f1d0f6c6c7d4e14fb599601f5953b50d278a5c87cfb296356c12edc6435f37"
+        },
+        {
+          "length": 683,
+          "contentLength": 683,
+          "sha256": "0d1fd2a0f8793128b95bc5ef74ec429885e99c308ec2d52a43e7cacacedf3ad0"
+        }
+      ]
+    },
+    {
+      "strip": "all",
+      "streaming": true,
+      "purge": "summary",
+      "estimates": [
+        52
+      ],
+      "requestOrdinals": [
+        [
+          "1",
+          "2",
+          "3"
+        ],
+        [
+          "1",
+          "2",
+          "3"
+        ]
+      ],
+      "ordinals": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "bodies": [
+        {
+          "length": 312,
+          "contentLength": 312,
+          "sha256": "15243dc5220f8a859a0cf1847cf1b9b345a63b4451c57ffc55f4dcd80c6f8df1"
+        },
+        {
+          "length": 698,
+          "contentLength": 698,
+          "sha256": "dd346aab235d7b4047b0e434b958f6af76ec08942a9fcfe7eb7ac5d7d8603f91"
+        }
+      ]
+    },
+    {
+      "strip": "allButLast",
+      "streaming": false,
+      "purge": "off",
+      "estimates": [
+        59
+      ],
+      "requestOrdinals": [
+        [
+          "1",
+          "2",
+          "3"
+        ],
+        [
+          "1",
+          "2",
+          "3"
+        ]
+      ],
+      "ordinals": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "bodies": [
+        {
+          "length": 308,
+          "contentLength": 308,
+          "sha256": "5e6405764c9eda589d85e7578f27f3c68454c109da9021487d84b0229278e2c0"
+        },
+        {
+          "length": 643,
+          "contentLength": 643,
+          "sha256": "98678fd16379cd4d0d8f158dded3954757765a31b266572a7ff524ff3bb87369"
+        }
+      ]
+    },
+    {
+      "strip": "allButLast",
+      "streaming": false,
+      "purge": "remove",
+      "estimates": [
+        59
+      ],
+      "requestOrdinals": [
+        [
+          "1",
+          "2",
+          "3"
+        ],
+        [
+          "1",
+          "2",
+          "3"
+        ]
+      ],
+      "ordinals": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "bodies": [
+        {
+          "length": 308,
+          "contentLength": 308,
+          "sha256": "5e6405764c9eda589d85e7578f27f3c68454c109da9021487d84b0229278e2c0"
+        },
+        {
+          "length": 643,
+          "contentLength": 643,
+          "sha256": "98678fd16379cd4d0d8f158dded3954757765a31b266572a7ff524ff3bb87369"
+        }
+      ]
+    },
+    {
+      "strip": "allButLast",
+      "streaming": false,
+      "purge": "summary",
+      "estimates": [
+        62
+      ],
+      "requestOrdinals": [
+        [
+          "1",
+          "2",
+          "3"
+        ],
+        [
+          "1",
+          "2",
+          "3"
+        ]
+      ],
+      "ordinals": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "bodies": [
+        {
+          "length": 323,
+          "contentLength": 323,
+          "sha256": "dbde7429c00e509ed4309ed068eba84e3ae3f936ce10c46786457ac154ce1c85"
+        },
+        {
+          "length": 658,
+          "contentLength": 658,
+          "sha256": "274216cb1d76d52989eb433d15be12fab85d7de6837ac868eabd8d52513b5c7a"
+        }
+      ]
+    },
+    {
+      "strip": "allButLast",
+      "streaming": true,
+      "purge": "off",
+      "estimates": [
+        59
+      ],
+      "requestOrdinals": [
+        [
+          "1",
+          "2",
+          "3"
+        ],
+        [
+          "1",
+          "2",
+          "3"
+        ]
+      ],
+      "ordinals": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "bodies": [
+        {
+          "length": 347,
+          "contentLength": 347,
+          "sha256": "4c93158969a18cf5c67e64bc52fc29f1cde921e1c9a7a0dda2321bd56072349f"
+        },
+        {
+          "length": 683,
+          "contentLength": 683,
+          "sha256": "0d1fd2a0f8793128b95bc5ef74ec429885e99c308ec2d52a43e7cacacedf3ad0"
+        }
+      ]
+    },
+    {
+      "strip": "allButLast",
+      "streaming": true,
+      "purge": "remove",
+      "estimates": [
+        59
+      ],
+      "requestOrdinals": [
+        [
+          "1",
+          "2",
+          "3"
+        ],
+        [
+          "1",
+          "2",
+          "3"
+        ]
+      ],
+      "ordinals": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "bodies": [
+        {
+          "length": 347,
+          "contentLength": 347,
+          "sha256": "4c93158969a18cf5c67e64bc52fc29f1cde921e1c9a7a0dda2321bd56072349f"
+        },
+        {
+          "length": 683,
+          "contentLength": 683,
+          "sha256": "0d1fd2a0f8793128b95bc5ef74ec429885e99c308ec2d52a43e7cacacedf3ad0"
+        }
+      ]
+    },
+    {
+      "strip": "allButLast",
+      "streaming": true,
+      "purge": "summary",
+      "estimates": [
+        62
+      ],
+      "requestOrdinals": [
+        [
+          "1",
+          "2",
+          "3"
+        ],
+        [
+          "1",
+          "2",
+          "3"
+        ]
+      ],
+      "ordinals": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "bodies": [
+        {
+          "length": 362,
+          "contentLength": 362,
+          "sha256": "ad5d816e1c4deab0f01ae15eccbaf69782e5325f2ffebcb9eba504c98b7253a6"
+        },
+        {
+          "length": 698,
+          "contentLength": 698,
+          "sha256": "dd346aab235d7b4047b0e434b958f6af76ec08942a9fcfe7eb7ac5d7d8603f91"
+        }
+      ]
+    }
+  ],
+  "publicCaseOrder": "Test inputs enumerate gpt-4o first (18), then mistral-large-latest (18). All cases assert both old-converter POST bodies, declared byte lengths, nonzero estimates within the unchanged 16-token allowance, terminal output and durable chronology.",
+  "frozenScope": "Both unchanged 5000-input length-model oracle files and the existing 5000-input/5000-selection Mistral native converter differential pass. The latter drives the indexed streaming converter adapter, not 5000 complete requests through the new stored-length/direct-body production route. New actual HTTP coverage is 22 Mistral frozen histories, 69 Mistral continuation cases and 30 collision/tail cases.",
+  "limit": "Both plain and Mistral actual near-limit initial bodies transmit 134217600 bytes. Their stored prefix plus independently measured current tail is refused before a second HTTP connection under the unchanged 134217728-byte guard.",
+  "audit": "Final audit executes with zero scan errors. Two pre-existing SELF_CONFIRMING observations in native-chat-estimate.test.ts concern unchanged old estimate snapshot/revision tests. The added old-pin byte test now compares with an independent legacy converter oracle; no new prohibited owned finding is accepted.",
+  "preservation": "All 1204 preserved SHA256 entries, including 306 inherited declarations and raw recovery, verify before and after builds. No preserved obstruction was moved.",
+  "excluded": [
+    {
+      "name": "OpenAINonStreamHandler.finishReason.test.ts",
+      "reason": "Inherited gate path does not exist. Exit 1 is not a passing test. No source test was skipped."
+    },
+    {
+      "name": "initial journal-chat-length.test.ts",
+      "reason": "Five pass / one fail exposed missing format/toolFormat mismatch validation. Registration now fails fast; full six-case refresh passes."
+    }
+  ],
+  "remaining": [
+    "Mistral route closure remains open: arbitrary earlier-tail/reconstructed collision scope refills still fail explicitly through JournalRequestMistral rather than silently using legacy files. No complete 5000-case stored-planner/native-HTTP route acceptance is claimed.",
+    "First native Mistral activation still requires mapping slot 2 to be unassigned. Switching from a history with an occupied slot 2 fails the existing mapping-only activation guard; this was not widened or silently worked around.",
+    "Cold mapping, wire length and token registration are separate bounded fills, not one fused pass. Metadata-only warm evidence covers text/thinking histories at 40/4000; no 100000-call capacity claim follows from the existing 4000-call mapping test.",
+    "New production Mistral second-body media concurrent clear/purge/error combinations, original native full retained-memory/trap protocols and the original tools 170000ms RED need their own current-source runs. Existing plain lifetime and original reader tests pass without retuning.",
+    "Kimi, Responses, Anthropic, native log/dump, automatic compression, global LENS/live-byte accounting, aggregate cache/pin/overlay/admission-owner capacity and cutover/default obligations stay open.",
+    "#3917, old durable cases, blanket compaction/public fixture and wider core test-type REDs stay separate and unsuppressed."
+  ],
+  "policy": "Review skipped per Andrew 2026-10-09. No OCR, push, merge, default flip, cleanup, .llxprt staging or enforcement change.",
+  "terminalOwnedPids": {
+    "checked": [
+      1494,
+      1499,
+      1535,
+      1657,
+      1663,
+      1710,
+      1931,
+      2609,
+      3113,
+      3155,
+      3167,
+      3306,
+      3521,
+      3553,
+      3684,
+      4425,
+      5408,
+      5549,
+      5841,
+      6235,
+      6266,
+      6484,
+      6491,
+      6529,
+      6570,
+      91217,
+      91222,
+      91272,
+      91398,
+      91403,
+      91410,
+      91533,
+      91558,
+      91565,
+      91765,
+      91771,
+      91774,
+      92227,
+      92387,
+      92676,
+      92787,
+      93646,
+      94197,
+      94499,
+      94559,
+      94881,
+      94964,
+      95032,
+      95129,
+      95211,
+      95257,
+      95302,
+      95387,
+      95468,
+      95520,
+      95741,
+      95756,
+      95779,
+      95870,
+      95883,
+      95887,
+      95914,
+      95915,
+      96014,
+      96063,
+      96101,
+      96243,
+      96403,
+      96668,
+      96813,
+      96918,
+      97063,
+      97105,
+      97650,
+      97669,
+      97786,
+      97912,
+      99180
+    ],
+    "present": []
+  }
+}

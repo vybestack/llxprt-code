@@ -51,6 +51,7 @@ function countPayloadOverlaps(reads: readonly PhysicalRead[]): number {
 const results: unknown[] = [];
 function options(
   rows: ProviderRequestSelection,
+  model = 'gpt-4o',
 ): NormalizedGenerateChatOptions {
   return {
     contents: [],
@@ -67,7 +68,7 @@ function options(
       },
     }),
     resolved: {
-      model: 'gpt-4o',
+      model,
       baseURL: 'https://example.test/v1',
       authToken: 'test',
     },
@@ -75,10 +76,11 @@ function options(
 }
 async function prepareAndEstimate(
   rows: ProviderRequestSelection,
+  model = 'gpt-4o',
 ): Promise<{ bytes: number; tokens: number }> {
   const prepared = await prepareRequest(
-    options(rows),
-    'gpt-4o',
+    options(rows, model),
+    model,
     undefined,
     logger,
     'openai',
@@ -91,7 +93,7 @@ async function prepareAndEstimate(
       throw new Error('Missing native estimate');
     const projection = projectOpenAIChatPromptEnvelopeFromSource(
       prepared.estimate.projection,
-      { model: 'gpt-4o', releaseIfUnsent: async () => undefined },
+      { model, releaseIfUnsent: async () => undefined },
     );
     const estimate = await estimatePromptEnvelope(
       'openai',
@@ -132,9 +134,13 @@ async function buildMeasuredContinuation(
 
 describe('stored continuation physical descriptor reads', () => {
   const directory = useTempDir('last-thinking-reads-');
-  it.each([40, 4000])(
-    'captures %s warm rows using metadata and builds the second body without prefix reads',
-    async (size) => {
+  it.each(
+    [40, 4000].flatMap((size) =>
+      ['gpt-4o', 'mistral-large-latest'].map((model) => ({ size, model })),
+    ),
+  )(
+    'captures $size/$model warm rows using metadata and builds the second body without prefix reads',
+    async ({ size, model }) => {
       const reads: PhysicalRead[] = [];
       let observe = false;
       const seams = testJournalSeams({}, 1, false);
@@ -192,7 +198,7 @@ describe('stored continuation physical descriptor reads', () => {
         );
         await history.addBatch(rows);
         const first = await history.prepareCuratedForProviderSnapshot([], {});
-        await prepareAndEstimate(first);
+        await prepareAndEstimate(first, model);
         await first.close();
         const warm = await history.prepareCuratedForProviderSnapshot(
           [{ speaker: 'human', blocks: [{ type: 'text', text: 'pending' }] }],
@@ -205,8 +211,8 @@ describe('stored continuation physical descriptor reads', () => {
             observe = true;
             try {
               const prepared = await prepareRequest(
-                options(warm),
-                'gpt-4o',
+                options(warm, model),
+                model,
                 undefined,
                 logger,
                 'openai',
@@ -228,6 +234,7 @@ describe('stored continuation physical descriptor reads', () => {
         const capturePayloadOverlaps = countPayloadOverlaps(captureReads);
         results.push({
           size,
+          model,
           interval:
             'After first selection/cold fills; warm prepareRequest capture interval separate from continuation.build and unsent release; excludes HTTP emission',
           planned,

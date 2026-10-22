@@ -18,8 +18,6 @@ import {
   type ContinuationToolCall,
 } from '../openai/OpenAIRequestBuilder.js';
 
-const route = WIRE_ROUTES.find((value) => value.id === 'openai-chat-plain');
-if (route === undefined) throw new Error('Missing plain Chat route');
 const calls: ContinuationToolCall[] = [
   {
     id: 'call_next',
@@ -33,144 +31,162 @@ const textRow = (text: string): IContent => ({
 });
 
 describe('native continuation declared envelope refusal', () => {
-  it('admits the first real near-limit body but refuses the stored prefix plus measured tail before a second connection', async () => {
-    expect(DEFAULT_HTTP_JSON_ENVELOPE_BYTES).toBe(134217728);
-    let connections = 0;
-    let entries = 0;
-    let received = 0;
-    let declared = 0;
-    const server = createServer((request, response) => {
-      entries++;
-      void (async (): Promise<void> => {
-        for await (const chunk of request) {
-          if (!Buffer.isBuffer(chunk)) throw new Error('Expected socket bytes');
-          received += chunk.byteLength;
-        }
-        declared = Number(request.headers['content-length']);
-        const delta = {
-          tool_calls: calls.map((call, index) => ({ index, ...call })),
-        };
-        response.writeHead(200, {
-          'content-type': 'text/event-stream',
-          connection: 'close',
-        });
-        response.end(
-          `data: ${JSON.stringify({ id: 'reply', object: 'chat.completion.chunk', choices: [{ index: 0, delta, finish_reason: null }] })}\n\ndata: ${JSON.stringify({ id: 'reply', object: 'chat.completion.chunk', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n`,
+  it.each(
+    WIRE_ROUTES.filter(
+      (item) =>
+        item.id === 'openai-chat-plain' || item.id === 'openai-chat-mistral',
+    ),
+  )(
+    'admits $id first near-limit body but refuses stored prefix plus tail before a second connection',
+    async (route) => {
+      const toolFormat =
+        route.id === 'openai-chat-mistral' ? 'mistral' : 'openai';
+      expect(DEFAULT_HTTP_JSON_ENVELOPE_BYTES).toBe(134217728);
+      let connections = 0;
+      let entries = 0;
+      let received = 0;
+      let declared = 0;
+      const server = createServer((request, response) => {
+        entries++;
+        void (async (): Promise<void> => {
+          for await (const chunk of request) {
+            if (!Buffer.isBuffer(chunk))
+              throw new Error('Expected socket bytes');
+            received += chunk.byteLength;
+          }
+          declared = Number(request.headers['content-length']);
+          const delta = {
+            tool_calls: calls.map((call, index) => ({ index, ...call })),
+          };
+          response.writeHead(200, {
+            'content-type': 'text/event-stream',
+            connection: 'close',
+          });
+          response.end(
+            `data: ${JSON.stringify({ id: 'reply', object: 'chat.completion.chunk', choices: [{ index: 0, delta, finish_reason: null }] })}\n\ndata: ${JSON.stringify({ id: 'reply', object: 'chat.completion.chunk', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n`,
+          );
+        })().catch((error: unknown) =>
+          response.destroy(
+            error instanceof Error ? error : new Error(String(error)),
+          ),
         );
-      })().catch((error: unknown) =>
-        response.destroy(
-          error instanceof Error ? error : new Error(String(error)),
-        ),
+      });
+      server.on('connection', () => {
+        connections++;
+      });
+      await new Promise<void>((resolve) =>
+        server.listen(0, '127.0.0.1', resolve),
       );
-    });
-    server.on('connection', () => {
-      connections++;
-    });
-    await new Promise<void>((resolve) =>
-      server.listen(0, '127.0.0.1', resolve),
-    );
-    const address = server.address();
-    if (address === null || typeof address === 'string')
-      throw new Error('Missing local socket');
-    const local = { ...route, baseURL: `http://127.0.0.1:${address.port}/v1` };
-    const input = {
-      id: 'near-limit',
-      description: 'bounded native units',
-      rows: [],
-      systemInstruction: 'system',
-      ephemerals: { streaming: 'enabled' },
-    };
-    const smallOptions = buildHistoryCallOptions(
-      local,
-      input,
-      'rows',
-      new SettingsService(),
-      rowsSelection([textRow('')]),
-    );
-    const old = await prepareRequestBody(
-      {
-        ...smallOptions,
-        contents: [],
-        metadata: {},
-        invocation: createRuntimeInvocationContext({
-          runtimeId: 'refusal-oracle',
-          providerName: 'openai',
-          ephemeralsSnapshot: { streaming: 'enabled' },
-        }),
-        resolved: {
-          model: 'gpt-4o',
-          baseURL: local.baseURL,
-          authToken: 'test',
-        },
-      },
-      'gpt-4o',
-      undefined,
-      new DebugLogger('continuation-refusal'),
-      'openai',
-    );
-    const count = 2048;
-    const target = DEFAULT_HTTP_JSON_ENVELOPE_BYTES - 128;
-    const fixed =
-      Buffer.byteLength(JSON.stringify({ ...old.requestBody, messages: [] })) +
-      Buffer.byteLength(JSON.stringify({ role: 'system', content: 'system' }));
-    const perRow =
-      Buffer.byteLength(JSON.stringify({ role: 'user', content: '' })) + 1;
-    const totalText = target - fixed - count * perRow;
-    const each = Math.floor(totalText / count);
-    const remainder = totalText % count;
-    expect(each).toBeLessThanOrEqual(64 * 1024);
-    const tailBytes = buildContinuationTail(calls, 'openai').reduce(
-      (sum, message) => sum + 1 + Buffer.byteLength(JSON.stringify(message)),
-      0,
-    );
-    expect(target + tailBytes).toBeGreaterThan(
-      DEFAULT_HTTP_JSON_ENVELOPE_BYTES,
-    );
-    const fixture = await journalSendFixture(
-      (function* (): Generator<IContent> {
-        for (let index = 0; index < count; index++)
-          yield textRow('x'.repeat(each + (index < remainder ? 1 : 0)));
-      })(),
-      [],
-      {
-        directory: 'tmp/p6/chat-continuation-runtime-run-bi/fixtures',
-        oneRowAtATime: true,
-      },
-    );
-    try {
-      const options = buildHistoryCallOptions(
+      const address = server.address();
+      if (address === null || typeof address === 'string')
+        throw new Error('Missing local socket');
+      const local = {
+        ...route,
+        baseURL: `http://127.0.0.1:${address.port}/v1`,
+      };
+      const input = {
+        id: 'near-limit',
+        description: 'bounded native units',
+        rows: [],
+        systemInstruction: 'system',
+        ephemerals: { streaming: 'enabled' },
+      };
+      const smallOptions = buildHistoryCallOptions(
         local,
         input,
         'rows',
         new SettingsService(),
-        fixture.selection,
+        rowsSelection([textRow('')]),
       );
-      let failure: unknown;
-      try {
-        for await (const chunk of route
-          .createProvider()
-          .generateChatCompletion(options))
-          void chunk;
-      } catch (error: unknown) {
-        failure = error;
-      }
-      expect(received).toBe(target);
-      expect(declared).toBe(target);
-      expect(entries).toBe(1);
-      expect(connections).toBe(1);
-      expect(failure).toBeInstanceOf(RangeError);
-      if (!(failure instanceof RangeError)) throw failure;
-      expect(failure.message).toBe(
-        `JSON request envelope exceeds ${DEFAULT_HTTP_JSON_ENVELOPE_BYTES} bytes (${target + tailBytes} bytes)`,
+      const old = await prepareRequestBody(
+        {
+          ...smallOptions,
+          contents: [],
+          metadata: {},
+          invocation: createRuntimeInvocationContext({
+            runtimeId: 'refusal-oracle',
+            providerName: 'openai',
+            ephemeralsSnapshot: { streaming: 'enabled' },
+          }),
+          resolved: {
+            model: route.model,
+            baseURL: local.baseURL,
+            authToken: 'test',
+          },
+        },
+        route.model,
+        undefined,
+        new DebugLogger('continuation-refusal'),
+        'openai',
       );
-    } finally {
-      await new Promise<void>((resolve, reject) => {
-        server.close((error) =>
-          error === undefined ? resolve() : reject(error),
+      const count = 2048;
+      const target = DEFAULT_HTTP_JSON_ENVELOPE_BYTES - 128;
+      const fixed =
+        Buffer.byteLength(
+          JSON.stringify({ ...old.requestBody, messages: [] }),
+        ) +
+        Buffer.byteLength(
+          JSON.stringify({ role: 'system', content: 'system' }),
         );
-        server.closeAllConnections();
-      });
-      await fixture.close();
-    }
-  });
+      const perRow =
+        Buffer.byteLength(JSON.stringify({ role: 'user', content: '' })) + 1;
+      const totalText = target - fixed - count * perRow;
+      const each = Math.floor(totalText / count);
+      const remainder = totalText % count;
+      expect(each).toBeLessThanOrEqual(64 * 1024);
+      const tailBytes = buildContinuationTail(calls, toolFormat).reduce(
+        (sum, message) => sum + 1 + Buffer.byteLength(JSON.stringify(message)),
+        0,
+      );
+      expect(target + tailBytes).toBeGreaterThan(
+        DEFAULT_HTTP_JSON_ENVELOPE_BYTES,
+      );
+      const fixture = await journalSendFixture(
+        (function* (): Generator<IContent> {
+          for (let index = 0; index < count; index++)
+            yield textRow('x'.repeat(each + (index < remainder ? 1 : 0)));
+        })(),
+        [],
+        {
+          directory: 'tmp/p6/chat-mistral-run-bj/fixtures',
+          oneRowAtATime: true,
+        },
+      );
+      try {
+        const options = buildHistoryCallOptions(
+          local,
+          input,
+          'rows',
+          new SettingsService(),
+          fixture.selection,
+        );
+        let failure: unknown;
+        try {
+          for await (const chunk of route
+            .createProvider()
+            .generateChatCompletion(options))
+            void chunk;
+        } catch (error: unknown) {
+          failure = error;
+        }
+        expect(received).toBe(target);
+        expect(declared).toBe(target);
+        expect(entries).toBe(1);
+        expect(connections).toBe(1);
+        expect(failure).toBeInstanceOf(RangeError);
+        if (!(failure instanceof RangeError)) throw failure;
+        expect(failure.message).toBe(
+          `JSON request envelope exceeds ${DEFAULT_HTTP_JSON_ENVELOPE_BYTES} bytes (${target + tailBytes} bytes)`,
+        );
+      } finally {
+        await new Promise<void>((resolve, reject) => {
+          server.close((error) =>
+            error === undefined ? resolve() : reject(error),
+          );
+          server.closeAllConnections();
+        });
+        await fixture.close();
+      }
+    },
+  );
 });

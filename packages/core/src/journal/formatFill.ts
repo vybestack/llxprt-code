@@ -246,7 +246,8 @@ async function assignedSlots(
   if (selected < 0) {
     let oldest: bigint | undefined;
     for (let index = 0; index < 3; index++) {
-      if ((reserved & (1 << index)) !== 0) continue;
+      if ((reserved & (1 << index)) !== 0 && registration.mistralSlot !== index)
+        continue;
       const value = await reader.get(
         built.state.metaRoot,
         `format:last-used:${index}`,

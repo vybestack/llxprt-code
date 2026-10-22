@@ -18,7 +18,10 @@ import { normalizedRows } from '../__tests__/support/frozenWire/normalizedRows.j
 import { rowsSelection } from '../__tests__/support/wireBodyCapture.js';
 import { projectOpenAIChatPromptEnvelopeFromSource } from '../runtime/promptEnvelopeProjections.js';
 import { prepareRequest } from './OpenAIRequestPreparation.js';
-import { prepareRequestBody } from './__tests__/support/prepareRequestBody.js';
+import {
+  prepareRequestBody,
+  readPreparedChatBody,
+} from './__tests__/support/prepareRequestBody.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import { ProviderSourceEnforcer } from '../../../agents/src/compression/provider-source-enforcement.js';
@@ -90,17 +93,14 @@ async function reference(
     NormalizedGenerateChatOptions,
     'tools' | 'systemInstruction'
   > = {},
+  model = 'gpt-4o',
 ): Promise<number> {
   const body = await prepareRequestBody(
     {
-      ...options(
-        rowsSelection(await normalizedRows(rows)),
-        'gpt-4o',
-        ephemerals,
-      ),
+      ...options(rowsSelection(await normalizedRows(rows)), model, ephemerals),
       ...fixed,
     },
-    'gpt-4o',
+    model,
     undefined,
     logger,
     'openai',
@@ -139,6 +139,131 @@ describe('stored native Chat estimates through production preparation', () => {
       await recording.dispose();
     }
   }
+
+  it('keeps emitted old-pin salted IDs after replacement and reassigns the surviving call in the new pin', async () => {
+    const holder: IContent = {
+      speaker: 'ai',
+      blocks: [
+        { type: 'tool_call', id: '4SftZvDMX', name: 'holder', parameters: {} },
+      ],
+    };
+    const survivor: IContent = {
+      speaker: 'ai',
+      blocks: [
+        {
+          type: 'tool_call',
+          id: 'toolu_alpha-1',
+          name: 'lookup',
+          parameters: {},
+        },
+      ],
+    };
+    await withHistory([holder, survivor], async (history) => {
+      const old = await history.prepareCuratedForProviderSnapshot([], {});
+      const prepared = await prepareRequest(
+        options(old, 'mistral-large-latest'),
+        'mistral-large-latest',
+        undefined,
+        logger,
+        'openai',
+      );
+      try {
+        const oldExpected = await prepareRequestBody(
+          options(
+            rowsSelection(await normalizedRows([holder, survivor])),
+            'mistral-large-latest',
+          ),
+          'mistral-large-latest',
+          undefined,
+          logger,
+          'openai',
+        );
+        const first = await readPreparedChatBody(prepared.spool);
+        expect(first).toStrictEqual(oldExpected.requestBody);
+        expect(JSON.stringify(first)).toContain('4Uq1sY29c');
+        await history.replaceAll([survivor]);
+        const current = await history.prepareCuratedForProviderSnapshot([], {});
+        const next = await prepareRequest(
+          options(current, 'mistral-large-latest'),
+          'mistral-large-latest',
+          undefined,
+          logger,
+          'openai',
+        );
+        try {
+          const expected = await prepareRequestBody(
+            options(
+              rowsSelection(await normalizedRows([survivor])),
+              'mistral-large-latest',
+            ),
+            'mistral-large-latest',
+            undefined,
+            logger,
+            'openai',
+          );
+          const body = await readPreparedChatBody(next.spool);
+          expect(body).toStrictEqual(expected.requestBody);
+          expect(JSON.stringify(body)).not.toContain('4Uq1sY29c');
+          expect(JSON.stringify(body)).toContain('4SftZvDMX');
+          expect(await readPreparedChatBody(prepared.spool)).toStrictEqual(
+            oldExpected.requestBody,
+          );
+        } finally {
+          await next.release();
+          await current.close();
+        }
+      } finally {
+        await prepared.release();
+        await old.close();
+      }
+    });
+  });
+
+  it.each(
+    estimatorCorpus().flatMap((input) =>
+      ['none', 'all', 'allButLast'].map((strip) => ({ input, strip })),
+    ),
+  )(
+    'estimates Mistral $input.id/$strip using the old mapped projection',
+    async ({ input, strip }) => {
+      const policy = {
+        ...input.ephemerals,
+        'reasoning.includeInContext': true,
+        'reasoning.stripFromContext': strip,
+      };
+      const fixed = {
+        systemInstruction: input.systemInstruction ?? 'system 雪',
+        tools: input.tools,
+      };
+      const expected = await reference(
+        input.rows,
+        policy,
+        fixed,
+        'mistral-large-latest',
+      );
+      await withHistory(input.rows, async (history) => {
+        const selected = await history.prepareCuratedForProviderSnapshot(
+          [],
+          {},
+        );
+        try {
+          const tokens = await estimate(
+            selected,
+            'mistral-large-latest',
+            policy,
+            createRuntimeTokenizerFactory(),
+            fixed,
+          );
+          expect(tokens).toBeGreaterThan(0);
+          expect(Math.abs(tokens - expected)).toBeLessThanOrEqual(
+            Math.max(16, expected * 0.005),
+          );
+        } finally {
+          await selected.close();
+        }
+      });
+    },
+  );
 
   it.each([40, 4000])(
     'estimates %s warm rows and a pending user without historical payload reads or operation files',

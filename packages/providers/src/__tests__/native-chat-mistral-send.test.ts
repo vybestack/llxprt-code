@@ -1,5 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import {
+  call,
+  response,
+} from '../../../core/src/services/history/__tests__/support/normalization-cases.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { operationFileCreates } from '../../../agents/src/compression/__tests__/support/operation-file-creates.js';
@@ -73,14 +77,91 @@ const histories: ReadonlyArray<readonly IContent[]> = [
   ],
 ];
 
+interface MistralCase {
+  readonly rows: readonly IContent[];
+  readonly pending: readonly IContent[];
+}
+const cases: readonly MistralCase[] = [
+  ...histories.map((rows) => ({ rows, pending: [] })),
+  {
+    rows: [
+      {
+        speaker: 'ai',
+        blocks: [call(''), call('hist_tool_alias'), call('call_alias')],
+      },
+      {
+        speaker: 'tool',
+        blocks: [
+          response(''),
+          response('hist_tool_alias'),
+          response('call_alias'),
+        ],
+      },
+    ],
+    pending: [],
+  },
+  {
+    rows: [
+      { speaker: 'human', blocks: [call('4SftZvDMX', '')] },
+      {
+        speaker: 'ai',
+        blocks: [call('toolu_alpha-1'), call('toolu_alpha-1', '')],
+      },
+    ],
+    pending: [],
+  },
+  {
+    rows: [
+      {
+        speaker: 'tool',
+        blocks: [response('toolu_alpha-1'), call('4SftZvDMX')],
+      },
+    ],
+    pending: [],
+  },
+  {
+    rows: [{ speaker: 'ai', blocks: [call('4SftZvDMX')] }],
+    pending: [
+      {
+        speaker: 'ai',
+        blocks: [call('toolu_alpha-1'), call('toolu_alpha-1', 'renamed')],
+      },
+    ],
+  },
+  {
+    rows: [{ speaker: 'ai', blocks: [call('toolu_alpha-1')] }],
+    pending: [{ speaker: 'tool', blocks: [response('toolu_alpha-1')] }],
+  },
+  {
+    rows: [{ speaker: 'tool', blocks: [response('toolu_alpha-1')] }],
+    pending: [
+      { speaker: 'human', blocks: [call('4Uq1sY29c', '')] },
+      { speaker: 'ai', blocks: [call('4SftZvDMX'), call('toolu_alpha-1')] },
+    ],
+  },
+  {
+    rows: [{ speaker: 'human', blocks: [] }],
+    pending: [
+      { speaker: 'tool', blocks: [response('toolu_alpha-1')] },
+      { speaker: 'tool', blocks: [response('4SftZvDMX'), call('4Uq1sY29c')] },
+      { speaker: 'ai', blocks: [call('toolu_alpha-1')] },
+    ],
+  },
+];
+
 describe('native Mistral production HTTP', () => {
   it.each(
-    histories.flatMap((rows, index) =>
-      ['none', 'all', 'allButLast'].map((strip) => ({ rows, index, strip })),
+    cases.flatMap(({ rows, pending }, index) =>
+      ['none', 'all', 'allButLast'].map((strip) => ({
+        rows,
+        pending,
+        index,
+        strip,
+      })),
     ),
   )(
     'matches old Mistral bytes without operation files for history $index/$strip',
-    async ({ rows, strip }) => {
+    async ({ rows, pending, strip }) => {
       const route = WIRE_ROUTES.find(
         (item) => item.id === 'openai-chat-mistral',
       );
@@ -97,11 +178,11 @@ describe('native Mistral production HTTP', () => {
       const expected = recordOf(
         await sendThroughRoute(
           route,
-          { ...shape, rows: await normalizedRows(rows) },
+          { ...shape, rows: await normalizedRows([...rows, ...pending]) },
           'rows',
         ),
       );
-      const fixture = await journalSendFixture(rows, [], {
+      const fixture = await journalSendFixture(rows, pending, {
         directory: 'tmp/p6/chat-mistral-run-bj/fixtures',
       });
       const sink = await localWireHashSink(route);

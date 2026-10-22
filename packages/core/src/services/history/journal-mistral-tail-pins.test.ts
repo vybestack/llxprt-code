@@ -9,6 +9,37 @@ import { measuredRequestSnapshot } from './__tests__/support/measured-request-sn
 
 describe('request Mistral pin and pending isolation', () => {
   const directory = useTempDir('mistral-tail-pins-');
+  it('retires a borrowed measured mapping when its request closes while the underlying pin stays open', async () => {
+    const session = await JournalSession.create(
+      `${directory()}/borrowed.llxj`,
+      { journal: testJournalSeams().dependencies },
+    );
+    try {
+      await session.store.commit([{ kind: 'mistral', slot: 0 }]);
+      await session.append([
+        { speaker: 'ai', blocks: [call('toolu_alpha-1')] },
+      ]);
+      const pin = await session.store.snapshot();
+      const request = await IndexedJournalRequestSnapshot.create(pin);
+      try {
+        const borrowed = await request.mistralForSnapshot(pin, 0);
+        expect((await borrowed.resolve('toolu_alpha-1')).id).toBe('4SftZvDMX');
+        await request.close();
+        await expect(borrowed.resolve('toolu_alpha-1')).rejects.toThrow(
+          'closed',
+        );
+        expect((await pin.mistralMapping('toolu_alpha-1', 0))?.id).toBe(
+          '4SftZvDMX',
+        );
+      } finally {
+        await request.close();
+        await pin.close();
+      }
+    } finally {
+      await session.close();
+    }
+  });
+
   it('holds callback ownership across closed openers and isolates concurrent pending views', async () => {
     const session = await JournalSession.create(
       `${directory()}/isolation.llxj`,
