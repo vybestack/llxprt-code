@@ -51,7 +51,6 @@ import {
   buildAgent,
   internalConfig,
   ASYNC_PROPERTY_TIMEOUT_MS,
-  IDENTITY_PROPERTY_TIMEOUT_MS,
 } from './helpers/agentHarness.js';
 import { nonBlankStringArbitrary } from './helpers/fastCheckArbitraries.js';
 
@@ -498,7 +497,7 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
         }),
       );
     },
-    IDENTITY_PROPERTY_TIMEOUT_MS,
+    ASYNC_PROPERTY_TIMEOUT_MS,
   );
 
   it(
@@ -529,7 +528,7 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
         }),
       );
     },
-    IDENTITY_PROPERTY_TIMEOUT_MS,
+    ASYNC_PROPERTY_TIMEOUT_MS,
   );
 
   it(
@@ -578,7 +577,7 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
         ),
       );
     },
-    IDENTITY_PROPERTY_TIMEOUT_MS,
+    ASYNC_PROPERTY_TIMEOUT_MS,
   );
 
   it(
@@ -624,7 +623,7 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
         ),
       );
     },
-    IDENTITY_PROPERTY_TIMEOUT_MS,
+    ASYNC_PROPERTY_TIMEOUT_MS,
   );
 
   it(
@@ -657,7 +656,7 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
         }),
       );
     },
-    IDENTITY_PROPERTY_TIMEOUT_MS,
+    ASYNC_PROPERTY_TIMEOUT_MS,
   );
 
   it(
@@ -725,7 +724,7 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
         }),
       );
     },
-    IDENTITY_PROPERTY_TIMEOUT_MS,
+    ASYNC_PROPERTY_TIMEOUT_MS,
   );
 });
 

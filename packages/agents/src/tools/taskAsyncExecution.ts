@@ -19,6 +19,7 @@ import type { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyn
 import type { AgentDisplayCallbacks } from '../api/agent.js';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
 import { createStreamNormalizer } from '@vybestack/llxprt-code-tools/utils/textDelta.js';
+import { installTaskOutputResetRelay } from './taskStreaming.js';
 import {
   type ToolResult,
   type LiveOutputUpdate,
@@ -369,7 +370,7 @@ export function setupAsyncStreaming(
 ): { emitAsyncClosingSubagentTag: () => void } | undefined {
   if (!updateOutput) return undefined;
 
-  const normalizer = createStreamNormalizer();
+  let normalizer = createStreamNormalizer();
   let asyncXmlOutputOpen = false;
   const emitAppend = (data: string): void => {
     updateOutput({ mode: 'append', data });
@@ -397,8 +398,20 @@ export function setupAsyncStreaming(
     }
     existingHandler?.(message);
   };
-
-  return { emitAsyncClosingSubagentTag };
+  const restoreOutputReset = installTaskOutputResetRelay(scope, () => {
+    if (asyncXmlOutputOpen) {
+      normalizer = createStreamNormalizer();
+      emitAppend(
+        '\n[Subagent response interrupted. Previous attempt output is abandoned; retrying.]\n',
+      );
+    }
+  });
+  return {
+    emitAsyncClosingSubagentTag: () => {
+      restoreOutputReset();
+      emitAsyncClosingSubagentTag();
+    },
+  };
 }
 
 /**
