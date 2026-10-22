@@ -13,6 +13,7 @@ import { rowsSelection } from '../__tests__/support/wireBodyCapture.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { operationFileCreates } from '../../../agents/src/compression/__tests__/support/operation-file-creates.js';
 import { prepareRequest } from './OpenAIRequestPreparation.js';
+import { observeRowFormat } from './__tests__/support/observeRowFormat.js';
 import {
   prepareRequestBody,
   readSpooledChatBody,
@@ -281,7 +282,57 @@ describe('native Chat preparation ownership and planning', () => {
     'cold fills %s rows, then prepares and cancels unsent warm bodies with zero physical reads or files',
     async (size) => {
       await withHistory(size, async (history, counter) => {
-        const cold = await history.prepareCuratedForProviderSnapshot([], {});
+        const texts = Array.from(
+          { length: size },
+          (_, index) => `row-${index} 雪`,
+        );
+        const measured: { label: bigint; lens: unknown }[] = [];
+        function observe(
+          selection: ProviderRequestSelection,
+        ): ProviderRequestSelection {
+          const native = selection.native;
+          if (native === undefined)
+            throw new Error('Expected native selection');
+          return {
+            count: selection.count,
+            openReader: (signal) => selection.openReader(signal),
+            readAt: (index, signal) => selection.readAt(index, signal),
+            close: () => selection.close(),
+            native: {
+              indexed: native.indexed,
+              withFormat: (registration, consume) =>
+                native.withFormat(
+                  observeRowFormat(registration, (entry, facts) => {
+                    measured.push({
+                      label: entry.label,
+                      lens: JSON.parse(new TextDecoder().decode(facts.lens)),
+                    });
+                  }),
+                  consume,
+                ),
+            },
+          };
+        }
+        const cold = observe(
+          await history.prepareCuratedForProviderSnapshot([], {}),
+        );
+        const old = await prepareRequestBody(
+          options(
+            rowsSelection(
+              texts.map((text) => ({
+                speaker: 'human',
+                blocks: [{ type: 'text', text }],
+              })),
+            ),
+          ),
+          'gpt-4o',
+          undefined,
+          logger,
+          'openai',
+        );
+        const expectedLength = Buffer.byteLength(
+          JSON.stringify(old.requestBody),
+        );
         counter.reads = 0;
         const first = await prepareRequest(
           options(cold),
@@ -290,11 +341,39 @@ describe('native Chat preparation ownership and planning', () => {
           logger,
           'openai',
         );
-        expect(counter.reads).toBeGreaterThan(size);
+        expect(measured).toHaveLength(size);
+        expect(new Set(measured.map(({ label }) => label)).size).toBe(size);
+        expect(measured.map(({ label }) => label)).toEqual(
+          measured
+            .map(({ label }) => label)
+            .sort((a, b) => (a < b ? -1 : Number(a > b))),
+        );
+        expect(measured.map(({ lens }) => lens)).toStrictEqual(
+          texts.map((text) => {
+            const unit = {
+              speaker: 'human',
+              messages: [
+                {
+                  bytes: Buffer.byteLength(
+                    JSON.stringify({ role: 'user', content: text }),
+                  ),
+                  dropped: false,
+                },
+              ],
+              media: [],
+            };
+            return { revision: 1, units: [[unit, unit]] };
+          }),
+        );
+        expect(first.spool.byteLength).toBe(expectedLength);
+        expect(counter.reads).toBeGreaterThan(0);
+        expect(counter.reads).toBeLessThan(size);
         const length = first.spool.byteLength;
         await first.release();
         await cold.close();
-        const warm = await history.prepareCuratedForProviderSnapshot([], {});
+        const warm = observe(
+          await history.prepareCuratedForProviderSnapshot([], {}),
+        );
         try {
           counter.reads = 0;
           const receipt = await operationFileCreates(async () => {
@@ -306,9 +385,12 @@ describe('native Chat preparation ownership and planning', () => {
               'openai',
             );
             expect(prepared.spool.byteLength).toBe(length);
+            expect(prepared.spool.byteLength).toBe(expectedLength);
+            expect(measured).toHaveLength(size);
             expect(counter.reads).toBe(0);
             await prepared.release();
             expect(counter.reads).toBe(0);
+            expect(measured).toHaveLength(size);
           }, true);
           expect(receipt).toStrictEqual({ files: [], directories: [] });
         } finally {

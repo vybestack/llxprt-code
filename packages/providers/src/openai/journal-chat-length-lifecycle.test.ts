@@ -5,9 +5,13 @@ import { testJournalSeams } from '@vybestack/llxprt-code-core/journal/__tests__/
 import { useTempDir } from '@vybestack/llxprt-code-core/journal/__tests__/support/useTempDir.js';
 import { OffsetAudit } from '@vybestack/llxprt-code-core/journal/__tests__/support/offsetAudit.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { RowFormatSettings } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
+import type {
+  RowFormatRegistration,
+  RowFormatSettings,
+} from '@vybestack/llxprt-code-core/journal/rowFormat.js';
 import type { Version } from '@vybestack/llxprt-code-core/journal/version.js';
 import { VersionSnapshot } from '@vybestack/llxprt-code-core/journal/versionSnapshot.js';
+import { observeRowFormat } from './__tests__/support/observeRowFormat.js';
 import {
   PinnedRead,
   PinLease,
@@ -119,28 +123,83 @@ describe('native format registration lifecycle', () => {
       await session.append(
         Array.from({ length: 128 }, (_, index) => textRow(`row-${index} 雪`)),
       );
-      counter.reads = 0;
-      await session.registerRowFormat(plainChatLengthRegistration(SETTINGS));
-      expect(counter.reads).toBeGreaterThan(128);
-      counter.reads = 0;
-      const before = textMessageLength(
-        Array.from({ length: 128 }, (_, index) => `row-${index} 雪`),
+      const texts = Array.from(
+        { length: 128 },
+        (_, index) => `row-${index} 雪`,
       );
+      const measured: { label: bigint; lens: unknown }[] = [];
+      function registration(
+        settings: RowFormatSettings,
+      ): RowFormatRegistration {
+        return observeRowFormat(
+          plainChatLengthRegistration(settings),
+          (entry, facts) => {
+            measured.push({
+              label: entry.label,
+              lens: JSON.parse(new TextDecoder().decode(facts.lens)),
+            });
+          },
+        );
+      }
+      function expectCoverage(expected: readonly string[]): void {
+        expect(measured).toHaveLength(expected.length);
+        expect(new Set(measured.map(({ label }) => label)).size).toBe(
+          expected.length,
+        );
+        expect(measured.map(({ label }) => label)).toEqual(
+          measured
+            .map(({ label }) => label)
+            .sort((a, b) => (a < b ? -1 : Number(a > b))),
+        );
+        expect(measured.map(({ lens }) => lens)).toStrictEqual(
+          expected.map((text) => {
+            const unit = {
+              speaker: 'human',
+              messages: [
+                {
+                  bytes: Buffer.byteLength(
+                    JSON.stringify({ role: 'user', content: text }),
+                  ),
+                  dropped: false,
+                },
+              ],
+              media: [],
+            };
+            return { revision: 1, units: [[unit, unit]] };
+          }),
+        );
+      }
+      counter.reads = 0;
+      await session.registerRowFormat(registration(SETTINGS));
+      expectCoverage(texts);
+      expect(counter.reads).toBeGreaterThan(0);
+      expect(counter.reads).toBeLessThan(128);
+      counter.reads = 0;
+      const before = textMessageLength(texts);
       expect(await planned(session)).toBe(before);
       expect(counter.reads).toBe(0);
+      expectCoverage(texts);
       await session.append([textRow('tail')]);
       const appendReads = counter.reads;
       expect(appendReads).toBeLessThan(150);
+      expectCoverage([...texts, 'tail']);
       counter.reads = 0;
-      expect(await planned(session)).toBeGreaterThan(before);
-      expect(counter.reads).toBe(0);
-      await session.registerRowFormat(
-        plainChatLengthRegistration({
-          ...SETTINGS,
-          endpoint: 'https://other.test/v1',
-        }),
+      expect(await planned(session)).toBe(
+        textMessageLength([...texts, 'tail']),
       );
-      expect(counter.reads).toBeGreaterThan(128);
+      expect(counter.reads).toBe(0);
+      const otherSettings = { ...SETTINGS, endpoint: 'https://other.test/v1' };
+      measured.length = 0;
+      await session.registerRowFormat(registration(otherSettings));
+      expectCoverage([...texts, 'tail']);
+      expect(counter.reads).toBeGreaterThan(0);
+      expect(counter.reads).toBeLessThan(129);
+      counter.reads = 0;
+      expect(await planned(session, otherSettings)).toBe(
+        textMessageLength([...texts, 'tail']),
+      );
+      expect(counter.reads).toBe(0);
+      expectCoverage([...texts, 'tail']);
     });
   });
 
