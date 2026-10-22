@@ -1,3 +1,11 @@
+# The #3929 journal regression passes; Phase 5 remains open
+
+2026-10-22. Early `795ea443d` commits four green cases before broader gates. Final journal coverage is **4/0, 192 assertions**, with fixture error identity/order **3/11**. The fourth release Error occurs during old-pin retirement, after rollback's publication Error; teardown now preserves both and recovers the durable queue before journal disposal. No production change or extra settlement loop was needed.
+
+[The journal receipt](PHASE6-SOURCE-BOUND-JOURNALMEDIAREGRESSION-PROOF.json) records 29 passing invocations, 85 tests/1,920 assertions, deterministic held-release sensitivity, restored source controls, a 5,051-source bridge and all 1,204 preservation hashes. Pending-media 13/1,337, unchanged no-file 22/176, queue 5/52 and #3919 readers 14/49 pass freshly. #3929 stays open until merge. Full-memory refresh, the original tools timeout and all other phase/provider/accounting gaps and separate REDs remain open. Review skipped per Andrew 2026-10-09. Earlier sections below are historical checkpoints.
+
+---
+
 # Pending-media regressions pass; Phase 5 remains open
 
 2026-10-22. Early commit `6c7673e4c` and security commit `0c6bcd002` resolve the six pending-media failures through exact owner identity and correct pin-release ordering, without production changes. The unchanged baseline was 1 pass/6 fail; the complete expanded file is 13/0 with 1,337 assertions and all twelve terminal case receipts. The extra reservation was the pinned history claim alongside a legitimate external-reader claim, not a redundant native request reservation. Added native-source cases require zero request reservations. Pending-admission coverage is 5/0 with 37 assertions, including rejection of dead admission authority while another owner holds the blob.

@@ -14,6 +14,7 @@ import { HISTORY_BACKEND_ENV } from '../../historyBackendSelect.js';
 import { exactTokenizer } from '../../chronology-rollback-test-helpers.js';
 import type { HistoryMediaOwner } from '../../historyBatchContracts.js';
 import type { IContent } from '../../IContent.js';
+import { historyMutationFailure } from '../../historyMutationEffects.js';
 
 type ReferenceSource = Parameters<
   NonNullable<HistoryMediaOwner['prepareReferenceReplacement']>
@@ -87,6 +88,7 @@ export async function withNativePurgeFixture(
     quotaBytes: 1024,
   });
   const owner = new PurgePublicationOwner(store);
+  const failures: unknown[] = [];
   try {
     history.setTokenizerFactory(exactTokenizer());
     await history.attachJournal(recording, true, undefined, origin);
@@ -108,12 +110,23 @@ export async function withNativePurgeFixture(
         }
       },
     });
-  } finally {
-    store.rejectedId = undefined;
-    await history.dispose();
-    await history.waitForOwnershipSettlement();
-    await recording.dispose();
-    await store.close();
-    rmSync(root, { recursive: true, force: true });
+  } catch (error) {
+    failures.push(error);
   }
+  for (const close of [
+    () => owner.releaseAll(),
+    () => history.dispose(),
+    () => history.waitForOwnershipSettlement(),
+    () => recording.dispose(),
+    () => store.close(),
+    () => rmSync(root, { recursive: true, force: true }),
+  ]) {
+    try {
+      await Promise.resolve(close());
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  if (failures.length > 0)
+    throw historyMutationFailure(failures[0], failures.slice(1));
 }

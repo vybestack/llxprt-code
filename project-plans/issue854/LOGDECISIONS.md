@@ -1,3 +1,13 @@
+# Journal retirement and cleanup decision, 2026-10-22
+
+The fourth #3929 failure required tracing the release boundary, not adding settlement waits. The diagnostic records rollback returning the original publication Error while the physical release injection remains armed. Awaited transaction close later returns the exact release Error. The base pin legitimately prevents physical release during rollback. An assertion expecting an immediate aggregate then entered cleanup, where journal disposal preceded ownership recovery and masked the useful errors with a closed-journal drain.
+
+Early checkpoint `795ea443d` commits four green cases before broader gates. The final test uses the existing releaseRead aggregation contract at retirement, validates the durable unacknowledged queue, and performs one explicit recovery before disposal. Fixture cleanup now releases ownership first, preserves sole Error identity and aggregates action plus cleanup failures without disabling the injection. Two of the three fixture-contract cases reject the original fixture. No production callback loss was demonstrated, so production remains unchanged. There is no ownership-settlement loop, sleep, retry budget change or relaxed assertion.
+
+[The receipt](PHASE6-SOURCE-BOUND-JOURNALMEDIAREGRESSION-PROOF.json) records final 4/0 with 192 assertions, 29 passing invocations, 85 tests/1,920 assertions, restored matcher controls, source/type bridges and all 1,204 preservation hashes. The held physical-release control specifically rejects completion before release; interrupted/runtime-only attempts remain excluded. #3929 stays open until merge. Full native memory acceptance, the tools timeout, other phase gaps and separate REDs remain open. Review skipped per Andrew 2026-10-09. No preservation cleanup, .llxprt edit/staging, enforcement change, OCR, push, merge or default flip. Earlier sections below are historical checkpoints.
+
+---
+
 # Pending-media ownership decision, 2026-10-22
 
 The six pending-media failures came from a stale count-only ownership predicate and reclamation before final pin retirement. The unchanged fixture constructs a raw indexed snapshot without a native lease. Its external reservation and the pinned history reservation have different owners and release at different transitions. The ownership pipeline is unchanged between pre-view `4fe997`, product `3f43569e9` and starting HEAD `e84ba7ced`. There is no demonstrated purge-clone provenance defect to fix in production.

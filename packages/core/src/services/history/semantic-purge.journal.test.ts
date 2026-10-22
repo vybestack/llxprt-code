@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -11,6 +11,7 @@ import {
   type SemanticPurgeStreamTransaction,
 } from './semantic-purge-stream.js';
 import { withNativePurgeFixture } from './__tests__/support/native-purge-fixture.js';
+import { batchGate } from './__tests__/support/addbatch-stream-test-helpers.js';
 import type { IContent } from './IContent.js';
 
 type Fixture = Parameters<Parameters<typeof withNativePurgeFixture>[0]>[0];
@@ -158,9 +159,41 @@ async function retire(
     await transaction.close();
     return;
   }
-  const error = await failureOf(
-    Promise.resolve(releaseRead(transaction, rollback)),
+  const entered = batchGate();
+  const resume = batchGate();
+  const release = fixture.store.release.bind(fixture.store);
+  const paused = spyOn(fixture.store, 'release').mockImplementation(
+    async (contentId, ownerId): Promise<void> => {
+      entered.resolve();
+      await resume.promise;
+      await release(contentId, ownerId);
+    },
   );
+  let settled = false;
+  const closing = Promise.resolve(releaseRead(transaction, rollback)).then(
+    () => {
+      settled = true;
+      return { closed: true };
+    },
+    (error: unknown) => {
+      settled = true;
+      return { error };
+    },
+  );
+  try {
+    await entered.promise;
+    const rejectedId = fixture.store.rejectedId;
+    if (rejectedId === undefined) throw new Error('Missing injected release');
+    await expectHistoryOwner(fixture.store.rootDirectory, rejectedId, true);
+    expect(settled).toBe(false);
+  } finally {
+    resume.resolve();
+    paused.mockRestore();
+  }
+  const result = await closing;
+  expect(result).toHaveProperty('error');
+  if (!('error' in result)) throw new Error('Expected retirement failure');
+  const error = result.error;
   expect(error).toBeInstanceOf(AggregateError);
   if (!(error instanceof AggregateError))
     throw new Error('Expected aggregate failure');
@@ -199,6 +232,7 @@ describe.each(failures)('native semantic purge with %s', (failure) => {
       if (transaction === undefined)
         throw new Error('Missing purge transaction');
       let rollback: { readonly error: unknown } | undefined;
+      let actionFailure: { readonly error: unknown } | undefined;
       try {
         const candidate = await collect(transaction.candidate);
         expect(candidate[0].blocks).toStrictEqual([
@@ -236,8 +270,12 @@ describe.each(failures)('native semantic purge with %s', (failure) => {
           (await store.reclaimUnreferenced(new Set(), Date.now()))
             .objectsRemoved,
         ).toBe(0);
-      } finally {
         await retire(fixture, transaction, failure, rollback);
+      } catch (error) {
+        actionFailure = { error };
+        throw error;
+      } finally {
+        await releaseRead(transaction, actionFailure);
       }
       expect(owners.snapshot().liveRows).toBe(0);
       expect(owners.snapshot().liveSerializedBytes).toBe(0);

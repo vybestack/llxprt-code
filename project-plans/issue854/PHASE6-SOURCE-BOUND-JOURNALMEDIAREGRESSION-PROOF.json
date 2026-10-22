@@ -1,0 +1,921 @@
+{
+  "date": "2026-10-22",
+  "issue": "https://github.com/vybestack/llxprt-code/issues/3929",
+  "startingHead": "478dea803",
+  "earlyCommit": "795ea443d",
+  "status": "Four journal semantic-purge cases pass through final retirement, recovery, reclamation and continued writer use. Production is unchanged. Issue remains open until merge.",
+  "baseline": {
+    "path": "tmp/p8/journal-media-regression-run-bg/baseline.log",
+    "sha256": "36802a46e50a913a0b63c5ac9486368b4652ccad5f244059639923be17454270",
+    "result": "0 pass / 4 fail / 58 assertions",
+    "rerun": false,
+    "originalSourceSha256": "da423edc6149e79dac424ee2867905dfa5d9b29fbe05c990aca74756ed376a37"
+  },
+  "inheritedWip": {
+    "path": "tmp/p8/journal-media-regression-run-bg/green.log",
+    "sha256": "11d924cb7fff432938340d3bc7644c343ca78ee994a4d2c001b0def7cbab6bc9",
+    "result": "3 pass / 1 fail / 110 assertions",
+    "notAccepted": true
+  },
+  "diagnosis": {
+    "path": "tmp/p8/journal-media-regression-run-bg/root-diagnostic.log",
+    "sha256": "b3f6ca3776dbe639d033facb2fc38e3bfc69c66803ceb73e19ba18f52869c32c",
+    "result": "Rollback returns the exact publication error while the physical release injection remains armed; transaction close later returns the exact release error; fixture disposal masks both with a closed-journal drain.",
+    "mechanism": [
+      "The native transaction base owns the old snapshot pin. Candidate reader close does not retire that base. Transaction close awaits readers, candidate, then base; base awaits snapshot close, which closes formats, dump and compensation resources.",
+      "Rollback publication fails after reserving the old image. Compensation queues the image release in the durable rel state while the old base pin is live. Its drain cannot release that image yet, so rollback returns the original publication Error alone.",
+      "Final pin close releases the version and invokes JournalMediaPins.afterReaderRelease. Its retirement Promise awaits the serialized release-gate drain. The injected physical store release fails there, not during rollback. This Promise is observed by awaited transaction retirement; no lost production callback is demonstrated.",
+      "The old assertion expected both errors during rollback. When it failed, final transaction close threw the deferred release error. Outer fixture disposal began closing the journal before ownership releaseAll drained the remaining queue, producing the misleading closed-journal error.",
+      "The test now preserves publication and physical release Errors at their real boundaries using the existing releaseRead aggregation contract. After the one-shot external release failure it verifies every pin is gone and durable head is behind tail, then performs one explicit owner releaseAll recovery before disposal and checks head reaches that saved tail.",
+      "Fixture teardown releases ownership before journal disposal, attempts every resource cleanup, and reports the original action Error followed by cleanup Errors through historyMutationFailure. It no longer disables an armed release injection during cleanup."
+    ],
+    "evidence": [
+      {
+        "path": "packages/core/src/services/history/semantic-purge-stream.ts",
+        "line": 154
+      },
+      {
+        "path": "packages/core/src/services/history/journalSemanticPurge.ts",
+        "line": 64
+      },
+      {
+        "path": "packages/core/src/journal/journalStore.ts",
+        "line": 388
+      },
+      {
+        "path": "packages/core/src/journal/journalMediaPins.ts",
+        "line": 56
+      },
+      {
+        "path": "packages/core/src/storage/history-media-release-gate.ts",
+        "line": 132
+      },
+      {
+        "path": "packages/core/src/storage/history-media-release-gate.ts",
+        "line": 121
+      },
+      {
+        "path": "packages/core/src/storage/history-media-ownership.ts",
+        "line": 235
+      },
+      {
+        "path": "packages/core/src/services/history/HistoryService.ts",
+        "line": 340
+      },
+      {
+        "path": "packages/core/src/services/history/HistoryServiceCore.ts",
+        "line": 849
+      },
+      {
+        "path": "packages/core/src/services/history/__tests__/support/native-purge-fixture.ts",
+        "line": 117
+      }
+    ]
+  },
+  "earlyCheckpoint": {
+    "path": "tmp/p8/journal-media-regression-run-bg/early-green.log",
+    "sha256": "c509df75f7d1ebebf2ccdc4e45c8ed9eaff1751e37908f5bd1290cef5444c24f",
+    "result": "4 pass / 0 fail / 188 assertions",
+    "beforeBroaderGates": true
+  },
+  "finalRegression": {
+    "path": "tmp/p8/journal-media-regression-run-bg/verified/final-core-semantic-purge.journal.test.ts.log",
+    "sha256": "a79ca32fe2ee1c678ca031ff79fd600137c8402db13ae1a3358477c7e321f8e8",
+    "result": "4 pass / 0 fail / 192 assertions",
+    "restored": {
+      "path": "tmp/p8/journal-media-regression-run-bg/restored-journal.log",
+      "sha256": "b47935b5e6b363eb080826c84051fe34e765d93106d95e8c83dcd23ede18c4d3"
+    },
+    "restoredAfterPinJanitor": {
+      "path": "tmp/p8/journal-media-regression-run-bg/final-restored-journal.log",
+      "sha256": "fb6fb64e68e17578ab23828634e12c8ac62d7fab6f98071847c6669a10dfd2f4"
+    },
+    "cases": [
+      "none",
+      "publication",
+      "rollback-publication",
+      "rollback-release"
+    ],
+    "terminalAssertions": "Each case validates candidate transformation, persisted primary/mirror and frontier after publication/rollback, exact on-disk owner digest sets, immutable readable base, verified original blob bytes, zero pre-retirement reclamation, awaited retirement, zero live rows/bytes, unchanged 440-row/8MiB ownership bounds, no final reservations, two reclaimed objects and successful subsequent add/read/persist while history remains alive.",
+    "fourth": "A physical release barrier holds the real store release. Close must stay pending until resumed. The observed AggregateError contains exactly the original publication Error and physical release Error in that order and by identity. Durable recovery occurs only after that expected failure has been asserted."
+  },
+  "fixtureErrorContract": {
+    "path": "tmp/p8/journal-media-regression-run-bg/verified/final-core-native-purge-fixture-lifecycle.test.ts.log",
+    "sha256": "1dac55b38efa48fef95521cf4852f35c28245a5f22351e9a1c31275b2edfb6e7",
+    "result": "3 pass / 0 fail / 11 assertions",
+    "checks": [
+      "Single action failure is the same Error.",
+      "Single physical cleanup failure is the same Error.",
+      "Action plus cleanup errors preserve exact identity, order and original cause."
+    ],
+    "originalFixtureControl": {
+      "path": "tmp/p8/journal-media-regression-run-bg/fixture-control.log",
+      "sha256": "442469066e133f94ae9883ef23316c3c49d461dbd89347504772eb87394866ab"
+    },
+    "originalFixtureResult": "1 pass / 2 fail / 5 assertions"
+  },
+  "sourceManifest": {
+    "before": {
+      "path": "tmp/p8/journal-media-regression-run-bg/verified/root-source-before.json",
+      "sha256": "a3aaa54fe1499b45e6648d78f878fc5da9183a3c371a1d2fbabdcf13e9f1a798"
+    },
+    "after": {
+      "path": "tmp/p8/journal-media-regression-run-bg/verified/root-source-after.json",
+      "sha256": "a3aaa54fe1499b45e6648d78f878fc5da9183a3c371a1d2fbabdcf13e9f1a798"
+    },
+    "entries": 5051,
+    "currentMismatches": [],
+    "ownedSource": [
+      {
+        "path": "packages/core/src/services/history/semantic-purge.journal.test.ts",
+        "sha256": "ecf0ac5372f7a332500119ee016a289638a8f1735a649c9071fdb83f0c2b9ab6"
+      },
+      {
+        "path": "packages/core/src/services/history/__tests__/support/native-purge-fixture.ts",
+        "sha256": "bcfa11a7435e7ac34a750e4f96018f7283161ac570a3860e39f36d7d81e3f42d"
+      },
+      {
+        "path": "packages/core/src/services/history/native-purge-fixture-lifecycle.test.ts",
+        "sha256": "cf049c5c7c3cc879182035527a60f15a04dc2eb621c7f347b2db091210ad26e5"
+      }
+    ]
+  },
+  "sourceBridge": {
+    "priorReceiptAtStartingHead": {
+      "path": "project-plans/issue854/PHASE6-SOURCE-BOUND-PENDINGMEDIAREGRESSION-PROOF.json",
+      "commit": "478dea803",
+      "sha256": "db574f0c313a021c3e1d1d93f4aa22148f09fecabc825a9e61e771327f985307"
+    },
+    "priorManifest": {
+      "path": "tmp/p8/pending-media-regression-run-bf/source-after.json",
+      "sha256": "5e68766d5dd00e7e60f81d97375d78216111b98b4ef24eed018f9e0b77085632"
+    },
+    "changedOrAdded": [
+      {
+        "path": "packages/core/src/services/history/__tests__/support/native-purge-fixture.ts",
+        "sha256": "bcfa11a7435e7ac34a750e4f96018f7283161ac570a3860e39f36d7d81e3f42d",
+        "before": "35ff32c003095cf3c155c4ec669012cdc0c8c7a717dde867601c470a5891499e"
+      },
+      {
+        "path": "packages/core/src/services/history/native-purge-fixture-lifecycle.test.ts",
+        "sha256": "cf049c5c7c3cc879182035527a60f15a04dc2eb621c7f347b2db091210ad26e5",
+        "before": null
+      },
+      {
+        "path": "packages/core/src/services/history/semantic-purge.journal.test.ts",
+        "sha256": "ecf0ac5372f7a332500119ee016a289638a8f1735a649c9071fdb83f0c2b9ab6",
+        "before": "da423edc6149e79dac424ee2867905dfa5d9b29fbe05c990aca74756ed376a37"
+      }
+    ],
+    "productionChanges": [],
+    "reuse": "All prior tracked package sources other than the journal test and native-purge fixture match. The only addition is the fixture lifecycle test. No prior production receipt is invalidated. Earlier pending-media, no-file, queue and reader results are nevertheless refreshed here. Other HTTP/oracle receipts are source-matched historical evidence, not new runs. Full native memory acceptance remains pending; the original tools timeout is not promoted or retried."
+  },
+  "gates": [
+    {
+      "name": "final-core-native-purge-fixture-lifecycle.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "src/services/history/native-purge-fixture-lifecycle.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 3580,
+      "exit": 0,
+      "log": "tmp/p8/journal-media-regression-run-bg/verified/final-core-native-purge-fixture-lifecycle.test.ts.log",
+      "sha256": "1dac55b38efa48fef95521cf4852f35c28245a5f22351e9a1c31275b2edfb6e7",
+      "summary": "(pass) native purge fixture error retirement > preserves a sole physical cleanup failure without wrapping it [58.75ms]\n(pass) native purge fixture error retirement > preserves action and physical cleanup failures in execution order [35.96ms]\n 3 pass\n 0 fail\n 11 expect() calls"
+    },
+    {
+      "name": "final-core-semantic-purge-disk-failure.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "src/services/history/semantic-purge-disk-failure.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 3585,
+      "exit": 0,
+      "log": "tmp/p8/journal-media-regression-run-bg/verified/final-core-semantic-purge-disk-failure.test.ts.log",
+      "sha256": "15fc77a59a43f5b6519168b4def708232cf8ea4bb94803bcc9e88d3d4909a7da",
+      "summary": "(pass) semantic purge snapshot failure on old > preserves the exact snapshot I/O failure and original membership without acquiring detached owners [55.70ms]\n(pass) semantic purge snapshot failure on journal > preserves the exact snapshot I/O failure and original membership without acquiring detached owners [56.07ms]\n 2 pass\n 0 fail\n 6 expect() calls"
+    },
+    {
+      "name": "final-core-semantic-purge-stream-failures.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "src/services/history/semantic-purge-stream-failures.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 3593,
+      "exit": 0,
+      "log": "tmp/p8/journal-media-regression-run-bg/verified/final-core-semantic-purge-stream-failures.test.ts.log",
+      "sha256": "e30eaed536c9a61215a88465c00701d67e19ba9f6943375d013b11527a5176f7",
+      "summary": "(pass) semantic purge failures on journal > semantic purge cancellation and compensation errors > compensates durable callback state when cancellation happens during persistence [26.05ms]\n(pass) semantic purge failures on journal > semantic purge cancellation and compensation errors > reports both tokenization and durable compensation errors in their original order [24.10ms]\n 8 pass\n 0 fail\n 32 expect() calls"
+    },
+    {
+      "name": "final-core-semantic-purge.journal.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "src/services/history/semantic-purge.journal.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 3603,
+      "exit": 0,
+      "log": "tmp/p8/journal-media-regression-run-bg/verified/final-core-semantic-purge.journal.test.ts.log",
+      "sha256": "a79ca32fe2ee1c678ca031ff79fd600137c8402db13ae1a3358477c7e321f8e8",
+      "summary": " 4 pass\n 0 fail\n 192 expect() calls"
+    },
+    {
+      "name": "final-agents-semantic-purge-native-media-lease.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "src/core/semantic-purge-native-media-lease.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents",
+      "pid": 3607,
+      "exit": 0,
+      "log": "tmp/p8/journal-media-regression-run-bg/verified/final-agents-semantic-purge-native-media-lease.test.ts.log",
+      "sha256": "bd62e0ebafe443cb5cd20fdbac7a769937f5d0400a35012b9bcd245ebfdfa18f",
+      "summary": " 13 pass\n 0 fail\n 1337 expect() calls"
+    },
+    {
+      "name": "final-providers-native-chat-golden.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "src/__tests__/native-chat-golden.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "pid": 3670,
+      "exit": 0,
+      "log": "tmp/p8/journal-media-regression-run-bg/verified/final-providers-native-chat-golden.test.ts.log",
+      "sha256": "a302fdd83bf6337f4b733fc92a32928adaf48ad14532fda78ba3f0614f896d73",
+      "summary": " 22 pass\n 0 fail\n 176 expect() calls"
+    },
+    {
+      "name": "final-core-native-media-queue-reopen.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "src/storage/native-media-queue-reopen.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 3683,
+      "exit": 0,
+      "log": "tmp/p8/journal-media-regression-run-bg/verified/final-core-native-media-queue-reopen.test.ts.log",
+      "sha256": "4b9b7c1c99fe10754bfab2eb666f62cacec6be6f472a321e99c8b4b3b8ea6035",
+      "summary": "(pass) native media release queue across owner reopen > keeps a failed release durable and retries it idempotently on an independent owner open [42.82ms]\n 5 pass\n 0 fail\n 52 expect() calls"
+    },
+    {
+      "name": "final-core-journalStore.readerLifetime.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "src/journal/journalStore.readerLifetime.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 3702,
+      "exit": 0,
+      "log": "tmp/p8/journal-media-regression-run-bg/verified/final-core-journalStore.readerLifetime.test.ts.log",
+      "sha256": "41c3e8fb8ebeef7255bb5c69c82fd7f7d6a129f2e5377f76aad1e40800c1beee",
+      "summary": "(pass) journal reader ownership across writer retirement > reports deferred descriptor close failure to the final reader release [0.72ms]\n(pass) journal reader ownership across writer retirement > keeps callback and descriptor-close failures in their original order [0.72ms]\n 11 pass\n 0 fail\n 29 expect() calls"
+    },
+    {
+      "name": "final-core-journalStore.readerCleanup.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "src/journal/journalStore.readerCleanup.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 3709,
+      "exit": 0,
+      "log": "tmp/p8/journal-media-regression-run-bg/verified/final-core-journalStore.readerCleanup.test.ts.log",
+      "sha256": "97273164bf1b9e881d0ce2b751d101509f8f50c23fbade6b13fec974af13a01d",
+      "summary": "(pass) retired reader cross-cleanup error identity > preserves readAt failure identity before final descriptor release failure [1.98ms]\n(pass) retired reader cross-cleanup error identity > still closes the descriptor when suspended dump reader cleanup fails independently [2.26ms]\n 3 pass\n 0 fail\n 20 expect() calls"
+    },
+    {
+      "name": "final-core-history-media-release-gate.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "src/storage/history-media-release-gate.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 3716,
+      "exit": 0,
+      "log": "tmp/p8/journal-media-regression-run-bg/verified/final-core-history-media-release-gate.test.ts.log",
+      "sha256": "b0cce9b9096616f967ef251e391b9fa9e64277c744804ba10ba2dad6d482349e",
+      "summary": "(pass) version-pinned history media ownership > drains releases after reader failure and preserves a single failure identity [1.03ms]\n(pass) version-pinned history media ownership > preserves reader and drain failures in cleanup order [0.33ms]\n 9 pass\n 0 fail\n 33 expect() calls"
+    },
+    {
+      "name": "final-core-semantic-purge-stream-lifecycle.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "src/services/history/semantic-purge-stream-lifecycle.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 3727,
+      "exit": 0,
+      "log": "tmp/p8/journal-media-regression-run-bg/verified/final-core-semantic-purge-stream-lifecycle.test.ts.log",
+      "sha256": "40d7f9ff4fd8622f9d7b11fd175d096ff30c0f1bed8999002997ed60a0c294dd",
+      "summary": " 4 pass\n 0 fail\n 23 expect() calls"
+    },
+    {
+      "name": "final-core-semantic-purge-native-compensation.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "src/services/history/semantic-purge-native-compensation.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 3737,
+      "exit": 0,
+      "log": "tmp/p8/journal-media-regression-run-bg/verified/final-core-semantic-purge-native-compensation.test.ts.log",
+      "sha256": "a9abfe8e3f010752fe0bc7549aff4a003383c6bfaa145f2369b2abcfa6a85d19",
+      "summary": "(pass) native semantic purge durable callback compensation > restores the candidate callback state when rollback media publication fails [157.62ms]\n 1 pass\n 0 fail\n 9 expect() calls"
+    },
+    {
+      "name": "final-core-declarations",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "../../scripts/build_package.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 3746,
+      "exit": 0,
+      "log": "tmp/p8/journal-media-regression-run-bg/verified/final-core-declarations.log",
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127",
+      "summary": ""
+    },
+    {
+      "name": "final-providers-declarations",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "../../scripts/build_package.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "pid": 3819,
+      "exit": 0,
+      "log": "tmp/p8/journal-media-regression-run-bg/verified/final-providers-declarations.log",
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127",
+      "summary": ""
+    },
+    {
+      "name": "final-agents-declarations",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "../../scripts/build_package.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents",
+      "pid": 3852,
+      "exit": 0,
+      "log": "tmp/p8/journal-media-regression-run-bg/verified/final-agents-declarations.log",
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127",
+      "summary": ""
+    },
+    {
+      "name": "final-core-types",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/core/tsconfig.noemit.json"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 3878,
+      "exit": 0,
+      "log": "tmp/p8/journal-media-regression-run-bg/verified/final-core-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": ""
+    },
+    {
+      "name": "final-providers-types",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/providers/tsconfig.noemit.json"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 3967,
+      "exit": 0,
+      "log": "tmp/p8/journal-media-regression-run-bg/verified/final-providers-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": ""
+    },
+    {
+      "name": "final-agents-types",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/agents/tsconfig.noemit.json"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 4102,
+      "exit": 0,
+      "log": "tmp/p8/journal-media-regression-run-bg/verified/final-agents-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": ""
+    },
+    {
+      "name": "final-core-bun-types",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/core/tsconfig.noemit.json",
+        "--types",
+        "bun"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 4200,
+      "exit": 0,
+      "log": "tmp/p8/journal-media-regression-run-bg/verified/final-core-bun-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": ""
+    },
+    {
+      "name": "final-providers-bun-types",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/providers/tsconfig.noemit.json",
+        "--types",
+        "bun"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 4313,
+      "exit": 0,
+      "log": "tmp/p8/journal-media-regression-run-bg/verified/final-providers-bun-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": ""
+    },
+    {
+      "name": "final-agents-bun-types",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/agents/tsconfig.noemit.json",
+        "--types",
+        "bun"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 4442,
+      "exit": 0,
+      "log": "tmp/p8/journal-media-regression-run-bg/verified/final-agents-bun-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": ""
+    },
+    {
+      "name": "final-providers-test-bun-types",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/providers/tsconfig.test-bun.json",
+        "--types",
+        "bun"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 4478,
+      "exit": 0,
+      "log": "tmp/p8/journal-media-regression-run-bg/verified/final-providers-test-bun-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": ""
+    },
+    {
+      "name": "final-agents-test-bun-types",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/agents/tsconfig.test-bun.json",
+        "--types",
+        "bun"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 4531,
+      "exit": 0,
+      "log": "tmp/p8/journal-media-regression-run-bg/verified/final-agents-test-bun-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": ""
+    },
+    {
+      "name": "final-lint",
+      "args": [
+        "node_modules/.bin/eslint",
+        "--max-warnings",
+        "0",
+        "packages/core/src/services/history/semantic-purge.journal.test.ts",
+        "packages/core/src/services/history/__tests__/support/native-purge-fixture.ts",
+        "packages/core/src/services/history/native-purge-fixture-lifecycle.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 4604,
+      "exit": 0,
+      "log": "tmp/p8/journal-media-regression-run-bg/verified/final-lint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": ""
+    },
+    {
+      "name": "final-format",
+      "args": [
+        "node_modules/.bin/prettier",
+        "--check",
+        "packages/core/src/services/history/semantic-purge.journal.test.ts",
+        "packages/core/src/services/history/__tests__/support/native-purge-fixture.ts",
+        "packages/core/src/services/history/native-purge-fixture-lifecycle.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 4648,
+      "exit": 0,
+      "log": "tmp/p8/journal-media-regression-run-bg/verified/final-format.log",
+      "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+      "summary": "All matched files use Prettier code style!"
+    },
+    {
+      "name": "final-graph",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "scripts/check-affected-test-shards.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 4650,
+      "exit": 0,
+      "log": "tmp/p8/journal-media-regression-run-bg/verified/final-graph.log",
+      "sha256": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67",
+      "summary": "affected-test-shards drift guard PASSED: checked-in graph matches real imports."
+    },
+    {
+      "name": "final-audit",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "scripts/test-audit/scan.ts",
+        "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p8/journal-media-regression-run-bg/verified/root-audit"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 4675,
+      "exit": 0,
+      "log": "tmp/p8/journal-media-regression-run-bg/verified/final-audit.log",
+      "sha256": "329fcf2328f17da7a33404cd279e3082dfefd2e42bf46714206ab58c729c5961",
+      "summary": "files scanned: 4671  errors: 0\nfindings: 2625"
+    },
+    {
+      "name": "final-preservation",
+      "args": [
+        "shasum",
+        "-a",
+        "256",
+        "-c",
+        "tmp/p6/chat-tail-run-au/preserved.sha256"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 4708,
+      "exit": 0,
+      "log": "tmp/p8/journal-media-regression-run-bg/verified/final-preservation.log",
+      "sha256": "0e4199bb6c410cc6f1e5bd39e3d87c8159795d9dc60279f003e975a7ea37b454",
+      "summary": ""
+    },
+    {
+      "name": "final-core-type-inputs",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/core/tsconfig.noemit.json",
+        "--types",
+        "bun",
+        "--listFilesOnly"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 4709,
+      "exit": 0,
+      "log": "tmp/p8/journal-media-regression-run-bg/verified/final-core-type-inputs.log",
+      "sha256": "de3cb2f8709ef4721d3b1fd3cbdf74210c4ed79d422ccc05ec8853e9cebdb62b",
+      "summary": ""
+    }
+  ],
+  "totals": {
+    "passingInvocations": 29,
+    "passingTestFiles": 12,
+    "tests": 85,
+    "assertions": 1920
+  },
+  "controls": [
+    {
+      "name": "control-early-drain",
+      "path": "packages/core/src/storage/history-media-release-gate.ts",
+      "old": "if (oldest !== undefined && held.version > oldest) return;",
+      "replacement": "if (false) return;",
+      "pkg": "core",
+      "file": "src/services/history/semantic-purge.journal.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "src/services/history/semantic-purge.journal.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 3542,
+      "exit": 1,
+      "log": "tmp/p8/journal-media-regression-run-bg/verified/control-early-drain.log",
+      "sha256": "0e2e271627f6c2c28197afdad8f0390315e523b6f7f7d1ea3d3dec78c7d813fd",
+      "summary": " |     throw error;\n45 |   });\n46 |   expect(files).toStrictEqual(present ? [digest] : []);\n                     ^\nerror: expect(received).toStrictEqual(expected)\n\n- [\n-   \"c8737773a9fb76953001b1596952c21e0e8bf4c6f62778ec0ff105863ae67d7e\",\n- ]\n+ []\n\n- Expected  - 3\n+ Received  + 1\n\n      at expectHistoryOwner (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/semantic-purge.journal.test.ts:46:17)\n      at async commitAndRollback (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/semantic-purge.journal.test.ts:139:9)\n      at async <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/semantic-purge.journal.test.ts:242:26)\n      at async withNativePurgeFixture (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/__tests__/support/native-purge-fixture.ts:96:11)\n      at async <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/semantic-purge.journal.test.ts:223:11)\n(fail) native semantic purge with rollback-publication > preserves persisted primary, mirror, frontier and media reservations [74.66ms]\n41 |   const files = await readdir(directory).catch((error: unknown) => {\n42 |     if (error instanceof Error && 'code' in error && error.code === 'ENOENT')\n43 |       return [];\n44 |     throw error;\n45 |   });\n46 |   expect(files).toStrictEqual(present ? [digest] : []);\n     ^\nerror: expect(received).toStrictEqual(expected)\n\n- [\n-   \"c8737773a9fb76953001b1596952c21e0e8bf4c6f62778ec0ff105863ae67d7e\",\n- ]\n+ []\n\n- Expected  - 3\n+ Received  + 1\n\n      at toStrictEqual (unknown:1:1)\n      at expectHistoryOwner (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/semantic-purge.journal.test.ts:46:17)\n      at commitAndRollback (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/semantic-purge.journal.test.ts:196:9)\n      at /Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/semantic-purge.journal.test.ts:242:26\n      at withNativePurgeFixture (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/__tests__/support/native-purge-fixture.ts:96:11)\n      at /Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/semantic-purge.journal.test.ts:223:11\n      at processTicksAndRejections (unknown:7:39)\n(fail) native semantic purge with rollback-release > preserves persisted primary, mirror, frontier and media reservations [88.25ms]\n\n 0 pass\n 4 fail\n 63 expect() calls\nRan 4 tests across 1 file. [799.00ms]\n",
+      "matcher": true,
+      "sourceSha256": "feee6f89b83544fb1ae2396f4fe277551339990111782b780d5c998fb2771ba7",
+      "restoredSha256": "feee6f89b83544fb1ae2396f4fe277551339990111782b780d5c998fb2771ba7",
+      "cmpExit": 0,
+      "headSha256": "feee6f89b83544fb1ae2396f4fe277551339990111782b780d5c998fb2771ba7"
+    },
+    {
+      "name": "control-ignored-retirement",
+      "path": "packages/core/src/services/history/semantic-purge-stream.ts",
+      "old": "await close();",
+      "replacement": "void close();",
+      "pkg": "core",
+      "file": "src/services/history/semantic-purge.journal.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "src/services/history/semantic-purge.journal.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 3559,
+      "exit": 1,
+      "log": "tmp/p8/journal-media-regression-run-bg/verified/control-ignored-retirement.log",
+      "sha256": "80e81ed1d46a49d87141b88905e0dcf13c9cee50383161b66126c7f18982bf45",
+      "summary": "cts/llxprt/branch-3/llxprt-code/packages/core/src/services/history/semantic-purge.journal.test.ts:285:13)\n      at async withNativePurgeFixture (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/__tests__/support/native-purge-fixture.ts:96:11)\n      at async <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/semantic-purge.journal.test.ts:223:11)\n(fail) native semantic purge with publication > preserves persisted primary, mirror, frontier and media reservations [86.23ms]\n41 |   const files = await readdir(directory).catch((error: unknown) => {\n42 |     if (error instanceof Error && 'code' in error && error.code === 'ENOENT')\n43 |       return [];\n44 |     throw error;\n45 |   });\n46 |   expect(files).toStrictEqual(present ? [digest] : []);\n     ^\nerror: expect(received).toStrictEqual(expected)\n\n- []\n+ [\n+   \"c8737773a9fb76953001b1596952c21e0e8bf4c6f62778ec0ff105863ae67d7e\",\n+ ]\n\n- Expected  - 1\n+ Received  + 3\n\n      at toStrictEqual (unknown:1:1)\n      at expectHistoryOwner (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/semantic-purge.journal.test.ts:46:17)\n      at /Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/semantic-purge.journal.test.ts:285:13\n      at withNativePurgeFixture (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/__tests__/support/native-purge-fixture.ts:96:11)\n      at /Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/semantic-purge.journal.test.ts:223:11\n      at processTicksAndRejections (unknown:7:39)\n(fail) native semantic purge with rollback-publication > preserves persisted primary, mirror, frontier and media reservations [117.64ms]\n81 |   opener.mockRestore();\n82 |   const recording = createRecorderForTest(\n83 |     { sessionId: 'purge-owner', projectHash: 'purge', chatsDir: root },\n84 |     { [HISTORY_BACKEND_ENV]: 'journal' },\n85 |   );\n86 |   const store = new PurgeReleaseStore({\n                                ^\nerror: purge rollback release failed\n      at new PurgeReleaseStore (1:28)\n      at withNativePurgeFixture (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/__tests__/support/native-purge-fixture.ts:86:17)\n      at async <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/semantic-purge.journal.test.ts:223:11)\n(fail) native semantic purge with rollback-release > preserves persisted primary, mirror, frontier and media reservations [90.53ms]\n\n 0 pass\n 4 fail\n 139 expect() calls\nRan 4 tests across 1 file. [862.00ms]\n",
+      "matcher": true,
+      "sourceSha256": "e857147646522964c18053b9177c10cb4f0ab076cc87691a5a0b9e76868b258e",
+      "restoredSha256": "e857147646522964c18053b9177c10cb4f0ab076cc87691a5a0b9e76868b258e",
+      "cmpExit": 0,
+      "headSha256": "e857147646522964c18053b9177c10cb4f0ab076cc87691a5a0b9e76868b258e"
+    },
+    {
+      "name": "control-ignored-head-write",
+      "path": "packages/core/src/storage/history-media-release-gate.ts",
+      "old": "      await this.journal.commit([\n        state(`rel:${this.head}`, null),\n        state('rel:head', this.head + 1),\n      ]);",
+      "replacement": "      void this.journal.commit([\n        state(`rel:${this.head}`, null),\n        state('rel:head', this.head + 1),\n      ]);",
+      "pkg": "core",
+      "file": "src/storage/native-media-queue-reopen.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "src/storage/native-media-queue-reopen.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 3564,
+      "exit": 1,
+      "log": "tmp/p8/journal-media-regression-run-bg/verified/control-ignored-head-write.log",
+      "sha256": "fa89963d95d88cdaf195e641a749679d8884ac4fd328d8964bce55783c069dc9",
+      "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/storage/native-media-queue-reopen.test.ts:\nqueue crash child pid=3567\n(pass) native media release queue across owner reopen > reclaims a queued blob after a killed request without expiring its instance lease [309.48ms]\n117 |           .objectsRemoved,\n118 |       ).toBe(0);\n119 |       await session.append([row]);\n120 |       await owner.reconcile([], () => [row]);\n121 |       await request.close();\n122 |       expect(await queueCounter(session, 'head')).toBe(\n                                                        ^\nerror: expect(received).toBe(expected)\n\nExpected: 1\nReceived: 0\n\n      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/storage/native-media-queue-reopen.test.ts:122:51)\n(fail) native media release queue across owner reopen > vetoes actual compaction while pinned and preserves current media after drain and swap [53.91ms]\n151 |     }\n152 |   });\n153 |   it('repeats an already completed external release when the durable head write was interrupted', async () => {\n154 |     const { session, media, request, reference } =\n155 |       await deferredMediaFixture(directory());\n156 |     const failure = new Error('queue head write interrupted');\n                              ^\nerror: queue head write interrupted\n      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/storage/native-media-queue-reopen.test.ts:156:25)\n\n# Unhandled error between tests\n-------------------------------\n154 |     const { session, media, request, reference } =\n155 |       await deferredMediaFixture(directory());\n156 |     const failure = new Error('queue head write interrupted');\n157 |     const commit = spyOn(session.store, 'commit').mockRejectedValue(failure);\n158 |     try {\n159 |       await expect(request.close()).rejects.toBe(failure);\n                                                  ^\nerror: \n\nExpected promise that rejects\nReceived promise that resolved: Promise { <resolved> }\n\n      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/storage/native-media-queue-reopen.test.ts:159:45)\n-------------------------------\n\n(fail) native media release queue across owner reopen > repeats an already completed external release when the durable head write was interrupted [29.25ms]\n(pass) native media release queue across owner reopen > protects checkpoint media through drain, compaction and reopen until checkpoint deletion [89.48ms]\n(pass) native media release queue across owner reopen > keeps a failed release durable and retries it idempotently on an independent owner open [42.39ms]\n\n 3 pass\n 2 fail\n 1 error\n 40 expect() calls\nRan 5 tests across 1 file. [835.00ms]\n",
+      "matcher": true,
+      "sourceSha256": "feee6f89b83544fb1ae2396f4fe277551339990111782b780d5c998fb2771ba7",
+      "restoredSha256": "feee6f89b83544fb1ae2396f4fe277551339990111782b780d5c998fb2771ba7",
+      "cmpExit": 0,
+      "headSha256": "feee6f89b83544fb1ae2396f4fe277551339990111782b780d5c998fb2771ba7"
+    }
+  ],
+  "supplement": [
+    {
+      "name": "barrier-control",
+      "pid": 4907,
+      "exit": 1,
+      "log": "tmp/p8/journal-media-regression-run-bg/barrier-control.log",
+      "sha256": "0772cb4589bd404eefacd6680d2950b0fd374a2952572da04dd955c29ee75263",
+      "summary": "iver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/semantic-purge.journal.test.ts:285:13\n      at withNativePurgeFixture (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/__tests__/support/native-purge-fixture.ts:96:11)\n      at /Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/semantic-purge.journal.test.ts:223:11\n      at processTicksAndRejections (unknown:7:39)\n(fail) native semantic purge with none > preserves persisted primary, mirror, frontier and media reservations [218.44ms]\n41 |   const files = await readdir(directory).catch((error: unknown) => {\n42 |     if (error instanceof Error && 'code' in error && error.code === 'ENOENT')\n43 |       return [];\n44 |     throw error;\n45 |   });\n46 |   expect(files).toStrictEqual(present ? [digest] : []);\n     ^\nerror: expect(received).toStrictEqual(expected)\n\n- []\n+ [\n+   \"c8737773a9fb76953001b1596952c21e0e8bf4c6f62778ec0ff105863ae67d7e\",\n+ ]\n\n- Expected  - 1\n+ Received  + 3\n\n      at toStrictEqual (unknown:1:1)\n      at expectHistoryOwner (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/semantic-purge.journal.test.ts:46:17)\n      at /Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/semantic-purge.journal.test.ts:285:13\n      at withNativePurgeFixture (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/__tests__/support/native-purge-fixture.ts:96:11)\n      at /Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/semantic-purge.journal.test.ts:223:11\n      at processTicksAndRejections (unknown:7:39)\n(fail) native semantic purge with publication > preserves persisted primary, mirror, frontier and media reservations [89.73ms]\n41 |   const files = await readdir(directory).catch((error: unknown) => {\n42 |     if (error instanceof Error && 'code' in error && error.code === 'ENOENT')\n43 |       return [];\n44 |     throw error;\n45 |   });\n46 |   expect(files).toStrictEqual(present ? [digest] : []);\n     ^\nerror: expect(received).toStrictEqual(expected)\n\n- []\n+ [\n+   \"c8737773a9fb76953001b1596952c21e0e8bf4c6f62778ec0ff105863ae67d7e\",\n+ ]\n\n- Expected  - 1\n+ Received  + 3\n\n      at toStrictEqual (unknown:1:1)\n      at expectHistoryOwner (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/semantic-purge.journal.test.ts:46:17)\n      at /Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/semantic-purge.journal.test.ts:285:13\n      at withNativePurgeFixture (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/__tests__/support/native-purge-fixture.ts:96:11)\n      at /Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/semantic-purge.journal.test.ts:223:11\n      at processTicksAndRejections (unknown:7:39)\n(fail) native semantic purge with rollback-publication > preserves persisted primary, mirror, frontier and media reservations [113.68ms]\n183 |   try {\n184 |     await entered.promise;\n185 |     const rejectedId = fixture.store.rejectedId;\n186 |     if (rejectedId === undefined) throw new Error('Missing injected release');\n187 |     await expectHistoryOwner(fixture.store.rootDirectory, rejectedId, true);\n188 |     expect(settled).toBe(false);\n      ^\nerror: expect(received).toBe(expected)\n\nExpected: false\nReceived: true\n\n      at toBe (unknown:1:1)\n      at retire (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/semantic-purge.journal.test.ts:188:21)\n      at /Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/semantic-purge.journal.test.ts:273:15\n      at withNativePurgeFixture (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/__tests__/support/native-purge-fixture.ts:96:11)\n      at /Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/semantic-purge.journal.test.ts:223:11\n      at processTicksAndRejections (unknown:7:39)\n(fail) native semantic purge with rollback-release > preserves persisted primary, mirror, frontier and media reservations [116.29ms]\n\n 0 pass\n 4 fail\n 139 expect() calls\nRan 4 tests across 1 file. [889.00ms]\n",
+      "barrierMatcher": true,
+      "sourceSha256": "e857147646522964c18053b9177c10cb4f0ab076cc87691a5a0b9e76868b258e",
+      "restoredSha256": "e857147646522964c18053b9177c10cb4f0ab076cc87691a5a0b9e76868b258e",
+      "cmpExit": 0,
+      "mutation": "Discard retirement promises and attach rejection observers only in the mutant, so the held physical failure cannot mask the completion-before-release matcher."
+    },
+    {
+      "name": "fixture-control",
+      "pid": 4915,
+      "exit": 1,
+      "log": "tmp/p8/journal-media-regression-run-bg/fixture-control.log",
+      "sha256": "442469066e133f94ae9883ef23316c3c49d461dbd89347504772eb87394866ab",
+      "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/services/history/native-purge-fixture-lifecycle.test.ts:\n(pass) native purge fixture error retirement > preserves the action error when all resource releases succeed [45.91ms]\n19 |     if (primary !== undefined) throw primary;\n20 |   }).then(\n21 |     () => ({ closed: true }),\n22 |     (error: unknown) => ({ error }),\n23 |   );\n24 |   expect(result).toHaveProperty('error');\n                      ^\nerror: expect(received).toHaveProperty(path)\n\nExpected path: \"error\"\n\nUnable to find property\n\n      at releaseFailureOf (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/native-purge-fixture-lifecycle.test.ts:24:18)\n      at async <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/native-purge-fixture-lifecycle.test.ts:41:45)\n(fail) native purge fixture error retirement > preserves a sole physical cleanup failure without wrapping it [70.91ms]\n43 |   });\n44 | \n45 |   it('preserves action and physical cleanup failures in execution order', async () => {\n46 |     const primary = new Error('purge action failed');\n47 |     const { error, releaseFailure } = await releaseFailureOf(primary);\n48 |     expect(error).toBeInstanceOf(AggregateError);\n                       ^\nerror: expect(received).toBeInstanceOf(expected)\n\nExpected constructor: [class AggregateError extends Error]\nReceived value: 41 |     const { error, releaseFailure } = await releaseFailureOf();\n42 |     expect(error).toBe(releaseFailure);\n43 |   });\n44 | \n45 |   it('preserves action and physical cleanup failures in execution order', async () => {\n46 |     const primary = new Error('purge action failed');\n                             ^\nerror: purge action failed\n      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/native-purge-fixture-lifecycle.test.ts:46:25)\n\n\n      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/native-purge-fixture-lifecycle.test.ts:48:19)\n(fail) native purge fixture error retirement > preserves action and physical cleanup failures in execution order [46.73ms]\n\n 1 pass\n 2 fail\n 5 expect() calls\nRan 3 tests across 1 file. [527.00ms]\n",
+      "sourceSha256": "35ff32c003095cf3c155c4ec669012cdc0c8c7a717dde867601c470a5891499e",
+      "restoredSha256": "bcfa11a7435e7ac34a750e4f96018f7283161ac570a3860e39f36d7d81e3f42d",
+      "cmpExit": 0
+    },
+    {
+      "name": "restored-journal",
+      "pid": 4927,
+      "exit": 0,
+      "log": "tmp/p8/journal-media-regression-run-bg/restored-journal.log",
+      "sha256": "b47935b5e6b363eb080826c84051fe34e765d93106d95e8c83dcd23ede18c4d3",
+      "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/services/history/semantic-purge.journal.test.ts:\n(pass) native semantic purge with none > preserves persisted primary, mirror, frontier and media reservations [263.06ms]\n(pass) native semantic purge with publication > preserves persisted primary, mirror, frontier and media reservations [107.69ms]\n(pass) native semantic purge with rollback-publication > preserves persisted primary, mirror, frontier and media reservations [148.53ms]\n(pass) native semantic purge with rollback-release > preserves persisted primary, mirror, frontier and media reservations [129.39ms]\n\n 4 pass\n 0 fail\n 192 expect() calls\nRan 4 tests across 1 file. [1002.00ms]\n"
+    },
+    {
+      "name": "restored-fixture",
+      "pid": 4943,
+      "exit": 0,
+      "log": "tmp/p8/journal-media-regression-run-bg/restored-fixture.log",
+      "sha256": "7f5b3868c060909e162b97a8186fbe5d083b6d822cfafc599a6f2d1ecc213938",
+      "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/services/history/native-purge-fixture-lifecycle.test.ts:\n(pass) native purge fixture error retirement > preserves the action error when all resource releases succeed [57.15ms]\n(pass) native purge fixture error retirement > preserves a sole physical cleanup failure without wrapping it [58.88ms]\n(pass) native purge fixture error retirement > preserves action and physical cleanup failures in execution order [34.85ms]\n\n 3 pass\n 0 fail\n 11 expect() calls\nRan 3 tests across 1 file. [511.00ms]\n"
+    }
+  ],
+  "pinJanitorControl": {
+    "path": "tmp/p8/journal-media-regression-run-bg/pin-janitor-results.json",
+    "sha256": "f25cab46caf4b22db90ae0590224e3df101d6695d96bdcdc070be0ec2299802c",
+    "records": [
+      {
+        "name": "pin-janitor-negative",
+        "pid": 8571,
+        "exit": 1,
+        "log": "tmp/p8/journal-media-regression-run-bg/pin-janitor-negative.log",
+        "sha256": "339b7a1f42ea38275c1a2676b6d021dbbd78712b66d1897e023d0c38d7075da5",
+        "sourceSha256": "feee6f89b83544fb1ae2396f4fe277551339990111782b780d5c998fb2771ba7"
+      },
+      {
+        "name": "pin-janitor-positive",
+        "pid": 8574,
+        "exit": 0,
+        "log": "tmp/p8/journal-media-regression-run-bg/pin-janitor-positive.log",
+        "sha256": "92a8a967f5adb367eebb577e1bfa9aa452fb633d6014369bccf5f0222ac4bf40",
+        "sourceSha256": "feee6f89b83544fb1ae2396f4fe277551339990111782b780d5c998fb2771ba7"
+      }
+    ],
+    "restoredSha256": "feee6f89b83544fb1ae2396f4fe277551339990111782b780d5c998fb2771ba7",
+    "headSha256": "feee6f89b83544fb1ae2396f4fe277551339990111782b780d5c998fb2771ba7",
+    "cmp": true,
+    "restoration": {
+      "path": "tmp/p8/journal-media-regression-run-bg/pin-janitor-restoration.log",
+      "sha256": "4d530e87b75de6503cfe307da4158a8c9068879a32a4f2e9a56856e801e6902f"
+    },
+    "testSource": {
+      "path": "tmp/p8/journal-media-regression-run-bg/pin-janitor-control.test.ts",
+      "sha256": "ae2b6df95161cb57d4732d7e28c98c9bcc95abd8aa40c1596cfa5c990323282f"
+    },
+    "negative": {
+      "path": "tmp/p8/journal-media-regression-run-bg/pin-janitor-negative.log",
+      "sha256": "339b7a1f42ea38275c1a2676b6d021dbbd78712b66d1897e023d0c38d7075da5"
+    },
+    "positive": {
+      "path": "tmp/p8/journal-media-regression-run-bg/pin-janitor-positive.log",
+      "sha256": "92a8a967f5adb367eebb577e1bfa9aa452fb633d6014369bccf5f0222ac4bf40"
+    },
+    "result": "Negative 0/1, positive 1/0, one compound matcher each. With early drain, the immutable base remains readable but janitor removes one pinned image and its verified hash read becomes MediaObjectMissingError. Restored production retains both original blob hashes and reclaims zero. This independent diagnostic captures all observations before its compound assertion; it does not claim later assertions in the main negative cases executed."
+  },
+  "controlQualifications": [
+    "All three verified production mutations restore by cmp and SHA256 against saved bytes and HEAD before positive gates.",
+    "Early drain fails exact owner predicates and pre-close reclamation. It does not establish execution of assertions after the first failing predicate in a case.",
+    "The unobserved-retirement mutation fails final owner-release assertions; its fourth physical error alone is not counted as an independent matcher.",
+    "The supplementary ignored-retirement mutant attaches rejection observers only to discarded mutant cleanup promises. That prevents its deliberately dropped physical failure from masking the held-release barrier matcher: expected unsettled false, observed true. No such catch exists in production or the passing fixture.",
+    "Ignored durable head acknowledgement fails a persisted-head matcher and the exact injected write-error rejection. Its unhandled error is separately recorded, not counted as matcher sensitivity.",
+    "Restoring the original fixture fails both new cleanup-error assertions. Current fixture bytes restore by cmp and SHA256; subsequent complete journal and fixture files pass."
+  ],
+  "nonAcceptedAttempts": {
+    "interruptedEarlyDrain": {
+      "log": {
+        "path": "tmp/p8/journal-media-regression-run-bg/control-early-drain.log",
+        "sha256": "784f6dc2c164c46aad3b75dc5d11cdb6bab787e8a64cc38b4c4a10f0b8ce082e"
+      },
+      "reason": "Initial control reached assertion failures but expected-error retirement in finally waited for a release the failed setup never scheduled. Driver and child were stopped, production bytes restored, and retirement moved into the successful action path. This interrupted attempt is not accepted as a completed control."
+    },
+    "unobservedDumpClose": {
+      "log": {
+        "path": "tmp/p8/journal-media-regression-run-bg/final/control-ignored-retirement.log",
+        "sha256": "8ad11c780558759021286c3e93be446f33aeb7b87bdf1156070e2158ceae325e"
+      },
+      "reason": "Runtime failure without a displayed matcher. Excluded; replaced by the deterministic physical-barrier control."
+    },
+    "initialLint": {
+      "log": {
+        "path": "tmp/p8/journal-media-regression-run-bg/attempt2/final-lint.log",
+        "sha256": "63c6c9f611b35fcacc4d96c08d5d24c7bb548e1a6dbc449f7d92290a8427c400"
+      },
+      "reason": "Mixed synchronous/asynchronous cleanup returns required Promise.resolve before await. Corrected without disabling enforcement; complete final lint passes."
+    }
+  },
+  "typing": {
+    "strict": true,
+    "projects": [
+      "core/providers/agents declarations",
+      "core/providers/agents noemit",
+      "core/providers/agents current-source Bun types",
+      "providers/agents test-bun types"
+    ],
+    "ownedInputs": {
+      "path": "tmp/p8/journal-media-regression-run-bg/verified/final-core-type-inputs.log",
+      "sha256": "de3cb2f8709ef4721d3b1fd3cbdf74210c4ed79d422ccc05ec8853e9cebdb62b"
+    },
+    "allOwnedPathsPresent": true,
+    "widerCore": "Existing wider 609-diagnostic RED remains separate, unchanged and not rerun or suppressed."
+  },
+  "audit": {
+    "path": "tmp/p8/journal-media-regression-run-bg/verified/root-audit/findings.tsv",
+    "sha256": "c85c48cd405275c2fb639edb72fd272336844976824885c71c407a0eaca4a459",
+    "repositoryFindings": 2625,
+    "scanErrors": 0,
+    "ownedFindings": []
+  },
+  "preservation": {
+    "path": "tmp/p8/journal-media-regression-run-bg/verified/final-preservation.log",
+    "sha256": "0e4199bb6c410cc6f1e5bd39e3d87c8159795d9dc60279f003e975a7ea37b454",
+    "hashes": 1204,
+    "inheritedDeclarations": 306,
+    "movedOrDeleted": false
+  },
+  "processes": {
+    "recordedPids": [
+      3534,
+      795,
+      99370,
+      99376,
+      2868,
+      2870,
+      3531,
+      3532,
+      4905,
+      8571,
+      8574,
+      3580,
+      3585,
+      3593,
+      3603,
+      3607,
+      3670,
+      3683,
+      3702,
+      3709,
+      3716,
+      3727,
+      3737,
+      3746,
+      3819,
+      3852,
+      3878,
+      3967,
+      4102,
+      4200,
+      4313,
+      4442,
+      4478,
+      4531,
+      4604,
+      4648,
+      4650,
+      4675,
+      4708,
+      4709,
+      4907,
+      4915,
+      4927,
+      4943,
+      3687
+    ],
+    "observedRunning": [],
+    "checkedAt": "2026-10-22T10:55:03.667Z"
+  },
+  "remaining": [
+    "#3929 stays open until merge; no GitHub close/comment/push/merge performed.",
+    "Phase 5/6/W26 remain open.",
+    "Full native old 1/8MiB memory protocols and controls remain pending; original tools 170000ms RED retained.",
+    "#3917, two old durable cases, blanket compaction, public fixture and wider core test-type REDs remain separate.",
+    "Public automatic compression plus purge, public explicit-cache combinations, other providers/continuations, native log/dump, global LENS/live-byte accounting and aggregate capacity remain open.",
+    "Raw external readers still require an independent verified resolver claim; this work does not change native clear/pin ownership responsibilities."
+  ],
+  "review": "review skipped per Andrew 2026-10-09",
+  "restrictions": "Test/fixture changes only. No production changes, guards/retry loops, assertion or bound weakening, enforcement changes, .llxprt edits/staging, cleanup/moves of preserved files, OCR, push, merge or default flip."
+}

@@ -1,3 +1,21 @@
+# Journal media retirement proof, 2026-10-22
+
+[Source-bound #3929 receipt](PHASE6-SOURCE-BOUND-JOURNALMEDIAREGRESSION-PROOF.json). Early checkpoint `795ea443d`; production unchanged. #3929 stays open until merge.
+
+| Contract | Executed evidence |
+| --- | --- |
+| Original four journal cases | Retained baseline 0/4 and 58 assertions; early 4/0 and 188; final 4/0 and 192, every terminal assertion reached |
+| Fourth cleanup failure | Publication Error during rollback; deferred physical release Error at final pin retirement; exact ordered aggregate, durable outstanding head/tail and explicit recovery before disposal |
+| Pin and history ownership | Exact owner digest sets, immutable base, verified blob bytes, no pinned reclamation, no final reservations, two reclaimed blobs and continued persisted writer use |
+| Fixture error preservation | Three cases/11 assertions; sole action and sole cleanup preserve identity, combined failures preserve identity/order/cause; original fixture control fails two cases |
+| Sensitivity | Early drain, discarded retirement, held physical-release barrier and ignored head-write controls fail actual matchers; all source bytes restore by cmp/SHA256; runtime-only attempts excluded |
+| Serial acceptance | Pending-media 13/1,337; unchanged no-file 22/176; queue 5/52; #3919 readers 14/49; final twelve files total 85 tests/1,920 assertions |
+| Gates and preservation | 29 positive invocations; declarations/strict/Bun inputs/lint/format/graph/audit; zero owned audit findings; 5,051-source bridge; all 1,204 preservation hashes verify |
+
+Full native memory acceptance and Phase 5/6/W26 remain open. The original tools timeout and separate known REDs are unchanged. Earlier sections below record historical checkpoints, including the prior #3929 RED.
+
+---
+
 # Pending-media ownership proof, 2026-10-22
 
 [Source-bound pending-media receipt](PHASE6-SOURCE-BOUND-PENDINGMEDIAREGRESSION-PROOF.json). Early checkpoint `6c7673e4c`; security checkpoint `0c6bcd002`. Production is unchanged.

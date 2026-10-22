@@ -1,3 +1,11 @@
+# W26 remains open after the four #3929 journal cases pass
+
+2026-10-22. Early checkpoint `795ea443d` commits 4/0 before broader gates; the final file executes 192 assertions. The fourth failure was deferred physical release at old-pin retirement, masked by fixture disposal ordering. Errors retain identity and order, ownership recovery precedes journal closure, and all four cases prove final reclamation plus continued writer use. Production is unchanged.
+
+[The journal receipt](PHASE6-SOURCE-BOUND-JOURNALMEDIAREGRESSION-PROOF.json) and [Phase 6 status](PHASE6-STATUS.md) record 29 green invocations, 85 tests/1,920 assertions, restored negative controls, current source/type inputs and 1,204 verified preservation hashes. #3929 remains open until merge. Full native memory acceptance, the original tools timeout, broader provider/view/accounting gaps and all separate REDs remain open. No Phase 5/6/W26 completion, push, merge or default change. Earlier sections below are historical checkpoints.
+
+---
+
 # W26 remains open after resolving six pending-media failures
 
 2026-10-22. Early `6c7673e4c` and security `0c6bcd002` leave production unchanged while correcting stale owner/lifetime assertions. The regression file progresses from unchanged 1 pass/6 fail to complete expanded 13/0 with 1,337 assertions. All original completion/abort cases reach final reclamation and row-lifetime checks. Native cases add no request reservation; pending ingest still needs its existing admission claim. [Phase 6 status](PHASE6-STATUS.md) and [the receipt](PHASE6-SOURCE-BOUND-PENDINGMEDIAREGRESSION-PROOF.json) contain exact owners, current-source gates, four restored matcher controls and preservation hashes.

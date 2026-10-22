@@ -2336,6 +2336,19 @@
     "checkedAt": "2026-10-22T10:26:10.806Z",
     "managedJobs": ["shell_2b9e6da31080", "shell_54fd2d962b36"]
   },
+  "currentFollowUp3929": {
+    "date": "2026-10-22",
+    "receipt": "PHASE6-SOURCE-BOUND-JOURNALMEDIAREGRESSION-PROOF.json",
+    "earlyCommit": "795ea443d",
+    "journalResult": "4 pass / 0 fail / 192 assertions",
+    "fixtureErrorResult": "3 pass / 0 fail / 11 assertions",
+    "finalGates": "29 pass; 85 tests / 1920 assertions in twelve isolated files",
+    "historicalQualification": "The additionalRed and remaining entries above record the 478dea803 checkpoint. Its #3929 RED is superseded by the linked complete-file proof; the issue stays open until merge. Other REDs and memory acceptance remain open.",
+    "mechanism": "Rollback returns the publication Error while the old transaction base pin defers physical release. Awaited retirement later reports the exact physical release Error. Recovery must drain the remaining durable queue before journal disposal; fixture cleanup must preserve action and cleanup errors in order.",
+    "sourceBridge": "5051 entries: only semantic-purge.journal.test.ts and its native-purge-fixture.ts differ from the prior 5050-entry manifest, plus the new native-purge-fixture-lifecycle.test.ts. Production matches; pending-media, no-file, queue and reader gates are refreshed, and other matching receipts are historical evidence rather than new runs.",
+    "productionChanged": false,
+    "issueClosed": false
+  },
   "review": "review skipped per Andrew 2026-10-09",
   "restrictions": "No production change, enforcement change, cleanup, .llxprt edit/staging, fixture regeneration, OCR, push, merge or default flip."
 }
