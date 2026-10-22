@@ -1,3 +1,13 @@
+## Mistral occupied-slot checkpoint; tail acceptance remains incomplete, 2026-10-22
+
+`61184e88e` removes the native slot-2 assumption. The registry selects its normal LRU slot before mapping activation, without rebuilding or dropping unrelated formats. A three-family occupied-slot test selects slot 0 generation 2, preserves Anthropic/Responses summaries and reuses the same key on warm reentry. The new immutable 5,000-input differential checks production stored planning and native message emission against old bytes and frozen normalization hashes; it does not represent 5,000 HTTP sends.
+
+The mapper now records compact source-backed first claims and has a pending-bound displacement frontier with a 64 KiB lookup cache. This portion is not fully accepted: the new late-response fixture also passes baseline, and displaced historical holders outside `changedSources` still need explicit token-summary remeasurement proof. No new mutation controls or complete occupied-slot public HTTP/lifecycle cross-product were executed. Current-source gates and exact scope are in [the checkpoint receipt](PHASE6-SOURCE-BOUND-NATIVEMISTRALCOMPLETE-PROOF.json). Existing lifecycle, HTTP, continuation and reader tests cover their stated cases only.
+
+Cold mapping and length/token passes remain separate. New claim records add trie/live storage and path-copy garbage reclaimed by existing compaction; no fresh memory, aggregate capacity, garbage-free operation or 100,000-call claim is made. Phase 5/6/W26, remaining provider/log/media/accounting work and pre-existing REDs remain open. Review skipped per Andrew 2026-10-09. No cleanup, .llxprt staging, push, merge or default flip.
+
+---
+
 ## Native Mistral reaches production HTTP; broader acceptance remains open, 2026-10-22
 
 Early green `77da91170` routes native Mistral through direct body streaming, versioned mapped IDs and stored six-state length/token facts. [Mistral receipt](PHASE6-SOURCE-BOUND-NATIVEMISTRAL-PROOF.json) records 50 accepted scoped gates, 1230 tests across 35 files, seven restored assertion-failing controls and exact source hashes. The first nine cases failed at legacy spool creation; all 30 expanded collision/tail cases now pass with independent old-body hashes and Content-Length and no created files. Public ChatSession adds 18 Mistral JSON/SSE × reasoning/purge cases with two old-builder-equivalent POSTs and mandatory estimates 49–168. The route corpus preserves the original 22 plain cases and adds 22 Mistral frozen histories; continuation coverage is 69 per format. No frozen fixture was regenerated.

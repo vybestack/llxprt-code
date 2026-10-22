@@ -1,0 +1,601 @@
+{
+  "date": "2026-10-22",
+  "baseline": "ac83db5732ae10be2f3e79701b53c371aeab404d",
+  "checkpoint": "61184e88e",
+  "root": "tmp/p6/chat-mistral-complete-run-bk",
+  "status": "partial implementation checkpoint; requested complete acceptance is not established",
+  "accepted": [
+    "Actual LRU slot allocation after three occupied format slots; Chat/Anthropic/Responses summary kinds retained, selected slot 0 generation 2 and warm same-key reentry.",
+    "5000 immutable inputs pass independent old normalization hashes and exact old message bytes through production stored planner/native emitter; this is not 5000 HTTP sends.",
+    "Existing 30 native Mistral HTTP, 44 plain/Mistral golden HTTP, 138 continuation HTTP, 36 public continuation including 18 Mistral, mandatory estimates, original 14 reader cases and focused mapping/lifecycle files pass."
+  ],
+  "implementation": [
+    "Native registration selects its normal length slot before activating mapping facts in that slot. It no longer reserves slot 2 or rebuilds unrelated format summaries. Captured settings select the pin-local actual key and generation.",
+    "Normalized call contributions assign mapping facts in emitted unit order. Reverse collision claims store a 15-byte source label/part/unit/block/raw-tuple reference under distinct existing-namespace keys, not retained raw rows. Values remain below the IdFact offset-rewrite discriminator.",
+    "Request repair uses pending-bound seed/frontier/terminal sets, indexed original holders and a byte-capped 64KiB result cache. It does not allocate a per-request file or whole-history ID map. Displacement chains are replayed for uncached lookups rather than retained."
+  ],
+  "notAccepted": [
+    "The added earlier-human-call/late-response fixture also passes baseline. It is not evidence of the previously unsupported arbitrary earlier-tail collision. No failing-on-old-code actual earlier-tail fixture or complete first-winner/control acceptance is established.",
+    "Displacement repairs do not yet add historical holders outside changedSources to request token-summary remeasurement. Mapping replay therefore does not establish correct mandatory estimates for arbitrary earlier-tail displacement.",
+    "No new assertion-failing/restored mutation controls were executed.",
+    "Occupied-slot actual public HTTP fresh-settings/eviction/pop/clone/compaction/reopen cross-product is not newly established. Existing focused lifecycle files pass only their executed cases.",
+    "Warm 40/4000 exact physical-cost receipts were not refreshed; previous metadata/ROW/LENS measurements are historical. No fused cold fill, 100000-call capacity, global live/unreachable-byte accounting or fresh full native memory/traps claim.",
+    "Kimi/Responses/Anthropic production migration, native log/dump, wider media provenance cross-products and phase 5/6/W26 completion remain open. Original tools 170s RED and separate pre-existing REDs are unchanged."
+  ],
+  "red": {
+    "occupiedSlot": "tmp/p6/chat-mistral-complete-run-bk/slot-red.log",
+    "earlierTail": "Initial tail fixture passes baseline; no RED claim."
+  },
+  "sourceManifest": [
+    {
+      "path": "packages/core/src/journal/formatFill.ts",
+      "sha256": "50f724be736fcfcd240c5d8422f4d25d4b73f7e50c43c545887f46b9a7a71562"
+    },
+    {
+      "path": "packages/core/src/journal/groupFacts.ts",
+      "sha256": "8d76b470cbe47cc80fc5206bce9759306926d3a474c886ef61c83c6a53f649d6"
+    },
+    {
+      "path": "packages/core/src/journal/mistralClaims.ts",
+      "sha256": "b3463321fb2b02c842c6f1bcc019047bb1b137f0eaa0ea4947c455af5d7bf309"
+    },
+    {
+      "path": "packages/core/src/journal/mistralFormatFill.ts",
+      "sha256": "e5cfd90171f59047c2afb22ddaf08e140a75e88ff4c7e839083bf58ba258ef2d"
+    },
+    {
+      "path": "packages/core/src/journal/mistralMapping.ts",
+      "sha256": "f00aca2971e0ee52072e4da20e062169d479b2e2c020a79d52af4dca9d6a6054"
+    },
+    {
+      "path": "packages/core/src/journal/normalizedRowOccurrences.ts",
+      "sha256": "c9ead1029ed5b9968f0d7cca8a80ee6ac4300b94d0d8392ab34766b662e25ac7"
+    },
+    {
+      "path": "packages/core/src/journal/rowFormat.ts",
+      "sha256": "06533e94dc5ac80cffac5811fa73c31ea2d4741ba81233103444e31498d01f91"
+    },
+    {
+      "path": "packages/core/src/services/history/journal-mistral-tail.test.ts",
+      "sha256": "11cceb9a8ea614b1a19be08f81e665a81d064081f49eadaafb0c287fc4c4451c"
+    },
+    {
+      "path": "packages/core/src/services/history/journal-request-mistral.ts",
+      "sha256": "bbe3b1a02426ceab5aeb9b6ba07e29da92b8fe7548dabc8b0cea6816de1710bb"
+    },
+    {
+      "path": "packages/core/src/services/history/native-provider-format.ts",
+      "sha256": "58a756edc85142aeb7849a9ec54619e75201e67f3f7e0523927e3608029bddbd"
+    },
+    {
+      "path": "packages/providers/src/openai/__tests__/native-mistral-production-frozen.test.ts",
+      "sha256": "859aee5ea01f0f39cc05e4ab3a13f747370ed48975f004a96271342dea018b58"
+    },
+    {
+      "path": "packages/providers/src/openai/journal-chat-length-lifecycle.test.ts",
+      "sha256": "1667774eaf28fdcfed69a9096593107c1f722d3b8a5aa67cc8440baa16c859a9"
+    },
+    {
+      "path": "packages/providers/src/openai/journal-chat-length.ts",
+      "sha256": "558a4dafba7e39d7d3a3c9cc368b631d4b2788e5de64a3c05b0b116da82e516d"
+    },
+    {
+      "path": "packages/providers/src/openai/native-chat-body.ts",
+      "sha256": "9637c38d3019ca63e0ee000e607ad557ed9f93eac5aeb8c38b34d9be5040e2a8"
+    }
+  ],
+  "gates": [
+    {
+      "name": "native-mistral-production-frozen.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/openai/__tests__/native-mistral-production-frozen.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 98221,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-complete-run-bk/gate-native-mistral-production-frozen.test.ts.log",
+      "sha256": "f0780d649a32d15719976d92d692f83378793e81400cff739ce4cc841585297c"
+    },
+    {
+      "name": "journal-mistral-tail.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/core/src/services/history/journal-mistral-tail.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 889,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-complete-run-bk/gate-journal-mistral-tail.test.ts.log",
+      "sha256": "cf7238e01979fc59be2d50de91dd4b658cdd523d9d72e1f16f2f9b34b86b1395"
+    },
+    {
+      "name": "journal-mistral-mapping.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/core/src/services/history/journal-mistral-mapping.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 891,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-complete-run-bk/gate-journal-mistral-mapping.test.ts.log",
+      "sha256": "a4fa4484faab1c5c7a6feb2d4f0a265f207c66edf4d1751920d383a15fd4a8c5"
+    },
+    {
+      "name": "journal-mistral-tail-pins.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/core/src/services/history/journal-mistral-tail-pins.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 961,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-complete-run-bk/gate-journal-mistral-tail-pins.test.ts.log",
+      "sha256": "f8238e59abf76d7eaa2113a6821a51e1d0aab6e408d0c845724b973aa9d79548"
+    },
+    {
+      "name": "journal-mistral-lifecycle.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/core/src/services/history/journal-mistral-lifecycle.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 968,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-complete-run-bk/gate-journal-mistral-lifecycle.test.ts.log",
+      "sha256": "9c9120f5eaa8053c3b147e10998b7c3ab72589daed7dc109b8c4a4b92f4d69ac"
+    },
+    {
+      "name": "journal-mistral-tail-lifecycle.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/core/src/services/history/journal-mistral-tail-lifecycle.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 1841,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-complete-run-bk/gate-journal-mistral-tail-lifecycle.test.ts.log",
+      "sha256": "74e89fd07c9e5246f81c5a9b2e5493ad22be4e4fdc35efeb00cd48e4c2de24c6"
+    },
+    {
+      "name": "journal-mistral-tail-resources.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/core/src/services/history/journal-mistral-tail-resources.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 1866,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-complete-run-bk/gate-journal-mistral-tail-resources.test.ts.log",
+      "sha256": "879b60b614fe91e14ed476629076ff97a0b415ef965b9076e2702335662e7581"
+    },
+    {
+      "name": "versionCopy.mistral.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/core/src/journal/versionCopy.mistral.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 3514,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-complete-run-bk/gate-versionCopy.mistral.test.ts.log",
+      "sha256": "9bfa7a6862e48ec581a0af041b403ac1a6f9c66ec105313816c3775475a37c0f"
+    },
+    {
+      "name": "journal-chat-length-lifecycle.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/openai/journal-chat-length-lifecycle.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 3520,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-complete-run-bk/gate-journal-chat-length-lifecycle.test.ts.log",
+      "sha256": "45817e79304084e6b53773161a9a8a2cd319404b6fd9d9cfc86250379d7e8858"
+    },
+    {
+      "name": "native-chat-preparation.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/openai/native-chat-preparation.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 3611,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-complete-run-bk/gate-native-chat-preparation.test.ts.log",
+      "sha256": "133eb883e142d96f66fd05cc055c984242a5f9aac4485549e1ab07af18cdfd41"
+    },
+    {
+      "name": "native-chat-estimate.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/openai/native-chat-estimate.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 4037,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-complete-run-bk/gate-native-chat-estimate.test.ts.log",
+      "sha256": "b664af4aa8b5efb1d15d38779bf92c377ee85db40cb51e4adbf15f139650df84"
+    },
+    {
+      "name": "native-chat-mistral-send.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/__tests__/native-chat-mistral-send.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 5021,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-complete-run-bk/gate-native-chat-mistral-send.test.ts.log",
+      "sha256": "2fe9bd5ec46e9e76fe393763e9a380749a00c59cae968440d845b282e19801ac"
+    },
+    {
+      "name": "native-chat-golden.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/__tests__/native-chat-golden.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 5210,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-complete-run-bk/gate-native-chat-golden.test.ts.log",
+      "sha256": "d38d78d5b5de591a18214cbe68fab8ce65bc2701e0165f1a02ce407485c4956e"
+    },
+    {
+      "name": "native-chat-continuation-http.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/__tests__/native-chat-continuation-http.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 5394,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-complete-run-bk/gate-native-chat-continuation-http.test.ts.log",
+      "sha256": "e4d53d89a5c2b72e8604c28d76dfc4720058551fd6fb2e36d2b205d3a988df64"
+    },
+    {
+      "name": "native-chat-continuation-runtime.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/agents/src/core/__tests__/native-chat-continuation-runtime.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 5786,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-complete-run-bk/gate-native-chat-continuation-runtime.test.ts.log",
+      "sha256": "59a6bcf2be11e9bb19517538d180b9e3bd8d88c6989624c9b9dfbd59a5ffe537"
+    },
+    {
+      "name": "journalStore.readerLifetime.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/core/src/journal/journalStore.readerLifetime.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 6189,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-complete-run-bk/gate-journalStore.readerLifetime.test.ts.log",
+      "sha256": "7b985e752f5a2b5d311add1d24190c52f84411c4f1e126f1d1247dd3ef81d60b"
+    },
+    {
+      "name": "journalStore.readerCleanup.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/core/src/journal/journalStore.readerCleanup.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 6217,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-complete-run-bk/gate-journalStore.readerCleanup.test.ts.log",
+      "sha256": "561b3387501730f78bb17a673461faf0959fd83dcb202ba69e829ac0d8a5f275"
+    },
+    {
+      "name": "core-declarations",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "../../scripts/build_package.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 6237,
+      "exit": 0,
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127",
+      "summary": "Successfully copied files.\n",
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-complete-run-bk/gate-core-declarations.log"
+    },
+    {
+      "name": "providers-declarations",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "../../scripts/build_package.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "pid": 6728,
+      "exit": 0,
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127",
+      "summary": "Successfully copied files.\n",
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-complete-run-bk/gate-providers-declarations.log"
+    },
+    {
+      "name": "agents-declarations",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "../../scripts/build_package.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents",
+      "pid": 6959,
+      "exit": 0,
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127",
+      "summary": "Successfully copied files.\n",
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-complete-run-bk/gate-agents-declarations.log"
+    },
+    {
+      "name": "core-types",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/core/tsconfig.noemit.json"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 7141,
+      "exit": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": "",
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-complete-run-bk/gate-core-types.log"
+    },
+    {
+      "name": "providers-types",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/providers/tsconfig.noemit.json"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 8045,
+      "exit": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": "",
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-complete-run-bk/gate-providers-types.log"
+    },
+    {
+      "name": "agents-types",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/agents/tsconfig.noemit.json"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 9913,
+      "exit": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": "",
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-complete-run-bk/gate-agents-types.log"
+    },
+    {
+      "name": "providers-bun-types",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/providers/tsconfig.test-bun.json",
+        "--types",
+        "bun"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 12008,
+      "exit": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": "",
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-complete-run-bk/gate-providers-bun-types.log"
+    },
+    {
+      "name": "agents-bun-types",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/agents/tsconfig.test-bun.json",
+        "--types",
+        "bun"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 12747,
+      "exit": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": "",
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-complete-run-bk/gate-agents-bun-types.log"
+    },
+    {
+      "name": "providers-current-bun-types",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/providers/tsconfig.noemit.json",
+        "--types",
+        "bun"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 13156,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-complete-run-bk/gate-providers-current-bun-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": ""
+    },
+    {
+      "name": "agents-current-bun-types",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/agents/tsconfig.noemit.json",
+        "--types",
+        "bun"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 13457,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-complete-run-bk/gate-agents-current-bun-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": ""
+    },
+    {
+      "name": "lint",
+      "args": [
+        "node_modules/.bin/eslint",
+        "--max-warnings",
+        "0",
+        "packages/core/src/journal/formatFill.ts",
+        "packages/core/src/journal/groupFacts.ts",
+        "packages/core/src/journal/mistralClaims.ts",
+        "packages/core/src/journal/mistralFormatFill.ts",
+        "packages/core/src/journal/mistralMapping.ts",
+        "packages/core/src/journal/normalizedRowOccurrences.ts",
+        "packages/core/src/journal/rowFormat.ts",
+        "packages/core/src/services/history/journal-mistral-tail.test.ts",
+        "packages/core/src/services/history/journal-request-mistral.ts",
+        "packages/core/src/services/history/native-provider-format.ts",
+        "packages/providers/src/openai/__tests__/native-mistral-production-frozen.test.ts",
+        "packages/providers/src/openai/journal-chat-length-lifecycle.test.ts",
+        "packages/providers/src/openai/journal-chat-length.ts",
+        "packages/providers/src/openai/native-chat-body.ts",
+        "packages/core/src/journal/mistralClaims.ts",
+        "packages/core/src/journal/mistralFormatFill.ts"
+      ],
+      "pid": 13479,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-complete-run-bk/gate-lint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "format",
+      "args": [
+        "node_modules/.bin/prettier",
+        "--check",
+        "packages/core/src/journal/formatFill.ts",
+        "packages/core/src/journal/groupFacts.ts",
+        "packages/core/src/journal/mistralClaims.ts",
+        "packages/core/src/journal/mistralFormatFill.ts",
+        "packages/core/src/journal/mistralMapping.ts",
+        "packages/core/src/journal/normalizedRowOccurrences.ts",
+        "packages/core/src/journal/rowFormat.ts",
+        "packages/core/src/services/history/journal-mistral-tail.test.ts",
+        "packages/core/src/services/history/journal-request-mistral.ts",
+        "packages/core/src/services/history/native-provider-format.ts",
+        "packages/providers/src/openai/__tests__/native-mistral-production-frozen.test.ts",
+        "packages/providers/src/openai/journal-chat-length-lifecycle.test.ts",
+        "packages/providers/src/openai/journal-chat-length.ts",
+        "packages/providers/src/openai/native-chat-body.ts",
+        "packages/core/src/journal/mistralClaims.ts",
+        "packages/core/src/journal/mistralFormatFill.ts"
+      ],
+      "pid": 13905,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-complete-run-bk/gate-format.log",
+      "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+    },
+    {
+      "name": "graph",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "scripts/check-affected-test-shards.ts"
+      ],
+      "pid": 13937,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-complete-run-bk/gate-graph.log",
+      "sha256": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67"
+    },
+    {
+      "name": "audit",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "scripts/test-audit/scan.ts",
+        "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-complete-run-bk/audit"
+      ],
+      "pid": 13995,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-complete-run-bk/gate-audit.log",
+      "sha256": "b3e2e4404f815c2611a53efe203dd23c0a88bed779a2a88bbddc530e13d2f710"
+    },
+    {
+      "name": "preservation",
+      "args": [
+        "shasum",
+        "-a",
+        "256",
+        "-c",
+        "tmp/p6/chat-tail-run-au/preserved.sha256"
+      ],
+      "pid": 14048,
+      "exit": 0,
+      "log": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-complete-run-bk/gate-preservation.log",
+      "sha256": "0e4199bb6c410cc6f1e5bd39e3d87c8159795d9dc60279f003e975a7ea37b454"
+    }
+  ],
+  "review": "review skipped per Andrew 2026-10-09",
+  "restrictions": "No push, merge, OCR, default flip, enforcement weakening, cleanup or .llxprt staging.",
+  "summary": {
+    "gates": 32,
+    "failedGates": 0,
+    "testFiles": 17,
+    "tests": 412,
+    "immutableInputs": 5000
+  },
+  "audit": {
+    "execution": "passed",
+    "ownedFindings": "Five existing DUP_ASSERT findings across distinct lifecycle boundaries; none in the new frozen production test. No new prohibited owned findings."
+  }
+}

@@ -1,3 +1,13 @@
+## Mistral occupied-slot checkpoint; tail acceptance remains incomplete, 2026-10-22
+
+`61184e88e` removes the native slot-2 assumption. The registry selects its normal LRU slot before mapping activation, without rebuilding or dropping unrelated formats. A three-family occupied-slot test selects slot 0 generation 2, preserves Anthropic/Responses summaries and reuses the same key on warm reentry. The new immutable 5,000-input differential checks production stored planning and native message emission against old bytes and frozen normalization hashes; it does not represent 5,000 HTTP sends.
+
+The mapper now records compact source-backed first claims and has a pending-bound displacement frontier with a 64 KiB lookup cache. This portion is not fully accepted: the new late-response fixture also passes baseline, and displaced historical holders outside `changedSources` still need explicit token-summary remeasurement proof. No new mutation controls or complete occupied-slot public HTTP/lifecycle cross-product were executed. Current-source gates and exact scope are in [the checkpoint receipt](PHASE6-SOURCE-BOUND-NATIVEMISTRALCOMPLETE-PROOF.json). Existing lifecycle, HTTP, continuation and reader tests cover their stated cases only.
+
+Cold mapping and length/token passes remain separate. New claim records add trie/live storage and path-copy garbage reclaimed by existing compaction; no fresh memory, aggregate capacity, garbage-free operation or 100,000-call claim is made. Phase 5/6/W26, remaining provider/log/media/accounting work and pre-existing REDs remain open. Review skipped per Andrew 2026-10-09. No cleanup, .llxprt staging, push, merge or default flip.
+
+---
+
 ## 2026-10-22: use measured-pin Mistral mappings in the production native route
 
 Use the existing raw-ID/salt facts and JournalRequestMistral pending overlay, injected through the bounded NativeMistralRow adapter into native message conversion and stored measurement. Do not normalize IDs again or retain a whole-history ID map. A captured measured pin outlives awaited body-reader retirement; borrowed resolution also retires with its indexed request. Reuse first-request history mappings for continuation, and keep the old continuation tail's raw SDK IDs and Mistral names.

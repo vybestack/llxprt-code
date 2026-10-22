@@ -1,3 +1,13 @@
+## Mistral occupied-slot checkpoint; tail acceptance remains incomplete, 2026-10-22
+
+`61184e88e` removes the native slot-2 assumption. The registry selects its normal LRU slot before mapping activation, without rebuilding or dropping unrelated formats. A three-family occupied-slot test selects slot 0 generation 2, preserves Anthropic/Responses summaries and reuses the same key on warm reentry. The new immutable 5,000-input differential checks production stored planning and native message emission against old bytes and frozen normalization hashes; it does not represent 5,000 HTTP sends.
+
+The mapper now records compact source-backed first claims and has a pending-bound displacement frontier with a 64 KiB lookup cache. This portion is not fully accepted: the new late-response fixture also passes baseline, and displaced historical holders outside `changedSources` still need explicit token-summary remeasurement proof. No new mutation controls or complete occupied-slot public HTTP/lifecycle cross-product were executed. Current-source gates and exact scope are in [the checkpoint receipt](PHASE6-SOURCE-BOUND-NATIVEMISTRALCOMPLETE-PROOF.json). Existing lifecycle, HTTP, continuation and reader tests cover their stated cases only.
+
+Cold mapping and length/token passes remain separate. New claim records add trie/live storage and path-copy garbage reclaimed by existing compaction; no fresh memory, aggregate capacity, garbage-free operation or 100,000-call claim is made. Phase 5/6/W26, remaining provider/log/media/accounting work and pre-existing REDs remain open. Review skipped per Andrew 2026-10-09. No cleanup, .llxprt staging, push, merge or default flip.
+
+---
+
 ## Public continuation runtime checkpoint, 2026-10-22
 
 `3981382c5` and `6a5d5a854` close the executed native plain Chat public JSON/SSE continuation, scoped second-body lifetime/error cleanup, declared-limit refusal and physical warm-planning cases. [Runtime receipt](PHASE6-SOURCE-BOUND-NATIVECONTINUATIONRUNTIME-PROOF.json): 43 accepted passing invocations; 25 complete current-file tests, 772 passes and 122,537 assertions; four restored assertion controls. Both complete public POSTs match old bytes, estimates are nonzero, ordinals 1–3 stay unchanged until user/model 4–5 commit, and synthetic acknowledgements remain wire-only. Paused second media reads survive clear/purge, exact abort reasons and original failure causes propagate, and final pin retirement permits reclaim. Warm capture reads 20/56 metadata ranges at 40/4,000 rows; continuation construction adds zero reads, with zero ROW/LENS overlap in both intervals. The real near-limit request allows exactly one HTTP entry/connection before continuation refusal.
