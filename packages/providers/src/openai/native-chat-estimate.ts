@@ -67,7 +67,7 @@ export class NativeChatEstimateProjection {
   constructor(
     private readonly native: NativeProviderFormat,
     settings: RowFormatSettings,
-    private readonly selected: 0 | 1,
+    private readonly selected: 0 | 1 | 2,
     private readonly system: string,
     private readonly tools: unknown,
     readonly signal?: AbortSignal,

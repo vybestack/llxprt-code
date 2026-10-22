@@ -43,7 +43,7 @@ import {
   type ChatUnitLengthFacts,
 } from './chat-length-facts.js';
 
-export const PLAIN_CHAT_FORMAT_REV = 1;
+export const PLAIN_CHAT_FORMAT_REV = 2;
 export type ChatUnitTokenMeasurer = (
   messages: readonly unknown[],
 ) => Promise<number>;
@@ -199,6 +199,10 @@ async function measurePlans(
     lens.push([kept.facts, removed.facts]);
     summary = composeSlotSummaries(summary, {
       kind: 'chat',
+      thinkingRank: {
+        units: 1,
+        last: row.blocks.some((block) => block.type === 'thinking') ? 1 : 0,
+      },
       ...(count === undefined
         ? {}
         : {
@@ -213,7 +217,7 @@ async function measurePlans(
   return {
     summary,
     lens: new TextEncoder().encode(
-      JSON.stringify({ revision: PLAIN_CHAT_FORMAT_REV, units: lens }),
+      JSON.stringify({ revision: 1, units: lens }),
     ),
   };
 }
@@ -274,6 +278,7 @@ export interface StoredChatMessagePlan {
   readonly key: bigint;
   readonly generation: number;
   readonly settings: RowFormatSettings;
+  readonly lastThinking: number;
 }
 
 export function planStoredChatMessages(
@@ -320,6 +325,7 @@ export function planStoredChatMessages(
       Number(end >= 3) + chatMediaFrameBytes(end % 3 === 2) + root.p[state];
   return Object.freeze({
     tokens: summary.tokens?.[selected] ?? 0,
+    lastThinking: (summary.thinkingRank?.last ?? 0) - 1,
     bytes:
       2 +
       jsonBytes({ role: 'system', content: systemInstruction }) +
@@ -336,33 +342,66 @@ export async function planRequestChatMessages(
   snapshot: VersionSnapshot,
   indexed: IndexedJournalRequestSnapshot,
   settings: RowFormatSettings,
-  selected: 0 | 1,
+  selected: 0 | 1 | 2,
   systemInstruction: string,
   count?: ChatUnitTokenMeasurer,
 ): Promise<StoredChatMessagePlan> {
+  const variant = selected === 2 ? 1 : selected;
   const base = planStoredChatMessages(
     snapshot,
     settings,
-    selected,
+    variant,
     systemInstruction,
   );
-  if (indexed.pending.inputCount === 0) return base;
+  if (indexed.pending.inputCount === 0 && selected !== 2) return base;
   const slot = snapshot.version?.slots.formatSlots.findIndex(
     (format) =>
       format.summaryKind === 'chat' && format.formatKeyHash === base.key,
   );
   if (slot === undefined || slot < 0)
     throw new JournalFormatError('Request format is not registered');
-  const summary = await indexed.formatSummary(
-    snapshot,
-    slot,
-    async (plans) => (await measurePlans(plans, settings, count)).summary,
-  );
-  return planStoredChatMessages(
-    snapshot,
-    settings,
-    selected,
-    systemInstruction,
-    summary,
-  );
+  const measure = async (
+    plans: AsyncIterable<JournalResponsePlan>,
+  ): Promise<SlotSummary> =>
+    (await measurePlans(plans, settings, count)).summary;
+  const summary = await indexed.formatSummary(snapshot, slot, measure);
+  if (selected !== 2)
+    return planStoredChatMessages(
+      snapshot,
+      settings,
+      selected,
+      systemInstruction,
+      summary,
+    );
+  if (summary.kind !== 'chat')
+    throw new JournalFormatError('Expected Chat summary');
+  const lastThinking = (summary.thinkingRank?.last ?? 0) - 1;
+  if (lastThinking < 0)
+    return planStoredChatMessages(
+      snapshot,
+      settings,
+      1,
+      systemInstruction,
+      summary,
+    );
+  const target = await indexed.unitEntryAt(lastThinking);
+  const mixed = await indexed.formatSummary(snapshot, slot, measure, {
+    label: target.entry.label,
+    select(value, kept) {
+      if (value.kind !== 'chat')
+        throw new JournalFormatError('Expected Chat summary');
+      const index = kept ? 0 : 1;
+      return {
+        ...value,
+        variants: [value.variants[index], value.variants[index]],
+        ...(value.tokens === undefined
+          ? {}
+          : { tokens: [value.tokens[index], value.tokens[index]] as const }),
+      };
+    },
+  });
+  return Object.freeze({
+    ...planStoredChatMessages(snapshot, settings, 0, systemInstruction, mixed),
+    lastThinking,
+  });
 }

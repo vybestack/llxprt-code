@@ -57,6 +57,7 @@ export interface ChatSummary {
   readonly kind: 'chat';
   readonly variants: Pair<ChatVariant>;
   readonly tokens?: Pair<number>;
+  readonly thinkingRank?: { readonly units: number; readonly last: number };
 }
 
 export interface ResponsesSummary {
@@ -207,6 +208,11 @@ function encodeChat(view: DataView, summary: ChatSummary): void {
   const at = SLOT_SUMMARY_LAYOUT.chat;
   putU64(view, 256, 'Chat kept tokens', summary.tokens?.[0] ?? 0);
   putU64(view, 264, 'Chat stripped tokens', summary.tokens?.[1] ?? 0);
+  if (summary.thinkingRank !== undefined) {
+    putU32(view, 272, 'Chat thinking rank revision', 1);
+    putU32(view, 276, 'Chat units', summary.thinkingRank.units);
+    putU32(view, 280, 'Chat last thinking', summary.thinkingRank.last);
+  }
   for (const index of [0, 1] as const) {
     const base = at.variants[index];
     const variant = summary.variants[index];
@@ -284,15 +290,35 @@ export function decodeSlotSummary(
     );
   }
   assertLength(bytes, SLOT_SUMMARY_BYTES, 'Slot summary');
-  for (const [start, end] of SLOT_SUMMARY_LAYOUT[kind].padding) {
-    assertAllZero(bytes, start, end, `Slot summary ${kind} padding`);
-  }
   const view = viewOf(bytes);
+  const ranked = kind === 'chat' && view.getUint32(272, true) === 1;
+  for (const [start, end] of SLOT_SUMMARY_LAYOUT[kind].padding) {
+    assertAllZero(
+      bytes,
+      ranked && start === 272 ? 284 : start,
+      end,
+      `Slot summary ${kind} padding`,
+    );
+  }
+  if (
+    ranked &&
+    (view.getUint32(276, true) === 0 ||
+      view.getUint32(280, true) > view.getUint32(276, true))
+  )
+    throw new JournalFormatError('Invalid Chat thinking rank');
   if (kind === 'anthropic') return decodeAnthropic(view);
   if (kind === 'chat') {
     const at = SLOT_SUMMARY_LAYOUT.chat;
     return {
       kind,
+      ...(ranked
+        ? {
+            thinkingRank: {
+              units: view.getUint32(276, true),
+              last: view.getUint32(280, true),
+            },
+          }
+        : {}),
       ...(getU64(view, 256, 'tokens') === 0 && getU64(view, 264, 'tokens') === 0
         ? {}
         : {

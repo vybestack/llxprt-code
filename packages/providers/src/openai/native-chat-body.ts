@@ -6,6 +6,7 @@ import { JournalFormatError } from '@vybestack/llxprt-code-core/journal/errors.j
 import {
   plainChatLengthRegistration,
   planRequestChatMessages,
+  PLAIN_CHAT_FORMAT_REV,
 } from './journal-chat-length.js';
 import { ProgressiveJsonBody } from '../utils/progressive-json-body.js';
 import {
@@ -85,9 +86,9 @@ async function prepareNativeChatBody(
       options.invocation.ephemerals,
       'reasoning.stripFromContext',
     ) ?? 'none';
-  if (strip !== 'none' && strip !== 'all')
+  if (strip !== 'none' && strip !== 'all' && strip !== 'allButLast')
     throw new JournalFormatError(
-      'Native plain Chat last-thinking planning is not installed',
+      `Invalid reasoning.stripFromContext: ${String(strip)}`,
     );
   const system = options.systemInstruction ?? '';
   const plan = await native.withFormat(
@@ -97,7 +98,7 @@ async function prepareNativeChatBody(
         snapshot,
         native.indexed,
         settings,
-        strip === 'all' ? 1 : 0,
+        strip === 'all' ? 1 : strip === 'allButLast' ? 2 : 0,
         system,
       ),
   );
@@ -113,7 +114,7 @@ async function prepareNativeChatBody(
         rowInput.mediaStage?.(source) ?? source,
         settings,
         strip,
-        -1,
+        plan.lastThinking,
       );
       yield Buffer.from(']');
       yield tail;
@@ -128,7 +129,7 @@ function nativeChatSettings(
 ): RowFormatSettings {
   return {
     formatId: 'openai-chat:plain',
-    formatRev: 1,
+    formatRev: PLAIN_CHAT_FORMAT_REV,
     model: options.resolved.model,
     endpoint: options.resolved.baseURL ?? '',
     isOAuth: false,
@@ -176,13 +177,11 @@ export async function prepareNativePlainRequest(
   const native = rows.native;
   if (native === undefined)
     throw new Error('Native Chat requires indexed request rows');
-  const selected =
-    readInvocationPolicyValue(
-      options.invocation.ephemerals,
-      'reasoning.stripFromContext',
-    ) === 'all'
-      ? 1
-      : 0;
+  const strip = readInvocationPolicyValue(
+    options.invocation.ephemerals,
+    'reasoning.stripFromContext',
+  );
+  const selected = strip === 'all' ? 1 : strip === 'allButLast' ? 2 : 0;
   const projection = use.estimate
     ? new NativeChatEstimateProjection(
         native,

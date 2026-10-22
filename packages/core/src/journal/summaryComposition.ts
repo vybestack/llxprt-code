@@ -179,7 +179,21 @@ function composeChatVariant(
 }
 
 function composeChat(left: ChatSummary, right: ChatSummary): ChatSummary {
+  const leftUnits = left.thinkingRank?.units ?? 0;
+  const rightUnits = right.thinkingRank?.units ?? 0;
+  const rightLast = right.thinkingRank?.last ?? 0;
   return {
+    ...(leftUnits + rightUnits === 0
+      ? {}
+      : {
+          thinkingRank: {
+            units: leftUnits + rightUnits,
+            last:
+              rightLast === 0
+                ? (left.thinkingRank?.last ?? 0)
+                : leftUnits + rightLast,
+          },
+        }),
     ...(left.tokens === undefined && right.tokens === undefined
       ? {}
       : {

@@ -110,8 +110,38 @@ export class IndexedJournalRequestSnapshot {
     measure: (
       plans: AsyncIterable<JournalResponsePlan>,
     ) => Promise<SlotSummary>,
+    selection?: {
+      readonly label: bigint;
+      select(summary: SlotSummary, kept: boolean): SlotSummary;
+    },
   ): Promise<SlotSummary> {
     this.requireOpen();
+    const range = async (from: bigint, to: bigint): Promise<SlotSummary> => {
+      if (selection === undefined)
+        return snapshot.formatSummaryRange(slot, from, to);
+      const label = selection.label;
+      if (label < from || label >= to)
+        return selection.select(
+          await snapshot.formatSummaryRange(slot, from, to),
+          false,
+        );
+      return composeSlotSummaries(
+        composeSlotSummaries(
+          selection.select(
+            await snapshot.formatSummaryRange(slot, from, label),
+            false,
+          ),
+          selection.select(
+            await snapshot.formatSummaryRange(slot, label, label + 1n),
+            true,
+          ),
+        ),
+        selection.select(
+          await snapshot.formatSummaryRange(slot, label + 1n, to),
+          false,
+        ),
+      );
+    };
     let from = 1n;
     const end = snapshot.version?.nextLabel ?? 1n;
     let summary = await snapshot.formatSummaryRange(slot, 0n, 0n);
@@ -119,20 +149,26 @@ export class IndexedJournalRequestSnapshot {
       if (row.entry.label > from)
         summary = composeSlotSummaries(
           summary,
-          await snapshot.formatSummaryRange(slot, from, row.entry.label),
+          await range(from, row.entry.label),
         );
+      const measured = await measure(journalEntryPlans(this.source, row.entry));
       summary = composeSlotSummaries(
         summary,
-        await measure(journalEntryPlans(this.source, row.entry)),
+        selection === undefined
+          ? measured
+          : selection.select(measured, row.entry.label === selection.label),
       );
       from = row.entry.label + 1n;
     }
     if (from < end)
-      summary = composeSlotSummaries(
-        summary,
-        await snapshot.formatSummaryRange(slot, from, end),
-      );
+      summary = composeSlotSummaries(summary, await range(from, end));
     return summary;
+  }
+
+  unitEntryAt(index: number): Promise<IndexedUnit> {
+    this.requireOpen();
+    assertRowIndex(index, this.count);
+    return this.locate(index);
   }
 
   nativeFacts(scope: string): Promise<NativeFactIndexReader> {
