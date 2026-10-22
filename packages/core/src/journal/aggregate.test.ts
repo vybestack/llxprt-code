@@ -29,11 +29,11 @@ describe('aggregate', () => {
     );
   });
 
-  it('lays the plain fields out contiguously, 312 bytes plus 8 reserved', () => {
+  it('lays the plain fields out contiguously, 316 bytes plus 4 reserved', () => {
     const { reserved, summaries, ...fields } = AGGREGATE_LAYOUT;
 
-    assertContiguous(fields, 312);
-    expect(reserved).toStrictEqual({ offset: 312, size: 8 });
+    assertContiguous(fields, 316);
+    expect(reserved).toStrictEqual({ offset: 316, size: 4 });
     expect(summaries).toStrictEqual({ offset: 320, size: 888 });
   });
 
@@ -194,6 +194,7 @@ describe('aggregate', () => {
       imageChars: zeros,
       pdfBytes: zeros,
       imageRows: 0,
+      mediaContribRows: 0,
       thinkingRows: 0,
       callRows: 0,
       reconRows: 0,

@@ -69,7 +69,8 @@ export const AGGREGATE_LAYOUT = {
   lastHuman: span(288, 8),
   lastAi: span(296, 8),
   lastTool: span(304, 8),
-  reserved: span(312, 8),
+  mediaContribRows: span(312, 4),
+  reserved: span(316, 4),
   summaries: span(320, 888),
 };
 
@@ -89,6 +90,7 @@ export interface Aggregate {
   readonly imageChars: Triple<number>;
   readonly pdfBytes: Triple<number>;
   readonly imageRows: number;
+  readonly mediaContribRows: number;
   readonly thinkingRows: number;
   readonly callRows: number;
   readonly reconRows: number;
@@ -133,6 +135,7 @@ const U32_FIELDS = [
   'curated',
   'units',
   'imageRows',
+  'mediaContribRows',
   'thinkingRows',
   'callRows',
   'reconRows',
@@ -293,6 +296,7 @@ export function decodeAggregate(source: Uint8Array, offset = 0): Aggregate {
     imageChars: readU64s3(view, offset + L.imageChars.offset, 'imageChars'),
     pdfBytes: readU64s3(view, offset + L.pdfBytes.offset, 'pdfBytes'),
     imageRows: u32('imageRows'),
+    mediaContribRows: u32('mediaContribRows'),
     thinkingRows: u32('thinkingRows'),
     callRows: u32('callRows'),
     reconRows: u32('reconRows'),

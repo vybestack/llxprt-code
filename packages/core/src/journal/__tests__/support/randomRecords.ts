@@ -68,6 +68,7 @@ export function randomAggregate(random: SeededRandom): Aggregate {
     imageChars: triple(u64),
     pdfBytes: triple(u64),
     imageRows: u32(),
+    mediaContribRows: u32(),
     thinkingRows: u32(),
     callRows: u32(),
     reconRows: u32(),

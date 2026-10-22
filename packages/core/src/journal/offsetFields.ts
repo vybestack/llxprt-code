@@ -232,6 +232,7 @@ const AGGREGATE: Record<keyof Aggregate, FieldDecl> = {
   imageChars: 'size',
   pdfBytes: 'size',
   imageRows: 'count',
+  mediaContribRows: 'count',
   thinkingRows: 'count',
   callRows: 'count',
   reconRows: 'count',

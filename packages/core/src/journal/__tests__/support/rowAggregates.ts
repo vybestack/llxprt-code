@@ -65,6 +65,7 @@ export function randomRowAggregate(
     imageChars: triple(() => random.int(1 << 20)),
     pdfBytes: triple(() => random.int(1 << 20)),
     imageRows: random.int(2),
+    mediaContribRows: random.int(2),
     thinkingRows: random.int(2),
     callRows: random.int(2),
     reconRows: random.int(2),

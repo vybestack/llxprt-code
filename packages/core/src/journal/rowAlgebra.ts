@@ -50,6 +50,7 @@ export function entryAggregate(entry: RowEntry): Aggregate {
     imageChars: entry.media.imageChars,
     pdfBytes: entry.media.pdfBytes,
     imageRows: has(ROW_FLAG.hasImage),
+    mediaContribRows: unitCount(entry) > 0 ? has(ROW_FLAG.hasMedia) : 0,
     thinkingRows: has(ROW_FLAG.hasThinking),
     callRows: has(ROW_FLAG.hasToolCall),
     reconRows: entry.reconBlocks > 0 ? 1 : 0,

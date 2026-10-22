@@ -112,6 +112,7 @@ function naiveFold(rows: readonly Aggregate[]): Aggregate {
     imageChars: sumTriple(rows, (row) => row.imageChars),
     pdfBytes: sumTriple(rows, (row) => row.pdfBytes),
     imageRows: sumBy(rows, (row) => row.imageRows),
+    mediaContribRows: sumBy(rows, (row) => row.mediaContribRows),
     thinkingRows: sumBy(rows, (row) => row.thinkingRows),
     callRows: sumBy(rows, (row) => row.callRows),
     reconRows: sumBy(rows, (row) => row.reconRows),

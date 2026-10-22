@@ -148,6 +148,7 @@ export function composeAggregates(
     imageChars: sum3(left.imageChars, right.imageChars),
     pdfBytes: sum3(left.pdfBytes, right.pdfBytes),
     imageRows: left.imageRows + right.imageRows,
+    mediaContribRows: left.mediaContribRows + right.mediaContribRows,
     thinkingRows: left.thinkingRows + right.thinkingRows,
     callRows: left.callRows + right.callRows,
     reconRows: left.reconRows + right.reconRows,
