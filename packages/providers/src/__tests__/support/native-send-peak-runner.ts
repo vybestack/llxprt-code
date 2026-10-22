@@ -47,10 +47,13 @@ function writeRows(
 
 export async function runNativeSendPeak(
   shape: SendPeakShape = 'text-only',
+  protocol?: 'original-three-pair',
 ): Promise<SendPeakRun> {
   const parent = join(
     import.meta.dir,
-    '../../../../../tmp/p6/native-memory-run-aw/corpora',
+    protocol === 'original-three-pair'
+      ? '../../../../../tmp/p6/native-memory-full-run-ax/corpora'
+      : '../../../../../tmp/p6/native-memory-run-aw/corpora',
   );
   mkdirSync(parent, { recursive: true });
   const root = mkdtempSync(join(parent, `${shape}-`));
@@ -60,7 +63,8 @@ export async function runNativeSendPeak(
   };
   const plan: SendPeakPlan = {
     source: 'rows',
-    rounds: 1,
+    ...(protocol === undefined ? {} : { protocol }),
+    rounds: protocol === 'original-three-pair' ? 3 : 1,
     estimate: true,
     shapes: {
       [shape]: {

@@ -131,6 +131,7 @@ export type SendPeakSource = 'rows' | 'stream';
 /** What the parent asks the child to measure. */
 export interface SendPeakPlan {
   readonly source: SendPeakSource;
+  readonly protocol?: 'original-three-pair';
   /** Measured small/large pairs per shape, after one unmeasured warm-up. */
   readonly rounds: number;
   /**
@@ -155,7 +156,10 @@ function isShapeCounts(value: unknown): value is ShapeCounts {
 
 export function isSendPeakPlan(value: unknown): value is SendPeakPlan {
   if (!isRecord(value)) return false;
-  const { source, rounds, estimate, shapes } = value;
+  const { source, rounds, estimate, shapes, protocol } = value;
+  if (protocol !== undefined && protocol !== 'original-three-pair')
+    return false;
+  if (protocol === 'original-three-pair' && rounds !== 3) return false;
   if (source !== 'rows' && source !== 'stream') return false;
   if (typeof estimate !== 'boolean') return false;
   if (typeof rounds !== 'number' || !isRecord(shapes)) return false;

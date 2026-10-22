@@ -1,3 +1,26 @@
+# Original three-pair native memory verification remains RED
+
+2026-10-22. [The original-protocol native-memory receipt](PHASE6-SOURCE-BOUND-NATIVEMEMORYFULL-PROOF.json) records final-source actual-native text/tool-heavy invocations and array/fill/estimate/retain controls under the original three small/large pairs, small-only warmup and six retention sends. The 1,024/8,192-row corpus, independent fixed wire hashes, Content-Length, positive native estimates, one actual native body stream and zero legacy spool/estimator-file operations are unchanged. Test/command budgets remain 170000/180000 ms; sampling, GC, engine settings, the signed median growth calculation, Theil-Sen predicate and 1 MiB bounds are unchanged. The added harness profile refuses a reduced pair count. The old tests and separate native one-pair warm diagnostic are preserved.
+
+All six final-source lanes time out before complete three-pair/six-retention results. A timeout is not a memory-predicate failure, so neither native memory acceptance nor fresh full-protocol sensitivity of the four controls is established. Raw partial pairs, signed differences, last phases/inputs, native-route observations, process scans and SHA-256 log/source manifests are retained under `tmp/p6/native-memory-full-run-ax`. Missing retention fits and verdicts are null, not inferred from partial data. The earlier two wrapper-authoring attempts are excluded from final-source acceptance; final baselines were invoked after adding an explicit local retention assertion for lint/audit. This was source revalidation, not a successful retry claim.
+
+The observed bottleneck is cold large native fact preparation/estimation inside the unchanged sampled window. The first text attempt's large send took 123,236.105084 ms and added 24,951,030 journal bytes; its next large send took 4,909.600083 ms with zero net journal growth. The existing cold format fill already uses a streaming bulk tree build. No quadratic-rebuild diagnosis, production leak fix, physical-I/O attribution or change to the acceptance method is claimed. Further work must profile cold native fill under the existing sampler and test the cause before optimizing production. Large pre-fill, fewer pairs, altered GC/sampling or increased budgets would change this proof and were not used.
+
+Saved warm one-pair results and their five-path source bridge remain diagnostic evidence only; they were not freshly rerun or promoted to acceptance. Scoped native-route/sink/corpus/trend and type/lint/format/graph/audit results are in the new receipt. No production source changed. Last-thinking/pruned views, Kimi/Mistral/old continuation, Responses/Anthropic native migration, broader/exact estimators, native log/dump, automatic compression, media reservations, LENS/live-byte accounting and aggregate cache/pin/overlay capacity remain open. #3917, reference-media all-creation and the other recorded legacy REDs remain separate, enabled and unsuppressed. No Phase 5/6/W26 completion or default flip. The 1,204-file inherited manifest, 306 declarations, raw recovery and dirty memory remain preserved. No cleanup, .llxprt edits/staging, OCR, push or merge. Review skipped per Andrew 2026-10-09.
+
+| Final-source lane | Completed peak sends | Retention sends | Last phase and input | Probe PID |
+| --- | --- | --- | --- | --- |
+| native-full-trap-array | 3/6 | 0/6 | measured-send-start; last sample http; input 8192 rows | 21925 |
+| native-full-trap-fill | 3/6 | 0/6 | measured-send-start; last sample http; input 8192 rows | 24154 |
+| native-full-trap-estimate | 1/6 | 0/6 | measured-send-complete; last sample http; input 8192 rows | 26366 |
+| native-full-trap-retain | 5/6 | 0/6 | measured-send-start; last sample http; input 8192 rows | 28583 |
+| final-native-full-text | 5/6 | 0/6 | measured-send-start; last sample estimate; input 8192 rows | 30855 |
+| final-native-full-tools | 1/6 | 0/6 | measured-send-start; last sample estimate; input 8192 rows | 33107 |
+
+Only complete original series can be judged: median large peak minus median small peak for heap and ArrayBuffers, then the maximum six-reading Theil-Sen growth. All partial measurement values and each signed pair difference are in the receipt. None is substituted for the missing original verdict.
+
+---
+
 # Actual native plain Chat passes the saved warm memory profile; cold heap remains open
 
 2026-10-22. Harness follow-up `6266852b44ad8875f8722d47d1c7ddf56d6e840b` follows capability-forwarding commit `7357d2c3c`. [The source-bound native-memory receipt](PHASE6-SOURCE-BOUND-NATIVEMEMORY-PROOF.json) records the completed `tmp/p6/native-memory-run-aw` runs and a measured-to-committed source bridge. These are actual native HistoryService selections sent by the real provider through HTTP to an isolated incremental SHA-256 sink. Every measured native send records one NativeChatBody stream, one NativeChatEstimateProjection estimate, positive tokens, zero WireBodySpool creates and zero estimator-file writes. The wrapper borrows the original native object and forwards the real count, receiver-bound random access, abort signals and pending metadata. Closing a borrowed handle does not dispose the fixture-owned pin.

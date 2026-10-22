@@ -142,6 +142,16 @@ const deadline = setTimeout(() => {
   throw new Error('Send peak probe did not settle');
 }, 600000);
 
+function progress(phase: string, job?: Job): void {
+  const path = process.env.SEND_PEAK_LOG;
+  if (path !== undefined)
+    appendFileSync(
+      `${path}.progress.jsonl`,
+      `${JSON.stringify({ phase, pid: process.pid, uptime: process.uptime(), job })}
+`,
+    );
+}
+
 function sleep(milliseconds: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, milliseconds);
@@ -583,10 +593,13 @@ async function measure(
   const handle = fileSelection(job, sampler, peakTrap);
   const cost =
     nativeSources === undefined ? undefined : nativeProbeCost(job.directory);
+  progress('measured-send-start', job);
   const evidence = await send(wireRoute, handle, sampler);
   const nativeCost = cost?.();
+  progress('measured-send-complete', job);
   handle.hold()?.release();
   const after = await awaitQuiescentReading();
+  progress('measured-quiet-complete', job);
   return {
     after,
     measurement: {
@@ -623,6 +636,7 @@ async function accumulate(
   const readings: AccumulationReading[] = [];
   let sha256: string | undefined;
   for (let sent = 0; sent < SEND_PEAK_ACCUMULATION_SENDS; sent++) {
+    progress('accumulation-send-start', job);
     const evidence = await send(
       wireRoute,
       fileSelection(job, undefined, accumulationTrap),
@@ -638,6 +652,7 @@ async function accumulate(
       throw new Error('accumulation sends put different bytes on the wire');
     }
     readings.push(await accumulationReading());
+    progress('accumulation-send-complete', job);
   }
   return readings;
 }
@@ -655,7 +670,7 @@ async function measureShape(
     small: jobFor(shape, 'small', counts.small),
     large: jobFor(shape, 'large', counts.large),
   };
-  if (nativeSources === undefined) {
+  if (nativeSources === undefined || plan.protocol === 'original-three-pair') {
     await send(
       wireRoute,
       fileSelection(jobs.small, undefined, undefined),
@@ -677,7 +692,9 @@ async function measureShape(
         );
     }
   }
+  progress('warmup-complete', jobs.small);
   let baseline = await awaitQuiescentReading();
+  progress('initial-baseline-complete', jobs.small);
   const series: { small: SendPeakMeasurement[]; large: SendPeakMeasurement[] } =
     { small: [], large: [] };
   for (let round = 0; round < plan.rounds; round++) {
@@ -688,16 +705,24 @@ async function measureShape(
         baseline,
       );
       series[size].push(measurement);
+      if (process.env.SEND_PEAK_LOG !== undefined)
+        appendFileSync(
+          `${process.env.SEND_PEAK_LOG}.pairs.jsonl`,
+          `${JSON.stringify({ shape, round, size, measurement })}
+`,
+        );
       baseline = after;
     }
   }
   return { ...series, accumulation: await accumulate(wireRoute, jobs.large) };
 }
 
+progress('source-preparation-start');
 const nativeSources =
   process.env.ISSUE854_SEND_NATIVE === '1'
     ? await prepareNativeProbeSources(root, plan)
     : undefined;
+progress('source-preparation-complete');
 await awaitCodeAging();
 const results: Record<string, SendPeakSeries> = {};
 for (const [shape, counts] of Object.entries(plan.shapes)) {
