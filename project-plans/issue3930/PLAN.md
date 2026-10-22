@@ -628,3 +628,52 @@ is deleted (npm leaves the restored entry untouched on a further run). The net
 `bun.lock` with `rm bun.lock && bun install`; the diff is the same three
 packages plus `source-map-js` 1.2.1 to 1.2.2, which now matches
 `package-lock.json`.
+
+## CI round 2
+
+CI on `0b3866c85` failed in two jobs after the lockfile repair let installs succeed. All four
+causes are test bugs that Bun 1.3.14 happened to tolerate; none is in production code. Each file
+passes on Bun 1.3.14 and fails (or races) on 1.4.4 before the fix. main has no push-triggered CI
+run for these jobs, so the baseline is a local run of the unchanged tests under Bun 1.3.14
+(`npm i bun@1.3.14` into a scratch dir), compared with Bun 1.4.4.
+
+### A. Windows: `retains materialized Bun precedence and does not retry a failed application`
+
+`scripts/tests/issue-2978-node-shim.bun.test.ts` asserted that the entry's `process.execPath`
+string-equals the path the test placed the bundled Bun at. That path comes from `os.tmpdir()`,
+which on the Windows runner is the 8.3 short form (`C:\Users\RUNNER~1\...`). Bun 1.3.14
+reported `process.execPath` as it was spawned; Bun 1.4.4 reports the long form
+(`C:\Users\runneradmin\...`). Same file, two spellings. The shim only execs the runtime and
+never compares paths, so production code is unaffected. `makeLayout` now builds the layout from
+`fs.realpathSync.native(tempRoot)`, so the path the launcher execs and the path the entry reports
+are the same long spelling. The assertion stays an exact equality, and it still fails if the shim
+picked the `@oven` payload instead of the bundled Bun. (Comparing canonical paths in the test body
+was tried first and works, but the test file sits at the 800-line `max-lines` ceiling.)
+
+### B1. `base + a malformed plugin install` failed with `ENOENT reading .../dist/index.ts`
+
+`withIncompatibleManifestFixture` was synchronous and returned `run(root, pluginName)` (a
+promise) from inside `try`, so the `finally` removed the fixture directory before the async body
+had finished importing `dist/index.ts`. Bun 1.3.14 read the module file early enough that the
+race went unnoticed; Bun 1.4.4 reads it later, after `rmSync`. Minimal repro (write file, start
+`import()`, `rmSync` the directory, await the import): 1.3.14 prints `ok`, 1.4.4 rejects with
+`ENOENT reading ...`. It passed on macOS only because of timing. The helper is now `async` and
+awaits `run` before cleanup, as `withInstalledFixtureAsync` already does.
+
+### B2. OCR transport lifecycle, three tests
+
+Two independent Bun 1.4 behaviors, both matching Node:
+
+- `ClientRequest.destroy()` before a response now emits an `error` event (`socket hang up`,
+  ECONNRESET). Bun 1.3.14 stayed silent. The scenario scope destroys the requests it owns during
+  teardown, and in the callback-throws path the request was destroyed before `proxyRequest`
+  attached `request.once('error', reject)`. With no listener the event became an uncaught
+  exception (`releases every registered resource...`, `preserves a throwing request callback...`).
+  The scope now attaches a one-shot no-op `error` listener when it destroys a request itself;
+  errors on requests the scenario still owns are untouched.
+- `proxyRequest` built the URL with `url.pathname += pathSuffix`. For a bare origin the pathname
+  is `/`, giving `//open`. Bun 1.3.14 normalized `//open` to `/open` on the wire; Bun 1.4.4 sends
+  it literally (the minimal repro prints `url /open` on 1.3.14 and `url //open` on 1.4.4). The
+  upstream saw no `/open` request, so `waitFor(openRequestSeen)` timed out and the timeout error
+  became the aggregate's first error (`closes an internal sibling request...`). The helper now
+  strips trailing slashes before appending a non-empty suffix.
