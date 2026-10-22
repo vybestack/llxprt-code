@@ -5,9 +5,8 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { mkdir, readFile, rm } from 'node:fs/promises';
-import { randomUUID } from 'node:crypto';
-import { join } from 'node:path';
+import { readFile, rm, writeFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 import type { Agent, AgentEvent } from '@vybestack/llxprt-code-agents';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import {
@@ -15,6 +14,7 @@ import {
   HookType,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { withRecordingLifetimeFixture } from './helpers/recording-owner-lifetime-fixture.js';
+import { makeScratchDir } from './helpers/scratch-dir.js';
 
 type ToolConfirmation = Extract<AgentEvent, { type: 'tool-confirmation' }>;
 
@@ -54,18 +54,22 @@ interface CommandInput {
 
 describe('borrowed facade tool hook owner routing', () => {
   it('retains A and B at deferred confirmation and reads the current recording path when each tool executes', async () => {
-    const evidenceDir = join(process.cwd(), 'tmp', 'recording-tool-hook-owner');
-    const output = join(
-      process.cwd(),
-      'tmp',
-      'recording-tool-hook-owner',
-      `${randomUUID()}.jsonl`,
-    );
-    // The hook command appends to `output` before any tool has had a chance to
-    // create this directory, so it must exist up front (it is absent on a
-    // clean checkout, e.g. CI).
-    await mkdir(evidenceDir, { recursive: true });
+    const evidenceDir = await makeScratchDir('recording-tool-hook-owner-');
+    const output = join(evidenceDir, 'hooks.jsonl');
+    const fixture = join(evidenceDir, 'responses.jsonl');
     try {
+      expect(evidenceDir).not.toContain(resolve(import.meta.dir, '../../..'));
+      const template = await readFile(
+        join(import.meta.dir, 'fixtures/recording-tool-owner.jsonl'),
+        'utf8',
+      );
+      await writeFile(
+        fixture,
+        template.replaceAll(
+          '{{CWD}}/tmp/recording-tool-hook-owner',
+          JSON.stringify(evidenceDir).slice(1, -1),
+        ),
+      );
       await withRecordingLifetimeFixture(
         async ({ agent: a, borrow }) => {
           const b = await borrow();
@@ -152,6 +156,7 @@ describe('borrowed facade tool hook owner routing', () => {
         },
         undefined,
         {
+          workingDir: evidenceDir,
           hooks: Object.fromEntries(
             [
               HookEventName.BeforeTool,
@@ -172,7 +177,7 @@ describe('borrowed facade tool hook owner routing', () => {
             ]),
           ),
         },
-        'recording-tool-owner.jsonl',
+        fixture,
       );
     } finally {
       await rm(evidenceDir, { recursive: true, force: true });

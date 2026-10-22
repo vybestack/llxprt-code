@@ -207,3 +207,140 @@ The working branch remains `issue3923` at `d834bc703`, with these remediation ch
 Draft commit message: `fix(async): recover deferred notices on later idle turns (Fixes #3923)`.
 
 Suggested body: Keep discarded and cancelled batches pending until a later idle opportunity without retrying provider failures. Preserve owned delivery handoff, report lost shell ownership as a restart requirement, and narrow stream finalization to its actual lifecycle dependency so the CI boundary ratchet passes.
+
+## PR #3924 render-phase finding: committed idle gates
+
+Scope: thread `PRRT_kwDOPB5qbc6u_PDZ` only, starting from clean pushed `992271fea`. No further independent review, OCR, commit or push is authorized for this worker.
+
+### Disposition and mechanism
+
+The finding is valid for the production hook under React suspension. `useSubmitQueryEffects` wrote its live subscription's busy predicate and busy-opportunity counter during render. `useScheduleNext` independently wrote the queue scheduler's streaming-state ref during render. The stable submission executor also wrote `latestCbdRef` during render and read its streamingState when deciding whether to requeue. A busy render that suspends can therefore poison three live gates while the last committed hook state remains idle.
+
+The regression uses the existing Ink-backed renderHook, actual `useSubmitQuery`, `useQueuedSubmissions`, Agent, task owner and notification subscription. It starts with committed idle, renders busy and throws an unresolved promise after invoking the hooks, then completes a task while that busy render remains suspended. A commit-effect witness remains idle. The expected behavior is one actual Agent delivery, history containing the task failure, acknowledgement after delivery and successful session clear. This is a behavioral reproduction with the installed React 19 / Ink renderer, not a simulated ref or static assertion. Installed Ink creates a LegacyRoot; the test does not assume ConcurrentRoot or substitute a DOM renderer. The test adds a Suspense boundary as the interruption harness. No existing shipped AppContainer suspension path or live-user occurrence is claimed.
+
+### Fix and effect ordering
+
+- Commit the subscription's streaming state and busy-opportunity transition in an effect registered before its idle scheduler and subscription effects. The deferred-opportunity comparison and original settlement protocol are unchanged.
+- Commit the queue scheduler's streaming state in useScheduleNext. This effect registers before useSubmitQueryEffects, so the latter's idle scheduler sees committed idle rather than the preceding busy state.
+- Commit the stable executor's latest dependency snapshot before the notification/idle effects. Fixing only the other two refs still leaves the executor requeuing against an uncommitted busy snapshot; the intermediate failing receipt below confirms this part of the same delivery path.
+- Remove four redundant local-useRef entries from the scheduler callback dependency array to keep the function within the existing 80-line lint limit. Those ref identities never change. No rule, limit or baseline was altered.
+
+### Test-first and local receipts
+
+All paths in this section are under `tmp/verify3923/render-phase-20261021/`.
+
+- Pre-change AST baseline: `bun scripts/test-audit/scan.ts tmp/verify3923/render-phase-20261021/audit-before`, exit 0.
+- RED `red-suspended.log/.exit`: the new regression against unchanged production code exits 1, 0 pass / 1 fail. Expected zero unread results after delivery; received one while only idle had committed.
+- Intermediate RED `red-executor.log/.exit`: the same regression still exits 1 after fixing the subscription and scheduler refs only. Moving latestCbdRef into its commit effect then makes the regression pass.
+- GREEN `green-suspended.log/.exit`: exit 0, 1 pass / 0 fail, 9 assertions. One real Agent delivery occurs while busy remains suspended, then session clear succeeds.
+- A separate exploratory cancellation/opportunity case passed even with render-time opportunity bookkeeping (`red-opportunity.log`, exit 0). It did not distinguish the defect because no new idle effect runs when the last committed streaming state stays idle. That non-distinguishing test was removed; it is not presented as red proof.
+- `green-targeted.log` exits 0 but Bun discovers only three of its six named paths, 45 pass / 0 fail. The corrected explicit path list in `green-targeted-2.log/.exit` discovers all six suites: 75 pass / 0 fail, 399 assertions. They cover mounted deferred recovery, cancellation, real provider failure with no loop, max-turns cancellation, queue settlement, task-owner lifetime, no premature acknowledgement and clear admission.
+- Scoped lint initially rejected useScheduleNext at 83 lines (`scoped-lint-1.log` and `scoped-lint-2.log`, exit 1). Removing redundant stable-ref dependencies satisfies the unchanged limit. `scoped-lint-3.log/.exit` exits 0 for both changed code/test files.
+
+### Full verification
+
+The required six-command cycle, exact CI runtime-boundary command and final AST scan completed sequentially as managed background job `shell_d18b286efa93`. Logs and matching per-command exit files use this section's unique directory. The full test gate is not green; its failure is retained below rather than replaced by a retry.
+
+| Command | Exit | Receipt |
+| --- | --- | --- |
+| `npm run test` | 1 | `full-test-1.log/.exit`, `full-test-1-summary.json`: 2999/3000 reported file executions passed across 17 batches. Agents: 551/552, scanner ENOENT described below. CLI: 822/822 files; 10174 passed, 0 failed, 5 skipped, 13 todo cases. |
+| `npm run lint` | 0 | `full-lint-1.log/.exit`: all 18 partitions completed. |
+| `npm run typecheck` | 0 | `full-typecheck-1.log/.exit`: declaration build, workspaces, scripts and evals. |
+| `npm run format` | 0 | `full-format-1.log/.exit`: only targeted code/test and issue-plan paths changed. |
+| `npm run build` | 0 | `full-build-1.log/.exit`: compiled/source lazy-MCP coherence verified. |
+| `bun scripts/start.ts --profile-load lunahigh "write me a haiku and nothing else"` | 0 | `full-smoke-1.log/.exit`: actual identity `[lunahigh:gpt-6-luna]`, three-line haiku. |
+| `npm run check:runtime-boundary` | 0 | `runtime-boundary-1.log/.exit`: exact CI command, unchanged baseline, no increases, no unratcheted findings, zero compiler diagnostics, all scanners complete. |
+| `bun scripts/test-audit/scan.ts tmp/verify3923/render-phase-20261021/audit-after` | 0 | `audit-after.log/.exit`, `audit-summary.json`: no new prohibited findings compared with the pre-change snapshot. |
+
+AST counts before/after are unchanged for MOCK_MIRROR 173/173, ALWAYS_TRUE 13/13, SELF_CONFIRMING 274/274 and NO_ASSERT 98/98. One new DUP_ASSERT checks committed idle before and after notice delivery while busy remains suspended. All other findings are unchanged after ignoring line shifts. Combined receipts are in `verification-summary.json`; its summary process exits 1 because the recorded full-test exit is 1, not because the AST comparison failed.
+
+### Full-suite failure: scratch-directory traversal race
+
+The sole failing file is untouched `packages/agents/src/api/__tests__/boundary.no-internals-subpath.test.ts`. Its source-tree walk includes package-local tmp directories and does `readdirSync` followed by stat/recursive traversal without a consistent snapshot (lines 54-59 and 81-90). At `full-test-1.log:36672-36674`, the scan throws ENOENT reading `packages/agents/tmp/child-shell-owner-61NQgc`. The log interleaves that failure with the actual child-shell test completing. That fixture creates the directory at `async-child-background-isolation.behavior.test.ts:479` and removes it in finally at lines 532-535. `helpers/scratch-dir.ts:16-21` explains the package-local tmp placement. The varying input is the directory's existence during concurrent cleanup, not an import assertion or the notice hook.
+
+Filed the source/log evidence as [issue #3927](https://github.com/vybestack/llxprt-code/issues/3927) after verifying GitHub identity as acoliver. No scanner code, enforcement rule, assertion, concurrency setting or fixture was changed. No full-suite retry was run. This failure remains a verification limitation for the remediation.
+
+After identifying the changing input, ran that exact boundary test with its concurrent scratch-directory producer finished: from packages/agents, `bun test src/api/__tests__/boundary.no-internals-subpath.test.ts`, exit 0, 5 pass / 0 fail / 5 assertions (`boundary-stable-input.log/.exit`). This controlled stable-input result does not erase the failed aggregate. The agents package script's failing predecessor also skipped its seven-file native tail through `&&`; executing the previously unrun tail with `bun ../../scripts/run_bun_tests.ts --workspace agents` exits 0, 7/7 files (`agents-skipped-tail.log/.exit`).
+
+Final tracked scope remains the production hook, its existing background-clear regression file and this issue plan. HEAD stays `992271fea`; no commit or push occurred. No .llxprt, workflow, baseline, manifest, lockfile or enforcement changes, no independent review and no OCR. The finding is fixed locally, but the required full-test aggregate must not be reported as passing.
+
+Draft commit message: `fix(async): use committed state for notice delivery (Fixes #3923)`.
+
+Suggested body: Keep suspended busy renders from changing the live notice subscription, queue scheduler or submission executor. Update their state snapshots in commit effects before idle scheduling so pending completions still reach the Agent and unblock clear after delivery.
+
+
+## Issue #3927: relocate concurrent scratch inputs before final verification
+
+The failed aggregate above remains the original failure receipt. Remediation is limited to the fixture producer and its ownership regression. The committed-state hook fix and regression are unchanged.
+
+### Root cause and ownership decision
+
+- Read #3927 and all six existing consumers of `helpers/scratch-dir.ts`. The default `resolve('tmp')` depends on each Bun child's working directory. The agents runner uses the package root, placing mutable fixture state under `packages/agents/tmp`, within the boundary scanner's unchanged `packages` root.
+- The shell and child tests use the returned path as a working/config directory, log root or marker location, then remove it in their existing teardown/finally blocks. They resolve executable source fixtures separately through `resolveRepositoryFixture`; none requires scratch content to participate in source scanning. The profile test's explicit prompt parent resolves to repository-root `tmp/session-client-owner-consolidation`, already outside all four scan roots, and stays supported unchanged.
+- Use `os.tmpdir()` as the helper's default. Both package and shared Bun runners already create unique sessions and pass `buildSessionEnv` to children, setting TMPDIR/TEMP/TMP to the session's temp root. This makes scratch lifecycle belong to the existing runner session while preserving unique mkdtemp suffixes, immediate caller cleanup, explicit parent creation and direct Bun execution's OS-temp fallback. No new session mechanism or shared global path is needed.
+- The boundary scanner itself is untouched: the same four source roots, directory skips, forbidden reference check, import/export assertions and error propagation remain. No ENOENT catch, retries, test concurrency changes, threshold changes or baseline edits.
+
+### Test-first receipts
+
+All receipts in this section use `tmp/verify3923/scratch-root-20261021-2104/`.
+
+- `red-scratch.log/.exit`, exit 1: 1 pass / 3 fail / 9 assertions against the unchanged helper, executed from packages/agents. Default ownership and session ownership both resolve to package-local tmp instead of the OS/session temp root. During an actual unchanged boundary scan, concurrent scratch create/write/remove cycles also remain inside the scanned packages root. The deterministic path assertions expose the invalid input even when the race does not throw on that run.
+- `green-scratch.log/.exit`, exit 0: 4 pass / 0 fail / 18 assertions after changing the default root. Covers unique caller-owned paths outside all scan roots, independent Bun session environments and session cleanup, explicit missing-parent creation and caller cleanup, and an actual unchanged five-assertion boundary scan concurrent with repeated scratch creation/write/removal. No scanner implementation is mocked or copied.
+- `scoped-lint-1.log/.exit`, exit 1: TypeScript lint treats a local boolean mutated only from a completion callback as always truthy. Store that lifecycle state in an object so the condition is typed as mutable, without adding a suppression or changing concurrency. `scoped-lint-2.log/.exit`, exit 0 after that test-only correction and scoped formatting.
+- `audit-before.log/.exit`, exit 0: pre-change AST snapshot captured before adding the scratch regression. `committed-state-before.diff` preserves the incoming hook/test diff for a final byte comparison.
+
+The full consumer run and required verification cycle follow below. #3927 stays open until final PR linkage; no issue closure, review/OCR, commit or push is authorized in this worker.
+
+
+### Remaining direct producers: same changing-input mechanism
+
+A source search before accepting the full-cycle result found three additional agents tests bypassing the helper. Their package-local scratch directories/files are also removed during teardown, so fixing only the named child-shell producer would leave the same scanner-input defect elsewhere.
+
+- `workspace-checkpoint-lifetime.behavior.test.ts` now obtains its unique project/data root through `makeScratchDir`; its Git-backed checkpoint and borrowed-owner assertions and teardown remain intact.
+- `recording-tool-hook-owner.behavior.test.ts` now owns a unique scratch root containing hook output, actual tool-written files and a substituted copy of its existing JSONL fixture. The original template stays unchanged. Set the fixture's working directory to that root and substitute JSON-escaped absolute scratch paths, because FakeProvider's existing `{{CWD}}` substitution uses process.cwd rather than the Agent working directory. Do not chdir, change provider code or alter the tool results/assertions. Dispose both recording owners before deleting the scratch root, as before.
+- `model-tool-fixture.behavior.test.ts` now places its physical input in a unique scratch root and passes that root through the fixture's existing targetDir option. Its real ReadFileTool publication/execution assertions remain, with root cleanup after fixture-owner teardown.
+- Added location assertions to those existing tests before relocation. RED receipts `red-direct-<filename>.log/.exit`: checkpoint 0 pass / 4 fail / 4 assertions, recording hook 0 pass / 1 fail / 1 assertion, model fixture 0 pass / 1 fail / 1 assertion. Each fails because its actual scratch path contains the agents package source root.
+- GREEN receipts `green-direct-<filename>.log/.exit`: checkpoint 4 pass / 20 assertions, recording hook 1 pass / 10 assertions, model fixture 1 pass / 3 assertions, scratch ownership/concurrent scanner 4 pass / 18 assertions; all exit 0. Existing behavior assertions were retained, with only the location assertions added. The new regression's path-containment predicate also recognizes cross-drive absolute relative paths on Windows; no Windows execution is claimed.
+- The earlier seven-suite consumer run completed as managed job `shell_15e895804504`, all exit 0: 32 pass / 0 fail / 436 assertions. Receipts are `target-<suite>.log/.exit`, with `target-all.exit` containing 0.
+- Managed cycle `shell_cd3747fb9fe8` was cancelled during its first test command after locating the three direct producers, before accepting any final aggregate. Its `full-test-1.log` is a partial receipt; no completed test exit is claimed. No subsequent command in that cycle ran. A complete cycle on all relocated producers uses `full-*-2` receipts below.
+- Scoped lint's third pass had no errors and one warning for a cleanup hook outside describe. Moved the hook into its existing describe block; no lint configuration was changed. Final scoped lint and all full-cycle results follow.
+
+
+### Complete cycle 2 and test typing correction
+
+Managed job `shell_9682852ad6aa` completed the eight-command cycle. `full-test-2.log/.exit` passes 3008/3008 reported file executions across 18 batches: agents 553/553 plus its seven-file native tail, CLI 822/822 files and 10174 passed / 0 failed / 5 skipped / 13 todo cases. `full-lint-2`, `full-format-2`, `full-build-2`, `full-smoke-2`, `runtime-boundary-2` and `audit-final` all exit 0 with matching log/exit receipts. This cycle's aggregate is not green because `full-typecheck-2.log/.exit` exits 2.
+
+The typecheck failure is confined to two global `Bun.spawn` references in the new scratch regression. The agents package intentionally typechecks its source under Node types, with only bun:test declarations included. An explicit Bun namespace import was tested separately (`agents-typecheck-import.log/.exit`, exit 2), but loading Bun's ambient globals changes fetch/stream types throughout the imported Node-typed program. Do not change that program's types or unrelated provider code. Instead, use the adjacent suites' existing `node:child_process` API to launch the same Bun executable and capture its actual completion/output. The test remains a native bun:test suite, with identical ownership assertions, source roots, concurrent lifecycle loop, boundary subprocess and cleanup behavior. No test assertion is removed or weakened.
+
+`agents-typecheck-final.log/.exit` now exits 0 for both existing agents TypeScript projects. `scoped-lint-final-2.log/.exit` exits 0 with --max-warnings 0. `green-scratch-final.log/.exit` exits 0, 4 pass / 0 fail / 18 assertions. A complete cycle after this test-only transport correction follows in `full-*-3`, `runtime-boundary-3` and `audit-final-3` receipts. The earlier failed typecheck and explicit-import probe are retained.
+
+
+### Final verification after scratch relocation
+
+Managed job `shell_70daab9a9b6a` completed sequentially with exit 0. Every command below has a matching `.log` and `.exit` under `tmp/verify3923/scratch-root-20261021-2104/`; all eight exit receipts and `cycle-3.exit` contain 0.
+
+| Command | Exit | Receipt and result |
+| --- | --- | --- |
+| `npm run test` | 0 | `full-test-3`: 3008/3008 reported file executions, 18 batches, no runner failure lines. Agents 553/553 plus 7/7 native tail; CLI 822/822 files, 10174 passed / 0 failed / 5 skipped / 13 todo cases. |
+| `npm run lint` | 0 | `full-lint-3`: all 18 partitions completed. |
+| `npm run typecheck` | 0 | `full-typecheck-3`: declaration build, all workspaces including agents, scripts and evals completed. |
+| `npm run format` | 0 | `full-format-3`: no unrelated tracked changes. |
+| `npm run build` | 0 | `full-build-3`: source/compiled lazy-MCP registry coherence verified. |
+| `bun scripts/start.ts --profile-load lunahigh "write me a haiku and nothing else"` | 0 | `full-smoke-3`: actual identity `[lunahigh:gpt-6-luna]`, three-line haiku. |
+| `npm run check:runtime-boundary` | 0 | `runtime-boundary-3`: exact baseline command, no increases or unratcheted findings, zero compiler diagnostics; state, serviceShape and ambientDelegation scanners complete. |
+| `bun scripts/test-audit/scan.ts tmp/verify3923/scratch-root-20261021-2104/audit-final-3` | 0 | `audit-final-3`: full-corpus AST audit and comparison below. |
+
+`verification-summary.json` and `verification-summary.log/.exit` aggregate the actual exits, all 18 test batches and AST comparison; the summary exits 0. AST findings are identical to the pre-scratch snapshot after ignoring line shifts: no added or removed findings of any category, and no findings in the new scratch suite. Prohibited-category counts remain MOCK_MIRROR 173, ALWAYS_TRUE 13, SELF_CONFIRMING 274 and NO_ASSERT 98, also matching the original audit-main counts. `audit-diff.log` records the empty normalized difference. The exact boundary file passes its original five tests in the full suite, alongside the new concurrent lifecycle regression.
+
+### Final scope, preserved constraints and dispositions
+
+- Incoming committed-state hook/test changes are byte-for-byte identical to the starting worker diff: `committed-state-before.diff` versus `committed-state-after.diff`, with `committed-state-preserved.exit` containing 0.
+- `enforcement-unchanged.log/.exit` records an empty HEAD diff and exit 0 for the boundary scanner, discovery roots, retry/concurrency policy, runtime baseline, agents runner/bunfig, .llxprt, workflows, ESLint configuration, package.json and bun.lock. No scanner root or assertion, test threshold, existing skip, concurrency or retry setting changed. No ENOENT catch was added.
+- Added scope consists only of the scratch helper, new scratch ownership/concurrency suite, the three direct producer relocations, and this issue plan. The original template, recording helper, model-tool fixture helper and all runtime production code remain unchanged by the scratch remediation.
+- Final changed paths: `packages/agents/src/api/__tests__/helpers/scratch-dir.ts`, `packages/agents/src/api/__tests__/scratch-dir.behavior.test.ts` (new, untracked), `packages/agents/src/api/__tests__/recording-tool-hook-owner.behavior.test.ts`, `packages/agents/src/api/__tests__/workspace-checkpoint-lifetime.behavior.test.ts`, `packages/agents/src/core/__tests__/model-tool-fixture.behavior.test.ts`, the two incoming `useSubmitQuery` code/test paths, and `project-plans/issue3923.md`.
+- #3927's changing-input cause is fixed locally and verified. Keep #3927 open until the orchestrator adds final PR linkage. #3923's committed-state remedy remains intact and now has a green full-cycle aggregate. The original failing race aggregate and all intermediate red/typecheck receipts remain available; none was replaced by a passing receipt.
+- Branch remains `issue3923`, HEAD `992271fea`. No commit, push, PR/thread edit, issue closure, review or OCR was performed. Review skipped per Andrew 2026-10-09. No Windows execution is claimed; new real-process behavior was verified on macOS. Remote PR #3924 still reflects the previously pushed commit until the orchestrator publishes this work.
+
+Draft commit message: `fix(async): use committed state for notice delivery (Fixes #3923)`.
+
+Suggested body: Keep suspended busy renders from changing live notice-delivery gates. Move mutable test fixtures into the existing Bun session temp root so concurrent cleanup cannot change source-boundary scan inputs. Preserve caller cleanup, session isolation and all boundary enforcement. Refs #3927.

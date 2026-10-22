@@ -356,12 +356,14 @@ function useSubmitQueryEffects(
   const streamingStateRef = useRef(streamingState);
   const busyOpportunityRef = useRef(0);
   const deferredOpportunityRef = useRef(-1);
-  if (
-    streamingState !== StreamingState.Idle &&
-    streamingStateRef.current === StreamingState.Idle
-  )
-    busyOpportunityRef.current++;
-  streamingStateRef.current = streamingState;
+  useEffect(() => {
+    if (
+      streamingState !== StreamingState.Idle &&
+      streamingStateRef.current === StreamingState.Idle
+    )
+      busyOpportunityRef.current++;
+    streamingStateRef.current = streamingState;
+  }, [streamingState]);
   const notificationRef = useRef<ReturnType<
     Agent['tasks']['subscribeNotifications']
   > | null>(null);
@@ -632,6 +634,7 @@ function useScheduleNext(
     dequeueSubmission,
     tryReserveDrain,
     drainSuppressedRef,
+    streamingState,
   } = deps;
   const drainTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -644,8 +647,10 @@ function useScheduleNext(
   // The mutable indirection breaks the schedule/drain callback cycle while
   // allowing delayed retries to invoke the latest stable scheduler.
   const scheduleRef = useRef<() => void>(() => undefined);
-  const streamingStateRef = useRef(deps.streamingState);
-  streamingStateRef.current = deps.streamingState;
+  const streamingStateRef = useRef(streamingState);
+  useEffect(() => {
+    streamingStateRef.current = streamingState;
+  }, [streamingState]);
   useDrainCleanup(
     drainTimeoutRef,
     retryTimeoutRef,
@@ -691,10 +696,6 @@ function useScheduleNext(
     activeTurnRef,
     lifecycle,
     queuedSubmissionsRef,
-    retryTimeoutRef,
-    pendingSubmissionRef,
-    drainTimeoutRef,
-    streamingStateRef,
     dequeueSubmission,
     drainSubmission,
     tryReserveDrain,
@@ -708,7 +709,9 @@ function useScheduleNext(
 function useSubmitQueryCallback(cbd: SubmitQueryCallbackDeps) {
   // Keep the callback identity stable while every invocation reads current deps.
   const latestCbdRef = useRef(cbd);
-  latestCbdRef.current = cbd;
+  useEffect(() => {
+    latestCbdRef.current = cbd;
+  });
   return useCallback<SubmissionExecutor>(
     async (query, options, promptId, fromQueue = false) => {
       const current = latestCbdRef.current;

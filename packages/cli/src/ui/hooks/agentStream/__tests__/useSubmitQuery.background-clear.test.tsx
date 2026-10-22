@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, expect, it, vi } from 'bun:test';
-import { act } from 'react';
+import { act, Suspense, useEffect } from 'react';
 import { setTimeout as delay } from 'node:timers/promises';
 import { ShellJobOwner } from '../../../../../../agents/src/session/shell-job-owner.js';
 import { renderHook, waitFor } from '../../../../__tests__/render.js';
@@ -57,7 +57,11 @@ function renderNotificationQueue(
   queuedSubmissionsRef: UseSubmitQueryDeps['queuedSubmissionsRef'],
   drainSuppressedRef: UseSubmitQueryDeps['drainSuppressedRef'],
   runStreamRef: UseSubmitQueryDeps['runStreamRef'],
-  state: { current: StreamingState } = { current: StreamingState.Idle },
+  state: {
+    current: StreamingState;
+    suspension?: Promise<void>;
+    committed?: { current: StreamingState };
+  } = { current: StreamingState.Idle },
 ): ReturnType<
   typeof renderHook<
     ReturnType<typeof useSubmitQuery> & ReturnType<typeof useQueuedSubmissions>,
@@ -106,24 +110,36 @@ function renderNotificationQueue(
     isResponding: false,
     streamingState: StreamingState.Idle,
   };
-  return renderHook(() => {
-    const events = useAgentEventStream({
-      agent,
-      addItem: () => 1,
-      processAgentEventRef: { current: null },
-      flushPendingHistoryItem: noop,
-      clearPendingHistoryItem: noop,
-      performMemoryRefresh: async () => {},
-    });
-    runStreamRef.current ??= events.runStream;
-    const queue = useQueuedSubmissions();
-    const submit = useSubmitQuery({
-      ...deps,
-      ...queue,
-      streamingState: state.current,
-    });
-    return { ...submit, ...queue };
-  });
+  return renderHook(
+    () => {
+      const events = useAgentEventStream({
+        agent,
+        addItem: () => 1,
+        processAgentEventRef: { current: null },
+        flushPendingHistoryItem: noop,
+        clearPendingHistoryItem: noop,
+        performMemoryRefresh: async () => {},
+      });
+      runStreamRef.current ??= events.runStream;
+      const queue = useQueuedSubmissions();
+      const submit = useSubmitQuery({
+        ...deps,
+        ...queue,
+        streamingState: state.current,
+      });
+      const streamingState = state.current;
+      useEffect(() => {
+        if (state.committed) state.committed.current = streamingState;
+      }, [streamingState]);
+      if (state.suspension) throw state.suspension;
+      return { ...submit, ...queue };
+    },
+    {
+      wrapper: ({ children }) => (
+        <Suspense fallback={null}>{children}</Suspense>
+      ),
+    },
+  );
 }
 
 function backgroundOwners(agent: UseSubmitQueryDeps['agent']): {
@@ -198,6 +214,56 @@ async function finishBackgroundWork(
 }
 
 describe('background notification queue ownership', () => {
+  it('delivers a pending notice while a busy render is suspended and only idle has committed', async () => {
+    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+    const { tasks, shell } = backgroundOwners(agent);
+    const suspension = createDeferred<void>();
+    const committed = { current: StreamingState.Idle };
+    const state: Parameters<typeof renderNotificationQueue>[4] = {
+      current: StreamingState.Idle,
+      committed,
+    };
+    let attempts = 0;
+    const rendered = renderNotificationQueue(
+      agent,
+      { current: [] },
+      { current: false },
+      {
+        current: async (query, signal) => {
+          attempts++;
+          await drain(agent.stream(JSON.stringify(query), { signal }));
+        },
+      },
+      state,
+    );
+    try {
+      act(() => {
+        state.current = StreamingState.Responding;
+        state.suspension = suspension.promise;
+        rendered.rerender();
+      });
+      expect(committed.current).toBe(StreamingState.Idle);
+      await finishBackgroundWork(tasks, shell, 'task failed');
+      await waitFor(() => {
+        expect(tasks.getPendingNotifications()).toHaveLength(0);
+        expect(tasks.hasPendingWork()).toBe(false);
+      });
+      expect(committed.current).toBe(StreamingState.Idle);
+      expect(attempts).toBe(1);
+      expect(JSON.stringify(await agent.getHistory())).toContain(
+        'idle-recovered-failure',
+      );
+      await agent.session.startNewSession();
+      expect(await agent.getHistory()).toStrictEqual([]);
+    } finally {
+      state.current = StreamingState.Idle;
+      state.suspension = undefined;
+      suspension.resolve();
+      rendered.unmount();
+      await cleanup();
+    }
+  });
+
   for (const deferral of ['clear', 'cancel while busy', 'cancel while idle']) {
     it(`recovers after ${deferral} only on a subsequent busy-to-idle opportunity`, async () => {
       const { agent, cleanup } = await buildAgent('plain-text.jsonl');

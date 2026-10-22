@@ -5,8 +5,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import {
   processRestorableToolCalls,
@@ -15,6 +15,7 @@ import {
 import { fromConfig } from '../index.js';
 import { buildAgent } from './helpers/agentHarness.js';
 import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
+import { makeScratchDir } from './helpers/scratch-dir.js';
 
 describe('public Agent workspace checkpoint lifetime', () => {
   function useProject(): () => string {
@@ -23,7 +24,8 @@ describe('public Agent workspace checkpoint lifetime', () => {
     let dataHome: string | undefined;
     let sandbox: string | undefined;
     beforeEach(async () => {
-      root = await mkdtemp(join(process.cwd(), 'tmp/agent-checkpoints-'));
+      root = await makeScratchDir('agent-checkpoints-');
+      expect(root).not.toContain(resolve(import.meta.dir, '../../..'));
       project = join(root, 'project');
       await mkdir(project);
       execFileSync('git', ['init', '--initial-branch=main', project]);
