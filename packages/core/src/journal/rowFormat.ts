@@ -28,6 +28,7 @@ export interface RowFormatSettings {
   readonly chat?: {
     readonly includeInContext: boolean;
     readonly toolFormat?: 'openai';
+    readonly estimatorKey?: string;
   };
   readonly anthropic?: {
     readonly cache: 'off' | '5m' | '1h';

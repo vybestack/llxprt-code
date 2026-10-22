@@ -43,15 +43,48 @@ import {
 } from './chat-length-facts.js';
 
 export const PLAIN_CHAT_FORMAT_REV = 1;
+export type ChatUnitTokenMeasurer = (
+  messages: readonly unknown[],
+) => Promise<number>;
 const jsonBytes = (value: unknown): number =>
   Buffer.byteLength(JSON.stringify(value), 'utf8');
+
+function estimateMediaMessage(
+  pending: readonly MediaBlock[],
+): readonly unknown[] {
+  return pending.length === 0
+    ? []
+    : [
+        {
+          role: 'user' as const,
+          content: [
+            {
+              type: 'text' as const,
+              text: pending.some(
+                (block) => classifyMediaBlock(block) === 'video',
+              )
+                ? '[Media from tool response]'
+                : '[Images from tool response]',
+            },
+            ...pending.flatMap((block) => {
+              const part = convertBlockToPart(block);
+              return part === null ? [] : [part];
+            }),
+          ],
+        },
+      ];
+}
 
 function factsOf(
   row: IContent,
   stripped: boolean,
   settings: RowFormatSettings,
   previous: readonly string[],
-): { facts: ChatUnitLengthFacts; lastIds: readonly string[] } {
+): {
+  facts: ChatUnitLengthFacts;
+  lastIds: readonly string[];
+  messages: readonly unknown[];
+} {
   const measured = measurableChatRow(
     stripped ? removeThinkingFromContent(row) : row,
   );
@@ -94,6 +127,10 @@ function factsOf(
     return { bytes: jsonBytes(message) + measured.userBytes, dropped };
   });
   return {
+    messages: [
+      ...messages.filter((_message, index) => !facts[index].dropped),
+      ...estimateMediaMessage(pending),
+    ],
     facts: {
       speaker: row.speaker,
       messages: facts,
@@ -132,15 +169,17 @@ async function measure(
   snapshot: VersionSnapshot,
   entry: RowEntry,
   settings: RowFormatSettings,
+  count?: ChatUnitTokenMeasurer,
 ): Promise<RowLengthFacts> {
   supported(settings);
   const source = await JournalTailSource.create(snapshot, []);
-  return measurePlans(journalEntryPlans(source, entry), settings);
+  return measurePlans(journalEntryPlans(source, entry), settings, count);
 }
 
 async function measurePlans(
   plans: AsyncIterable<JournalResponsePlan>,
   settings: RowFormatSettings,
+  count?: ChatUnitTokenMeasurer,
 ): Promise<RowLengthFacts> {
   let summary = identitySlotSummary('chat');
   const lens: Array<readonly [ChatUnitLengthFacts, ChatUnitLengthFacts]> = [];
@@ -159,6 +198,14 @@ async function measurePlans(
     lens.push([kept.facts, removed.facts]);
     summary = composeSlotSummaries(summary, {
       kind: 'chat',
+      ...(count === undefined
+        ? {}
+        : {
+            tokens: [
+              await count(kept.messages),
+              await count(removed.messages),
+            ] as const,
+          }),
       variants: [chatUnitSummary(kept.facts), chatUnitSummary(removed.facts)],
     });
   }
@@ -172,14 +219,20 @@ async function measurePlans(
 
 export function plainChatLengthRegistration(
   settings: RowFormatSettings,
+  count?: ChatUnitTokenMeasurer,
 ): RowFormatRegistration {
   supported(settings);
-  return { settings, measure };
+  return {
+    settings,
+    measure: (snapshot, entry, captured) =>
+      measure(snapshot, entry, captured, count),
+  };
 }
 
 export interface StoredChatMessagePlan {
   readonly bytes: number;
   readonly items: number;
+  readonly tokens: number;
   readonly key: bigint;
   readonly generation: number;
   readonly settings: RowFormatSettings;
@@ -228,6 +281,7 @@ export function planStoredChatMessages(
     flush =
       Number(end >= 3) + chatMediaFrameBytes(end % 3 === 2) + root.p[state];
   return Object.freeze({
+    tokens: summary.tokens?.[selected] ?? 0,
     bytes:
       2 +
       jsonBytes({ role: 'system', content: systemInstruction }) +
@@ -246,6 +300,7 @@ export async function planRequestChatMessages(
   settings: RowFormatSettings,
   selected: 0 | 1,
   systemInstruction: string,
+  count?: ChatUnitTokenMeasurer,
 ): Promise<StoredChatMessagePlan> {
   const base = planStoredChatMessages(
     snapshot,
@@ -263,7 +318,7 @@ export async function planRequestChatMessages(
   const summary = await indexed.formatSummary(
     snapshot,
     slot,
-    async (plans) => (await measurePlans(plans, settings)).summary,
+    async (plans) => (await measurePlans(plans, settings, count)).summary,
   );
   return planStoredChatMessages(
     snapshot,

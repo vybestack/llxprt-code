@@ -4,6 +4,7 @@ import { isSanctionedOpenAIO200kModel } from '../openai/openaiModelPolicy.js';
 import { Gpt56SourceProjection } from './gpt56-source-projection.js';
 import { estimateSourceThroughFamilyRegistry } from './source-family-estimator.js';
 import { estimateGpt56PromptFromSources } from './gpt56-source-prompt-estimator.js';
+import { NativeChatEstimateProjection } from '../openai/native-chat-estimate.js';
 
 export function withGpt56DiskSources(
   factory: RuntimeTokenizerFactory,
@@ -13,6 +14,8 @@ export function withGpt56DiskSources(
   return {
     ...factory,
     estimatePrompt: (request) => {
+      if (request.finalizedProjection instanceof NativeChatEstimateProjection)
+        return request.finalizedProjection.estimate(request, factory);
       if (!(request.finalizedProjection instanceof Gpt56SourceProjection))
         return factory.estimatePrompt(request);
       const signals = [signal, request.finalizedProjection.signal].filter(

@@ -180,6 +180,14 @@ function composeChatVariant(
 
 function composeChat(left: ChatSummary, right: ChatSummary): ChatSummary {
   return {
+    ...(left.tokens === undefined && right.tokens === undefined
+      ? {}
+      : {
+          tokens: [
+            (left.tokens?.[0] ?? 0) + (right.tokens?.[0] ?? 0),
+            (left.tokens?.[1] ?? 0) + (right.tokens?.[1] ?? 0),
+          ] as const,
+        }),
     kind: 'chat',
     variants: [
       composeChatVariant(left.variants[0], right.variants[0]),

@@ -56,6 +56,7 @@ export interface AnthropicSummary {
 export interface ChatSummary {
   readonly kind: 'chat';
   readonly variants: Pair<ChatVariant>;
+  readonly tokens?: Pair<number>;
 }
 
 export interface ResponsesSummary {
@@ -99,7 +100,7 @@ export const SLOT_SUMMARY_LAYOUT = {
     padding: [
       [127, 128],
       [255, 256],
-      [256, 296],
+      [272, 296],
     ],
   },
   responses: {
@@ -204,6 +205,8 @@ function decodeAnthropic(view: DataView): AnthropicSummary {
 
 function encodeChat(view: DataView, summary: ChatSummary): void {
   const at = SLOT_SUMMARY_LAYOUT.chat;
+  putU64(view, 256, 'Chat kept tokens', summary.tokens?.[0] ?? 0);
+  putU64(view, 264, 'Chat stripped tokens', summary.tokens?.[1] ?? 0);
   for (const index of [0, 1] as const) {
     const base = at.variants[index];
     const variant = summary.variants[index];
@@ -290,6 +293,14 @@ export function decodeSlotSummary(
     const at = SLOT_SUMMARY_LAYOUT.chat;
     return {
       kind,
+      ...(getU64(view, 256, 'tokens') === 0 && getU64(view, 264, 'tokens') === 0
+        ? {}
+        : {
+            tokens: [
+              getU64(view, 256, 'tokens'),
+              getU64(view, 264, 'tokens'),
+            ] as const,
+          }),
       variants: [
         decodeChatVariant(view, at.variants[0]),
         decodeChatVariant(view, at.variants[1]),

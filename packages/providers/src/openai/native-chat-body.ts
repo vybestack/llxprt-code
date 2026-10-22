@@ -18,6 +18,7 @@ import { getRequestSignal } from '../utils/abortSignal.js';
 import { nativeChatMessages, nativeChatValue } from './native-chat-messages.js';
 import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { createChatContinuation } from './OpenAIChatContinuation.js';
+import { NativeChatEstimateProjection } from './native-chat-estimate.js';
 import type {
   ChatRowInput,
   RequestContext,
@@ -122,6 +123,34 @@ async function prepareNativeChatBody(
   return { spool, messageCount: plan.items, release: () => spool.dispose() };
 }
 
+function nativeChatSettings(
+  options: NormalizedGenerateChatOptions,
+): RowFormatSettings {
+  return {
+    formatId: 'openai-chat:plain',
+    formatRev: 1,
+    model: options.resolved.model,
+    endpoint: options.resolved.baseURL ?? '',
+    isOAuth: false,
+    toolNameTransform: 'none',
+    supportsUrlImages: true,
+    reasoningEnabled: false,
+    reasoningFieldName: 'reasoning_content',
+    mediaPdfEnabled: false,
+    unsupportedMedia: 'notice',
+    outputLimits: parseOutputLimits(options.invocation.ephemerals),
+    chat: {
+      toolFormat: 'openai',
+      includeInContext: Boolean(
+        readInvocationPolicyValue(
+          options.invocation.ephemerals,
+          'reasoning.includeInContext',
+        ),
+      ),
+    },
+  };
+}
+
 export async function prepareNativePlainRequest(
   envelope: Readonly<Record<string, unknown>>,
   rows: ProviderRequestRows,
@@ -134,42 +163,48 @@ export async function prepareNativePlainRequest(
     'spool' | 'messageCount' | 'release' | 'estimate' | 'dump' | 'continuation'
   >
 > {
-  if (use.estimate || use.dump)
-    throw new Error(
-      'Native plain Chat estimate and dump projections are not installed',
-    );
+  if (use.dump)
+    throw new Error('Native plain Chat dump projection is not installed');
+  const settings = nativeChatSettings(options);
   const body = await prepareNativeChatBody(
     envelope,
     rows,
     options,
-    {
-      formatId: 'openai-chat:plain',
-      formatRev: 1,
-      model: options.resolved.model,
-      endpoint: options.resolved.baseURL ?? '',
-      isOAuth: false,
-      toolNameTransform: 'none',
-      supportsUrlImages: true,
-      reasoningEnabled: false,
-      reasoningFieldName: 'reasoning_content',
-      mediaPdfEnabled: false,
-      unsupportedMedia: 'notice',
-      outputLimits: parseOutputLimits(options.invocation.ephemerals),
-      chat: {
-        toolFormat: 'openai',
-        includeInContext: Boolean(
-          readInvocationPolicyValue(
-            options.invocation.ephemerals,
-            'reasoning.includeInContext',
-          ),
-        ),
-      },
-    },
+    settings,
     rowInput,
   );
+  const native = rows.native;
+  if (native === undefined)
+    throw new Error('Native Chat requires indexed request rows');
+  const selected =
+    readInvocationPolicyValue(
+      options.invocation.ephemerals,
+      'reasoning.stripFromContext',
+    ) === 'all'
+      ? 1
+      : 0;
+  const projection = use.estimate
+    ? new NativeChatEstimateProjection(
+        native,
+        settings,
+        selected,
+        options.systemInstruction ?? '',
+        envelope.tools,
+        getRequestSignal(options),
+      )
+    : undefined;
   return {
     ...body,
-    estimate: undefined,
+    estimate:
+      projection === undefined
+        ? undefined
+        : {
+            projection,
+            unsupportedMedia: [],
+            discard: () => {
+              void projection.dispose();
+            },
+          },
     dump: undefined,
     continuation: createChatContinuation({
       envelope,

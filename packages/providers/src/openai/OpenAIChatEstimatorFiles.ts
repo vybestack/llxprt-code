@@ -7,6 +7,7 @@ import {
 } from '../runtime/prompt-estimator-files.js';
 import type { MediaCategory } from '../utils/mediaUtils.js';
 import type { ChatMessageItem } from './OpenAIChatBodyBuilder.js';
+import type { NativeChatEstimateProjection } from './native-chat-estimate.js';
 
 /** The chat protocol carries images only; every other media is a placeholder. */
 const isSupportedChatMedia = (
@@ -15,7 +16,11 @@ const isSupportedChatMedia = (
 ): boolean => category === 'image';
 
 /** What a chat projection owns: its prompt files and the media it dropped. */
-export type ChatPromptEstimate = PromptEstimate;
+export interface ChatPromptEstimate extends Omit<PromptEstimate, 'projection'> {
+  readonly projection:
+    | PromptEstimate['projection']
+    | NativeChatEstimateProjection;
+}
 
 /** The prompt files of a chat body (`messages` and `tools`). */
 export type ChatEstimatorFiles = PromptEstimatorFiles;
