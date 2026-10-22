@@ -1,3 +1,22 @@
+# 8192 pending-token compaction boundaries, 2026-10-21
+
+[W26-SOURCE-BOUND-PENDINGTOKEN-COMPACTION-PROOF.json](W26-SOURCE-BOUND-PENDINGTOKEN-COMPACTION-PROOF.json) binds **94 passes, zero failures/skips and 2,367 assertions across 18 complete serial files**, ten scoped gates, four restored controls and exact source bridges. The only reused-file inventory difference is the independent new core compaction test's explicit present-version type narrowing; that file and all gates ran fresh.
+
+| Obligation | Evidence and limit |
+| --- | --- |
+| Exact root artifact | Once-only original 8192 RED logs exact recorder path, `wx+`, stack, version/pin/queue state and unchanged 103980812-byte threshold. Diagnostic logging restored byte-exact. The diagnostic receipt flags an unused fixture recording-property addition during the run; it is not presented as a pristine whole-inventory run. |
+| Pinned strict denial | New `pending-token-compaction-pinned`: unchanged creating matcher, zero paths across roots, actual request and recorder readpins, full 8192 independent array/old-disk/token/range/history/native-and-old-durable comparison. No retained decoded-history array in these pins. |
+| Unpinned persistent replacement | New `pending-token-compaction-live`: no extra store pins, independent old descriptor, exact single compactor candidate and rename destination, real compactionDue, copy shrinks 129206218 to 20421065 bytes, new fileId with unchanged sequence/tag/aggregate; identical 8192 semantic comparisons and actual post-operation ranking query. No substring/path-wide exemption. |
+| Copy preserves facts | New core `tool-ranking-compaction`: direct persisted/pending tree queries without fill, all rank values, 65 summary ranges, owners/labels/rows and relocated checkpoint row/id roots. Scalar ranking facts contain labels and tree IDs, not copied file offsets. No new namespace support was assumed or added. |
+| Falsification | Old pending disk ranking fails the pinned no-file result matcher with the denied-creation cause. Zeroed ranking parts, zeroed summary count and new groupTag fail value/identity assertions, not runtime errors. Each production mutation restores by cmp/SHA256. |
+| Original acceptance | Original mixed contracts file remains enabled and unchanged, with its original 8192 all-creation denial RED. Paired new passes are not a full-file or original-RED-to-green claim. |
+| Existing lifecycle | Original #3919 readerLifetime/readerCleanup, compaction refusal/rearm/poison and retained-version/copy/identity tests run unchanged. No production pin lifecycle change. |
+| Scope limits | Public ProviderNormalizationDisk/ChatSession and Phase 6 normalization/header/request/body/key/message/tokenizer spools/guards remain RED/open. #3917 and two explicit-old durable capture REDs remain separate, without retry or suppression. Full cold structural ranking refill, pending/stale capacity/accounting, global LENS/live bytes, whole heap and aggregate cache/pin capacity, Phase 8 reservations, W23/W25/cutover, cold Mistral, defaults and Phase 9 remain open. |
+
+All 1,204 preservation hashes and inherited dirty memory match; 306 unrelated declarations and raw recovery remain untouched and unstaged. No production lifecycle/policy change, original assertion change, enforcement weakening, default flip, cleanup, OCR, push or merge. Review skipped per Andrew 2026-10-09.
+
+---
+
 # Pending-token native ranking proof and retained compaction RED, 2026-10-21
 
 [W26-SOURCE-BOUND-PENDINGTOKEN-PROOF.json](W26-SOURCE-BOUND-PENDINGTOKEN-PROOF.json) binds first implementation `9dde0de75`, follow-up `e5711114135737a577821dd718ce261b398941d8`, **98 passes, zero failures/skips and 500,119 assertions in 20 complete serial files**, nine scoped gates and five cmp/hash-restored assertion controls. The two existing ranking/mirror model files supply 499,356 of those assertions. Final production/test inventory digest: `5a92f130391dc0f85066645eba9da54366604ff3126fdaa4ba520f886299c148`. Raw root: `tmp/p5/w26-pending-token-run-aq/`. Reused receipts preserve executed-test/production/shared-helper bytes; their other-test differences are listed rather than relabeled as whole-inventory matches.

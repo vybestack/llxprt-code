@@ -1,0 +1,1484 @@
+{
+  "date": "2026-10-22T00:34:50.113Z",
+  "status": "Separate 8192 pinned-denial and unpinned persistent-compaction parity pass. Original all-creation-denial 8192 contract stays enabled and RED unchanged. W26 and Phase5 remain open.",
+  "base": "ab0ba098f79",
+  "production": "e5711114135737a577821dd718ce261b398941d8",
+  "firstGreen": "ddef55c15562bee08706d5960c71d186ccb944ce",
+  "source": {
+    "head": "ddef55c15562bee08706d5960c71d186ccb944ce",
+    "hash": "b530eaef2862b6a23865587e05d07028b931f3ced83d5fcbfd12eedd89eb8ff8",
+    "count": 9087,
+    "manifest": "tmp/p5/w26-pending-compaction-run-ar/finish-source.json",
+    "owned": [
+      {
+        "path": "packages/core/src/journal/tool-ranking-compaction.test.ts",
+        "sha256": "fb8d149a9674e9a49c52b7893c06d075cc0a6313227a71d071244af05144cf6e"
+      },
+      {
+        "path": "packages/core/src/journal/mirrorApply.ts",
+        "sha256": "f596aaf521856402483d72803186bf684bed2793a3377053093b780143cb074b"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/support/native-value-fixture.ts",
+        "sha256": "dfa4309b2104df6817ee2e3bf6d0a94611a5c62e3f71e1ecb92c45f2f457bb53"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/support/operation-file-creates.ts",
+        "sha256": "a6d5bb77f7b2c578c3e930c88fab3f52bad0dc143f047d3f6485987e351e2b99"
+      },
+      {
+        "path": "packages/agents/src/compression/toolResultTruncator.ts",
+        "sha256": "9b588da9b8d8de8d070ae7f6c104b6d2e4b7c1b53583dd493a365480eda4b522"
+      },
+      {
+        "path": "packages/agents/src/compression/native-tool-publication.ts",
+        "sha256": "9128d5e9f161c182e3abae68e66232d69a70eae1e7c9675c483fdf316809addb"
+      },
+      {
+        "path": "packages/agents/src/compression/native-tool-ranking.ts",
+        "sha256": "0081f0519527944ed64f942703ebd8752213518c03a4ec062883ab15bae61e5e"
+      },
+      {
+        "path": "packages/agents/src/compression/native-pending-tool-ranking.ts",
+        "sha256": "db2e03829bdd65533808b8ae5f2546fb7234d8f88aef9ed23ae11a9475659a1e"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/pending-token-compaction-live.test.ts",
+        "sha256": "08257edf37f529f8a76983239450bd46626e587f0e86364a17cc8b9c2553be99"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/pending-token-native-helpers.ts",
+        "sha256": "a167d16ad37df429608f0c723295fb6eb184ba9cd3581e74620ac11706a35c1e"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/pending-token-native-contracts.test.ts",
+        "sha256": "60e22ac2c9bdd8a058ea079e59e506bd46a5542e850a902a878b5363de1c3bec"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/pending-token-compaction-parity.ts",
+        "sha256": "2c559d2ff164cc932ced802252531274ac4c4b922ba18f3b156aadb8a1e221ce"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/pending-token-compaction-observer.ts",
+        "sha256": "95214862863553b244da86c0f164a5ee8a91768866dd1cfc75238121396e1695"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/pending-token-native-lifetime.test.ts",
+        "sha256": "200c02b8ed1cacc145c6d438208b555cd60f76dfe4a19c181e619f9f3661141a"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/pending-token-native-values.test.ts",
+        "sha256": "b082bf6e605acae3a6bd9e2333b95d9654cee61e8734dcf6887f61739beb84e0"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/pending-token-native-owners.test.ts",
+        "sha256": "16cd4ea7efdc235efbc1bc35619700f372e5ec8294d961d7390ad3ff93a029f8"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/pending-token-native-failures.test.ts",
+        "sha256": "5ab7520c7f4ea36133a9c4d4a7ade28939ef2d17f7e262dbf0d2001596f97f72"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/pending-token-native-ranking.test.ts",
+        "sha256": "0e4b78540bc0ef2d88827a8750d1d9742c1d00cb3a9eb076140f50c77eb56e24"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/pending-token-native-tail.test.ts",
+        "sha256": "7418fd34240d4c1f59a7f9358b04069903b48977427324a379a22824fa9673d1"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/pending-token-compaction-pinned.test.ts",
+        "sha256": "7969986181e982a7c0309b320c0e2cc42f799e3971d8d622a7ec36a9713eba83"
+      }
+    ]
+  },
+  "rawRoot": "tmp/p5/w26-pending-compaction-run-ar/",
+  "root": {
+    "events": [
+      {
+        "event": "COMPACTION_DUE",
+        "path": "(unlinked journal)",
+        "unlinked": true,
+        "pins": 5,
+        "queued": 0,
+        "rearmAt": 0,
+        "deferredByPin": false,
+        "version": {
+          "commitSeq": 3,
+          "groupTag": "25835269004386800",
+          "durableEnd": 165390535,
+          "rows": 8192,
+          "liveBytes": 5738374,
+          "ckptBytes": 0
+        },
+        "threshold": 103980812
+      },
+      {
+        "event": "COMPACTION_DUE",
+        "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/native-compression-values-q2mDrp/session-2026-10-22T00-08-26-0c718285-d642-4092-b662-cd025ddc6e31-suffix-test.llxj",
+        "unlinked": false,
+        "pins": 0,
+        "queued": 0,
+        "rearmAt": 0,
+        "deferredByPin": false,
+        "version": {
+          "commitSeq": 5,
+          "groupTag": "8949566287641802",
+          "durableEnd": 129206218,
+          "rows": 8192,
+          "liveBytes": 5738374,
+          "ckptBytes": 0
+        },
+        "threshold": 103980812
+      },
+      {
+        "event": "DENIED_CREATE",
+        "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/native-compression-values-q2mDrp/session-2026-10-22T00-08-26-0c718285-d642-4092-b662-cd025ddc6e31-suffix-test.llxj.compact",
+        "flags": "wx+",
+        "stack": "Error\n    at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/compression/__tests__/support/operation-file-creates.ts:85:121)\n    at unknown\n    at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/recording/journalRecordingService.ts:486:42)\n    at createJournal (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/journal/journalWriterOpen.ts:46:37)\n    at withNewFile (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/journal/versionCopy.ts:224:24)\n    at writeCompactionCandidate (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/journal/storeCompaction.ts:70:24)\n    at async compactOnce (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/journal/journalStore.ts:596:29)\n    at processTicksAndRejections (native:7:39)"
+      },
+      {
+        "event": "COMPACTION_DUE",
+        "path": "(unlinked journal)",
+        "unlinked": true,
+        "pins": 5,
+        "queued": 0,
+        "rearmAt": 0,
+        "deferredByPin": true,
+        "version": {
+          "commitSeq": 4,
+          "groupTag": "58353480420588521",
+          "durableEnd": 247183809,
+          "rows": 8192,
+          "liveBytes": 5640341,
+          "ckptBytes": 0
+        },
+        "threshold": 103784746
+      },
+      {
+        "event": "COMPACTION_DUE",
+        "path": "(unlinked journal)",
+        "unlinked": true,
+        "pins": 0,
+        "queued": 0,
+        "rearmAt": 0,
+        "deferredByPin": false,
+        "version": {
+          "commitSeq": 4,
+          "groupTag": "58353480420588521",
+          "durableEnd": 247183809,
+          "rows": 8192,
+          "liveBytes": 5640341,
+          "ckptBytes": 0
+        },
+        "threshold": 103784746
+      }
+    ],
+    "diagnosticRestoration": [
+      {
+        "path": "packages/core/src/journal/journalStore.ts",
+        "hash": "4ac5b2c683d7a6e35ad256e0b6b0ae56f59924b29165292ea96ce0ea3d4bc81b",
+        "restored": true
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/support/operation-file-creates.ts",
+        "hash": "a6d5bb77f7b2c578c3e930c88fab3f52bad0dc143f047d3f6485987e351e2b99",
+        "restored": true
+      }
+    ],
+    "receipt": {
+      "name": "root-repro-8192",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/pending-token-native-contracts.test.ts",
+        "--test-name-pattern",
+        "8192",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 45532,
+      "pid": 45578,
+      "start": "2026-10-22T00:08:25.794Z",
+      "end": "2026-10-22T00:10:50.267Z",
+      "code": 1,
+      "signal": null,
+      "sourceHash": "ab5f0b1ef6549c2dc5cc25b190cdf5e946afe318e458d352c8905bf5e673f550",
+      "sourceChanged": true,
+      "log": "tmp/p5/w26-pending-compaction-run-ar/root-repro-8192.log",
+      "logHash": "3fb63e2570108e01099331061ff45b1ec8ace9ae8a43d9571e5726af203a0d67",
+      "summary": [
+        " 0 pass",
+        " 1 fail",
+        " 9 expect() calls",
+        "Ran 1 test across 1 file. [144.19s]"
+      ]
+    },
+    "scope": "Once-only original 8192 diagnostic execution. Logging-only instrumentation was byte-restored. The sourceChanged flag records the helper acquiring an unused recording property during this diagnostic run; original test semantics and creating matcher were unchanged. This diagnostic is excluded from passing totals."
+  },
+  "lanes": {
+    "pinned": {
+      "size": 8192,
+      "replaced": 2,
+      "projected": 869676,
+      "files": [],
+      "directories": [],
+      "pins": [
+        "Existing HistoryService.openCompressionInput request snapshot of nameless primary",
+        "Existing recording.session().store snapshot of the named durable recorder"
+      ],
+      "guard": "Unchanged operationFileCreates(action, true), every intercepted creating API across roots"
+    },
+    "live": {
+      "size": 8192,
+      "replaced": 2,
+      "projected": 869676,
+      "extraStorePins": 0,
+      "files": "Exactly [compactionCandidatePath(recording.path)] under the unchanged all-roots creating matcher in observation mode",
+      "ownership": "Exact candidate and destination asserted at the filesystem rename seam against the actual recorder store and unchanged compactionDue policy",
+      "identity": "New fileId, same commitSeq/groupTag and rootAggregate, smaller copy; old read-only descriptor keeps complete pre-operation values",
+      "ranking": "Actual post-operation ranking query at 8192, plus direct post-copy persisted/pending rank, summary, owner and checkpoint-root queries without a fill at 65"
+    }
+  },
+  "tests": [
+    {
+      "name": "final-pending-token-compaction-pinned",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/pending-token-compaction-pinned.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 87387,
+      "pid": 87401,
+      "start": "2026-10-22T00:21:35.365Z",
+      "end": "2026-10-22T00:23:50.257Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "a49291168b24c2d59e79b81a3deb83926640ae40c67e8a8b77a0845ba3f2cbc5",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-pending-compaction-run-ar/final-pending-token-compaction-pinned.log",
+      "logHash": "48365383f1b809b7b1db6c738b8e5313d5638245fdc3ee10b5c9a5f14cd168d0",
+      "summary": [
+        "PENDING_COMPACTION_PARITY {\"size\":8192,\"replaced\":2,\"projected\":869676,\"historyPath\":\"/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/native-compression-values-fzzdX3/session-2026-10-22T00-21-35-aa3ed385-9721-42dc-a297-4670caa06148-suffix-test.llxj\",\"recording\":\"/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/native-compression-values-fzzdX3/session-2026-10-22T00-21-35-aa3ed385-9721-42dc-a297-4670caa06148-suffix-test.llxj\",\"files\":{\"directories\":[],\"files\":[]}}",
+        " 1 pass",
+        " 0 fail",
+        " 18 expect() calls",
+        "Ran 1 test across 1 file. [134.34s]"
+      ]
+    },
+    {
+      "name": "final-pending-token-compaction-live",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/pending-token-compaction-live.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 87387,
+      "pid": 91060,
+      "start": "2026-10-22T00:23:50.466Z",
+      "end": "2026-10-22T00:26:06.680Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "a49291168b24c2d59e79b81a3deb83926640ae40c67e8a8b77a0845ba3f2cbc5",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-pending-compaction-run-ar/final-pending-token-compaction-live.log",
+      "logHash": "684b89849cf2acb2a402e4200dfeaac59b64a7fc65879233e2b65b11ed710343",
+      "summary": [
+        "PENDING_COMPACTION_SWAP {\"path\":\"/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/native-compression-values-zaCjd1/session-2026-10-22T00-23-51-514176ba-c205-4f57-b199-7c423e10f9c6-suffix-test.llxj\",\"candidate\":\"/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/native-compression-values-zaCjd1/session-2026-10-22T00-23-51-514176ba-c205-4f57-b199-7c423e10f9c6-suffix-test.llxj.compact\",\"beforeBytes\":129206218,\"afterBytes\":20421065,\"commitSeq\":5,\"groupTag\":\"22396955104009661\",\"beforeFileId\":\"9f2f2ca3facdf11a7a1a411fc2a78b70\",\"afterFileId\":\"a94d13bebc39927dcc184090bf340076\"}",
+        "PENDING_COMPACTION_PARITY {\"size\":8192,\"replaced\":2,\"projected\":869676,\"historyPath\":\"/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/native-compression-values-zaCjd1/session-2026-10-22T00-23-51-514176ba-c205-4f57-b199-7c423e10f9c6-suffix-test.llxj\",\"recording\":\"/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/native-compression-values-zaCjd1/session-2026-10-22T00-23-51-514176ba-c205-4f57-b199-7c423e10f9c6-suffix-test.llxj\",\"files\":{\"directories\":[],\"files\":[\"/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/native-compression-values-zaCjd1/session-2026-10-22T00-23-51-514176ba-c205-4f57-b199-7c423e10f9c6-suffix-test.llxj.compact\"]}}",
+        " 1 pass",
+        " 0 fail",
+        " 28 expect() calls",
+        "Ran 1 test across 1 file. [133.82s]"
+      ]
+    },
+    {
+      "name": "final-pending-token-native-values",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/pending-token-native-values.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 87387,
+      "pid": 95139,
+      "start": "2026-10-22T00:26:07.989Z",
+      "end": "2026-10-22T00:26:09.125Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "a49291168b24c2d59e79b81a3deb83926640ae40c67e8a8b77a0845ba3f2cbc5",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-pending-compaction-run-ar/final-pending-token-native-values.log",
+      "logHash": "d97ede22793a590c2a7f273347dcad7d2dcd4ec44dd24e4e48d463facc9041fb",
+      "summary": [
+        " 3 pass",
+        " 0 fail",
+        " 12 expect() calls",
+        "Ran 3 tests across 1 file. [853.00ms]"
+      ]
+    },
+    {
+      "name": "final-pending-token-native-failures",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/pending-token-native-failures.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 87387,
+      "pid": 95193,
+      "start": "2026-10-22T00:26:09.333Z",
+      "end": "2026-10-22T00:26:10.409Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "a49291168b24c2d59e79b81a3deb83926640ae40c67e8a8b77a0845ba3f2cbc5",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-pending-compaction-run-ar/final-pending-token-native-failures.log",
+      "logHash": "ba752c041b711425d99307e4995cf0dfcc17430f0031c0d81c86e6511d0b0d5c",
+      "summary": [
+        " 4 pass",
+        " 0 fail",
+        " 11 expect() calls",
+        "Ran 4 tests across 1 file. [835.00ms]"
+      ]
+    },
+    {
+      "name": "final-pending-token-native-ranking",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/pending-token-native-ranking.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 87387,
+      "pid": 95237,
+      "start": "2026-10-22T00:26:10.665Z",
+      "end": "2026-10-22T00:26:11.507Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "a49291168b24c2d59e79b81a3deb83926640ae40c67e8a8b77a0845ba3f2cbc5",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-pending-compaction-run-ar/final-pending-token-native-ranking.log",
+      "logHash": "59a2f4b71a8f90909d149ecad79d80321e6a4bd26e03ef787b3c9ed62a3f92c2",
+      "summary": [
+        " 1 pass",
+        " 0 fail",
+        " 6 expect() calls",
+        "Ran 1 test across 1 file. [596.00ms]"
+      ]
+    },
+    {
+      "name": "final-tool-ranking-native",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/tool-ranking-native.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 87387,
+      "pid": 95263,
+      "start": "2026-10-22T00:26:11.710Z",
+      "end": "2026-10-22T00:26:12.757Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "a49291168b24c2d59e79b81a3deb83926640ae40c67e8a8b77a0845ba3f2cbc5",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-pending-compaction-run-ar/final-tool-ranking-native.log",
+      "logHash": "64de37eddb16d3c1676f633a2e64549f9abb6d95179e1dcdf42c089706e98a45",
+      "summary": [
+        " 4 pass",
+        " 0 fail",
+        " 12 expect() calls",
+        "Ran 4 tests across 1 file. [800.00ms]"
+      ]
+    },
+    {
+      "name": "final-pendingContextWindowEnforcement.toolTruncation",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/pendingContextWindowEnforcement.toolTruncation.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 87387,
+      "pid": 95307,
+      "start": "2026-10-22T00:26:12.973Z",
+      "end": "2026-10-22T00:26:13.807Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "a49291168b24c2d59e79b81a3deb83926640ae40c67e8a8b77a0845ba3f2cbc5",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-pending-compaction-run-ar/final-pendingContextWindowEnforcement.toolTruncation.log",
+      "logHash": "147c4ae6a40c4c216d6b0ecc04357c84c3a84f81d1c9e6aabc6566a1b6e6edb0",
+      "summary": [
+        " 8 pass",
+        " 0 fail",
+        " 17 expect() calls",
+        "Ran 8 tests across 1 file. [592.00ms]"
+      ]
+    },
+    {
+      "name": "final-journalStore.compaction",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/journalStore.compaction.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 87387,
+      "pid": 95334,
+      "start": "2026-10-22T00:26:14.013Z",
+      "end": "2026-10-22T00:26:14.841Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "a49291168b24c2d59e79b81a3deb83926640ae40c67e8a8b77a0845ba3f2cbc5",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-pending-compaction-run-ar/final-journalStore.compaction.log",
+      "logHash": "0c7d80edb126ea2025e4eaa8c9608ffe6bdd08145f75eb7c1a421632a2c2b22c",
+      "summary": [
+        " 14 pass",
+        " 0 fail",
+        " 43 expect() calls",
+        "Ran 14 tests across 1 file. [581.00ms]"
+      ]
+    },
+    {
+      "name": "final-compaction",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/compaction.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 87387,
+      "pid": 95368,
+      "start": "2026-10-22T00:26:15.061Z",
+      "end": "2026-10-22T00:26:15.685Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "a49291168b24c2d59e79b81a3deb83926640ae40c67e8a8b77a0845ba3f2cbc5",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-pending-compaction-run-ar/final-compaction.log",
+      "logHash": "e28a17eadd9fe30ce0bcd6c189a908694d41f61c484b02919efea886e64758a9",
+      "summary": [
+        " 5 pass",
+        " 0 fail",
+        " 10 expect() calls",
+        "Ran 5 tests across 1 file. [378.00ms]"
+      ]
+    },
+    {
+      "name": "final-journalStore.compaction.identity",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/journalStore.compaction.identity.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 87387,
+      "pid": 95394,
+      "start": "2026-10-22T00:26:15.896Z",
+      "end": "2026-10-22T00:26:16.523Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "a49291168b24c2d59e79b81a3deb83926640ae40c67e8a8b77a0845ba3f2cbc5",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-pending-compaction-run-ar/final-journalStore.compaction.identity.log",
+      "logHash": "59362e73ad838419fbd7dc1819afc854eebdba37a1de48d1c15e0e81ab001317",
+      "summary": [
+        " 3 pass",
+        " 0 fail",
+        " 24 expect() calls",
+        "Ran 3 tests across 1 file. [366.00ms]"
+      ]
+    },
+    {
+      "name": "final-journalStore.compaction.unlinked",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/journalStore.compaction.unlinked.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 87387,
+      "pid": 95419,
+      "start": "2026-10-22T00:26:16.734Z",
+      "end": "2026-10-22T00:26:17.331Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "a49291168b24c2d59e79b81a3deb83926640ae40c67e8a8b77a0845ba3f2cbc5",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-pending-compaction-run-ar/final-journalStore.compaction.unlinked.log",
+      "logHash": "1b4e0a39bea6d389a59f7a18e0e013002646cb32891e8fff0e12babaeb228155",
+      "summary": [
+        " 1 pass",
+        " 0 fail",
+        " 7 expect() calls",
+        "Ran 1 test across 1 file. [350.00ms]"
+      ]
+    },
+    {
+      "name": "final-versionCopy.compaction",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/versionCopy.compaction.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 87387,
+      "pid": 95443,
+      "start": "2026-10-22T00:26:17.538Z",
+      "end": "2026-10-22T00:26:22.383Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "a49291168b24c2d59e79b81a3deb83926640ae40c67e8a8b77a0845ba3f2cbc5",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-pending-compaction-run-ar/final-versionCopy.compaction.log",
+      "logHash": "8592c2db4b1e0dbd7e11d2b507fb680173a8ce6852483df3dd344a08945315ec",
+      "summary": [
+        " 7 pass",
+        " 0 fail",
+        " 2031 expect() calls",
+        "Ran 7 tests across 1 file. [4.59s]"
+      ]
+    },
+    {
+      "name": "final-journalStore.readerLifetime",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/journalStore.readerLifetime.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 87387,
+      "pid": 95591,
+      "start": "2026-10-22T00:26:22.616Z",
+      "end": "2026-10-22T00:26:23.213Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "a49291168b24c2d59e79b81a3deb83926640ae40c67e8a8b77a0845ba3f2cbc5",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-pending-compaction-run-ar/final-journalStore.readerLifetime.log",
+      "logHash": "2d9ae019e976d5e21715bad989be5f453287b78c5dee985d646ba8276cf87640",
+      "summary": [
+        " 11 pass",
+        " 0 fail",
+        " 29 expect() calls",
+        "Ran 11 tests across 1 file. [353.00ms]"
+      ]
+    },
+    {
+      "name": "final-journalStore.readerCleanup",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/journalStore.readerCleanup.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 87387,
+      "pid": 95613,
+      "start": "2026-10-22T00:26:23.419Z",
+      "end": "2026-10-22T00:26:24.060Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "a49291168b24c2d59e79b81a3deb83926640ae40c67e8a8b77a0845ba3f2cbc5",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-pending-compaction-run-ar/final-journalStore.readerCleanup.log",
+      "logHash": "c8abbc36225d7a943ea7389cff7ded8fd34e3280e61638b54aeff1d7117adde2",
+      "summary": [
+        " 3 pass",
+        " 0 fail",
+        " 20 expect() calls",
+        "Ran 3 tests across 1 file. [382.00ms]"
+      ]
+    },
+    {
+      "name": "final-groupWriter",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/groupWriter.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 87387,
+      "pid": 95640,
+      "start": "2026-10-22T00:26:24.298Z",
+      "end": "2026-10-22T00:26:24.766Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "a49291168b24c2d59e79b81a3deb83926640ae40c67e8a8b77a0845ba3f2cbc5",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-pending-compaction-run-ar/final-groupWriter.log",
+      "logHash": "ac433549791c59267d3365efcd5ee6b9e4cd568ad5778278c69f31a7c257a8d4",
+      "summary": [
+        " 24 pass",
+        " 0 fail",
+        " 73 expect() calls",
+        "Ran 24 tests across 1 file. [219.00ms]"
+      ]
+    },
+    {
+      "name": "final-journal-context-span-lifecycle",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/services/history/journal-context-span-lifecycle.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 87387,
+      "pid": 95667,
+      "start": "2026-10-22T00:26:24.994Z",
+      "end": "2026-10-22T00:26:25.989Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "a49291168b24c2d59e79b81a3deb83926640ae40c67e8a8b77a0845ba3f2cbc5",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-pending-compaction-run-ar/final-journal-context-span-lifecycle.log",
+      "logHash": "b813329fd562bdbec8df25853d296f4f73a1bc58a52fd652ea45fe3cb49072a2",
+      "summary": [
+        " 2 pass",
+        " 0 fail",
+        " 6 expect() calls",
+        "Ran 2 tests across 1 file. [755.00ms]"
+      ]
+    },
+    {
+      "name": "final-tool-ranking-invalidation",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/tool-ranking-invalidation.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 87387,
+      "pid": 95702,
+      "start": "2026-10-22T00:26:26.195Z",
+      "end": "2026-10-22T00:26:26.830Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "a49291168b24c2d59e79b81a3deb83926640ae40c67e8a8b77a0845ba3f2cbc5",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-pending-compaction-run-ar/final-tool-ranking-invalidation.log",
+      "logHash": "b562126a4be3a088b9fae644acac56c992b7c2d8c548a52d42b62a7bc8f8264b",
+      "summary": [
+        " 1 pass",
+        " 0 fail",
+        " 8 expect() calls",
+        "Ran 1 test across 1 file. [396.00ms]"
+      ]
+    },
+    {
+      "name": "finish-tool-ranking-compaction",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/tool-ranking-compaction.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 18177,
+      "pid": 22085,
+      "start": "2026-10-22T00:28:01.369Z",
+      "end": "2026-10-22T00:28:02.150Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "b530eaef2862b6a23865587e05d07028b931f3ced83d5fcbfd12eedd89eb8ff8",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-pending-compaction-run-ar/finish-tool-ranking-compaction.log",
+      "logHash": "9316bc15989618578648bdf3de6987180f811dd4e0c8a4501f77147f8b5d0cbe",
+      "summary": [
+        " 1 pass",
+        " 0 fail",
+        " 12 expect() calls",
+        "Ran 1 test across 1 file. [512.00ms]"
+      ]
+    }
+  ],
+  "bridges": [
+    {
+      "name": "final-pending-token-compaction-pinned",
+      "sourceHash": "a49291168b24c2d59e79b81a3deb83926640ae40c67e8a8b77a0845ba3f2cbc5",
+      "differences": [
+        "packages/core/src/journal/tool-ranking-compaction.test.ts"
+      ],
+      "productionAndExecutedTestBytesMatch": true,
+      "reason": "Only the independent new core compaction test needed an explicit present-version type narrowing; its assertions and all final scoped gates ran fresh. No production, imported helper or executed test bytes differ."
+    },
+    {
+      "name": "final-pending-token-compaction-live",
+      "sourceHash": "a49291168b24c2d59e79b81a3deb83926640ae40c67e8a8b77a0845ba3f2cbc5",
+      "differences": [
+        "packages/core/src/journal/tool-ranking-compaction.test.ts"
+      ],
+      "productionAndExecutedTestBytesMatch": true,
+      "reason": "Only the independent new core compaction test needed an explicit present-version type narrowing; its assertions and all final scoped gates ran fresh. No production, imported helper or executed test bytes differ."
+    },
+    {
+      "name": "final-pending-token-native-values",
+      "sourceHash": "a49291168b24c2d59e79b81a3deb83926640ae40c67e8a8b77a0845ba3f2cbc5",
+      "differences": [
+        "packages/core/src/journal/tool-ranking-compaction.test.ts"
+      ],
+      "productionAndExecutedTestBytesMatch": true,
+      "reason": "Only the independent new core compaction test needed an explicit present-version type narrowing; its assertions and all final scoped gates ran fresh. No production, imported helper or executed test bytes differ."
+    },
+    {
+      "name": "final-pending-token-native-failures",
+      "sourceHash": "a49291168b24c2d59e79b81a3deb83926640ae40c67e8a8b77a0845ba3f2cbc5",
+      "differences": [
+        "packages/core/src/journal/tool-ranking-compaction.test.ts"
+      ],
+      "productionAndExecutedTestBytesMatch": true,
+      "reason": "Only the independent new core compaction test needed an explicit present-version type narrowing; its assertions and all final scoped gates ran fresh. No production, imported helper or executed test bytes differ."
+    },
+    {
+      "name": "final-pending-token-native-ranking",
+      "sourceHash": "a49291168b24c2d59e79b81a3deb83926640ae40c67e8a8b77a0845ba3f2cbc5",
+      "differences": [
+        "packages/core/src/journal/tool-ranking-compaction.test.ts"
+      ],
+      "productionAndExecutedTestBytesMatch": true,
+      "reason": "Only the independent new core compaction test needed an explicit present-version type narrowing; its assertions and all final scoped gates ran fresh. No production, imported helper or executed test bytes differ."
+    },
+    {
+      "name": "final-tool-ranking-native",
+      "sourceHash": "a49291168b24c2d59e79b81a3deb83926640ae40c67e8a8b77a0845ba3f2cbc5",
+      "differences": [
+        "packages/core/src/journal/tool-ranking-compaction.test.ts"
+      ],
+      "productionAndExecutedTestBytesMatch": true,
+      "reason": "Only the independent new core compaction test needed an explicit present-version type narrowing; its assertions and all final scoped gates ran fresh. No production, imported helper or executed test bytes differ."
+    },
+    {
+      "name": "final-pendingContextWindowEnforcement.toolTruncation",
+      "sourceHash": "a49291168b24c2d59e79b81a3deb83926640ae40c67e8a8b77a0845ba3f2cbc5",
+      "differences": [
+        "packages/core/src/journal/tool-ranking-compaction.test.ts"
+      ],
+      "productionAndExecutedTestBytesMatch": true,
+      "reason": "Only the independent new core compaction test needed an explicit present-version type narrowing; its assertions and all final scoped gates ran fresh. No production, imported helper or executed test bytes differ."
+    },
+    {
+      "name": "final-journalStore.compaction",
+      "sourceHash": "a49291168b24c2d59e79b81a3deb83926640ae40c67e8a8b77a0845ba3f2cbc5",
+      "differences": [
+        "packages/core/src/journal/tool-ranking-compaction.test.ts"
+      ],
+      "productionAndExecutedTestBytesMatch": true,
+      "reason": "Only the independent new core compaction test needed an explicit present-version type narrowing; its assertions and all final scoped gates ran fresh. No production, imported helper or executed test bytes differ."
+    },
+    {
+      "name": "final-compaction",
+      "sourceHash": "a49291168b24c2d59e79b81a3deb83926640ae40c67e8a8b77a0845ba3f2cbc5",
+      "differences": [
+        "packages/core/src/journal/tool-ranking-compaction.test.ts"
+      ],
+      "productionAndExecutedTestBytesMatch": true,
+      "reason": "Only the independent new core compaction test needed an explicit present-version type narrowing; its assertions and all final scoped gates ran fresh. No production, imported helper or executed test bytes differ."
+    },
+    {
+      "name": "final-journalStore.compaction.identity",
+      "sourceHash": "a49291168b24c2d59e79b81a3deb83926640ae40c67e8a8b77a0845ba3f2cbc5",
+      "differences": [
+        "packages/core/src/journal/tool-ranking-compaction.test.ts"
+      ],
+      "productionAndExecutedTestBytesMatch": true,
+      "reason": "Only the independent new core compaction test needed an explicit present-version type narrowing; its assertions and all final scoped gates ran fresh. No production, imported helper or executed test bytes differ."
+    },
+    {
+      "name": "final-journalStore.compaction.unlinked",
+      "sourceHash": "a49291168b24c2d59e79b81a3deb83926640ae40c67e8a8b77a0845ba3f2cbc5",
+      "differences": [
+        "packages/core/src/journal/tool-ranking-compaction.test.ts"
+      ],
+      "productionAndExecutedTestBytesMatch": true,
+      "reason": "Only the independent new core compaction test needed an explicit present-version type narrowing; its assertions and all final scoped gates ran fresh. No production, imported helper or executed test bytes differ."
+    },
+    {
+      "name": "final-versionCopy.compaction",
+      "sourceHash": "a49291168b24c2d59e79b81a3deb83926640ae40c67e8a8b77a0845ba3f2cbc5",
+      "differences": [
+        "packages/core/src/journal/tool-ranking-compaction.test.ts"
+      ],
+      "productionAndExecutedTestBytesMatch": true,
+      "reason": "Only the independent new core compaction test needed an explicit present-version type narrowing; its assertions and all final scoped gates ran fresh. No production, imported helper or executed test bytes differ."
+    },
+    {
+      "name": "final-journalStore.readerLifetime",
+      "sourceHash": "a49291168b24c2d59e79b81a3deb83926640ae40c67e8a8b77a0845ba3f2cbc5",
+      "differences": [
+        "packages/core/src/journal/tool-ranking-compaction.test.ts"
+      ],
+      "productionAndExecutedTestBytesMatch": true,
+      "reason": "Only the independent new core compaction test needed an explicit present-version type narrowing; its assertions and all final scoped gates ran fresh. No production, imported helper or executed test bytes differ."
+    },
+    {
+      "name": "final-journalStore.readerCleanup",
+      "sourceHash": "a49291168b24c2d59e79b81a3deb83926640ae40c67e8a8b77a0845ba3f2cbc5",
+      "differences": [
+        "packages/core/src/journal/tool-ranking-compaction.test.ts"
+      ],
+      "productionAndExecutedTestBytesMatch": true,
+      "reason": "Only the independent new core compaction test needed an explicit present-version type narrowing; its assertions and all final scoped gates ran fresh. No production, imported helper or executed test bytes differ."
+    },
+    {
+      "name": "final-groupWriter",
+      "sourceHash": "a49291168b24c2d59e79b81a3deb83926640ae40c67e8a8b77a0845ba3f2cbc5",
+      "differences": [
+        "packages/core/src/journal/tool-ranking-compaction.test.ts"
+      ],
+      "productionAndExecutedTestBytesMatch": true,
+      "reason": "Only the independent new core compaction test needed an explicit present-version type narrowing; its assertions and all final scoped gates ran fresh. No production, imported helper or executed test bytes differ."
+    },
+    {
+      "name": "final-journal-context-span-lifecycle",
+      "sourceHash": "a49291168b24c2d59e79b81a3deb83926640ae40c67e8a8b77a0845ba3f2cbc5",
+      "differences": [
+        "packages/core/src/journal/tool-ranking-compaction.test.ts"
+      ],
+      "productionAndExecutedTestBytesMatch": true,
+      "reason": "Only the independent new core compaction test needed an explicit present-version type narrowing; its assertions and all final scoped gates ran fresh. No production, imported helper or executed test bytes differ."
+    },
+    {
+      "name": "final-tool-ranking-invalidation",
+      "sourceHash": "a49291168b24c2d59e79b81a3deb83926640ae40c67e8a8b77a0845ba3f2cbc5",
+      "differences": [
+        "packages/core/src/journal/tool-ranking-compaction.test.ts"
+      ],
+      "productionAndExecutedTestBytesMatch": true,
+      "reason": "Only the independent new core compaction test needed an explicit present-version type narrowing; its assertions and all final scoped gates ran fresh. No production, imported helper or executed test bytes differ."
+    }
+  ],
+  "totals": {
+    "files": 18,
+    "pass": 94,
+    "fail": 0,
+    "skip": 0,
+    "assertions": 2367
+  },
+  "gates": [
+    {
+      "name": "finish-gate-core-declarations",
+      "cwd": ".",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-b",
+        "packages/core/tsconfig.build.json",
+        "--emitDeclarationOnly"
+      ],
+      "driver": 18177,
+      "pid": 22631,
+      "start": "2026-10-22T00:28:02.408Z",
+      "end": "2026-10-22T00:28:06.444Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "b530eaef2862b6a23865587e05d07028b931f3ced83d5fcbfd12eedd89eb8ff8",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-pending-compaction-run-ar/finish-gate-core-declarations.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": []
+    },
+    {
+      "name": "finish-gate-agents-declarations",
+      "cwd": ".",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-b",
+        "packages/agents/tsconfig.build.json",
+        "--emitDeclarationOnly"
+      ],
+      "driver": 18177,
+      "pid": 24466,
+      "start": "2026-10-22T00:28:06.720Z",
+      "end": "2026-10-22T00:28:09.685Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "b530eaef2862b6a23865587e05d07028b931f3ced83d5fcbfd12eedd89eb8ff8",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-pending-compaction-run-ar/finish-gate-agents-declarations.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": []
+    },
+    {
+      "name": "finish-gate-core-types",
+      "cwd": ".",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "packages/core/tsconfig.noemit.json"
+      ],
+      "driver": 18177,
+      "pid": 25441,
+      "start": "2026-10-22T00:28:09.913Z",
+      "end": "2026-10-22T00:28:17.555Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "b530eaef2862b6a23865587e05d07028b931f3ced83d5fcbfd12eedd89eb8ff8",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-pending-compaction-run-ar/finish-gate-core-types.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": []
+    },
+    {
+      "name": "finish-gate-agents-types",
+      "cwd": ".",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "packages/agents/tsconfig.noemit.json"
+      ],
+      "driver": 18177,
+      "pid": 26689,
+      "start": "2026-10-22T00:28:17.779Z",
+      "end": "2026-10-22T00:28:28.010Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "b530eaef2862b6a23865587e05d07028b931f3ced83d5fcbfd12eedd89eb8ff8",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-pending-compaction-run-ar/finish-gate-agents-types.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": []
+    },
+    {
+      "name": "finish-gate-core-bun-types",
+      "cwd": ".",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "packages/core/tsconfig.noemit.json",
+        "--types",
+        "node,bun"
+      ],
+      "driver": 18177,
+      "pid": 27423,
+      "start": "2026-10-22T00:28:28.257Z",
+      "end": "2026-10-22T00:28:35.541Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "b530eaef2862b6a23865587e05d07028b931f3ced83d5fcbfd12eedd89eb8ff8",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-pending-compaction-run-ar/finish-gate-core-bun-types.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": []
+    },
+    {
+      "name": "finish-gate-agents-bun-types",
+      "cwd": ".",
+      "command": [
+        "node",
+        "node_modules/typescript/bin/tsc",
+        "-p",
+        "packages/agents/tsconfig.test-bun.json",
+        "--types",
+        "node,bun"
+      ],
+      "driver": 18177,
+      "pid": 28654,
+      "start": "2026-10-22T00:28:35.771Z",
+      "end": "2026-10-22T00:28:41.723Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "b530eaef2862b6a23865587e05d07028b931f3ced83d5fcbfd12eedd89eb8ff8",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-pending-compaction-run-ar/finish-gate-agents-bun-types.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": []
+    },
+    {
+      "name": "finish-gate-lint",
+      "cwd": ".",
+      "command": [
+        "node_modules/.bin/eslint",
+        "--max-warnings",
+        "0",
+        "packages/core/src/journal/tool-ranking-compaction.test.ts",
+        "packages/core/src/journal/mirrorApply.ts",
+        "packages/agents/src/compression/__tests__/support/native-value-fixture.ts",
+        "packages/agents/src/compression/__tests__/support/operation-file-creates.ts",
+        "packages/agents/src/compression/toolResultTruncator.ts",
+        "packages/agents/src/compression/native-tool-publication.ts",
+        "packages/agents/src/compression/native-tool-ranking.ts",
+        "packages/agents/src/compression/native-pending-tool-ranking.ts",
+        "packages/agents/src/compression/__tests__/pending-token-compaction-live.test.ts",
+        "packages/agents/src/compression/__tests__/pending-token-native-helpers.ts",
+        "packages/agents/src/compression/__tests__/pending-token-native-contracts.test.ts",
+        "packages/agents/src/compression/__tests__/pending-token-compaction-parity.ts",
+        "packages/agents/src/compression/__tests__/pending-token-compaction-observer.ts",
+        "packages/agents/src/compression/__tests__/pending-token-native-lifetime.test.ts",
+        "packages/agents/src/compression/__tests__/pending-token-native-values.test.ts",
+        "packages/agents/src/compression/__tests__/pending-token-native-owners.test.ts",
+        "packages/agents/src/compression/__tests__/pending-token-native-failures.test.ts",
+        "packages/agents/src/compression/__tests__/pending-token-native-ranking.test.ts",
+        "packages/agents/src/compression/__tests__/pending-token-native-tail.test.ts",
+        "packages/agents/src/compression/__tests__/pending-token-compaction-pinned.test.ts"
+      ],
+      "driver": 18177,
+      "pid": 29280,
+      "start": "2026-10-22T00:28:41.971Z",
+      "end": "2026-10-22T00:28:49.455Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "b530eaef2862b6a23865587e05d07028b931f3ced83d5fcbfd12eedd89eb8ff8",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-pending-compaction-run-ar/finish-gate-lint.log",
+      "logHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": []
+    },
+    {
+      "name": "finish-gate-format",
+      "cwd": ".",
+      "command": [
+        "node_modules/.bin/prettier",
+        "--check",
+        "packages/core/src/journal/tool-ranking-compaction.test.ts",
+        "packages/core/src/journal/mirrorApply.ts",
+        "packages/agents/src/compression/__tests__/support/native-value-fixture.ts",
+        "packages/agents/src/compression/__tests__/support/operation-file-creates.ts",
+        "packages/agents/src/compression/toolResultTruncator.ts",
+        "packages/agents/src/compression/native-tool-publication.ts",
+        "packages/agents/src/compression/native-tool-ranking.ts",
+        "packages/agents/src/compression/native-pending-tool-ranking.ts",
+        "packages/agents/src/compression/__tests__/pending-token-compaction-live.test.ts",
+        "packages/agents/src/compression/__tests__/pending-token-native-helpers.ts",
+        "packages/agents/src/compression/__tests__/pending-token-native-contracts.test.ts",
+        "packages/agents/src/compression/__tests__/pending-token-compaction-parity.ts",
+        "packages/agents/src/compression/__tests__/pending-token-compaction-observer.ts",
+        "packages/agents/src/compression/__tests__/pending-token-native-lifetime.test.ts",
+        "packages/agents/src/compression/__tests__/pending-token-native-values.test.ts",
+        "packages/agents/src/compression/__tests__/pending-token-native-owners.test.ts",
+        "packages/agents/src/compression/__tests__/pending-token-native-failures.test.ts",
+        "packages/agents/src/compression/__tests__/pending-token-native-ranking.test.ts",
+        "packages/agents/src/compression/__tests__/pending-token-native-tail.test.ts",
+        "packages/agents/src/compression/__tests__/pending-token-compaction-pinned.test.ts"
+      ],
+      "driver": 18177,
+      "pid": 31596,
+      "start": "2026-10-22T00:28:49.688Z",
+      "end": "2026-10-22T00:28:50.249Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "b530eaef2862b6a23865587e05d07028b931f3ced83d5fcbfd12eedd89eb8ff8",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-pending-compaction-run-ar/finish-gate-format.log",
+      "logHash": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+      "summary": []
+    },
+    {
+      "name": "finish-gate-graph",
+      "cwd": ".",
+      "command": [
+        "bun",
+        "scripts/check-affected-test-shards.ts"
+      ],
+      "driver": 18177,
+      "pid": 31681,
+      "start": "2026-10-22T00:28:50.478Z",
+      "end": "2026-10-22T00:28:53.027Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "b530eaef2862b6a23865587e05d07028b931f3ced83d5fcbfd12eedd89eb8ff8",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-pending-compaction-run-ar/finish-gate-graph.log",
+      "logHash": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67",
+      "summary": []
+    },
+    {
+      "name": "finish-gate-audit",
+      "cwd": ".",
+      "command": [
+        "bun",
+        "scripts/test-audit/scan.ts",
+        "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p5/w26-pending-compaction-run-ar/finish-audit"
+      ],
+      "driver": 18177,
+      "pid": 32662,
+      "start": "2026-10-22T00:28:53.233Z",
+      "end": "2026-10-22T00:28:56.469Z",
+      "code": 0,
+      "signal": null,
+      "sourceHash": "b530eaef2862b6a23865587e05d07028b931f3ced83d5fcbfd12eedd89eb8ff8",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-pending-compaction-run-ar/finish-gate-audit.log",
+      "logHash": "c9963e051866de88026d7adeab436041191d1b02e366bb09e900d56e59b8be5b",
+      "summary": []
+    }
+  ],
+  "controls": [
+    {
+      "name": "control2-old-pending-disk",
+      "cwd": "packages/agents",
+      "command": [
+        "bun",
+        "test",
+        "src/compression/__tests__/pending-token-compaction-pinned.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 85547,
+      "pid": 85557,
+      "start": "2026-10-22T00:20:33.669Z",
+      "end": "2026-10-22T00:21:10.839Z",
+      "code": 1,
+      "signal": null,
+      "sourceHash": "60c5bc3906bb14469622bcb52e96fffd50783fd1cd670537e0af81939866768e",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-pending-compaction-run-ar/control2-old-pending-disk.log",
+      "logHash": "1f09dc72e530a64843d5affc45d25ccc5639dbbfd6928a3e1bef62532bc796a9",
+      "summary": [
+        " 0 pass",
+        " 1 fail",
+        " 1 expect() calls",
+        "Ran 1 test across 1 file. [35.61s]"
+      ],
+      "path": "packages/agents/src/compression/toolResultTruncator.ts",
+      "originalHash": "9b588da9b8d8de8d070ae7f6c104b6d2e4b7c1b53583dd493a365480eda4b522",
+      "restored": true,
+      "assertionFailures": 1,
+      "deniedCreate": true
+    },
+    {
+      "name": "control3-lost-ranking-scalars",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/tool-ranking-compaction.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 18177,
+      "pid": 18557,
+      "start": "2026-10-22T00:27:58.093Z",
+      "end": "2026-10-22T00:27:59.040Z",
+      "code": 1,
+      "signal": null,
+      "sourceHash": "b7e3c8c5fe164738542c929b378df97d1cd34a8879074727e5e15454ff38900f",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-pending-compaction-run-ar/control3-lost-ranking-scalars.log",
+      "logHash": "01c66a759dfd10c76c2ca5f4a5a9130856addab4603b24e56e82a3f28f53a368",
+      "summary": [
+        " 0 pass",
+        " 1 fail",
+        " 4 expect() calls",
+        "Ran 1 test across 1 file. [664.00ms]"
+      ],
+      "path": "packages/core/src/journal/groupCopier.ts",
+      "originalHash": "6b41f0885f43a6bd57b586419ad46c1f2b9de072c442822b46191139d294d48c",
+      "restored": true,
+      "assertionFailures": 1,
+      "deniedCreate": false
+    },
+    {
+      "name": "control3-lost-summary-count",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/tool-ranking-compaction.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 18177,
+      "pid": 20208,
+      "start": "2026-10-22T00:27:59.274Z",
+      "end": "2026-10-22T00:28:00.036Z",
+      "code": 1,
+      "signal": null,
+      "sourceHash": "2f92cd303735e097ada00fd2bc8da59a82412d37e3cf7e2482ef0dfe7737c695",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-pending-compaction-run-ar/control3-lost-summary-count.log",
+      "logHash": "fd55e1050fae2273fdd56772d9422232049e602ee3132d207b6d015661d984d5",
+      "summary": [
+        " 0 pass",
+        " 1 fail",
+        " 6 expect() calls",
+        "Ran 1 test across 1 file. [487.00ms]"
+      ],
+      "path": "packages/core/src/journal/groupCopier.ts",
+      "originalHash": "6b41f0885f43a6bd57b586419ad46c1f2b9de072c442822b46191139d294d48c",
+      "restored": true,
+      "assertionFailures": 1,
+      "deniedCreate": false
+    },
+    {
+      "name": "control3-legacy-new-group-tag",
+      "cwd": "packages/core",
+      "command": [
+        "bun",
+        "test",
+        "src/journal/tool-ranking-compaction.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 18177,
+      "pid": 21432,
+      "start": "2026-10-22T00:28:00.315Z",
+      "end": "2026-10-22T00:28:01.092Z",
+      "code": 1,
+      "signal": null,
+      "sourceHash": "e5bc130811dfc8d3a27d4f96f9389188f1b2db6e9b3c958ed666ae0968171b86",
+      "sourceChanged": false,
+      "log": "tmp/p5/w26-pending-compaction-run-ar/control3-legacy-new-group-tag.log",
+      "logHash": "ee31f54bd754abe7d23b01bf25fcaf28f42f43f0f90306a2bc2dee660bfe6389",
+      "summary": [
+        " 0 pass",
+        " 1 fail",
+        " 3 expect() calls",
+        "Ran 1 test across 1 file. [497.00ms]"
+      ],
+      "path": "packages/core/src/journal/versionCopy.ts",
+      "originalHash": "4174abf98ab550de76895a94ef3ff2af84df4140c63b3eaa82e9398874272ef6",
+      "restored": true,
+      "assertionFailures": 1,
+      "deniedCreate": false
+    }
+  ],
+  "unchanged": [
+    {
+      "path": "packages/agents/src/compression/__tests__/support/operation-file-creates.ts",
+      "sha256": "a6d5bb77f7b2c578c3e930c88fab3f52bad0dc143f047d3f6485987e351e2b99",
+      "baseSha256": "a6d5bb77f7b2c578c3e930c88fab3f52bad0dc143f047d3f6485987e351e2b99"
+    },
+    {
+      "path": "packages/agents/src/compression/__tests__/pending-token-native-contracts.test.ts",
+      "sha256": "60e22ac2c9bdd8a058ea079e59e506bd46a5542e850a902a878b5363de1c3bec",
+      "baseSha256": "60e22ac2c9bdd8a058ea079e59e506bd46a5542e850a902a878b5363de1c3bec"
+    },
+    {
+      "path": "packages/agents/src/compression/toolResultTruncator.ts",
+      "sha256": "9b588da9b8d8de8d070ae7f6c104b6d2e4b7c1b53583dd493a365480eda4b522",
+      "baseSha256": "9b588da9b8d8de8d070ae7f6c104b6d2e4b7c1b53583dd493a365480eda4b522"
+    },
+    {
+      "path": "packages/core/src/journal/groupCopier.ts",
+      "sha256": "6b41f0885f43a6bd57b586419ad46c1f2b9de072c442822b46191139d294d48c",
+      "baseSha256": "6b41f0885f43a6bd57b586419ad46c1f2b9de072c442822b46191139d294d48c"
+    },
+    {
+      "path": "packages/core/src/journal/groupCopier.ts",
+      "sha256": "6b41f0885f43a6bd57b586419ad46c1f2b9de072c442822b46191139d294d48c",
+      "baseSha256": "6b41f0885f43a6bd57b586419ad46c1f2b9de072c442822b46191139d294d48c"
+    },
+    {
+      "path": "packages/core/src/journal/versionCopy.ts",
+      "sha256": "4174abf98ab550de76895a94ef3ff2af84df4140c63b3eaa82e9398874272ef6",
+      "baseSha256": "4174abf98ab550de76895a94ef3ff2af84df4140c63b3eaa82e9398874272ef6"
+    }
+  ],
+  "preservation": {
+    "count": 1204,
+    "failures": [],
+    "declarations": 306,
+    "memory": "92b20147d09588700e203951849a9a84a2aaade0aa6d006c4b395ba84c7fb2bb",
+    "expectedMemory": "92b20147d09588700e203951849a9a84a2aaade0aa6d006c4b395ba84c7fb2bb",
+    "memoryMatches": true
+  },
+  "processes": {
+    "checkedAt": "2026-10-22T00:34:01.179Z",
+    "pids": [
+      83201,
+      83216,
+      87387,
+      95394,
+      18177,
+      24466,
+      95263,
+      87401,
+      18557,
+      56088,
+      66269,
+      80064,
+      81578,
+      27423,
+      22085,
+      25441,
+      28654,
+      1128,
+      81238,
+      80120,
+      80268,
+      1878,
+      96533,
+      80980,
+      95307,
+      85547,
+      86638,
+      85557,
+      95613,
+      86670,
+      80604,
+      32662,
+      95419,
+      95237,
+      95640,
+      95098,
+      31596,
+      86706,
+      95368,
+      81496,
+      22631,
+      45532,
+      45578,
+      80356,
+      80148,
+      1382,
+      96165,
+      95860,
+      95193,
+      95728,
+      95591,
+      20208,
+      56325,
+      95702,
+      95334,
+      96795,
+      95443,
+      21432,
+      29280,
+      95959,
+      81477,
+      26689,
+      31681,
+      95667,
+      95139,
+      97016,
+      80995,
+      91060
+    ],
+    "count": 68,
+    "remaining": "",
+    "exitCode": 1
+  },
+  "audit": {
+    "findings": []
+  },
+  "finalization": {
+    "checkedAt": "2026-10-22T00:34:01.493Z",
+    "sourceHash": "b530eaef2862b6a23865587e05d07028b931f3ced83d5fcbfd12eedd89eb8ff8",
+    "verifiedLogHashes": 33,
+    "controlsCmp": 4,
+    "frozen": [
+      {
+        "path": "packages/agents/src/compression/__tests__/continuous-empty-id.test.ts",
+        "sha256": "b03ec9a4d021cbce9d81385abc57c2b1ec5d504c512774327e5a27bf4ac25ea3",
+        "baseSha256": "b03ec9a4d021cbce9d81385abc57c2b1ec5d504c512774327e5a27bf4ac25ea3"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/pending-window-disk-noop.test.ts",
+        "sha256": "c9c67ba02057073d4de6add12f83a89aaa733ca19a0ea50082b7149be28e3ebb",
+        "baseSha256": "c9c67ba02057073d4de6add12f83a89aaa733ca19a0ea50082b7149be28e3ebb"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/pending-token-native-owners.test.ts",
+        "sha256": "16cd4ea7efdc235efbc1bc35619700f372e5ec8294d961d7390ad3ff93a029f8",
+        "baseSha256": "16cd4ea7efdc235efbc1bc35619700f372e5ec8294d961d7390ad3ff93a029f8"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/tool-ranking-native-owners.test.ts",
+        "sha256": "b6021f4db59143f64885806c31fb98967167767fc5e6fb111fd6d2721b593349",
+        "baseSha256": "b6021f4db59143f64885806c31fb98967167767fc5e6fb111fd6d2721b593349"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/tool-truncation-owner-controls.test.ts",
+        "sha256": "4ebe3650bcdf3d69ec2592c28da8c89bbdfa7cd8f3816db5a75ff7f6e125d857",
+        "baseSha256": "4ebe3650bcdf3d69ec2592c28da8c89bbdfa7cd8f3816db5a75ff7f6e125d857"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/pending-token-native-contracts.test.ts",
+        "sha256": "60e22ac2c9bdd8a058ea079e59e506bd46a5542e850a902a878b5363de1c3bec",
+        "baseSha256": "60e22ac2c9bdd8a058ea079e59e506bd46a5542e850a902a878b5363de1c3bec"
+      },
+      {
+        "path": "packages/agents/src/compression/__tests__/support/operation-file-creates.ts",
+        "sha256": "a6d5bb77f7b2c578c3e930c88fab3f52bad0dc143f047d3f6485987e351e2b99",
+        "baseSha256": "a6d5bb77f7b2c578c3e930c88fab3f52bad0dc143f047d3f6485987e351e2b99"
+      },
+      {
+        "path": "packages/core/src/journal/journalStore.readerLifetime.test.ts",
+        "sha256": "9744ca9d7829bddc3b2010e895ff9450cb64f89e5856d8903de6e6ae11f96b3b",
+        "baseSha256": "9744ca9d7829bddc3b2010e895ff9450cb64f89e5856d8903de6e6ae11f96b3b"
+      },
+      {
+        "path": "packages/core/src/journal/journalStore.readerCleanup.test.ts",
+        "sha256": "caa8ad4cf7442eb2df8f22d6a02ef3743e8eeda1ae1698f989732c9a1d6d3cb0",
+        "baseSha256": "caa8ad4cf7442eb2df8f22d6a02ef3743e8eeda1ae1698f989732c9a1d6d3cb0"
+      },
+      {
+        "path": "packages/core/src/journal/journalStore.compaction.identity.test.ts",
+        "sha256": "8a5959b69195b89682f417fd6afca20b2613beadac4e90f32d61cfd895f7a2a1",
+        "baseSha256": "8a5959b69195b89682f417fd6afca20b2613beadac4e90f32d61cfd895f7a2a1"
+      }
+    ],
+    "absentPids": 68,
+    "declarationCount": 306,
+    "declarationsHash": "625dfaba2463a6ede40317f389782cc7b00fd1746b78cf834f0ae38f43bf0f15",
+    "preservation": {
+      "count": 1204,
+      "failures": [],
+      "declarations": 306,
+      "memory": "92b20147d09588700e203951849a9a84a2aaade0aa6d006c4b395ba84c7fb2bb",
+      "expectedMemory": "92b20147d09588700e203951849a9a84a2aaade0aa6d006c4b395ba84c7fb2bb",
+      "memoryMatches": true
+    },
+    "noNewTestOrGateLanes": true
+  },
+  "excluded": [
+    "Original 8192 all-creating-API denial diagnostic RED",
+    "Authoring paired runs before describe/type-only fixes",
+    "Authoring type/config gate failures",
+    "Initial control assertion hid rejected reason; explicit settled outcome exposes the unchanged denial cause"
+  ],
+  "remaining": [
+    "ProviderNormalizationDisk/public ChatSession RED",
+    "Separate #3917 RED, not rerun/retried/suppressed",
+    "Two explicit-old durable capture REDs",
+    "Full cold structural ranking refill and pending/stale capacity/accounting",
+    "Phase6 normalization/header/request/body/key/message/tokenizer spools/guards",
+    "Whole heap, aggregate cache/pin capacity, global LENS/live bytes",
+    "Phase8 shared reservations, W23/W25/cutover, cold Mistral, defaults and Phase9"
+  ],
+  "review": "Review skipped per Andrew 2026-10-09"
+}

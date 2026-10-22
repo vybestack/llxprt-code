@@ -95,7 +95,7 @@ export async function pendingCompactionParity(
         ).toBe(true);
         expect(owners.snapshot().liveRows).toBe(0);
         process.stdout.write(
-          `PENDING_COMPACTION_PARITY ${JSON.stringify({ size, replaced: expected.replacedCount, projected: expected.projected, primary: history.journalPath(), recording: session.path, files })}\n`,
+          `PENDING_COMPACTION_PARITY ${JSON.stringify({ size, replaced: expected.replacedCount, projected: expected.projected, historyPath: history.journalPath(), recording: session.path, files })}\n`,
         );
       });
     },
