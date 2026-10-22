@@ -451,3 +451,60 @@ so user-session prevalence is not established by this investigation.
    load. No retries, assertion relaxation, deadline increase, or warm-up fixture
    as a substitute for fixing lost output/settlement. Treat this as pre-existing
    when classifying issue3930 upgrade regressions. No OCR review was run.
+
+## Lockfile repair: selderee, @selderee/plugin-htmlparser2, @pkgjs/parseargs
+
+CI failed in every job at `bun install` with `Integrity check failed for tarball:
+selderee` (and `@selderee/plugin-htmlparser2`). Locally the install passed only
+because the Bun cache already held the tarballs.
+
+### Cause
+
+Not an npm or `min-release-age` bug, and not introduced by this branch. Commit
+`c5010bce7` ("chore(release): bump main to v0.12.0", 2026-09-08) rewrote every
+`"version": "0.11.0"` line in `package-lock.json` to `0.12.0`. 19 of the 22 hits
+were the root and workspace entries. The other 3 were third-party packages that
+happen to be at 0.11.0: `@pkgjs/parseargs`, `@selderee/plugin-htmlparser2` and
+`selderee`. Their `resolved` URLs and integrity hashes stayed at 0.11.0, so the
+entries were self-contradictory. Evidence:
+
+- `sed 's/"version": "0.11.0"/"version": "0.12.0"/'` applied to the parent
+  commit's `package-lock.json` is byte-identical to the file in `c5010bce7`.
+- `scripts/version.ts` uses `npm version` and does not do a textual replace, so
+  the blanket replace happened outside that script.
+- `bun.lock` was updated correctly in that commit, which hid the problem: it kept
+  `selderee@0.11.0` and `@selderee/plugin-htmlparser2@0.11.0`.
+- On this branch `npm install --package-lock-only` and `npm update
+  brace-expansion --package-lock-only` preserved the bad entries (npm trusts
+  existing lock entries), and `rm bun.lock && bun install` migrated from that
+  lockfile, so `bun.lock` became `selderee@0.12.0` with the 0.11.0 hash.
+  The registry's real 0.12.0 hashes differ, hence the integrity failure.
+  `@pkgjs/parseargs@0.12.0` does not exist on the registry at all; it is an
+  optional dev dependency, so installs skipped it without failing.
+- `html-to-text@9.0.5` requires `^0.11.0` for both selderee packages, which
+  0.12.0 does not satisfy.
+
+### Scan
+
+`tmp/lockfix/scan.ts` (not committed) checks each `package-lock.json` entry for
+version vs `resolved` URL version, every declared dependency range against the
+version that resolves for it (hoisted and nested lookup, workspace links), every
+`package-lock.json` entry against `bun.lock` (version and integrity), and every
+`name@version` in both lockfiles against the registry's published integrity.
+Before the fix it reported the three version/URL mismatches, the four resulting
+range violations, three registry integrity mismatches in `bun.lock`, and one
+unrelated drift (`source-map-js` 1.2.2 in `package-lock.json`, 1.2.1 in
+`bun.lock`). Range hits for `shell-quote`, `uuid` and `@tootallnate/once` are
+explained by root `overrides` and are not defects. After the fix it reports zero
+problems.
+
+### Fix
+
+Removed the three bad entries from `package-lock.json`, ran
+`npm install --package-lock-only`, then restored the `@pkgjs/parseargs` entry
+with version 0.11.0 because npm does not re-add that optional dev entry once it
+is deleted (npm leaves the restored entry untouched on a further run). The net
+`package-lock.json` change is three `version` lines back to 0.11.0. Regenerated
+`bun.lock` with `rm bun.lock && bun install`; the diff is the same three
+packages plus `source-map-js` 1.2.1 to 1.2.2, which now matches
+`package-lock.json`.
