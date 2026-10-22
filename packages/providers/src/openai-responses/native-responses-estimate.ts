@@ -1,4 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { PromptEnvelopeAccountingProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+
 import type {
   RuntimePromptEstimateRequest,
   RuntimePromptEstimateResult,
@@ -24,7 +26,19 @@ interface EstimateScan {
 }
 
 export class NativeResponsesEstimateProjection {
-  constructor(private readonly prompt: NativeResponsesPrompt) {}
+  constructor(
+    private readonly prompt: NativeResponsesPrompt,
+    private readonly view: {
+      readonly inputOnly?: boolean;
+      readonly skipRows?: number;
+    } = {},
+  ) {}
+
+  private keys(): readonly PromptKey[] {
+    return this.view.inputOnly === true
+      ? ['input']
+      : ['instructions', 'input', 'tools'];
+  }
 
   private async *segment(
     key: PromptKey,
@@ -48,9 +62,13 @@ export class NativeResponsesEstimateProjection {
       yield canonical(this.prompt.envelope()[key]);
       return;
     }
+    if (this.prompt.selection.inputOverride !== undefined) {
+      yield canonical(this.prompt.selection.inputOverride.value);
+      return;
+    }
     yield '[';
     let separator = '';
-    for await (const item of this.prompt.items()) {
+    for await (const item of this.prompt.items(this.view.skipRows, true)) {
       yield separator;
       yield canonical(item);
       separator = ',';
@@ -63,15 +81,11 @@ export class NativeResponsesEstimateProjection {
     scan: EstimateScan,
   ): AsyncGenerator<string> {
     let prefix = '{';
-    for (const key of [
-      'instructions',
-      'input',
-      'tools',
-    ] satisfies PromptKey[]) {
+    for (const key of this.keys()) {
       const value = this.prompt.envelope()[key];
       if (value === undefined) continue;
       yield `${prefix}${JSON.stringify(key)}:`;
-      const string = typeof value === 'string';
+      const string = key !== 'input' && typeof value === 'string';
       for await (const piece of this.segment(key, request, scan))
         yield string ? JSON.stringify(piece) : piece;
       prefix = ',';
@@ -107,11 +121,7 @@ export class NativeResponsesEstimateProjection {
     const encoder = await getO200kBaseEncoder();
     let count = 0;
     if (exact) {
-      for (const key of [
-        'instructions',
-        'input',
-        'tools',
-      ] satisfies PromptKey[]) {
+      for (const key of this.keys()) {
         if (this.prompt.envelope()[key] !== undefined)
           count += await countO200kBaseTokensFromChunks(
             this.segment(key, request, scan),
@@ -142,4 +152,33 @@ export class NativeResponsesEstimateProjection {
       );
     return result;
   }
+}
+
+export function nativeResponsesAccounting(
+  prompt: NativeResponsesPrompt,
+): PromptEnvelopeAccountingProjection | undefined {
+  const stateful = prompt.selection.stateful;
+  if (stateful.parentId === undefined) return undefined;
+  const projection = (view: {
+    readonly inputOnly?: boolean;
+    readonly skipRows?: number;
+  }) => ({
+    finalizedProjection: new NativeResponsesEstimateProjection(prompt, view),
+    legacyEstimate: (): Promise<number> =>
+      Promise.reject(
+        new Error('Native Responses requires the pinned estimator'),
+      ),
+  });
+  return {
+    statefulParentUsed: true,
+    ...(stateful.parentRetainedTokens === undefined
+      ? {
+          incremental: projection({}),
+          fullHistory: projection({ skipRows: 0 }),
+        }
+      : {
+          retainedBaselineTokens: stateful.parentRetainedTokens,
+          incremental: projection({ inputOnly: true }),
+        }),
+  };
 }

@@ -39,6 +39,20 @@ import { PROJECTION_REVISION } from '../runtime/promptEnvelopeProjections.js';
 import { NativeResponsesEstimateProjection } from './native-responses-estimate.js';
 import { sanitizeDiagnosticData } from '../utils/mediaDiagnostics.js';
 import type { DiskBodyMedia } from './responses-disk-body.js';
+import {
+  statefulResponsesSummary,
+  statefulUnsupportedMedia,
+} from './native-responses-selection.js';
+import type { UnsupportedMediaEntry } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import { toEstimationContents } from './openAIResponsesRequestState.js';
+import type { StatefulConversation } from './openAIResponsesStateful.js';
+import { jsonValueByteLength } from '../utils/progressive-json-body.js';
+
+export interface NativeResponsesSelection {
+  readonly stateful: StatefulConversation;
+  readonly skipRows: number;
+  readonly inputOverride?: { readonly value: unknown };
+}
 
 async function overlaySummary(
   plans: AsyncIterable<JournalResponsePlan>,
@@ -82,6 +96,8 @@ export class NativeResponsesPrompt {
     private readonly shell: ResponsesRequestShell,
     private readonly context: ResponsesInputBuildContext,
     readonly byteLength: number,
+    readonly selection: NativeResponsesSelection,
+    readonly unsupportedMedia: readonly UnsupportedMediaEntry[],
   ) {
     this.model = shell.request.model;
     this.estimate = new NativeResponsesEstimateProjection(this);
@@ -97,26 +113,43 @@ export class NativeResponsesPrompt {
     if (this.closed) throw new Error('Native Responses prompt is closed');
   }
 
-  async *items(): AsyncGenerator<ResponsesInputItem> {
+  private async *selectedRows(
+    skipRows: number,
+    estimation: boolean,
+  ): AsyncGenerator<IContent> {
+    for (let index = skipRows; index < this.rows.count; index++) {
+      this.requireOpen();
+      const row = await this.rows.readAt(index, this.options.invocation.signal);
+      yield estimation ? toEstimationContents([row])[0] : row;
+    }
+  }
+
+  async *items(
+    skipRows = this.selection.skipRows,
+    estimation = false,
+  ): AsyncGenerator<ResponsesInputItem> {
     this.requireOpen();
     const indexed = this.rows.native?.indexed;
     if (indexed === undefined)
       throw new Error('Native Responses requires journal rows');
     let counter = 0;
-    const source = resolveRowsMedia(
-      this.rows.openReader(this.options.invocation.signal),
-      {
-        requestId: this.options.mediaRequestId,
-        aggregateBudgetBytes: this.options.mediaBudgetBytes,
-        resolver: this.options.mediaResolver,
-      },
-      this.shell.mediaRequest,
-      this.options.invocation.signal,
-      this.rows.native,
-    );
+    const selected = this.selectedRows(skipRows, estimation);
+    const source = estimation
+      ? selected
+      : resolveRowsMedia(
+          selected,
+          {
+            requestId: this.options.mediaRequestId,
+            aggregateBudgetBytes: this.options.mediaBudgetBytes,
+            resolver: this.options.mediaResolver,
+          },
+          this.shell.mediaRequest,
+          this.options.invocation.signal,
+          this.rows.native,
+        );
     for await (const row of source) {
       this.requireOpen();
-      const pairs = await responsesUnitPairs(row, indexed);
+      const pairs = await responsesUnitPairs(row, indexed, skipRows);
       yield* buildOpenAIResponsesUnit(
         row,
         this.context,
@@ -127,6 +160,13 @@ export class NativeResponsesPrompt {
   }
 
   async *inputBytes(media: DiskBodyMedia): AsyncGenerator<Uint8Array> {
+    if (this.selection.inputOverride !== undefined) {
+      const value = this.selection.inputOverride.value;
+      yield* jsonValueBytes(
+        media === 'dump' ? sanitizeDiagnosticData(value) : value,
+      );
+      return;
+    }
     yield Buffer.from('[');
     let separator = '';
     for await (const item of this.items()) {
@@ -187,20 +227,38 @@ function nativeSettings(options: ResponsesRequest): RowFormatSettings {
   };
 }
 
-export async function prepareNativeResponsesPrompt(
+async function historyByteLength(
   options: ResponsesRequest,
-  deps: ResponsesExecutorDeps,
   shell: ResponsesRequestShell,
   reasoningIdTime: number,
-): Promise<NativeResponsesPrompt> {
+  selection: NativeResponsesSelection,
+): Promise<number> {
   const rows = options.requestRows;
   const native = rows?.native;
   if (rows === undefined || native === undefined)
     throw new Error('Native Responses requires journal rows');
   const settings = nativeSettings(options);
   const registration = responsesLengthRegistration(settings);
+  const envelope = { ...shell.request, input: [] };
   const plan = await native.withFormat(registration, async (snapshot) => {
     const slot = requestFormatSlot(snapshot, settings);
+    if (selection.stateful.parentId !== undefined) {
+      const selected = await statefulResponsesSummary(
+        native,
+        snapshot,
+        slot,
+        settings,
+        selection.skipRows,
+      );
+      return planStoredResponsesRequest(
+        snapshot,
+        settings,
+        options.includeReasoningInContext ? 0 : 1,
+        envelope,
+        reasoningIdTime,
+        selected,
+      );
+    }
     let pdfBytes = snapshot.version?.aggregate.pdfBytes[slot] ?? 0;
     for (const changed of native.indexed.viewPlan.changedSources) {
       const original = await snapshot.entryByLabel(changed.entry.label);
@@ -219,17 +277,59 @@ export async function prepareNativeResponsesPrompt(
       snapshot,
       settings,
       options.includeReasoningInContext ? 0 : 1,
-      shell.request,
+      envelope,
       reasoningIdTime,
       { summary, pdfBytes },
     );
   });
-  const prompt = new NativeResponsesPrompt(
+  return plan.contentLength;
+}
+
+function overrideByteLength(
+  request: OpenAIResponsesRequest,
+  value: unknown,
+): number {
+  let bytes = 0;
+  for (const part of responsesRequestParts(request)) {
+    if (part.kind === 'literal') bytes += part.bytes.byteLength;
+    else
+      bytes += jsonValueByteLength(part.key === 'input' ? value : part.value);
+  }
+  return bytes;
+}
+
+export async function prepareNativeResponsesPrompt(
+  options: ResponsesRequest,
+  deps: ResponsesExecutorDeps,
+  shell: ResponsesRequestShell,
+  reasoningIdTime: number,
+  selection: NativeResponsesSelection,
+): Promise<NativeResponsesPrompt> {
+  const rows = options.requestRows;
+  if (rows?.native === undefined)
+    throw new Error('Native Responses requires journal rows');
+  const bytes =
+    selection.inputOverride === undefined
+      ? await historyByteLength(options, shell, reasoningIdTime, selection)
+      : overrideByteLength(shell.request, selection.inputOverride.value);
+  return new NativeResponsesPrompt(
     rows,
     options,
     shell,
-    responsesInputContext(options, deps, false, reasoningIdTime),
-    plan.contentLength,
+    responsesInputContext(
+      options,
+      deps,
+      selection.stateful.parentId !== undefined,
+      reasoningIdTime,
+    ),
+    bytes,
+    selection,
+    selection.stateful.enabled && selection.inputOverride === undefined
+      ? await statefulUnsupportedMedia(
+          rows,
+          selection.skipRows,
+          options.pdfEnabled,
+        )
+      : [],
   );
-  return prompt;
 }

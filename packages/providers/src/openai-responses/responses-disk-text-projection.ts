@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { nativeResponsesAccounting } from './native-responses-estimate.js';
 import { readFileSync } from 'node:fs';
 import {
   NativeResponsesPrompt,
@@ -63,6 +64,18 @@ async function* countedRows(
   if (count !== rows.count) throw new Error('Disk source row count changed');
 }
 
+async function* statefulRows(
+  rows: ProviderRequestRows,
+  signal?: AbortSignal,
+): AsyncGenerator<IContent> {
+  if (rows.native === undefined) {
+    yield* countedRows(rows, signal);
+    return;
+  }
+  for (let index = 0; index < rows.count; index++)
+    yield (await rows.native.indexed.planAt(index, signal)).header;
+}
+
 /**
  * Selects the newest usable stored parent while streaming the rows once; only
  * that row's id and observed usage are retained, never the history.
@@ -92,13 +105,14 @@ async function selectRowsStateful(
     };
   let hit: StatefulParentHit | undefined;
   let index = 0;
-  for await (const row of countedRows(rows, getRequestSignal(request))) {
+  for await (const row of statefulRows(rows, getRequestSignal(request))) {
     hit = parentHitOf(row, index++, plan) ?? hit;
   }
   // The array route patches synthetic outputs before choosing the parent, so
   // dangling calls on the parent row itself leave content after it.
+  // Native journal-response-slots.responseAdjacent already adds orphan outputs after their calls.
   const calls =
-    hit === undefined
+    hit === undefined || rows.native !== undefined
       ? undefined
       : await findDanglingCalls(
           () => countedRows(rows, getRequestSignal(request)),
@@ -203,6 +217,14 @@ function rebuildResponses(
     buildDiskTextResponsesContext(request, deps, { ...mode, reasoningIdTime });
 }
 
+function clearDiskPromptKeys(
+  prepared: Pick<PreparedResponsesRequestContext, 'request'>,
+): void {
+  if (prepared.request.instructions !== undefined)
+    prepared.request.instructions = '';
+  if (prepared.request.tools !== undefined) prepared.request.tools = [];
+}
+
 export async function buildDiskTextResponsesContext(
   request: ResponsesRequest,
   deps: ResponsesExecutorDeps,
@@ -224,17 +246,20 @@ export async function buildDiskTextResponsesContext(
   );
   const prepared = await buildResponsesRequestShell(request, deps, stateful);
   try {
-    const native =
-      rows.native !== undefined &&
-      !stateful.enabled &&
-      !('input' in overrides) &&
-      !('previous_response_id' in overrides);
+    const native = rows.native !== undefined;
     const prompt = native
       ? await prepareNativeResponsesPrompt(
           request,
           deps,
           prepared,
           reasoningIdTime,
+          {
+            stateful,
+            skipRows,
+            ...('input' in overrides
+              ? { inputOverride: { value: overrides['input'] } }
+              : {}),
+          },
         )
       : await serializeResponsesPromptEnvelope({
           model: prepared.request.model,
@@ -264,11 +289,7 @@ export async function buildDiskTextResponsesContext(
           signal,
         });
     prepared.mediaRequest.registerCleanup(() => prompt.dispose());
-    if (!native) {
-      if (prepared.request.instructions !== undefined)
-        prepared.request.instructions = '';
-      if (prepared.request.tools !== undefined) prepared.request.tools = [];
-    }
+    if (!native) clearDiskPromptKeys(prepared);
     return {
       ...prepared,
       sourcePrompt: prompt,
@@ -340,10 +361,11 @@ export function diskTextProjection(
       protocol: prompt.protocol,
       method: prompt.method,
       projectionRevision: prompt.projectionRevision,
-      unsupportedMedia: [],
+      unsupportedMedia: prompt.unsupportedMedia,
       transportToken: token,
       finalizedProjection: prompt.toEstimatorProjection(),
       legacyEstimate: pinnedSourceEstimatorOnly,
+      accounting: nativeResponsesAccounting(prompt),
       releaseIfUnsent,
     };
   return {

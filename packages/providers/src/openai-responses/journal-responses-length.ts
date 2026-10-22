@@ -123,7 +123,10 @@ function supportedRequest(
   reasoningIdTime: number,
   selection: ResponsesSelection,
 ): void {
-  if (request.previous_response_id !== undefined)
+  if (
+    request.previous_response_id !== undefined &&
+    selection.summary === undefined
+  )
     throw new JournalFormatError(
       'Responses parent planning requires cursor-restricted pair corrections',
     );

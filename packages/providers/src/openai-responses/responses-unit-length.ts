@@ -25,16 +25,18 @@ export interface ResponsesUnitLength {
 export async function responsesUnitPairs(
   unit: IContent,
   query: IndexedJournalRequestSnapshot,
+  from = 0,
 ): Promise<ResponsesToolPairs> {
+  const range = { from, to: query.count };
   const calls = new Set<string>();
   const responses = new Set<string>();
   for (const block of unit.blocks) {
     if (unit.speaker === 'ai' && block.type === 'tool_call') {
       const id = normalizeToOpenAIToolId(block.id);
-      if ((await query.normalizedCount(1, 1, id)) > 0) responses.add(id);
+      if ((await query.normalizedCount(1, 1, id, range)) > 0) responses.add(id);
     } else if (unit.speaker === 'tool' && block.type === 'tool_response') {
       const id = normalizeToOpenAIToolId(block.callId);
-      if ((await query.normalizedCount(1, 0, id)) > 0) calls.add(id);
+      if ((await query.normalizedCount(1, 0, id, range)) > 0) calls.add(id);
     }
   }
   return {
@@ -58,6 +60,7 @@ export function responsesUnitLength(
   settings: RowFormatSettings,
   includeReasoning: boolean,
   pairs: ResponsesToolPairs,
+  serverSideParentActive = false,
 ): ResponsesUnitLength {
   const measured = measurableResponsesUnit(unit, settings.mediaPdfEnabled);
   const items = buildOpenAIResponsesUnit(
@@ -68,6 +71,7 @@ export function responsesUnitLength(
       debug: () => undefined,
       mediaPdfEnabled: settings.mediaPdfEnabled,
       reasoningIdTime: 0,
+      serverSideParentActive,
     },
     pairs,
     () => '',
