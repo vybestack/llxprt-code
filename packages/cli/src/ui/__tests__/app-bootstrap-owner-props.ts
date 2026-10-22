@@ -151,7 +151,7 @@ export function appContainerTestAgentProps(
       listRunning: () => [],
       cancel: unavailableOperation,
       subscribeNotifications: () =>
-        Object.assign(() => {}, { drain: async () => {} }),
+        Object.assign(() => {}, { drain: async () => {}, schedule: () => {} }),
     },
     disposeInput: async () => {},
     readApprovalMode: () => ApprovalMode.DEFAULT,

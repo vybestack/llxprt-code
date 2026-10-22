@@ -14,7 +14,7 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { McpRuntimeOwner } from '../../mcpRuntimeAssembly.js';
 import { toConfigParameters } from '../../agentConfig.adapter.js';
 import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
@@ -127,8 +127,9 @@ class RecordingLifetime {
     skillOperations?: WorkspaceSkillAssemblyOperations,
   ): Promise<void> {
     const previousReplay = process.env.LLXPRT_FAKE_RESPONSES;
-    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
-      new URL('../fixtures/' + fixture, import.meta.url),
+    process.env.LLXPRT_FAKE_RESPONSES = resolve(
+      fileURLToPath(new URL('../fixtures/', import.meta.url)),
+      fixture,
     );
     const acquiredDirectory = await mkdtemp(join(tmpdir(), 'caller-adoption-'));
     this.acquiredPrefix.push(() =>

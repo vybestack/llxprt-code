@@ -37,6 +37,7 @@ import type {
 } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { UseHistoryManagerReturn } from '../useHistoryManager.js';
+import type { SubmissionOutcome } from './types.js';
 import { mapToDisplay as mapTrackedToolCallsToDisplay } from '../toolMapping.js';
 import {
   processMemoryToolResults,
@@ -129,7 +130,7 @@ export interface UseAgentEventStreamReturn {
     message: AgentRequestInput,
     signal: AbortSignal,
     promptId: string,
-  ) => Promise<void>;
+  ) => Promise<SubmissionOutcome>;
 }
 
 /**
@@ -217,14 +218,14 @@ export function useAgentEventStream(
 
   // Holds the in-flight runStream promise so overlapping calls can be
   // serialized (see runStream for details).
-  const inflightRunRef = useRef<Promise<void> | null>(null);
+  const inflightRunRef = useRef<Promise<SubmissionOutcome> | null>(null);
 
   const runStream = useCallback(
     async (
       message: AgentRequestInput,
       signal: AbortSignal,
       promptId: string,
-    ): Promise<void> => {
+    ): Promise<SubmissionOutcome> => {
       // Serialize overlapping runStream calls: await any in-flight previous
       // run — swallowing its (expected) cancellation error — before starting
       // the next. This mirrors the pre-migration useAgenticLoop semantics
@@ -269,7 +270,7 @@ export function useAgentEventStream(
         });
       inflightRunRef.current = currentRun;
       try {
-        await currentRun;
+        return await currentRun;
       } finally {
         if (inflightRunRef.current === currentRun) {
           inflightRunRef.current = null;
@@ -323,8 +324,9 @@ function iterateAgentStream(
   promptId: string,
   args: UseAgentEventStreamArgs,
   userMessageTimestamp: number,
-): Promise<void> {
-  return (async () => {
+): Promise<SubmissionOutcome> {
+  return (async (): Promise<SubmissionOutcome> => {
+    let outcome: SubmissionOutcome = { status: 'completed' };
     const input = toAgentInput(message);
     const iterator = stream(input, { signal, promptId });
     const observer = args.onAgentEventObserved;
@@ -345,6 +347,16 @@ function iterateAgentStream(
     };
     for await (const event of iterator) {
       if (signal.aborted) break;
+      if (event.type === 'error' || event.type === 'idle-timeout') {
+        outcome = { status: 'failed', error: event.error };
+      } else if (
+        event.type === 'done' &&
+        event.reason !== 'stop' &&
+        event.reason !== 'refusal' &&
+        outcome.status !== 'failed'
+      ) {
+        outcome = { status: 'cancelled' };
+      }
       if (observer === undefined) {
         // Default-off: no perf observer means NO timing calls and NO sample
         // allocation. The ordinary handler dispatch/catch behavior is preserved
@@ -361,5 +373,6 @@ function iterateAgentStream(
         observer(event, signal, handlerMs);
       }
     }
+    return signal.aborted ? { status: 'cancelled' } : outcome;
   })();
 }

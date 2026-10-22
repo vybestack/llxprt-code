@@ -48,7 +48,7 @@ export class TasksControl implements AgentTasksControl {
 
   subscribeNotifications(
     isBusy: () => boolean,
-    deliver: (message: string) => Promise<void>,
+    deliver: Parameters<AgentTasksControl['subscribeNotifications']>[1],
   ): ReturnType<AgentTasksControl['subscribeNotifications']> {
     if (!this.deps.subscribeNotifications)
       throw new Error('Task notifications require an Agent owner');

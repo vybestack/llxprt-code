@@ -19,7 +19,7 @@ import {
   readFile,
   writeFile,
 } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
@@ -73,6 +73,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 
 import { buildAgent } from './helpers/agentHarness.js';
+import { makeScratchDir } from './helpers/scratch-dir.js';
 
 /**
  * @license
@@ -306,7 +307,8 @@ describe('public Agent workspace checkpoint lifetime', () => {
     let dataHome: string | undefined;
     let sandbox: string | undefined;
     beforeEach(async () => {
-      root = await mkdtemp(join(process.cwd(), 'tmp/agent-checkpoints-'));
+      root = await makeScratchDir('agent-checkpoints-');
+      expect(root).not.toContain(resolve(import.meta.dir, '../../..'));
       project = join(root, 'project');
       await mkdir(project);
       execFileSync('git', ['init', '--initial-branch=main', project]);

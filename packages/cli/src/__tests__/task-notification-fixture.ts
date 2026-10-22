@@ -1,4 +1,4 @@
-import { adoptFixture as fromConfig } from '../../../agents/src/api/__tests__/helpers/adoption-fixture.js';
+import { captureAgentAdoption as fromConfig } from '../../../agents/src/api/__tests__/helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC

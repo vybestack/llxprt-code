@@ -17,10 +17,14 @@ export enum StreamProcessingStatus {
   Error,
 }
 
+export type SubmissionOutcome =
+  | { readonly status: 'completed' | 'discarded' | 'cancelled' }
+  | { readonly status: 'failed'; readonly error: unknown };
+
 export interface QueuedSubmission {
   query: AgentRequestInput;
   options?: { isContinuation: boolean };
   promptId?: string;
   readonly queueId?: number;
-  readonly onConsumed?: () => void;
+  readonly onSettled?: (outcome: SubmissionOutcome) => void;
 }

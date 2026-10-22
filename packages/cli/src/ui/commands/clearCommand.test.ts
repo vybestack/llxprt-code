@@ -475,13 +475,36 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
         expect(notifications.getPendingNotifications()).toHaveLength(1),
       );
       const pending = await clearAction(context, '');
-      expect(pending).toStrictEqual(running);
+      expect(pending).toMatchObject({ type: 'message', messageType: 'error' });
+      if (pending?.type !== 'message')
+        throw new Error('Expected notice blocker');
+      expect(pending.content).toContain('completion notices');
+      expect(pending.content).not.toContain('cancel');
       expect(agent.session.getSessionId()).toBe(oldId);
       expect(
         (await agent.getHistory()).flatMap((item) => item.blocks),
       ).toContainEqual({ type: 'text', text: 'old question' });
       expect(uiEvents).not.toContain('clear');
       expect(uiEvents).not.toContain('tokens:0');
+      const messages: string[] = [];
+      const unsubscribe = agent.tasks.subscribeNotifications(
+        () => false,
+        async (text) => {
+          messages.push(text);
+        },
+      );
+      try {
+        await setImmediate();
+        await unsubscribe.drain();
+        expect(messages).toHaveLength(1);
+        await clearAction(context, '');
+        expect(agent.session.getSessionId()).not.toBe(oldId);
+        expect(await agent.getHistory()).toStrictEqual([]);
+        expect(uiEvents.slice(-2)).toStrictEqual(['tokens:0', 'clear']);
+      } finally {
+        unsubscribe();
+        await unsubscribe.drain();
+      }
     } finally {
       await child.close();
     }

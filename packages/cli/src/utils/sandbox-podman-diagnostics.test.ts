@@ -13,6 +13,10 @@ import path from 'node:path';
 const isWindows = process.platform === 'win32';
 const DARWIN_SOCKET_PATH_MAX_BYTES = 103;
 const DIAGNOSTIC_MAX_BYTES = 4096;
+// Tests that assert OpenSSH exit diagnostics are decided by the fixture ssh
+// exiting, not by a wall-clock readiness deadline racing a loaded host. The
+// deadline only ends those runs when a test asks for it explicitly.
+const READINESS_DEADLINE_NOT_REACHED_MS = 60_000;
 
 function writeExecutable(filePath: string, content: string): void {
   fs.writeFileSync(filePath, content);
@@ -52,7 +56,7 @@ function invokeCredentialBridgeInFreshBun(
   fixtureRoot: string,
   originalPath: string,
   socketPath: string,
-  pollTimeoutMs = 1000,
+  pollTimeoutMs = READINESS_DEADLINE_NOT_REACHED_MS,
 ): string {
   const runnerPath = path.join(fixtureRoot, 'invoke-credential-bridge.ts');
   const modulePath = path.join(import.meta.dirname, 'sandbox-podman.ts');
@@ -63,6 +67,9 @@ function invokeCredentialBridgeInFreshBun(
       "import fs from 'node:fs';",
       `const resultTimePath = ${JSON.stringify(path.join(fixtureRoot, 'bridge-result-time'))};`,
       `const socketPath = ${JSON.stringify(socketPath)};`,
+      // Taken after the module import so bridge latency excludes the cost of
+      // starting a fresh Bun process, which varies with host load.
+      `fs.writeFileSync(${JSON.stringify(path.join(fixtureRoot, 'bridge-start-time'))}, String(Date.now()));`,
       'try {',
       `  await setupCredentialProxyPodmanMacOS([], socketPath, ${String(pollTimeoutMs)});`,
       "  console.log('unexpected success');",
@@ -157,7 +164,6 @@ describe('Podman tunnel startup diagnostics', () => {
         fixtureRoot,
         originalPath,
         '/tmp/cred-proxy.sock',
-        3000,
       );
       const sshPid = Number(fs.readFileSync(sshPidPath, 'utf8').trim());
 
@@ -232,8 +238,80 @@ describe('Podman tunnel startup diagnostics', () => {
       expect(resultTime - readinessStartTime).toBeLessThan(1000);
     }, 10000);
 
+    it('surfaces SSH diagnostics when the readiness deadline elapses while OpenSSH has exited but is still draining output', () => {
+      const readinessStarted = path.join(fixtureRoot, 'readiness-started');
+      const sshPidPath = path.join(fixtureRoot, 'ssh.pid');
+      // The first readiness probe starts only after the 500ms startup gate, so
+      // OpenSSH is still running there. The probe then blocks until OpenSSH has
+      // been reaped and outlives the readiness deadline, so the deadline error
+      // is raised strictly after OpenSSH exited and before its stdio closed.
+      writeExecutable(
+        path.join(fixtureRoot, 'podman'),
+        [
+          '#!/bin/sh',
+          `printf '%s\\n' "$*" >> ${shellQuote(podmanInvocationLog)}`,
+          'case "$*" in',
+          "  *'system connection list'*)",
+          `    printf '%s\\n' '[{"Name":"default","URI":"ssh://core@localhost:12345/run/podman/podman.sock","Identity":"/tmp/key","Default":true}]'`,
+          '    ;;',
+          '  *)',
+          `    while [ ! -s ${shellQuote(sshPidPath)} ]; do sleep 0.01; done`,
+          `    printf started > ${shellQuote(readinessStarted)}`,
+          `    while kill -0 "$(cat ${shellQuote(sshPidPath)})" 2>/dev/null; do sleep 0.01; done`,
+          '    sleep 0.5',
+          '    exit 1',
+          '    ;;',
+          'esac',
+        ].join('\n'),
+      );
+      // The backgrounded sleep inherits OpenSSH's stdio, so the child emits
+      // `exit` immediately while `close` is held back until the sleep ends.
+      writeExecutable(
+        path.join(fixtureRoot, 'ssh'),
+        [
+          '#!/bin/sh',
+          `printf '%s\\n' "$$" > ${shellQuote(sshPidPath)}`,
+          `while [ ! -f ${shellQuote(readinessStarted)} ]; do sleep 0.01; done`,
+          "printf 'exited-before-deadline diagnostic\\n' >&2",
+          'sleep 2 &',
+          'exit 23',
+        ].join('\n'),
+      );
+
+      const message = invokeCredentialBridgeInFreshBun(
+        fixtureRoot,
+        originalPath,
+        '/tmp/cred-proxy.sock',
+        300,
+      );
+      const sshPid = Number(fs.readFileSync(sshPidPath, 'utf8').trim());
+
+      expect(message).toContain('OpenSSH exited with code 23');
+      expect(message).toContain('exited-before-deadline diagnostic');
+      expect(message).not.toContain('timed out waiting for TCP tunnel');
+      expect(processExists(sshPid)).toBe(false);
+    }, 10000);
+
     it('reports a bounded readiness timeout and reaps an SSH process that remains running', () => {
       const sshPidPath = path.join(fixtureRoot, 'ssh.pid');
+      // The readiness probe cannot report until the fixture ssh is running, so
+      // a slow process start cannot turn this into a deadline with no SSH to
+      // reap.
+      writeExecutable(
+        path.join(fixtureRoot, 'podman'),
+        [
+          '#!/bin/sh',
+          'case "$*" in',
+          "  *'system connection list'*)",
+          `    printf '%s\\n' '[{"Name":"default","URI":"ssh://core@localhost:12345/run/podman/podman.sock","Identity":"/tmp/key","Default":true}]'`,
+          '    ;;',
+          '  *)',
+          `    while [ ! -s ${shellQuote(sshPidPath)} ]; do sleep 0.01; done`,
+          '    exit 1',
+          '    ;;',
+          'esac',
+        ].join('\n'),
+      );
       writeExecutable(
         path.join(fixtureRoot, 'ssh'),
         [
@@ -243,18 +321,24 @@ describe('Podman tunnel startup diagnostics', () => {
         ].join('\n'),
       );
 
-      const start = Date.now();
       const message = invokeCredentialBridgeInFreshBun(
         fixtureRoot,
         originalPath,
         '/tmp/cred-proxy.sock',
+        1000,
       );
       const sshPid = Number(fs.readFileSync(sshPidPath, 'utf8').trim());
 
       expect(message).toContain('timed out waiting for TCP tunnel');
       expect(message).not.toContain('OpenSSH exited from signal');
       expect(processExists(sshPid)).toBe(false);
-      expect(Date.now() - start).toBeLessThan(5000);
+      const bridgeStartTime = Number(
+        fs.readFileSync(path.join(fixtureRoot, 'bridge-start-time'), 'utf8'),
+      );
+      const resultTime = Number(
+        fs.readFileSync(path.join(fixtureRoot, 'bridge-result-time'), 'utf8'),
+      );
+      expect(resultTime - bridgeStartTime).toBeLessThan(5000);
     }, 10000);
 
     it('retains exactly 4096 encoded bytes from an oversized OpenSSH diagnostic', () => {

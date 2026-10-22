@@ -340,6 +340,7 @@ export class AsyncTaskManager {
     const task = this.tasks.get(id);
     if (task && task.notifiedAt === undefined) {
       task.notifiedAt = Date.now();
+      this.enforceHistoryLimit();
     }
   }
 
@@ -356,18 +357,13 @@ export class AsyncTaskManager {
       .filter((t) => t.status !== 'running')
       .sort((a, b) => (a.completedAt ?? 0) - (b.completedAt ?? 0));
 
-    // Lines 254-266: Remove oldest until under limit
-    while (terminalTasks.length > historyLimit) {
-      const oldest = terminalTasks[0];
-
-      // Lines 258-262: ERROR: Never remove unnotified tasks
-      if (oldest.notifiedAt === undefined) {
-        break; // Stop - can't remove unnotified
+    let remaining = terminalTasks.length;
+    for (const task of terminalTasks) {
+      if (remaining <= historyLimit) break;
+      if (task.status === 'cancelled' || task.notifiedAt !== undefined) {
+        this.tasks.delete(task.id);
+        remaining--;
       }
-
-      // Lines 264-265: Remove oldest
-      this.tasks.delete(oldest.id);
-      terminalTasks.shift();
     }
   }
 
