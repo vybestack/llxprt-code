@@ -1,3 +1,11 @@
+# Native historical media corpus is green; Phase 5 remains open
+
+2026-10-22. Follow-up `4de7bebc0` and [the media receipt](PHASE6-SOURCE-BOUND-NATIVEMEDIA-PROOF.json) record 22/0 original corpus cases under unchanged creation denial, exact 323-byte frozen image parity, persistent journal-state release queuing, admission-release binding and reader-before-pin retirement. Final media gate/HTTP files pass 9/0 and 2/0. Four controls restore by cmp/hash; forced old reservation trips creation denial, while early release/hash/stale-pin controls fail assertions. The retained-row-cache control remains unclosed.
+
+[Phase 6 status](PHASE6-STATUS.md) gives the source changes and remaining scope. External pending provenance, runtime adoption identity, queue checkpoint/adoption/reopen/janitor capacity/live bytes, HTTP purge/abort combinations and 512/8192 actual-unit media retention remain open. Earlier native memory passes are historical evidence, not acceptance for these changed production/helper bytes. Other providers, last-thinking/pruned views, native log/dump and aggregate capacity remain open. Separate known REDs are untouched. All inherited hashes verify; no cleanup, default flip, OCR, push or merge.
+
+---
+
 # Cold measurement gate failures are closed, 2026-10-22
 
 `ba13d766f` checkpoints the green test instrumentation. [The supplement](PHASE6-SOURCE-BOUND-COLDMEASUREMENT-PROOF.json) and [Phase 6 status](PHASE6-STATUS.md) supersede only the two cold-read REDs below. Physical syscall counts no longer stand in for ROW coverage: genuine measurement callbacks must return independently correct kept/stripped LENS facts for all original 128/40/4000 rows, with exact old-body length, changed-settings refill, zero warm reads/remeasurement and the unchanged append bound. The two complete files pass 6/90 and 10/71; original #3919 files pass 11/29 and 3/20. Eighteen current scoped checks and four explicit environment runs pass, resolving all 36 original gate slots through affected runs and source-bound reuse. Both environment settings still use the explicitly native fixture.

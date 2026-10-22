@@ -1,3 +1,11 @@
+# Native historical media proof, 2026-10-22
+
+[PHASE6-SOURCE-BOUND-NATIVEMEDIA-PROOF.json](PHASE6-SOURCE-BOUND-NATIVEMEDIA-PROOF.json) maps follow-up `4de7bebc0`, actual source/log hashes, initial REDs, final 22/0 no-file corpus, 9/0 media gate, 2/0 HTTP proof, four restored controls, affected gates and 1204 preserved files. Forced old reservation trips creation denial; the other three controls fail assertions. The original 323-byte image hash is unchanged; real fixture ownership registration changes are explicit.
+
+[Phase 6 status](PHASE6-STATUS.md) separates this closed corpus/lease scope from pending external provenance, runtime adoption identity, queue/checkpoint/janitor capacity and accounting, purge/abort HTTP combinations, media row-retention/WeakRef measurements and the missing retained-row-cache control. Original native memory protocols have not been revalidated for these new production/helper bytes. Broader Phase 5/6/W26 and separate known REDs remain open.
+
+---
+
 # Cold measurement proof supplement, 2026-10-22
 
 [PHASE6-SOURCE-BOUND-COLDMEASUREMENT-PROOF.json](PHASE6-SOURCE-BOUND-COLDMEASUREMENT-PROOF.json) maps checkpoint `ba13d766f` to exact ROW callback/LENS coverage, independent old-body lengths, five assertion-rejecting restored mutations, complete two-file greens (6/90 and 10/71), unchanged #3919 greens, 18 scoped gates and four explicit environment invocations. All 36 original gate slots are resolved through current affected runs and unchanged-source reuse, not a whole-suite rerun. Both environment settings use the explicitly journal-backed fixture.

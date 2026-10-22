@@ -1,0 +1,1075 @@
+{
+  "date": "2026-10-22",
+  "scope": "Native historical reference-media follow-up and bounded proof, not Phase 5/6/W26 completion.",
+  "checkpoint": "4de7bebc0",
+  "predecessor": "567264a3a",
+  "corpus": {
+    "rootRed": "tmp/p8/native-media-run-ba/corpus-red.log",
+    "rootRedResult": "21 pass / 1 fail: media-reference-image creates a media reservation directory",
+    "green": "tmp/p8/native-media-final-bb/corpus-restored.log",
+    "greenResult": "22 pass / 0 fail / 176 assertions",
+    "unchanged": "All 22 inputs, frozen expected bytes, raw old-converter comparison, Content-Length and all-creation denial are unchanged.",
+    "setupChange": "Expose the existing real corpus store and register HistoryMediaOwnership on the seeded native fixture before taking its selection. No default owned-media capability, fake lease or detector allowance.",
+    "referenceImage": {
+      "stream": {
+        "sha256": "ffbdc92d8a9922eca7522af18d92c692296a30a9ddf3d05e7cdabe9fb7899665",
+        "length": 323,
+        "body": "{\"model\":\"gpt-4o\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"what is in the stored image?\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,AQID\"}}]},{\"role\":\"assistant\",\"content\":\"a pixel\"},{\"role\":\"user\",\"content\":\"thanks\"}],\"stream\":false}",
+        "contentLength": "present"
+      },
+      "rows": {
+        "sha256": "ffbdc92d8a9922eca7522af18d92c692296a30a9ddf3d05e7cdabe9fb7899665",
+        "length": 323,
+        "body": "{\"model\":\"gpt-4o\",\"messages\":[{\"role\":\"system\",\"content\":\"test system prompt\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"what is in the stored image?\"},{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:image/png;base64,AQID\"}}]},{\"role\":\"assistant\",\"content\":\"a pixel\"},{\"role\":\"user\",\"content\":\"thanks\"}],\"stream\":false}",
+        "contentLength": "present"
+      }
+    }
+  },
+  "historicalLease": {
+    "read": "RequestMediaResolver uses verified readReserved inside the native snapshot reader scope, without new request reservations.",
+    "admission": "Runtime admission releases bind to the same HistoryMediaOwnership instance. Newly registering an owner reserves its already-adopted references before granting the capability.",
+    "queue": "Deferred releases are rel:<sequence>, rel:head and rel:tail in the existing journal state root. No release sidecar or deferred-ID RAM map. Drain awaits one record and its release/commit at a time. Head is persisted at enqueue so reopen does not infer a retired head as zero.",
+    "memory": "JournalMediaPins retains version counts for currently live pins. The state-trie cache separately charges encoded nodes plus 48 bytes per entry against its existing 65536-byte cap. These structures are not a measured aggregate heap/capacity result.",
+    "cleanup": "Blob readers retire before the source pin. One cleanup failure is propagated by identity; multiple cleanup failures preserve reader-then-drain order.",
+    "queueLimits": "Checkpoint adoption, queue reopen/compaction, janitor coordination, tombstone/live-byte accounting and large-queue capacity are not closed by this run."
+  },
+  "proofs": {
+    "gate": {
+      "log": "tmp/p8/native-media-final-bb/gate-restored.log",
+      "tests": 9,
+      "failures": 0,
+      "assertions": 33
+    },
+    "http": {
+      "log": "tmp/p8/native-media-final-bb/http-proof.log",
+      "tests": 2,
+      "failures": 0,
+      "assertions": 26,
+      "observed": "Actual HTTP paused before readReserved; clear and reclamation remove zero blobs while selected; completion has exact 323-byte old-body hash/Content-Length; after last selection close reclamation removes one. Separate two-send proof denies all creating APIs."
+    },
+    "errors": "Same-length corrupt bytes retain MediaObjectHashMismatchError as the contextual resolution cause. Reader/drain single and multiple cleanup errors and stale lease rejection are asserted.",
+    "nestedPins": "Two old-version pins hold three real blobs until the last closes. Fresh readoption survives draining an old pin."
+  },
+  "controls": [
+    {
+      "name": "old-reservation",
+      "path": "packages/core/src/storage/request-media-resolver.ts",
+      "old": "if (input.lease !== undefined) {",
+      "replacement": "if (input.lease !== undefined && input.requestId === '__never__') {",
+      "test": "packages/providers/src/__tests__/native-chat-golden.test.ts",
+      "pid": 18329,
+      "exit": 1,
+      "assertionFailure": false,
+      "restoredCmpExit": 0,
+      "before": "a1b6b77e032d22f31217bd5c77dba9d5446c520e34ceb6a92af577cc287b5c9f",
+      "after": "a1b6b77e032d22f31217bd5c77dba9d5446c520e34ceb6a92af577cc287b5c9f",
+      "logSha256": "d85a6f743a7f6e0924c99f51d3ac93fdacc719281efa0be54692436cb1f5618f",
+      "failureMechanism": "Unchanged all-creation denial throws during reservation directory setup; 21 pass / 1 fail."
+    },
+    {
+      "name": "early-release",
+      "path": "packages/core/src/storage/history-media-release-gate.ts",
+      "old": "if (this.journal.mediaPins.oldestVersion === undefined) {",
+      "replacement": "if (this.journal.mediaPins.oldestVersion === undefined || contentId.length > 0) {",
+      "test": "packages/core/src/storage/history-media-release-gate.test.ts",
+      "pid": 18358,
+      "exit": 1,
+      "assertionFailure": true,
+      "restoredCmpExit": 0,
+      "before": "c0ca6c298d2ee10338297b262679f72078aa4f467b927bfb3f537b4a808bc629",
+      "after": "c0ca6c298d2ee10338297b262679f72078aa4f467b927bfb3f537b4a808bc629",
+      "logSha256": "3632af3367ea688bdf1a15515b7c5204bec5bfa848b01e6494e00d98e1ec6fa3",
+      "failureMechanism": "Reclamation assertion expected 0, received 1."
+    },
+    {
+      "name": "skip-blob-hash",
+      "path": "packages/core/src/storage/local-media-store-persistence.ts",
+      "old": "if (contentIdFor(storedBytes) !== reference.contentId) {",
+      "replacement": "if (contentIdFor(storedBytes) !== reference.contentId && operation === '__never__') {",
+      "test": "packages/core/src/storage/history-media-release-gate.test.ts",
+      "pid": 18371,
+      "exit": 1,
+      "assertionFailure": true,
+      "restoredCmpExit": 0,
+      "before": "6e5c6e06f0f232ad98b4fa755c194e1c8cc4af34e8bc1a75972bedd1bc665f62",
+      "after": "6e5c6e06f0f232ad98b4fa755c194e1c8cc4af34e8bc1a75972bedd1bc665f62",
+      "logSha256": "3255a5d2936ac7c40a31562854886200b9cbc585e71051c754c156b858a13931",
+      "failureMechanism": "Expected promise that rejects, received resolved promise."
+    },
+    {
+      "name": "stale-pin",
+      "path": "packages/core/src/storage/request-media-resolver.ts",
+      "old": "          input.lease.requireOpen();\n          bytes = await input.lease.withRead(() =>\n            this.store.readReserved(entry.reference),\n          );\n          input.lease.requireOpen();",
+      "replacement": "          bytes = await this.store.readReserved(entry.reference);",
+      "test": "packages/core/src/storage/history-media-release-gate.test.ts",
+      "pid": 18389,
+      "exit": 1,
+      "assertionFailure": true,
+      "restoredCmpExit": 0,
+      "before": "a1b6b77e032d22f31217bd5c77dba9d5446c520e34ceb6a92af577cc287b5c9f",
+      "after": "a1b6b77e032d22f31217bd5c77dba9d5446c520e34ceb6a92af577cc287b5c9f",
+      "logSha256": "78e12b638d63ab4d6cc6015c656da12a1f5232e8a9a895f490372b43a506f75e",
+      "failureMechanism": "Expected promise that rejects, received resolved promise."
+    }
+  ],
+  "controlsRestored": true,
+  "initialFinalDriver": {
+    "results": [
+      {
+        "name": "core-history-media-release-gate.test.ts",
+        "cwd": "packages/core",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "test",
+          "src/storage/history-media-release-gate.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "pid": 13236,
+        "exit": 0,
+        "timedOut": false,
+        "log": "tmp/p8/native-media-final-bb/core-history-media-release-gate.test.ts.log",
+        "sha256": "4beb0eb5c1b68d9178b60b75aefa1bbbe2cb5712e6ce7826ff83d3cbf8d975bd"
+      },
+      {
+        "name": "core-HistoryService.media-ownership.test.ts",
+        "cwd": "packages/core",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "test",
+          "src/services/history/HistoryService.media-ownership.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "pid": 13243,
+        "exit": 0,
+        "timedOut": false,
+        "log": "tmp/p8/native-media-final-bb/core-HistoryService.media-ownership.test.ts.log",
+        "sha256": "e55da5923f96c562b63bbbe71b4309bedbc0b1c310aa735ebe74a2e428ca54b4"
+      },
+      {
+        "name": "core-journalHistoryStore.repair.test.ts",
+        "cwd": "packages/core",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "test",
+          "src/services/history/journalHistoryStore.repair.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "pid": 13258,
+        "exit": 0,
+        "timedOut": false,
+        "log": "tmp/p8/native-media-final-bb/core-journalHistoryStore.repair.test.ts.log",
+        "sha256": "cc285142e0e142a782e0ba82022edca4dfb7259c8a78020f515f16a262dc933d"
+      },
+      {
+        "name": "core-native-provider-lifetime.test.ts",
+        "cwd": "packages/core",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "test",
+          "src/services/history/native-provider-lifetime.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "pid": 13263,
+        "exit": 0,
+        "timedOut": false,
+        "log": "tmp/p8/native-media-final-bb/core-native-provider-lifetime.test.ts.log",
+        "sha256": "4827753417a70de2c51e7d9e515a06a1d6da890146261758a95ea9da935585ed"
+      },
+      {
+        "name": "core-journalStore.readerLifetime.test.ts",
+        "cwd": "packages/core",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "test",
+          "src/journal/journalStore.readerLifetime.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "pid": 13265,
+        "exit": 0,
+        "timedOut": false,
+        "log": "tmp/p8/native-media-final-bb/core-journalStore.readerLifetime.test.ts.log",
+        "sha256": "c1198f9c706f0d711186d19a509f3a42f8d62134bc5b6b1241707abc16aaf159"
+      },
+      {
+        "name": "core-native-provider-request.test.ts",
+        "cwd": "packages/core",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "test",
+          "src/services/history/native-provider-request.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "pid": 13269,
+        "exit": 0,
+        "timedOut": false,
+        "log": "tmp/p8/native-media-final-bb/core-native-provider-request.test.ts.log",
+        "sha256": "9c572f228a96a899483d1fea88323840eeb983506657bc228cff87b3c5a287e1"
+      },
+      {
+        "name": "core-journalHistoryStore.detachedMedia.test.ts",
+        "cwd": "packages/core",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "test",
+          "src/services/history/journalHistoryStore.detachedMedia.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "pid": 13270,
+        "exit": 0,
+        "timedOut": false,
+        "log": "tmp/p8/native-media-final-bb/core-journalHistoryStore.detachedMedia.test.ts.log",
+        "sha256": "0c7c43f02bd4b6c70218e660a27f5de8dcdcd8d4661fc9c4fa655de0b20a13ff"
+      },
+      {
+        "name": "core-semantic-purge-native-compensation.test.ts",
+        "cwd": "packages/core",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "test",
+          "src/services/history/semantic-purge-native-compensation.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "pid": 13279,
+        "exit": 0,
+        "timedOut": false,
+        "log": "tmp/p8/native-media-final-bb/core-semantic-purge-native-compensation.test.ts.log",
+        "sha256": "8eb4bddf6a89bef722394dfdf4e4419c61f3e57846692fe5f14e8ab0f642d2e7"
+      },
+      {
+        "name": "core-media-admission-service.test.ts",
+        "cwd": "packages/core",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "test",
+          "src/storage/media-admission-service.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "pid": 13293,
+        "exit": 0,
+        "timedOut": false,
+        "log": "tmp/p8/native-media-final-bb/core-media-admission-service.test.ts.log",
+        "sha256": "de44b1dce9f13e86c9fb9982761ec4b946daa34573cee9904d91f2161ff75f73"
+      },
+      {
+        "name": "providers-native-chat-golden.test.ts",
+        "cwd": "packages/providers",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "test",
+          "src/__tests__/native-chat-golden.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "pid": 13301,
+        "exit": 1,
+        "timedOut": false,
+        "log": "tmp/p8/native-media-final-bb/providers-native-chat-golden.test.ts.log",
+        "sha256": "e11ec39114198a48c5f3cac1710c64b0739ba2e0f3f488f373bb33a38c46c541"
+      },
+      {
+        "name": "providers-native-chat-media-lease.test.ts",
+        "cwd": "packages/providers",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "test",
+          "src/__tests__/native-chat-media-lease.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "pid": 13310,
+        "exit": 0,
+        "timedOut": false,
+        "log": "tmp/p8/native-media-final-bb/providers-native-chat-media-lease.test.ts.log",
+        "sha256": "41f44ddc0bded35bd299b04fed678531346add49213f7011e3c674a7eccf65f2"
+      },
+      {
+        "name": "providers-native-chat-direct-send.test.ts",
+        "cwd": "packages/providers",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "test",
+          "src/__tests__/native-chat-direct-send.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "pid": 13324,
+        "exit": 0,
+        "timedOut": false,
+        "log": "tmp/p8/native-media-final-bb/providers-native-chat-direct-send.test.ts.log",
+        "sha256": "a951974ba884b53ebcdf18ce5e2039fa02419a96e5f64389d0d05c5258d2b777"
+      },
+      {
+        "name": "providers-native-chat-preparation.test.ts",
+        "cwd": "packages/providers",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "test",
+          "src/openai/native-chat-preparation.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "pid": 13336,
+        "exit": 0,
+        "timedOut": false,
+        "log": "tmp/p8/native-media-final-bb/providers-native-chat-preparation.test.ts.log",
+        "sha256": "a1c6d223d557e570166a9cef6e0e580ef0795ef49d5af7f664121a211576d7af"
+      },
+      {
+        "name": "providers-journal-chat-length-lifecycle.test.ts",
+        "cwd": "packages/providers",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "test",
+          "src/openai/journal-chat-length-lifecycle.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "pid": 13366,
+        "exit": 0,
+        "timedOut": false,
+        "log": "tmp/p8/native-media-final-bb/providers-journal-chat-length-lifecycle.test.ts.log",
+        "sha256": "8195fc3394000a0c55e274b23a1d0ad034a759533b89571523b0d9f75f6003b9"
+      },
+      {
+        "name": "providers-request-media-resolution.test.ts",
+        "cwd": "packages/providers",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "test",
+          "src/utils/request-media-resolution.test.ts",
+          "--timeout",
+          "180000"
+        ],
+        "pid": 13372,
+        "exit": 0,
+        "timedOut": false,
+        "log": "tmp/p8/native-media-final-bb/providers-request-media-resolution.test.ts.log",
+        "sha256": "45d2d7997c33d243a8b79e0e3a05f73a5b3007aa722930d32c4950b3e21f0c1b"
+      },
+      {
+        "name": "core-declarations",
+        "cwd": "packages/core",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "../../scripts/build_package.ts"
+        ],
+        "env": {
+          "LLXPRT_EMIT_DECLARATIONS_ONLY": "1"
+        },
+        "pid": 13377,
+        "exit": 0,
+        "timedOut": false,
+        "log": "tmp/p8/native-media-final-bb/core-declarations.log",
+        "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127"
+      },
+      {
+        "name": "providers-declarations",
+        "cwd": "packages/providers",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "../../scripts/build_package.ts"
+        ],
+        "env": {
+          "LLXPRT_EMIT_DECLARATIONS_ONLY": "1"
+        },
+        "pid": 13456,
+        "exit": 0,
+        "timedOut": false,
+        "log": "tmp/p8/native-media-final-bb/providers-declarations.log",
+        "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127"
+      },
+      {
+        "name": "agents-declarations",
+        "cwd": "packages/agents",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "../../scripts/build_package.ts"
+        ],
+        "env": {
+          "LLXPRT_EMIT_DECLARATIONS_ONLY": "1"
+        },
+        "pid": 13486,
+        "exit": 0,
+        "timedOut": false,
+        "log": "tmp/p8/native-media-final-bb/agents-declarations.log",
+        "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127"
+      },
+      {
+        "name": "core-types",
+        "cwd": ".",
+        "args": [
+          "node_modules/.bin/tsc",
+          "--noEmit",
+          "-p",
+          "packages/core/tsconfig.noemit.json"
+        ],
+        "pid": 13529,
+        "exit": 2,
+        "timedOut": false,
+        "log": "tmp/p8/native-media-final-bb/core-types.log",
+        "sha256": "f693bb56c523cfbe46eb6dacdefd38f653d472509ac77633e554a71e38c14024"
+      },
+      {
+        "name": "providers-types",
+        "cwd": ".",
+        "args": [
+          "node_modules/.bin/tsc",
+          "--noEmit",
+          "-p",
+          "packages/providers/tsconfig.noemit.json"
+        ],
+        "pid": 13650,
+        "exit": 0,
+        "timedOut": false,
+        "log": "tmp/p8/native-media-final-bb/providers-types.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "agents-types",
+        "cwd": ".",
+        "args": [
+          "node_modules/.bin/tsc",
+          "--noEmit",
+          "-p",
+          "packages/agents/tsconfig.noemit.json"
+        ],
+        "pid": 13777,
+        "exit": 0,
+        "timedOut": false,
+        "log": "tmp/p8/native-media-final-bb/agents-types.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "providers-bun-types",
+        "cwd": ".",
+        "args": [
+          "node_modules/.bin/tsc",
+          "--noEmit",
+          "-p",
+          "packages/providers/tsconfig.test-bun.json",
+          "--types",
+          "bun"
+        ],
+        "pid": 13875,
+        "exit": 0,
+        "timedOut": false,
+        "log": "tmp/p8/native-media-final-bb/providers-bun-types.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "agents-bun-types",
+        "cwd": ".",
+        "args": [
+          "node_modules/.bin/tsc",
+          "--noEmit",
+          "-p",
+          "packages/agents/tsconfig.test-bun.json",
+          "--types",
+          "bun"
+        ],
+        "pid": 13909,
+        "exit": 0,
+        "timedOut": false,
+        "log": "tmp/p8/native-media-final-bb/agents-bun-types.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "lint",
+        "cwd": ".",
+        "args": [
+          "node_modules/.bin/eslint",
+          "--max-warnings",
+          "0",
+          "packages/core/src/journal/journalStore.ts",
+          "packages/core/src/runtime/createAgentRuntimeContext.ts",
+          "packages/core/src/services/history/HistoryServiceCore.ts",
+          "packages/core/src/services/history/historyBatchContracts.ts",
+          "packages/core/src/services/history/journal-provider-request.ts",
+          "packages/core/src/services/history/journalHistoryStore.ts",
+          "packages/core/src/services/history/journalMediaMutations.ts",
+          "packages/core/src/services/history/native-provider-format.ts",
+          "packages/core/src/services/history/native-purge-provider-request.ts",
+          "packages/core/src/storage/history-media-ownership.ts",
+          "packages/core/src/storage/history-media-release-gate.test.ts",
+          "packages/core/src/storage/history-media-release-gate.ts",
+          "packages/core/src/storage/media-admission-service.ts",
+          "packages/core/src/storage/request-media-resolver.ts",
+          "packages/providers/src/__tests__/native-chat-golden.test.ts",
+          "packages/providers/src/__tests__/native-chat-media-lease.test.ts",
+          "packages/providers/src/__tests__/support/journal-send-fixture.ts",
+          "packages/providers/src/__tests__/support/wireBodyCorpus.ts",
+          "packages/providers/src/openai-responses/responses-row-media.ts",
+          "packages/providers/src/openai/OpenAISourceRoute.ts",
+          "packages/providers/src/utils/request-media-resolution.ts",
+          "packages/core/src/journal/journalMediaPins.ts"
+        ],
+        "pid": 13987,
+        "exit": 0,
+        "timedOut": false,
+        "log": "tmp/p8/native-media-final-bb/lint.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "format",
+        "cwd": ".",
+        "args": [
+          "node_modules/.bin/prettier",
+          "--check",
+          "packages/core/src/journal/journalStore.ts",
+          "packages/core/src/runtime/createAgentRuntimeContext.ts",
+          "packages/core/src/services/history/HistoryServiceCore.ts",
+          "packages/core/src/services/history/historyBatchContracts.ts",
+          "packages/core/src/services/history/journal-provider-request.ts",
+          "packages/core/src/services/history/journalHistoryStore.ts",
+          "packages/core/src/services/history/journalMediaMutations.ts",
+          "packages/core/src/services/history/native-provider-format.ts",
+          "packages/core/src/services/history/native-purge-provider-request.ts",
+          "packages/core/src/storage/history-media-ownership.ts",
+          "packages/core/src/storage/history-media-release-gate.test.ts",
+          "packages/core/src/storage/history-media-release-gate.ts",
+          "packages/core/src/storage/media-admission-service.ts",
+          "packages/core/src/storage/request-media-resolver.ts",
+          "packages/providers/src/__tests__/native-chat-golden.test.ts",
+          "packages/providers/src/__tests__/native-chat-media-lease.test.ts",
+          "packages/providers/src/__tests__/support/journal-send-fixture.ts",
+          "packages/providers/src/__tests__/support/wireBodyCorpus.ts",
+          "packages/providers/src/openai-responses/responses-row-media.ts",
+          "packages/providers/src/openai/OpenAISourceRoute.ts",
+          "packages/providers/src/utils/request-media-resolution.ts",
+          "packages/core/src/journal/journalMediaPins.ts"
+        ],
+        "pid": 14156,
+        "exit": 0,
+        "timedOut": false,
+        "log": "tmp/p8/native-media-final-bb/format.log",
+        "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+      },
+      {
+        "name": "graph",
+        "cwd": ".",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "scripts/check-affected-test-shards.ts"
+        ],
+        "pid": 14157,
+        "exit": 0,
+        "timedOut": false,
+        "log": "tmp/p8/native-media-final-bb/graph.log",
+        "sha256": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67"
+      },
+      {
+        "name": "audit",
+        "cwd": ".",
+        "args": [
+          "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+          "scripts/test-audit/scan.ts",
+          "tmp/p8/native-media-final-bb/audit"
+        ],
+        "pid": 14191,
+        "exit": 0,
+        "timedOut": false,
+        "log": "tmp/p8/native-media-final-bb/audit.log",
+        "sha256": "0650c3672b5cef5286995781afe77b87f6c46037ee89d3df5c078c5958c50136"
+      },
+      {
+        "name": "preservation",
+        "cwd": ".",
+        "args": [
+          "shasum",
+          "-a",
+          "256",
+          "-c",
+          "tmp/p6/chat-tail-run-au/preserved.sha256"
+        ],
+        "pid": 14238,
+        "exit": 0,
+        "timedOut": false,
+        "log": "tmp/p8/native-media-final-bb/preservation.log",
+        "sha256": "0e4199bb6c410cc6f1e5bd39e3d87c8159795d9dc60279f003e975a7ea37b454"
+      }
+    ],
+    "interpretation": "Initial BB corpus and core types were RED. Preserve these logs. Corpus setup timing and the narrowed owner parameter were corrected; affected complete corpus/type/lint/format runs supersede only those slots."
+  },
+  "finalGateOverrides": {
+    "core-types": "core-types-proof.log",
+    "providers-bun-types": "providers-bun-types-proof.log",
+    "core-declarations": "core-declarations-final.log",
+    "lint": "lint-proof.log",
+    "format": "format-proof.log",
+    "audit": "audit-proof.log",
+    "preservation": "preservation-final.log",
+    "core-history-media-release-gate.test.ts": "gate-restored.log",
+    "providers-native-chat-golden.test.ts": "corpus-restored.log",
+    "providers-native-chat-media-lease.test.ts": "http-proof.log"
+  },
+  "finalGateStatus": "All affected gates pass after the documented corrections. Core/providers/agents declarations and strict types, providers/agents Bun types, zero-warning lint, format, graph, audit and preservation. No whole-matrix rerun or whole-suite claim.",
+  "source": [
+    {
+      "path": "packages/core/src/journal/journalStore.ts",
+      "sha256": "a27723253a14e958f2e4aa66e9af4685587265209d7c6e86fcdd5297e74b3937"
+    },
+    {
+      "path": "packages/core/src/runtime/createAgentRuntimeContext.ts",
+      "sha256": "066d08c9e68fd72b62380f4ef10985870e5e55f91455c03f624f2b6f4eca514e"
+    },
+    {
+      "path": "packages/core/src/services/history/HistoryServiceCore.ts",
+      "sha256": "c86b127f140bc33326a4bbe5c16c7947787574b6a1c230bd759df1e9e9644cb2"
+    },
+    {
+      "path": "packages/core/src/services/history/historyBatchContracts.ts",
+      "sha256": "dac61c715482e0f381aa40e15932f0a0d49c42c081a777441b0a1c6736c8ed35"
+    },
+    {
+      "path": "packages/core/src/services/history/journal-provider-request.ts",
+      "sha256": "a03d159a00d7a0198c8c6a5ce43efa036e8eee862d8ee14df77c469f13b4f479"
+    },
+    {
+      "path": "packages/core/src/services/history/journalHistoryStore.ts",
+      "sha256": "350434cec4bb832dca99f782b245134f9875a7ec0b2cb5c968b967e4cdaabc73"
+    },
+    {
+      "path": "packages/core/src/services/history/journalMediaMutations.ts",
+      "sha256": "6f2e57641a35f8208e371ade953ca1a57d7f3c55ffac467e92cb6b5d08d0155d"
+    },
+    {
+      "path": "packages/core/src/services/history/native-provider-format.ts",
+      "sha256": "d10fae7c3524b7caf6e4abce8eec356c6c557f9b979e583f1e7d3c609ae920c1"
+    },
+    {
+      "path": "packages/core/src/services/history/native-purge-provider-request.ts",
+      "sha256": "5ab61b4825e4b41098b7d5e1e8375aea3bc55a32efe51fd562cdccaea26c78b7"
+    },
+    {
+      "path": "packages/core/src/storage/history-media-ownership.ts",
+      "sha256": "e5b68177ec6701d2baeb06ac79c5c81167b60bcfc051bbd4410c39072baee685"
+    },
+    {
+      "path": "packages/core/src/storage/history-media-release-gate.test.ts",
+      "sha256": "b5196e850bd4b5db9b742db30cf8cb995384a961a84c377afad22c46ca9d0c8c"
+    },
+    {
+      "path": "packages/core/src/storage/history-media-release-gate.ts",
+      "sha256": "c0ca6c298d2ee10338297b262679f72078aa4f467b927bfb3f537b4a808bc629"
+    },
+    {
+      "path": "packages/core/src/storage/media-admission-service.ts",
+      "sha256": "74ef124a383103bd2c517d43a496cf5cca428af33b216be1df336f30be9beee8"
+    },
+    {
+      "path": "packages/core/src/storage/request-media-resolver.ts",
+      "sha256": "a1b6b77e032d22f31217bd5c77dba9d5446c520e34ceb6a92af577cc287b5c9f"
+    },
+    {
+      "path": "packages/providers/src/__tests__/native-chat-golden.test.ts",
+      "sha256": "6c3424f283ef5e4573bfd6c9e71779cf4b1c39d188ac30d57a9611d42744ff5b"
+    },
+    {
+      "path": "packages/providers/src/__tests__/native-chat-media-lease.test.ts",
+      "sha256": "5e55827229287bc1bda56426061f5fed7914c4790c1da86bc56099712510b6d7"
+    },
+    {
+      "path": "packages/providers/src/__tests__/support/journal-send-fixture.ts",
+      "sha256": "7c6ec81df414b90c94764d71643c302df8a33fe998c413ca8a578ceba69aa6c5"
+    },
+    {
+      "path": "packages/providers/src/__tests__/support/wireBodyCorpus.ts",
+      "sha256": "3bde7e586d6f64299937370e519d629fbc37f62a2f846595bf5e95a07101d153"
+    },
+    {
+      "path": "packages/providers/src/openai-responses/responses-row-media.ts",
+      "sha256": "82486f4fda7e2335976e63ca66146905d68306ccfce19ed78e36ad4577b0dd73"
+    },
+    {
+      "path": "packages/providers/src/openai/OpenAISourceRoute.ts",
+      "sha256": "0c8ef38a24ff1041ff308411739af8cdc83ea505e59cc6b94d71978331db7c25"
+    },
+    {
+      "path": "packages/providers/src/utils/request-media-resolution.ts",
+      "sha256": "22e506a151101ee8e6f90a1d2c5a51a628204c56bfdd366e8578ec1005d1b37d"
+    },
+    {
+      "path": "packages/core/src/journal/journalMediaPins.ts",
+      "sha256": "bfed2ac191d6bc88df61b347d43cc8393cc013f96ebb6cfd1d2d30f297e15a09"
+    }
+  ],
+  "differencesFromBA": [
+    {
+      "path": "packages/core/src/journal/journalStore.ts",
+      "before": "b8f20a7195cdf38ce882f310bebc7c6f7e0f68320fd9855654331d35a4660050",
+      "after": "a27723253a14e958f2e4aa66e9af4685587265209d7c6e86fcdd5297e74b3937"
+    },
+    {
+      "path": "packages/core/src/services/history/journalHistoryStore.ts",
+      "before": "6f5b4e3d4052c62479a55a25223089c4e17937c929428d68168d632702184c2c",
+      "after": "350434cec4bb832dca99f782b245134f9875a7ec0b2cb5c968b967e4cdaabc73"
+    },
+    {
+      "path": "packages/core/src/services/history/native-provider-format.ts",
+      "before": "def13ce629b89b1022965794ddc6d3b28aea57fd1d6b68b48fdc71cb0775ce9f",
+      "after": "d10fae7c3524b7caf6e4abce8eec356c6c557f9b979e583f1e7d3c609ae920c1"
+    },
+    {
+      "path": "packages/core/src/services/history/native-purge-provider-request.ts",
+      "before": "ae06e76197a86c89f21da0732f189ec33b2d2de6c8254a838dfdc041e7bba9fd",
+      "after": "5ab61b4825e4b41098b7d5e1e8375aea3bc55a32efe51fd562cdccaea26c78b7"
+    },
+    {
+      "path": "packages/core/src/storage/history-media-release-gate.test.ts",
+      "before": "0970582ec339a5c397a92032a7a86981227f00004fc8e4f3c866cc0f469cfe26",
+      "after": "b5196e850bd4b5db9b742db30cf8cb995384a961a84c377afad22c46ca9d0c8c"
+    },
+    {
+      "path": "packages/core/src/storage/history-media-release-gate.ts",
+      "before": "359e44482c0668a5a163619b52b5ece1dfffff26c96f0bf8fad1dc7e72fa1896",
+      "after": "c0ca6c298d2ee10338297b262679f72078aa4f467b927bfb3f537b4a808bc629"
+    },
+    {
+      "path": "packages/providers/src/__tests__/native-chat-media-lease.test.ts",
+      "before": "01b642dc51c219134ada128d8d4247a4702751fe90113075706afcb8adc4dd47",
+      "after": "5e55827229287bc1bda56426061f5fed7914c4790c1da86bc56099712510b6d7"
+    },
+    {
+      "path": "packages/providers/src/openai-responses/responses-row-media.ts",
+      "before": "4b15b1200fcbde678f7d535b81e11f8d5476ad261e3a728161b3a4dc5bcb072c",
+      "after": "82486f4fda7e2335976e63ca66146905d68306ccfce19ed78e36ad4577b0dd73"
+    },
+    {
+      "path": "packages/providers/src/utils/request-media-resolution.ts",
+      "before": "025501e1ac655fee65be815b4a20ef866fb0b7f9d817c44d1f4df4429bb63ac2",
+      "after": "22e506a151101ee8e6f90a1d2c5a51a628204c56bfdd366e8578ec1005d1b37d"
+    }
+  ],
+  "differencesFromInitialBB": [
+    {
+      "path": "packages/core/src/services/history/journalHistoryStore.ts",
+      "before": "c9035d9cfdee8e676cc68430903f6f08c5234ad0c6a0da1e412812bbbf5ef961",
+      "after": "350434cec4bb832dca99f782b245134f9875a7ec0b2cb5c968b967e4cdaabc73"
+    },
+    {
+      "path": "packages/core/src/storage/history-media-release-gate.test.ts",
+      "before": "efbbd26a1b5da9fd495404e8872c316441cead9072db93ce24a27d4dac0d86a6",
+      "after": "b5196e850bd4b5db9b742db30cf8cb995384a961a84c377afad22c46ca9d0c8c"
+    },
+    {
+      "path": "packages/providers/src/__tests__/native-chat-media-lease.test.ts",
+      "before": "8fd4ba30f04a2d683a51582fa31425bd000d9754adf9a6f48deb30059ac8da0e",
+      "after": "5e55827229287bc1bda56426061f5fed7914c4790c1da86bc56099712510b6d7"
+    },
+    {
+      "path": "packages/providers/src/__tests__/support/journal-send-fixture.ts",
+      "before": "ef15e79bde99e32491b97f4fe66a764d970379ad87bcd7296eddb33e768ea0b4",
+      "after": "7c6ec81df414b90c94764d71643c302df8a33fe998c413ca8a578ceba69aa6c5"
+    }
+  ],
+  "memoryAcceptance": {
+    "status": "PENDING for these bytes",
+    "reason": "Production journal/media/request methods and the shared journal fixture changed after the original native text/tool protocols. No source bridge establishes final 1/8 MiB memory acceptance. No memory protocol was rerun.",
+    "unclosed": [
+      "512/8192 reference-media plus 64 KiB text actual-unit retention and same-prefix WeakRef measurement <=2 / final 0",
+      "retain-row-cache control",
+      "media-specific original full memory protocol"
+    ]
+  },
+  "pending": [
+    "Explicit source-provenance/existing-external-reservation proof for unowned pending references; pending rows still use the old request reservation path, not a default native-history lease.",
+    "Typed runtime store-identity regression coverage across post-registration session adoption. The corpus registers its real owner after seeding.",
+    "Paused actual HTTP concurrent purge and abort variants; current paused HTTP proof covers clear plus completion only.",
+    "Missing blob/file corruption variants and repeated raw IDs with media-specific unit-lifetime measurements.",
+    "Queue checkpoint/adoption/reopen/compaction/janitor capacity and complete LENS/live-byte accounting, including retained tombstones.",
+    "last-thinking/pruned views; other providers, Kimi/Mistral/old continuation, broader/exact estimators, native log/dump, automatic compression and aggregate cache/pin/overlay capacity."
+  ],
+  "separateReds": [
+    "#3917",
+    "two earlier explicit-old durable failures",
+    "8192 blanket compaction denial",
+    "public fixture regression"
+  ],
+  "preservation": {
+    "manifest": "tmp/p6/chat-tail-run-au/preserved.sha256",
+    "entries": 1204,
+    "unrelatedDeclarations": 306,
+    "status": "all verify; raw recovery and .llxprt untouched and unstaged"
+  },
+  "processStatus": {
+    "baDriver": 4167,
+    "bbDriver": 13235,
+    "active": "none observed",
+    "scan": "tmp/p8/native-media-final-bb/processes-final.log",
+    "pids": [
+      13236,
+      13243,
+      13258,
+      13263,
+      13265,
+      13269,
+      13270,
+      13279,
+      13293,
+      13301,
+      13310,
+      13324,
+      13336,
+      13366,
+      13372,
+      13377,
+      13456,
+      13486,
+      13529,
+      13650,
+      13777,
+      13875,
+      13909,
+      13987,
+      14156,
+      14157,
+      14191,
+      14238,
+      18329,
+      18358,
+      18371,
+      18389
+    ]
+  },
+  "review": "review skipped per Andrew 2026-10-09",
+  "prohibitedActions": "No cleanup, lock deletion, .llxprt staging/edit, OCR, default flip, push or merge. The transient index.lock disappeared before an ordinary successful commit retry.",
+  "logs": [
+    {
+      "path": "tmp/p8/native-media-final-bb/agents-declarations.log",
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/processes-final.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/agents-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/lint-proof.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/http-proof.log",
+      "sha256": "df9fbec90bb88e8077c78d056b1bffd97dbbfaa658c9e88d905f841a48b65f52"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/providers-native-chat-media-lease.test.ts.log",
+      "sha256": "41f44ddc0bded35bd299b04fed678531346add49213f7011e3c674a7eccf65f2"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/gate-restored.log",
+      "sha256": "3660af78936ab48ae69d144599fc3b3c1259e7ab57be63f1c0404a8455322484"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/format.log",
+      "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/stale-pin.log",
+      "sha256": "78e12b638d63ab4d6cc6015c656da12a1f5232e8a9a895f490372b43a506f75e"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/lint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/core-declarations.log",
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/core-journalStore.readerLifetime.test.ts.log",
+      "sha256": "c1198f9c706f0d711186d19a509f3a42f8d62134bc5b6b1241707abc16aaf159"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/core-declarations-affected.log",
+      "sha256": "eae65adaa43b0928706658ecaa01a46731779d76628a28b8e3cc113d21ce4ce4"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/agents-bun-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/core-journalHistoryStore.detachedMedia.test.ts.log",
+      "sha256": "0c7c43f02bd4b6c70218e660a27f5de8dcdcd8d4661fc9c4fa655de0b20a13ff"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/core-types.log",
+      "sha256": "f693bb56c523cfbe46eb6dacdefd38f653d472509ac77633e554a71e38c14024"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/graph.log",
+      "sha256": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/core-declarations-final.log",
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/core-native-provider-request.test.ts.log",
+      "sha256": "9c572f228a96a899483d1fea88323840eeb983506657bc228cff87b3c5a287e1"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/providers-journal-chat-length-lifecycle.test.ts.log",
+      "sha256": "8195fc3394000a0c55e274b23a1d0ad034a759533b89571523b0d9f75f6003b9"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/gate-proof-format.log",
+      "sha256": "3b42e559d417d822d72a75c0538eaeef00199f72bb38f866d4e9e02493c1aacb"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/providers-native-chat-direct-send.test.ts.log",
+      "sha256": "a951974ba884b53ebcdf18ce5e2039fa02419a96e5f64389d0d05c5258d2b777"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/providers-native-chat-golden.test.ts.log",
+      "sha256": "e11ec39114198a48c5f3cac1710c64b0739ba2e0f3f488f373bb33a38c46c541"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/corpus-affected.log",
+      "sha256": "9f236e9f4372d1261bd8642fea77f7e7094d10f74d27cffd852b630b49f332c6"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/core-history-media-release-gate.test.ts.log",
+      "sha256": "4beb0eb5c1b68d9178b60b75aefa1bbbe2cb5712e6ce7826ff83d3cbf8d975bd"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/core-semantic-purge-native-compensation.test.ts.log",
+      "sha256": "8eb4bddf6a89bef722394dfdf4e4419c61f3e57846692fe5f14e8ab0f642d2e7"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/audit.log",
+      "sha256": "0650c3672b5cef5286995781afe77b87f6c46037ee89d3df5c078c5958c50136"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/proof-format.log",
+      "sha256": "6f0a75c4b99dea3cee4dca778829e6773fc1c17de09dae7201ff0cf144c9160a"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/format-proof.log",
+      "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/core-native-provider-lifetime.test.ts.log",
+      "sha256": "4827753417a70de2c51e7d9e515a06a1d6da890146261758a95ea9da935585ed"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/providers-declarations.log",
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/core-HistoryService.media-ownership.test.ts.log",
+      "sha256": "e55da5923f96c562b63bbbe71b4309bedbc0b1c310aa735ebe74a2e428ca54b4"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/controls-driver.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/corpus-restored.log",
+      "sha256": "1c0bae774d0056625c383d08f4c0c5a4eea01c6a2ea182d920e7fcaeb056778c"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/lint-affected.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/preservation.log",
+      "sha256": "0e4199bb6c410cc6f1e5bd39e3d87c8159795d9dc60279f003e975a7ea37b454"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/audit-proof.log",
+      "sha256": "b1886a72528684b12688450a90d372fe35155989cb33a2736cc8d643310817a2"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/format-affected.log",
+      "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/early-release.log",
+      "sha256": "3632af3367ea688bdf1a15515b7c5204bec5bfa848b01e6494e00d98e1ec6fa3"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/providers-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/providers-request-media-resolution.test.ts.log",
+      "sha256": "45d2d7997c33d243a8b79e0e3a05f73a5b3007aa722930d32c4950b3e21f0c1b"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/core-types-affected.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/core-journalHistoryStore.repair.test.ts.log",
+      "sha256": "cc285142e0e142a782e0ba82022edca4dfb7259c8a78020f515f16a262dc933d"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/driver.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/skip-blob-hash.log",
+      "sha256": "3255a5d2936ac7c40a31562854886200b9cbc585e71051c754c156b858a13931"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/providers-bun-types-proof.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/preservation-final.log",
+      "sha256": "0e4199bb6c410cc6f1e5bd39e3d87c8159795d9dc60279f003e975a7ea37b454"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/core-media-admission-service.test.ts.log",
+      "sha256": "de44b1dce9f13e86c9fb9982761ec4b946daa34573cee9904d91f2161ff75f73"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/gate-proof.log",
+      "sha256": "1c3f7bdd54c6c174e2191944b8ae4694396beb41bdd29c5086b498f20f2e07bc"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/corpus.log",
+      "sha256": "41786901c69f64f3ff3179bf84fff95648fb02e1d2d92a0f54ddb891860730ab"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/providers-native-chat-preparation.test.ts.log",
+      "sha256": "a1c6d223d557e570166a9cef6e0e580ef0795ef49d5af7f664121a211576d7af"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/format-write.log",
+      "sha256": "375644deb444c490be314704b0b75e244fe7acf3c888a433fa20464b0e8c0450"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/preservation-before.log",
+      "sha256": "0e4199bb6c410cc6f1e5bd39e3d87c8159795d9dc60279f003e975a7ea37b454"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/providers-bun-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/gate.log",
+      "sha256": "331fedcfe3ed777cda00404881a89105d9774df5cd37f95e9bf32b73db0adcdc"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/old-reservation.log",
+      "sha256": "d85a6f743a7f6e0924c99f51d3ac93fdacc719281efa0be54692436cb1f5618f"
+    },
+    {
+      "path": "tmp/p8/native-media-final-bb/core-types-proof.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ]
+}

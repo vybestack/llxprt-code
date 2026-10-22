@@ -14,10 +14,48 @@ import { setImmediate } from 'node:timers/promises';
 import { batchGate } from '../services/history/__tests__/support/addbatch-stream-test-helpers.js';
 import type { IContent } from '../services/history/IContent.js';
 import { writeFile } from 'node:fs/promises';
+import { JournalMediaPins } from '../journal/journalMediaPins.js';
 
 const directory = tempDirectory('native-media-gate-');
 
 describe('version-pinned history media ownership', () => {
+  it('drains releases after reader failure and preserves a single failure identity', async () => {
+    const pins = new JournalMediaPins();
+    let drained = false;
+    pins.bind(
+      () => {
+        drained = true;
+      },
+      () => false,
+    );
+    const failure = new Error('reader retirement failed');
+    await expect(
+      Promise.resolve(
+        pins.afterReaderRelease(() => {
+          throw failure;
+        }),
+      ),
+    ).rejects.toBe(failure);
+    expect(drained).toBe(true);
+  });
+  it('preserves reader and drain failures in cleanup order', async () => {
+    const pins = new JournalMediaPins();
+    const reader = new Error('reader');
+    const drain = new Error('drain');
+    pins.bind(
+      () => {
+        throw drain;
+      },
+      () => false,
+    );
+    await expect(
+      Promise.resolve(
+        pins.afterReaderRelease(() => {
+          throw reader;
+        }),
+      ),
+    ).rejects.toMatchObject({ errors: [reader, drain] });
+  });
   it('rejects same-length corrupt blob bytes at the selected unit with its original verification cause', async () => {
     const history = new HistoryService({ backend: 'journal' });
     const root = join(directory(), 'corrupt');
@@ -288,6 +326,20 @@ describe('version-pinned history media ownership', () => {
         }
       }
       await source.close();
+      await expect(
+        resolver.resolve({
+          contents: [{ speaker: 'human', blocks: [reference] }],
+          requestId: 'stale-native-pin',
+          turnId: 'one',
+          aggregateBudgetBytes: 1024,
+          lease,
+        }),
+      ).rejects.toMatchObject({
+        name: 'RequestMediaResolutionError',
+        cause: expect.objectContaining({
+          message: 'Provider request snapshot is closed',
+        }),
+      });
       expect(
         (await media.reclaimUnreferenced(new Set(), Date.now())).objectsRemoved,
       ).toBe(1);

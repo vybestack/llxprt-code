@@ -1,3 +1,11 @@
+# Historical media corpus is green; W26 remains open
+
+2026-10-22. Follow-up `4de7bebc0` and [the media receipt](../../PHASE6-SOURCE-BOUND-NATIVEMEDIA-PROOF.json) close the 22-case native plain-Chat reference-image corpus under unchanged all-creation denial. Fixture registration of the real owner is explicit; original inputs, golden bytes and the 323-byte image hash remain unchanged. Reader-retirement/admission-release/persistent-state queue proof passes 9/0; actual HTTP pause-clear-reclaim and two-send no-file proof passes 2/0. Four controls restore by cmp/hash, with three assertion failures and one creation-denial guard rejection.
+
+[Phase 6 status](../../PHASE6-STATUS.md) retains external pending provenance, runtime adoption identity, queue checkpoint/adoption/reopen/janitor capacity/live-byte accounting, purge/abort HTTP combinations, actual-unit media WeakRef retention and retained-row-cache sensitivity as open. Changed production/helper bytes mean final native memory acceptance needs revalidation, not automatic reuse. Broader providers/views/log/dump/aggregate capacity and separate REDs are untouched. Inherited 1204 hashes verify, declarations/raw recovery/.llxprt remain unstaged, and no verification PIDs remain observed. No cleanup, default flip, OCR, push or merge.
+
+---
+
 # Cold measurement gate failures are closed; W26 remains open, 2026-10-22
 
 [The cold-measurement supplement](../../PHASE6-SOURCE-BOUND-COLDMEASUREMENT-PROOF.json) supersedes the two cold-read minimum REDs below. Checkpoint `ba13d766f` delegates genuine measurers and checks all original rows' returned LENS facts against independent JSON sizes, plus independent complete old-body length. Warm reads/remeasurement stay zero, changed-settings refill is covered and the append bound remains. Complete target files pass 6/90 and 10/71; unchanged #3919 files pass 11/29 and 3/20. All 18 current scoped invocations and four environment runs pass. The explicit journal factory stays native under both environment settings. All 36 original gate slots are green through affected runs and source-bound reuse, not a fresh whole-suite run.
