@@ -23,14 +23,14 @@ Rules that stay: no compatibility shims, no eslint-disable, no type-escape casts
 |---|---|---|
 | 1 | Kimi native request route | Done in `01b957933`: Kimi requests and estimates stream from journal facts without body spooling; publication and one-row retention tests pass |
 | 2 | OpenAI Responses native request route | Done: stateless in `4dc55e707`, stateful in `be3ecbcda`. Journal-backed sends, estimates, parentless recovery and caller input overrides no longer use per-segment disk projection |
-| 3 | Anthropic native request route | `AnthropicSpooledRequest.ts` and `message-table/tool-id-index.ts` no longer used |
+| 3 | Anthropic native request route | Partial in `88e8ab2e6`: uncached, unchanged, media-free journal requests and estimates stream from stored facts. Spooling remains for caching, image recovery budgets, request dumps, changed-source views and persisted media; remove those uses of `AnthropicSpooledRequest.ts` and `message-table/tool-id-index.ts` |
 | 4 | Native request log/dump | Logging and dumps read the journal, no body copy |
 | 5 | Tool-heavy memory test | Passes inside its existing 170,000 ms budget |
 | 6 | Default flip and deletion | `journal` is the default; old JSONL backend, `historyBackendSelect.ts`, `WireBodySpool`, `KeyedRowIndex` and old-only scratch code deleted |
 | 7 | Branch cleanup | PR diff contains product code, tests, fixtures and the design doc, not proof receipts or evidence logs |
 | 8 | Ship | test, lint, typecheck, format, build, lunahigh smoke; PR; CI green |
 
-Journal-backed Responses requests no longer use disk prompt projection. The non-native Responses route still uses `serializeResponsesPromptEnvelope` for the old backend. Anthropic journal requests still spool their body and estimator prompt files through `AnthropicSpooledRequest.ts`; that remains item 3.
+Journal-backed Responses requests no longer use disk prompt projection. The non-native Responses route still uses `serializeResponsesPromptEnvelope` for the old backend. Supported uncached Anthropic journal requests no longer spool their body or estimator prompt files. The excluded cases in item 3 and the non-native backend still use `AnthropicSpooledRequest.ts`.
 
 ## Known failures tracked separately
 
@@ -38,6 +38,9 @@ Journal-backed Responses requests no longer use disk prompt projection. The non-
 - Two old-backend durable capture/replay cases at 512/8192 rows.
 - Blanket no-create compaction test at 8192 rows (recorder `.llxj.compact` is legitimate).
 - Public fake-provider fixture exhausts on its second call.
+- `packages/providers/src/anthropic/anthropic-stream-repair-scale.test.ts`: three failures at `150d36e02`, one with the native-route changes.
+- `packages/providers/src/anthropic/journal-anthropic-append-lifecycle.test.ts`: two failures at `150d36e02`.
+- `packages/providers/src/anthropic/journal-anthropic-lifecycle.test.ts`: "bounds live auxiliary metadata" fails at `150d36e02` with 10 entries against a limit of 7.
 
 Several of these are old-backend paths and may disappear with item 6. Whatever survives gets fixed or filed before the PR.
 
