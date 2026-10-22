@@ -22,7 +22,7 @@ Rules that stay: no compatibility shims, no eslint-disable, no type-escape casts
 | # | Item | Done when |
 |---|---|---|
 | 1 | Kimi native request route | Done in `01b957933`: Kimi requests and estimates stream from journal facts without body spooling; publication and one-row retention tests pass |
-| 2 | OpenAI Responses native request route | Responses sends stream from journal facts, no body spool |
+| 2 | OpenAI Responses native request route | Stateless done in `4dc55e707`. Remaining: stateful (`previous_response_id`) sends still project text into per-segment disk files |
 | 3 | Anthropic native request route | `AnthropicSpooledRequest.ts` and `message-table/tool-id-index.ts` no longer used |
 | 4 | Native request log/dump | Logging and dumps read the journal, no body copy |
 | 5 | Tool-heavy memory test | Passes inside its existing 170,000 ms budget |
