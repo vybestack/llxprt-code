@@ -2,7 +2,7 @@
   "date": "2026-10-22",
   "baseline": "2d89234f4",
   "root": "tmp/p6/chat-mistral-dense-cost-run-bn",
-  "status": "Dense single-changed-ID cost fix committed; 38 of 39 completed final gates green. One mixed production/recovery liveness invocation is RED and retained. Exact-path liveness and remaining reader/media checks are pending. Phase 5/6/W26 remain open.",
+  "status": "Dense single-changed-ID descriptor-read checkpoint verified. 46 accepted scoped gates pass; the original mixed recovery-copy liveness RED remains recorded and the exact-path production file passes. General displacement, complete retained memory and capacity remain unaccepted. Phase 5/6/W26 are incomplete.",
   "rootCause": [
     "Each emitted affected label restarted changed-ID repair replay, re-read its fact and binary-searched source occurrence ordinals.",
     "Each holder performed two row-tree descents for entry lookup, two for its curated successor, and range-summary traversals across numerically separated but adjacent labels.",
@@ -1001,18 +1001,218 @@
     }
   ],
   "correctness": {
-    "passed": 844,
-    "failed": 4,
-    "files": 21,
-    "assertions": 133965,
+    "passed": 896,
+    "failed": 0,
+    "files": 27,
+    "assertions": 193705,
+    "tests": [
+      {
+        "name": "final-native-mistral-holder-cost.test.ts",
+        "passed": 12,
+        "failed": 0,
+        "assertions": 216,
+        "files": 1
+      },
+      {
+        "name": "final-native-mistral-occupied-lifecycle.test.ts",
+        "passed": 1,
+        "failed": 0,
+        "assertions": 218,
+        "files": 1
+      },
+      {
+        "name": "final-native-chat-estimate.test.ts",
+        "passed": 206,
+        "failed": 0,
+        "assertions": 633,
+        "files": 1
+      },
+      {
+        "name": "final-native-mistral-production-frozen.test.ts",
+        "passed": 3,
+        "failed": 0,
+        "assertions": 75006,
+        "files": 1
+      },
+      {
+        "name": "final-journal-chat-length.test.ts",
+        "passed": 6,
+        "failed": 0,
+        "assertions": 62,
+        "files": 1
+      },
+      {
+        "name": "final-journal-chat-length-lifecycle.test.ts",
+        "passed": 8,
+        "failed": 0,
+        "assertions": 101,
+        "files": 1
+      },
+      {
+        "name": "final-native-chat-mistral-send.test.ts",
+        "passed": 30,
+        "failed": 0,
+        "assertions": 150,
+        "files": 1
+      },
+      {
+        "name": "final-native-chat-golden.test.ts",
+        "passed": 44,
+        "failed": 0,
+        "assertions": 352,
+        "files": 1
+      },
+      {
+        "name": "final-native-chat-continuation-http.test.ts",
+        "passed": 138,
+        "failed": 0,
+        "assertions": 1518,
+        "files": 1
+      },
+      {
+        "name": "final-native-chat-continuation-runtime.test.ts",
+        "passed": 36,
+        "failed": 0,
+        "assertions": 1018,
+        "files": 1
+      },
+      {
+        "name": "final-journalStore.readerLifetime.test.ts",
+        "passed": 11,
+        "failed": 0,
+        "assertions": 29,
+        "files": 1
+      },
+      {
+        "name": "final-journalStore.readerCleanup.test.ts",
+        "passed": 3,
+        "failed": 0,
+        "assertions": 20,
+        "files": 1
+      },
+      {
+        "name": "final-journal-mistral-tail.test.ts",
+        "passed": 6,
+        "failed": 0,
+        "assertions": 61,
+        "files": 1
+      },
+      {
+        "name": "final-journal-mistral-tail-pins.test.ts",
+        "passed": 5,
+        "failed": 0,
+        "assertions": 16,
+        "files": 1
+      },
+      {
+        "name": "final-journal-mistral-lifecycle.test.ts",
+        "passed": 4,
+        "failed": 0,
+        "assertions": 948,
+        "files": 1
+      },
+      {
+        "name": "final-journal-mistral-tail-lifecycle.test.ts",
+        "passed": 2,
+        "failed": 0,
+        "assertions": 72,
+        "files": 1
+      },
+      {
+        "name": "final-journal-mistral-tail-resources.test.ts",
+        "passed": 4,
+        "failed": 0,
+        "assertions": 27,
+        "files": 1
+      },
+      {
+        "name": "final-versionCopy.mistral.test.ts",
+        "passed": 2,
+        "failed": 0,
+        "assertions": 119,
+        "files": 1
+      },
+      {
+        "name": "final-wireBodyGolden.test.ts",
+        "passed": 315,
+        "failed": 0,
+        "assertions": 315,
+        "files": 1
+      },
+      {
+        "name": "final-native-chat-media-lifetime.test.ts",
+        "passed": 4,
+        "failed": 0,
+        "assertions": 53048,
+        "files": 1
+      },
+      {
+        "name": "journal-native-row-liveness.test.ts",
+        "passed": 4,
+        "failed": 0,
+        "assertions": 36,
+        "files": 1
+      },
+      {
+        "name": "native-chat-media-lease.test.ts",
+        "passed": 2,
+        "failed": 0,
+        "assertions": 26,
+        "files": 1
+      },
+      {
+        "name": "native-media-queue-reopen.test.ts",
+        "passed": 5,
+        "failed": 0,
+        "assertions": 52,
+        "files": 1
+      },
+      {
+        "name": "row-read-window.test.ts",
+        "passed": 6,
+        "failed": 0,
+        "assertions": 34,
+        "files": 1
+      },
+      {
+        "name": "rowRecord.test.ts",
+        "passed": 19,
+        "failed": 0,
+        "assertions": 572,
+        "files": 1
+      },
+      {
+        "name": "journalTornTail.test.ts",
+        "passed": 7,
+        "failed": 0,
+        "assertions": 59006,
+        "files": 1
+      },
+      {
+        "name": "journalOpen.test.ts",
+        "passed": 13,
+        "failed": 0,
+        "assertions": 50,
+        "files": 1
+      }
+    ],
     "productionComparisons": 15000,
     "policies": [
       "none",
       "all",
       "allButLast"
     ],
-    "fixturesUnchanged": true,
-    "scope": "Exact old-converter body bytes, stored lengths and independent per-unit tokens; actual HTTP/public occupied-slot and lifecycle suites retain their original assertions."
+    "scope": "All 5000 immutable original normalization inputs through actual production registration/planning/emission under three policies: exact old body bytes, stored lengths and independent per-unit old-converter token totals. Not 15000 HTTP requests. Current estimate projection (96 histories/policies), occupied lifecycle, immutable old pins and the 211-to-205 estimate correction pass.",
+    "public": "Complete current ChatSession file: 36 cases, including Mistral JSON/SSE with concrete plain Chat/Anthropic/Responses occupied slots; original first Mistral slot 0 generation 2, body hashes/lengths, estimates and old/other-format plans are retained. Separate HTTP continuation file: 138 cases, 69 each plain and Mistral, two actual POSTs per case. Public estimates retain their existing 16-token calibration allowance; per-unit projection/oracle tests are exact.",
+    "referenceMedia": "Current 44-case golden file retains original 22 plain no-file cases and adds 22 Mistral cases. Actual HTTP media lifetime: 4 cases, 53048 assertions, 64 rows with 64 KiB text plus 512/8192 rows with 128-byte text; lease 2/26; queue/reopen 5/52; production liveness 4/36. None is full 100000-call or retained-memory acceptance.",
+    "readers": "Current #3919 reader lifetime/cleanup suites: 11/29 and 3/20. Supplemental bounded-window 6/34, row record 19/572, torn tail 7/59006 and journal open 13/50 pass unchanged corruption, CRC and failure-identity assertions.",
+    "excludedMixedRun": {
+      "passed": 4,
+      "failed": 4,
+      "assertions": 36,
+      "includedInAcceptedTotals": false,
+      "reason": "Current production passed but the same invocation also ran a preserved recovery copy. The exact-path production pass above is the accepted receipt."
+    }
   },
   "sourceManifest": [
     {
@@ -1144,13 +1344,222 @@
     {
       "path": "tmp/p6/chat-mistral-dense-cost-run-bn/control-retain-reads.jsonl",
       "sha256": "0d1973d785b18c2d57708161f0e4b2be3e69cd51cb13d0dace8774edf597005e"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-native-mistral-holder-cost.test.ts.log",
+      "sha256": "89f8bdf305b04bde35ae76e40c685634fdadb6fafb157d0a0831591e2b8f79df"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-native-mistral-occupied-lifecycle.test.ts.log",
+      "sha256": "7deeff00d4feedf048871d81d9dd9ef314348b7008cf0f48a3948d406016d03c"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-native-chat-estimate.test.ts.log",
+      "sha256": "c71e19f17b4ba268e5fba0d29b6f2f46b54e760e26f32ad65f5a250c873637ca"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-native-mistral-production-frozen.test.ts.log",
+      "sha256": "0374729cbac45f0a1599782dbc062fe1861c64187d9a05c5a1b58e2c94073c21"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-journal-chat-length.test.ts.log",
+      "sha256": "77512a2968e6bdd0ec37b63df396f9168c3155284346c5c7c81a0c4f24747aa6"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-journal-chat-length-lifecycle.test.ts.log",
+      "sha256": "080acc3bfc44c155c97fa9fc1049bae3cf39743bbf711fad6985df59f8aa42a2"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-native-chat-mistral-send.test.ts.log",
+      "sha256": "6c9ccd13295abeaedffdb8aafe6fe5e59c6d04788488984c3c4ee04d1f1961d2"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-native-chat-golden.test.ts.log",
+      "sha256": "f124425fe215b9fc738b6d827c7dc877c4dbd5715a5787e638b0ad03e4c4eb1b"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-native-chat-continuation-http.test.ts.log",
+      "sha256": "7b9639a7c3a0666754b17ab9677d1ddef56e0ea8e7b91d7586bea856a969c224"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-native-chat-continuation-runtime.test.ts.log",
+      "sha256": "b39565160f3fa27b9c67076e017aa8a495e954221813515874ea19bb5cbfe449"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-journalStore.readerLifetime.test.ts.log",
+      "sha256": "02d91f466049be26575863599761659f15882511bd06ea08b2b3b74c00e4ead5"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-journalStore.readerCleanup.test.ts.log",
+      "sha256": "87dd36878ac55d728bfe35f989cd945f2794aaefd27886a4dee449c9e28790fa"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-journal-mistral-tail.test.ts.log",
+      "sha256": "17829c9f435f022abd73c6e41444fcd88f7e7a984ec4ea0ef1ad46eb7edeb557"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-journal-mistral-tail-pins.test.ts.log",
+      "sha256": "30f13851f530c882b73fd2f16082cc5ef82f3c7575c1128f4dda3c222926a5ba"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-journal-mistral-lifecycle.test.ts.log",
+      "sha256": "0f2e5af311efff5b367b56996b474b101b82cca627d910f1a2e8a29d999ba356"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-journal-mistral-tail-lifecycle.test.ts.log",
+      "sha256": "031fff3001ba6a5847625f2fb556f21fc63b393a7b49c16f3800f7801e3e091b"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-journal-mistral-tail-resources.test.ts.log",
+      "sha256": "1fb945e3801b2e2e05bdcfbb51595b32f8e9138145154f7ad4b870b5cb6aefdd"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-versionCopy.mistral.test.ts.log",
+      "sha256": "2f5e71f3d72b0a09051527e07f8560d14bc1950707066e8c4c34e1a5b6c9bd3d"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-core-declarations.log",
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-providers-declarations.log",
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-agents-declarations.log",
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-core-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-providers-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-agents-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-providers-tsconfig.test-bun.json-bun.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-providers-tsconfig.noemit.json-bun.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-agents-tsconfig.test-bun.json-bun.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-agents-tsconfig.noemit.json-bun.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-format.log",
+      "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-preservation1204.log",
+      "sha256": "0e4199bb6c410cc6f1e5bd39e3d87c8159795d9dc60279f003e975a7ea37b454"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-preservation-current.log",
+      "sha256": "0e4199bb6c410cc6f1e5bd39e3d87c8159795d9dc60279f003e975a7ea37b454"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-preservation-modified.log",
+      "sha256": "56eb995f0e0c565dd39674787f330c38a95ccf7b3333a97d53e2872609314324"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-wireBodyGolden.test.ts.log",
+      "sha256": "12abb40b173d43277f3c3e79da9c34d5907afe65cf8558f6d075aeb2e6128d2a"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-native-chat-media-lifetime.test.ts.log",
+      "sha256": "20678251513bae371a19e63b25288020e4a7ab540f941dfbfa5170e0ad6bca88"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-journal-native-row-liveness.test.ts.log",
+      "sha256": "088db3f0583a71ec8edfc7aae516f4013ffadc2bc664f3a37c2360b9d8b2743e"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-lint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-prettier.log",
+      "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-graph.log",
+      "sha256": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-audit.log",
+      "sha256": "e7eab1fa7f0521aeafe1b78dcfbfd3b7767010dc5c12d238bab41743cfe9102c"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/doc-closure-journal-native-row-liveness.test.ts.log",
+      "sha256": "9963672bb628b1224dd79f5bc304452278b7c3d5fe9a499887355da1a3b9a21f"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/doc-closure-native-chat-media-lease.test.ts.log",
+      "sha256": "c7f310bae0991aea156dc1575c23eb781067ab9ea75aa91f85cbff78331d537a"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/doc-closure-native-media-queue-reopen.test.ts.log",
+      "sha256": "4723649fbbc219710660afeab40c138daf21110cf7c7fd68e313a74cd7691f45"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/doc-closure-row-read-window.test.ts.log",
+      "sha256": "2b0449370a343e41a9c000829b57ac38226c1d0175783bbc62d048e38f2b6e5d"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/doc-closure-rowRecord.test.ts.log",
+      "sha256": "137402f318407e190da71461eef657517e43778e1b1271a15cfe91a362e65e68"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/doc-closure-journalTornTail.test.ts.log",
+      "sha256": "7b8f88a679f9589f2b058ed40539634c014b1901c7644d477fc484d78014cf56"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/doc-closure-journalOpen.test.ts.log",
+      "sha256": "8db5015e78c4712d61ab3cf54a912a9812be529e77634e1a487e96a31acf15bd"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/doc-closure-core-bun-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/doc-closure-gates.ts",
+      "sha256": "30459213c452fbc4b1cf6ca17339dd4bcc09d0cd569a39ce67adb5d58a8fde41"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/doc-closure-gates.json",
+      "sha256": "8dbdf2ad7909553a848fc4241b7e90a81ddc78763ba62552ed108139b81064b9"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/doc-closure-completed.json",
+      "sha256": "e5500d0eb9cbefcb1761866495a49eaae1726ecf1ca828f4d3a54bd23b110b52"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/audit/findings.tsv",
+      "sha256": "6bed06c919135fd5cfe035de046647f581692aacb839950315d700f76fb12aaa"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/doc-closure-source-manifest.json",
+      "sha256": "c6a4e62575f0da22eade3ddc687fcbc00c49535cce5226da5b0b8f89e80c1c31"
     }
   ],
   "limits": [
     "The multi-changed-ID branch still replays changedIds and nextSource per selected label; no universal many-displacement complexity acceptance.",
     "The nonempty cost control preserves an earlier hashed owner when a later passthrough appears; it is not an arbitrary historical nonempty collision-chain displacement proof.",
     "No new complete retained-memory, 100000-call capacity or fused cold-fill acceptance. Original tools 170000ms memory RED remains open.",
-    "Original #3917, two durable cases, blanket compaction/public fixture and wider 609 test-type REDs remain separate and unsuppressed. Kimi, Responses, Anthropic, log/dump and aggregate accounting remain open."
+    "Original #3917, two durable cases, blanket compaction/public fixture and wider 609 test-type REDs remain separate and unsuppressed. Kimi, Responses, Anthropic, log/dump and aggregate accounting remain open.",
+    "Current-source wrong-dedup and decoded-all-holder retention control refresh remain unexecuted; old control receipts are not promoted to current-source trap acceptance."
   ],
   "review": "review skipped per Andrew 2026-10-09",
   "implementation": "ff2ae2078",
@@ -1170,7 +1579,7 @@
     },
     "restored": true
   },
-  "accountingScope": "ROW window metrics sum retained buffer byteLength, with at most two retained Window objects and one replacement-window allocation in the serial reader lane. Returned per-unit slices, decoded tree paths, mapping cache and ID-node cache are separate; this is not aggregate heap/capacity acceptance. Mapping/ID caches retain their existing 65536-byte caps, not newly measured whole-heap peaks.",
+  "accountingScope": "Observed ROW window buffer byteLengths total at most 32768 retained and 49152 during one serial replacement. Per-unit returned slices, decoded row/tree objects, existing mapping/ID-node caches, pending seed/frontier state and test audit arrays are outside those window measurements. Reads above 16 KiB bypass the window, with no extra cached duplicate. Mapping cache uses its existing 65536-byte accounting budget (2*UTF8 raw-ID bytes+256 per entry), not a measured V8 heap cap; ID-node cache has its existing 65536-byte accounting cap. No aggregate retained-memory, capacity, arbitrary-concurrency or constant-whole-heap claim.",
   "preservation": {
     "files": 1204,
     "changed": []
@@ -1932,6 +2341,151 @@
       "sha256": "e7eab1fa7f0521aeafe1b78dcfbfd3b7767010dc5c12d238bab41743cfe9102c",
       "sourceBeforeMatches": true,
       "sourceAfterMatches": true
+    },
+    {
+      "name": "journal-native-row-liveness.test.ts",
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/__tests__/journal-native-row-liveness.test.ts"
+      ],
+      "pid": 56203,
+      "started": "2026-10-22T14:53:33.707Z",
+      "ended": "2026-10-22T14:53:40.156Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/doc-closure-journal-native-row-liveness.test.ts.log",
+      "sha256": "9963672bb628b1224dd79f5bc304452278b7c3d5fe9a499887355da1a3b9a21f",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "native-chat-media-lease.test.ts",
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/__tests__/native-chat-media-lease.test.ts"
+      ],
+      "pid": 56285,
+      "started": "2026-10-22T14:53:40.157Z",
+      "ended": "2026-10-22T14:53:40.805Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/doc-closure-native-chat-media-lease.test.ts.log",
+      "sha256": "c7f310bae0991aea156dc1575c23eb781067ab9ea75aa91f85cbff78331d537a",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "native-media-queue-reopen.test.ts",
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/core/src/storage/native-media-queue-reopen.test.ts"
+      ],
+      "pid": 56291,
+      "started": "2026-10-22T14:53:40.806Z",
+      "ended": "2026-10-22T14:53:41.550Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/doc-closure-native-media-queue-reopen.test.ts.log",
+      "sha256": "4723649fbbc219710660afeab40c138daf21110cf7c7fd68e313a74cd7691f45",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "row-read-window.test.ts",
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/core/src/journal/row-read-window.test.ts"
+      ],
+      "pid": 56300,
+      "started": "2026-10-22T14:53:41.551Z",
+      "ended": "2026-10-22T14:53:41.574Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/doc-closure-row-read-window.test.ts.log",
+      "sha256": "2b0449370a343e41a9c000829b57ac38226c1d0175783bbc62d048e38f2b6e5d",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "rowRecord.test.ts",
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/core/src/journal/rowRecord.test.ts"
+      ],
+      "pid": 56301,
+      "started": "2026-10-22T14:53:41.575Z",
+      "ended": "2026-10-22T14:53:41.876Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/doc-closure-rowRecord.test.ts.log",
+      "sha256": "137402f318407e190da71461eef657517e43778e1b1271a15cfe91a362e65e68",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "journalTornTail.test.ts",
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/core/src/journal/journalTornTail.test.ts"
+      ],
+      "pid": 56314,
+      "started": "2026-10-22T14:53:41.876Z",
+      "ended": "2026-10-22T14:53:44.569Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/doc-closure-journalTornTail.test.ts.log",
+      "sha256": "7b8f88a679f9589f2b058ed40539634c014b1901c7644d477fc484d78014cf56",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "journalOpen.test.ts",
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/core/src/journal/journalOpen.test.ts"
+      ],
+      "pid": 56346,
+      "started": "2026-10-22T14:53:44.571Z",
+      "ended": "2026-10-22T14:53:44.616Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/doc-closure-journalOpen.test.ts.log",
+      "sha256": "8db5015e78c4712d61ab3cf54a912a9812be529e77634e1a487e96a31acf15bd",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "core-bun-types",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/core/tsconfig.noemit.json",
+        "--types",
+        "bun"
+      ],
+      "pid": 56347,
+      "started": "2026-10-22T14:53:44.617Z",
+      "ended": "2026-10-22T14:53:51.868Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/doc-closure-core-bun-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
     }
   ],
   "controls": [
@@ -2099,12 +2653,118 @@
   },
   "restoration": {
     "sourceMatchesCommit": true,
+    "cmpAndSha256": [
+      {
+        "path": "packages/core/src/journal/journalStore.ts",
+        "expected": "91c70e50ce7534597ccd7f967db576235eda639bf1540fe37f5baaee7bb4803d",
+        "current": "91c70e50ce7534597ccd7f967db576235eda639bf1540fe37f5baaee7bb4803d",
+        "commit": "91c70e50ce7534597ccd7f967db576235eda639bf1540fe37f5baaee7bb4803d",
+        "cmp": 0
+      },
+      {
+        "path": "packages/core/src/journal/pinLease.ts",
+        "expected": "3cedbd6ad30b91462b55984117db292c19cf5430bdd71fb970f38ce64072cd39",
+        "current": "3cedbd6ad30b91462b55984117db292c19cf5430bdd71fb970f38ce64072cd39",
+        "commit": "3cedbd6ad30b91462b55984117db292c19cf5430bdd71fb970f38ce64072cd39",
+        "cmp": 0
+      },
+      {
+        "path": "packages/core/src/journal/recordAccess.ts",
+        "expected": "8fc897d2bb26113fc70b2458b32b824ea74c525a76ed243db6b0bfb9e70f2b78",
+        "current": "8fc897d2bb26113fc70b2458b32b824ea74c525a76ed243db6b0bfb9e70f2b78",
+        "commit": "8fc897d2bb26113fc70b2458b32b824ea74c525a76ed243db6b0bfb9e70f2b78",
+        "cmp": 0
+      },
+      {
+        "path": "packages/core/src/journal/row-read-window.ts",
+        "expected": "e3540f0ec311b36f358999da35a4c09da1167280821071a5aa14741f346b666f",
+        "current": "e3540f0ec311b36f358999da35a4c09da1167280821071a5aa14741f346b666f",
+        "commit": "e3540f0ec311b36f358999da35a4c09da1167280821071a5aa14741f346b666f",
+        "cmp": 0
+      },
+      {
+        "path": "packages/core/src/journal/rowRangeReads.ts",
+        "expected": "2fc1520ae358465d2b420e1ea0cc1311db7fc5542176af0da9cdb3536c336431",
+        "current": "2fc1520ae358465d2b420e1ea0cc1311db7fc5542176af0da9cdb3536c336431",
+        "commit": "2fc1520ae358465d2b420e1ea0cc1311db7fc5542176af0da9cdb3536c336431",
+        "cmp": 0
+      },
+      {
+        "path": "packages/core/src/journal/rowReads.ts",
+        "expected": "de4489c03cba8f7b8ee7d9108c192acefefca037706e6af8cf3f19b938424a86",
+        "current": "de4489c03cba8f7b8ee7d9108c192acefefca037706e6af8cf3f19b938424a86",
+        "commit": "de4489c03cba8f7b8ee7d9108c192acefefca037706e6af8cf3f19b938424a86",
+        "cmp": 0
+      },
+      {
+        "path": "packages/core/src/journal/versionSnapshot.ts",
+        "expected": "8d66b46a869cb6122a0669c3cc4a75fa1385b50a28fe39f4e3ded09416daf171",
+        "current": "8d66b46a869cb6122a0669c3cc4a75fa1385b50a28fe39f4e3ded09416daf171",
+        "commit": "8d66b46a869cb6122a0669c3cc4a75fa1385b50a28fe39f4e3ded09416daf171",
+        "cmp": 0
+      },
+      {
+        "path": "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+        "expected": "15237dbf5250b811a6735f856d2fef7f537d5c57daaf2013a51536def58370eb",
+        "current": "15237dbf5250b811a6735f856d2fef7f537d5c57daaf2013a51536def58370eb",
+        "commit": "15237dbf5250b811a6735f856d2fef7f537d5c57daaf2013a51536def58370eb",
+        "cmp": 0
+      },
+      {
+        "path": "packages/core/src/services/history/journal-request-mistral.ts",
+        "expected": "12afdfcc8feaa3e76962d43943ce589eac7be8673a4203e6e04546f630d1fdc0",
+        "current": "12afdfcc8feaa3e76962d43943ce589eac7be8673a4203e6e04546f630d1fdc0",
+        "commit": "12afdfcc8feaa3e76962d43943ce589eac7be8673a4203e6e04546f630d1fdc0",
+        "cmp": 0
+      },
+      {
+        "path": "packages/core/src/services/history/journal-request-projection.ts",
+        "expected": "8744cabe862c0d7545a8878625ebc2b9115ba421c1ad5867337c82342097550d",
+        "current": "8744cabe862c0d7545a8878625ebc2b9115ba421c1ad5867337c82342097550d",
+        "commit": "8744cabe862c0d7545a8878625ebc2b9115ba421c1ad5867337c82342097550d",
+        "cmp": 0
+      },
+      {
+        "path": "packages/core/src/services/history/journal-response-parts.ts",
+        "expected": "8270dff6fe62bfb316c712f0c7acfdb3e3b15f1eccd88de9932fb33e30a6a247",
+        "current": "8270dff6fe62bfb316c712f0c7acfdb3e3b15f1eccd88de9932fb33e30a6a247",
+        "commit": "8270dff6fe62bfb316c712f0c7acfdb3e3b15f1eccd88de9932fb33e30a6a247",
+        "cmp": 0
+      },
+      {
+        "path": "packages/core/src/services/history/journal-response-source.ts",
+        "expected": "bf7ccb9fa22a4348358a3af5d0c29132cbc6f2909b67a4f4f150c4a237f23f77",
+        "current": "bf7ccb9fa22a4348358a3af5d0c29132cbc6f2909b67a4f4f150c4a237f23f77",
+        "commit": "bf7ccb9fa22a4348358a3af5d0c29132cbc6f2909b67a4f4f150c4a237f23f77",
+        "cmp": 0
+      },
+      {
+        "path": "packages/core/src/services/history/journal-tail-source.ts",
+        "expected": "19061ff993031f09a86a70b44e430c6ef7a565c35ecde777b6e73d8c39f3fb12",
+        "current": "19061ff993031f09a86a70b44e430c6ef7a565c35ecde777b6e73d8c39f3fb12",
+        "commit": "19061ff993031f09a86a70b44e430c6ef7a565c35ecde777b6e73d8c39f3fb12",
+        "cmp": 0
+      },
+      {
+        "path": "packages/providers/src/openai/__tests__/native-mistral-holder-cost.test.ts",
+        "expected": "09a940d76cf16813c855d4dfa4fe51e6cb7221505789dddc42f13678af1f99e3",
+        "current": "09a940d76cf16813c855d4dfa4fe51e6cb7221505789dddc42f13678af1f99e3",
+        "commit": "09a940d76cf16813c855d4dfa4fe51e6cb7221505789dddc42f13678af1f99e3",
+        "cmp": 0
+      }
+    ],
     "preservation": {
       "files": 1204,
       "changed": []
     }
   },
-  "processClosure": "Completed serial driver and its children exited. Final audit PID in running.json is stale; completed.json records completion. No active BN job observed. Supplemental reader checks pending.",
+  "processClosure": {
+    "checkedAt": "2026-10-22T14:56:46.151Z",
+    "driverCompleted": "tmp/p6/chat-mistral-dense-cost-run-bn/completed.json",
+    "supplementCompleted": "tmp/p6/chat-mistral-dense-cost-run-bn/doc-closure-completed.json",
+    "activeRecordedGateOrControlPids": [],
+    "note": "All original and supplemental children exited. running.json and doc-closure-running.json are last-started receipts, not active-job status. Unrelated pre-existing processes were not stopped."
+  },
   "gateDiagnosis": {
     "name": "final-journal-native-row-liveness.test.ts",
     "exit": 1,
@@ -2118,13 +2778,248 @@
       "path": "tmp/p5/w26-cli-run-am/declaration-recovery-source/packages/providers/src/__tests__/journal-native-row-liveness.test.ts",
       "error": "Recorder/backend mismatch: the journal history store takes only a journal recorder"
     },
-    "cause": "A bare packages/... argument was treated as a Bun filename filter and selected the preserved recovery copy as well. Exact ./packages/... invocation is pending; original RED remains recorded."
+    "cause": "The bare packages/... argument was a Bun filename filter and selected both current production and preserved recovery files. Exact ./packages/... resolves to only the current file. The original RED receipt is retained; assertions, budgets and source files were unchanged.",
+    "correctedInvocation": "tmp/p6/chat-mistral-dense-cost-run-bn/doc-closure-journal-native-row-liveness.test.ts.log"
   },
   "costInterval": "Snapshot already has registered format facts. Each measuredCollision interval includes IndexedJournalRequestSnapshot.create, planRequestChatMessages and request.close; excludes append, format registration, old-converter oracle preparation, snapshot creation and emission. Neutral then collision share a pin, so caches are not independent cold runs. Window peaks are pin-lifetime high-water marks, not interval deltas. elapsedMs includes instrumented read stacks and creation audit; no end-to-end cold-fill timing claim.",
   "logicalWork": "size=4000 means 4000 physical input rows/affected holders, not 8000 distinct rows. The measure callback still receives 8000 holder-containing conversions (two per affected holder); unrelated conversions remain zero. Sparse collision measures only three affected holders (six callbacks); neutral measures zero holders but still does metadata I/O.",
-  "pendingSupplemental": [
-    "Exact-path production row liveness",
-    "Reference-media lease and queue/reopen",
-    "Bounded-window and torn/CRC regressions"
-  ]
+  "gateSummary": {
+    "accepted": 46,
+    "originalMixedInvocationRed": 1,
+    "expectedAssertionFailingControls": 2,
+    "scope": "39 original final invocations, including one mixed production/recovery RED, plus eight supplemental invocations. This is scoped verification, not a full repository suite."
+  },
+  "productionBridge": {
+    "implementation": "ff2ae2078987ded1a69198867de31de2e2b787eb",
+    "current": {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/doc-closure-source-manifest.json",
+      "sha256": "c6a4e62575f0da22eade3ddc687fcbc00c49535cce5226da5b0b8f89e80c1c31",
+      "count": 9155
+    },
+    "previous": {
+      "path": "tmp/p6/chat-mistral-acceptance-run-bm/closure-source-manifest.json",
+      "sha256": "87bd33d7381f53203319c8f495b2b9733c8ebcf8b1b1d75610c17798f2a9c0ad",
+      "count": 9155
+    },
+    "scope": "All tracked packages/ and scripts/ paths, matching the earlier source-manifest scope. Proof/status documents and inherited untracked declarations are excluded, so the proof does not hash itself. This is a source bridge, not evidence that every listed test ran.",
+    "removedPaths": [],
+    "differences": [
+      {
+        "path": "packages/core/src/journal/journalStore.ts",
+        "sha256": "91c70e50ce7534597ccd7f967db576235eda639bf1540fe37f5baaee7bb4803d",
+        "before": "8f65289c5aaf26324fe88bf353459e7801ba5a7e5107e5d6ddf264f709efdc59"
+      },
+      {
+        "path": "packages/core/src/journal/pinLease.ts",
+        "sha256": "3cedbd6ad30b91462b55984117db292c19cf5430bdd71fb970f38ce64072cd39",
+        "before": "729112e27077ad2258407c4e608903b147da3bc3f05ec47f711454b0df65392b"
+      },
+      {
+        "path": "packages/core/src/journal/recordAccess.ts",
+        "sha256": "8fc897d2bb26113fc70b2458b32b824ea74c525a76ed243db6b0bfb9e70f2b78",
+        "before": "638d1257ad5a08d35f21a519025bc7003c1c2294a82097bf62310c7ac72cee63"
+      },
+      {
+        "path": "packages/core/src/journal/row-read-window.ts",
+        "sha256": "e3540f0ec311b36f358999da35a4c09da1167280821071a5aa14741f346b666f",
+        "before": "4137a7b6e802b46dcc112ba886f4ade6f95ef07c1a91b552d2614eee853baa4b"
+      },
+      {
+        "path": "packages/core/src/journal/rowRangeReads.ts",
+        "sha256": "2fc1520ae358465d2b420e1ea0cc1311db7fc5542176af0da9cdb3536c336431",
+        "before": "8883d28e4528e8d1b6222a7d6284f16a75b6bbf9e8bf62a09d8436119fc37471"
+      },
+      {
+        "path": "packages/core/src/journal/rowReads.ts",
+        "sha256": "de4489c03cba8f7b8ee7d9108c192acefefca037706e6af8cf3f19b938424a86",
+        "before": "6a0d88c94f3589598fe2ed106195bf9b8cde98cc2398ad7aea7ad44876bf7952"
+      },
+      {
+        "path": "packages/core/src/journal/versionSnapshot.ts",
+        "sha256": "8d66b46a869cb6122a0669c3cc4a75fa1385b50a28fe39f4e3ded09416daf171",
+        "before": "279021e8cb01bcc4411623760ca33bd687ebfc456eb59b9c7083bbd732e39165"
+      },
+      {
+        "path": "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+        "sha256": "15237dbf5250b811a6735f856d2fef7f537d5c57daaf2013a51536def58370eb",
+        "before": "31c291a0286a8f5b2e5e2399c4824a6535ba46eccf902ffc1e85b1fc5a1ded4e"
+      },
+      {
+        "path": "packages/core/src/services/history/journal-request-mistral.ts",
+        "sha256": "12afdfcc8feaa3e76962d43943ce589eac7be8673a4203e6e04546f630d1fdc0",
+        "before": "e247412dc0d801f2de39d7f428d4d3091cffe045a17482f396dd1af22d48d741"
+      },
+      {
+        "path": "packages/core/src/services/history/journal-request-projection.ts",
+        "sha256": "8744cabe862c0d7545a8878625ebc2b9115ba421c1ad5867337c82342097550d",
+        "before": "8039662104c5652c766d7682df0c629f15d0c8f84429b3d260f90fb8c9bd2749"
+      },
+      {
+        "path": "packages/core/src/services/history/journal-response-parts.ts",
+        "sha256": "8270dff6fe62bfb316c712f0c7acfdb3e3b15f1eccd88de9932fb33e30a6a247",
+        "before": "7dfc9bb84a4a4d04e0a788c671c92df667b19c86164d439135e404cff2cd252b"
+      },
+      {
+        "path": "packages/core/src/services/history/journal-response-source.ts",
+        "sha256": "bf7ccb9fa22a4348358a3af5d0c29132cbc6f2909b67a4f4f150c4a237f23f77",
+        "before": "0b74553256ccb8b02fc81875d7fabe069800946157efa51174ec3493e2c06151"
+      },
+      {
+        "path": "packages/core/src/services/history/journal-tail-source.ts",
+        "sha256": "19061ff993031f09a86a70b44e430c6ef7a565c35ecde777b6e73d8c39f3fb12",
+        "before": "a91125dea32e94e066b61e5b24a8fcf73924de364ba55fbfdd204a52793d4d43"
+      },
+      {
+        "path": "packages/providers/src/openai/__tests__/native-mistral-holder-cost.test.ts",
+        "sha256": "09a940d76cf16813c855d4dfa4fe51e6cb7221505789dddc42f13678af1f99e3",
+        "before": "91f0b5b7fd4fb95637b75db5739fcb47c137b78cf2ec56e8ba0ceda0e8bda846"
+      }
+    ],
+    "unchangedPaths": 9141,
+    "gateSourceChecks": "Each original final and supplemental gate captures the 14 changed implementation/test hashes before and after. All match the implementation. Other manifest paths, including unchanged converters, tests and oracle helpers, match the prior complete source manifest.",
+    "olderControls": {
+      "fresh": false,
+      "proof": "PHASE6-SOURCE-BOUND-NATIVEMISTRALACCEPTANCE-PROOF.json",
+      "scope": "Omit-holder/wrong-raw-ID-dedup/response/stale-slot/old-index controls retain their earlier assertions and receipts; changed-helper controls are not relabeled as fresh ff2ae2078 executions.",
+      "checkedCurrentSources": [
+        {
+          "path": "packages/core/src/services/history/journal-request-mistral.ts",
+          "sha256": "12afdfcc8feaa3e76962d43943ce589eac7be8673a4203e6e04546f630d1fdc0",
+          "cmp": 0,
+          "matchesImplementation": true
+        },
+        {
+          "path": "packages/providers/src/openai/journal-chat-length.ts",
+          "sha256": "4b3e43283bd06ce5ff0bb77bcbd1e32b1a25daf4476cf897339ab2bddcc1b0a7",
+          "cmp": 0,
+          "matchesImplementation": true
+        },
+        {
+          "path": "packages/core/src/services/history/native-provider-format.ts",
+          "sha256": "58a756edc85142aeb7849a9ec54619e75201e67f3f7e0523927e3608029bddbd",
+          "cmp": 0,
+          "matchesImplementation": true
+        }
+      ]
+    }
+  },
+  "frozenFixture": {
+    "path": "packages/core/src/services/history/__tests__/fixtures/normalization-units.jsonl",
+    "sha256": "4699c502e99b67ea231f47884bdc2109400c4138803a16a3e5ac7418e0fa8d9e",
+    "cmp": 0,
+    "identicalTo": "67cf0081a",
+    "regenerated": false
+  },
+  "costSummary": {
+    "dense4000": {
+      "before": {
+        "reads": 201572,
+        "returnedBytes": 824989362,
+        "metadataReads": 145575,
+        "metadataBytes": 577838792,
+        "rowReads": 55997,
+        "rowBytes": 247150570,
+        "queries": 103935,
+        "logicalHolderConversions": 8000,
+        "repeatedExactRanges": 177567
+      },
+      "after": {
+        "reads": 6834,
+        "returnedBytes": 12211784,
+        "metadataReads": 6695,
+        "metadataBytes": 10362616,
+        "rowReads": 139,
+        "rowBytes": 1849168,
+        "queries": 8016,
+        "logicalHolderConversions": 8000,
+        "repeatedExactRanges": 2749
+      },
+      "afterKinds": {
+        "ITNODE": {
+          "reads": 5601,
+          "bytes": 5779664
+        },
+        "RTNODE": {
+          "reads": 1094,
+          "bytes": 4582952
+        },
+        "ROW": {
+          "reads": 139,
+          "bytes": 1849168
+        }
+      }
+    },
+    "sparse4000": {
+      "before": {
+        "reads": 157,
+        "returnedBytes": 657660,
+        "metadataReads": 114,
+        "metadataBytes": 461824,
+        "rowReads": 43,
+        "rowBytes": 195836,
+        "queries": 68,
+        "logicalHolderConversions": 6,
+        "repeatedExactRanges": 131
+      },
+      "after": {
+        "reads": 35,
+        "returnedBytes": 172864,
+        "metadataReads": 30,
+        "metadataBytes": 116992,
+        "rowReads": 5,
+        "rowBytes": 55872,
+        "queries": 22,
+        "logicalHolderConversions": 6,
+        "repeatedExactRanges": 24
+      }
+    },
+    "neutral4000": {
+      "dense": {
+        "reads": 20,
+        "returnedBytes": 18437,
+        "metadataReads": 20,
+        "metadataBytes": 18437,
+        "rowReads": 0,
+        "rowBytes": 0,
+        "queries": 15,
+        "logicalHolderConversions": 0,
+        "repeatedExactRanges": 0
+      },
+      "sparse": {
+        "reads": 5,
+        "returnedBytes": 3077,
+        "metadataReads": 5,
+        "metadataBytes": 3077,
+        "rowReads": 0,
+        "rowBytes": 0,
+        "queries": 15,
+        "logicalHolderConversions": 0,
+        "repeatedExactRanges": 0
+      }
+    },
+    "classification": "Counts are actual positional descriptor calls and result.bytesRead, not logical query counts or unique records. Per-kind attribution uses the known frame containing the read start. ROW prefetch can cross record boundaries; ROW-attributed bytes are not exclusive ROW payload bytes. There are no LENS-attributed calls in these receipts, but no zero LENS-overlap or zero metadata-I/O claim."
+  },
+  "mechanism": [
+    "Single changed raw ID: sourcesForId reads its fact once, walks occurrence ordinals forward and merges the target label with scalar deduplication. It does not collect all holder labels.",
+    "selectedEntries keeps one row-tree iterator and following-entry witness across adjacent selected labels. It jumps by rowsBelow for a sparse gap rather than scanning unrelated history; fallback nextCuratedAfter remains for an uncurated immediate successor.",
+    "formatSummary consumes the following-label witness to avoid range descent over numerical gaps between adjacent selected rows. Unchanged ranges use stored formatSummaryRange facts; changed holders still undergo both kept/stripped conversions.",
+    "Decoded RowIds carry validated head/header context into metadata and block reads; readRowPiece still checks piece CRCs. Published RecordAccess enables the existing two 16 KiB windows. Direct whole-body streaming retains its original unwindowed CRC path.",
+    "The source does not introduce an old-version leaf-LENS cache or transplant LENS facts per holder. The changed paths reuse row-tree traversal, validated ROW context and bounded read buffers; measured logical holder work is unchanged.",
+    "Mapping repairs use a claim-order cursor, resetting for backward lookups. Existing pending seeds/repair frontier sets are not replaced by a history-wide ID set; general multi-changed-ID replay and its memory/cost remain open."
+  ],
+  "controlScope": {
+    "fresh": "Original BN driver runs the old traversal/context code with the new bounded window still enabled: assertion fails at 103935 fact queries versus 20100. Physical receipt is also over both unchanged budgets: 165647 reads and 775682984 returned bytes. Retain-all-windows mutant fails the actual 32768-byte retained-window assertion at 131072. Both originals are restored by current cmp and SHA256 checks.",
+    "remaining": "No fresh current-source wrong-dedup mutation, decoded-all-holder strong-retention control or original text/tools full-memory trap refresh is claimed. The bounded-window retention mutant is narrower than a decoded-history retention control. Earlier wrong-dedup controls remain historical evidence only."
+  },
+  "audit": {
+    "path": "tmp/p6/chat-mistral-dense-cost-run-bn/audit/findings.tsv",
+    "sha256": "6bed06c919135fd5cfe035de046647f581692aacb839950315d700f76fb12aaa",
+    "executionExit": 0,
+    "scanErrors": 0,
+    "repositoryFindings": 2628,
+    "currentDenseCostTestFindings": 0,
+    "scope": "Audit execution passed; the repository does not have zero findings. Existing findings remain enabled."
+  },
+  "documentLocation": "project-plans/issue854/W26-STATUS.md was already tracked at ff2ae2078 and is the active status path for this lane. The separately tracked recovered-control/W26-STATUS.md remains historical and untouched.",
+  "restrictions": "Proof/doc finalization only. No production/test edits, fixture regeneration, threshold/timeout/enforcement changes, provider-default flip, OCR, push or merge. Existing .llxprt changes, untracked declarations and raw recovery left untouched."
 }
