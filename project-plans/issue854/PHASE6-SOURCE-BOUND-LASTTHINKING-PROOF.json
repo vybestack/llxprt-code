@@ -1,0 +1,2610 @@
+{
+  "date": "2026-10-22",
+  "baseline": "5bf72a212",
+  "commits": [
+    "9388915e3",
+    "84b4aae14"
+  ],
+  "scope": "Native plain OpenAI Chat none/all/allButLast stored planning, emission and legacy-family mandatory estimates. No default flip or Phase 5/6/W26 completion.",
+  "policy": "Matches existing converter: last normalized block-bearing unit containing ANY thinking block, irrespective of speaker or empty thought. Historical empty AI is curated away before normalization; pending empty AI remains a request unit. Source ordinal, output rank and physical row label are distinct.",
+  "facts": "Chat summary extension revision 1 stores units and 1-based last-thinking rank in 12 previously reserved bytes. Plain Chat formatRev 2 prevents old facts being reused. Kept/stripped transfer and token facts share a captured converter/settings key independent of strip choice. Range traversal selects kept target holder and stripped subtrees; affected tail holders are locally measured. One physical holder can contribute reconstructed/adjacent tool units but thinking remains in its self unit. No new history-sized map, cache or sidecar.",
+  "physical": {
+    "pid": 4360,
+    "results": [
+      {
+        "size": 40,
+        "interval": "After selection capture; actual prepareRequest, mandatory estimate and unsent release; excludes cold fill and emission",
+        "planned": {
+          "bytes": 1939,
+          "tokens": 563
+        },
+        "payloadOverlaps": 0,
+        "reads": [
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-4SZKkB/session-2026-10-22T08-44-01-65f6d442-6cea-4a8e-8958-1f2a5ee1b0a6-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 192119,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-4SZKkB/session-2026-10-22T08-44-01-65f6d442-6cea-4a8e-8958-1f2a5ee1b0a6-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 192139,
+            "requested": 6176,
+            "returned": 6176
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-4SZKkB/session-2026-10-22T08-44-01-65f6d442-6cea-4a8e-8958-1f2a5ee1b0a6-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 161891,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-4SZKkB/session-2026-10-22T08-44-01-65f6d442-6cea-4a8e-8958-1f2a5ee1b0a6-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 161911,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-4SZKkB/session-2026-10-22T08-44-01-65f6d442-6cea-4a8e-8958-1f2a5ee1b0a6-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 192119,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-4SZKkB/session-2026-10-22T08-44-01-65f6d442-6cea-4a8e-8958-1f2a5ee1b0a6-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 192139,
+            "requested": 6176,
+            "returned": 6176
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-4SZKkB/session-2026-10-22T08-44-01-65f6d442-6cea-4a8e-8958-1f2a5ee1b0a6-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 140376,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-4SZKkB/session-2026-10-22T08-44-01-65f6d442-6cea-4a8e-8958-1f2a5ee1b0a6-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 140396,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-4SZKkB/session-2026-10-22T08-44-01-65f6d442-6cea-4a8e-8958-1f2a5ee1b0a6-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 161891,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-4SZKkB/session-2026-10-22T08-44-01-65f6d442-6cea-4a8e-8958-1f2a5ee1b0a6-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 161911,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-4SZKkB/session-2026-10-22T08-44-01-65f6d442-6cea-4a8e-8958-1f2a5ee1b0a6-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 192119,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-4SZKkB/session-2026-10-22T08-44-01-65f6d442-6cea-4a8e-8958-1f2a5ee1b0a6-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 192139,
+            "requested": 6176,
+            "returned": 6176
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-4SZKkB/session-2026-10-22T08-44-01-65f6d442-6cea-4a8e-8958-1f2a5ee1b0a6-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 161891,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-4SZKkB/session-2026-10-22T08-44-01-65f6d442-6cea-4a8e-8958-1f2a5ee1b0a6-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 161911,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-4SZKkB/session-2026-10-22T08-44-01-65f6d442-6cea-4a8e-8958-1f2a5ee1b0a6-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 192119,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-4SZKkB/session-2026-10-22T08-44-01-65f6d442-6cea-4a8e-8958-1f2a5ee1b0a6-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 192139,
+            "requested": 6176,
+            "returned": 6176
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-4SZKkB/session-2026-10-22T08-44-01-65f6d442-6cea-4a8e-8958-1f2a5ee1b0a6-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 140376,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-4SZKkB/session-2026-10-22T08-44-01-65f6d442-6cea-4a8e-8958-1f2a5ee1b0a6-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 140396,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-4SZKkB/session-2026-10-22T08-44-01-65f6d442-6cea-4a8e-8958-1f2a5ee1b0a6-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 161891,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-4SZKkB/session-2026-10-22T08-44-01-65f6d442-6cea-4a8e-8958-1f2a5ee1b0a6-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 161911,
+            "requested": 8912,
+            "returned": 8912
+          }
+        ]
+      },
+      {
+        "size": 4000,
+        "interval": "After selection capture; actual prepareRequest, mandatory estimate and unsent release; excludes cold fill and emission",
+        "planned": {
+          "bytes": 163319,
+          "tokens": 51103
+        },
+        "payloadOverlaps": 0,
+        "reads": [
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 21877564,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 21877584,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 19008992,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 19009012,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 18903120,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 18903140,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 18829624,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 18829644,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 21877564,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 21877584,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 16675885,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 16675905,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 15898181,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 15898201,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 15803165,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 15803185,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 19008992,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 19009012,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 18221397,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 18221417,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 18116485,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 18116505,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 18903120,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 18903140,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 18798213,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 18798233,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 18829624,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 18829644,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 21877564,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 21877584,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 19008992,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 19009012,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 18903120,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 18903140,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 18829624,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 18829644,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 21877564,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 21877584,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 16675885,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 16675905,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 15898181,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 15898201,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 15803165,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 15803185,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 19008992,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 19009012,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 18221397,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 18221417,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 18116485,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 18116505,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 18903120,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 18903140,
+            "requested": 9872,
+            "returned": 9872
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 18798213,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 18798233,
+            "requested": 8912,
+            "returned": 8912
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 18829624,
+            "requested": 20,
+            "returned": 20
+          },
+          {
+            "path": "/var/folders/qd/962lhrjj0232rjykgg3lgmrw0000gn/T/last-thinking-reads-ofGoc3/session-2026-10-22T08-44-01-84b35da5-89d2-4de6-9e1c-6088f9c76f61-last-thinkin.llxj",
+            "fd": 26348,
+            "position": 18829644,
+            "requested": 8912,
+            "returned": 8912
+          }
+        ]
+      }
+    ]
+  },
+  "publicRed": {
+    "path": "tmp/p6/chat-last-thinking-run-bd/public-red.log",
+    "sha256": "0dcc86a790070164dfaf721e0606c873a1b2f5b3dba1a9f854cacf21e9578f50",
+    "result": "none/all pass; allButLast throws mandatory initial projection before HTTP"
+  },
+  "publicGreen": "Actual public ChatSession, real production estimator, old converter bytes, Content-Length, all-creation denial; 3 tests/45 assertions. Original public fixture extended with two reasoning assistants and multiple thinking blocks.",
+  "matrix": "16 histories x 9 policy/inclusion turns, 4 invalid policies, lifecycle: 21 tests/595 assertions. Old oracle includes actual old history curation before independent normalization. Initial missing await and missing curation were test setup errors, recorded, corrected without changing product policy.",
+  "http": "132 actual HTTP cases, all 22 existing histories x two inclusion settings x none/all/allButLast. Owned historical references use existing exact-reference/store pin provenance. Unknown external references retain their distinct verified reservation contract. Frozen 155-wire file, corpus inputs and two 5000-input normalization oracles unchanged.",
+  "lifecycle": "Append replaces target, old pin remains immutable, pop restores target, density removal/rebuild, clone, actual compaction and reopen preserve stored facts. No source-row retention or media provenance code changed.",
+  "gates": [
+    {
+      "name": "providers-native-chat-last-thinking.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "src/openai/native-chat-last-thinking.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "pid": 94122,
+      "exit": 0,
+      "sha256": "a0e84a32b4e7bd26c87ee4bc8231e57771affd24cd070a36e764f026bab16117",
+      "summary": "ID matches the independent old converter for every strip and inclusion setting [89.01ms]\n(pass) native stored last-thinking policy > pending user matches the independent old converter for every strip and inclusion setting [75.53ms]\n(pass) native stored last-thinking policy > pending AI overrides history matches the independent old converter for every strip and inclusion setting [71.30ms]\n(pass) native stored last-thinking policy > pending response changes holder matches the independent old converter for every strip and inclusion setting [100.43ms]\n(pass) native stored last-thinking policy > pending response before call matches the independent old converter for every strip and inclusion setting [104.34ms]\n(pass) native stored last-thinking policy > rejects invalid policy last before creating a transport body [20.03ms]\n(pass) native stored last-thinking policy > rejects invalid policy allbutlast before creating a transport body [19.65ms]\n(pass) native stored last-thinking policy > rejects invalid policy  before creating a transport body [19.13ms]\n(pass) native stored last-thinking policy > rejects invalid policy invalid before creating a transport body [18.07ms]\n(pass) native stored last-thinking policy > carries last-unit ranks through append, old pins, pop, rewrite, clone, compaction and reopen [90.41ms]\n\n 21 pass\n 0 fail\n 595 expect() calls\nRan 21 tests across 1 file. [2.37s]\n"
+    },
+    {
+      "name": "providers-native-chat-last-thinking-reads.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "src/openai/native-chat-last-thinking-reads.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "pid": 94144,
+      "exit": 0,
+      "sha256": "eef9230c63c29ca5307b3d4ee9fc495019c162f35f452da3eb6462f71be96e48",
+      "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/openai/native-chat-last-thinking-reads.test.ts:\n(pass) stored last-thinking physical descriptor reads > plans and estimates %s warm rows using metadata only [194.91ms]\n(pass) stored last-thinking physical descriptor reads > plans and estimates %s warm rows using metadata only [1942.54ms]\n\n 2 pass\n 0 fail\n 10 expect() calls\nRan 2 tests across 1 file. [2.56s]\n"
+    },
+    {
+      "name": "providers-native-chat-last-thinking-http.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "src/__tests__/native-chat-last-thinking-http.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "pid": 94174,
+      "exit": 0,
+      "sha256": "815d44e9ed4326220001034a3b2562d775a66f6810d6a6f95fb40ad9f62dc19d",
+      "summary": "ent include=true strip=none matches independent old bytes with no request files [28.54ms]\n(pass) stored last-thinking actual HTTP corpus > responses-stateful-parent include=true strip=all matches independent old bytes with no request files [25.30ms]\n(pass) stored last-thinking actual HTTP corpus > responses-stateful-parent include=true strip=allButLast matches independent old bytes with no request files [22.68ms]\n(pass) stored last-thinking actual HTTP corpus > blockless-row include=false strip=none matches independent old bytes with no request files [27.62ms]\n(pass) stored last-thinking actual HTTP corpus > blockless-row include=false strip=all matches independent old bytes with no request files [24.37ms]\n(pass) stored last-thinking actual HTTP corpus > blockless-row include=false strip=allButLast matches independent old bytes with no request files [24.73ms]\n(pass) stored last-thinking actual HTTP corpus > blockless-row include=true strip=none matches independent old bytes with no request files [36.46ms]\n(pass) stored last-thinking actual HTTP corpus > blockless-row include=true strip=all matches independent old bytes with no request files [23.64ms]\n(pass) stored last-thinking actual HTTP corpus > blockless-row include=true strip=allButLast matches independent old bytes with no request files [28.65ms]\n\n 132 pass\n 0 fail\n 660 expect() calls\nRan 132 tests across 1 file. [4.21s]\n"
+    },
+    {
+      "name": "providers-journal-chat-length.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "src/openai/journal-chat-length.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "pid": 94220,
+      "exit": 1,
+      "sha256": "a228a5d780da3b91146616db6c614ec4a70675637b0f80f5f7f99cee27ce9caa",
+      "summary": "2,\n    model: \"same-class-a\",\n    endpoint: \"https://example.test/v1\",\n    isOAuth: false,\n    toolNameTransform: \"none\",\n    supportsUrlImages: true,\n    reasoningEnabled: false,\n    reasoningFieldName: \"reasoning_content\",\n    mediaPdfEnabled: false,\n    unsupportedMedia: \"notice\",\n    outputLimits: null,\n  },\n  measure: [Function: measure],\n  prepare: [AsyncFunction: prepare],\n  prepareAppend: [AsyncFunction: prepareAppend],\n}\n\n      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/journal-chat-length.test.ts:431:63)\n(fail) stored plain chat lengths > rejects settings without implemented plain-chat conversion at registration and planning [14.64ms]\n470 |           truncateMode: 'truncate',\n471 |         },\n472 |       },\n473 |     ];\n474 |     for (const changed of changes)\n475 |       expect(rowFormatKey(changed)).not.toBe(rowFormatKey(SETTINGS));\n                                              ^\nerror: expect(received).not.toBe(expected)\n\nExpected: not 7417132773164139096n\n\n      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/journal-chat-length.test.ts:475:41)\n(fail) stored plain chat lengths > includes every declared setting and nested output option in the deterministic key [0.20ms]\n\n 4 pass\n 2 fail\n 35 expect() calls\nRan 6 tests across 1 file. [555.00ms]\n"
+    },
+    {
+      "name": "providers-journal-chat-length-lifecycle.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "src/openai/journal-chat-length-lifecycle.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "pid": 94228,
+      "exit": 0,
+      "sha256": "8d546d6a1daa4c6b3dfdbd235820b7cdbf8ef840cc0b8667fbdafd1d418d24cf",
+      "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/openai/journal-chat-length-lifecycle.test.ts:\n(pass) native format registration lifecycle > reads explicitly on cold fill, zero bytes for warm plans and bounded paths for an append [64.40ms]\n(pass) native format registration lifecycle > restores lengths through pop, owner edits, rebuild, clone, compaction and reopen [31.51ms]\n(pass) native format registration lifecycle > captures settings before asynchronous registration and leaves a plan unchanged after a model change [2.14ms]\n(pass) native format registration lifecycle > does not assign mapping-only and length formats conflicting meanings in one slot [2.43ms]\n(pass) native format registration lifecycle > preserves the published version, old pin and original cause when a measurer fails [9.13ms]\n(pass) native format registration lifecycle > refuses stale generations and an unmeasured zero summary instead of declaring a length [1.55ms]\n\n 6 pass\n 0 fail\n 90 expect() calls\nRan 6 tests across 1 file. [422.00ms]\n"
+    },
+    {
+      "name": "providers-native-chat-estimate.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "src/openai/native-chat-estimate.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "pid": 94234,
+      "exit": 0,
+      "sha256": "34b8f8f85ea03683730b206d0e8dd991a35ea9a72345b03ed8c32de503163ccc",
+      "summary": "preparation > matches the old eager token oracle for cache-media-purge-boundary with captured system/tools and inline media [7.01ms]\n(pass) stored native Chat estimates through production preparation > matches the old eager token oracle for responses-stateful-parent with captured system/tools and inline media [12.61ms]\n(pass) stored native Chat estimates through production preparation > matches the old eager token oracle for blockless-row with captured system/tools and inline media [7.18ms]\n(pass) stored native Chat estimates through production preparation > matches the old eager token oracle for many-images with captured system/tools and inline media [9.63ms]\n(pass) stored native Chat estimates through production preparation > matches the old eager token oracle for embedded-data-uri with captured system/tools and inline media [9.02ms]\n(pass) stored native Chat estimates through production preparation > preserves scoped estimate failure behavior for abort and permits a fresh pin [4.15ms]\n(pass) stored native Chat estimates through production preparation > preserves scoped estimate failure behavior for dispose and permits a fresh pin [3.43ms]\n(pass) stored native Chat estimates through production preparation > preserves scoped estimate failure behavior for tokenizer-failure and permits a fresh pin [7.35ms]\n\n 33 pass\n 0 fail\n 74 expect() calls\nRan 33 tests across 1 file. [3.28s]\n"
+    },
+    {
+      "name": "providers-native-chat-preparation.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "src/openai/native-chat-preparation.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "pid": 94288,
+      "exit": 0,
+      "sha256": "bf9b63f98f2e9341fd9f00885c9fae16009e32d54ad8426e47c1b4c74df7bc27",
+      "summary": " > prepares a pending user over %s warm rows without historical reads or writes [1024.25ms]\n(pass) native Chat preparation ownership and planning > captures pending bytes once and keeps retry streams immutable across caller mutation and history append [53.55ms]\n(pass) native Chat preparation ownership and planning > holds at most one source unit under backpressure and retires it on cancel [8.65ms]\n(pass) native Chat preparation ownership and planning > holds at most one source unit under backpressure and retires it on transport-error [9.89ms]\n(pass) native Chat preparation ownership and planning > cold fills %s rows, then prepares and cancels unsent warm bodies with zero physical reads or files [10.17ms]\n(pass) native Chat preparation ownership and planning > cold fills %s rows, then prepares and cancels unsent warm bodies with zero physical reads or files [1003.34ms]\n(pass) native Chat preparation ownership and planning > keys repeated preparation by captured reasoning settings against the old converter [13.84ms]\n(pass) native Chat preparation ownership and planning > reuses a cold-filled pin for fresh byte-identical streams and repeated preparation [4.42ms]\n(pass) native Chat preparation ownership and planning > preserves the explicit old continuation route and the streamed test-helper contract [4.97ms]\n\n 10 pass\n 0 fail\n 71 expect() calls\nRan 10 tests across 1 file. [2.87s]\n"
+    },
+    {
+      "name": "providers-native-chat-cold-cost.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "src/openai/native-chat-cold-cost.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "pid": 94334,
+      "exit": 0,
+      "sha256": "7c3d5681dcb30ac2bc23364eac309a49c1db1c5e82f01d613ba52d649aa977ac",
+      "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/openai/native-chat-cold-cost.test.ts:\n(pass) cold native Chat storage cost > prepares and estimates %s rows with bounded physical reads per row [231.10ms]\n(pass) cold native Chat storage cost > prepares and estimates %s rows with bounded physical reads per row [657.61ms]\n(pass) cold native Chat storage cost > prepares and estimates %s rows with bounded physical reads per row [6844.60ms]\n\n 3 pass\n 0 fail\n 18 expect() calls\nRan 3 tests across 1 file. [8.16s]\n"
+    },
+    {
+      "name": "providers-native-chat-golden.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "src/__tests__/native-chat-golden.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "pid": 94432,
+      "exit": 0,
+      "sha256": "61f8569628605b50def6c72f4f58c8e2cbe29794cd688c31fd54643224a2c3ae",
+      "summary": "s) native plain Chat frozen HTTP bodies > unicode-edges checks raw frozen bytes and native curated parity without request files [28.01ms]\n(pass) native plain Chat frozen HTTP bodies > cache-tail-user checks raw frozen bytes and native curated parity without request files [30.88ms]\n(pass) native plain Chat frozen HTTP bodies > cache-tail-tool-result checks raw frozen bytes and native curated parity without request files [29.28ms]\n(pass) native plain Chat frozen HTTP bodies > cache-tail-assistant checks raw frozen bytes and native curated parity without request files [25.50ms]\n(pass) native plain Chat frozen HTTP bodies > cache-anchor checks raw frozen bytes and native curated parity without request files [25.50ms]\n(pass) native plain Chat frozen HTTP bodies > cache-tail-thinking checks raw frozen bytes and native curated parity without request files [22.29ms]\n(pass) native plain Chat frozen HTTP bodies > cache-media-purge-boundary checks raw frozen bytes and native curated parity without request files [25.59ms]\n(pass) native plain Chat frozen HTTP bodies > responses-stateful-parent checks raw frozen bytes and native curated parity without request files [29.46ms]\n(pass) native plain Chat frozen HTTP bodies > blockless-row checks raw frozen bytes and native curated parity without request files [35.36ms]\n\n 22 pass\n 0 fail\n 176 expect() calls\nRan 22 tests across 1 file. [1469.00ms]\n"
+    },
+    {
+      "name": "providers-journal-wire-body-golden.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "src/__tests__/journal-wire-body-golden.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "pid": 94453,
+      "exit": 0,
+      "sha256": "5908cb23a6eb9febe3b64b1822d287bcd473898177c2a5726569c8a49682db1c",
+      "summary": "ic-cache-off > cache-tail-tool-result sends the frozen complete body and Content-Length from journal rows [21.88ms]\n(pass) native HistoryService frozen request bytes > route anthropic-cache-off > cache-tail-assistant sends the frozen complete body and Content-Length from journal rows [23.05ms]\n(pass) native HistoryService frozen request bytes > route anthropic-cache-off > cache-anchor sends the frozen complete body and Content-Length from journal rows [21.77ms]\n(pass) native HistoryService frozen request bytes > route anthropic-cache-off > cache-tail-thinking sends the frozen complete body and Content-Length from journal rows [19.73ms]\n(pass) native HistoryService frozen request bytes > route anthropic-cache-off > cache-media-purge-boundary sends the frozen complete body and Content-Length from journal rows [23.32ms]\n(pass) native HistoryService frozen request bytes > route anthropic-cache-off > responses-stateful-parent sends the frozen complete body and Content-Length from journal rows [32.74ms]\n(pass) native HistoryService frozen request bytes > route anthropic-cache-off > blockless-row sends the frozen complete body and Content-Length from journal rows [29.81ms]\n(pass) native HistoryService frozen request bytes > rejects a changed committed row through the real native source and transport [22.32ms]\n\n 155 pass\n 0 fail\n 155 expect() calls\nRan 155 tests across 1 file. [4.51s]\n"
+    },
+    {
+      "name": "providers-native-chat-direct-send.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "src/__tests__/native-chat-direct-send.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "pid": 94523,
+      "exit": 0,
+      "sha256": "efc36a53baaadfd4e12bd04c0c09b57618ea60314d3c00839d117a3a84a91fcb",
+      "summary": "irect production send > keeps pending thinking and inline user image bytes [34.32ms]\n(pass) native plain Chat direct production send > drops cross-speaker result messages when a real assistant call exists [29.44ms]\n(pass) native plain Chat direct production send > sends a pending user without files with streaming enabled [28.78ms]\n(pass) native plain Chat direct production send > sends a pending user without files with streaming disabled [24.57ms]\n(pass) native plain Chat direct production send > streams a native request into a real streaming Chat response without files [22.15ms]\n(pass) native plain Chat direct production send > sends the old builder bytes and Content-Length without creating any file or directory [24.07ms]\n(pass) native plain Chat direct production send > keeps strict OpenAI tool-call reasoning policy in measurement and emission [25.00ms]\n(pass) native plain Chat direct production send > filters empty assistant units before counting the native contribution [23.10ms]\n(pass) native plain Chat direct production send > flushes one tool unit of media without a scratch index or spool [23.88ms]\n(pass) native plain Chat direct production send > preserves reasoning.includeInContext=%s [23.59ms]\n(pass) native plain Chat direct production send > preserves reasoning.includeInContext=%s [23.16ms]\n\n 17 pass\n 0 fail\n 102 expect() calls\nRan 17 tests across 1 file. [1303.00ms]\n"
+    },
+    {
+      "name": "core-chat-token-summary.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "src/journal/chat-token-summary.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 94540,
+      "exit": 0,
+      "sha256": "0b6506b58bfcb90e30ceea92578045399dc390894abcda57776814a55c8269e6",
+      "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/journal/chat-token-summary.test.ts:\n(pass) stored Chat token summaries > persists and composes both token variants without changing wire transfer counters [0.56ms]\n(pass) stored Chat token summaries > persists normalized unit ranks and composes the last thinking coordinate associatively [0.10ms]\n(pass) stored Chat token summaries > refuses unknown rank revisions, impossible coordinates and nonzero reserved bytes [0.15ms]\n(pass) stored Chat token summaries > refuses a CRC-valid pre-token-summary journal [0.25ms]\n\n 4 pass\n 0 fail\n 9 expect() calls\nRan 4 tests across 1 file. [137.00ms]\n"
+    },
+    {
+      "name": "core-slotSummary.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "src/journal/slotSummary.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 94541,
+      "exit": 0,
+      "sha256": "0686abe95d4e6b1921b8cb3b722c6beff4e064a22920f9ab7c48e58f503c2838",
+      "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/journal/slotSummary.test.ts:\n(pass) slot summary > always occupies the 296 bytes of a slot [0.55ms]\n(pass) slot summary > sizes one variant 136, 128 and 32 bytes and two variants 272, 256 and 64 [0.02ms]\n(pass) slot summary > leaves the tail of the slot zero for the smaller formats [0.38ms]\n(pass) slot summary > round-trips randomized summaries of every kind [4.67ms]\n(pass) slot summary > puts the Anthropic tables at the offsets of the design table [0.11ms]\n(pass) slot summary > puts the chat tables, P offsets and carry mask at the offsets of the design table [0.06ms]\n(pass) slot summary > puts the Responses tables and reasoning count at the offsets of the design table [0.04ms]\n(pass) slot summary > refuses a table with the wrong number of states [0.08ms]\n(pass) slot summary > refuses out-of-range state numbers and carry masks [0.12ms]\n(pass) slot summary > rejects a slot of the wrong length and bytes the format leaves zero [0.10ms]\n(pass) slot summary > decodes each slot of a trailer by the kind its own table entry records [0.80ms]\n(pass) slot summary > throws when the kind in the table is not the kind the slot holds [0.06ms]\n(pass) slot summary > refuses to decode a slot whose table entry is unassigned [0.02ms]\n\n 13 pass\n 0 fail\n 762 expect() calls\nRan 13 tests across 1 file. [146.00ms]\n"
+    },
+    {
+      "name": "core-summaryComposition.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "src/journal/summaryComposition.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 94547,
+      "exit": 0,
+      "sha256": "8d6666e9829d05e0c5c8db862a9535d391592e93c8a4e2c104b8fb16b21d689a",
+      "summary": " is associative with an identity for K=10 with P on random valid tables [4.65ms]\n(pass) transfer composition with the affine part > is associative with an identity for K=6 with P on random valid tables [2.08ms]\n(pass) transfer composition with the affine part > is associative with an identity for K=2 with P on random valid tables [1.28ms]\n(pass) transfer composition with the affine part > charges the pending bytes of the left node to the right node when it does not carry them on [0.11ms]\n(pass) transfer composition with the affine part > keeps the pending bytes for a later flush when the right node carries them on [0.02ms]\n(pass) slot summaries > composes anthropic summaries associatively, with an identity, through the codec [7.37ms]\n(pass) slot summaries > composes chat summaries associatively, with an identity, through the codec [7.25ms]\n(pass) slot summaries > composes responses summaries associatively, with an identity, through the codec [3.61ms]\n(pass) slot summaries > threads the Anthropic chain state and the last thinking label through both operands [0.07ms]\n(pass) slot summaries > keeps the left label when the right operand saw none [0.03ms]\n(pass) slot summaries > adds the Responses reasoning-id counts [0.05ms]\n(pass) slot summaries > refuses to compose summaries of different kinds [0.05ms]\n\n 18 pass\n 0 fail\n 12017 expect() calls\nRan 18 tests across 1 file. [169.00ms]\n"
+    },
+    {
+      "name": "core-journalStore.readerLifetime.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "src/journal/journalStore.readerLifetime.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 94548,
+      "exit": 0,
+      "sha256": "e577d3e321b39346f1ba1ab1d303d8f9eacef10cbe94264c31e0032383d72a6c",
+      "summary": "orts retired batch descriptor release failure after closing the file [1.27ms]\n(pass) journal reader ownership across writer retirement > reports retired dump descriptor release failure after closing the file [0.93ms]\n(pass) journal reader ownership across writer retirement > reports a fanout-held reader close failure through flush after all mirrors settle [7.61ms]\n(pass) journal reader ownership across writer retirement > closes a reader-free journal before returning [0.76ms]\n(pass) journal reader ownership across writer retirement > keeps an abort reason before a deferred descriptor-close failure [1.05ms]\n(pass) journal reader ownership across writer retirement > joins an admitted checkpoint deletion before closing while rejecting later work [1.82ms]\n(pass) journal reader ownership across writer retirement > closes immediately with no readers and preserves the original close failure [0.83ms]\n(pass) journal reader ownership across writer retirement > reports deferred descriptor close failure to the final reader release [0.72ms]\n(pass) journal reader ownership across writer retirement > keeps callback and descriptor-close failures in their original order [0.93ms]\n(pass) journal reader ownership across writer retirement > preserves the abort reason when a retired snapshot releases its descriptor [1.04ms]\n\n 11 pass\n 0 fail\n 29 expect() calls\nRan 11 tests across 1 file. [338.00ms]\n"
+    },
+    {
+      "name": "core-journalStore.readerCleanup.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "src/journal/journalStore.readerCleanup.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 94552,
+      "exit": 0,
+      "sha256": "f5f965caadd1919cbbcf2bcd5b2306bd526d30e4a63d982a79338759e4fb9826",
+      "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/journal/journalStore.readerCleanup.test.ts:\n(pass) retired reader cross-cleanup error identity > keeps the original consumer error before the original dump descriptor failure [11.47ms]\n(pass) retired reader cross-cleanup error identity > preserves readAt failure identity before final descriptor release failure [1.61ms]\n(pass) retired reader cross-cleanup error identity > still closes the descriptor when suspended dump reader cleanup fails independently [2.17ms]\n\n 3 pass\n 0 fail\n 20 expect() calls\nRan 3 tests across 1 file. [372.00ms]\n"
+    },
+    {
+      "name": "core-normalization-unit-oracle.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "src/services/history/normalization-unit-oracle.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 94560,
+      "exit": 0,
+      "sha256": "5337bc072ac287a5443b93e2585be4cfa9cfbae3e27cab0e2c0b3264af413c56",
+      "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/services/history/normalization-unit-oracle.test.ts:\n(pass) immutable old-normalizer unit oracle > matches all 5000 frozen input, unit and pending hashes without regenerating them [4764.57ms]\n(pass) immutable old-normalizer unit oracle > matches the frozen subset admitted by the indexed orphan-only stream [1060.16ms]\n(pass) immutable old-normalizer unit oracle > matches all 5000 indexed outputs, counts and pending origins without refusals [9375.27ms]\n\n 3 pass\n 0 fail\n 60857 expect() calls\nRan 3 tests across 1 file. [15.51s]\n"
+    },
+    {
+      "name": "core-tail-query-oracle.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "src/services/history/tail-query-oracle.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 94743,
+      "exit": 0,
+      "sha256": "c6c7502d08adbcc7052c3f2e10f287b8a41ca6629035f086aa8e84e0980a37f5",
+      "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/services/history/tail-query-oracle.test.ts:\n(pass) normalized request-tail frozen differential > matches count, selection, last, successor and cursor ranges for all 5000 unchanged inputs [58445.37ms]\n\n 1 pass\n 0 fail\n 1470046 expect() calls\nRan 1 test across 1 file. [58.76s]\n"
+    },
+    {
+      "name": "core-journalLargeRows.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "src/journal/journalLargeRows.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 95551,
+      "exit": 0,
+      "sha256": "8570d437717fccdbbd8913e6e0e52c76196d3637a8e264910b7e758acfe7f5df",
+      "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/journal/journalLargeRows.test.ts:\n(pass) rows larger than any buffer the codec would allocate > writes, reopens and reads back a 17 MiB row with the CRC checked and the heap far below the body [81.31ms]\n(pass) rows larger than any buffer the codec would allocate > writes, reopens and reads back a 40 MiB row with the CRC checked and the heap far below the body [133.50ms]\n(pass) rows larger than any buffer the codec would allocate > writes, reopens and reads back a 200 MiB row with the CRC checked and the heap far below the body [526.98ms]\n(pass) rows larger than any buffer the codec would allocate > control: a writer that gathers the body before writing exceeds the heap bound [141.37ms]\n(pass) rows larger than any buffer the codec would allocate > control: a reader that keeps every chunk exceeds the heap bound [121.76ms]\n\n 5 pass\n 0 fail\n 15 expect() calls\nRan 5 tests across 1 file. [1146.00ms]\n"
+    },
+    {
+      "name": "agents-native-chat-session-http.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "src/core/__tests__/native-chat-session-http.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents",
+      "pid": 95569,
+      "exit": 0,
+      "sha256": "df3e47b8940dc0ccf81f96ee8432a279fcb767eb0c32494f44121f060e82e7ff",
+      "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/core/__tests__/native-chat-session-http.test.ts:\n(pass) public native plain Chat pending user HTTP > sends none thinking through mandatory estimation and HTTP without operation files [222.95ms]\n(pass) public native plain Chat pending user HTTP > sends all thinking through mandatory estimation and HTTP without operation files [53.64ms]\n(pass) public native plain Chat pending user HTTP > sends allButLast thinking through mandatory estimation and HTTP without operation files [54.99ms]\n\n 3 pass\n 0 fail\n 45 expect() calls\nRan 3 tests across 1 file. [1078.00ms]\n"
+    },
+    {
+      "name": "core-declarations",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "../../scripts/build_package.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 95590,
+      "exit": 0,
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127",
+      "summary": "Successfully copied files.\n"
+    },
+    {
+      "name": "providers-declarations",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "../../scripts/build_package.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "pid": 95650,
+      "exit": 0,
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127",
+      "summary": "Successfully copied files.\n"
+    },
+    {
+      "name": "agents-declarations",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "../../scripts/build_package.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents",
+      "pid": 95697,
+      "exit": 0,
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127",
+      "summary": "Successfully copied files.\n"
+    },
+    {
+      "name": "core-types",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/core/tsconfig.noemit.json"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 95719,
+      "exit": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": ""
+    },
+    {
+      "name": "providers-types",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/providers/tsconfig.noemit.json"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 95800,
+      "exit": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": ""
+    },
+    {
+      "name": "agents-types",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/agents/tsconfig.noemit.json"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 95939,
+      "exit": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": ""
+    },
+    {
+      "name": "providers-bun-types",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/providers/tsconfig.test-bun.json",
+        "--types",
+        "bun"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 96058,
+      "exit": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": ""
+    },
+    {
+      "name": "agents-bun-types",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/agents/tsconfig.test-bun.json",
+        "--types",
+        "bun"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 96114,
+      "exit": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "summary": ""
+    },
+    {
+      "name": "lint",
+      "args": [
+        "node_modules/.bin/eslint",
+        "--max-warnings",
+        "0",
+        "packages/agents/src/core/__tests__/native-chat-session-http.test.ts",
+        "packages/core/src/journal/chat-token-summary.test.ts",
+        "packages/core/src/journal/row-summary-range.ts",
+        "packages/core/src/journal/rowTreeReader.ts",
+        "packages/core/src/journal/slotSummary.ts",
+        "packages/core/src/journal/summaryComposition.ts",
+        "packages/core/src/journal/versionSnapshot.ts",
+        "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+        "packages/providers/src/openai/journal-chat-length-lifecycle.test.ts",
+        "packages/providers/src/openai/journal-chat-length.test.ts",
+        "packages/providers/src/openai/journal-chat-length.ts",
+        "packages/providers/src/openai/native-chat-body.ts",
+        "packages/providers/src/openai/native-chat-estimate.ts",
+        "packages/providers/src/openai/native-chat-last-thinking.test.ts",
+        "packages/providers/src/openai/native-chat-last-thinking-reads.test.ts",
+        "packages/providers/src/__tests__/native-chat-last-thinking-http.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 96200,
+      "exit": 1,
+      "sha256": "64bee53cbc9d8ec2b241237513b5cdcaa8c18b4672f21302704b8cbb34739da4",
+      "summary": "t                        sonarjs/no-nested-conditional\n\n/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/__tests__/native-chat-last-thinking-http.test.ts\n  63:11  error  Refactor this code to not nest more than 3 if/for/while/switch/try statements  sonarjs/nested-control-flow\n\n/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/native-chat-body.ts\n  101:31  error  Extract this nested ternary operation into an independent statement  sonarjs/no-nested-conditional\n  184:42  error  Extract this nested ternary operation into an independent statement  sonarjs/no-nested-conditional\n\n/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/native-chat-last-thinking-reads.test.ts\n  182:13  error  Refactor this code to not nest more than 3 if/for/while/switch/try statements  sonarjs/nested-control-flow\n  189:13  error  Refactor this code to not nest more than 3 if/for/while/switch/try statements  sonarjs/nested-control-flow\n\n/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/native-chat-last-thinking.test.ts\n  219:11  error  Refactor this code to not nest more than 3 if/for/while/switch/try statements  sonarjs/nested-control-flow\n\n✖ 11 problems (11 errors, 0 warnings)\n  1 error and 0 warnings potentially fixable with the `--fix` option.\n\n"
+    },
+    {
+      "name": "format",
+      "args": [
+        "node_modules/.bin/prettier",
+        "--check",
+        "packages/agents/src/core/__tests__/native-chat-session-http.test.ts",
+        "packages/core/src/journal/chat-token-summary.test.ts",
+        "packages/core/src/journal/row-summary-range.ts",
+        "packages/core/src/journal/rowTreeReader.ts",
+        "packages/core/src/journal/slotSummary.ts",
+        "packages/core/src/journal/summaryComposition.ts",
+        "packages/core/src/journal/versionSnapshot.ts",
+        "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+        "packages/providers/src/openai/journal-chat-length-lifecycle.test.ts",
+        "packages/providers/src/openai/journal-chat-length.test.ts",
+        "packages/providers/src/openai/journal-chat-length.ts",
+        "packages/providers/src/openai/native-chat-body.ts",
+        "packages/providers/src/openai/native-chat-estimate.ts",
+        "packages/providers/src/openai/native-chat-last-thinking.test.ts",
+        "packages/providers/src/openai/native-chat-last-thinking-reads.test.ts",
+        "packages/providers/src/__tests__/native-chat-last-thinking-http.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 96311,
+      "exit": 0,
+      "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+      "summary": "Checking formatting...\nAll matched files use Prettier code style!\n"
+    },
+    {
+      "name": "graph",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "scripts/check-affected-test-shards.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 96318,
+      "exit": 0,
+      "sha256": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67",
+      "summary": "affected-test-shards drift guard: scanning /Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code against scripts/affected-test-shards.data.json\naffected-test-shards drift guard PASSED: checked-in graph matches real imports.\n"
+    },
+    {
+      "name": "audit",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "scripts/test-audit/scan.ts",
+        "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-last-thinking-run-bd/audit"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 96346,
+      "exit": 0,
+      "sha256": "dc752d48106c097dbb47e3074fe74a1dd3b79072347cb85be73ebc58b8cd50d4",
+      "summary": "files scanned: 4667  errors: 0\ntests: 44658  assertions: 110400  (avg 2.47 asserts/test)\nfindings: 2621\n\n== by flag ==\n   855  DUP_ASSERT\n   497  MOCK_ONLY_ORACLE\n   482  SELF_CONFIRMING\n   242  WEAK_ONLY\n   187  STRUCTURE_ONLY\n   170  MOCK_MIRROR\n    98  NO_ASSERT\n    45  SNAPSHOT_ONLY\n    25  SWALLOWED_ASSERT\n    14  ALWAYS_TRUE\n     6  SELF_COMPARE\n\n== by area ==\n   823  cli\n   534  core\n   448  agents\n   378  providers\n   123  scripts\n    64  mcp\n    61  tools\n    43  auth\n    31  telemetry\n    24  integration-tests\n    21  zed-acp\n    20  lsp\n    18  policy\n     9  ide-integration\n     8  settings\n     7  vscode-ide-companion\n     4  storage\n     3  test-utils\n\nper-file stats for 4542 files written alongside findings.tsv\n"
+    },
+    {
+      "name": "preservation",
+      "args": [
+        "shasum",
+        "-a",
+        "256",
+        "-c",
+        "tmp/p6/chat-tail-run-au/preserved.sha256"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 96394,
+      "exit": 0,
+      "sha256": "0e4199bb6c410cc6f1e5bd39e3d87c8159795d9dc60279f003e975a7ea37b454",
+      "summary": "ry-2026-10-19/recreated-notes-at-recovery/final-delivery/verified-tests.tsv: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/final-delivery/w17-remaining-files.txt: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/native-test-evidence.tsv: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/remaining-inventory-files.txt: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/source-inventory.tsv: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/starting-inventory-files.txt: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/test-case-evidence.tsv: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/verified-tests.tsv: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/w17-remaining-files.txt: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/w21/ROOT-CAUSE.md: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/w21/STATUS.md: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/w21/contract-map.md: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/w21/remaining-contracts.md: OK\nproject-plans/issue854/recovery-2026-10-19/validate-recovery.ts: OK\nproject-plans/issue854/recovery-2026-10-19/validation.json: OK\n"
+    }
+  ],
+  "finalGates": [
+    {
+      "name": "forced-spool",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "packages/agents/src/core/__tests__/native-chat-session-http.test.ts",
+        "--timeout",
+        "180000",
+        "-t",
+        "allButLast"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 4293,
+      "exit": 1,
+      "sha256": "0d7ea70e5170bda55e9d6620158c638a807046b90c3a8dc7f537a61ad57fca34",
+      "tail": "throw new Error('Operation attempted to create a file or directory');\n                   ^\nerror: Operation attempted to create a file or directory\n      at denied (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/compression/__tests__/support/operation-file-creates.ts:76:15)\n      at mkdtempSync (unknown:1:1)\n      at create (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/utils/wire-body-spool.ts:256:5)\n      at spoolChatBody (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/OpenAIRequestPreparation.ts:396:31)\n      at prepareRequest (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/OpenAIRequestPreparation.ts:532:15)\n      at prepareOpenAIChatProjection (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/OpenAIPromptProjectionPreparation.ts:207:34)\n      at prepareOpenAIPromptProjection (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/OpenAIPromptEnvelopeStore.ts:129:32)\n      at processTicksAndRejections (unknown:7:39)\n(fail) public native plain Chat pending user HTTP > sends allButLast thinking through mandatory estimation and HTTP without operation files [166.51ms]\n\n 0 pass\n 2 filtered out\n 1 fail\nRan 1 test across 1 file. [1222.00ms]\n"
+    },
+    {
+      "name": "native-chat-last-thinking.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "packages/providers/src/openai/native-chat-last-thinking.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 4314,
+      "exit": 0,
+      "sha256": "0a595f0c9eaa53ddeda0ca3eed7c45d94b0aad60bc15b8914e0d7d9cf782081e",
+      "tail": " ID matches the independent old converter for every strip and inclusion setting [93.89ms]\n(pass) native stored last-thinking policy > pending user matches the independent old converter for every strip and inclusion setting [91.65ms]\n(pass) native stored last-thinking policy > pending AI overrides history matches the independent old converter for every strip and inclusion setting [75.92ms]\n(pass) native stored last-thinking policy > pending response changes holder matches the independent old converter for every strip and inclusion setting [99.79ms]\n(pass) native stored last-thinking policy > pending response before call matches the independent old converter for every strip and inclusion setting [104.48ms]\n(pass) native stored last-thinking policy > rejects invalid policy last before creating a transport body [19.96ms]\n(pass) native stored last-thinking policy > rejects invalid policy allbutlast before creating a transport body [18.85ms]\n(pass) native stored last-thinking policy > rejects invalid policy  before creating a transport body [19.48ms]\n(pass) native stored last-thinking policy > rejects invalid policy invalid before creating a transport body [16.30ms]\n(pass) native stored last-thinking policy > carries last-unit ranks through append, old pins, pop, rewrite, clone, compaction and reopen [89.99ms]\n\n 21 pass\n 0 fail\n 595 expect() calls\nRan 21 tests across 1 file. [2.69s]\n"
+    },
+    {
+      "name": "native-chat-last-thinking-reads.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "packages/providers/src/openai/native-chat-last-thinking-reads.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 4360,
+      "exit": 0,
+      "sha256": "1ea9f3351148df89fd171eabcd3cea471280afab8720b22b39aea44d4614355c",
+      "tail": "bun test v1.3.14 (0d9b296a)\n\npackages/providers/src/openai/native-chat-last-thinking-reads.test.ts:\n(pass) stored last-thinking physical descriptor reads > plans and estimates %s warm rows using metadata only [184.70ms]\n(pass) stored last-thinking physical descriptor reads > plans and estimates %s warm rows using metadata only [1972.61ms]\n\n 2 pass\n 0 fail\n 10 expect() calls\nRan 2 tests across 1 file. [2.97s]\n"
+    },
+    {
+      "name": "native-chat-last-thinking-http.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "packages/providers/src/__tests__/native-chat-last-thinking-http.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 4405,
+      "exit": 0,
+      "sha256": "84eb72ff9025c9b116e3fe90672d0ad697c78d4114410c1ec9993ccb14352d9a",
+      "tail": "ent include=true strip=none matches independent old bytes with no request files [22.49ms]\n(pass) stored last-thinking actual HTTP corpus > responses-stateful-parent include=true strip=all matches independent old bytes with no request files [24.73ms]\n(pass) stored last-thinking actual HTTP corpus > responses-stateful-parent include=true strip=allButLast matches independent old bytes with no request files [22.85ms]\n(pass) stored last-thinking actual HTTP corpus > blockless-row include=false strip=none matches independent old bytes with no request files [27.36ms]\n(pass) stored last-thinking actual HTTP corpus > blockless-row include=false strip=all matches independent old bytes with no request files [22.13ms]\n(pass) stored last-thinking actual HTTP corpus > blockless-row include=false strip=allButLast matches independent old bytes with no request files [33.10ms]\n(pass) stored last-thinking actual HTTP corpus > blockless-row include=true strip=none matches independent old bytes with no request files [24.88ms]\n(pass) stored last-thinking actual HTTP corpus > blockless-row include=true strip=all matches independent old bytes with no request files [28.62ms]\n(pass) stored last-thinking actual HTTP corpus > blockless-row include=true strip=allButLast matches independent old bytes with no request files [25.11ms]\n\n 132 pass\n 0 fail\n 660 expect() calls\nRan 132 tests across 1 file. [4.54s]\n"
+    },
+    {
+      "name": "journal-chat-length.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "packages/providers/src/openai/journal-chat-length.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 4454,
+      "exit": 0,
+      "sha256": "803e6886f1610f517959bea56c70e55040fec754d427bc19524945dff0c0b660",
+      "tail": "bun test v1.3.14 (0d9b296a)\n\npackages/providers/src/openai/journal-chat-length.test.ts:\n(pass) stored plain chat tools > measures tool pairs, escaped names, relocated image media and updated best responses [104.97ms]\n(pass) stored plain chat lengths > matches old conversion for both thinking variants and inline media URI bytes [19.38ms]\n(pass) stored plain chat lengths > fills real normalized contributions and plans from the pinned aggregate without decoding again [14.42ms]\n(pass) stored plain chat lengths > keeps an old pin and its captured settings valid across append, eviction and clone [54.78ms]\n(pass) stored plain chat lengths > rejects settings without implemented plain-chat conversion at registration and planning [12.25ms]\n(pass) stored plain chat lengths > includes every declared setting and nested output option in the deterministic key [0.29ms]\n\n 6 pass\n 0 fail\n 62 expect() calls\nRan 6 tests across 1 file. [950.00ms]\n"
+    },
+    {
+      "name": "chat-token-summary.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "packages/core/src/journal/chat-token-summary.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 4465,
+      "exit": 0,
+      "sha256": "54d76df17076f1094177eb017a58644fd5edc60a6b97307d964b9fbd3e1fd84d",
+      "tail": "bun test v1.3.14 (0d9b296a)\n\npackages/core/src/journal/chat-token-summary.test.ts:\n(pass) stored Chat token summaries > persists and composes both token variants without changing wire transfer counters [0.53ms]\n(pass) stored Chat token summaries > persists normalized unit ranks and composes the last thinking coordinate associatively [0.12ms]\n(pass) stored Chat token summaries > refuses unknown rank revisions, impossible coordinates and nonzero reserved bytes [0.21ms]\n(pass) stored Chat token summaries > refuses a CRC-valid pre-token-summary journal [0.25ms]\n\n 4 pass\n 0 fail\n 9 expect() calls\nRan 4 tests across 1 file. [599.00ms]\n"
+    },
+    {
+      "name": "native-chat-session-http.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "packages/agents/src/core/__tests__/native-chat-session-http.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 4472,
+      "exit": 0,
+      "sha256": "d6dae794c6139f353b48b185cc221613fdd06ac8d451f18e065bae75f58e4bcb",
+      "tail": "bun test v1.3.14 (0d9b296a)\n\npackages/agents/src/core/__tests__/native-chat-session-http.test.ts:\n(pass) public native plain Chat pending user HTTP > sends none thinking through mandatory estimation and HTTP without operation files [230.43ms]\n(pass) public native plain Chat pending user HTTP > sends all thinking through mandatory estimation and HTTP without operation files [54.57ms]\n(pass) public native plain Chat pending user HTTP > sends allButLast thinking through mandatory estimation and HTTP without operation files [52.17ms]\n\n 3 pass\n 0 fail\n 45 expect() calls\nRan 3 tests across 1 file. [1338.00ms]\n"
+    },
+    {
+      "name": "core-declarations",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "../../scripts/build_package.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "pid": 4486,
+      "exit": 0,
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127",
+      "tail": "Successfully copied files.\n"
+    },
+    {
+      "name": "providers-declarations",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "../../scripts/build_package.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "pid": 4529,
+      "exit": 0,
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127",
+      "tail": "Successfully copied files.\n"
+    },
+    {
+      "name": "agents-declarations",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "../../scripts/build_package.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents",
+      "pid": 4557,
+      "exit": 0,
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127",
+      "tail": "Successfully copied files.\n"
+    },
+    {
+      "name": "core-types",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/core/tsconfig.noemit.json"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 4601,
+      "exit": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tail": ""
+    },
+    {
+      "name": "providers-types",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/providers/tsconfig.noemit.json"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 4708,
+      "exit": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tail": ""
+    },
+    {
+      "name": "agents-types",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/agents/tsconfig.noemit.json"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 4849,
+      "exit": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tail": ""
+    },
+    {
+      "name": "providers-bun-types",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/providers/tsconfig.test-bun.json",
+        "--types",
+        "bun"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 4984,
+      "exit": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tail": ""
+    },
+    {
+      "name": "agents-bun-types",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/agents/tsconfig.test-bun.json",
+        "--types",
+        "bun"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 5020,
+      "exit": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tail": ""
+    },
+    {
+      "name": "lint",
+      "args": [
+        "node_modules/.bin/eslint",
+        "--max-warnings",
+        "0",
+        "packages/agents/src/core/__tests__/native-chat-session-http.test.ts",
+        "packages/core/src/journal/chat-token-summary.test.ts",
+        "packages/core/src/journal/row-summary-range.ts",
+        "packages/core/src/journal/rowTreeReader.ts",
+        "packages/core/src/journal/slotSummary.ts",
+        "packages/core/src/journal/summaryComposition.ts",
+        "packages/core/src/journal/versionSnapshot.ts",
+        "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+        "packages/providers/src/__tests__/native-chat-last-thinking-http.test.ts",
+        "packages/providers/src/openai/journal-chat-length-lifecycle.test.ts",
+        "packages/providers/src/openai/journal-chat-length.test.ts",
+        "packages/providers/src/openai/journal-chat-length.ts",
+        "packages/providers/src/openai/native-chat-body.ts",
+        "packages/providers/src/openai/native-chat-estimate.ts",
+        "packages/providers/src/openai/native-chat-last-thinking-reads.test.ts",
+        "packages/providers/src/openai/native-chat-last-thinking.test.ts",
+        "packages/providers/src/openai/native-chat-last-thinking.test.ts",
+        "packages/providers/src/openai/native-chat-last-thinking-reads.test.ts",
+        "packages/providers/src/__tests__/native-chat-last-thinking-http.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 5090,
+      "exit": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tail": ""
+    },
+    {
+      "name": "format",
+      "args": [
+        "node_modules/.bin/prettier",
+        "--check",
+        "packages/agents/src/core/__tests__/native-chat-session-http.test.ts",
+        "packages/core/src/journal/chat-token-summary.test.ts",
+        "packages/core/src/journal/row-summary-range.ts",
+        "packages/core/src/journal/rowTreeReader.ts",
+        "packages/core/src/journal/slotSummary.ts",
+        "packages/core/src/journal/summaryComposition.ts",
+        "packages/core/src/journal/versionSnapshot.ts",
+        "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+        "packages/providers/src/__tests__/native-chat-last-thinking-http.test.ts",
+        "packages/providers/src/openai/journal-chat-length-lifecycle.test.ts",
+        "packages/providers/src/openai/journal-chat-length.test.ts",
+        "packages/providers/src/openai/journal-chat-length.ts",
+        "packages/providers/src/openai/native-chat-body.ts",
+        "packages/providers/src/openai/native-chat-estimate.ts",
+        "packages/providers/src/openai/native-chat-last-thinking-reads.test.ts",
+        "packages/providers/src/openai/native-chat-last-thinking.test.ts",
+        "packages/providers/src/openai/native-chat-last-thinking.test.ts",
+        "packages/providers/src/openai/native-chat-last-thinking-reads.test.ts",
+        "packages/providers/src/__tests__/native-chat-last-thinking-http.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 5237,
+      "exit": 0,
+      "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+      "tail": "Checking formatting...\nAll matched files use Prettier code style!\n"
+    },
+    {
+      "name": "graph",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "scripts/check-affected-test-shards.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 5246,
+      "exit": 0,
+      "sha256": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67",
+      "tail": "affected-test-shards drift guard: scanning /Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code against scripts/affected-test-shards.data.json\naffected-test-shards drift guard PASSED: checked-in graph matches real imports.\n"
+    },
+    {
+      "name": "audit",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "scripts/test-audit/scan.ts",
+        "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-last-thinking-run-bd/final-audit"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 5275,
+      "exit": 0,
+      "sha256": "dc752d48106c097dbb47e3074fe74a1dd3b79072347cb85be73ebc58b8cd50d4",
+      "tail": "files scanned: 4667  errors: 0\ntests: 44658  assertions: 110400  (avg 2.47 asserts/test)\nfindings: 2621\n\n== by flag ==\n   855  DUP_ASSERT\n   497  MOCK_ONLY_ORACLE\n   482  SELF_CONFIRMING\n   242  WEAK_ONLY\n   187  STRUCTURE_ONLY\n   170  MOCK_MIRROR\n    98  NO_ASSERT\n    45  SNAPSHOT_ONLY\n    25  SWALLOWED_ASSERT\n    14  ALWAYS_TRUE\n     6  SELF_COMPARE\n\n== by area ==\n   823  cli\n   534  core\n   448  agents\n   378  providers\n   123  scripts\n    64  mcp\n    61  tools\n    43  auth\n    31  telemetry\n    24  integration-tests\n    21  zed-acp\n    20  lsp\n    18  policy\n     9  ide-integration\n     8  settings\n     7  vscode-ide-companion\n     4  storage\n     3  test-utils\n\nper-file stats for 4542 files written alongside findings.tsv\n"
+    },
+    {
+      "name": "preservation",
+      "args": [
+        "shasum",
+        "-a",
+        "256",
+        "-c",
+        "tmp/p6/chat-tail-run-au/preserved.sha256"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "pid": 5306,
+      "exit": 0,
+      "sha256": "0e4199bb6c410cc6f1e5bd39e3d87c8159795d9dc60279f003e975a7ea37b454",
+      "tail": "ry-2026-10-19/recreated-notes-at-recovery/final-delivery/verified-tests.tsv: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/final-delivery/w17-remaining-files.txt: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/native-test-evidence.tsv: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/remaining-inventory-files.txt: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/source-inventory.tsv: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/starting-inventory-files.txt: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/test-case-evidence.tsv: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/verified-tests.tsv: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/w17-remaining-files.txt: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/w21/ROOT-CAUSE.md: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/w21/STATUS.md: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/w21/contract-map.md: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/w21/remaining-contracts.md: OK\nproject-plans/issue854/recovery-2026-10-19/validate-recovery.ts: OK\nproject-plans/issue854/recovery-2026-10-19/validation.json: OK\n"
+    }
+  ],
+  "knownRed": "Initial journal-chat-length fixture incorrectly treated revision 2 as unsupported after the bump; corrected to current revision + 1 with assertions preserved. Final full file is 6/0. Initial lint corrected by extraction/formatting only. Wider 609-diagnostic core test types, #3917, two old durable cases, blanket compaction and public fixture remain separate and unsuppressed. Current tools memory is RED at its original timeout.",
+  "controls": [
+    {
+      "name": "v2-wrong-target",
+      "path": "packages/providers/src/openai/journal-chat-length.ts",
+      "old": "const target = await indexed.unitEntryAt(lastThinking);",
+      "change": "const target = await indexed.unitEntryAt(0);",
+      "test": [
+        "packages/providers/src/openai/native-chat-last-thinking.test.ts",
+        "-t",
+        "pending AI"
+      ],
+      "pid": 261,
+      "exit": 1,
+      "before": "10ec69e29ce813e89d934fc91826ed590bf6640f6a9f771c53091c68eea9a10d",
+      "after": "10ec69e29ce813e89d934fc91826ed590bf6640f6a9f771c53091c68eea9a10d",
+      "cmp": true,
+      "logSha256": "9c27e48d13182d2dd6ea36c8dfd5e5695bd0c59f6fee6914d7168e346d533371",
+      "tail": "bun test v1.3.14 (0d9b296a)\n\npackages/providers/src/openai/native-chat-last-thinking.test.ts:\n42 |   declared: number | undefined,\n43 |   finished: boolean,\n44 | ): void {\n45 |   if (declared === undefined) return;\n46 |   if (served > declared || (finished && served !== declared)) {\n47 |     throw new Error(\n                   ^\nerror: Request body served 271 bytes but declared 267\n      at assertServedLength (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/utils/progressive-json-body.ts:47:15)\n      at pull (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/utils/progressive-json-body.ts:110:13)\n(fail) native stored last-thinking policy > pending AI overrides history matches the independent old converter for every strip and inclusion setting [187.95ms]\n\n 0 pass\n 20 filtered out\n 1 fail\n 8 expect() calls\nRan 1 test across 1 file. [1159.00ms]\n"
+    },
+    {
+      "name": "v2-keeps-all",
+      "path": "packages/providers/src/openai/native-chat-body.ts",
+      "old": "        strip,\n        plan.lastThinking,",
+      "change": "        'none',\n        plan.lastThinking,",
+      "test": [
+        "packages/providers/src/openai/native-chat-last-thinking.test.ts",
+        "-t",
+        "pending AI"
+      ],
+      "pid": 271,
+      "exit": 1,
+      "before": "ad5731fda70e1946c38706a026d1f9f031bf0388928a716f2b97d1b3d7a3356d",
+      "after": "ad5731fda70e1946c38706a026d1f9f031bf0388928a716f2b97d1b3d7a3356d",
+      "cmp": true,
+      "logSha256": "4ba0db85cc09402186d57812769a12c85fd133ac815cbbfa21c15ec987028306",
+      "tail": "bun test v1.3.14 (0d9b296a)\n\npackages/providers/src/openai/native-chat-last-thinking.test.ts:\n42 |   declared: number | undefined,\n43 |   finished: boolean,\n44 | ): void {\n45 |   if (declared === undefined) return;\n46 |   if (served > declared || (finished && served !== declared)) {\n47 |     throw new Error(\n                   ^\nerror: Request body served 242 bytes but declared 241\n      at assertServedLength (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/utils/progressive-json-body.ts:47:15)\n      at pull (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/utils/progressive-json-body.ts:29:22)\n      at processTicksAndRejections (unknown:7:39)\n(fail) native stored last-thinking policy > pending AI overrides history matches the independent old converter for every strip and inclusion setting [184.65ms]\n\n 0 pass\n 20 filtered out\n 1 fail\n 4 expect() calls\nRan 1 test across 1 file. [1183.00ms]\n"
+    },
+    {
+      "name": "v2-drops-latest",
+      "path": "packages/providers/src/openai/native-chat-body.ts",
+      "old": "        plan.lastThinking,",
+      "change": "        -1,",
+      "test": [
+        "packages/providers/src/openai/native-chat-last-thinking.test.ts",
+        "-t",
+        "pending AI"
+      ],
+      "pid": 289,
+      "exit": 1,
+      "before": "ad5731fda70e1946c38706a026d1f9f031bf0388928a716f2b97d1b3d7a3356d",
+      "after": "ad5731fda70e1946c38706a026d1f9f031bf0388928a716f2b97d1b3d7a3356d",
+      "cmp": true,
+      "logSha256": "3a8d73947532b4b804c86f1418697a47673fa93d1d27a2aad54ef97e6bf8c084",
+      "tail": "bun test v1.3.14 (0d9b296a)\n\npackages/providers/src/openai/native-chat-last-thinking.test.ts:\n42 |   declared: number | undefined,\n43 |   finished: boolean,\n44 | ): void {\n45 |   if (declared === undefined) return;\n46 |   if (served > declared || (finished && served !== declared)) {\n47 |     throw new Error(\n                   ^\nerror: Request body served 241 bytes but declared 271\n      at assertServedLength (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/utils/progressive-json-body.ts:47:15)\n      at pull (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/utils/progressive-json-body.ts:104:15)\n(fail) native stored last-thinking policy > pending AI overrides history matches the independent old converter for every strip and inclusion setting [189.48ms]\n\n 0 pass\n 20 filtered out\n 1 fail\n 8 expect() calls\nRan 1 test across 1 file. [1162.00ms]\n"
+    },
+    {
+      "name": "v2-wrong-tail-shift",
+      "path": "packages/core/src/journal/summaryComposition.ts",
+      "old": ": leftUnits + rightLast,",
+      "change": ": rightLast,",
+      "test": [
+        "packages/providers/src/openai/native-chat-last-thinking.test.ts",
+        "-t",
+        "pending AI"
+      ],
+      "pid": 301,
+      "exit": 1,
+      "before": "dacda37726c098d38952d5d6098fd1631ab0305a9e730e1a53a3f24304e97364",
+      "after": "dacda37726c098d38952d5d6098fd1631ab0305a9e730e1a53a3f24304e97364",
+      "cmp": true,
+      "logSha256": "60d20b3ea9cae6ae221c52f04bd6ffbeb0d3a55a060db48f2dad1b139a39dfe4",
+      "tail": "bun test v1.3.14 (0d9b296a)\n\npackages/providers/src/openai/native-chat-last-thinking.test.ts:\n249 |             {},\n250 |             true,\n251 |           );\n252 |           try {\n253 |             const expected = Buffer.from(JSON.stringify(old.requestBody));\n254 |             expect(await readBody(actual)).toBe(expected.toString());\n                                                 ^\nerror: expect(received).toBe(expected)\n\nExpected: \"{\"model\":\"gpt-4o\",\"messages\":[{\"role\":\"system\",\"content\":\"system 雪\"},{\"role\":\"assistant\",\"content\":\"answer\"},{\"role\":\"user\",\"content\":\"middle\"},{\"role\":\"assistant\",\"content\":\"answer\",\"reasoning_content\":\"pending\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}\"\nReceived: \"{\"model\":\"gpt-4o\",\"messages\":[{\"role\":\"system\",\"content\":\"system 雪\"},{\"role\":\"assistant\",\"content\":\"answer\",\"reasoning_content\":\"old\"},{\"role\":\"user\",\"content\":\"middle\"},{\"role\":\"assistant\",\"content\":\"answer\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}\"\n\n      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/native-chat-last-thinking.test.ts:254:44)\n(fail) native stored last-thinking policy > pending AI overrides history matches the independent old converter for every strip and inclusion setting [216.14ms]\n\n 0 pass\n 20 filtered out\n 1 fail\n 9 expect() calls\nRan 1 test across 1 file. [1217.00ms]\n"
+    },
+    {
+      "name": "v2-stale-settings",
+      "path": "packages/core/src/journal/rowFormat.ts",
+      "old": ".update(ordered(settings))",
+      "change": ".update(ordered({ ...settings, chat: { ...settings.chat, includeInContext: true } }))",
+      "test": [
+        "packages/providers/src/openai/native-chat-last-thinking.test.ts",
+        "-t",
+        "end matches"
+      ],
+      "pid": 322,
+      "exit": 1,
+      "before": "37fdd876717a7b79e3b094b754ddcf556e5f2e5265c6c238ed95567d2e841f91",
+      "after": "37fdd876717a7b79e3b094b754ddcf556e5f2e5265c6c238ed95567d2e841f91",
+      "cmp": true,
+      "logSha256": "44af5fa1b8a8b9a7f0975dc7998870ced7267a9e20db6e5f1a780203e65466c9",
+      "tail": "bun test v1.3.14 (0d9b296a)\n\npackages/providers/src/openai/native-chat-last-thinking.test.ts:\n42 |   declared: number | undefined,\n43 |   finished: boolean,\n44 | ): void {\n45 |   if (declared === undefined) return;\n46 |   if (served > declared || (finished && served !== declared)) {\n47 |     throw new Error(\n                   ^\nerror: Request body served 241 bytes but declared 294\n      at assertServedLength (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/utils/progressive-json-body.ts:47:15)\n      at pull (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/utils/progressive-json-body.ts:104:15)\n(fail) native stored last-thinking policy > end matches the independent old converter for every strip and inclusion setting [195.01ms]\n\n 0 pass\n 20 filtered out\n 1 fail\n 12 expect() calls\nRan 1 test across 1 file. [1176.00ms]\n"
+    },
+    {
+      "name": "v2-forced-spool",
+      "path": "packages/providers/src/openai/OpenAIRequestPreparation.ts",
+      "old": "nativeRows?.native !== undefined && !usesToolIdStore(detectedFormat)",
+      "change": "nativeRows?.native === undefined && !usesToolIdStore(detectedFormat)",
+      "test": [
+        "packages/agents/src/core/__tests__/native-chat-session-http.test.ts",
+        "-t",
+        "allButLast"
+      ],
+      "pid": 337,
+      "exit": 1,
+      "before": "dd900591f7870f9d9fa9c0f1afd07c4ff4b75bca6255231b5ea123ddd565ae42",
+      "after": "dd900591f7870f9d9fa9c0f1afd07c4ff4b75bca6255231b5ea123ddd565ae42",
+      "cmp": true,
+      "logSha256": "4a38d9a7ddebef44deaa1238dc9f2ad13427cd036d8790a29be27d4dfbe98ad7",
+      "tail": "bun test v1.3.14 (0d9b296a)\n\npackages/agents/src/core/__tests__/native-chat-session-http.test.ts:\n87 |   messageCount: number;\n88 |   release: () => Promise<void>;\n89 | }> {\n90 |   const native = rows.native;\n91 |   if (native === undefined)\n92 |     throw new Error('Native Chat requires indexed request rows');\n                   ^\nerror: Native Chat requires indexed request rows\n      at prepareNativeChatBody (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/native-chat-body.ts:92:15)\n      at prepareNativePlainRequest (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/native-chat-body.ts:176:22)\n      at prepareRequest (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/OpenAIRequestPreparation.ts:525:15)\n      at prepareRequestBody (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/__tests__/support/prepareRequestBody.ts:69:25)\n      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/core/__tests__/native-chat-session-http.test.ts:148:33)\n(fail) public native plain Chat pending user HTTP > sends allButLast thinking through mandatory estimation and HTTP without operation files [97.86ms]\n\n 0 pass\n 2 filtered out\n 1 fail\nRan 1 test across 1 file. [1100.00ms]\n"
+    }
+  ],
+  "controlQualification": "v2 wrong-target, keeps-all, drops-latest and stale-settings reject at the progressive-body declared-byte guard, not actual HTTP byte equality. Wrong-tail-shift rejects independent body equality. All sources restored by cmp and SHA256 before both memory lanes. The invalid v2 forced-spool is excluded; final corrected forced-spool fails the public mandatory-estimate creation guard. Actual public HTTP policy-constant controls are not yet claimed.",
+  "memory": {
+    "acceptance": "NOT ACCEPTED as a full current-source native memory protocol: text PASS; tools RED timeout with incomplete six-retention series; current-source original four trap controls pending. Neither fresh lane exercises allButLast: the harness omits reasoning.stripFromContext, so native defaults to none. These fixtures do not establish last-thinking-specific heap behavior.",
+    "bounds": {
+      "rows": [
+        1024,
+        8192
+      ],
+      "peakPairs": 3,
+      "retainedSends": 6,
+      "bytes": 1048576,
+      "testTimeoutMs": 170000,
+      "commandTimeoutMs": 180000,
+      "warmup": "Small only; no large prefill outside measurement."
+    },
+    "text": {
+      "name": "current-native-full-text",
+      "file": "send-peak.native-full-text.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "./src/__tests__/send-peak.native-full-text.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 354,
+      "pid": 357,
+      "started": "2026-10-22T08:39:18.941Z",
+      "ended": "2026-10-22T08:41:03.742Z",
+      "exit": 0,
+      "commandTimeout": false,
+      "stopped": [],
+      "sha256": "16708aa8d58921880183e8773ef195eea6280b724cda42ce2006e8ddc50da042",
+      "sourceManifest": {
+        "path": "tmp/p6/chat-last-thinking-run-bd/current-native-full-text.source.json",
+        "sha256": "26d8898535e28733b77763946e6aab8b96d301bcd55ecd3046ccec5ddd119d0f",
+        "paths": 5042,
+        "currentConflicts": []
+      },
+      "log": {
+        "path": "tmp/p6/chat-last-thinking-run-bd/current-native-full-text.log",
+        "sha256": "16708aa8d58921880183e8773ef195eea6280b724cda42ce2006e8ddc50da042"
+      },
+      "peakMeasurements": [
+        {
+          "shape": "text-only",
+          "round": 0,
+          "size": "small",
+          "measurement": {
+            "routeId": "openai-chat-plain",
+            "trap": null,
+            "bytes": 1073412,
+            "sha256": "3da50735dd9871e72f2a1a02ee960c00ea2cbc36c0a91d8889a40220f7759de2",
+            "contentLength": "1073412",
+            "chunks": 1977,
+            "modelRequests": 1,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 269288
+            },
+            "nativeCost": {
+              "elapsedMs": 1024.6385410000003,
+              "cpuUserMicros": 1146816,
+              "cpuSystemMicros": 128373,
+              "journalBytesAdded": 0,
+              "kernelReadOperations": 0,
+              "kernelWriteOperations": 0
+            },
+            "peakHeap": 369568,
+            "peakArrayBuffers": 9024,
+            "peakRss": 517472256,
+            "samples": 8,
+            "peakLive": 2
+          }
+        },
+        {
+          "shape": "text-only",
+          "round": 0,
+          "size": "large",
+          "measurement": {
+            "routeId": "openai-chat-plain",
+            "trap": null,
+            "bytes": 8596228,
+            "sha256": "7f4fd024a6b943136ab12a1323f40be8bdddf9fe8a2b3ce8c359d5b2efca268e",
+            "contentLength": "8596228",
+            "chunks": 15708,
+            "modelRequests": 1,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 2161640
+            },
+            "nativeCost": {
+              "elapsedMs": 40041.917292000006,
+              "cpuUserMicros": 83324371,
+              "cpuSystemMicros": 2782469,
+              "journalBytesAdded": 24951528,
+              "kernelReadOperations": 0,
+              "kernelWriteOperations": 0
+            },
+            "peakHeap": 2040723,
+            "peakArrayBuffers": 279658,
+            "peakRss": 534380544,
+            "samples": 591,
+            "peakLive": 2
+          }
+        },
+        {
+          "shape": "text-only",
+          "round": 1,
+          "size": "small",
+          "measurement": {
+            "routeId": "openai-chat-plain",
+            "trap": null,
+            "bytes": 1073412,
+            "sha256": "3da50735dd9871e72f2a1a02ee960c00ea2cbc36c0a91d8889a40220f7759de2",
+            "contentLength": "1073412",
+            "chunks": 1954,
+            "modelRequests": 1,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 269288
+            },
+            "nativeCost": {
+              "elapsedMs": 1067.0406250000087,
+              "cpuUserMicros": 1136394,
+              "cpuSystemMicros": 133014,
+              "journalBytesAdded": 0,
+              "kernelReadOperations": 0,
+              "kernelWriteOperations": 0
+            },
+            "peakHeap": 777838,
+            "peakArrayBuffers": 9024,
+            "peakRss": 534380544,
+            "samples": 8,
+            "peakLive": 1
+          }
+        },
+        {
+          "shape": "text-only",
+          "round": 1,
+          "size": "large",
+          "measurement": {
+            "routeId": "openai-chat-plain",
+            "trap": null,
+            "bytes": 8596228,
+            "sha256": "7f4fd024a6b943136ab12a1323f40be8bdddf9fe8a2b3ce8c359d5b2efca268e",
+            "contentLength": "8596228",
+            "chunks": 15701,
+            "modelRequests": 1,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 2161640
+            },
+            "nativeCost": {
+              "elapsedMs": 2972.067458000005,
+              "cpuUserMicros": 3444220,
+              "cpuSystemMicros": 855949,
+              "journalBytesAdded": 0,
+              "kernelReadOperations": 0,
+              "kernelWriteOperations": 0
+            },
+            "peakHeap": 967378,
+            "peakArrayBuffers": 9024,
+            "peakRss": 534380544,
+            "samples": 18,
+            "peakLive": 1
+          }
+        },
+        {
+          "shape": "text-only",
+          "round": 2,
+          "size": "small",
+          "measurement": {
+            "routeId": "openai-chat-plain",
+            "trap": null,
+            "bytes": 1073412,
+            "sha256": "3da50735dd9871e72f2a1a02ee960c00ea2cbc36c0a91d8889a40220f7759de2",
+            "contentLength": "1073412",
+            "chunks": 1949,
+            "modelRequests": 1,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 269288
+            },
+            "nativeCost": {
+              "elapsedMs": 1038.9380410000012,
+              "cpuUserMicros": 1121618,
+              "cpuSystemMicros": 124704,
+              "journalBytesAdded": 0,
+              "kernelReadOperations": 0,
+              "kernelWriteOperations": 0
+            },
+            "peakHeap": 860324,
+            "peakArrayBuffers": 9024,
+            "peakRss": 534429696,
+            "samples": 8,
+            "peakLive": 2
+          }
+        },
+        {
+          "shape": "text-only",
+          "round": 2,
+          "size": "large",
+          "measurement": {
+            "routeId": "openai-chat-plain",
+            "trap": null,
+            "bytes": 8596228,
+            "sha256": "7f4fd024a6b943136ab12a1323f40be8bdddf9fe8a2b3ce8c359d5b2efca268e",
+            "contentLength": "8596228",
+            "chunks": 15717,
+            "modelRequests": 1,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 2161640
+            },
+            "nativeCost": {
+              "elapsedMs": 3013.683625000005,
+              "cpuUserMicros": 3486878,
+              "cpuSystemMicros": 858961,
+              "journalBytesAdded": 0,
+              "kernelReadOperations": 0,
+              "kernelWriteOperations": 0
+            },
+            "peakHeap": 980057,
+            "peakArrayBuffers": 9137,
+            "peakRss": 534609920,
+            "samples": 18,
+            "peakLive": 1
+          }
+        }
+      ],
+      "retainedCompleted": [
+        {
+          "sent": 0,
+          "bytes": 8596228,
+          "sha256": "7f4fd024a6b943136ab12a1323f40be8bdddf9fe8a2b3ce8c359d5b2efca268e",
+          "contentLength": "8596228",
+          "chunks": 15906,
+          "modelRequests": 1,
+          "nativeRoute": {
+            "streams": 1,
+            "estimates": 1,
+            "spools": 0,
+            "estimatorFiles": 0,
+            "tokens": 2161640
+          }
+        },
+        {
+          "sent": 1,
+          "bytes": 8596228,
+          "sha256": "7f4fd024a6b943136ab12a1323f40be8bdddf9fe8a2b3ce8c359d5b2efca268e",
+          "contentLength": "8596228",
+          "chunks": 15860,
+          "modelRequests": 1,
+          "nativeRoute": {
+            "streams": 1,
+            "estimates": 1,
+            "spools": 0,
+            "estimatorFiles": 0,
+            "tokens": 2161640
+          }
+        },
+        {
+          "sent": 2,
+          "bytes": 8596228,
+          "sha256": "7f4fd024a6b943136ab12a1323f40be8bdddf9fe8a2b3ce8c359d5b2efca268e",
+          "contentLength": "8596228",
+          "chunks": 15776,
+          "modelRequests": 1,
+          "nativeRoute": {
+            "streams": 1,
+            "estimates": 1,
+            "spools": 0,
+            "estimatorFiles": 0,
+            "tokens": 2161640
+          }
+        },
+        {
+          "sent": 3,
+          "bytes": 8596228,
+          "sha256": "7f4fd024a6b943136ab12a1323f40be8bdddf9fe8a2b3ce8c359d5b2efca268e",
+          "contentLength": "8596228",
+          "chunks": 15861,
+          "modelRequests": 1,
+          "nativeRoute": {
+            "streams": 1,
+            "estimates": 1,
+            "spools": 0,
+            "estimatorFiles": 0,
+            "tokens": 2161640
+          }
+        },
+        {
+          "sent": 4,
+          "bytes": 8596228,
+          "sha256": "7f4fd024a6b943136ab12a1323f40be8bdddf9fe8a2b3ce8c359d5b2efca268e",
+          "contentLength": "8596228",
+          "chunks": 15750,
+          "modelRequests": 1,
+          "nativeRoute": {
+            "streams": 1,
+            "estimates": 1,
+            "spools": 0,
+            "estimatorFiles": 0,
+            "tokens": 2161640
+          }
+        },
+        {
+          "sent": 5,
+          "bytes": 8596228,
+          "sha256": "7f4fd024a6b943136ab12a1323f40be8bdddf9fe8a2b3ce8c359d5b2efca268e",
+          "contentLength": "8596228",
+          "chunks": 15801,
+          "modelRequests": 1,
+          "nativeRoute": {
+            "streams": 1,
+            "estimates": 1,
+            "spools": 0,
+            "estimatorFiles": 0,
+            "tokens": 2161640
+          }
+        }
+      ],
+      "result": "PASS original complete protocol",
+      "series": {
+        "small": [
+          {
+            "routeId": "openai-chat-plain",
+            "trap": null,
+            "bytes": 1073412,
+            "sha256": "3da50735dd9871e72f2a1a02ee960c00ea2cbc36c0a91d8889a40220f7759de2",
+            "contentLength": "1073412",
+            "chunks": 1977,
+            "modelRequests": 1,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 269288
+            },
+            "nativeCost": {
+              "elapsedMs": 1024.6385410000003,
+              "cpuUserMicros": 1146816,
+              "cpuSystemMicros": 128373,
+              "journalBytesAdded": 0,
+              "kernelReadOperations": 0,
+              "kernelWriteOperations": 0
+            },
+            "peakHeap": 369568,
+            "peakArrayBuffers": 9024,
+            "peakRss": 517472256,
+            "samples": 8,
+            "peakLive": 2
+          },
+          {
+            "routeId": "openai-chat-plain",
+            "trap": null,
+            "bytes": 1073412,
+            "sha256": "3da50735dd9871e72f2a1a02ee960c00ea2cbc36c0a91d8889a40220f7759de2",
+            "contentLength": "1073412",
+            "chunks": 1954,
+            "modelRequests": 1,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 269288
+            },
+            "nativeCost": {
+              "elapsedMs": 1067.0406250000087,
+              "cpuUserMicros": 1136394,
+              "cpuSystemMicros": 133014,
+              "journalBytesAdded": 0,
+              "kernelReadOperations": 0,
+              "kernelWriteOperations": 0
+            },
+            "peakHeap": 777838,
+            "peakArrayBuffers": 9024,
+            "peakRss": 534380544,
+            "samples": 8,
+            "peakLive": 1
+          },
+          {
+            "routeId": "openai-chat-plain",
+            "trap": null,
+            "bytes": 1073412,
+            "sha256": "3da50735dd9871e72f2a1a02ee960c00ea2cbc36c0a91d8889a40220f7759de2",
+            "contentLength": "1073412",
+            "chunks": 1949,
+            "modelRequests": 1,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 269288
+            },
+            "nativeCost": {
+              "elapsedMs": 1038.9380410000012,
+              "cpuUserMicros": 1121618,
+              "cpuSystemMicros": 124704,
+              "journalBytesAdded": 0,
+              "kernelReadOperations": 0,
+              "kernelWriteOperations": 0
+            },
+            "peakHeap": 860324,
+            "peakArrayBuffers": 9024,
+            "peakRss": 534429696,
+            "samples": 8,
+            "peakLive": 2
+          }
+        ],
+        "large": [
+          {
+            "routeId": "openai-chat-plain",
+            "trap": null,
+            "bytes": 8596228,
+            "sha256": "7f4fd024a6b943136ab12a1323f40be8bdddf9fe8a2b3ce8c359d5b2efca268e",
+            "contentLength": "8596228",
+            "chunks": 15708,
+            "modelRequests": 1,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 2161640
+            },
+            "nativeCost": {
+              "elapsedMs": 40041.917292000006,
+              "cpuUserMicros": 83324371,
+              "cpuSystemMicros": 2782469,
+              "journalBytesAdded": 24951528,
+              "kernelReadOperations": 0,
+              "kernelWriteOperations": 0
+            },
+            "peakHeap": 2040723,
+            "peakArrayBuffers": 279658,
+            "peakRss": 534380544,
+            "samples": 591,
+            "peakLive": 2
+          },
+          {
+            "routeId": "openai-chat-plain",
+            "trap": null,
+            "bytes": 8596228,
+            "sha256": "7f4fd024a6b943136ab12a1323f40be8bdddf9fe8a2b3ce8c359d5b2efca268e",
+            "contentLength": "8596228",
+            "chunks": 15701,
+            "modelRequests": 1,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 2161640
+            },
+            "nativeCost": {
+              "elapsedMs": 2972.067458000005,
+              "cpuUserMicros": 3444220,
+              "cpuSystemMicros": 855949,
+              "journalBytesAdded": 0,
+              "kernelReadOperations": 0,
+              "kernelWriteOperations": 0
+            },
+            "peakHeap": 967378,
+            "peakArrayBuffers": 9024,
+            "peakRss": 534380544,
+            "samples": 18,
+            "peakLive": 1
+          },
+          {
+            "routeId": "openai-chat-plain",
+            "trap": null,
+            "bytes": 8596228,
+            "sha256": "7f4fd024a6b943136ab12a1323f40be8bdddf9fe8a2b3ce8c359d5b2efca268e",
+            "contentLength": "8596228",
+            "chunks": 15717,
+            "modelRequests": 1,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 2161640
+            },
+            "nativeCost": {
+              "elapsedMs": 3013.683625000005,
+              "cpuUserMicros": 3486878,
+              "cpuSystemMicros": 858961,
+              "journalBytesAdded": 0,
+              "kernelReadOperations": 0,
+              "kernelWriteOperations": 0
+            },
+            "peakHeap": 980057,
+            "peakArrayBuffers": 9137,
+            "peakRss": 534609920,
+            "samples": 18,
+            "peakLive": 1
+          }
+        ],
+        "accumulation": [
+          {
+            "heap": 106706519,
+            "arrayBuffers": 30723574
+          },
+          {
+            "heap": 107198202,
+            "arrayBuffers": 30723574
+          },
+          {
+            "heap": 107101274,
+            "arrayBuffers": 30723574
+          },
+          {
+            "heap": 106787928,
+            "arrayBuffers": 30723574
+          },
+          {
+            "heap": 107296557,
+            "arrayBuffers": 30723574
+          },
+          {
+            "heap": 107224043,
+            "arrayBuffers": 30723574
+          }
+        ]
+      },
+      "oracles": {
+        "small": {
+          "bytes": 1073412,
+          "sha256": "3da50735dd9871e72f2a1a02ee960c00ea2cbc36c0a91d8889a40220f7759de2"
+        },
+        "large": {
+          "bytes": 8596228,
+          "sha256": "7f4fd024a6b943136ab12a1323f40be8bdddf9fe8a2b3ce8c359d5b2efca268e"
+        }
+      },
+      "verdict": {
+        "bytesMatchOracle": true,
+        "contentLengthMatchesBytes": true,
+        "heapGrowth": 202219,
+        "heapGrowthWithinBound": true,
+        "arrayBufferGrowth": 113,
+        "arrayBufferGrowthWithinBound": true,
+        "retainedGrowth": 204615,
+        "retainedGrowthWithinBound": true,
+        "retainedEndpointGrowth": 517524,
+        "medians": {
+          "peakHeap": {
+            "small": 777838,
+            "large": 980057
+          },
+          "peakArrayBuffers": {
+            "small": 9024,
+            "large": 9137
+          },
+          "peakRss": {
+            "small": 534380544,
+            "large": 534380544
+          },
+          "peakLive": {
+            "small": 2,
+            "large": 1
+          }
+        }
+      },
+      "progress": {
+        "path": "tmp/p6/chat-last-thinking-run-bd/current-native-full-text.jsonl.progress.jsonl",
+        "sha256": "d7d376b6b8e5c811f5a0714c2df7180d3ffbb8cb065ce5289c52ef9ba226c7f2"
+      }
+    },
+    "tools": {
+      "name": "current-native-full-tools",
+      "file": "send-peak.native-full-tools.test.ts",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "./src/__tests__/send-peak.native-full-tools.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "driver": 1914,
+      "pid": 1916,
+      "started": "2026-10-22T08:41:03.898Z",
+      "ended": "2026-10-22T08:43:54.642Z",
+      "exit": 1,
+      "commandTimeout": false,
+      "stopped": [
+        4242
+      ],
+      "sha256": "85201085bf8c7abd53d90f7bacb320885ae5b7e5eecf855575a1ddc464577e78",
+      "sourceManifest": {
+        "path": "tmp/p6/chat-last-thinking-run-bd/current-native-full-tools.source.json",
+        "sha256": "59ff529adb0c2426953fff7aad2ec04c46b216ea804050c8cb797ae03d186135",
+        "paths": 5045,
+        "currentConflicts": []
+      },
+      "log": {
+        "path": "tmp/p6/chat-last-thinking-run-bd/current-native-full-tools.log",
+        "sha256": "85201085bf8c7abd53d90f7bacb320885ae5b7e5eecf855575a1ddc464577e78"
+      },
+      "peakMeasurements": [
+        {
+          "shape": "tool-heavy",
+          "round": 0,
+          "size": "small",
+          "measurement": {
+            "routeId": "openai-chat-plain",
+            "trap": null,
+            "bytes": 1470492,
+            "sha256": "a31fc26d960da4e93be21a938a47a53fb1bfbaa3791cca5ce4e4e2d7f813f906",
+            "contentLength": "1470492",
+            "chunks": 1973,
+            "modelRequests": 1,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 379186
+            },
+            "nativeCost": {
+              "elapsedMs": 1278.4629170000044,
+              "cpuUserMicros": 1360819,
+              "cpuSystemMicros": 221871,
+              "journalBytesAdded": 0,
+              "kernelReadOperations": 0,
+              "kernelWriteOperations": 0
+            },
+            "peakHeap": 259895,
+            "peakArrayBuffers": 9024,
+            "peakRss": 547504128,
+            "samples": 8,
+            "peakLive": 2
+          }
+        },
+        {
+          "shape": "tool-heavy",
+          "round": 0,
+          "size": "large",
+          "measurement": {
+            "routeId": "openai-chat-plain",
+            "trap": null,
+            "bytes": 11774659,
+            "sha256": "fd7489eb6e0dfc6c4012b03fe0d43ab83afd86a658427ec3b33776b29b7bf836",
+            "contentLength": "11774659",
+            "chunks": 15887,
+            "modelRequests": 1,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 3040473
+            },
+            "nativeCost": {
+              "elapsedMs": 86424.42308400001,
+              "cpuUserMicros": 180782283,
+              "cpuSystemMicros": 7612797,
+              "journalBytesAdded": 24922860,
+              "kernelReadOperations": 0,
+              "kernelWriteOperations": 0
+            },
+            "peakHeap": 912284,
+            "peakArrayBuffers": 267754,
+            "peakRss": 560005120,
+            "samples": 1287,
+            "peakLive": 1
+          }
+        },
+        {
+          "shape": "tool-heavy",
+          "round": 1,
+          "size": "small",
+          "measurement": {
+            "routeId": "openai-chat-plain",
+            "trap": null,
+            "bytes": 1470492,
+            "sha256": "a31fc26d960da4e93be21a938a47a53fb1bfbaa3791cca5ce4e4e2d7f813f906",
+            "contentLength": "1470492",
+            "chunks": 2004,
+            "modelRequests": 1,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 379186
+            },
+            "nativeCost": {
+              "elapsedMs": 1328.9177920000075,
+              "cpuUserMicros": 1371532,
+              "cpuSystemMicros": 231154,
+              "journalBytesAdded": 0,
+              "kernelReadOperations": 0,
+              "kernelWriteOperations": 0
+            },
+            "peakHeap": 1474283,
+            "peakArrayBuffers": 9024,
+            "peakRss": 560005120,
+            "samples": 8,
+            "peakLive": 1
+          }
+        },
+        {
+          "shape": "tool-heavy",
+          "round": 1,
+          "size": "large",
+          "measurement": {
+            "routeId": "openai-chat-plain",
+            "trap": null,
+            "bytes": 11774659,
+            "sha256": "fd7489eb6e0dfc6c4012b03fe0d43ab83afd86a658427ec3b33776b29b7bf836",
+            "contentLength": "11774659",
+            "chunks": 15874,
+            "modelRequests": 1,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 3040473
+            },
+            "nativeCost": {
+              "elapsedMs": 5198.430041999993,
+              "cpuUserMicros": 5361770,
+              "cpuSystemMicros": 1831834,
+              "journalBytesAdded": 0,
+              "kernelReadOperations": 0,
+              "kernelWriteOperations": 0
+            },
+            "peakHeap": 287156,
+            "peakArrayBuffers": 9224,
+            "peakRss": 560037888,
+            "samples": 21,
+            "peakLive": 1
+          }
+        },
+        {
+          "shape": "tool-heavy",
+          "round": 2,
+          "size": "small",
+          "measurement": {
+            "routeId": "openai-chat-plain",
+            "trap": null,
+            "bytes": 1470492,
+            "sha256": "a31fc26d960da4e93be21a938a47a53fb1bfbaa3791cca5ce4e4e2d7f813f906",
+            "contentLength": "1470492",
+            "chunks": 1976,
+            "modelRequests": 1,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 379186
+            },
+            "nativeCost": {
+              "elapsedMs": 1294.046457999997,
+              "cpuUserMicros": 1352928,
+              "cpuSystemMicros": 222404,
+              "journalBytesAdded": 0,
+              "kernelReadOperations": 0,
+              "kernelWriteOperations": 0
+            },
+            "peakHeap": 1737757,
+            "peakArrayBuffers": 9024,
+            "peakRss": 560037888,
+            "samples": 8,
+            "peakLive": 1
+          }
+        },
+        {
+          "shape": "tool-heavy",
+          "round": 2,
+          "size": "large",
+          "measurement": {
+            "routeId": "openai-chat-plain",
+            "trap": null,
+            "bytes": 11774659,
+            "sha256": "fd7489eb6e0dfc6c4012b03fe0d43ab83afd86a658427ec3b33776b29b7bf836",
+            "contentLength": "11774659",
+            "chunks": 15962,
+            "modelRequests": 1,
+            "nativeRoute": {
+              "streams": 1,
+              "estimates": 1,
+              "spools": 0,
+              "estimatorFiles": 0,
+              "tokens": 3040473
+            },
+            "nativeCost": {
+              "elapsedMs": 5460.045499999978,
+              "cpuUserMicros": 5647907,
+              "cpuSystemMicros": 1968331,
+              "journalBytesAdded": 0,
+              "kernelReadOperations": 0,
+              "kernelWriteOperations": 0
+            },
+            "peakHeap": 104069,
+            "peakArrayBuffers": 9224,
+            "peakRss": 560119808,
+            "samples": 21,
+            "peakLive": 2
+          }
+        }
+      ],
+      "retainedCompleted": [
+        {
+          "sent": 0,
+          "bytes": 11774659,
+          "sha256": "fd7489eb6e0dfc6c4012b03fe0d43ab83afd86a658427ec3b33776b29b7bf836",
+          "contentLength": "11774659",
+          "chunks": 16033,
+          "modelRequests": 1,
+          "nativeRoute": {
+            "streams": 1,
+            "estimates": 1,
+            "spools": 0,
+            "estimatorFiles": 0,
+            "tokens": 3040473
+          }
+        },
+        {
+          "sent": 1,
+          "bytes": 11774659,
+          "sha256": "fd7489eb6e0dfc6c4012b03fe0d43ab83afd86a658427ec3b33776b29b7bf836",
+          "contentLength": "11774659",
+          "chunks": 16009,
+          "modelRequests": 1,
+          "nativeRoute": {
+            "streams": 1,
+            "estimates": 1,
+            "spools": 0,
+            "estimatorFiles": 0,
+            "tokens": 3040473
+          }
+        },
+        {
+          "sent": 2,
+          "bytes": 11774659,
+          "sha256": "fd7489eb6e0dfc6c4012b03fe0d43ab83afd86a658427ec3b33776b29b7bf836",
+          "contentLength": "11774659",
+          "chunks": 16001,
+          "modelRequests": 1,
+          "nativeRoute": {
+            "streams": 1,
+            "estimates": 1,
+            "spools": 0,
+            "estimatorFiles": 0,
+            "tokens": 3040473
+          }
+        },
+        {
+          "sent": 3,
+          "bytes": 11774659,
+          "sha256": "fd7489eb6e0dfc6c4012b03fe0d43ab83afd86a658427ec3b33776b29b7bf836",
+          "contentLength": "11774659",
+          "chunks": 15991,
+          "modelRequests": 1,
+          "nativeRoute": {
+            "streams": 1,
+            "estimates": 1,
+            "spools": 0,
+            "estimatorFiles": 0,
+            "tokens": 3040473
+          }
+        },
+        {
+          "sent": 4,
+          "bytes": 11774659,
+          "sha256": "fd7489eb6e0dfc6c4012b03fe0d43ab83afd86a658427ec3b33776b29b7bf836",
+          "contentLength": "11774659",
+          "chunks": 15928,
+          "modelRequests": 1,
+          "nativeRoute": {
+            "streams": 1,
+            "estimates": 1,
+            "spools": 0,
+            "estimatorFiles": 0,
+            "tokens": 3040473
+          }
+        }
+      ],
+      "verdict": null,
+      "result": "RED original 170000 ms test timeout after three pairs and five completed retention sends; sixth started. No retained-growth verdict. Probe was killed by Bun; driver stopped owned remaining sink 4242. No retry or timeout change.",
+      "progress": {
+        "path": "tmp/p6/chat-last-thinking-run-bd/current-native-full-tools.jsonl.progress.jsonl",
+        "sha256": "ea35456c108348741fd2b2cc321fa52868d8a1885ee147d11cfca961eb5015de"
+      },
+      "observedRuntime": {
+        "firstColdLargeMs": 86424.42308400001,
+        "subsequentLargeMs": [
+          5198.430041999993,
+          5460.045499999978
+        ],
+        "firstColdLargeJournalBytesAdded": 24922860,
+        "warmLargeJournalBytesAdded": [
+          0,
+          0
+        ],
+        "explanation": "The original test deadline expired during the sixth retained send. Cold first-large fill consumed most of the measured runtime. This proves a runtime-budget failure, not a failed heap predicate. No causal attribution of the slowdown to a particular production change is established; no retries, threshold changes or prefill were applied."
+      }
+    },
+    "originalTraps": {
+      "status": "PENDING current-source refresh",
+      "names": [
+        "array",
+        "fill",
+        "estimate",
+        "retain"
+      ],
+      "oldReceipt": "PHASE6-SOURCE-BOUND-CHATCOLDCOST-PROOF.json",
+      "reuse": false
+    }
+  },
+  "preservation": "Final 1204 inherited SHA256 checks pass, including 306 untracked declarations and raw recovery. Unchanged #3919 suites pass 11/29 and 3/20. No inherited files deleted/moved. Pre-existing .llxprt/LLXPRT.md modification is untouched and must not be staged. Review skipped per Andrew 2026-10-09. No cleanup, OCR, default flip, push or merge.",
+  "remaining": [
+    "Pruned request views",
+    "Kimi/Mistral and old continuation native migration",
+    "Responses/Anthropic",
+    "Native log/dump",
+    "More media queue/crash cases",
+    "Global LENS/live-byte and capacity accounting",
+    "Full current-source original memory and trap controls if pending",
+    "Existing #3917/two old-durable/blanket-compaction/public-fixture/wider-core REDs remain separate"
+  ],
+  "source": [
+    {
+      "path": "packages/agents/src/core/__tests__/native-chat-session-http.test.ts",
+      "sha256": "b670bcd82360667b04509755db00e3659374d8a3bdc3cc499b754bb9a3809528"
+    },
+    {
+      "path": "packages/core/src/journal/chat-token-summary.test.ts",
+      "sha256": "cd1ee735dbe0246c05cae7a145a61ea33ece897e0651cf75679c0409de39014c"
+    },
+    {
+      "path": "packages/core/src/journal/row-summary-range.ts",
+      "sha256": "ba3c9075e4ac79ce042dfb1599c4f1439895ef75f1fab8dfe2f393112db21c67"
+    },
+    {
+      "path": "packages/core/src/journal/rowTreeReader.ts",
+      "sha256": "9967a2cc659113daee346fbfbe0ca4d5057f323d1fe468da337dda9d84ebbbba"
+    },
+    {
+      "path": "packages/core/src/journal/slotSummary.ts",
+      "sha256": "b8c9324cb1beadc82fa5d5cfd7a2bc736c730ce27a7f73758306e19a23a8b594"
+    },
+    {
+      "path": "packages/core/src/journal/summaryComposition.ts",
+      "sha256": "dacda37726c098d38952d5d6098fd1631ab0305a9e730e1a53a3f24304e97364"
+    },
+    {
+      "path": "packages/core/src/journal/versionSnapshot.ts",
+      "sha256": "ecb1bec6f9abe2b9c214eb82a37bfeb99429bd9289248e40409bea5510cd1429"
+    },
+    {
+      "path": "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+      "sha256": "979798f9220a79df593ddd2ad6ba792da6bfd4837a90498d7b30e8dfd68739e2"
+    },
+    {
+      "path": "packages/providers/src/__tests__/native-chat-last-thinking-http.test.ts",
+      "sha256": "dd2598b4a9b99061ce380ace7fae6f0b434af29a67a70b588457802fab54d9cc"
+    },
+    {
+      "path": "packages/providers/src/openai/journal-chat-length-lifecycle.test.ts",
+      "sha256": "a979a890f251758df0fad1ffa866365ddd8285b4b73ae06880d8ca0731be8e20"
+    },
+    {
+      "path": "packages/providers/src/openai/journal-chat-length.test.ts",
+      "sha256": "6ea55c03de1f2e6d58ac875cf39d5adc90617269656b6c7d8b9bc7b4a0716cd7"
+    },
+    {
+      "path": "packages/providers/src/openai/journal-chat-length.ts",
+      "sha256": "10ec69e29ce813e89d934fc91826ed590bf6640f6a9f771c53091c68eea9a10d"
+    },
+    {
+      "path": "packages/providers/src/openai/native-chat-body.ts",
+      "sha256": "ad5731fda70e1946c38706a026d1f9f031bf0388928a716f2b97d1b3d7a3356d"
+    },
+    {
+      "path": "packages/providers/src/openai/native-chat-estimate.ts",
+      "sha256": "a852a618efbccdf29d56bfe4fb21d90b63a6d6258b25679ca6cd340b2fd0df11"
+    },
+    {
+      "path": "packages/providers/src/openai/native-chat-last-thinking-reads.test.ts",
+      "sha256": "1d7909a67d5c712253c860d76e84f5fd501f564950ae9bfb929ffcebab572393"
+    },
+    {
+      "path": "packages/providers/src/openai/native-chat-last-thinking.test.ts",
+      "sha256": "c2634e73766183ba89a5fec6995532ab87f90e5a7fbfe69c2a2f9606c553d96a"
+    }
+  ],
+  "handoff": {
+    "verificationDirectory": "tmp/p6/chat-last-thinking-run-bd",
+    "pipelineComplete": {
+      "path": "tmp/p6/chat-last-thinking-run-bd/pipeline-v2-done.txt",
+      "sha256": "fbe76b38436037141f31ea027a481c7a57fe265f3016f0c1a76814c13f4b7d7c"
+    },
+    "gatesComplete": {
+      "pid": 4291,
+      "ended": "2026-10-22T08:45:09.570Z"
+    },
+    "activeMemoryFileIsHistorical": true,
+    "activeGateFileIsHistorical": true,
+    "rule": "No new heavy memory lane. Original memory traps remain pending; tools timeout must not be converted to a PASS from partial output."
+  },
+  "finalGatesDone": {
+    "pid": 4291,
+    "ended": "2026-10-22T08:45:09.570Z"
+  },
+  "finalGateSummary": {
+    "positive": 19,
+    "positiveFailures": 0,
+    "negativeControls": 1,
+    "negativeExpectedFailures": 1,
+    "scope": "Affected sources only. Full repository test suite and wider core Bun test type configuration are not claimed green."
+  },
+  "physicalSummary": [
+    {
+      "rows": 40,
+      "calls": 20,
+      "requested": 78376,
+      "returned": 78376,
+      "payloadOverlaps": 0,
+      "plan": {
+        "bytes": 1939,
+        "tokens": 563
+      }
+    },
+    {
+      "rows": 4000,
+      "calls": 56,
+      "requested": 267376,
+      "returned": 267376,
+      "payloadOverlaps": 0,
+      "plan": {
+        "bytes": 163319,
+        "tokens": 51103
+      }
+    }
+  ],
+  "correctedForcedSpool": {
+    "result": "Expected failure at mandatory public estimate: WireBodySpool.create -> mkdtempSync -> all-creation denial. This replaces the invalid v2 forced-spool precondition failure, which remains excluded.",
+    "path": "tmp/p6/chat-last-thinking-run-bd/final-forced-spool.log",
+    "sha256": "0d7ea70e5170bda55e9d6620158c638a807046b90c3a8dc7f537a61ad57fca34",
+    "restoration": {
+      "cmp": true,
+      "sha256": "dd900591f7870f9d9fa9c0f1afd07c4ff4b75bca6255231b5ea123ddd565ae42"
+    }
+  },
+  "auditQualification": {
+    "result": "Scanner execution passed; not a clean repository audit",
+    "files": 4667,
+    "findings": 2621,
+    "errors": 0,
+    "log": {
+      "path": "tmp/p6/chat-last-thinking-run-bd/final-audit.log",
+      "sha256": "dc752d48106c097dbb47e3074fe74a1dd3b79072347cb85be73ebc58b8cd50d4"
+    }
+  },
+  "scopeLimits": {
+    "public": "Actual public ChatSession, mandatory production estimator and local HTTP; gpt-4o model, reasoning.includeInContext=true, none/all/allButLast, pending user; no reasoning effort parameter supplied. Runtime/session/recording directories, fixture registration and old oracle are initialized before operation-wide creation denial.",
+    "policy": "Only exact none/all/allButLast values supported, with absent policy default none. last, allbutlast, empty string and invalid reject before transport.",
+    "pruned": "Current/purge/pruned views are not accepted by this proof. Rendering ability must not be inferred from native plain unpruned acceptance.",
+    "largerCost": "No fresh 9 MiB or 512/8192 physical-read-cost claim. Fresh 1024/8192 wire/memory samples are recorded separately. Older cost receipts remain historical unless an explicit source bridge validates them.",
+    "source": "All production and helper paths listed in each fresh source manifest match current bytes. Different manifest path counts reflect tracked input inventories at their respective launch points, not a claim that one manifest covers absent paths."
+  }
+}
