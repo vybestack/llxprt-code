@@ -55,7 +55,11 @@ class ObservedMediaProvider extends AnthropicProvider {
   }
 }
 
-async function publicMediaCase(unsupported: boolean): Promise<void> {
+async function publicMediaCase(
+  unsupported: boolean,
+  mode: 'history' | 'pending' | 'changed' | 'merged' = 'history',
+  cache: 'off' | '5m' | '1h' = 'off',
+): Promise<void> {
   const sink = await anthropicJournalSink();
   const parent = `${import.meta.dir}/../../../../tmp/anthropic-media2/fixtures`;
   mkdirSync(parent, { recursive: true });
@@ -87,7 +91,7 @@ async function publicMediaCase(unsupported: boolean): Promise<void> {
   settings.setProviderSetting('anthropic', 'model', sink.route.model);
   settings.setProviderSetting('anthropic', 'base-url', sink.route.baseURL);
   settings.setProviderSetting('anthropic', 'auth-key', 'test-api-key');
-  settings.setProviderSetting('anthropic', 'prompt-caching', 'off');
+  settings.setProviderSetting('anthropic', 'prompt-caching', cache);
   settings.set('model', sink.route.model);
   settings.set('streaming', 'disabled');
   settings.set('token-usage-log', false);
@@ -130,7 +134,24 @@ async function publicMediaCase(unsupported: boolean): Promise<void> {
           ...(audio === undefined ? [] : [audio]),
         ],
       },
-      { speaker: 'ai', blocks: [{ type: 'text', text: 'seen' }] },
+      ...(mode === 'merged'
+        ? []
+        : [
+            {
+              speaker: 'ai',
+              blocks:
+                mode === 'changed'
+                  ? [
+                      {
+                        type: 'tool_call',
+                        id: 'hist_tool_read',
+                        name: 'read',
+                        parameters: {},
+                      },
+                    ]
+                  : [{ type: 'text', text: 'seen' }],
+            } satisfies IContent,
+          ]),
     ]);
     await history.waitForCommit();
     const pin = await history.prepareCuratedForProviderSnapshot();
@@ -142,8 +163,44 @@ async function publicMediaCase(unsupported: boolean): Promise<void> {
         chat,
         {
           message: {
-            speaker: 'human',
-            blocks: [{ type: 'text', text: 'continue 🐈' }],
+            speaker: mode === 'changed' ? 'tool' : 'human',
+            blocks: [
+              ...(mode === 'changed'
+                ? [
+                    {
+                      type: 'tool_response',
+                      callId: 'hist_tool_read',
+                      toolName: 'read',
+                      result: 'found',
+                    } satisfies IContent['blocks'][number],
+                  ]
+                : [
+                    {
+                      type: 'text',
+                      text: 'continue ',
+                    } satisfies IContent['blocks'][number],
+                  ]),
+              ...(mode === 'history'
+                ? []
+                : [
+                    {
+                      type: 'media',
+                      encoding: 'base64',
+                      mimeType: 'image/png',
+                      data: png.toString('base64'),
+                    } satisfies IContent['blocks'][number],
+                    ...(unsupported
+                      ? [
+                          {
+                            type: 'media',
+                            encoding: 'base64',
+                            mimeType: 'audio/wav',
+                            data: 'AQID',
+                          } satisfies IContent['blocks'][number],
+                        ]
+                      : []),
+                  ]),
+            ],
           },
         },
         'media-public',
@@ -176,7 +233,10 @@ async function publicMediaCase(unsupported: boolean): Promise<void> {
       }))
         void chunk;
       expect(provider.estimate).toStrictEqual(estimate);
-      expect(estimate.unsupportedMedia).toHaveLength(unsupported ? 1 : 0);
+      const mediaCount = mode === 'history' ? 1 : 2;
+      expect(estimate.unsupportedMedia).toHaveLength(
+        unsupported ? mediaCount : 0,
+      );
     } finally {
       await oracle.releaseIfUnsent?.();
     }
@@ -206,6 +266,22 @@ describe('native Anthropic public history media estimation and send', () => {
     'keeps builder bytes and estimates without files or history reservations, unsupported=%s',
     async (unsupported) => {
       await expect(publicMediaCase(unsupported)).resolves.toBeUndefined();
+    },
+  );
+  it.each(
+    (
+      ['pending', 'changed', 'merged'] satisfies Array<
+        'pending' | 'changed' | 'merged'
+      >
+    ).flatMap((mode) =>
+      (['off', '5m', '1h'] satisfies Array<'off' | '5m' | '1h'>).map(
+        (cache) => ({ mode, cache }),
+      ),
+    ),
+  )(
+    'keeps native bytes, estimates and history leases with $mode media and $cache caching',
+    async ({ mode, cache }) => {
+      expect(await publicMediaCase(true, mode, cache)).toBeUndefined();
     },
   );
 });

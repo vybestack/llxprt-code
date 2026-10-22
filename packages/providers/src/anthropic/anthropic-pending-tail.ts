@@ -103,10 +103,9 @@ async function isolatedTail(
     if (
       row.blocks.some(
         (block) =>
-          block.type !== 'text' &&
-          block.type !== 'code' &&
-          block.type !== 'tool_call' &&
-          block.type !== 'tool_response',
+          !['text', 'code', 'media', 'tool_call', 'tool_response'].includes(
+            block.type,
+          ),
       )
     )
       return false;
