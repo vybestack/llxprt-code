@@ -697,6 +697,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         options.model,
         options.detectedFormat,
         deps,
+        (toolCalls) => streamContinuationAfterToolCalls(toolCalls, options),
       );
     }
   }
