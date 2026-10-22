@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { requestFormatSlot } from '@vybestack/llxprt-code-core/services/history/native-provider-format.js';
 import type OpenAI from 'openai';
 import {
   nativeMistralRow,
@@ -192,7 +193,12 @@ async function measure(
   const source = await JournalTailSource.create(snapshot, []);
   const resolver =
     settings.chat?.toolFormat === 'mistral'
-      ? await JournalRequestMistral.create(snapshot, source, [], 2)
+      ? await JournalRequestMistral.create(
+          snapshot,
+          source,
+          [],
+          requestFormatSlot(snapshot, settings),
+        )
       : undefined;
   return measurePlans(
     journalEntryPlans(source, entry),
@@ -259,14 +265,19 @@ export function plainChatLengthRegistration(
   supported(settings);
   return {
     settings,
-    ...(settings.chat?.toolFormat === 'mistral' ? { mistralSlot: 2 } : {}),
+    ...(settings.chat?.toolFormat === 'mistral' ? { mistral: true } : {}),
     measure: (snapshot, entry, captured) =>
       measure(snapshot, entry, captured, count),
     prepare: async (snapshot, captured) => {
       const source = await JournalTailSource.create(snapshot, []);
       const resolver =
         captured.chat?.toolFormat === 'mistral'
-          ? await JournalRequestMistral.create(snapshot, source, [], 2)
+          ? await JournalRequestMistral.create(
+              snapshot,
+              source,
+              [],
+              requestFormatSlot(snapshot, captured),
+            )
           : undefined;
       const entries = snapshot.entries();
       let following = await entries.next();
@@ -299,7 +310,12 @@ export function plainChatLengthRegistration(
       const source = await JournalTailSource.create(snapshot, []);
       const resolver =
         captured.chat?.toolFormat === 'mistral'
-          ? await JournalRequestMistral.create(snapshot, source, [], 2)
+          ? await JournalRequestMistral.create(
+              snapshot,
+              source,
+              [],
+              requestFormatSlot(snapshot, captured),
+            )
           : undefined;
       return {
         measure: async (_snapshot, entry) =>
@@ -443,7 +459,7 @@ export async function planRequestChatMessages(
     throw new JournalFormatError('Request format is not registered');
   const resolver =
     settings.chat?.toolFormat === 'mistral'
-      ? await indexed.mistralForSnapshot(snapshot, 2)
+      ? await indexed.mistralForSnapshot(snapshot, slot)
       : undefined;
   const measure = async (
     plans: AsyncIterable<JournalResponsePlan>,

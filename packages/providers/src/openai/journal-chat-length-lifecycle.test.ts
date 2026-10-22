@@ -1,4 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { identitySlotSummary } from '@vybestack/llxprt-code-core/journal/summaryComposition.js';
+import { requestFormatSlot } from '@vybestack/llxprt-code-core/services/history/native-provider-format.js';
 import { describe, expect, it } from 'bun:test';
 import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
 import { testJournalSeams } from '@vybestack/llxprt-code-core/journal/__tests__/support/journalFixtures.js';
@@ -118,6 +120,81 @@ describe('native format registration lifecycle', () => {
       await session.close();
     }
   }
+  it('allocates Mistral after all three native format slots have been filled', async () => {
+    await withSession('occupied-mistral', async (session) => {
+      await session.append([textRow('occupied formats')]);
+      for (const model of ['plain', 'anthropic', 'responses']) {
+        const pin = await session.store.snapshot();
+        try {
+          await session.store.commit([
+            {
+              kind: 'format',
+              registration:
+                model === 'plain'
+                  ? plainChatLengthRegistration({ ...SETTINGS, model })
+                  : {
+                      settings: {
+                        ...SETTINGS,
+                        model,
+                        formatId:
+                          model === 'anthropic' ? 'anthropic' : 'responses',
+                      },
+                      measure: async () => ({
+                        summary: identitySlotSummary(
+                          model === 'anthropic' ? 'anthropic' : 'responses',
+                        ),
+                        lens: new Uint8Array(0),
+                      }),
+                    },
+            },
+          ]);
+        } finally {
+          await pin.close();
+        }
+      }
+      const pin = await session.store.snapshot();
+      const settings: RowFormatSettings = {
+        ...SETTINGS,
+        formatId: 'openai-chat:mistral',
+        chat: { includeInContext: true, toolFormat: 'mistral' },
+      };
+      try {
+        const measured = await session.store.prepareSnapshotFormat(
+          pin,
+          plainChatLengthRegistration(settings),
+        );
+        try {
+          expect(planStoredChatMessages(measured, settings, 0, '').bytes).toBe(
+            textMessageLength(['occupied formats']),
+          );
+          const slot = requestFormatSlot(measured, settings);
+          expect(slot).toBe(0);
+          expect(measured.version?.slots.formatSlots[slot].gen).toBe(2);
+          expect(
+            measured.version?.slots.formatSlots.map(
+              (format) => format.summaryKind,
+            ),
+          ).toStrictEqual(['chat', 'anthropic', 'responses']);
+          const warm = await session.store.prepareSnapshotFormat(
+            measured,
+            plainChatLengthRegistration(settings),
+          );
+          try {
+            expect(requestFormatSlot(warm, settings)).toBe(slot);
+            expect(
+              planStoredChatMessages(warm, settings, 0, '').generation,
+            ).toBe(2);
+          } finally {
+            await warm.close();
+          }
+        } finally {
+          await measured.close();
+        }
+      } finally {
+        await pin.close();
+      }
+    });
+  });
 
   it('fills an immutable older view without changing the published rows', async () => {
     await withSession('old-view-fill', async (session) => {

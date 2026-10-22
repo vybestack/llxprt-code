@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { requestFormatSlot } from '@vybestack/llxprt-code-core/services/history/native-provider-format.js';
 import type { NativeMistralResolver } from './native-mistral-row.js';
 import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
@@ -154,7 +155,7 @@ async function captureChatPlan(
         if (settings.chat?.toolFormat === 'mistral') {
           mapping.resolver = await native.indexed.mistralForSnapshot(
             snapshot,
-            2,
+            requestFormatSlot(snapshot, settings),
           );
         }
         const result = await planRequestChatMessages(

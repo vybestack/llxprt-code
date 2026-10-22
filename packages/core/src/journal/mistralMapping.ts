@@ -125,7 +125,7 @@ export async function readMistralMapping(
     : (await readMappings(access, fact.mappedRef, rawId, hasher))[slot];
 }
 
-async function assignMapping(
+export async function assignMapping(
   facts: GroupFacts,
   rawId: string,
   appender: RecordAppender,

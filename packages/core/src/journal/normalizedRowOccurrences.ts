@@ -1,4 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { assignMapping, readMistralMapping } from './mistralMapping.js';
+import { compareMistralClaims, writeMistralClaim } from './mistralClaims.js';
 import { JournalFormatError } from './errors.js';
 import type { PlannedRow } from './groupEdits.js';
 import type { FactDeps, GroupFacts } from './groupFacts.js';
@@ -366,6 +368,8 @@ export async function writeNormalizedRowOccurrences(
       spill,
     );
   }
+  if (kimiFacts !== undefined && kimiFacts.mistralSlots !== 0)
+    await observeNormalizedMistralRow(row, entry, kimiFacts, deps, spill);
   if (kimiFacts?.kimi === true) {
     for (const [rawId, id] of occurrences.kimiRows)
       await replaceKimiRow(kimiFacts, row.label, {
@@ -377,4 +381,71 @@ export async function writeNormalizedRowOccurrences(
     callBlocks: kimiSafeCount(occurrences.eligibleCalls),
     unmappedBlocks: kimiSafeCount(occurrences.unmapped.length),
   };
+}
+
+export async function observeNormalizedMistralRow(
+  row: PlannedRow,
+  entry: RowEntry,
+  facts: GroupFacts,
+  deps: FactDeps,
+  spill: BatchSpill,
+): Promise<void> {
+  if ((row.flags & ROW_FLAG.curated) === 0) return;
+  const candidate = deps.idDeps.mistralCandidate;
+  if (candidate === undefined)
+    throw new JournalFormatError('Mistral mapping candidate is not registered');
+  const emitted = await kimiRowCalls(
+    row,
+    entry,
+    await deps.planOccurrences(row, facts.ids.queries),
+    facts.ids.queries,
+  );
+  const calls = [...emitted.ids].flatMap(([rawId, id]) =>
+    id.calls.map((call) => ({ rawId, call })),
+  );
+  calls.sort((left, right) =>
+    compareMistralClaims(
+      {
+        rawId: left.rawId,
+        position: left.call.position,
+        block: left.call.block,
+      },
+      {
+        rawId: right.rawId,
+        position: right.call.position,
+        block: right.call.block,
+      },
+    ),
+  );
+  for (const { rawId, call } of calls) {
+    if (rawId === '') continue;
+    await assignMapping(
+      facts,
+      rawId,
+      spill.appender,
+      spill.readGroup,
+      deps.idDeps.hasher,
+      candidate,
+    );
+    await spill.appender.drain();
+    for (let slot = 0; slot < 3; slot++) {
+      if ((facts.mistralSlots & (1 << slot)) === 0) continue;
+      const mapping = await readMistralMapping(
+        spill.readGroup(spill.appender.nextOffset),
+        facts.ids.queries,
+        rawId,
+        slot,
+        deps.idDeps.hasher,
+      );
+      if (mapping === undefined)
+        throw new JournalFormatError('Observed Mistral claim has no mapping');
+      await writeMistralClaim(
+        facts.ids,
+        slot,
+        mapping.id,
+        { rawId, position: call.position, block: call.block },
+        row.ids.findIndex((id) => id.rawId === rawId),
+      );
+    }
+  }
 }

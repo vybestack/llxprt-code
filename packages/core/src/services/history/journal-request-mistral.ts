@@ -1,6 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalFormatError } from '../../journal/errors.js';
 import type { MistralMapping } from '../../journal/mistralMapping.js';
+import {
+  compareMistralClaims,
+  readMistralClaim,
+  type MistralClaim,
+} from '../../journal/mistralClaims.js';
 import { kimiRowCalls } from '../../journal/normalizedRowOccurrences.js';
 import { plannedFromIds } from '../../journal/unitContributions.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
@@ -8,8 +13,13 @@ import type { IndexedOverlayRow } from './journal-indexed-overlay.js';
 import type { JournalTailSource } from './journal-tail-source.js';
 import { planSourceRowOccurrences } from './source-fact-planner.js';
 
+const CACHE_BYTES = 64 * 1024;
+const passthrough = (rawId: string): boolean => /^[a-zA-Z0-9]{9}$/.test(rawId);
+
 export class JournalRequestMistral {
-  private readonly pending = new Map<string, MistralMapping>();
+  private readonly seeds = new Map<string, MistralClaim>();
+  private readonly cache = new Map<string, MistralMapping>();
+  private cacheBytes = 0;
   private empty: MistralMapping | undefined;
 
   private constructor(
@@ -38,50 +48,96 @@ export class JournalRequestMistral {
       await planSourceRowOccurrences(planned, this.snapshot.facts),
       this.source.facts,
     );
-    const calls = [...emitted.ids].flatMap(([rawId, id]) =>
-      id.calls.map((call) => ({ rawId, call })),
-    );
-    calls.sort((left, right) => {
-      const part = left.call.position.part - right.call.position.part;
-      if (part !== 0) return part;
-      const unit = left.call.position.unit - right.call.position.unit;
-      return unit !== 0 ? unit : left.call.block - right.call.block;
-    });
-    for (const { rawId } of calls) {
-      if (
-        rawId === '' ||
-        !this.source.hasPendingId(rawId) ||
-        (await this.mapping(rawId)) !== undefined
-      )
-        continue;
-      if (!this.source.isTail(row.entry.label))
-        throw new JournalFormatError(
-          'Earlier Mistral call needs a mapping refill',
-        );
-      this.pending.set(rawId, await this.assign(rawId));
+    for (const [rawId, id] of emitted.ids) {
+      if (rawId === '' || !this.source.hasPendingId(rawId)) continue;
+      for (const call of id.calls) {
+        const claim = { rawId, position: call.position, block: call.block };
+        const previous =
+          this.seeds.get(rawId) ??
+          (await readMistralClaim(this.snapshot, 'raw', this.slot, rawId));
+        if (previous === undefined || compareMistralClaims(claim, previous) < 0)
+          this.seeds.set(rawId, claim);
+      }
     }
   }
 
-  private async used(id: string): Promise<boolean> {
-    if (this.empty?.id === id) return true;
-    for (const mapping of this.pending.values())
-      if (mapping.id === id) return true;
-    return (
-      (await this.snapshot.facts.mistralUsedBy(this.slot, id)) !== undefined
+  private async owner(id: string): Promise<MistralClaim | undefined> {
+    const hashed = await readMistralClaim(
+      this.snapshot,
+      'hashed',
+      this.slot,
+      id,
     );
+    const direct = await readMistralClaim(this.snapshot, 'raw', this.slot, id);
+    const left =
+      hashed === undefined || this.seeds.has(hashed.rawId) ? undefined : hashed;
+    const right =
+      direct === undefined || this.seeds.has(direct.rawId) ? undefined : direct;
+    if (left === undefined) return right;
+    if (right === undefined) return left;
+    return compareMistralClaims(left, right) < 0 ? left : right;
   }
 
-  private async assign(rawId: string): Promise<MistralMapping> {
-    if (/^[a-zA-Z0-9]{9}$/.test(rawId)) return { id: rawId, salt: null };
+  /** Each insertion has one displacement frontier and at most one newly occupied terminal ID. */
+  private async *repairs(
+    terminal: Set<string>,
+  ): AsyncGenerator<{ rawId: string; mapping: MistralMapping }> {
+    const queue = new Map(this.seeds);
+    while (queue.size !== 0) {
+      let current: MistralClaim | undefined;
+      for (const claim of queue.values())
+        if (current === undefined || compareMistralClaims(claim, current) < 0)
+          current = claim;
+      if (current === undefined)
+        throw new JournalFormatError('Missing Mistral repair frontier');
+      queue.delete(current.rawId);
+      yield {
+        rawId: current.rawId,
+        mapping: await this.repairClaim(current, queue, terminal),
+      };
+    }
+  }
+
+  private async repairClaim(
+    current: MistralClaim,
+    queue: Map<string, MistralClaim>,
+    terminal: Set<string>,
+  ): Promise<MistralMapping> {
     let salt = 0;
-    let id = this.snapshot.mistralCandidate(rawId, salt);
-    while (await this.used(id)) {
+    for (;;) {
+      const id = passthrough(current.rawId)
+        ? current.rawId
+        : this.snapshot.mistralCandidate(current.rawId, salt);
+      const owner = await this.owner(id);
+      const earlier =
+        owner !== undefined &&
+        (queue.has(owner.rawId) || compareMistralClaims(owner, current) <= 0);
+      if (passthrough(current.rawId) || (!terminal.has(id) && !earlier)) {
+        if (
+          owner !== undefined &&
+          !earlier &&
+          owner.rawId !== current.rawId &&
+          !passthrough(owner.rawId)
+        )
+          queue.set(owner.rawId, owner);
+        else terminal.add(id);
+        return { id, salt: passthrough(current.rawId) ? null : salt };
+      }
       salt++;
       if (!Number.isSafeInteger(salt + 1))
         throw new JournalFormatError('Mistral salt exhausted');
-      id = this.snapshot.mistralCandidate(rawId, salt);
     }
-    return { id, salt };
+  }
+
+  private remember(rawId: string, mapping: MistralMapping): void {
+    const bytes = Buffer.byteLength(rawId) * 2 + 256;
+    if (bytes > CACHE_BYTES) return;
+    if (this.cacheBytes + bytes > CACHE_BYTES) {
+      this.cache.clear();
+      this.cacheBytes = 0;
+    }
+    this.cache.set(rawId, mapping);
+    this.cacheBytes += bytes;
   }
 
   async resolve(rawId: string): Promise<MistralMapping> {
@@ -91,14 +147,36 @@ export class JournalRequestMistral {
       throw new JournalFormatError(
         'Unobserved Mistral id requires selected conversion facts',
       );
-    this.empty ??= await this.assign(rawId);
+    if (this.empty !== undefined) return this.empty;
+    const terminal = new Set<string>();
+    for await (const _repair of this.repairs(terminal)) {
+      /* Consume the bounded displacement frontiers. */
+    }
+    let salt = 0;
+    let id = this.snapshot.mistralCandidate('', salt);
+    while (
+      terminal.has(id) ||
+      (this.seeds.size === 0
+        ? (await this.snapshot.facts.mistralUsedBy(this.slot, id)) !== undefined
+        : (await this.owner(id)) !== undefined)
+    )
+      id = this.snapshot.mistralCandidate('', ++salt);
+    this.empty = { id, salt };
     return this.empty;
   }
 
   async mapping(rawId: string): Promise<MistralMapping | undefined> {
     this.snapshot.requireOpen();
-    return (
-      this.pending.get(rawId) ?? this.snapshot.mistralMapping(rawId, this.slot)
-    );
+    const cached = this.cache.get(rawId);
+    if (cached !== undefined) return cached;
+    if (this.seeds.size !== 0) {
+      for await (const repaired of this.repairs(new Set<string>())) {
+        if (repaired.rawId === rawId) {
+          this.remember(rawId, repaired.mapping);
+          return repaired.mapping;
+        }
+      }
+    }
+    return this.snapshot.mistralMapping(rawId, this.slot);
   }
 }

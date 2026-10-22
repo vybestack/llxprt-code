@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { fillMistralFormat } from './mistralFormatFill.js';
 import {
   finishFormatFill,
   invalidateAnthropicFormats,
@@ -246,7 +247,11 @@ async function assignedSlots(
   if (selected < 0) {
     let oldest: bigint | undefined;
     for (let index = 0; index < 3; index++) {
-      if ((reserved & (1 << index)) !== 0 && registration.mistralSlot !== index)
+      if (
+        (reserved & (1 << index)) !== 0 &&
+        slots.formatSlots[index].summaryKind === null &&
+        registration.mistralSlot !== index
+      )
         continue;
       const value = await reader.get(
         built.state.metaRoot,
@@ -524,6 +529,8 @@ export async function fillRowFormats(
       ),
       { key, registration },
     ];
+    if (registration.mistral === true)
+      next = await fillMistralFormat(ctx, next, appender, assigned);
   }
   if (
     assigned < 0 &&

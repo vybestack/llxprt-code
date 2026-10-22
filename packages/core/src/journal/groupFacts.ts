@@ -121,7 +121,10 @@ async function applyRow(
   await applyDensityCallFacts(facts.ids, row);
   const occurrences = await deps.planOccurrences(row, facts.ids.queries);
   for (const occurrence of occurrences) await facts.ids.apply(occurrence);
-  if (facts.mistralSlots !== 0) {
+  if (
+    facts.mistralSlots !== 0 &&
+    deps.idDeps.occurrenceSpace !== 'source-with-normalized'
+  ) {
     const candidate = deps.idDeps.mistralCandidate;
     if (candidate === undefined || facts.spill === undefined)
       throw new JournalFormatError(

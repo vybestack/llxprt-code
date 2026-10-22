@@ -75,6 +75,7 @@ export interface RowFormatRegistration {
   readonly incremental?: 'unsupported' | 'append';
   readonly nativeFactScope?: string;
   readonly mistralSlot?: number;
+  readonly mistral?: boolean;
   readonly prepareAppend?: (
     snapshot: VersionSnapshot,
     settings: RowFormatSettings,
@@ -118,6 +119,7 @@ export function captureRowFormat(
     incremental: registration.incremental,
     nativeFactScope: registration.nativeFactScope,
     mistralSlot: registration.mistralSlot,
+    mistral: registration.mistral,
   };
 }
 

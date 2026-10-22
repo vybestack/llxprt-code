@@ -13,6 +13,37 @@ describe('request-only Mistral observe mappings', () => {
   const directory = useTempDir('mistral-tail-');
   const options = { journal: testJournalSeams().dependencies };
 
+  it('repairs an earlier human call made observable by a late response before a collision holder', async () => {
+    const session = await JournalSession.create(
+      `${directory()}/earlier.llxj`,
+      options,
+    );
+    const rows: readonly IContent[] = [
+      { speaker: 'human', blocks: [call('toolu_alpha-1')] },
+      { speaker: 'ai', blocks: [call('4SftZvDMX')] },
+    ];
+    const tail: readonly IContent[] = [
+      { speaker: 'tool', blocks: [response('toolu_alpha-1')] },
+    ];
+    try {
+      await session.store.commit([{ kind: 'mistral', slot: 0 }]);
+      await session.append(rows);
+      const pin = await session.store.snapshot();
+      const request = await IndexedJournalRequestSnapshot.create(pin, tail);
+      try {
+        await assertMistralTail(request, await oldTailUnits(rows, tail));
+        expect((await request.mistralMapping('toolu_alpha-1', 0))?.id).toBe(
+          '4SftZvDMX',
+        );
+      } finally {
+        await request.close();
+        await pin.close();
+      }
+    } finally {
+      await session.close();
+    }
+  });
+
   it('continues native owners and earlier request-only calls across all format slots', async () => {
     const session = await JournalSession.create(
       `${directory()}/slots.llxj`,

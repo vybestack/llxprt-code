@@ -11,6 +11,19 @@ import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { IndexedJournalRequestSnapshot } from './indexed-journal-request-snapshot.js';
 import type { PinnedMediaLease } from '../../storage/history-media-release-gate.js';
 
+export function requestFormatSlot(
+  snapshot: VersionSnapshot,
+  settings: RowFormatRegistration['settings'],
+): number {
+  const key = rowFormatKey(settings);
+  const slot =
+    snapshot.version?.slots.formatSlots.findIndex(
+      (format) => format.summaryKind !== null && format.formatKeyHash === key,
+    ) ?? -1;
+  if (slot < 0) throw new Error('Request format is not registered in this pin');
+  return slot;
+}
+
 export type PrepareNativeRequestFormat = (
   snapshot: VersionSnapshot,
   registration: RowFormatRegistration,
@@ -55,14 +68,6 @@ export function nativeRequestFormatPreparation(host: {
       if (snapshot.version?.commitSeq !== host.current()?.commitSeq)
         throw new Error(
           'History changed before the native request format fill',
-        );
-      const mappingSlot = registration.mistralSlot;
-      if (
-        mappingSlot !== undefined &&
-        !(await snapshot.hasMistralSlot(mappingSlot))
-      )
-        await host.commit(() =>
-          Promise.resolve([{ kind: 'mistral', slot: mappingSlot }]),
         );
       await host.commit(() =>
         Promise.resolve([{ kind: 'format', registration }]),
