@@ -255,14 +255,10 @@ async function prepareNativeAnthropicRequest(
 async function canUseNativeAnthropic(
   params: AnthropicPlanParams,
   rows: ProviderRequestRows,
-  options: SpooledRequestOptions,
 ): Promise<boolean> {
   const native = rows.native;
   if (native === undefined) return false;
-  if (
-    options.recoveryBudget !== undefined ||
-    wantsRequestDump(params.options.invocation.ephemerals.dumpcontext)
-  )
+  if (wantsRequestDump(params.options.invocation.ephemerals.dumpcontext))
     return false;
   return (
     native.indexed.viewPlan.changedSources.length === 0 &&
@@ -276,7 +272,7 @@ export async function prepareAnthropicRequestRows(
   mediaStage: MediaStage | undefined,
   options: SpooledRequestOptions = {},
 ): Promise<PreparedAnthropicRequest> {
-  if (await canUseNativeAnthropic(params, rows, options))
+  if (await canUseNativeAnthropic(params, rows))
     return prepareNativeAnthropicRequest(
       params,
       rows,
