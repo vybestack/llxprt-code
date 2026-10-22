@@ -23,6 +23,7 @@ import { rowsSelection } from '../../../../providers/src/__tests__/support/wireB
 import { createRuntimeTokenizerFactory } from '../../../../providers/src/composition/runtimeTokenizerFactory.js';
 import { operationFileCreates } from '../../compression/__tests__/support/operation-file-creates.js';
 import { loggingChatSession } from './support/chat-session-logging-fixture.js';
+import { occupyMistralFormats } from './support/occupied-mistral-formats.js';
 
 const calls: ContinuationToolCall[] = [
   {
@@ -206,9 +207,14 @@ describe('public native plain Chat automatic continuation HTTP', () => {
       const chat = loggingChatSession(runtime, provider, {
         systemInstruction: 'system',
       });
+      let occupied:
+        | Awaited<ReturnType<typeof occupyMistralFormats>>
+        | undefined;
       try {
         await history.addBatch(prior);
         await history.waitForCommit();
+        if (toolFormat === 'mistral' && purge === 'off')
+          occupied = await occupyMistralFormats(history);
         const reference = await prepareRequestBody(
           {
             contents: [],
@@ -288,6 +294,27 @@ describe('public native plain Chat automatic continuation HTTP', () => {
           }),
         );
         expect(requests[0]).toBe(JSON.stringify(reference.requestBody));
+        expect(
+          requests.map((body) =>
+            createHash('sha256').update(body).digest('hex'),
+          ),
+        ).toStrictEqual(
+          [
+            reference.requestBody,
+            {
+              ...reference.requestBody,
+              messages: buildContinuationMessages(
+                calls,
+                reference.messagesWithSystem,
+                toolFormat,
+              ),
+              stream: true,
+            },
+          ].map((body) =>
+            createHash('sha256').update(JSON.stringify(body)).digest('hex'),
+          ),
+        );
+        await occupied?.verify();
         expect(expectedTokens).toBeGreaterThan(0);
         expect(estimates.length).toBeGreaterThan(0);
         for (const tokens of estimates) {
@@ -377,6 +404,7 @@ describe('public native plain Chat automatic continuation HTTP', () => {
           await committed.close();
         }
       } finally {
+        await occupied?.close();
         await server.stop(true);
         await history.dispose();
         await recording.dispose();
