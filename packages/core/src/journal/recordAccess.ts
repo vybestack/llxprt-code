@@ -15,6 +15,8 @@ import {
   type PositionalReader,
 } from './positionalFile.js';
 import type { TrailerHeader } from './trailerRecord.js';
+import { rowReadWindow } from './row-read-window.js';
+import { RECORD_KIND } from './recordKinds.js';
 
 /** What a record is called in an error when the caller does not name it. */
 const DEFAULT_WHAT = 'record';
@@ -88,7 +90,9 @@ export function createRecordAccess(
   path: string,
   reader: PositionalReader,
   trailer: AccessBounds,
+  windowRows = false,
 ): RecordAccess {
+  const rows = windowRows ? rowReadWindow(reader, trailer.durableEnd) : reader;
   const corruption = (
     what: string,
     offset: number,
@@ -109,7 +113,7 @@ export function createRecordAccess(
   ): Promise<FrameStart> => {
     try {
       return await readFrameStart(
-        reader,
+        what === 'ROW' ? rows : reader,
         offset,
         trailer.durableEnd,
         prefetchBytes,
@@ -134,7 +138,10 @@ export function createRecordAccess(
     async readRecordRange(head, offset, length) {
       validateRange(head, offset, length, trailer.durableEnd);
       try {
-        return await reader.readAt(head.bodyOffset + offset, length);
+        return await (head.kind === RECORD_KIND.ROW ? rows : reader).readAt(
+          head.bodyOffset + offset,
+          length,
+        );
       } catch (error) {
         if (error instanceof JournalShortReadError)
           throw corruption('ROW', head.offset, error);

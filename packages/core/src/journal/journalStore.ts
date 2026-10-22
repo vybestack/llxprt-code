@@ -893,11 +893,16 @@ export class JournalStore {
     return {
       measureFormats: this.rowFormats.length > 0,
       access: this.access,
-      readGroup: (writtenEnd) =>
-        createRecordAccess(this.path, this.writer.reader, {
-          selfOffset: this.currentVersion?.selfOffset ?? 0,
-          durableEnd: writtenEnd,
-        }),
+      readGroup: (writtenEnd, windowRows) =>
+        createRecordAccess(
+          this.path,
+          this.writer.reader,
+          {
+            selfOffset: this.currentVersion?.selfOffset ?? 0,
+            durableEnd: writtenEnd,
+          },
+          windowRows,
+        ),
       published: this.currentVersion,
       hasher: this.deps.idDeps.hasher,
       idDeps: this.deps.idDeps,

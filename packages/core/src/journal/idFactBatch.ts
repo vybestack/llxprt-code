@@ -68,7 +68,10 @@ function chargeOf(entry: IdEntry): number {
 }
 
 /** Reads of a file the current group has partly written. */
-export type ReadGroup = (writtenEnd: number) => RecordAccess;
+export type ReadGroup = (
+  writtenEnd: number,
+  windowRows?: boolean,
+) => RecordAccess;
 
 /**
  * Where a rebuild group lets a batch merge its writes before `commit`: into

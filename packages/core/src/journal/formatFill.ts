@@ -158,7 +158,7 @@ export function snapshotOf(
   return new VersionSnapshot(
     new PinnedRead(
       version,
-      ctx.readGroup(appender.nextOffset),
+      ctx.readGroup(appender.nextOffset, true),
       new PinLease(() => undefined),
     ),
     ctx.idDeps,

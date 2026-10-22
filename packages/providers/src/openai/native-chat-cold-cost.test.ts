@@ -88,9 +88,11 @@ describe('cold native Chat storage cost', () => {
           try {
             expect(prepared.spool.byteLength).toBe(size * 989 + 126);
             expect(counter.reads).toBeLessThanOrEqual(size * 10 + 100);
+            expect(counter.reads).toBeLessThanOrEqual(size * 2 + 100);
             counter.reads = 0;
             expect(await estimatePrepared(prepared)).toBe(size * 200 + 15);
             expect(counter.reads).toBeLessThanOrEqual(size * 10 + 100);
+            expect(counter.reads).toBeLessThanOrEqual(size * 2 + 100);
           } finally {
             await prepared.estimate?.projection.dispose();
             await prepared.release();
