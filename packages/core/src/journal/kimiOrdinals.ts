@@ -35,8 +35,8 @@ export class KimiOrdinalQueries {
   async count(): Promise<number> {
     this.read.requireOpen();
     const version = this.read.version;
+    if (version === undefined) return 0;
     if (
-      version === undefined ||
       !kimiEnabled(
         await this.meta.get(version.roots.metaRoot, KIMI_ELIGIBLE_KEY),
       )

@@ -4,6 +4,7 @@ import type {
   ContentBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { StreamingToolIdMapper } from '@vybestack/llxprt-code-tools/ToolIdStrategy.js';
+import type { NativeRowIds } from './native-row-ids.js';
 
 export interface NativeMistralResolver {
   resolve(rawId: string): Promise<{ readonly id: string }>;
@@ -37,5 +38,12 @@ export async function nativeMistralRow(
     observe(): void {},
     resolveToolCallId: (call) => resolve(call.id),
     resolveToolResponseId: (response) => resolve(response.callId),
+  };
+}
+
+export function mistralRowIds(resolver: NativeMistralResolver): NativeRowIds {
+  return async (row) => {
+    const mapper = await nativeMistralRow(row, resolver);
+    return () => mapper;
   };
 }

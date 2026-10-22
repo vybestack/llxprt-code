@@ -15,6 +15,7 @@ import {
   planRequestChatMessages,
 } from '../journal-chat-length.js';
 import { nativeChatMessages } from '../native-chat-messages.js';
+import { mistralRowIds } from '../native-mistral-row.js';
 import { buildMessagesWithReasoning } from '../OpenAIRequestBuilder.js';
 import {
   legacyUnitTokens,
@@ -127,7 +128,7 @@ describe('Mistral simultaneous historical mapping changes', () => {
             settings,
             'none',
             plan.lastThinking,
-            resolver,
+            mistralRowIds(resolver),
           ))
             parts.push(part);
           parts.push(Buffer.from(']'));

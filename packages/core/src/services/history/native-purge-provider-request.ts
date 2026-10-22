@@ -2,7 +2,10 @@
 import { decodeStoredRow } from './journalRowCodec.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { LocalMediaStore } from '../../storage/local-media-store.js';
-import type { PrepareNativeRequestFormat } from './native-provider-format.js';
+import type {
+  PrepareNativeRequestFormat,
+  PrepareNativeRequestKimi,
+} from './native-provider-format.js';
 import type {
   HistoryPrepareCuratedRequest,
   HistoryStorePort,
@@ -12,7 +15,10 @@ import { oldProviderRequest } from './old-provider-request.js';
 export function prepareJournalProviderRequest(
   store: Pick<HistoryStorePort, 'streamRows' | 'waitForCommit'> & {
     settledSnapshot(settle: () => Promise<void>): Promise<VersionSnapshot>;
-    prepareRequestFormat: PrepareNativeRequestFormat;
+    nativePreparation: {
+      readonly format: PrepareNativeRequestFormat;
+      readonly kimi: PrepareNativeRequestKimi;
+    };
   },
   pinnedMediaStore: () => LocalMediaStore | undefined,
 ): (request: HistoryPrepareCuratedRequest) => Promise<ProviderRequestSnapshot> {
@@ -31,8 +37,9 @@ export function prepareJournalProviderRequest(
       undefined,
       undefined,
       (snapshot, registration) =>
-        store.prepareRequestFormat(snapshot, registration),
+        store.nativePreparation.format(snapshot, registration),
       pinnedMediaStore(),
+      (snapshot) => store.nativePreparation.kimi(snapshot),
     );
   };
 }

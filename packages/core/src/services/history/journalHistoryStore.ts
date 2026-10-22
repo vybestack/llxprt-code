@@ -1,4 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { JournalHistoryStoreReads } from './journal-history-store-reads.js';
+import { JournalRowMutations } from './journal-row-mutations.js';
 import { openJournalSemanticPurge } from './journalSemanticPurge.js';
 import { prepareJournalProviderRequest } from './native-purge-provider-request.js';
 import * as nativeFormat from './native-provider-format.js';
@@ -9,11 +11,6 @@ import type { CommitAck } from '../../journal/groupWriter.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { IContent } from './IContent.js';
 import {
-  checkedPositions,
-  inheritingDraft,
-  labelsAt,
-  publishClear,
-  spansAfterClear,
   type PositionedContent,
   type PositionedOrigin,
   type PositionedOwner,
@@ -36,26 +33,7 @@ import type {
   StagedProfileAdoption,
 } from './historyStorePort.js';
 import { stageProfileReplacementOnJournal } from './journalProfileReplacement.js';
-import type { ConversationStatistics } from './curationDebugLogger.js';
-import type { ContextRange, RemovedInteriorSpan } from './historyEventTypes.js';
-import {
-  JournalDumpSnapshot,
-  journalCompressionInput,
-} from './journalDumpSnapshot.js';
-import type { HistoryRowView } from './historyRowView.js';
-import {
-  contextBoundaryOf,
-  contextRangeOf,
-  withRowView,
-  withVersionSnapshot,
-  lastContentOf,
-  lastTurnMarkerOf,
-  streamSnapshotRows,
-  statisticsOf,
-  materializeJournalRows,
-  type ContextBoundary,
-} from './journalScalars.js';
-import type { HistorySuffixQuery } from './historyJournalRows.js';
+import { journalCompressionInput } from './journalDumpSnapshot.js';
 import {
   adoptOnto,
   type AdoptionHost,
@@ -65,15 +43,10 @@ import { JournalMirrors } from './journalMirrors.js';
 import { RecordingPrimary } from './recording-primary.js';
 import { JournalOwners, type ResolvedOwner } from './journalOwners.js';
 import {
-  committedBatchSource,
-  type CommittedBatchRowSource,
-} from './journalBatchSource.js';
-import {
   JournalCheckpointLifetime,
   journalCheckpointReader,
   withRollbackCheckpointOnJournal,
 } from './journalCheckpoints.js';
-import { planToolPairingRepair } from './journalHistoryRepair.js';
 import { optimizeDensityOnJournal } from './journalDensity.js';
 import { mergeOnJournal } from './journalMerge.js';
 import { publishDetachedOnJournal } from './journalPublishDetached.js';
@@ -91,8 +64,6 @@ import type { JournalSession } from './journalSession.js';
 import {
   encodedRows,
   JournalPublication,
-  originChangeEdits,
-  ownerChangeEdits,
   type EditBuilder,
   JournalCompensationMark,
   preparedDetachedEdit,
@@ -106,7 +77,6 @@ import { PendingRecorderWrites } from './pendingRecorderWrites.js';
 import { SessionPreviews } from './sessionPreviews.js';
 import type { ResumePoint } from '../../recording/journalResume.js';
 import { applyOperation, type JournalWriteHost } from './journalOps.js';
-import type { CurrentTurnMarker } from './historyChronology.js';
 
 export type {
   JournalHistoryStoreOptions,
@@ -131,7 +101,10 @@ import type * as StoreTypes from './journal-history-store-types.js';
  * opening the journal is the first step of the queue, the count starts at 0,
  * and a failure to open is the failure of the queue (decision D-W7-1).
  */
-export class JournalHistoryStore implements HistoryStorePort {
+export class JournalHistoryStore
+  extends JournalHistoryStoreReads
+  implements HistoryStorePort
+{
   prepareCurated = prepareJournalProviderRequest(
     this,
     () => this.session.store.mediaPins.mediaStore,
@@ -140,7 +113,7 @@ export class JournalHistoryStore implements HistoryStorePort {
   pinnedRequestResources = () =>
     nativeFormat.nativeRequestResources(this.session.store);
 
-  prepareRequestFormat = nativeFormat.nativeRequestFormatPreparation({
+  readonly nativePreparation = nativeFormat.nativeRequestPreparations({
     exclusive: (run) => this.exclusive(run),
     current: () => this.session.store.published,
     commit: (edits) => this.commitStep(this.tentativeRows, edits),
@@ -153,10 +126,8 @@ export class JournalHistoryStore implements HistoryStorePort {
   private ack: CommitAck | undefined;
   private disposed = false;
   readonly checkpointLifetime = new JournalCheckpointLifetime();
-  /** Dumps not yet closed: they read the file, so disposing closes them first. */
-  private readonly openDumps = new Set<JournalDumpSnapshot>();
   private readonly publication = new JournalPublication();
-  private journal: StoreTypes.OpenJournal | undefined;
+  protected journal: StoreTypes.OpenJournal | undefined;
   /** Settles when the journal is open; rejects with the reason it could not be. */
   private readonly opened: Promise<void>;
   /** Settles when the journal is open and the recorder given at construction is bound; never rejects. */
@@ -170,16 +141,30 @@ export class JournalHistoryStore implements HistoryStorePort {
     enqueue: (rowsAfter, build) => this.enqueue(rowsAfter, build),
     offerPreview: (content, origin) => this.offerPreview(content, origin),
   };
+  private readonly rowMutations = new JournalRowMutations({
+    writes: this.writes,
+    assertUsable: () => this.assertUsable(),
+    rows: () => this.tentativeRows,
+    owners: () => this.owners,
+    store: () => this.session.store,
+    enqueue: (rowsAfter, build) => this.enqueue(rowsAfter, build),
+    withSnapshot: (read) => this.withDurableSnapshot(read),
+    assertSettled: (snapshot, doing) => this.assertSettled(snapshot, doing),
+    restoreTo: (saved) => this.restoreTo(saved),
+    waitForDurable: () => this.waitForDurable(),
+    lastAck: () => this.ack,
+  });
   private adopted: JournalRecordingService | undefined;
-  private boundary: bigint | undefined;
+  protected boundary: bigint | undefined;
   private previews = new SessionPreviews();
   private readonly adoptedWrites = new PendingRecorderWrites();
   private readonly topology = new RecordingPrimary(this.adoptionHost());
 
   constructor(
     source: JournalSession | StoreTypes.JournalSessionOpener,
-    private readonly options: StoreTypes.JournalHistoryStoreOptions = {},
+    protected readonly options: StoreTypes.JournalHistoryStoreOptions = {},
   ) {
+    super();
     if (typeof source === 'function') {
       this.opened = source().then((session) => this.install(session));
       this.queue = this.opened.catch((error: unknown) => {
@@ -215,7 +200,7 @@ export class JournalHistoryStore implements HistoryStorePort {
   }
 
   /** The open journal; before it is open, or when it could not be, the reason. */
-  private requireOpen(): StoreTypes.OpenJournal {
+  protected requireOpen(): StoreTypes.OpenJournal {
     if (this.journal === undefined) {
       throw (
         this.failure?.error ??
@@ -231,11 +216,6 @@ export class JournalHistoryStore implements HistoryStorePort {
 
   private get owners(): JournalOwners {
     return this.requireOpen().owners;
-  }
-
-  /** The per-agent mirror files bound to this history. */
-  get mirrors(): JournalMirrors {
-    return this.requireOpen().mirrors;
   }
 
   private mirrorsOf(
@@ -277,11 +257,6 @@ export class JournalHistoryStore implements HistoryStorePort {
     return this.adopted === requireJournalRecorder(recorder);
   }
 
-  /** Rows with a label below this were written by an earlier process; every reader applies it (D-S08-3). */
-  get resumeBoundary(): bigint | undefined {
-    return this.boundary;
-  }
-
   private adoptionHost(): AdoptionHost {
     return {
       state: () => ({
@@ -315,19 +290,6 @@ export class JournalHistoryStore implements HistoryStorePort {
     return this.ack;
   }
 
-  /**
-   * The file the history is recorded in: the named file of the store, else the
-   * file of the recorder bound first. Null while the journal is not open and
-   * for a bare store, which has neither.
-   */
-  journalPath(): string | null {
-    const open = this.journal;
-    if (open === undefined) return null;
-    return open.session.named
-      ? open.session.path
-      : open.mirrors.firstRecorderPath();
-  }
-
   /** A journal clear is asynchronous: the service holds its mutation queue until it settles (D-W7-5). */
   readonly clearIsAsynchronous = true;
 
@@ -341,54 +303,20 @@ export class JournalHistoryStore implements HistoryStorePort {
     applyOperation(this.writes, op);
   }
 
-  /**
-   * Rewrites the rows at `changes[].position` of the history under their own
-   * labels and owners (a semantic media purge). Positions are those of the
-   * history once everything queued is applied.
-   */
   purge(changes: readonly PositionedContent[]): void {
-    this.assertUsable();
-    const sorted = checkedPositions(changes, this.tentativeRows);
-    if (sorted.length === 0) return;
-    const rows = sorted.map(({ content }) => inheritingDraft(content));
-    const positions = sorted.map(({ position }) => position);
-    this.enqueue(this.tentativeRows, async (snapshot) => {
-      const labels = await labelsAt(snapshot, positions);
-      return [
-        {
-          kind: 'purge',
-          rows: labels.map((label, at) => ({ label, draft: rows[at] })),
-        },
-      ];
-    });
+    this.rowMutations.purge(changes);
   }
 
-  /** Gives the rows at `changes[].position` a new owner; no row is rewritten (design 5.4). */
   changeOwners(changes: readonly PositionedOwner[]): void {
-    this.assertUsable();
-    const sorted = checkedPositions(changes, this.tentativeRows);
-    if (sorted.length > 0)
-      this.enqueue(this.tentativeRows, ownerChangeEdits(sorted));
+    this.rowMutations.changeOwners(changes);
   }
 
-  /** Like {@link changeOwners}, naming origins; `undefined` makes the row unowned. */
   changeOwnersOf(changes: readonly PositionedOrigin[]): void {
-    this.assertUsable();
-    const sorted = checkedPositions(changes, this.tentativeRows);
-    if (sorted.length > 0)
-      this.enqueue(
-        this.tentativeRows,
-        originChangeEdits(sorted, () => this.owners),
-      );
+    this.rowMutations.changeOwnersOf(changes);
   }
 
-  /** Sets entry fields of rows (design 8.2); the rows and their order do not change. */
   fill(fills: readonly EntryFill[]): void {
-    this.assertUsable();
-    if (fills.length === 0) return;
-    this.enqueue(this.tentativeRows, () =>
-      Promise.resolve([{ kind: 'fill', fills }]),
-    );
+    this.rowMutations.fill(fills);
   }
 
   /**
@@ -565,14 +493,6 @@ export class JournalHistoryStore implements HistoryStorePort {
     await this.mirrors.flush();
   }
 
-  primaryOriginId(): string | undefined {
-    return this.journal?.mirrors.primaryOriginId();
-  }
-
-  adoptedOrigin(origin: string | undefined): void {
-    this.mirrors.adoptedOrigin(origin);
-  }
-
   onRetired(listener: () => void): () => void {
     this.retirement.add(listener);
     return () => this.retirement.delete(listener);
@@ -588,121 +508,6 @@ export class JournalHistoryStore implements HistoryStorePort {
       throw this.failure.error;
     }
   }
-
-  /**
-   * The rows of the history once the queue is durable, as of the version
-   * published at the first read; later groups do not show in a stream that
-   * has started.
-   */
-  async *streamRows(
-    query?: HistorySuffixQuery,
-    signal?: AbortSignal,
-  ): AsyncGenerator<IContent, void, unknown> {
-    signal?.throwIfAborted();
-    this.assertUsable();
-    await this.waitForDurable();
-    const snapshot = await this.session.store.snapshot();
-    yield* streamSnapshotRows(
-      snapshot,
-      this.boundary,
-      this.options.counters,
-      query,
-      signal,
-    );
-  }
-
-  /**
-   * The last `count` rows (all rows when omitted) of the version published
-   * now, as the source of a batch event. Call it once the publication it
-   * announces is acked. The source holds a pin until its dispatcher retires it.
-   */
-  async committedBatch(count?: number): Promise<CommittedBatchRowSource> {
-    const snapshot = await this.session.store.snapshot();
-    try {
-      return committedBatchSource(
-        snapshot,
-        count ?? snapshot.rows,
-        this.boundary,
-        this.options.counters,
-      );
-    } catch (error) {
-      await snapshot.close();
-      throw error;
-    }
-  }
-
-  /**
-   * The statistics of the last acked version, from its trailer; nothing is
-   * read. Rows still queued are not counted (WIRING G2): a caller that needs
-   * them waits for the queue first.
-   */
-  statistics(): ConversationStatistics {
-    return statisticsOf(this.journal?.session.store.published?.aggregate);
-  }
-
-  /** The chronology boundary of the last acked version, from its trailer; see {@link statistics}. */
-  contextBoundary(): ContextBoundary {
-    return contextBoundaryOf(this.journal?.session.store.published?.aggregate);
-  }
-
-  /** The boundary joined with the interior spans the service accumulated (WIRING G2). */
-  contextRange(accumulated: readonly RemovedInteriorSpan[]): ContextRange {
-    const summaries = this.journal?.session.store.contextSpans();
-    return contextRangeOf(this.contextBoundary(), accumulated, summaries);
-  }
-
-  /**
-   * The commit boundary (WIRING G11): the queue is acked and every bound
-   * recorder file holds the acked groups. A recorder's own `flush()` does not
-   * wait for mirror deliveries, so without the settle the rows of the last
-   * turn could be missing from the session file when the next request starts.
-   */
-  async waitForCommit(): Promise<void> {
-    await this.waitForDurable();
-    await this.settleFanout();
-  }
-
-  /** The newest row, or the newest of `speaker`, once the queue is durable; nothing is kept. */
-  lastContent(speaker?: IContent['speaker']): Promise<IContent | undefined> {
-    return this.withDurableSnapshot((snapshot) =>
-      lastContentOf(snapshot, speaker, this.boundary),
-    );
-  }
-
-  currentTurnMarker(): Promise<CurrentTurnMarker | null> {
-    return this.withDurableSnapshot((snapshot) =>
-      lastTurnMarkerOf(snapshot, this.boundary, this.options.counters),
-    );
-  }
-
-  /**
-   * Row facts for a mutation, over the version durable now. The view reads the
-   * file, so it holds no row, and it fails once `execute` has settled.
-   */
-  readRows<T>(
-    execute: (view: HistoryRowView) => Promise<T>,
-    signal?: AbortSignal,
-  ): Promise<T> {
-    signal?.throwIfAborted();
-    return this.withDurableSnapshot((snapshot) =>
-      withRowView(snapshot, this.owners, this.boundary, {
-        execute,
-        counters: this.options.counters,
-        signal,
-      }),
-    );
-  }
-
-  private async withDurableSnapshot<T>(
-    read: (snapshot: VersionSnapshot) => Promise<T>,
-  ): Promise<T> {
-    this.assertUsable();
-    await this.waitForDurable();
-    return withVersionSnapshot(await this.session.store.snapshot(), read);
-  }
-
-  /** Every row; for tests and tools that need the whole history, which a send never does. */
-  materialize = materializeJournalRows;
 
   openCompressionInput = journalCompressionInput;
 
@@ -722,100 +527,14 @@ export class JournalHistoryStore implements HistoryStorePort {
     return openJournalSemanticPurge(this, host);
   }
 
-  async openDumpSnapshot(): Promise<JournalDumpSnapshot> {
-    this.assertUsable();
-    await this.waitForDurable();
-    const dump: JournalDumpSnapshot = new JournalDumpSnapshot(
-      await this.session.store.snapshot(),
-      this.boundary,
-      this.options.counters,
-      () => this.openDumps.delete(dump),
-    );
-    this.openDumps.add(dump);
-    return dump;
-  }
-
-  /**
-   * Removes every row and publishes the spans the clear leaves behind. The
-   * first and last chronology numbers come from the row headers of the
-   * version the clear removes. It runs inside the service's mutation FIFO, so
-   * no other operation is queued between the read and the rewind.
-   *
-   * A failing publish with rollback on puts the removed version back with
-   * `restore(version)` (design 4.5) and then undoes the service's changes.
-   */
   clear(request: HistoryClearRequest): Promise<void> {
-    return this.withDurableSnapshot(async (snapshot) => {
-      this.assertSettled(snapshot, 'cleared');
-      const spans = await spansAfterClear(snapshot, request.spans);
-      if (snapshot.rows > 0) {
-        applyOperation(this.writes, {
-          kind: 'rewind',
-          itemsRemoved: snapshot.rows,
-        });
-        // The service publishes after the ack, so what its observers read is the emptied version.
-        await this.waitForDurable();
-      }
-      await publishClear(request, spans, () => this.restoreTo(snapshot));
-    });
+    return this.rowMutations.clear(request);
   }
 
-  /**
-   * Inserts a synthetic response after every AI row whose tool calls have
-   * none, and resolves once the insertions are durable. The rows come back
-   * in `inserted`; they are small and few, one per unanswered call row.
-   * `rollback` restores the version the repair started from, so it refuses
-   * once any other group has been written.
-   */
-  async validateAndFix(
+  validateAndFix(
     request: HistoryRepairRequest,
   ): Promise<StoreTypes.JournalRepair> {
-    await this.waitForDurable();
-    const snapshot = await this.session.store.snapshot();
-    let plan: Awaited<ReturnType<typeof planToolPairingRepair>>;
-    try {
-      this.assertSettled(snapshot, 'repaired');
-      plan = await planToolPairingRepair(
-        this.session.store,
-        snapshot,
-        request.stamp,
-      );
-    } catch (error) {
-      await snapshot.close();
-      throw error;
-    }
-    if (plan.inserts.length === 0 || snapshot.version === undefined) {
-      await snapshot.close();
-      return {
-        inserted: plan.inserted,
-        rollback: async () => {},
-        close: () => {},
-      };
-    }
-    const rowsBefore = snapshot.rows;
-    this.enqueue(rowsBefore + plan.inserts.length, () =>
-      Promise.resolve(
-        plan.inserts.map(({ afterLabel, draft }) => ({
-          kind: 'insert' as const,
-          afterLabel,
-          draft,
-        })),
-      ),
-    );
-    await this.waitForDurable();
-    const repairedAt = this.ack?.commitSeq;
-    return {
-      inserted: plan.inserted,
-      rollback: async () => {
-        if (this.ack?.commitSeq !== repairedAt) {
-          throw new Error(
-            'Rows were written since the repair; it cannot be rolled back',
-          );
-        }
-        await this.restoreTo(snapshot);
-      },
-      close: () => snapshot.close(),
-    };
+    return this.rowMutations.validateAndFix(request);
   }
 
   /** Hands the owner every row, one at a time, once the queue is durable. */
@@ -857,7 +576,7 @@ export class JournalHistoryStore implements HistoryStorePort {
    */
   captureCompensation(): JournalCompensationMark {
     this.assertUsable();
-    return new JournalCompensationMark(
+    return this.publication.capture(
       this,
       this.queue.then(() => this.session.store.snapshot()),
     );
@@ -865,7 +584,7 @@ export class JournalHistoryStore implements HistoryStorePort {
 
   /** Lets go of the version a mark names; the owner of the mark calls it once, after the last compensation. */
   async releaseCompensation(mark: JournalCompensationMark): Promise<void> {
-    await (await mark.saved).close();
+    await this.publication.release(mark);
   }
 
   /**
@@ -928,6 +647,7 @@ export class JournalHistoryStore implements HistoryStorePort {
     await this.queue;
     await this.startup;
     for (const dump of [...this.openDumps]) await dump.close();
+    await this.publication.close();
     if (this.journal === undefined) return;
     await this.checkpointLifetime.closePrimary(
       this.journal,
@@ -1069,7 +789,7 @@ export class JournalHistoryStore implements HistoryStorePort {
     }
   }
 
-  private assertUsable(): void {
+  protected assertUsable(): void {
     if (this.disposed) throw new Error('The journal history store is disposed');
     if (this.failure !== undefined) throw this.failure.error;
   }

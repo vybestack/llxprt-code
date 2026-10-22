@@ -14,7 +14,11 @@ import { decodeSlotSummary, type SlotSummary } from './slotSummary.js';
 import { identitySlotSummary } from './summaryComposition.js';
 import { JournalFormatError } from './errors.js';
 import { decodeDecimal } from './metaFacts.js';
-import { KimiOrdinalQueries } from './kimiOrdinals.js';
+import {
+  KimiOrdinalQueries,
+  KIMI_ELIGIBLE_KEY,
+  kimiEnabled,
+} from './kimiOrdinals.js';
 import { KIMI_FLAG, type KimiOccurrence } from './kimiFactCodec.js';
 import { kimiSafeCount } from './kimiDigits.js';
 import { KimiFactQueries, type KimiIdFact } from './kimiFactQueries.js';
@@ -264,6 +268,16 @@ export class VersionSnapshot {
 
   kimiEligibleBelow(label: bigint): Promise<number> {
     return this.kimi.below(label);
+  }
+
+  /** Whether the Kimi facts describe every row; a history with no version has none to describe. */
+  async hasKimiFacts(): Promise<boolean> {
+    this.read.requireOpen();
+    const version = this.version;
+    if (version === undefined) return true;
+    return kimiEnabled(
+      await this.kimi.meta.get(version.roots.metaRoot, KIMI_ELIGIBLE_KEY),
+    );
   }
 
   async hasMistralSlot(slot: number): Promise<boolean> {

@@ -199,6 +199,7 @@ export async function prepareKimiProviderFiles(
   }
   const signal = getRequestSignal(options);
   return {
+    uploadedMedia: uploaded,
     mediaStage: (rows) =>
       withUploadedReferences(
         resolveRowsMedia(rows, media, mediaRequest, signal),

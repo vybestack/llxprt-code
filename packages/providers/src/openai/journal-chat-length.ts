@@ -2,9 +2,10 @@
 import { requestFormatSlot } from '@vybestack/llxprt-code-core/services/history/native-provider-format.js';
 import type OpenAI from 'openai';
 import {
-  nativeMistralRow,
+  mistralRowIds,
   type NativeMistralResolver,
 } from './native-mistral-row.js';
+import type { NativeRowIds } from './native-row-ids.js';
 import type { StreamingToolIdMapper } from '@vybestack/llxprt-code-tools/ToolIdStrategy.js';
 import { JournalRequestMistral } from '@vybestack/llxprt-code-core/services/history/journal-request-mistral.js';
 import { measurableChatRow } from './chat-measure-media.js';
@@ -208,71 +209,143 @@ async function measure(
   );
 }
 
+type ChatUnitFacts = readonly [ChatUnitLengthFacts, ChatUnitLengthFacts];
+
+interface ChatFoldState {
+  readonly keptIds: readonly string[];
+  readonly removedIds: readonly string[];
+}
+
+function keptBytes(facts: ChatUnitLengthFacts): number {
+  return facts.messages.reduce(
+    (sum, message) => sum + (message.dropped ? 0 : message.bytes),
+    0,
+  );
+}
+
+/** One unit's summary and the length facts of its two thinking variants. */
+async function chatUnit(
+  row: IContent,
+  index: number,
+  settings: RowFormatSettings,
+  state: ChatFoldState,
+  count: ChatUnitTokenMeasurer | undefined,
+  rowIds: NativeRowIds | undefined,
+): Promise<{
+  readonly unit: SlotSummary;
+  readonly thinking: boolean;
+  readonly facts: ChatUnitFacts;
+  readonly state: ChatFoldState;
+}> {
+  const ids = await rowIds?.(row, index);
+  const hasThinking = row.blocks.some((block) => block.type === 'thinking');
+  const kept = factsOf(row, false, settings, state.keptIds, ids?.());
+  const removed = hasThinking
+    ? factsOf(row, true, settings, state.removedIds, ids?.())
+    : kept;
+  const omitted =
+    hasThinking && settings.chat?.includeInContext !== false
+      ? factsOf(
+          row,
+          false,
+          { ...settings, chat: { ...settings.chat, includeInContext: false } },
+          state.keptIds,
+          ids?.(),
+        )
+      : kept;
+  const keptTokens = await count?.(kept.messages);
+  const removedTokens = await count?.(removed.messages);
+  return {
+    unit: {
+      kind: 'chat',
+      omittedReasoningBytes: keptBytes(kept.facts) - keptBytes(omitted.facts),
+      thinkingRank: { units: 1, last: hasThinking ? 1 : 0 },
+      ...(keptTokens === undefined || removedTokens === undefined
+        ? {}
+        : { tokens: [keptTokens, removedTokens] as const }),
+      variants: [chatUnitSummary(kept.facts), chatUnitSummary(removed.facts)],
+    },
+    thinking: hasThinking,
+    facts: [kept.facts, removed.facts],
+    state: { keptIds: kept.lastIds, removedIds: removed.lastIds },
+  };
+}
+
+export interface ChatFoldOptions {
+  readonly count?: ChatUnitTokenMeasurer;
+  readonly rowIds?: NativeRowIds;
+  /** Sees each unit's length facts; a request fold keeps none of them. */
+  readonly onUnit?: (facts: ChatUnitFacts) => void;
+  /** Also folds the variant that keeps only the last thinking unit's reasoning. */
+  readonly lastThinkingOnly?: boolean;
+}
+
+export interface ChatFold {
+  readonly summary: SlotSummary;
+  readonly lastThinkingOnly: SlotSummary | undefined;
+}
+
+/**
+ * Folds the units of a request into one chat summary, one unit at a time, so
+ * the units are never held together. This is the measurement a format fill
+ * stores per unit, taken over the whole request instead.
+ */
+export async function foldChatUnits(
+  rows: AsyncIterable<IContent>,
+  settings: RowFormatSettings,
+  options: ChatFoldOptions = {},
+): Promise<ChatFold> {
+  let summary = identitySlotSummary('chat');
+  let mixed = options.lastThinkingOnly === true ? summary : undefined;
+  let state: ChatFoldState = { keptIds: [], removedIds: [] };
+  let index = 0;
+  for await (const row of rows) {
+    const done = await chatUnit(
+      row,
+      index++,
+      settings,
+      state,
+      options.count,
+      options.rowIds,
+    );
+    state = done.state;
+    options.onUnit?.(done.facts);
+    if (mixed !== undefined)
+      mixed = done.thinking
+        ? composeSlotSummaries(
+            selectChatSummary(summary, false),
+            selectChatSummary(done.unit, true),
+          )
+        : composeSlotSummaries(mixed, selectChatSummary(done.unit, false));
+    summary = composeSlotSummaries(summary, done.unit);
+  }
+  return { summary, lastThinkingOnly: mixed };
+}
+
+async function* planRows(
+  plans: AsyncIterable<JournalResponsePlan>,
+): AsyncGenerator<IContent> {
+  for await (const plan of plans) {
+    const blocks: IContent['blocks'] = [];
+    for await (const block of plan.openBlocks()) blocks.push(block);
+    yield { ...plan.header, blocks };
+  }
+}
+
 async function measurePlans(
   plans: AsyncIterable<JournalResponsePlan>,
   settings: RowFormatSettings,
   count?: ChatUnitTokenMeasurer,
   resolver?: NativeMistralResolver,
 ): Promise<RowLengthFacts> {
-  let summary = identitySlotSummary('chat');
-  const lens: Array<readonly [ChatUnitLengthFacts, ChatUnitLengthFacts]> = [];
-  let keptIds: readonly string[] = [];
-  let removedIds: readonly string[] = [];
-  for await (const plan of plans) {
-    const blocks: IContent['blocks'] = [];
-    for await (const block of plan.openBlocks()) {
-      blocks.push(block);
-    }
-    const row = { ...plan.header, blocks };
-    const mapper =
-      resolver === undefined
-        ? undefined
-        : await nativeMistralRow(row, resolver);
-    const hasThinking = row.blocks.some((block) => block.type === 'thinking');
-    const kept = factsOf(row, false, settings, keptIds, mapper);
-    const removed = hasThinking
-      ? factsOf(row, true, settings, removedIds, mapper)
-      : kept;
-    const omitted =
-      hasThinking && settings.chat?.includeInContext !== false
-        ? factsOf(
-            row,
-            false,
-            {
-              ...settings,
-              chat: { ...settings.chat, includeInContext: false },
-            },
-            keptIds,
-            mapper,
-          )
-        : kept;
-    const omittedReasoningBytes =
-      kept.facts.messages.reduce(
-        (sum, message) => sum + (message.dropped ? 0 : message.bytes),
-        0,
-      ) -
-      omitted.facts.messages.reduce(
-        (sum, message) => sum + (message.dropped ? 0 : message.bytes),
-        0,
-      );
-    keptIds = kept.lastIds;
-    removedIds = removed.lastIds;
-    lens.push([kept.facts, removed.facts]);
-    const keptTokens = await count?.(kept.messages);
-    const removedTokens = await count?.(removed.messages);
-    summary = composeSlotSummaries(summary, {
-      kind: 'chat',
-      omittedReasoningBytes,
-      thinkingRank: {
-        units: 1,
-        last: row.blocks.some((block) => block.type === 'thinking') ? 1 : 0,
-      },
-      ...(keptTokens === undefined || removedTokens === undefined
-        ? {}
-        : { tokens: [keptTokens, removedTokens] as const }),
-      variants: [chatUnitSummary(kept.facts), chatUnitSummary(removed.facts)],
-    });
-  }
+  const lens: ChatUnitFacts[] = [];
+  const { summary } = await foldChatUnits(planRows(plans), settings, {
+    count,
+    rowIds: resolver === undefined ? undefined : mistralRowIds(resolver),
+    onUnit: (facts) => {
+      lens.push(facts);
+    },
+  });
   return {
     summary,
     lens: new TextEncoder().encode(
@@ -406,6 +479,35 @@ export function appendStoredChatTail(
   };
 }
 
+/** The plan of one thinking variant of a request's chat summary. */
+export function chatPlanOf(
+  summary: SlotSummary,
+  settings: RowFormatSettings,
+  selected: 0 | 1,
+  systemInstruction: string,
+  format: { readonly key: bigint; readonly generation: number },
+): StoredChatMessagePlan {
+  if (summary.kind !== 'chat')
+    throw new JournalFormatError('Request format has no chat summary');
+  const root = summary.variants[selected];
+  const finalized = finalizedChat(root);
+  return Object.freeze({
+    root,
+    omittedReasoningBytes:
+      selected === 0 ? (summary.omittedReasoningBytes ?? 0) : 0,
+    tokens: summary.tokens?.[selected] ?? 0,
+    lastThinking: (summary.thinkingRank?.last ?? 0) - 1,
+    bytes:
+      2 +
+      jsonBytes({ role: 'system', content: systemInstruction }) +
+      finalized.bytes,
+    items: 1 + finalized.items,
+    key: format.key,
+    generation: format.generation,
+    settings: captureRowFormatSettings(settings),
+  });
+}
+
 export function planStoredChatMessages(
   snapshot: VersionSnapshot,
   settings: RowFormatSettings,
@@ -439,24 +541,9 @@ export function planStoredChatMessages(
     (version.rows === 0
       ? identitySlotSummary('chat')
       : decodeSlotSummary(version.aggregate.summaries[slot], format));
-  if (summary.kind !== 'chat')
-    throw new JournalFormatError('Request format has no chat summary');
-  const root = summary.variants[selected];
-  const finalized = finalizedChat(root);
-  return Object.freeze({
-    root,
-    omittedReasoningBytes:
-      selected === 0 ? (summary.omittedReasoningBytes ?? 0) : 0,
-    tokens: summary.tokens?.[selected] ?? 0,
-    lastThinking: (summary.thinkingRank?.last ?? 0) - 1,
-    bytes:
-      2 +
-      jsonBytes({ role: 'system', content: systemInstruction }) +
-      finalized.bytes,
-    items: 1 + finalized.items,
+  return chatPlanOf(summary, settings, selected, systemInstruction, {
     key,
     generation: format.gen,
-    settings: captureRowFormatSettings(settings),
   });
 }
 

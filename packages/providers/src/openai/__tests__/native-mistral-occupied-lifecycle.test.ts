@@ -20,6 +20,7 @@ import {
   PLAIN_CHAT_FORMAT_REV,
 } from '../journal-chat-length.js';
 import { nativeChatMessages } from '../native-chat-messages.js';
+import { mistralRowIds } from '../native-mistral-row.js';
 import { buildMessagesWithReasoning } from '../OpenAIRequestBuilder.js';
 import {
   anthropicLengthRegistration,
@@ -86,7 +87,7 @@ async function check(
       selected,
       'none',
       plan.lastThinking,
-      resolver,
+      mistralRowIds(resolver),
     ))
       chunks.push(chunk);
     chunks.push(Buffer.from(']'));

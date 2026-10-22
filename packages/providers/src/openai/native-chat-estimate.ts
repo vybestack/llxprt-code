@@ -16,6 +16,7 @@ import {
   plainChatLengthRegistration,
   planRequestChatMessages,
   type ChatUnitTokenMeasurer,
+  type StoredChatMessagePlan,
 } from './journal-chat-length.js';
 
 type EstimateIdentity = Pick<
@@ -64,12 +65,18 @@ function unitCounter(
   };
 }
 
-export async function chatTokenRegistration(
+export type StreamedChatPlan = (
+  settings: RowFormatSettings,
+  count: ChatUnitTokenMeasurer,
+) => Promise<StoredChatMessagePlan>;
+
+/** The unit counter, the whole-prompt estimator and the settings that key them. */
+export async function chatTokenMeasure(
   settings: RowFormatSettings,
   identity: EstimateIdentity,
   factory: RuntimeTokenizerFactory,
 ): Promise<{
-  readonly registration: RowFormatRegistration;
+  readonly settings: RowFormatSettings;
   readonly count: ChatUnitTokenMeasurer;
   readonly estimate: ReturnType<typeof unitEstimator>;
 }> {
@@ -99,11 +106,23 @@ export async function chatTokenRegistration(
       }),
     },
   };
-  const count = unitCounter(estimate);
+  return { settings: captured, count: unitCounter(estimate), estimate };
+}
+
+export async function chatTokenRegistration(
+  settings: RowFormatSettings,
+  identity: EstimateIdentity,
+  factory: RuntimeTokenizerFactory,
+): Promise<{
+  readonly registration: RowFormatRegistration;
+  readonly count: ChatUnitTokenMeasurer;
+  readonly estimate: ReturnType<typeof unitEstimator>;
+}> {
+  const measure = await chatTokenMeasure(settings, identity, factory);
   return {
-    registration: plainChatLengthRegistration(captured, count),
-    count,
-    estimate,
+    registration: plainChatLengthRegistration(measure.settings, measure.count),
+    count: measure.count,
+    estimate: measure.estimate,
   };
 }
 
@@ -117,6 +136,7 @@ export class NativeChatEstimateProjection {
     private readonly system: string,
     private readonly tools: unknown,
     readonly signal?: AbortSignal,
+    private readonly streamedPlan?: StreamedChatPlan,
   ) {
     this.settings = captureRowFormatSettings(settings);
   }
@@ -133,17 +153,25 @@ export class NativeChatEstimateProjection {
       wireMethod: request.wireMethod,
       projectionRevision: request.projectionRevision,
     };
-    const { registration, count, estimate } = await chatTokenRegistration(
-      this.settings,
-      identity,
-      factory,
-    );
-    const envelope = await estimate(
+    const measure = await chatTokenMeasure(this.settings, identity, factory);
+    const envelope = await measure.estimate(
       [{ role: 'system', content: this.system }],
       this.tools,
     );
     this.requireOpen();
-    const plan = await this.native.withFormat(registration, (snapshot) =>
+    const plan = await this.plan(measure.settings, measure.count);
+    this.requireOpen();
+    return { ...envelope, count: envelope.count + plan.tokens };
+  }
+
+  private plan(
+    settings: RowFormatSettings,
+    count: ChatUnitTokenMeasurer,
+  ): Promise<StoredChatMessagePlan> {
+    if (this.streamedPlan !== undefined)
+      return this.streamedPlan(settings, count);
+    const registration = plainChatLengthRegistration(settings, count);
+    return this.native.withFormat(registration, (snapshot) =>
       planRequestChatMessages(
         snapshot,
         this.native.indexed,
@@ -153,8 +181,6 @@ export class NativeChatEstimateProjection {
         count,
       ),
     );
-    this.requireOpen();
-    return { ...envelope, count: envelope.count + plan.tokens };
   }
 
   private requireOpen(): void {

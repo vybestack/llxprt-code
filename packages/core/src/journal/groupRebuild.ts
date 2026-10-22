@@ -5,6 +5,7 @@ import { applyStoredRecency } from './recencyFacts.js';
 import { EMPTY_AGGREGATE } from './aggregateComposition.js';
 import { rebuildContributions } from './contributionRebuild.js';
 import { JournalFormatError } from './errors.js';
+import { mapRowStream } from './mapped-row-stream.js';
 import { kimiEnabled, KIMI_ELIGIBLE_KEY } from './kimiOrdinals.js';
 import {
   decodeMistralSlots,
@@ -156,24 +157,26 @@ class RebuildPass {
     return this.note(entry);
   }
 
-  private async *stream(
+  private stream(
     rows: Iterable<RowDraft> | AsyncIterable<RowDraft>,
   ): AsyncGenerator<RowEntry> {
-    for await (const draft of rows) {
-      const allocated = allocateAppendLabels(this.nextLabel, 1);
-      const label = allocated.labels[0];
-      this.nextLabel = allocated.nextLabel;
-      const encoded = encodeRowDraft(label, draft);
-      const segment: FreshSegment = {
-        kind: 'fresh',
-        label,
-        draft,
-        role: 'append',
-      };
-      const entry = await writeFresh(this.appender, segment, encoded);
-      await applyDraftRow(this.facts, this.ctx, label, draft);
-      yield this.note(entry);
-    }
+    return mapRowStream(rows, (draft) => this.streamedRow(draft));
+  }
+
+  private async streamedRow(draft: RowDraft): Promise<RowEntry> {
+    const allocated = allocateAppendLabels(this.nextLabel, 1);
+    const label = allocated.labels[0];
+    this.nextLabel = allocated.nextLabel;
+    const encoded = encodeRowDraft(label, draft);
+    const segment: FreshSegment = {
+      kind: 'fresh',
+      label,
+      draft,
+      role: 'append',
+    };
+    const entry = await writeFresh(this.appender, segment, encoded);
+    await applyDraftRow(this.facts, this.ctx, label, draft);
+    return this.note(entry);
   }
 
   /** Copies the row's record and applies its facts from the header and id piece, read once. */

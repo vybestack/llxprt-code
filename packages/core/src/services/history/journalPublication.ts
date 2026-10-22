@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { INHERIT_OWNER, type VersionEdit } from '../../journal/groupEdits.js';
+import { mapRowStream } from '../../journal/mapped-row-stream.js';
 import type { GroupPreparation } from '../../journal/preparedGroup.js';
 
 import type { RowDraft } from '../../journal/rowDraft.js';
@@ -49,6 +50,25 @@ export class JournalCompensationMark implements HistoryCompensationMark {
  * back; it only counts.
  */
 export class JournalPublication {
+  private readonly compensation = new Set<JournalCompensationMark>();
+
+  capture(
+    store: JournalHistoryStore,
+    saved: Promise<VersionSnapshot>,
+  ): JournalCompensationMark {
+    const mark = new JournalCompensationMark(store, saved);
+    this.compensation.add(mark);
+    return mark;
+  }
+
+  async release(mark: JournalCompensationMark): Promise<void> {
+    if (this.compensation.delete(mark)) await (await mark.saved).close();
+  }
+
+  async close(): Promise<void> {
+    for (const mark of this.compensation) await this.release(mark);
+  }
+
   private depth = 0;
   /** Groups accepted so far, acked or not. */
   private admitted = 0;
@@ -80,13 +100,11 @@ export class JournalPublication {
 }
 
 /** The drafts of `rows`, each encoded when the writer asks for it. The stream never checks a signal: a group that stops after its first byte poisons the writer, so a cancellation is acted on before the group and after its ack. */
-export async function* encodedRows(
+export function encodedRows(
   rows: Iterable<IContent> | AsyncIterable<IContent>,
   owner: number,
 ): AsyncGenerator<RowDraft> {
-  for await (const content of rows) {
-    yield encodeContentRow(content, { owner });
-  }
+  return mapRowStream(rows, (content) => encodeContentRow(content, { owner }));
 }
 
 /** The edit that gives the rows at `sorted[].position` the numeric owners named (no row is rewritten, design 5.4). */

@@ -1,9 +1,18 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { requestFormatSlot } from '@vybestack/llxprt-code-core/services/history/native-provider-format.js';
+import {
+  requestFormatSlot,
+  type NativeProviderFormat,
+} from '@vybestack/llxprt-code-core/services/history/native-provider-format.js';
+import { mistralRowIds } from './native-mistral-row.js';
 import type { NativeMistralResolver } from './native-mistral-row.js';
+import { nativeKimiRowIds } from './native-kimi-row.js';
+import type { NativeRowIds } from './native-row-ids.js';
 import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
-import type { RowFormatSettings } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
+import {
+  rowFormatKey,
+  type RowFormatSettings,
+} from '@vybestack/llxprt-code-core/journal/rowFormat.js';
 import { readInvocationPolicyValue } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { JournalFormatError } from '@vybestack/llxprt-code-core/journal/errors.js';
 import {
@@ -11,6 +20,9 @@ import {
   planRequestChatMessages,
   PLAIN_CHAT_FORMAT_REV,
   appendStoredChatTail,
+  chatPlanOf,
+  foldChatUnits,
+  type ChatFold,
   type StoredChatMessagePlan,
 } from './journal-chat-length.js';
 import { ProgressiveJsonBody } from '../utils/progressive-json-body.js';
@@ -28,6 +40,7 @@ import { buildContinuationTail } from './OpenAIRequestBuilder.js';
 import {
   NativeChatEstimateProjection,
   chatTokenRegistration,
+  type StreamedChatPlan,
 } from './native-chat-estimate.js';
 import { createRuntimeTokenizerFactory } from '../composition/runtimeTokenizerFactory.js';
 import { PROJECTION_REVISION } from '../runtime/promptEnvelopeProjections.js';
@@ -107,7 +120,7 @@ function initialNativeChatBody(
         settings,
         strip,
         plan.lastThinking,
-        captured.resolver,
+        captured.rowIds,
       );
       yield Buffer.from(']');
       yield tail;
@@ -117,7 +130,7 @@ function initialNativeChatBody(
 }
 
 interface CapturedNativeChatPlan {
-  readonly resolver?: NativeMistralResolver;
+  readonly rowIds?: NativeRowIds;
   readonly releaseMapping?: () => void | Promise<void>;
   readonly plan: StoredChatMessagePlan;
   readonly stripped: StoredChatMessagePlan;
@@ -139,82 +152,227 @@ function reasoningStrip(options: NormalizedGenerateChatOptions): unknown {
   );
 }
 
-async function captureChatPlan(
-  envelope: Readonly<Record<string, unknown>>,
-  rows: ProviderRequestRows,
-  options: NormalizedGenerateChatOptions,
+/** What a request's chat plan is made from, and what keeps its ids readable. */
+interface PlannedNativeChat {
+  readonly plan: StoredChatMessagePlan;
+  readonly rowIds?: NativeRowIds;
+  readonly releaseMapping?: () => void | Promise<void>;
+}
+
+type ChatPlanner = (
+  selected: 0 | 1 | 2,
+  system: string,
+) => Promise<PlannedNativeChat>;
+
+/** The plan from the lengths stored in the request's format slot. */
+function storedChatPlanner(
+  native: NativeProviderFormat,
   registration: RowFormatRegistration,
   count?: ChatUnitTokenMeasurer,
-): Promise<CapturedNativeChatPlan> {
+): ChatPlanner {
   const settings = registration.settings;
-  const native = rows.native;
-  if (native === undefined)
-    throw new Error('Native Chat requires indexed request rows');
-  const strip = reasoningStrip(options);
-  const selected = selectedVariant(strip);
-  const system = options.systemInstruction ?? '';
-  const mapping: {
-    resolver?: NativeMistralResolver;
-    release?: () => void | Promise<void>;
-  } = {};
-  try {
-    let omitted: StoredChatMessagePlan | undefined;
-    const plan = await native.withFormat(registration, async (snapshot) => {
-      if (settings.chat?.toolFormat === 'mistral') {
-        mapping.resolver = await native.indexed.mistralForSnapshot(
+  return async (selected, system) => {
+    const mapping: {
+      resolver?: NativeMistralResolver;
+      release?: () => void | Promise<void>;
+    } = {};
+    try {
+      const plan = await native.withFormat(registration, async (snapshot) => {
+        if (settings.chat?.toolFormat === 'mistral') {
+          mapping.resolver = await native.indexed.mistralForSnapshot(
+            snapshot,
+            requestFormatSlot(snapshot, settings),
+          );
+        }
+        const result = await planRequestChatMessages(
           snapshot,
-          requestFormatSlot(snapshot, settings),
+          native.indexed,
+          settings,
+          selected,
+          system,
+          count,
         );
-      }
-      const result = await planRequestChatMessages(
-        snapshot,
-        native.indexed,
+        if (mapping.resolver !== undefined) mapping.release = snapshot.hold();
+        return result;
+      });
+      return {
+        plan,
+        rowIds:
+          mapping.resolver === undefined
+            ? undefined
+            : mistralRowIds(mapping.resolver),
+        releaseMapping: mapping.release,
+      };
+    } catch (error) {
+      await mapping.release?.();
+      throw error;
+    }
+  };
+}
+
+function kimiChatPlan(
+  fold: ChatFold,
+  settings: RowFormatSettings,
+  selected: 0 | 1 | 2,
+  system: string,
+): StoredChatMessagePlan {
+  const format = { key: rowFormatKey(settings), generation: 0 };
+  const { summary } = fold;
+  if (summary.kind !== 'chat') throw new Error('Kimi fold has no chat summary');
+  if (selected !== 2)
+    return chatPlanOf(summary, settings, selected, system, format);
+  const lastThinking = (summary.thinkingRank?.last ?? 0) - 1;
+  if (lastThinking < 0) return chatPlanOf(summary, settings, 1, system, format);
+  if (fold.lastThinkingOnly === undefined)
+    throw new Error('Kimi fold lacks the last-thinking variant');
+  return {
+    ...chatPlanOf(fold.lastThinkingOnly, settings, 0, system, format),
+    lastThinking,
+  };
+}
+
+/**
+ * The Kimi ids of the request, read from a filled pin. The pin stays held
+ * until `release`, because the body is written long after the plan is made.
+ */
+async function acquireKimiRowIds(
+  native: NativeProviderFormat,
+): Promise<{ rowIds: NativeRowIds; release: () => void | Promise<void> }> {
+  return native.withKimi(async (snapshot) => {
+    const release = snapshot.hold();
+    try {
+      return {
+        rowIds: nativeKimiRowIds(
+          await native.indexed.kimiForSnapshot(snapshot),
+        ),
+        release,
+      };
+    } catch (error) {
+      await release();
+      throw error;
+    }
+  });
+}
+
+/**
+ * Kimi writes each id as `functions.<name>:<ordinal>` from facts that move
+ * with the whole history, so no stored per-unit length stays right. The plan
+ * is folded from the request's units with the ids the journal's Kimi facts
+ * give, one unit at a time, and the body is then written from the same units.
+ */
+async function planKimiChat(
+  rows: ProviderRequestRows,
+  settings: RowFormatSettings,
+  selected: 0 | 1 | 2,
+  system: string,
+  signal: AbortSignal | undefined,
+  rowIds: NativeRowIds,
+  count?: ChatUnitTokenMeasurer,
+): Promise<StoredChatMessagePlan> {
+  const fold = await foldChatUnits(rows.openReader(signal), settings, {
+    rowIds,
+    count,
+    lastThinkingOnly: selected === 2,
+  });
+  return kimiChatPlan(fold, settings, selected, system);
+}
+
+function kimiChatPlanner(
+  native: NativeProviderFormat,
+  rows: ProviderRequestRows,
+  settings: RowFormatSettings,
+  signal: AbortSignal | undefined,
+): ChatPlanner {
+  return async (selected, system) => {
+    const { rowIds, release } = await acquireKimiRowIds(native);
+    try {
+      return {
+        plan: await planKimiChat(
+          rows,
+          settings,
+          selected,
+          system,
+          signal,
+          rowIds,
+        ),
+        rowIds,
+        releaseMapping: release,
+      };
+    } catch (error) {
+      await release();
+      throw error;
+    }
+  };
+}
+
+function kimiStreamedPlan(
+  native: NativeProviderFormat,
+  rows: ProviderRequestRows,
+  selected: 0 | 1 | 2,
+  system: string,
+  signal: AbortSignal | undefined,
+): StreamedChatPlan {
+  return async (settings, count) => {
+    const { rowIds, release } = await acquireKimiRowIds(native);
+    try {
+      return await planKimiChat(
+        rows,
         settings,
         selected,
         system,
+        signal,
+        rowIds,
         count,
       );
-      omitted = {
-        ...result,
-        bytes: result.bytes - result.omittedReasoningBytes,
-        root: {
-          ...result.root,
-          bytes: result.root.bytes.map(
-            (bytes) => bytes - result.omittedReasoningBytes,
-          ),
-        },
-      };
-      if (mapping.resolver !== undefined) mapping.release = snapshot.hold();
-      return result;
-    });
+    } finally {
+      await release();
+    }
+  };
+}
+
+function withoutReasoning(plan: StoredChatMessagePlan): StoredChatMessagePlan {
+  return {
+    ...plan,
+    bytes: plan.bytes - plan.omittedReasoningBytes,
+    root: {
+      ...plan.root,
+      bytes: plan.root.bytes.map((bytes) => bytes - plan.omittedReasoningBytes),
+    },
+  };
+}
+
+async function captureChatPlan(
+  envelope: Readonly<Record<string, unknown>>,
+  options: NormalizedGenerateChatOptions,
+  settings: RowFormatSettings,
+  planner: ChatPlanner,
+): Promise<CapturedNativeChatPlan> {
+  const strip = reasoningStrip(options);
+  const system = options.systemInstruction ?? '';
+  const planned = await planner(selectedVariant(strip), system);
+  try {
     const continuationSettings: RowFormatSettings = {
       ...settings,
       chat: { ...settings.chat, includeInContext: false },
     };
-    if (omitted === undefined)
-      throw new Error('Missing captured continuation plan');
-    const stripped = omitted;
     const { head, tail } = await envelopeParts(envelope);
     const continuationEnvelope = await envelopeParts({
       ...envelope,
       stream: true,
     });
-    const signal = getRequestSignal(options);
     return {
-      resolver: mapping.resolver,
-      releaseMapping: mapping.release,
-      plan,
-      stripped,
+      ...planned,
+      stripped: withoutReasoning(planned.plan),
       continuationSettings,
       system,
       strip,
       head,
       tail,
       continuationEnvelope,
-      signal,
+      signal: getRequestSignal(options),
     };
   } catch (error) {
-    await mapping.release?.();
+    await planned.releaseMapping?.();
     throw error;
   }
 }
@@ -240,7 +398,7 @@ function continuationNativeChatBody(
         continuationSettings,
         strip,
         stripped.lastThinking,
-        captured.resolver,
+        captured.rowIds,
       );
       for (const message of messages) {
         yield Buffer.from(',');
@@ -279,23 +437,16 @@ async function prepareNativeChatBody(
   envelope: Readonly<Record<string, unknown>>,
   rows: ProviderRequestRows,
   options: NormalizedGenerateChatOptions,
-  registration: RowFormatRegistration,
+  settings: RowFormatSettings,
+  planner: ChatPlanner,
   rowInput: ChatRowInput,
-  count?: ChatUnitTokenMeasurer,
 ): Promise<{
   spool: NativeChatBody;
   messageCount: number;
   continuation: ChatContinuation;
   release: () => Promise<void>;
 }> {
-  const settings = registration.settings;
-  const captured = await captureChatPlan(
-    envelope,
-    rows,
-    options,
-    registration,
-    count,
-  );
+  const captured = await captureChatPlan(envelope, options, settings, planner);
   const { plan, signal } = captured;
   const { stripped, continuationSettings } = captured;
   const continuations = new Set<NativeChatBody>();
@@ -358,8 +509,7 @@ function nativeChatSettings(
   toolFormat: ToolFormat,
 ): RowFormatSettings {
   return {
-    formatId:
-      toolFormat === 'mistral' ? 'openai-chat:mistral' : 'openai-chat:plain',
+    formatId: `openai-chat:${toolFormat === 'mistral' || toolFormat === 'kimi' ? toolFormat : 'plain'}`,
     formatRev: PLAIN_CHAT_FORMAT_REV,
     model: options.resolved.model,
     endpoint: options.resolved.baseURL ?? '',
@@ -372,7 +522,10 @@ function nativeChatSettings(
     unsupportedMedia: 'notice',
     outputLimits: parseOutputLimits(options.invocation.ephemerals),
     chat: {
-      toolFormat: toolFormat === 'mistral' ? 'mistral' : 'openai',
+      toolFormat:
+        toolFormat === 'mistral' || toolFormat === 'kimi'
+          ? toolFormat
+          : 'openai',
       ...(toolFormat === 'mistral'
         ? { mistralRevision: 'sha256-base62-salt-v1-normalizer-v1' }
         : {}),
@@ -383,6 +536,59 @@ function nativeChatSettings(
         ),
       ),
     },
+  };
+}
+
+interface ChatPlanning {
+  readonly planner: ChatPlanner;
+  readonly bodySettings: RowFormatSettings;
+  readonly streamedPlan: StreamedChatPlan | undefined;
+}
+
+async function chatPlanning(
+  native: NativeProviderFormat,
+  rows: ProviderRequestRows,
+  options: NormalizedGenerateChatOptions,
+  settings: RowFormatSettings,
+  request: {
+    readonly activeProvider: string;
+    readonly signal: AbortSignal | undefined;
+  },
+): Promise<ChatPlanning> {
+  const toolFormat = settings.chat?.toolFormat;
+  if (toolFormat === 'kimi')
+    return {
+      planner: kimiChatPlanner(native, rows, settings, request.signal),
+      bodySettings: settings,
+      streamedPlan: kimiStreamedPlan(
+        native,
+        rows,
+        selectedVariant(reasoningStrip(options)),
+        options.systemInstruction ?? '',
+        request.signal,
+      ),
+    };
+  const measured =
+    toolFormat === 'mistral'
+      ? await chatTokenRegistration(
+          settings,
+          {
+            activeProvider: request.activeProvider,
+            canonicalModel: settings.model,
+            protocol: 'openai-chat',
+            wireMethod: 'chat/completions/v1',
+            projectionRevision: PROJECTION_REVISION,
+          },
+          createRuntimeTokenizerFactory(),
+        )
+      : {
+          registration: plainChatLengthRegistration(settings),
+          count: undefined,
+        };
+  return {
+    planner: storedChatPlanner(native, measured.registration, measured.count),
+    bodySettings: measured.registration.settings,
+    streamedPlan: undefined,
   };
 }
 
@@ -402,48 +608,41 @@ export async function prepareNativePlainRequest(
 > {
   if (use.dump)
     throw new Error('Native plain Chat dump projection is not installed');
+  const native = rows.native;
+  if (native === undefined)
+    throw new Error('Native Chat requires indexed request rows');
+  if ((rowInput.uploadedMedia ?? 0) > 0)
+    throw new Error(
+      'Kimi provider-file uploads are not supported on the journal history backend',
+    );
   const settings = nativeChatSettings(options, toolFormat);
-  const measured =
-    toolFormat === 'mistral'
-      ? await chatTokenRegistration(
-          settings,
-          {
-            activeProvider: providerName,
-            canonicalModel: settings.model,
-            protocol: 'openai-chat',
-            wireMethod: 'chat/completions/v1',
-            projectionRevision: PROJECTION_REVISION,
-          },
-          createRuntimeTokenizerFactory(),
-        )
-      : {
-          registration: plainChatLengthRegistration(settings),
-          count: undefined,
-        };
+  const signal = getRequestSignal(options);
+  const system = options.systemInstruction ?? '';
+  const { planner, bodySettings, streamedPlan } = await chatPlanning(
+    native,
+    rows,
+    options,
+    settings,
+    { activeProvider: providerName, signal },
+  );
   const body = await prepareNativeChatBody(
     envelope,
     rows,
     options,
-    measured.registration,
+    bodySettings,
+    planner,
     rowInput,
-    measured.count,
   );
-  const native = rows.native;
-  if (native === undefined)
-    throw new Error('Native Chat requires indexed request rows');
-  const strip = readInvocationPolicyValue(
-    options.invocation.ephemerals,
-    'reasoning.stripFromContext',
-  );
-  const selected = selectedVariant(strip);
+  const selected = selectedVariant(reasoningStrip(options));
   const projection = use.estimate
     ? new NativeChatEstimateProjection(
         native,
         settings,
         selected,
-        options.systemInstruction ?? '',
+        system,
         envelope.tools,
-        getRequestSignal(options),
+        signal,
+        streamedPlan,
       )
     : undefined;
   return {

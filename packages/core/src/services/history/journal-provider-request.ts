@@ -15,6 +15,7 @@ import {
   hasNativeRequestFormat,
   type NativeProviderFormat,
   type PrepareNativeRequestFormat,
+  type PrepareNativeRequestKimi,
 } from './native-provider-format.js';
 
 export class JournalProviderRequestSnapshot implements ProviderRequestSnapshot {
@@ -35,6 +36,7 @@ export class JournalProviderRequestSnapshot implements ProviderRequestSnapshot {
     readonly indexed: IndexedJournalRequestSnapshot,
     private readonly snapshot: VersionSnapshot,
     private readonly prepareFormat: PrepareNativeRequestFormat | undefined,
+    private readonly prepareKimi: PrepareNativeRequestKimi | undefined,
     private readonly signal?: AbortSignal,
     private readonly ownership?: RowOwnership,
     mediaStore: LocalMediaStore | undefined = undefined,
@@ -57,6 +59,7 @@ export class JournalProviderRequestSnapshot implements ProviderRequestSnapshot {
       indexed,
       withFormat: (registration, consume) =>
         this.withFormat(registration, consume),
+      withKimi: (consume) => this.withKimi(consume),
     };
     signal?.addEventListener('abort', this.onAbort, { once: true });
   }
@@ -65,17 +68,45 @@ export class JournalProviderRequestSnapshot implements ProviderRequestSnapshot {
     registration: RowFormatRegistration,
     consume: (snapshot: VersionSnapshot) => T | Promise<T>,
   ): Promise<T> {
+    return this.queueFormat(() => this.consumeFormat(registration, consume));
+  }
+
+  private async withKimi<T>(
+    consume: (snapshot: VersionSnapshot) => T | Promise<T>,
+  ): Promise<T> {
+    return this.queueFormat(() => this.consumeKimi(consume));
+  }
+
+  private queueFormat<T>(run: () => Promise<T>): Promise<T> {
     this.requireOpen();
     return this.readers.read(() => {
-      const run = this.formatQueue.then(() =>
-        this.consumeFormat(registration, consume),
-      );
-      this.formatQueue = run.then(
+      const next = this.formatQueue.then(run);
+      this.formatQueue = next.then(
         () => undefined,
         () => undefined,
       );
-      return run;
+      return next;
     });
+  }
+
+  private async consumeKimi<T>(
+    consume: (snapshot: VersionSnapshot) => T | Promise<T>,
+  ): Promise<T> {
+    this.requireOpen();
+    let snapshot = this.formatSnapshot ?? this.snapshot;
+    if (!(await snapshot.hasKimiFacts())) {
+      if (this.prepareKimi === undefined)
+        throw new Error(
+          'Native Kimi facts need a persistent fill before this pin',
+        );
+      const filled = await this.prepareKimi(snapshot);
+      const previous = this.formatSnapshot;
+      this.formatSnapshot = filled;
+      snapshot = filled;
+      await previous?.close();
+    }
+    this.requireOpen();
+    return this.indexed.withHeld(() => consume(snapshot), this.signal);
   }
 
   private async consumeFormat<T>(
@@ -107,6 +138,7 @@ export class JournalProviderRequestSnapshot implements ProviderRequestSnapshot {
     release: () => void | Promise<void> = () => snapshot.close(),
     prepareFormat?: PrepareNativeRequestFormat,
     mediaStore?: LocalMediaStore,
+    prepareKimi?: PrepareNativeRequestKimi,
   ): Promise<JournalProviderRequestSnapshot> {
     const mediaReferences = new WeakSet<MediaReferenceBlock>();
     let indexed: IndexedJournalRequestSnapshot | undefined;
@@ -124,6 +156,7 @@ export class JournalProviderRequestSnapshot implements ProviderRequestSnapshot {
         indexed,
         snapshot,
         prepareFormat,
+        prepareKimi,
         options.signal,
         options.ownership,
         mediaStore,

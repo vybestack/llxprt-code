@@ -1,9 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type OpenAI from 'openai';
-import {
-  nativeMistralRow,
-  type NativeMistralResolver,
-} from './native-mistral-row.js';
+import type { NativeRowIds } from './native-row-ids.js';
 import type { StreamingToolIdMapper } from '@vybestack/llxprt-code-tools/ToolIdStrategy.js';
 import type {
   IContent,
@@ -92,7 +89,7 @@ export async function* nativeChatMessages(
   settings: RowFormatSettings,
   strip: unknown,
   lastThinking: number,
-  resolver?: NativeMistralResolver,
+  rowIds?: NativeRowIds,
 ): AsyncGenerator<Uint8Array> {
   let lastIds: readonly string[] = [];
   let pending: MediaBlock[] = [];
@@ -107,14 +104,10 @@ export async function* nativeChatMessages(
       pending = [];
       lastIds = [];
     }
-    const remove =
-      strip === 'all' || (strip !== 'none' && index !== lastThinking);
-    index++;
+    const at = index++;
+    const remove = strip === 'all' || (strip !== 'none' && at !== lastThinking);
     const row = remove ? removeThinkingFromContent(source) : source;
-    const mapper =
-      resolver === undefined
-        ? undefined
-        : await nativeMistralRow(row, resolver);
+    const mapper = (await rowIds?.(row, at))?.();
     const messages = messagesOf(row, settings, pending, mapper);
     for (const message of messages) {
       if (

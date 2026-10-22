@@ -14,6 +14,7 @@ import {
 } from './support/mistral-multi-id-cases.js';
 import { plainChatLengthRegistration } from '../journal-chat-length.js';
 import { nativeChatMessages } from '../native-chat-messages.js';
+import { mistralRowIds } from '../native-mistral-row.js';
 
 describe('Mistral multi-ID decoded holder lifetime', () => {
   const directory = useTempDir('mistral-multi-retention-');
@@ -75,7 +76,7 @@ describe('Mistral multi-ID decoded holder lifetime', () => {
           multiIdSettings,
           'none',
           -1,
-          resolver,
+          mistralRowIds(resolver),
         )) {
           hash.update(chunk);
           bytes += chunk.length;

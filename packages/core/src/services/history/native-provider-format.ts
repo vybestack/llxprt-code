@@ -29,11 +29,19 @@ export type PrepareNativeRequestFormat = (
   registration: RowFormatRegistration,
 ) => Promise<VersionSnapshot>;
 
+export type PrepareNativeRequestKimi = (
+  snapshot: VersionSnapshot,
+) => Promise<VersionSnapshot>;
+
 export interface NativeProviderFormat {
   readonly mediaLease?: PinnedMediaLease;
   readonly indexed: IndexedJournalRequestSnapshot;
   withFormat<T>(
     registration: RowFormatRegistration,
+    consume: (snapshot: VersionSnapshot) => T | Promise<T>,
+  ): Promise<T>;
+  /** Runs `consume` on a pin whose Kimi id facts are filled, filling them first if they are not. */
+  withKimi<T>(
     consume: (snapshot: VersionSnapshot) => T | Promise<T>,
   ): Promise<T>;
 }
@@ -57,12 +65,16 @@ export function hasNativeRequestFormat(
   );
 }
 
-export function nativeRequestFormatPreparation(host: {
+interface NativeRequestHost {
   exclusive<T>(run: () => Promise<T>): Promise<T>;
   current(): Version | undefined;
   commit(edits: () => Promise<VersionEdit[]>): Promise<unknown>;
   snapshot(): Promise<VersionSnapshot>;
-}): PrepareNativeRequestFormat {
+}
+
+function nativeRequestFormatPreparation(
+  host: NativeRequestHost,
+): PrepareNativeRequestFormat {
   return (snapshot, registration) =>
     host.exclusive(async () => {
       if (snapshot.version?.commitSeq !== host.current()?.commitSeq)
@@ -74,6 +86,28 @@ export function nativeRequestFormatPreparation(host: {
       );
       return host.snapshot();
     });
+}
+
+function nativeRequestKimiPreparation(
+  host: NativeRequestHost,
+): PrepareNativeRequestKimi {
+  return (snapshot) =>
+    host.exclusive(async () => {
+      if (snapshot.version?.commitSeq !== host.current()?.commitSeq)
+        throw new Error('History changed before the native Kimi fact fill');
+      await host.commit(() => Promise.resolve([{ kind: 'kimi' }]));
+      return host.snapshot();
+    });
+}
+
+export function nativeRequestPreparations(host: NativeRequestHost): {
+  readonly format: PrepareNativeRequestFormat;
+  readonly kimi: PrepareNativeRequestKimi;
+} {
+  return {
+    format: nativeRequestFormatPreparation(host),
+    kimi: nativeRequestKimiPreparation(host),
+  };
 }
 
 export function nativeRequestResources(store: JournalStore): {

@@ -482,14 +482,37 @@ export class IndexedJournalRequestSnapshot {
     return this.withMistral(slot, (view) => view.mapping(rawId));
   }
 
+  private async kimiCounter(
+    view: JournalRequestKimi,
+    index: number,
+  ): Promise<number> {
+    if (!Number.isSafeInteger(index) || index < 0 || index > this.count)
+      throw new RangeError('Kimi counter unit is outside the request');
+    return view.counterBefore(
+      index === this.count ? undefined : await this.locate(index),
+    );
+  }
+
   kimiCounterBefore(index: number): Promise<number> {
-    return this.withKimi(async (view) => {
-      if (!Number.isSafeInteger(index) || index < 0 || index > this.count)
-        throw new RangeError('Kimi counter unit is outside the request');
-      return view.counterBefore(
-        index === this.count ? undefined : await this.locate(index),
-      );
-    });
+    return this.withKimi((view) => this.kimiCounter(view, index));
+  }
+
+  /**
+   * The Kimi ids of this request read from a filled pin. The request's own
+   * pin may predate the Kimi fill, so the facts come from `snapshot`, which
+   * the caller keeps pinned for as long as it reads them.
+   */
+  async kimiForSnapshot(snapshot: VersionSnapshot): Promise<{
+    mappedId(rawId: string): Promise<string | undefined>;
+    counterBefore(index: number): Promise<number>;
+  }> {
+    const view = await this.query(() =>
+      JournalRequestKimi.create(snapshot, this.source, this.rows),
+    );
+    return {
+      mappedId: (rawId) => this.query(() => view.mappedId(rawId)),
+      counterBefore: (index) => this.query(() => this.kimiCounter(view, index)),
+    };
   }
 
   kimiEligibleCount(): Promise<number> {

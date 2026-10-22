@@ -4,6 +4,7 @@ import type {
   ContentBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { StreamingToolIdMapper } from '@vybestack/llxprt-code-tools/ToolIdStrategy.js';
+import type { NativeRowIds } from './native-row-ids.js';
 
 export interface NativeKimiResolver {
   mappedId(rawId: string): Promise<string | undefined>;
@@ -21,12 +22,12 @@ function conversionUse(
   return undefined;
 }
 
-export async function nativeKimiRow(
+async function kimiRowIds(
   row: IContent,
   index: number,
   resolver: NativeKimiResolver,
-): Promise<StreamingToolIdMapper> {
-  let counter = await resolver.counterBefore(index);
+): Promise<string[]> {
+  let counter: number | undefined;
   const ids: string[] = [];
   for (const block of row.blocks) {
     const use = conversionUse(row.speaker, block);
@@ -34,6 +35,7 @@ export async function nativeKimiRow(
     const mapped = await resolver.mappedId(use.id);
     if (mapped !== undefined) ids.push(mapped);
     else {
+      counter ??= await resolver.counterBefore(index);
       if (
         !Number.isSafeInteger(counter) ||
         counter < 0 ||
@@ -45,6 +47,10 @@ export async function nativeKimiRow(
       ids.push(`functions.${use.name}:${counter++}`);
     }
   }
+  return ids;
+}
+
+function rowMapper(ids: readonly string[]): StreamingToolIdMapper {
   let next = 0;
   function resolve(): string {
     if (next >= ids.length)
@@ -56,4 +62,19 @@ export async function nativeKimiRow(
     resolveToolCallId: resolve,
     resolveToolResponseId: resolve,
   };
+}
+
+export function nativeKimiRowIds(resolver: NativeKimiResolver): NativeRowIds {
+  return async (row, index) => {
+    const ids = await kimiRowIds(row, index, resolver);
+    return () => rowMapper(ids);
+  };
+}
+
+export async function nativeKimiRow(
+  row: IContent,
+  index: number,
+  resolver: NativeKimiResolver,
+): Promise<StreamingToolIdMapper> {
+  return rowMapper(await kimiRowIds(row, index, resolver));
 }

@@ -100,6 +100,8 @@ export interface RequestContext {
  */
 export interface ChatRowInput {
   readonly mediaStage?: ChatBodyOptions['mediaStage'];
+  /** Media blocks the Kimi pre-pass replaced with provider file references. */
+  readonly uploadedMedia?: number;
 }
 
 /**
@@ -519,7 +521,7 @@ export async function prepareRequest(
   };
   const nativeRows = options.requestRows;
   const body =
-    nativeRows?.native !== undefined && detectedFormat !== 'kimi'
+    nativeRows?.native !== undefined
       ? await prepareNativePlainRequest(
           envelope,
           nativeRows,
