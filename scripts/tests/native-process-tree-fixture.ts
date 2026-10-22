@@ -63,7 +63,10 @@ export function startNativeProcessTree(): NativeProcessTree {
     closed,
     descendantPid,
     dispose: async () => {
-      if (child.exitCode === null && child.signalCode === null) {
+      // A descendant can outlive its direct child, so POSIX disposal joins
+      // the owned group even after the child has already closed.
+      const childRunning = child.exitCode === null && child.signalCode === null;
+      if (childRunning || process.platform !== 'win32') {
         await killChildTreeAndWait(child, closed, { reapTimeoutMs: 8000 });
       }
       await closed;

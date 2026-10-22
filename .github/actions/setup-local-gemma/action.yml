@@ -4,7 +4,9 @@ description: >-
   on 127.0.0.1:12644, pulls the digest-pinned gemma4:e2b-it-qat model, proves
   that a real inference succeeds, and exports the provider environment the
   integration tests and evals use. Shared by e2e.yml, nightly.yml and
-  _evals-run.yml so the model, version and digests are defined once.
+  _evals-run.yml so the model, version and digests are defined once. macOS
+  runs the model and its vision projector on the CPU because the hosted VM's
+  paravirtual Metal device aborts llama-server during projector warm-up.
 
 runs:
   using: 'composite'
@@ -110,6 +112,16 @@ runs:
       run: |
         set -euo pipefail
         mkdir -p "$OLLAMA_MODELS"
+        if [[ "$RUNNER_OS" == macOS ]]; then
+          # The hosted macOS VM exposes an Apple Paravirtual Metal device on
+          # which llama-server aborts while warming up the vision projector
+          # (ggml-backend.cpp: pre-allocated tensor in MTL0 cannot run NONE).
+          # llama-server reads these from its environment, which it inherits
+          # from `ollama serve`, so the text model and the projector both stay
+          # on the CPU for warm-up and for every later request.
+          export LLAMA_ARG_N_GPU_LAYERS=0
+          export LLAMA_ARG_MMPROJ_OFFLOAD=0
+        fi
         nohup ollama serve >"$RUNNER_TEMP/ollama-server.log" 2>&1 &
         for _ in {1..60}; do
           if curl --fail --silent "http://$OLLAMA_HOST/api/version"; then
@@ -134,12 +146,32 @@ runs:
       run: |
         $ErrorActionPreference = 'Stop'
         $exe = Join-Path $env:RUNNER_TEMP 'ollama\ollama.exe'
+        $log = Join-Path $env:RUNNER_TEMP 'ollama-server.log'
+        $errLog = Join-Path $env:RUNNER_TEMP 'ollama-server.err.log'
+        $launcher = Join-Path $env:RUNNER_TEMP 'start-ollama.cmd'
         New-Item -ItemType Directory -Force -Path $env:OLLAMA_MODELS | Out-Null
-        Start-Process -FilePath $exe -ArgumentList 'serve' -WindowStyle Hidden `
-          -RedirectStandardOutput (Join-Path $env:RUNNER_TEMP 'ollama-server.log') `
-          -RedirectStandardError (Join-Path $env:RUNNER_TEMP 'ollama-server.err.log')
+
+        # A server spawned as a child of this step was gone by the next step
+        # (connection refused). Win32_Process creates the process under the
+        # WMI service instead, outside the step's process tree, so the server
+        # lives for the whole job. That process does not inherit this step's
+        # environment, so the launcher script sets it.
+        $environment = foreach ($name in 'OLLAMA_HOST', 'OLLAMA_CONTEXT_LENGTH', 'OLLAMA_NUM_PARALLEL', 'OLLAMA_MODELS', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'TEMP', 'TMP') {
+          "set `"$name=$([Environment]::GetEnvironmentVariable($name))`""
+        }
+        Set-Content -Path $launcher -Encoding ascii -Value (@('@echo off') + $environment + "`"$exe`" serve >`"$log`" 2>`"$errLog`"")
+        $created = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
+          CommandLine      = "cmd.exe /d /c `"$launcher`""
+          CurrentDirectory = $env:RUNNER_TEMP
+        }
+        if ($created.ReturnValue -ne 0) { throw "Could not start the Ollama server: Win32_Process.Create returned $($created.ReturnValue)" }
+
         $version = $null
         for ($i = 0; $i -lt 60; $i++) {
+          if (-not (Get-Process -Id $created.ProcessId -ErrorAction SilentlyContinue)) {
+            Get-Content -Path $log, $errLog -ErrorAction SilentlyContinue | Select-Object -Last 40 | ForEach-Object { [Console]::Error.WriteLine($_) }
+            throw "The Ollama server launcher (PID $($created.ProcessId)) exited before the server answered"
+          }
           try {
             $version = (Invoke-RestMethod -Uri "http://$env:OLLAMA_HOST/api/version").version
             break
@@ -148,6 +180,16 @@ runs:
           }
         }
         if ($version -ne '0.31.1') { throw "Unexpected Ollama server version: '$version'" }
+
+        # Record the server's own PID (the launcher's child) so the next step
+        # can prove the same server survived the step boundary.
+        $server = @(Get-CimInstance -ClassName Win32_Process -Filter "ParentProcessId = $($created.ProcessId) AND Name = 'ollama.exe'")
+        if ($server.Count -ne 1) { throw "Expected exactly one ollama.exe child of the launcher (PID $($created.ProcessId)), found $($server.Count)" }
+        $serverPid = $server[0].ProcessId
+        Set-Content -Path (Join-Path $env:RUNNER_TEMP 'ollama-server.pid') -Value $serverPid
+        "OLLAMA_SERVER_PID=$serverPid" | Add-Content -Path $env:GITHUB_ENV
+        Write-Output "Ollama server PID: $serverPid"
+
         & $exe pull gemma4:e2b-it-qat
         if ($LASTEXITCODE -ne 0) { throw "ollama pull failed with exit code $LASTEXITCODE" }
         $tags = Invoke-RestMethod -Uri "http://$env:OLLAMA_HOST/api/tags"
@@ -156,6 +198,22 @@ runs:
           $_.digest -eq '07ea59a474013479c8b6b802bef095c40e964a1d776ba02f264c0e30e1aede0c'
         })
         if ($model.Count -ne 1) { throw 'Pinned gemma4:e2b-it-qat digest not found in /api/tags' }
+
+    - name: 'Verify local model server is still running (Windows)'
+      if: runner.os == 'Windows'
+      shell: 'pwsh'
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $recorded = [int](Get-Content -Path (Join-Path $env:RUNNER_TEMP 'ollama-server.pid'))
+        if ($env:OLLAMA_SERVER_PID -ne "$recorded") {
+          throw "OLLAMA_SERVER_PID ($env:OLLAMA_SERVER_PID) does not match the recorded server PID ($recorded)"
+        }
+        $server = Get-Process -Id $recorded -ErrorAction SilentlyContinue
+        if (-not $server -or $server.ProcessName -ne 'ollama') {
+          Get-Content -Path (Join-Path $env:RUNNER_TEMP 'ollama-server.err.log') -ErrorAction SilentlyContinue | Select-Object -Last 40 | ForEach-Object { [Console]::Error.WriteLine($_) }
+          throw "The Ollama server (PID $recorded) started by the previous step is no longer running"
+        }
+        Write-Output "Ollama server PID $recorded is still running"
 
     # ---- Linux-only CPU backend evidence (reads /proc) -------------------
     - name: 'Verify CPU backend warm-up'
@@ -260,6 +318,23 @@ runs:
           [Console]::Error.WriteLine($raw)
           throw 'Local model inference did not return a completed non-empty response'
         }
+
+    - name: 'Verify CPU-only model backend (macOS)'
+      if: runner.os == 'macOS'
+      shell: 'bash'
+      env:
+        OLLAMA_HOST: '127.0.0.1:12644'
+      run: |
+        set -euo pipefail
+        log="$RUNNER_TEMP/ollama-server.log"
+        curl --fail --silent "http://$OLLAMA_HOST/api/ps" |
+          jq -e '.models[] | select(.name == "gemma4:e2b-it-qat" and .size_vram == 0)'
+        grep -E 'offloaded 0/[0-9]+ layers to GPU' "$log"
+        grep -F 'CLIP using CPU backend' "$log"
+        if grep -E 'CLIP using MTL|MTL0 (model|KV|compute) buffer size' "$log"; then
+          echo 'llama-server placed model or projector buffers on the Metal device' >&2
+          exit 1
+        fi
 
     # ---- Provider environment for the tests that follow ------------------
     - name: 'Export local model test environment'

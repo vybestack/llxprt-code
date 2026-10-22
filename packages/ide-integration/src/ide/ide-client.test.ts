@@ -65,8 +65,7 @@ describe('IdeClient', () => {
 
   beforeEach(async () => {
     // Reset singleton instance for test isolation
-    (IdeClient as unknown as { instance: IdeClient | undefined }).instance =
-      undefined;
+    IdeClient.resetInstance();
 
     // Mock environment variables
     process.env['LLXPRT_CODE_IDE_WORKSPACE_PATH'] = '/test/workspace';
@@ -144,6 +143,17 @@ describe('IdeClient', () => {
     const c = await IdeClient.getInstance();
 
     expect(c).not.toBe(a);
+  });
+
+  it('resolves the process ancestry once for every client created in the process', async () => {
+    IdeClient.resetInstance();
+    (getIdeProcessInfo as Mock<typeof getIdeProcessInfo>).mockClear();
+
+    await IdeClient.create();
+    await IdeClient.create();
+    await IdeClient.getInstance();
+
+    expect(getIdeProcessInfo).toHaveBeenCalledTimes(1);
   });
 
   describe('owner-created client context', () => {

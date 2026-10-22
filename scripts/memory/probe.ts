@@ -71,6 +71,7 @@ import {
   SAMPLES_FILE_NAME,
   SNAPSHOT_DIR_NAME,
 } from './paths.ts';
+import { startPeriodicSampler } from './periodic-sampler.ts';
 import { FILE_MODE, ensureSecureDir, secureFile } from './perms.ts';
 import { type JscHeapStats, collectSample, formatSample } from './sample.ts';
 import {
@@ -575,14 +576,13 @@ export function installProbe(): ProbeDeps | null {
     });
   }, REQUEST_POLL_INTERVAL_MS);
   pollTimer.unref();
-  const sampleTimer = setInterval(() => {
-    safeTick(deps, 'sample tick', () => writeProbeSample(deps, 'tick'));
-  }, config.intervalMs);
-  sampleTimer.unref();
+  const sampler = startPeriodicSampler(config.intervalMs, () =>
+    safeTick(deps, 'sample tick', () => writeProbeSample(deps, 'tick')),
+  );
 
   function stopTimers(): void {
     clearInterval(pollTimer);
-    clearInterval(sampleTimer);
+    sampler.stop();
   }
 
   process.on('exit', () => {

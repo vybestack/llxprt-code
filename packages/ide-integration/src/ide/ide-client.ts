@@ -18,7 +18,7 @@ import {
   type DiffUpdateResult,
   type IdeContext,
 } from './ideContext.js';
-import { getIdeProcessInfo } from './process-utils.js';
+import { cachedProcessInfo, resetProcessInfo } from './process-info.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import * as os from 'node:os';
@@ -298,7 +298,7 @@ export class IdeClient {
 
   static async create(): Promise<IdeClient> {
     const client = new IdeClient();
-    client.ideProcessInfo = await getIdeProcessInfo();
+    client.ideProcessInfo = await cachedProcessInfo();
     client.connectionConfig = await client.getConnectionConfigFromFile();
     client.currentIde = detectIde(
       client.ideProcessInfo,
@@ -320,6 +320,7 @@ export class IdeClient {
 
   static resetInstance(): void {
     IdeClient.instance = undefined;
+    resetProcessInfo();
   }
 
   addStatusChangeListener(listener: (state: IDEConnectionState) => void) {

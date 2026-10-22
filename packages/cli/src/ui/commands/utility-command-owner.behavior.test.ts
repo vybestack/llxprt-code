@@ -79,9 +79,15 @@ describe('registered statistics and logging owners', () => {
     };
     expect(history).toContainEqual(expected);
   });
-  it('reads the registered conversation log directory and applies the requested tail limit', async () => {
-    const owner = await makeOwner('logs');
-    const logPath = join(owner.workspace.getWorkingDirectory(), 'logs');
+  async function renderTailFromLogDirectory(
+    ownerName: string,
+    logDirectoryName: string,
+  ): Promise<string> {
+    const owner = await makeOwner(ownerName);
+    const logPath = join(
+      owner.workspace.getWorkingDirectory(),
+      logDirectoryName,
+    );
     await mkdir(logPath);
     await writeFile(
       join(logPath, 'session.jsonl'),
@@ -131,7 +137,19 @@ describe('registered statistics and logging owners', () => {
       createMockCommandContext({ services: { agent: null, config: null } }),
       '1',
     );
-    const rendered = JSON.stringify(history);
+    return JSON.stringify(history);
+  }
+  it('reads the registered conversation log directory and applies the requested tail limit', async () => {
+    const rendered = await renderTailFromLogDirectory('logs', 'logs');
+    expect(rendered).toContain('Conversation Logs (1 entries)');
+    expect(rendered).toContain('newest answer');
+    expect(rendered).not.toContain('older question');
+  });
+  it('leaves interior tildes in an absolute log path untouched, as in Windows 8.3 short names', async () => {
+    const rendered = await renderTailFromLogDirectory(
+      'short-name-logs',
+      'RUNNER~1-logs',
+    );
     expect(rendered).toContain('Conversation Logs (1 entries)');
     expect(rendered).toContain('newest answer');
     expect(rendered).not.toContain('older question');

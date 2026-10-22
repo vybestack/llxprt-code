@@ -245,9 +245,12 @@ if (process.argv[1]?.endsWith('install-checkout-plugins.ts')) {
     ]);
     expect(image['path']).toBe(asRecord(commands[2])['command']);
     if (process.platform === 'win32') {
-      const candidates = asRecord(image['probe'])['processCandidates'];
+      const probe = asRecord(image['probe']);
+      const candidates = probe['processCandidates'];
       if (!Array.isArray(candidates))
-        throw new Error('Missing native process candidates');
+        throw new Error(
+          `Missing native process candidates: ${JSON.stringify(probe)}`,
+        );
       expect(
         candidates.some(
           (candidate) =>

@@ -16,6 +16,7 @@ import {
   appendFile,
   mkdir,
   mkdtemp,
+  readdir,
   readFile,
   rm,
   stat,
@@ -637,7 +638,58 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
         const sourcePath = agent.session.getRecording().path;
         if (sourcePath === undefined)
           throw new Error('Expected recording path');
+        // A truncated JSON line fails the owner's replay on every platform
+        // after staging begins; the staging directory is then removed cleanly,
+        // so the owner's own error is what surfaces rather than an aggregate.
+        await appendFile(sourcePath, '{"v":1,"seq":99,"type":"truncated"\n');
+        const destinationParent = await mkdtemp(
+          join(tmpdir(), 'continue-export-failure-'),
+        );
+        try {
+          const destination = join(destinationParent, 'package');
+          ctx = createMockCommandContext({ services: { agent } });
+          const result = await continueCommand.action!(
+            ctx,
+            `export ${sessionInfo.id} ${destination}`,
+          );
+          assertType(result, isMessageAction);
+          expect(result.messageType).toBe('error');
+          expect(result.content).toMatch(/^JSON Parse error/);
+          expect(await readdir(destinationParent)).toStrictEqual([]);
+        } finally {
+          await rm(destinationParent, { recursive: true, force: true });
+        }
+      });
+    }, 30000);
+
+    it('reports the aggregate failure when the staging cleanup also fails', async () => {
+      await withRecordingLifetimeFixture(async (agent) => {
+        await agent.setHistory([
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'failed export and cleanup' }],
+          },
+        ]);
+        await agent.session.setRecording({ enabled: true });
+        const sessionInfo = (await agent.session.listSessions()).at(0);
+        if (sessionInfo === undefined)
+          throw new Error('Expected listed session');
+        const sourcePath = agent.session.getRecording().path;
+        if (sourcePath === undefined)
+          throw new Error('Expected recording path');
+        // A destination that runs through the recording file cannot be created,
+        // and removing the staging directory beneath it fails as well wherever
+        // the platform reports a path through a file as ENOTDIR. Windows reports
+        // it as absent, so there the cleanup succeeds and the owner's own error
+        // is what is returned; the probe selects the matching expectation.
         const destination = join(sourcePath, 'not-a-directory');
+        const cleanupFails = await rm(`${destination}.probe.tmp`, {
+          recursive: true,
+          force: true,
+        }).then(
+          () => false,
+          () => true,
+        );
         ctx = createMockCommandContext({ services: { agent } });
         const result = await continueCommand.action!(
           ctx,
@@ -645,10 +697,11 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
         );
         assertType(result, isMessageAction);
         expect(result.messageType).toBe('error');
-        expect(result.content).toBe(
-          'Session package export and cleanup failed',
+        expect(result.content).toMatch(
+          cleanupFails
+            ? /^Session package export and cleanup failed$/
+            : /ENOTDIR/,
         );
-        // Windows reports a path that runs through a file as ENOENT.
         await expect(stat(destination)).rejects.toMatchObject({
           code: process.platform === 'win32' ? 'ENOENT' : 'ENOTDIR',
         });

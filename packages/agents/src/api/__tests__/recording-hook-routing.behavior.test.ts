@@ -1,9 +1,13 @@
 import {
+  jsonlHookCommand,
+  removeJsonlHook,
+} from './helpers/jsonl-hook-command.js';
+import {
   useRecordingPrompts,
   withRecordingLifetimeFixture,
 } from './helpers/recording-owner-lifetime-fixture.js';
 import { describe, expect, it } from 'bun:test';
-import { readFile, rm } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -69,7 +73,7 @@ describe('borrowed facade lifecycle hook transcript routing', () => {
                 hooks: [
                   {
                     type: HookType.Command,
-                    command: `cat >> '${output}'; printf '\\n' >> '${output}'`,
+                    command: jsonlHookCommand(output),
                   },
                 ],
               },
@@ -78,7 +82,7 @@ describe('borrowed facade lifecycle hook transcript routing', () => {
         },
       );
     } finally {
-      await rm(output, { force: true });
+      await removeJsonlHook(output);
     }
   }, 30000);
 
@@ -134,7 +138,7 @@ describe('borrowed facade lifecycle hook transcript routing', () => {
                 hooks: [
                   {
                     type: HookType.Command,
-                    command: `cat >> '${output}'; printf '\\n' >> '${output}'`,
+                    command: jsonlHookCommand(output),
                   },
                 ],
               },
@@ -143,7 +147,7 @@ describe('borrowed facade lifecycle hook transcript routing', () => {
         },
       );
     } finally {
-      await rm(output, { force: true });
+      await removeJsonlHook(output);
     }
   }, 30000);
 
@@ -222,7 +226,7 @@ describe('borrowed facade lifecycle hook transcript routing', () => {
                 hooks: [
                   {
                     type: HookType.Command,
-                    command: `cat >> '${output}'; printf '\\n' >> '${output}'`,
+                    command: jsonlHookCommand(output),
                   },
                 ],
               },
@@ -231,7 +235,7 @@ describe('borrowed facade lifecycle hook transcript routing', () => {
         },
       );
     } finally {
-      await rm(output, { force: true });
+      await removeJsonlHook(output);
     }
   }, 30000);
 

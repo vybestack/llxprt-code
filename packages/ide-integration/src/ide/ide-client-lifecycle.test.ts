@@ -218,8 +218,7 @@ describe('IdeClient connection lifecycle isolation', () => {
   let createdFakes: FakeClientController[];
 
   beforeEach(async () => {
-    (IdeClient as unknown as { instance: IdeClient | undefined }).instance =
-      undefined;
+    IdeClient.resetInstance();
     process.env['LLXPRT_CODE_IDE_WORKSPACE_PATH'] = '/test/workspace';
     delete process.env['LLXPRT_CODE_IDE_SERVER_PORT'];
     delete process.env['LLXPRT_CODE_IDE_AUTH_TOKEN'];

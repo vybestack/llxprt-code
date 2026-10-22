@@ -14,6 +14,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { promisify } from 'node:util';
 import { SessionRecordingService } from './SessionRecordingService.js';
+import { SessionDiscovery } from './SessionDiscovery.js';
 import { SessionLockManager } from './SessionLockManager.js';
 import {
   resumeSession,
@@ -73,6 +74,16 @@ async function denyNewEntries(directory: string): Promise<() => Promise<void>> {
 
 // libuv reports ERROR_ACCESS_DENIED as EPERM, POSIX reports EACCES.
 const DENIED_CODE = process.platform === 'win32' ? 'EPERM' : 'EACCES';
+
+async function settle<T>(
+  promise: Promise<T>,
+): Promise<{ resolved: T } | { rejected: unknown }> {
+  try {
+    return { resolved: await promise };
+  } catch (error: unknown) {
+    return { rejected: error };
+  }
+}
 
 async function setModifiedTime(filePath: string, iso: string): Promise<void> {
   const when = new Date(iso);
@@ -353,11 +364,26 @@ describe('resumeSession with legacy and unreadable recordings (issue #3732)', ()
         fs.writeFile(path.join(chatsDir, 'probe'), ''),
       ).rejects.toMatchObject({ code: DENIED_CODE });
 
-      await expect(resume(CONTINUE_LATEST)).rejects.toMatchObject({
-        code: DENIED_CODE,
+      // The denial covers new entries only, so the healthy recording stays
+      // discoverable and the lock file is what cannot be created.
+      const discovered = await SessionDiscovery.listSessionsDetailed(
+        chatsDir,
+        PROJECT_HASH,
+      );
+      expect({
+        sessions: discovered.sessions.map((session) => session.sessionId),
+        unreadable: discovered.unreadableRecordings,
+      }).toStrictEqual({ sessions: ['locked-out-0010'], unreadable: [] });
+      await expect(
+        SessionLockManager.acquire(chatsDir, 'locked-out-0010'),
+      ).rejects.toMatchObject({ code: DENIED_CODE });
+
+      // Settling keeps a wrongly resolved result in the failure output.
+      expect(await settle(resume(CONTINUE_LATEST))).toMatchObject({
+        rejected: { code: DENIED_CODE },
       });
-      await expect(resume('locked-out-0010')).rejects.toMatchObject({
-        code: DENIED_CODE,
+      expect(await settle(resume('locked-out-0010'))).toMatchObject({
+        rejected: { code: DENIED_CODE },
       });
     });
   });

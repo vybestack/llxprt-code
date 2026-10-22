@@ -34,7 +34,14 @@ import {
   failureExcerpt,
 } from '../../scripts/lib/bun-test-retry.js';
 import { spawn } from 'node:child_process';
-import { readdirSync, realpathSync, statSync, writeFileSync } from 'node:fs';
+import {
+  readdirSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import { isAbsolute, join, relative, win32 } from 'node:path';
 import {
   envPerFileTimeoutMs,
@@ -382,6 +389,27 @@ export function generateJUnit(results: readonly TestResult[]): string {
   });
 }
 
+/**
+ * Writes the report for the files completed so far. The runner calls this as
+ * each file finishes so a job cancelled at its time limit still leaves the
+ * results it had. The report is written beside its destination and renamed
+ * into place, so a cancellation mid-write cannot leave a truncated document.
+ */
+export function writeJUnitReport(
+  reportPath: string,
+  results: readonly TestResult[],
+): void {
+  const ordered = [...results].sort((a, b) => a.file.localeCompare(b.file));
+  const temporaryPath = `${reportPath}.${process.pid}.tmp`;
+  try {
+    writeFileSync(temporaryPath, generateJUnit(ordered));
+    renameSync(temporaryPath, reportPath);
+  } catch (error) {
+    rmSync(temporaryPath, { force: true });
+    throw error;
+  }
+}
+
 export function exitCodeForRun(
   failedTestFileCount: number,
   junitWriteFailed: boolean,
@@ -428,6 +456,23 @@ async function main(): Promise<void> {
   });
   let exitCode = 1;
   let failFast = false;
+  const reportPath = join(root, 'junit.xml');
+  // A write failure must not replace the run's verdict with an unhandled
+  // exception, but losing the required CI artifact is still a failed run.
+  let junitWriteFailed = false;
+  const checkpointReport = (completedResults: readonly TestResult[]): void => {
+    try {
+      writeJUnitReport(reportPath, completedResults);
+      junitWriteFailed = false;
+    } catch (error) {
+      junitWriteFailed = true;
+      console.error(
+        `Failed to write junit.xml: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  };
   try {
     const results: TestResult[] = [];
     let nextIndex = 0;
@@ -447,6 +492,7 @@ async function main(): Promise<void> {
         );
         results.push(result);
         completed++;
+        checkpointReport(results);
         if (!result.passed) {
           console.error(
             `FAIL (${completed}/${selectedFiles.length}) ${result.file}${
@@ -495,19 +541,7 @@ async function main(): Promise<void> {
         `(${cases.pass + cases.fail + cases.skip + cases.todo} total)`,
     );
 
-    // A write failure must not replace the run's verdict with an unhandled
-    // exception, but losing the required CI artifact is still a failed run.
-    let junitWriteFailed = false;
-    try {
-      writeFileSync(join(root, 'junit.xml'), generateJUnit(results));
-    } catch (error) {
-      junitWriteFailed = true;
-      console.error(
-        `Failed to write junit.xml: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    }
+    checkpointReport(results);
     exitCode = exitCodeForRun(failed.length, junitWriteFailed);
   } finally {
     try {

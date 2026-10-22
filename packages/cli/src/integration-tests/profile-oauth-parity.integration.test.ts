@@ -116,19 +116,41 @@ function isolatedEnv(dir: string): Record<string, string> {
   };
 }
 
+const CHILD_TIMEOUT_MS = 60000;
+
+interface RunProcessOptions {
+  /**
+   * Terminates the child from this process as soon as its stderr contains this
+   * text. Windows reports a terminated child as an ordinary exit code with no
+   * signal, so an intentional interruption must be recorded by the parent that
+   * performed it rather than inferred from the exit status.
+   */
+  readonly terminateWhenStderrContains?: string;
+}
+
 async function runProcess(
   dir: string,
   args: readonly string[],
+  options: RunProcessOptions = {},
 ): Promise<Omit<RunResult, 'requests' | 'events'>> {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, ['--preload', preload, ...args], {
       cwd: dir,
       env: isolatedEnv(dir),
       stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: 60000,
     });
     let stdout = '';
     let stderr = '';
+    let termination: string | undefined;
+    const terminate = (reason: string): void => {
+      if (termination !== undefined) return;
+      termination = reason;
+      child.kill('SIGTERM');
+    };
+    const timer = setTimeout(
+      () => terminate(`timeout after ${CHILD_TIMEOUT_MS}ms`),
+      CHILD_TIMEOUT_MS,
+    );
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
     child.stdout.on('data', (data: string) => {
@@ -136,12 +158,24 @@ async function runProcess(
     });
     child.stderr.on('data', (data: string) => {
       stderr += data;
+      const marker = options.terminateWhenStderrContains;
+      if (marker !== undefined && stderr.includes(marker)) {
+        terminate('SIGTERM requested by the parent');
+      }
     });
-    child.on('error', reject);
+    child.on('error', (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
     child.on('close', (code, signal) => {
-      if (signal !== null) {
+      clearTimeout(timer);
+      const interruption =
+        termination ?? (signal === null ? undefined : `signal ${signal}`);
+      if (interruption !== undefined) {
         reject(
-          new Error(`Profile parity child terminated by ${signal}: ${stderr}`),
+          new Error(
+            `Profile parity child terminated by ${interruption}: ${stderr}`,
+          ),
         );
         return;
       }
@@ -336,14 +370,34 @@ describe('real noninteractive CLI profile authentication parity (#3448, #3629, #
   }
 
   describe('subprocess outcome sensitivity', () => {
-    it('rejects signal termination with the signal and captured stderr', async () => {
+    it('rejects a parent-requested termination with the signal and captured stderr', async () => {
       await expect(
-        runProcess(dir, [
-          '--eval',
-          `await new Promise((resolve) => process.stderr.write('Synthetic child interruption', resolve));
-           process.kill(process.pid, 'SIGTERM');`,
-        ]),
+        runProcess(
+          dir,
+          [
+            '--eval',
+            `process.stderr.write('Synthetic child interruption');
+             setInterval(() => {}, 1000);`,
+          ],
+          { terminateWhenStderrContains: 'Synthetic child interruption' },
+        ),
       ).rejects.toThrow(/SIGTERM[\s\S]*Synthetic child interruption/);
+    });
+
+    it('does not mistake an ordinary non-zero exit status for an interruption', async () => {
+      const outcome = await runProcess(
+        dir,
+        [
+          '--eval',
+          `process.stderr.write('Synthetic status'); process.exit(1);`,
+        ],
+        { terminateWhenStderrContains: 'never-written-marker' },
+      );
+      expect(outcome).toStrictEqual({
+        exitCode: 1,
+        stdout: '',
+        stderr: 'Synthetic status',
+      });
     });
 
     for (const exitCode of [0, 23]) {

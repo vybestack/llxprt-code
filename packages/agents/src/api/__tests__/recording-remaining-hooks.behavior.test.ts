@@ -1,10 +1,14 @@
 import {
+  jsonlHookCommand,
+  removeJsonlHook,
+} from './helpers/jsonl-hook-command.js';
+import {
   useRecordingPrompts,
   withRecordingLifetimeFixture,
 } from './helpers/recording-owner-lifetime-fixture.js';
 import { describe, expect, it, spyOn } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { readFile, rm } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { Agent } from '@vybestack/llxprt-code-agents';
@@ -91,7 +95,7 @@ async function verifyFacades(
                 hooks: [
                   {
                     type: HookType.Command,
-                    command: `cat >> '${output}'; printf '\\n' >> '${output}'`,
+                    command: jsonlHookCommand(output),
                   },
                 ],
               },
@@ -102,7 +106,7 @@ async function verifyFacades(
       'recording-remaining-hooks.jsonl',
     );
   } finally {
-    await rm(output, { force: true });
+    await removeJsonlHook(output);
   }
 }
 
@@ -235,7 +239,7 @@ describe('borrowed facade remaining hook producers', () => {
                 hooks: [
                   {
                     type: HookType.Command,
-                    command: `cat >> '${output}'; printf '\\n' >> '${output}'`,
+                    command: jsonlHookCommand(output),
                   },
                 ],
               },
@@ -246,7 +250,7 @@ describe('borrowed facade remaining hook producers', () => {
       );
     } finally {
       strategySpy.mockRestore();
-      await rm(output, { force: true });
+      await removeJsonlHook(output);
     }
   }, 30000);
 });

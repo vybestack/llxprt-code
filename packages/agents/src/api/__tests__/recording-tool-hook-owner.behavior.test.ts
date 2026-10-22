@@ -1,3 +1,4 @@
+import { jsonlHookCommand } from './helpers/jsonl-hook-command.js';
 import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
 import {
   useRecordingPrompts,
@@ -178,7 +179,7 @@ describe('borrowed facade tool hook owner routing', () => {
                   hooks: [
                     {
                       type: HookType.Command,
-                      command: `node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>require("fs").appendFileSync(process.argv[1],JSON.stringify(JSON.parse(s))+"\\n"))' '${output}'`,
+                      command: jsonlHookCommand(output),
                     },
                   ],
                 },

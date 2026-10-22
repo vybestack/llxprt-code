@@ -57,9 +57,10 @@ type AtCompletionAction =
   | { type: 'INITIALIZE_SUCCESS' }
   | { type: 'SEARCH'; payload: string }
   | { type: 'SEARCH_SUCCESS'; payload: Suggestion[] }
+  | { type: 'NON_FILE_SUGGESTIONS'; payload: Suggestion[] }
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'SEARCH_CANCELLED' }
-  | { type: 'ERROR' }
+  | { type: 'ERROR'; payload?: Suggestion[] }
   | { type: 'RESET' };
 
 const initialState: AtCompletionState = {
@@ -96,6 +97,13 @@ function atCompletionReducer(
         suggestions: action.payload,
         isLoading: false,
       };
+    case 'NON_FILE_SUGGESTIONS':
+      // Resource, subagent and GitHub candidates do not depend on the file
+      // crawl, so they are shown while it is still initializing.
+      if (state.status === AtCompletionStatus.INITIALIZING) {
+        return { ...state, suggestions: action.payload };
+      }
+      return state;
     case 'SET_LOADING':
       // Only show loading if we are still in a searching state
       if (state.status === AtCompletionStatus.SEARCHING) {
@@ -113,7 +121,9 @@ function atCompletionReducer(
         ...state,
         status: AtCompletionStatus.ERROR,
         isLoading: false,
-        suggestions: [],
+        // A filesystem failure must not discard candidates that never touched
+        // the filesystem.
+        suggestions: action.payload ?? [],
       };
     case 'RESET':
       return initialState;
@@ -233,7 +243,7 @@ async function buildNonFileSuggestions(
   pattern: string,
   config: CliUiRuntime | undefined,
   signal: AbortSignal,
-): Promise<{ github: Suggestion[]; rest: Suggestion[] }> {
+): Promise<NonFileSuggestions> {
   // Run concurrently: these sources are independent, and the GitHub one may
   // make a network call. Awaiting them in sequence would let a slow GitHub
   // response delay suggestions that are already computed locally.
@@ -263,6 +273,15 @@ async function buildNonFileSuggestions(
     r.status === 'fulfilled' ? r.value : [],
   );
   return { github, rest: [...resources, ...subagents] };
+}
+
+interface NonFileSuggestions {
+  github: Suggestion[];
+  rest: Suggestion[];
+}
+
+function nonFileOnly(nonFile: NonFileSuggestions): Suggestion[] {
+  return [...nonFile.github, ...nonFile.rest];
 }
 
 async function searchNonFileCandidates(
@@ -375,6 +394,15 @@ function handleSkippedSearchDispatch(
   return !isCurrentPattern;
 }
 
+// Captures the filesystem search outcome so its failure can be reported
+// together with the non-file candidates instead of discarding them.
+async function settle<T>(
+  run: () => Promise<T>,
+): Promise<PromiseSettledResult<T>> {
+  const [outcome] = await Promise.allSettled([run()]);
+  return outcome;
+}
+
 async function performSearch(
   fileSearch: FileSearch,
   pattern: string,
@@ -392,10 +420,17 @@ async function performSearch(
   }, timeoutMs);
 
   try {
-    const results = await fileSearch.search(pattern, {
-      signal: controller.signal,
-      maxResults: MAX_SUGGESTIONS_TO_SHOW * 3,
-    });
+    // Non-file candidates are independent of the filesystem search, so they
+    // are collected alongside it and survive its failure.
+    const [fileOutcome, nonFileSuggestions] = await Promise.all([
+      settle(async () =>
+        fileSearch.search(pattern, {
+          signal: controller.signal,
+          maxResults: MAX_SUGGESTIONS_TO_SHOW * 3,
+        }),
+      ),
+      buildNonFileSuggestions(pattern, config, controller.signal),
+    ]);
 
     clearSlowSearchTimer();
 
@@ -410,27 +445,15 @@ async function performSearch(
       return;
     }
 
-    const fileSuggestions = results.map((p) => ({
+    if (fileOutcome.status === 'rejected') {
+      dispatch({ type: 'ERROR', payload: nonFileOnly(nonFileSuggestions) });
+      return;
+    }
+
+    const fileSuggestions = fileOutcome.value.map((p) => ({
       label: p,
       value: escapePath(p),
     }));
-
-    const nonFileSuggestions = await buildNonFileSuggestions(
-      pattern,
-      config,
-      controller.signal,
-    );
-
-    if (
-      handleSkippedSearchDispatch(
-        controller.signal,
-        pattern,
-        shouldDispatchResult,
-        dispatch,
-      )
-    ) {
-      return;
-    }
 
     dispatch({
       type: 'SEARCH_SUCCESS',
@@ -440,14 +463,6 @@ async function performSearch(
         ...nonFileSuggestions.rest,
       ],
     });
-  } catch (error) {
-    if (
-      !(error instanceof Error && error.name === 'AbortError') &&
-      !controller.signal.aborted &&
-      shouldDispatchResult(pattern)
-    ) {
-      dispatch({ type: 'ERROR' });
-    }
   } finally {
     clearTimeout(searchTimeout);
 
@@ -659,15 +674,38 @@ function useInitializationHandler(
   config: CliUiRuntime | undefined,
   cwd: string,
   fileSearch: React.MutableRefObject<FileSearch | null>,
+  latestRequestedPattern: React.MutableRefObject<PatternInput>,
   initializationGeneration: React.MutableRefObject<number>,
   dispatch: React.Dispatch<AtCompletionAction>,
 ): void {
   useEffect(() => {
     if (state.status !== AtCompletionStatus.INITIALIZING) {
-      return;
+      return undefined;
     }
 
     const generation = initializationGeneration.current;
+    const requestedPattern = latestRequestedPattern.current;
+    const controller = new AbortController();
+    // The crawl can be slow or fail; neither changes which resources,
+    // subagents or GitHub items match, so they are computed on their own path.
+    const nonFilePending =
+      requestedPattern === null
+        ? Promise.resolve(undefined)
+        : buildNonFileSuggestions(requestedPattern, config, controller.signal);
+
+    const publishNonFile = async (): Promise<void> => {
+      const nonFile = await nonFilePending;
+      if (
+        nonFile !== undefined &&
+        !controller.signal.aborted &&
+        generation === initializationGeneration.current
+      ) {
+        dispatch({
+          type: 'NON_FILE_SUGGESTIONS',
+          payload: nonFileOnly(nonFile),
+        });
+      }
+    };
     const initialize = async (): Promise<void> => {
       try {
         const searcher = await createFileSearcher(config, cwd);
@@ -681,18 +719,29 @@ function useInitializationHandler(
         }
       } catch {
         if (generation === initializationGeneration.current) {
-          dispatch({ type: 'ERROR' });
+          const nonFile = await nonFilePending;
+          if (generation === initializationGeneration.current) {
+            dispatch({
+              type: 'ERROR',
+              payload: nonFile === undefined ? [] : nonFileOnly(nonFile),
+            });
+          }
         }
       }
     };
 
+    void publishNonFile();
     void initialize();
+    return (): void => {
+      controller.abort();
+    };
   }, [
     state.status,
     state.pattern,
     config,
     cwd,
     fileSearch,
+    latestRequestedPattern,
     initializationGeneration,
     dispatch,
   ]);
@@ -832,6 +881,7 @@ export function useAtCompletion(props: UseAtCompletionProps): void {
     config,
     cwd,
     fileSearch,
+    latestRequestedPattern,
     lifecycleGeneration,
     dispatch,
   );

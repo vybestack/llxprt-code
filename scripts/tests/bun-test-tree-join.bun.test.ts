@@ -220,6 +220,12 @@ describe.skipIf(process.platform === 'win32')(
             expect(tree.child.signalCode).toBe('SIGKILL');
             if (tree.child.pid === undefined)
               throw new Error('Missing native PID');
+            // The injected failure ended the production reap at the direct
+            // child's close; the descendant's kernel entry is not promised
+            // to be gone yet, so join it with the real process table.
+            probe.mockRestore();
+            clock.mockRestore();
+            await tree.dispose();
             for (const pid of [tree.child.pid, descendantPid]) {
               expect(() => process.kill(pid, 0)).toThrow(
                 expect.objectContaining({ code: 'ESRCH' }),
@@ -271,6 +277,9 @@ describe.skipIf(process.platform === 'win32')(
             } else {
               await tree.closed;
               expect(tree.child.signalCode).toBe('SIGKILL');
+              probe.mockRestore();
+              clock.mockRestore();
+              await tree.dispose();
               expect(() => process.kill(descendantPid, 0)).toThrow(
                 expect.objectContaining({ code: 'ESRCH' }),
               );

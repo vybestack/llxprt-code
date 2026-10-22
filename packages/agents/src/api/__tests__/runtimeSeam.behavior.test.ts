@@ -1,50 +1,19 @@
-import {
-  createCapturedSessionOwner,
-  capturedSessionClient,
-} from './helpers/session-client-capture.js';
+import { capturedSessionClient } from './helpers/session-client-capture.js';
 import {
   captureAgentAdoption as fromConfig,
   fixtureAgentResources,
 } from './helpers/agent-resource-capture.js';
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
-import { toConfigParameters } from '../agentConfig.adapter.js';
-import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import {
-  configureProviderTokenizer,
-  createRuntimeContentGeneratorFactory,
-} from '@vybestack/llxprt-code-providers/composition.js';
-import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import {
-  acquirePreferredProviderManager,
-  acquirePreferredOAuth,
-  preparePreferredProviderCompletion,
-} from '../preferred-provider-acquisition.js';
-import { releaseAdoptedFileScope } from '../adoption-release.js';
-import { randomUUID } from 'node:crypto';
-import {
-  runCleanupSteps,
-  cleanupAfterFailure,
-} from '../../core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
-import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
+  openCaller,
+  useFakeResponsesReplay,
+} from './helpers/caller-fixture.js';
 import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { fileURLToPath } from 'node:url';
-import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
 import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
-import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
-import { executeProviderActivation } from '../providerActivationExecutor.js';
-import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
-import { assembleModelSelection } from '../model-selection.js';
 import { nonBlankStringArbitrary } from './helpers/fastCheckArbitraries.js';
 import { type Agent } from '@vybestack/llxprt-code-agents';
 import * as fc from 'fast-check';
@@ -121,222 +90,70 @@ describe('runtime-seam behavior @plan:PLAN-20260621-COREAPIREMED.P17 @requiremen
   });
 
   const credentials = useOwnedCredentials();
-  let callerConfig: Config;
-  let callerSettings: SettingsService;
-  let callerSettingsOwner: SessionSettingsOwner;
-  let callerPolicy: RuntimePolicyOwner;
-  let callerMcp: McpRuntimeOwner;
-  let callerManager: ReturnType<typeof acquirePreferredProviderManager>;
-  let callerOwner: SessionClientOwner;
-  let callerClose: () => Promise<void>;
   const callerFactories = createAgentRuntimeFactoryBindings();
-  let callerRelease: AcquisitionRelease;
-  let callerFiles: ProviderFileLifecycle;
-  let callerRuntimeId: string;
-  let callerOAuth: ReturnType<typeof acquirePreferredOAuth>;
-  let callerTokenizer: ReturnType<typeof configureProviderTokenizer>;
-  let callerContent: ReturnType<typeof createRuntimeContentGeneratorFactory>;
 
-  async function openCaller(fixture: string): Promise<void> {
-    const previousReplay = process.env.LLXPRT_FAKE_RESPONSES;
-    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
-      new URL('./fixtures/' + fixture, import.meta.url),
-    );
-    const directory = await realpath(
-      await mkdtemp(join(tmpdir(), 'caller-adoption-')),
-    );
-    callerConfig = new Config({
-      ...toConfigParameters({
-        provider: 'fake',
-        model: 'fake-model',
-        sessionId: randomUUID(),
-        workingDir: directory,
-      }),
-      interactive: true,
-      includeDirectories: [process.cwd()],
-    });
-    callerSettings = new SettingsService();
-    callerPolicy = new RuntimePolicyOwner(callerConfig);
-    injectConfirmationForcingPolicy(callerPolicy.session.confirmation);
-    callerMcp = await buildTestMcpRuntime(
-      callerConfig,
-      callerPolicy.session.messageBus,
-      {},
-      undefined,
-      callerPolicy,
-    );
-    acquireCallerProviders();
-    const media = new SessionMediaOwner(
-      callerConfig.projectTempDir,
-      1024 * 1024 * 1024,
-    );
-    callerOwner = await createCapturedSessionOwner(
-      callerConfig,
-      assembleTaskSchemaPolicy(callerSettings),
-      callerManager,
-      callerFactories.agentClientFactory,
-      media.store,
-      callerMcp.readInstructions,
-      callerMcp.workspacePaths,
-      callerSettingsOwner,
-      callerContent,
-      callerTokenizer,
-    );
-    callerOwner.bindMcpRuntime(callerMcp);
-    callerOwner.bindProviderFiles(callerFiles, (provider) =>
-      callerOAuth.composeRetryOperations(provider),
-    );
-    callerOwner.bindHooks();
-    callerClose = settleEngineRelease.bind(
-      undefined,
-      [
-        () => callerOwner.dispose(),
-        () => callerRelease.close(),
-        () => media.dispose(),
-        () => callerMcp.dispose(),
-        () => callerConfig.dispose(),
-        () => rm(directory, { recursive: true, force: true }),
-      ],
-      previousReplay,
-    );
-    try {
-      await preparePreferredProviderCompletion(
-        callerConfig,
-        callerSettings,
-        callerSettingsOwner,
-        callerManager,
-        callerOAuth,
-        callerRuntimeId,
-        callerTokenizer,
-        undefined,
-      );
-      await callerMcp.initialize();
-      await activateCallerClient();
-    } catch (primary) {
-      await cleanupAfterFailure(primary, callerClose);
-    }
-  }
-  function acquireCallerProviders(): void {
-    callerRuntimeId = 'caller-' + randomUUID();
-    callerRelease = new AcquisitionRelease();
-    callerSettingsOwner = new SessionSettingsOwner(callerSettings);
-    callerRelease.acquire('settings', () => callerSettingsOwner.dispose());
-    callerSettingsOwner.initializeProviderSelection(
-      callerConfig.getProvider(),
-      callerConfig.getModel(),
-    );
-    callerSettingsOwner.bindTelemetry(callerConfig);
-    callerFiles = new ProviderFileLifecycle({
-      maxFiles: 100,
-      maxBytes: 512 * 1024 * 1024,
-    });
-    for (const scope of [callerRuntimeId, callerConfig.getSessionId()])
-      callerRelease.acquire('files', () =>
-        releaseAdoptedFileScope(callerFiles, scope),
-      );
-    callerManager = acquirePreferredProviderManager(
-      callerConfig,
-      callerSettings,
-      callerSettingsOwner,
-      callerFiles,
-      callerRuntimeId,
-      credentials().authority,
-      callerRelease,
-    );
-    const factoriesTokenizer = configureProviderTokenizer(callerManager);
-    const factoriesContent = createRuntimeContentGeneratorFactory();
-    callerTokenizer = factoriesTokenizer;
-    callerContent = factoriesContent;
-    callerOAuth = acquirePreferredOAuth(
-      undefined,
-      callerPolicy.session.messageBus,
-      callerConfig,
-      callerSettings,
-      callerManager,
-      callerRuntimeId,
-      callerMcp.profileDefinitions,
-      credentials().authority,
-      callerRelease,
-      undefined,
-    );
-  }
-  async function activateCallerClient(): Promise<void> {
-    const activation = await executeProviderActivation(
-      callerConfig,
-      { provider: callerConfig.getProvider(), model: callerConfig.getModel() },
-      assembleProviderSwitch(
-        callerConfig,
-        callerSettings,
-        callerManager,
-        callerOAuth,
-        () => 'agent',
-        () => callerOwner.refreshAuth(),
-        callerSettingsOwner,
-      ),
-      callerSettings,
-      callerManager,
-      (method) => callerOwner.refreshAuth(method),
-      assembleModelSelection(callerSettingsOwner),
-    );
-    requireCallerActivation(activation);
-    await callerOwner.initializeTools();
-    await capturedSessionClient(callerOwner).startChat();
-  }
+  useFakeResponsesReplay('plain-text.jsonl');
 
   it('T6a fromConfig with a known sessionId yields agent.getRuntimeId() === that sessionId @requirement:REQ-005.1 @scenario:runtime-id @given:a real CLI-style Config and sessionId "known-runtime-id-T6a" @when:fromConfig({ config, sessionId }) @then:agent.getRuntimeId() === "known-runtime-id-T6a"', async () => {
-    await openCaller('plain-text.jsonl');
+    const caller = await openCaller(credentials().authority, callerFactories);
     let agent: Agent | undefined;
     try {
       agent = await fromConfig(
-        callerConfig,
-        callerSettings,
+        caller.config,
+        caller.settings,
         { sessionId: 'known-runtime-id-T6a' },
-        callerSettingsOwner,
-        callerManager,
+        caller.settingsOwner,
+        caller.manager,
         undefined,
         undefined,
-        callerMcp,
+        caller.mcp,
         undefined,
-        capturedSessionClient(callerOwner),
+        capturedSessionClient(caller.owner),
       );
       expect(asWithRuntimeId(agent).getRuntimeId()).toBe(
         'known-runtime-id-T6a',
       );
     } finally {
-      await agent?.dispose();
-      await callerClose();
+      try {
+        await agent?.dispose();
+      } finally {
+        await caller.close();
+      }
     }
   });
 
   it('T6b the adopted Config active provider/model are reflected on the agent (forward adopt-path guard) @requirement:REQ-005 @scenario:adopted-runtime @given:a real Config whose active provider=fake and model=fake-model @when:fromConfig({ config }) @then:agent.getProvider() === "fake" and agent.getModel() === "fake-model"', async () => {
-    await openCaller('plain-text.jsonl');
+    const caller = await openCaller(credentials().authority, callerFactories);
     let agent: Agent | undefined;
     try {
       agent = await fromConfig(
-        callerConfig,
-        callerSettings,
+        caller.config,
+        caller.settings,
         {},
-        callerSettingsOwner,
-        callerManager,
+        caller.settingsOwner,
+        caller.manager,
         undefined,
         undefined,
-        callerMcp,
+        caller.mcp,
         undefined,
-        capturedSessionClient(callerOwner),
+        capturedSessionClient(caller.owner),
       );
       expect(agent.getProvider()).toBe('fake');
       expect(agent.getModel()).toBe('fake-model');
     } finally {
-      await agent?.dispose();
-      await callerClose();
+      try {
+        await agent?.dispose();
+      } finally {
+        await caller.close();
+      }
     }
   });
 
   it('T6c no second ProviderManager: the runtime manager reachable post-build IS the SAME instance as the manager on the supplied Config (identity, observed via the real providers seam) @requirement:REQ-001 @scenario:no-double-manager @given:a Config whose manager accessor returns a real manager @when:fromConfig({ config }) @then:captureProviderManager(agent) === the Config manager (no second manager constructed)', async () => {
-    await openCaller('plain-text.jsonl');
+    const caller = await openCaller(credentials().authority, callerFactories);
     let agent: Agent | undefined;
     try {
-      const config = callerConfig;
+      const config = caller.config;
       // The invariant is instance identity, observed via the real providers
       // seam: the manager reachable from the agent IS the SAME instance as the
       // one on the supplied Config (no second manager constructed). Mirrors the
@@ -344,20 +161,23 @@ describe('runtime-seam behavior @plan:PLAN-20260621-COREAPIREMED.P17 @requiremen
       // agent-root accessor).
       agent = await fromConfig(
         config,
-        callerSettings,
+        caller.settings,
         {},
-        callerSettingsOwner,
-        callerManager,
+        caller.settingsOwner,
+        caller.manager,
         undefined,
         undefined,
-        callerMcp,
+        caller.mcp,
         undefined,
-        capturedSessionClient(callerOwner),
+        capturedSessionClient(caller.owner),
       );
-      expect(captureProviderManager(agent)).toBe(callerManager);
+      expect(captureProviderManager(agent)).toBe(caller.manager);
     } finally {
-      await agent?.dispose();
-      await callerClose();
+      try {
+        await agent?.dispose();
+      } finally {
+        await caller.close();
+      }
     }
   });
 
@@ -366,25 +186,31 @@ describe('runtime-seam behavior @plan:PLAN-20260621-COREAPIREMED.P17 @requiremen
   it('PROP-A for any valid non-empty sessionId R, fromConfig({ config, sessionId: R }) yields agent.getRuntimeId() === R @requirement:REQ-005.1 @scenario:property-runtime-id @given:any non-empty sessionId string R @when:fromConfig({ config, sessionId: R }) @then:agent.getRuntimeId() === R for every generated R', async () => {
     await fc.assert(
       fc.asyncProperty(nonBlankStringArbitrary, async (runtimeId) => {
-        await openCaller('plain-text.jsonl');
+        const caller = await openCaller(
+          credentials().authority,
+          callerFactories,
+        );
         let agent: Agent | undefined;
         try {
           agent = await fromConfig(
-            callerConfig,
-            callerSettings,
+            caller.config,
+            caller.settings,
             { sessionId: runtimeId },
-            callerSettingsOwner,
-            callerManager,
+            caller.settingsOwner,
+            caller.manager,
             undefined,
             undefined,
-            callerMcp,
+            caller.mcp,
             undefined,
-            capturedSessionClient(callerOwner),
+            capturedSessionClient(caller.owner),
           );
           expect(asWithRuntimeId(agent).getRuntimeId()).toBe(runtimeId);
         } finally {
-          await agent?.dispose();
-          await callerClose();
+          try {
+            await agent?.dispose();
+          } finally {
+            await caller.close();
+          }
         }
       }),
     );
@@ -393,45 +219,33 @@ describe('runtime-seam behavior @plan:PLAN-20260621-COREAPIREMED.P17 @requiremen
   it('PROP-B for any valid non-empty sessionId R, the no-2nd-manager identity holds: captureProviderManager(agent) === the Config manager @requirement:REQ-001 @scenario:property-no-double-manager @given:any non-empty sessionId string R @when:fromConfig({ config, sessionId: R }) @then:captureProviderManager(agent) === the Config manager for every generated R', async () => {
     await fc.assert(
       fc.asyncProperty(nonBlankStringArbitrary, async (runtimeId) => {
-        await openCaller('plain-text.jsonl');
+        const caller = await openCaller(
+          credentials().authority,
+          callerFactories,
+        );
         let agent: Agent | undefined;
         try {
           agent = await fromConfig(
-            callerConfig,
-            callerSettings,
+            caller.config,
+            caller.settings,
             { sessionId: runtimeId },
-            callerSettingsOwner,
-            callerManager,
+            caller.settingsOwner,
+            caller.manager,
             undefined,
             undefined,
-            callerMcp,
+            caller.mcp,
             undefined,
-            capturedSessionClient(callerOwner),
+            capturedSessionClient(caller.owner),
           );
-          expect(captureProviderManager(agent)).toBe(callerManager);
+          expect(captureProviderManager(agent)).toBe(caller.manager);
         } finally {
-          await agent?.dispose();
-          await callerClose();
+          try {
+            await agent?.dispose();
+          } finally {
+            await caller.close();
+          }
         }
       }),
     );
   }, 30000);
 });
-
-async function settleEngineRelease(
-  steps: ReadonlyArray<() => void | Promise<void>>,
-  previousReplay: string | undefined,
-): Promise<void> {
-  try {
-    await runCleanupSteps(steps);
-  } finally {
-    if (previousReplay === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
-    else process.env.LLXPRT_FAKE_RESPONSES = previousReplay;
-  }
-}
-
-function requireCallerActivation(
-  result: Awaited<ReturnType<typeof executeProviderActivation>>,
-): void {
-  if (result.authFailed) throw result.authError;
-}

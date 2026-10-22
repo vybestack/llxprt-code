@@ -11,8 +11,9 @@
  */
 
 import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
-import { devNull } from 'node:os';
-import { isAbsolute } from 'node:path';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { isAbsolute, join } from 'node:path';
 
 /** Bounded fixture Git timeout and output allowance. */
 export const GIT_FIXTURE_TIMEOUT_MS = 30_000;
@@ -23,11 +24,29 @@ export const GIT_FIXTURE_MAX_BUFFER = 64 * 1024 * 1024;
  * configuration must not leak in. Git for Windows ships `core.autocrlf=true`
  * in its system config, which makes every fixture file go through LF to CRLF
  * conversion and a per-file warning.
+ *
+ * GIT_CONFIG_GLOBAL points at an empty regular file rather than the null
+ * device: Git on Windows cannot open `\\.\nul` as a config file and aborts
+ * with "unable to access". The file lives outside every fixture repository so
+ * `git add -A` never stages it, and it is created once per process.
  */
-const ISOLATED_GIT_CONFIG_ENV = {
-  GIT_CONFIG_NOSYSTEM: '1',
-  GIT_CONFIG_GLOBAL: devNull,
-};
+let isolatedGitConfigEnv: Record<string, string> | undefined;
+
+function getIsolatedGitConfigEnv(): Record<string, string> {
+  if (isolatedGitConfigEnv === undefined) {
+    const configDir = mkdtempSync(join(tmpdir(), 'ast-read-git-config-'));
+    const emptyGlobalConfig = join(configDir, 'empty-gitconfig');
+    writeFileSync(emptyGlobalConfig, '');
+    process.once('exit', () => {
+      rmSync(configDir, { recursive: true, force: true });
+    });
+    isolatedGitConfigEnv = {
+      GIT_CONFIG_NOSYSTEM: '1',
+      GIT_CONFIG_GLOBAL: emptyGlobalConfig,
+    };
+  }
+  return isolatedGitConfigEnv;
+}
 
 /** Render every failure mode of a checked fixture Git run. */
 function describeGitFailure(
@@ -58,7 +77,7 @@ export function gitCheck(dir: string, args: string[]): string {
   const result = spawnSync('git', ['-C', dir, ...args], {
     encoding: 'utf-8',
     stdio: 'pipe',
-    env: { ...process.env, ...ISOLATED_GIT_CONFIG_ENV },
+    env: { ...process.env, ...getIsolatedGitConfigEnv() },
     timeout: GIT_FIXTURE_TIMEOUT_MS,
     maxBuffer: GIT_FIXTURE_MAX_BUFFER,
   });

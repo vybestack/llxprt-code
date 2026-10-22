@@ -90,12 +90,6 @@ jobs:
         run: |-
           npm run build
 
-      # scripts/tests/tmux-harness-input-diagnostics.bun.test.ts drives a real
-      # tmux server, so the scripts shard needs the executable provisioned.
-      - name: 'Install tmux (scripts shard)'
-        if: matrix.shard == 'scripts'
-        uses: './.github/actions/install-tmux'
-
       - name: 'Verify test shard completeness'
         run: 'npm run lint:test-shards'
 
@@ -108,10 +102,6 @@ jobs:
           LLXPRT_DEFAULT_MODEL: ${{ vars.LLXPRT_DEFAULT_MODEL }}
           LLXPRT_DEFAULT_PROVIDER: ${{ vars.LLXPRT_DEFAULT_PROVIDER }}
           LLXPRT_AUTH_TYPE: provider
-          # The install-tmux action provisions psmux (a tmux-compatible
-          # multiplexer) on the scripts shard; this declares it present so the
-          # native terminal tests run instead of being skipped on win32.
-          LLXPRT_E2E_TMUX: "${{ matrix.shard == 'scripts' && '1' || '' }}"
           NO_COLOR: true
           CI: true
         run: 'bun scripts/test.ts --shard "${{ matrix.shard }}"'

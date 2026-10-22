@@ -274,7 +274,10 @@ describe('production CLI workspace MCP consumers', () => {
       undefined,
       capturedSessionClient(builtCallerOwner),
     );
-    workspaceDirectory = directory;
+    // The Config's workspace root is the canonical (native realpath) spelling.
+    // On Windows the temp dir is an 8.3 short name, and completion rejects a cwd
+    // that is not spelled like a live workspace root.
+    workspaceDirectory = await realpath(directory);
     workspaceAgent = agent;
     workspaceCommands = buildSlashCommandRuntime(builtCallerConfig, agent);
     setWorkspaceTrustedFolder = (trusted) =>

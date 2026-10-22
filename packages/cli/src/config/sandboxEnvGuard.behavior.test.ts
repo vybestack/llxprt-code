@@ -416,7 +416,7 @@ describe('sandbox-env-guard', () => {
             engine: 'docker',
             image: 'sandbox:0.11.0',
             resources: { cpus: 2 },
-            mounts: [{ from: mountDir, to: '/mnt/profile', mode: 'ro' }],
+            mounts: [{ from: mountDir, to: '/mnt//profile/', mode: 'ro' }],
             env: { SANDBOX_FLAGS: '--cap-add=NET_ADMIN' },
           }),
         );
@@ -435,7 +435,7 @@ describe('sandbox-env-guard', () => {
         addContainerVolumeMounts(args);
         const joined = args.join(' ');
         expect(joined).toContain('--cap-add=NET_ADMIN');
-        expect(joined).toContain('/mnt/profile');
+        expect(joined).toContain(':/mnt/profile/:ro');
         expect(joined).not.toContain('GEMINI_API_KEY');
       });
 

@@ -125,6 +125,102 @@ try {
   cleanupInstaller();
 }
 
+interface NativeProcessCandidate {
+  readonly pid: number;
+  readonly parentPid: number;
+  readonly created: string;
+  readonly image: string;
+  readonly role: 'exact-private-bun' | 'installer' | 'ancestor-candidate';
+}
+
+/**
+ * Outcome of the Windows process snapshot. A failed snapshot keeps its
+ * status, signal, spawn error and PowerShell stderr instead of collapsing to
+ * "no candidates", so a diagnostic reader can tell a timeout from a query
+ * failure.
+ */
+interface NativeProcessProbe {
+  readonly status: number | null;
+  readonly signal: NodeJS.Signals | null;
+  readonly error: string | undefined;
+  readonly stderr: string;
+  readonly budgetMs: number;
+  readonly elapsedMs: number;
+  readonly processCandidates: readonly NativeProcessCandidate[] | null;
+}
+
+function nativeProcessSnapshotScript(image: string): string {
+  // One CIM query, indexed by pid: the ancestor walk is hash lookups rather
+  // than a pipeline scan per step, and only the properties used are fetched,
+  // so the snapshot stays inside the shared cleanup budget on a cold start.
+  return [
+    "$ErrorActionPreference='Stop';",
+    `$image='${image.replaceAll("'", "''")}';`,
+    '$byId=@{}; $selected=@{};',
+    'foreach ($p in Get-CimInstance -ClassName Win32_Process -Property ProcessId,ParentProcessId,ExecutablePath,CreationDate) { $byId[[int]$p.ProcessId]=$p };',
+    `foreach ($p in $byId.Values) { if ($p.ExecutablePath -eq $image) { $selected[[int]$p.ProcessId]='exact-private-bun' } elseif ($p.ProcessId -eq ${process.pid}) { $selected[[int]$p.ProcessId]='installer' } };`,
+    "foreach ($id in @($selected.Keys)) { $seen=@{}; $p=$byId[[int]$id]; while ($p -and -not $seen.ContainsKey([int]$p.ProcessId)) { $seen[[int]$p.ProcessId]=$true; $p=$byId[[int]$p.ParentProcessId]; if ($p -and -not $selected.ContainsKey([int]$p.ProcessId)) { $selected[[int]$p.ProcessId]='ancestor-candidate' } } };",
+    "ConvertTo-Json -Compress -InputObject @($selected.Keys | ForEach-Object { $p=$byId[[int]$_]; [pscustomobject]@{ pid=$p.ProcessId; parentPid=$p.ParentProcessId; created=$p.CreationDate.ToUniversalTime().ToString('o'); image=[IO.Path]::GetFileName($p.ExecutablePath); role=$selected[[int]$_] } })",
+  ].join(' ');
+}
+
+function probeNativeProcesses(
+  image: string,
+  budgetMs: number,
+): NativeProcessProbe {
+  const startedAt = performance.now();
+  const result = spawnSync(
+    'powershell.exe',
+    [
+      '-NoLogo',
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      nativeProcessSnapshotScript(image),
+    ],
+    {
+      cwd: repoRoot,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      encoding: 'utf8',
+      windowsHide: true,
+      timeout: budgetMs,
+      maxBuffer: 32 * 1024,
+    },
+  );
+  const elapsedMs = Math.round(performance.now() - startedAt);
+  const common = {
+    status: result.status,
+    signal: result.signal,
+    stderr: result.stderr,
+    budgetMs,
+    elapsedMs,
+  };
+  if (result.error !== undefined) {
+    return {
+      ...common,
+      error: result.error.message,
+      processCandidates: null,
+    };
+  }
+  if (result.status !== 0) {
+    return { ...common, error: undefined, processCandidates: null };
+  }
+  try {
+    const parsed: unknown = JSON.parse(result.stdout);
+    return {
+      ...common,
+      error: undefined,
+      processCandidates: Array.isArray(parsed) ? parsed : null,
+    };
+  } catch (parseError) {
+    return {
+      ...common,
+      error: `Unparseable process snapshot: ${String(parseError)}`,
+      processCandidates: null,
+    };
+  }
+}
+
 function privateImageContext(deadline: number): object {
   const path = join(
     toolRoot,
@@ -144,38 +240,7 @@ function privateImageContext(deadline: number): object {
   if (process.platform !== 'win32') return context;
   const remaining = Math.floor(deadline - performance.now());
   if (remaining <= 0) return { ...context, probe: { budgetExhausted: true } };
-  const script = [
-    "$ErrorActionPreference='Stop';",
-    `$image='${path.replaceAll("'", "''")}';`,
-    '$all=@(Get-CimInstance Win32_Process); $selected=@{};',
-    `foreach ($p in $all) { if ($p.ExecutablePath -eq $image) { $selected[[int]$p.ProcessId]='exact-private-bun' } elseif ($p.ProcessId -eq ${process.pid}) { $selected[[int]$p.ProcessId]='installer' } };`,
-    "foreach ($id in @($selected.Keys)) { $p=$all | Where-Object ProcessId -eq $id; $seen=@{}; while ($p -and -not $seen.ContainsKey([int]$p.ProcessId)) { $seen[[int]$p.ProcessId]=$true; $parent=$p.ParentProcessId; $p=$all | Where-Object ProcessId -eq $parent; if ($p -and -not $selected.ContainsKey([int]$p.ProcessId)) { $selected[[int]$p.ProcessId]='ancestor-candidate' } } };",
-    "ConvertTo-Json -Compress -InputObject @($all | Where-Object { $selected.ContainsKey([int]$_.ProcessId) } | ForEach-Object { [pscustomobject]@{ pid=$_.ProcessId; parentPid=$_.ParentProcessId; created=$_.CreationDate.ToUniversalTime().ToString('o'); image=[IO.Path]::GetFileName($_.ExecutablePath); role=$selected[[int]$_.ProcessId] } })",
-  ].join(' ');
-  const result = spawnSync(
-    'powershell.exe',
-    ['-NoProfile', '-NonInteractive', '-Command', script],
-    {
-      cwd: repoRoot,
-      stdio: ['ignore', 'pipe', 'ignore'],
-      encoding: 'utf8',
-      windowsHide: true,
-      timeout: Math.min(2000, remaining),
-      maxBuffer: 32 * 1024,
-    },
-  );
-  return {
-    ...context,
-    probe: {
-      status: result.status,
-      signal: result.signal,
-      failed: result.error !== undefined,
-      processCandidates:
-        result.status === 0 && result.error === undefined
-          ? JSON.parse(result.stdout)
-          : null,
-    },
-  };
+  return { ...context, probe: probeNativeProcesses(path, remaining) };
 }
 
 function cleanupInstaller(): void {

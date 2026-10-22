@@ -16,6 +16,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   symlinkSync,
@@ -46,6 +47,7 @@ import {
   stripAnsi,
   timeoutForFile,
   toPathArgument,
+  writeJUnitReport,
 } from '../run-bun-tests.js';
 import type { PartitionIdentity } from '../run-bun-tests.js';
 
@@ -67,6 +69,56 @@ describe('isTestFile', () => {
     expect(isTestFile('types.d.ts')).toBe(false);
     expect(isTestFile('test-helpers.ts')).toBe(false);
     expect(isTestFile('README.md')).toBe(false);
+  });
+});
+
+describe('writeJUnitReport', () => {
+  const passed = {
+    file: 'src/a.test.ts',
+    passed: true,
+    exitCode: 0,
+    timedOut: false,
+    output: ' 1 pass\n 0 fail\nRan 1 test across 1 file.',
+  };
+  const failed = {
+    file: 'src/b.test.ts',
+    passed: false,
+    exitCode: 1,
+    timedOut: false,
+    output: ' 0 pass\n 1 fail\nRan 1 test across 1 file.',
+  };
+
+  it('leaves a readable report of the completed files after every checkpoint', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'cli-junit-checkpoint-'));
+    try {
+      const reportPath = join(directory, 'junit.xml');
+      writeJUnitReport(reportPath, [passed]);
+      const afterFirst = readFileSync(reportPath, 'utf8');
+      expect(afterFirst).toContain('name="src/a"');
+      expect(afterFirst).not.toContain('name="src/b"');
+
+      writeJUnitReport(reportPath, [failed, passed]);
+      const afterSecond = readFileSync(reportPath, 'utf8');
+      expect(afterSecond).toContain('name="src/a"');
+      expect(afterSecond).toContain('name="src/b"');
+      expect(afterSecond.indexOf('name="src/a"')).toBeLessThan(
+        afterSecond.indexOf('name="src/b"'),
+      );
+      expect(readdirSync(directory)).toStrictEqual(['junit.xml']);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('removes its temporary file and rethrows when the report cannot be placed', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'cli-junit-failure-'));
+    try {
+      const reportPath = join(directory, 'missing-directory', 'junit.xml');
+      expect(() => writeJUnitReport(reportPath, [passed])).toThrow();
+      expect(readdirSync(directory)).toStrictEqual([]);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 });
 

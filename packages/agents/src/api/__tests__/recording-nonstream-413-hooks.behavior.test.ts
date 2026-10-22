@@ -1,3 +1,7 @@
+import {
+  jsonlHookCommand,
+  removeJsonlHook,
+} from './helpers/jsonl-hook-command.js';
 import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
 import {
   useRecordingPrompts,
@@ -12,7 +16,7 @@ import {
 } from '@vybestack/llxprt-code-core/hooks/hook-configuration.js';
 import { describe, expect, it, spyOn } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { readFile, rm } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { Agent } from '@vybestack/llxprt-code-agents';
@@ -154,7 +158,7 @@ async function exerciseFacades(
               hooks: [
                 {
                   type: HookType.Command,
-                  command: `cat >> '${output}'; printf '\\n' >> '${output}'`,
+                  command: jsonlHookCommand(output),
                 },
               ],
             },
@@ -165,7 +169,7 @@ async function exerciseFacades(
     );
     return observedCount;
   } finally {
-    await rm(output, { force: true });
+    await removeJsonlHook(output);
   }
 }
 
@@ -366,7 +370,7 @@ describe('shared client non-stream and context-size 413 hook owner', () => {
                 hooks: [
                   {
                     type: HookType.Command,
-                    command: `cat >> '${output}'; printf '\\n' >> '${output}'`,
+                    command: jsonlHookCommand(output),
                   },
                 ],
               },
@@ -375,7 +379,7 @@ describe('shared client non-stream and context-size 413 hook owner', () => {
         },
       );
     } finally {
-      await rm(output, { force: true });
+      await removeJsonlHook(output);
     }
   }, 30000);
 });

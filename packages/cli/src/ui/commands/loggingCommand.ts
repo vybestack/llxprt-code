@@ -255,6 +255,19 @@ async function handleDisableLogging(
   };
 }
 
+// Only a leading `~`, `~/` or `~\` names the home directory. An interior `~`
+// is ordinary path text, e.g. the Windows short name C:\Users\RUNNER~1.
+function expandLeadingHome(logPath: string): string {
+  if (
+    logPath === '~' ||
+    logPath.startsWith('~/') ||
+    logPath.startsWith('~\\')
+  ) {
+    return os.homedir() + logPath.slice(1);
+  }
+  return logPath;
+}
+
 async function handleShowLogs(
   args: string[],
   context: LoggingCommandOperations,
@@ -272,7 +285,7 @@ async function handleShowLogs(
 
   // Get the log path from config
   const logPath = context.getConversationLogPath();
-  const expandedPath = logPath.replace('~', os.homedir());
+  const expandedPath = expandLeadingHome(logPath);
 
   try {
     // Find all log files

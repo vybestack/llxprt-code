@@ -1,9 +1,9 @@
 name: 'Install tmux'
 description: >-
-  Provides a `tmux` executable on PATH for the real terminal harness tests.
-  macOS uses Homebrew tmux. Windows uses the pinned psmux release, whose
-  tmux.exe alias is the multiplexer scripts/tmux-harness-io.ts targets on
-  win32 through `-L <name>` namespace isolation.
+  Provides a `tmux` executable on PATH for the real terminal harness tests on
+  macOS (Homebrew tmux). The tmux UI harness is POSIX-only by repo convention
+  (the LLXPRT_E2E_TMUX opt-in), so Windows runners do not install a
+  multiplexer.
 
 runs:
   using: 'composite'
@@ -18,26 +18,3 @@ runs:
         set -euo pipefail
         brew install tmux
         tmux -V
-
-    - name: 'Install tmux via psmux (Windows)'
-      if: runner.os == 'Windows'
-      shell: 'pwsh'
-      run: |
-        $ErrorActionPreference = 'Stop'
-        $version = 'v3.4.0'
-        $asset = "psmux-$version-windows-x64.zip"
-        $zip = Join-Path $env:RUNNER_TEMP $asset
-        $dest = Join-Path $env:RUNNER_TEMP 'psmux'
-        Invoke-WebRequest -Uri "https://github.com/psmux/psmux/releases/download/$version/$asset" -OutFile $zip
-        $actual = (Get-FileHash -Algorithm SHA256 -Path $zip).Hash.ToLowerInvariant()
-        $expected = 'a66b6be7c13c6fa0dc3660a267b9e34eaa91a4eb7f07fbd55a0468018bd0f721'
-        if ($actual -ne $expected) {
-          throw "$asset checksum mismatch: expected $expected, got $actual"
-        }
-        Expand-Archive -Path $zip -DestinationPath $dest -Force
-        Remove-Item $zip
-        $tmux = Get-ChildItem -Path $dest -Recurse -Filter 'tmux.exe' | Select-Object -First 1
-        if (-not $tmux) { throw "tmux.exe not found in $asset" }
-        Add-Content -Path $env:GITHUB_PATH -Value $tmux.DirectoryName
-        & $tmux.FullName -V
-        if ($LASTEXITCODE -ne 0) { throw "tmux -V failed with exit code $LASTEXITCODE" }

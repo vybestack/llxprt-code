@@ -311,6 +311,53 @@ describe('ordinary local-model E2E', () => {
     );
   });
 
+  it('keeps the macOS model and vision projector on the CPU for warm-up and every later request', () => {
+    const posix = asString(actionStep('Start local Gemma 4 E2B model').run);
+    const macosBlock = posix.slice(
+      posix.indexOf('if [[ "$RUNNER_OS" == macOS ]]'),
+      posix.indexOf('nohup ollama serve'),
+    );
+    expect(macosBlock).toContain('export LLAMA_ARG_N_GPU_LAYERS=0');
+    expect(macosBlock).toContain('export LLAMA_ARG_MMPROJ_OFFLOAD=0');
+    expect(posix.indexOf('LLAMA_ARG_MMPROJ_OFFLOAD')).toBeLessThan(
+      posix.indexOf('nohup ollama serve'),
+    );
+
+    const verify = actionStep('Verify CPU-only model backend (macOS)');
+    expect(verify.if).toBe("runner.os == 'macOS'");
+    const script = asString(verify.run);
+    expect(script).toContain('.size_vram == 0');
+    expect(script).toContain('offloaded 0/');
+    expect(script).toContain('CLIP using CPU backend');
+  });
+
+  it('starts the Windows server outside the step process tree and fails clearly when it is gone', () => {
+    const start = asString(
+      actionStep('Start local Gemma 4 E2B model (Windows)').run,
+    );
+    expect(start).not.toContain('Start-Process');
+    expect(start).toContain('Win32_Process');
+    expect(start).toContain('OLLAMA_SERVER_PID=');
+    expect(start).toContain('ollama-server.pid');
+
+    const verify = actionStep(
+      'Verify local model server is still running (Windows)',
+    );
+    expect(verify.if).toBe("runner.os == 'Windows'");
+    const script = asString(verify.run);
+    expect(script).toContain('is no longer running');
+    expect(script).not.toMatch(/Start-Sleep|Invoke-RestMethod/);
+
+    const names = steps.map((candidate) => candidate.name);
+    const order = [
+      'Start local Gemma 4 E2B model (Windows)',
+      'Verify local model server is still running (Windows)',
+      'Verify model inference (macOS and Windows)',
+    ].map((name) => names.indexOf(name));
+    expect(order.every((index) => index >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+
   it('proves a real generation on macOS and Windows where CPU-only evidence is unavailable', () => {
     const inference = actionStep('Verify model inference (macOS and Windows)');
     expect(inference.if).toBe("runner.os != 'Linux'");
