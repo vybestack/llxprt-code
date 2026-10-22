@@ -45,18 +45,11 @@ function tailRow(
   });
   return {
     entry: entryForNewRow(encoded, 0),
-    get stored(): StoredRow {
-      const current = encodeContentRow(row, { owner: 0 });
-      const record = encodeRowDraft(label, {
-        ...current,
-        flags: current.flags | ROW_FLAG.curated,
-      });
-      return {
-        header: record.header,
-        rawIds: current.ids.map((id) => id.rawId),
-        meta: current.meta,
-        blocks: current.blocks.map((block) => block.bytes),
-      };
+    stored: {
+      header: encoded.header,
+      rawIds: draft.ids.map((id) => id.rawId),
+      meta: draft.meta,
+      blocks: draft.blocks.map((block) => block.bytes),
     },
     origins: row.blocks.map((block) => {
       let id = origins.get(block);

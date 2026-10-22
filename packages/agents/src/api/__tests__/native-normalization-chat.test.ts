@@ -10,6 +10,59 @@ import { collectAgentHistory } from './helpers/collect-agent-history.js';
 import { useNativePrefixBackend } from './helpers/native-prefix-backend.js';
 import { operationFileCreates } from '../../compression/__tests__/support/operation-file-creates.js';
 import { useTempDir } from '../../../../core/src/journal/__tests__/support/useTempDir.js';
+import { FakeProvider } from '@vybestack/llxprt-code-providers/fake/FakeProvider.js';
+import { materializeCallOptions } from '@vybestack/llxprt-code-providers/BaseProviderNormalization.js';
+import {
+  acquireRequestRows,
+  stagedRequestRows,
+} from '@vybestack/llxprt-code-providers/utils/requestRowsLease.js';
+import { providerRowsOf } from '@vybestack/llxprt-code-providers/utils/providerRows.js';
+
+function observeTransportRows(): ReturnType<
+  typeof spyOn<typeof FakeProvider.prototype, 'generateChatCompletion'>
+> {
+  const generate = FakeProvider.prototype.generateChatCompletion;
+  return spyOn(
+    FakeProvider.prototype,
+    'generateChatCompletion',
+  ).mockImplementation(async function* (this: FakeProvider, options) {
+    if (!('contents' in options))
+      throw new Error('Missing public call options');
+    const rows = options.requestRows;
+    if (rows === undefined) throw new Error('Missing public request selection');
+    const materialized = await materializeCallOptions(
+      options,
+      undefined,
+      true,
+      true,
+    );
+    expect(materialized.requestRows).toBe(rows);
+    expect(materialized.contents).toStrictEqual([]);
+    const scope = acquireRequestRows(options);
+    try {
+      expect(scope.options.requestRows).toBe(rows);
+      expect(await stagedRequestRows(scope.options.contents)).toBe(rows);
+      const checked = await providerRowsOf(scope.options);
+      let count = 0;
+      let pending = 0;
+      for await (const row of checked.openReader()) {
+        expect(await checked.readAt(count++)).toStrictEqual(row);
+        if (
+          row.speaker === 'human' &&
+          row.blocks.some(
+            (block) => block.type === 'text' && block.text === 'continue',
+          )
+        )
+          pending++;
+      }
+      expect(count).toBe(rows.count);
+      expect(pending).toBe(1);
+      yield* generate.call(this, options);
+    } finally {
+      await scope.close();
+    }
+  });
+}
 
 describe('native normalization through public chat', () => {
   function normalizationCreationGuard(
@@ -89,6 +142,7 @@ describe('native normalization through public chat', () => {
         const denyNormalization = spyOn(fs, 'mkdtempSync').mockImplementation(
           normalizationCreationGuard(createDirectory),
         );
+        const transport = observeTransportRows();
         try {
           const receipt = await operationFileCreates(async () => {
             await drain(agent.stream('continue'));
@@ -105,6 +159,7 @@ describe('native normalization through public chat', () => {
             ),
           ).toStrictEqual([]);
         } finally {
+          transport.mockRestore();
           denyNormalization.mockRestore();
         }
         const rows = await collectAgentHistory(agent);
