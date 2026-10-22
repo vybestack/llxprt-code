@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { openJournalSemanticPurge } from './journalSemanticPurge.js';
 import { prepareJournalProviderRequest } from './native-purge-provider-request.js';
+import { nativeRequestFormatPreparation } from './native-provider-format.js';
 import type { SemanticPurgeSnapshot } from './semantic-purge-native.js';
 import type { GroupPreparation } from '../../journal/preparedGroup.js';
 import type { EntryFill, VersionEdit } from '../../journal/groupEdits.js';
@@ -90,7 +91,6 @@ import type {
   DetachedHistoryTask,
 } from './detachedHistoryMutation.js';
 import type { JournalSession } from './journalSession.js';
-import type { JournalReadCounters } from '../../recording/journalCounters.js';
 import {
   encodedRows,
   JournalPublication,
@@ -111,29 +111,12 @@ import type { ResumePoint } from '../../recording/journalResume.js';
 import { applyOperation, type JournalWriteHost } from './journalOps.js';
 import type { CurrentTurnMarker } from './historyChronology.js';
 
-/** The published repair owns its original version's pin until `close`. */
-export interface JournalRepair {
-  readonly inserted: IContent[];
-  rollback(): Promise<void>;
-  close(): void | Promise<void>;
-}
-
-/** Opens the journal a store keeps its rows in; it must yield an empty journal. */
-export type JournalSessionOpener = () => Promise<JournalSession>;
-
-export interface JournalHistoryStoreOptions {
-  /** Bound as a mirror right after the journal is open (decision D-W7-3). */
-  readonly recording?: JournalRecordingService;
-  /** Observes every row the stream and batch readers decode (WIRING G9). */
-  readonly counters?: JournalReadCounters;
-}
-
-/** What opening the journal builds: the file and the bookkeeping over it. */
-interface OpenJournal {
-  readonly session: JournalSession;
-  readonly owners: JournalOwners;
-  readonly mirrors: JournalMirrors;
-}
+export type {
+  JournalHistoryStoreOptions,
+  JournalRepair,
+  JournalSessionOpener,
+} from './journal-history-store-types.js';
+import type * as StoreTypes from './journal-history-store-types.js';
 
 /**
  * The history of one session on a journal (design 4.1). Operations are
@@ -154,6 +137,13 @@ interface OpenJournal {
 export class JournalHistoryStore implements HistoryStorePort {
   prepareCurated = prepareJournalProviderRequest(this);
 
+  prepareRequestFormat = nativeRequestFormatPreparation({
+    exclusive: (run) => this.exclusive(run),
+    current: () => this.session.store.published,
+    commit: (edits) => this.commitStep(this.tentativeRows, edits),
+    snapshot: () => this.session.store.snapshot(),
+  });
+
   private tentativeRows = 0;
   private queue: Promise<void>;
   private failure: { readonly error: unknown; reported?: boolean } | undefined;
@@ -163,7 +153,7 @@ export class JournalHistoryStore implements HistoryStorePort {
   /** Dumps not yet closed: they read the file, so disposing closes them first. */
   private readonly openDumps = new Set<JournalDumpSnapshot>();
   private readonly publication = new JournalPublication();
-  private journal: OpenJournal | undefined;
+  private journal: StoreTypes.OpenJournal | undefined;
   /** Settles when the journal is open; rejects with the reason it could not be. */
   private readonly opened: Promise<void>;
   /** Settles when the journal is open and the recorder given at construction is bound; never rejects. */
@@ -184,8 +174,8 @@ export class JournalHistoryStore implements HistoryStorePort {
   private readonly topology = new RecordingPrimary(this.adoptionHost());
 
   constructor(
-    source: JournalSession | JournalSessionOpener,
-    private readonly options: JournalHistoryStoreOptions = {},
+    source: JournalSession | StoreTypes.JournalSessionOpener,
+    private readonly options: StoreTypes.JournalHistoryStoreOptions = {},
   ) {
     if (typeof source === 'function') {
       this.opened = source().then((session) => this.install(session));
@@ -222,7 +212,7 @@ export class JournalHistoryStore implements HistoryStorePort {
   }
 
   /** The open journal; before it is open, or when it could not be, the reason. */
-  private requireOpen(): OpenJournal {
+  private requireOpen(): StoreTypes.OpenJournal {
     if (this.journal === undefined) {
       throw (
         this.failure?.error ??
@@ -774,7 +764,9 @@ export class JournalHistoryStore implements HistoryStorePort {
    * `rollback` restores the version the repair started from, so it refuses
    * once any other group has been written.
    */
-  async validateAndFix(request: HistoryRepairRequest): Promise<JournalRepair> {
+  async validateAndFix(
+    request: HistoryRepairRequest,
+  ): Promise<StoreTypes.JournalRepair> {
     await this.waitForDurable();
     const snapshot = await this.session.store.snapshot();
     let plan: Awaited<ReturnType<typeof planToolPairingRepair>>;

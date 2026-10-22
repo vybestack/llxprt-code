@@ -2,11 +2,13 @@
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 import type { IContent } from './IContent.js';
 import type { ProviderNormalizationDisk } from './provider-normalization-disk.js';
+import type { NativeProviderFormat } from './native-provider-format.js';
 
 /** A reader checks that the scratch directory still exists every this many rows. */
 const SCRATCH_CHECK_ROWS = 64;
 
 export interface ProviderRequestRows {
+  readonly native?: NativeProviderFormat;
   readonly count: number;
   readonly openReader: (
     signal?: AbortSignal,
@@ -64,6 +66,7 @@ export function providerRequestRows(
   snapshot: ProviderRequestSnapshot,
 ): ProviderRequestRows {
   return Object.freeze({
+    ...(snapshot.native === undefined ? {} : { native: snapshot.native }),
     count: snapshot.count,
     openReader: (signal?: AbortSignal) => snapshot.openReader(signal),
     readAt: (index: number, signal?: AbortSignal) =>

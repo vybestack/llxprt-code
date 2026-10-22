@@ -57,7 +57,7 @@ function factsOf(
   } else if (unit.speaker === 'ai') {
     const message = processAssistantMessage(
       unit,
-      true,
+      settings.chat?.includeInContext ?? true,
       undefined,
       (call) => normalizeToOpenAIToolId(call.id),
       normalizeToolCallArguments,

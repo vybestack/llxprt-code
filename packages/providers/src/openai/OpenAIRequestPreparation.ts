@@ -57,6 +57,10 @@ import {
   type ChatPromptEstimate,
 } from './OpenAIChatEstimatorFiles.js';
 import { envelopeDumpBody } from '../utils/envelopeDumpBody.js';
+import {
+  prepareNativePlainRequest,
+  type NativeChatBody,
+} from './native-chat-body.js';
 
 /**
  * A prepared chat request: the sealed body on scratch disk and the scalars the
@@ -68,7 +72,7 @@ export interface RequestContext {
   formattedTools: OpenAITool[] | undefined;
   streamingEnabled: boolean;
   /** The sealed request body; its size is the Content-Length. */
-  spool: WireBodySpool;
+  spool: WireBodySpool | NativeChatBody;
   /** Messages in the body, the system message included. */
   messageCount: number;
   /**
@@ -87,7 +91,7 @@ export interface RequestContext {
    */
   continuation: ChatContinuation;
   /** Disposes the spool and the files, and closes the tool id index. Idempotent. */
-  release(): void;
+  release(): void | Promise<void>;
 }
 
 /**
@@ -511,16 +515,15 @@ export async function prepareRequest(
     cacheAffinityKey: mediaTransportCapabilities.cacheAffinityKey,
   });
 
-  const body = await spoolChatBody(
-    envelope,
-    options,
-    detectedFormat,
-    rowInput,
-    {
-      estimate: withEstimate,
-      dump: wantsRequestDump(ephemeralSettings['dumpcontext']),
-    },
-  );
+  const use = {
+    estimate: withEstimate,
+    dump: wantsRequestDump(ephemeralSettings['dumpcontext']),
+  };
+  const nativeRows = options.requestRows;
+  const body =
+    nativeRows?.native !== undefined && !usesToolIdStore(detectedFormat)
+      ? await prepareNativePlainRequest(envelope, nativeRows, options, use)
+      : await spoolChatBody(envelope, options, detectedFormat, rowInput, use);
   return {
     model,
     detectedFormat,

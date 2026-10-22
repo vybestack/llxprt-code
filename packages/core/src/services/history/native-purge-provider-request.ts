@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
+import type { PrepareNativeRequestFormat } from './native-provider-format.js';
 import type {
   HistoryPrepareCuratedRequest,
   HistoryStorePort,
@@ -9,6 +10,7 @@ import { oldProviderRequest } from './old-provider-request.js';
 export function prepareJournalProviderRequest(
   store: Pick<HistoryStorePort, 'streamRows' | 'waitForCommit'> & {
     settledSnapshot(settle: () => Promise<void>): Promise<VersionSnapshot>;
+    prepareRequestFormat: PrepareNativeRequestFormat;
   },
 ): (request: HistoryPrepareCuratedRequest) => Promise<ProviderRequestSnapshot> {
   return async (request) => {
@@ -23,6 +25,10 @@ export function prepareJournalProviderRequest(
       await store.settledSnapshot(() => Promise.resolve()),
       request.tail,
       request.options,
+      undefined,
+      undefined,
+      (snapshot, registration) =>
+        store.prepareRequestFormat(snapshot, registration),
     );
   };
 }

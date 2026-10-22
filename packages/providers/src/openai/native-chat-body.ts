@@ -1,0 +1,164 @@
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import type { RowFormatSettings } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
+import { readInvocationPolicyValue } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import { JournalFormatError } from '@vybestack/llxprt-code-core/journal/errors.js';
+import {
+  plainChatLengthRegistration,
+  planStoredChatMessages,
+} from './journal-chat-length.js';
+import { ProgressiveJsonBody } from '../utils/progressive-json-body.js';
+import {
+  DEFAULT_HTTP_JSON_ENVELOPE_BYTES,
+  envelopeTooLargeError,
+} from '../utils/boundedJsonBody.js';
+import { StreamedSegment, writeEnvelope } from '../utils/envelope-writer.js';
+import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import { getRequestSignal } from '../utils/abortSignal.js';
+import { nativeChatMessages, nativeChatValue } from './native-chat-messages.js';
+import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
+import type { RequestContext } from './OpenAIRequestPreparation.js';
+
+export class NativeChatBody {
+  private readonly body: ProgressiveJsonBody;
+  constructor(
+    bytes: () => AsyncIterable<Uint8Array>,
+    readonly byteLength: number,
+  ) {
+    if (byteLength > DEFAULT_HTTP_JSON_ENVELOPE_BYTES)
+      throw envelopeTooLargeError(DEFAULT_HTTP_JSON_ENVELOPE_BYTES, byteLength);
+    this.body = new ProgressiveJsonBody(bytes, byteLength);
+  }
+  openStream(): ReturnType<ProgressiveJsonBody['createStreamHandle']> {
+    return this.body.createStreamHandle();
+  }
+  dispose(): Promise<void> {
+    return this.body.dispose();
+  }
+}
+
+async function envelopeParts(
+  envelope: Readonly<Record<string, unknown>>,
+): Promise<{ head: Buffer; tail: Buffer }> {
+  const head: Uint8Array[] = [];
+  const tail: Uint8Array[] = [];
+  let after = false;
+  await writeEnvelope(
+    {
+      append(data) {
+        (after ? tail : head).push(
+          typeof data === 'string' ? Buffer.from(data) : data,
+        );
+      },
+    },
+    {
+      ...envelope,
+      messages: new StreamedSegment(() => {
+        after = true;
+      }),
+    },
+  );
+  return { head: Buffer.concat(head), tail: Buffer.concat(tail) };
+}
+
+async function prepareNativeChatBody(
+  envelope: Readonly<Record<string, unknown>>,
+  rows: ProviderRequestRows,
+  options: NormalizedGenerateChatOptions,
+  settings: RowFormatSettings,
+): Promise<{
+  spool: NativeChatBody;
+  messageCount: number;
+  release: () => Promise<void>;
+}> {
+  const native = rows.native;
+  if (native === undefined)
+    throw new Error('Native Chat requires indexed request rows');
+  const strip =
+    readInvocationPolicyValue(
+      options.invocation.ephemerals,
+      'reasoning.stripFromContext',
+    ) ?? 'none';
+  if (strip !== 'none' && strip !== 'all')
+    throw new JournalFormatError(
+      'Native plain Chat last-thinking planning is not installed',
+    );
+  if (native.indexed.pending.inputCount !== 0)
+    throw new JournalFormatError(
+      'Native plain Chat tail length planning is not installed',
+    );
+  const system = options.systemInstruction ?? '';
+  const plan = await native.withFormat(
+    plainChatLengthRegistration(settings),
+    (snapshot) =>
+      planStoredChatMessages(
+        snapshot,
+        settings,
+        strip === 'all' ? 1 : 0,
+        system,
+      ),
+  );
+  const { head, tail } = await envelopeParts(envelope);
+  const signal = getRequestSignal(options);
+  const spool = new NativeChatBody(
+    async function* () {
+      yield head;
+      yield Buffer.from('[');
+      yield* nativeChatValue({ role: 'system', content: system });
+      yield* nativeChatMessages(rows, settings, strip, -1, signal);
+      yield Buffer.from(']');
+      yield tail;
+    },
+    head.byteLength + plan.bytes + tail.byteLength,
+  );
+  return { spool, messageCount: plan.items, release: () => spool.dispose() };
+}
+
+export async function prepareNativePlainRequest(
+  envelope: Readonly<Record<string, unknown>>,
+  rows: ProviderRequestRows,
+  options: NormalizedGenerateChatOptions,
+  use: { readonly estimate: boolean; readonly dump: boolean },
+): Promise<
+  Pick<
+    RequestContext,
+    'spool' | 'messageCount' | 'release' | 'estimate' | 'dump' | 'continuation'
+  >
+> {
+  if (use.estimate || use.dump)
+    throw new Error(
+      'Native plain Chat estimate and dump projections are not installed',
+    );
+  const body = await prepareNativeChatBody(envelope, rows, options, {
+    formatId: 'openai-chat:plain',
+    formatRev: 1,
+    model: options.resolved.model,
+    endpoint: options.resolved.baseURL ?? '',
+    isOAuth: false,
+    toolNameTransform: 'none',
+    supportsUrlImages: true,
+    reasoningEnabled: false,
+    reasoningFieldName: 'reasoning_content',
+    mediaPdfEnabled: false,
+    unsupportedMedia: 'notice',
+    outputLimits: parseOutputLimits(options.invocation.ephemerals),
+    chat: {
+      includeInContext: Boolean(
+        readInvocationPolicyValue(
+          options.invocation.ephemerals,
+          'reasoning.includeInContext',
+        ),
+      ),
+    },
+  });
+  return {
+    ...body,
+    estimate: undefined,
+    dump: undefined,
+    continuation: {
+      async build() {
+        throw new Error('Native plain Chat continuation is not installed');
+      },
+    },
+  };
+}

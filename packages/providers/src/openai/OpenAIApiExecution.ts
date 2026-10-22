@@ -30,9 +30,9 @@ import {
 import { type DumpMode } from '../utils/dumpContext.js';
 import { type OpenAITool } from './schemaConverter.js';
 import {
-  withSpooledJsonHttpBody,
-  type WireBodySpool,
-} from '../utils/wire-body-spool.js';
+  withChatHttpBody,
+  type ChatHttpBody,
+} from '../utils/chat-http-body.js';
 
 interface OpenAIRawPostOptions {
   readonly body: unknown;
@@ -53,7 +53,7 @@ export interface OpenAIRawPostClient {
 export interface ApiExecutionOptions {
   client: OpenAIRawPostClient;
   /** The sealed request body; it is streamed with Content-Length equal to its size. */
-  spool: WireBodySpool;
+  spool: ChatHttpBody;
   /** What a request dump records. Required when `dumpMode` asks for a dump. */
   dumpBody?: StreamedDumpBody | undefined;
   abortSignal: AbortSignal | undefined;
@@ -261,14 +261,14 @@ function isChatCompletion(
 /** Posts a sealed body as a streaming chat request (also the continuation). */
 export async function executeSpooledStreamingChatRequest(
   client: OpenAIRawPostClient,
-  spool: WireBodySpool,
+  spool: ChatHttpBody,
   abortSignal: AbortSignal | undefined,
   mergedHeaders: Record<string, string> | undefined,
 ): Promise<AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>> {
-  const response = await withSpooledJsonHttpBody(spool, (body) =>
+  const response = await withChatHttpBody(spool, (stream, byteLength) =>
     client.post('/chat/completions', {
-      body: body.stream,
-      headers: boundedJsonHeaders(body.byteLength, mergedHeaders),
+      body: stream,
+      headers: boundedJsonHeaders(byteLength, mergedHeaders),
       stream: true,
       ...(abortSignal === undefined ? {} : { signal: abortSignal }),
     }),
@@ -281,14 +281,14 @@ export async function executeSpooledStreamingChatRequest(
 
 async function executeSpooledNonStreamingChatRequest(
   client: OpenAIRawPostClient,
-  spool: WireBodySpool,
+  spool: ChatHttpBody,
   abortSignal: AbortSignal | undefined,
   mergedHeaders: Record<string, string> | undefined,
 ): Promise<OpenAI.Chat.Completions.ChatCompletion> {
-  const response = await withSpooledJsonHttpBody(spool, (body) =>
+  const response = await withChatHttpBody(spool, (stream, byteLength) =>
     client.post('/chat/completions', {
-      body: body.stream,
-      headers: boundedJsonHeaders(body.byteLength, mergedHeaders),
+      body: stream,
+      headers: boundedJsonHeaders(byteLength, mergedHeaders),
       stream: false,
       ...(abortSignal === undefined ? {} : { signal: abortSignal }),
     }),

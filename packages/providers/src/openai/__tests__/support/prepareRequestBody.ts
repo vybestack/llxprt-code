@@ -4,6 +4,7 @@ import type { NormalizedGenerateChatOptions } from '../../../BaseProvider.js';
 import { rowsSelection } from '../../../__tests__/support/wireBodyCapture.js';
 import { readFileSync } from 'node:fs';
 import type { WireBodySpool } from '../../../utils/wire-body-spool.js';
+import type { NativeChatBody } from '../../native-chat-body.js';
 import {
   prepareRequest,
   type RequestContext,
@@ -11,8 +12,10 @@ import {
 
 /** The sealed chat body parsed back into one object (tests only). */
 export function readSpooledChatBody(
-  spool: WireBodySpool,
+  spool: WireBodySpool | NativeChatBody,
 ): OpenAI.Chat.ChatCompletionCreateParams {
+  if (!('path' in spool))
+    throw new Error('Expected explicit old spooled request');
   return JSON.parse(
     readFileSync(spool.path, 'utf8'),
   ) as OpenAI.Chat.ChatCompletionCreateParams;
@@ -51,6 +54,6 @@ export async function prepareRequestBody(
       messagesWithSystem: requestBody.messages,
     };
   } finally {
-    context.release();
+    await context.release();
   }
 }

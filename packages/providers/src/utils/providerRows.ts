@@ -54,6 +54,7 @@ function checkedRows(
 ): ProviderRequestRows {
   const { count } = rows;
   return Object.freeze({
+    ...(rows.native === undefined ? {} : { native: rows.native }),
     count,
     async *openReader(
       signal?: AbortSignal,

@@ -8,6 +8,12 @@ import { IndexedJournalRequestSnapshot } from './indexed-journal-request-snapsho
 import { historyMutationFailure } from './historyMutationEffects.js';
 import type { ProviderRequestSnapshot } from './provider-request-snapshot.js';
 import type { ProviderCuratedStreamOptions } from './provider-curated-stream.js';
+import type { RowFormatRegistration } from '../../journal/rowFormat.js';
+import {
+  hasNativeRequestFormat,
+  type NativeProviderFormat,
+  type PrepareNativeRequestFormat,
+} from './native-provider-format.js';
 
 export class JournalProviderRequestSnapshot implements ProviderRequestSnapshot {
   private readonly readers = new HistoryReaderScope(
@@ -18,13 +24,42 @@ export class JournalProviderRequestSnapshot implements ProviderRequestSnapshot {
     void this.close().catch(() => undefined);
   };
 
+  readonly native: NativeProviderFormat;
+
   private constructor(
     private readonly release: () => void | Promise<void>,
     readonly indexed: IndexedJournalRequestSnapshot,
+    private readonly snapshot: VersionSnapshot,
+    private readonly prepareFormat: PrepareNativeRequestFormat | undefined,
     private readonly signal?: AbortSignal,
     private readonly ownership?: RowOwnership,
   ) {
+    this.native = {
+      indexed,
+      withFormat: (registration, consume) =>
+        this.withFormat(registration, consume),
+    };
     signal?.addEventListener('abort', this.onAbort, { once: true });
+  }
+
+  private async withFormat<T>(
+    registration: RowFormatRegistration,
+    consume: (snapshot: VersionSnapshot) => T | Promise<T>,
+  ): Promise<T> {
+    this.requireOpen();
+    if (hasNativeRequestFormat(this.snapshot, registration))
+      return this.indexed.withHeld(() => consume(this.snapshot), this.signal);
+    if (this.prepareFormat === undefined)
+      throw new Error(
+        'Native request format needs a persistent fill before this pin',
+      );
+    const measured = await this.prepareFormat(this.snapshot, registration);
+    try {
+      this.requireOpen();
+      return await this.indexed.withHeld(() => consume(measured), this.signal);
+    } finally {
+      await measured.close();
+    }
   }
 
   static async create(
@@ -33,6 +68,7 @@ export class JournalProviderRequestSnapshot implements ProviderRequestSnapshot {
     options: ProviderCuratedStreamOptions,
     projection?: JournalRequestProjection,
     release: () => void | Promise<void> = () => snapshot.close(),
+    prepareFormat?: PrepareNativeRequestFormat,
   ): Promise<JournalProviderRequestSnapshot> {
     let indexed: IndexedJournalRequestSnapshot | undefined;
     try {
@@ -46,6 +82,8 @@ export class JournalProviderRequestSnapshot implements ProviderRequestSnapshot {
       return new JournalProviderRequestSnapshot(
         release,
         indexed,
+        snapshot,
+        prepareFormat,
         options.signal,
         options.ownership,
       );

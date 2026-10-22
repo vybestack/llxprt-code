@@ -25,6 +25,7 @@ export interface RowFormatSettings {
   readonly mediaPdfEnabled: boolean;
   readonly unsupportedMedia: 'notice' | 'reject';
   readonly outputLimits: Readonly<OutputLimitConfig> | null;
+  readonly chat?: { readonly includeInContext: boolean };
   readonly anthropic?: {
     readonly cache: 'off' | '5m' | '1h';
     readonly imageBudget: {
@@ -92,6 +93,7 @@ export function captureRowFormatSettings(
     Object.freeze(settings.outputLimits.tokenLimit);
     Object.freeze(settings.outputLimits);
   }
+  if (settings.chat !== undefined) Object.freeze(settings.chat);
   if (settings.anthropic !== undefined) {
     Object.freeze(settings.anthropic.imageBudget);
     Object.freeze(settings.anthropic);
