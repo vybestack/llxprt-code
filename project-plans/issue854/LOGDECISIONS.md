@@ -1,3 +1,15 @@
+## Extract production responsibilities to satisfy existing lint, 2026-10-22
+
+Commit `f02b791ce` extracts the store format-fill pipeline rather than shaving comments, changing guard formatting or weakening the 800-line rule. Typed BuildContext, RecordAppender and policy inputs keep store internals private. The commit queue keeps publication fixed through the fill; one context observes the same version and caches as the prior repeated construction. JournalStore public methods, sorter wiring and the existing persistent spill implementation stay unchanged.
+
+Move Mistral admission, retirement and heap advancement into SourceCursors, and name scalar spill iteration separately from ordered heap emission. Keep the 64-entry cap, admitted overflow reader, unique sorted source labels and finally ordering. Do not introduce an old replay fallback, another spool or swallowed producer/write errors. Existing sorter producer-error identity and descriptor retirement tests, #3919 readers and borrowed-source lifecycle/control files pass on the new source.
+
+887 current tests/208,427 assertions across 31 files and 50 retained positive gates pass. Four negative controls fail their intended assertions and restore bytes/SHA256; the new overflow control catches a missing 65th-source occurrence. Two early log names were reused; retained post-control replacements bind final totals, and the receipt discloses the missing early originals. Current-source receipts supersede the earlier production lint REDs only within this executed scope. Historical 686b32807 hashes and protocols remain historical.
+
+The 129-ID cascade still adds 9,120 durable bytes from one pending identity with unchanged roots/live aggregates. Treat spill records as journal garbage, not zero storage or accepted total live-byte/capacity accounting. Full current retained memory/traps, 100,000-call capacity, fused fill, other provider migrations and native log/dump remain open, as do Phase 5/6/W26 and independent known REDs. All 1,204 preservation hashes match; owned PIDs are absent. No enforcement, threshold, timeout, assertion-domain, cleanup, .llxprt, OCR, push, merge or default change.
+
+---
+
 ## Finalize the existing bounded Mistral merge without changing production, 2026-10-22
 
 Retain implementation `686b32807`. The previous multi-ID branch reran `changedIds` for every output label and used binary occurrence searches; it did not linearly rescan every old occurrence on every query. The replacement consumes changed IDs once, walks each ID's occurrences once, and deduplicates holder labels through a heap capped at 64. The next nonempty cursor switches to scalar streaming through the journal's existing trie. There is no all-changed-ID array or suffix-replay fallback.
