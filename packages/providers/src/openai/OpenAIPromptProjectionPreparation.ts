@@ -111,10 +111,10 @@ interface ChatProjectionPreparationDeps {
  * any outcome, disposes the spool, the tool id index and, for a projected
  * request, the estimator files.
  */
-export function registerOpenAIChatRequestCleanup(
+export async function registerOpenAIChatRequestCleanup(
   mediaRequest: ResolvedMediaRequest,
   requestContext: RequestContext,
-): void {
+): Promise<void> {
   const { estimate } = requestContext;
   try {
     mediaRequest.registerCleanup(requestContext.release);
@@ -122,8 +122,8 @@ export function registerOpenAIChatRequestCleanup(
       mediaRequest.registerCleanup(() => estimate.projection.dispose());
     }
   } catch (error) {
-    requestContext.release();
-    estimate?.discard();
+    await requestContext.release();
+    await estimate?.projection.dispose();
     throw error;
   }
 }
@@ -159,7 +159,7 @@ export async function prepareOwnedOpenAIChatRequest(
     mediaTransportCapabilities,
     kimiRows ?? { mediaStage: chatMediaStage(options, media, mediaRequest) },
   );
-  registerOpenAIChatRequestCleanup(mediaRequest, requestContext);
+  await registerOpenAIChatRequestCleanup(mediaRequest, requestContext);
   return requestContext;
 }
 
@@ -214,7 +214,7 @@ export async function prepareOpenAIChatProjection(
       rowInput,
       true,
     );
-    registerOpenAIChatRequestCleanup(mediaRequest, requestContext);
+    await registerOpenAIChatRequestCleanup(mediaRequest, requestContext);
     const { estimate } = requestContext;
     if (estimate === undefined) {
       throw new Error('A projected chat request carries its estimator files');

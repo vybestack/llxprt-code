@@ -14,12 +14,11 @@ import {
   type ContinuationToolCall,
 } from './OpenAIRequestBuilder.js';
 
-/** A continuation request body on scratch disk. */
-export interface ContinuationBody {
-  /** The sealed body, sent with Content-Length equal to its size. */
-  readonly spool: WireBodySpool;
-  /** Disposes the spool and the tool id index. Idempotent. */
-  release(): void;
+import type { ChatHttpBody } from '../utils/chat-http-body.js';
+
+export interface ContinuationBody<Body extends ChatHttpBody = ChatHttpBody> {
+  readonly spool: Body;
+  release(): void | Promise<void>;
 }
 
 /**
@@ -27,8 +26,8 @@ export interface ContinuationBody {
  * conversation of the first request again, without its reasoning, then the
  * tool calls acknowledged and a user turn asking the model to go on.
  */
-export interface ChatContinuation {
-  build(toolCalls: ContinuationToolCall[]): Promise<ContinuationBody>;
+export interface ChatContinuation<Body extends ChatHttpBody = ChatHttpBody> {
+  build(toolCalls: ContinuationToolCall[]): Promise<ContinuationBody<Body>>;
 }
 
 export interface ChatContinuationInput {
@@ -62,7 +61,7 @@ function releaseContinuation(
  */
 export function createChatContinuation(
   input: ChatContinuationInput,
-): ChatContinuation {
+): ChatContinuation<WireBodySpool> {
   return {
     async build(toolCalls) {
       const spool = WireBodySpool.create('openai-chat-continuation', {

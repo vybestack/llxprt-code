@@ -57,10 +57,8 @@ import {
   type ChatPromptEstimate,
 } from './OpenAIChatEstimatorFiles.js';
 import { envelopeDumpBody } from '../utils/envelopeDumpBody.js';
-import {
-  prepareNativePlainRequest,
-  type NativeChatBody,
-} from './native-chat-body.js';
+import { prepareNativePlainRequest } from './native-chat-body.js';
+import type { ChatHttpBody } from '../utils/chat-http-body.js';
 
 /**
  * A prepared chat request: the sealed body on scratch disk and the scalars the
@@ -72,7 +70,7 @@ export interface RequestContext {
   formattedTools: OpenAITool[] | undefined;
   streamingEnabled: boolean;
   /** The sealed request body; its size is the Content-Length. */
-  spool: WireBodySpool | NativeChatBody;
+  spool: ChatHttpBody;
   /** Messages in the body, the system message included. */
   messageCount: number;
   /**

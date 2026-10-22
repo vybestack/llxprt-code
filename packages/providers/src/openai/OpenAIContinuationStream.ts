@@ -96,6 +96,6 @@ export async function* streamContinuationAfterToolCalls(
     );
     // Don't re-throw - tool calls were already successful
   } finally {
-    body?.release();
+    await body?.release();
   }
 }

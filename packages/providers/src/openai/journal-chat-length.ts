@@ -15,13 +15,18 @@ import { decodeSlotSummary } from '@vybestack/llxprt-code-core/journal/slotSumma
 import {
   composeSlotSummaries,
   identitySlotSummary,
+  composeAffineTables,
+  CHAT_MEDIA_PENDING_MASK,
 } from '@vybestack/llxprt-code-core/journal/summaryComposition.js';
 import { journalEntryPlans } from '@vybestack/llxprt-code-core/services/history/journal-entry-plans.js';
 import { JournalTailSource } from '@vybestack/llxprt-code-core/services/history/journal-tail-source.js';
 import { ROW_FLAG } from '@vybestack/llxprt-code-core/journal/rowRecord.js';
 import type { JournalResponsePlan } from '@vybestack/llxprt-code-core/services/history/journal-response-plan.js';
 import type { IndexedJournalRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/indexed-journal-request-snapshot.js';
-import type { SlotSummary } from '@vybestack/llxprt-code-core/journal/slotSummary.js';
+import type {
+  SlotSummary,
+  ChatVariant,
+} from '@vybestack/llxprt-code-core/journal/slotSummary.js';
 import type {
   IContent,
   MediaBlock,
@@ -279,6 +284,46 @@ export interface StoredChatMessagePlan {
   readonly generation: number;
   readonly settings: RowFormatSettings;
   readonly lastThinking: number;
+  readonly root: ChatVariant;
+}
+
+function finalizedChat(root: ChatVariant): { bytes: number; items: number } {
+  const state = 3;
+  const end = root.out[state];
+  const pending = end % 3 !== 0;
+  return {
+    bytes:
+      root.bytes[state] +
+      (pending
+        ? Number(end >= 3) + chatMediaFrameBytes(end % 3 === 2) + root.p[state]
+        : 0),
+    items: root.count[state] + Number(pending),
+  };
+}
+
+export function appendStoredChatTail(
+  plan: StoredChatMessagePlan,
+  tail: readonly OpenAI.Chat.ChatCompletionMessageParam[],
+): { bytes: number; items: number } {
+  const appended = chatUnitSummary({
+    speaker: 'ai',
+    messages: tail.map((message) => ({
+      bytes: jsonBytes(message),
+      dropped: false,
+    })),
+    media: [],
+  });
+  const combined = composeAffineTables(
+    plan.root,
+    appended,
+    CHAT_MEDIA_PENDING_MASK,
+  );
+  const before = finalizedChat(plan.root);
+  const after = finalizedChat(combined);
+  return {
+    bytes: plan.bytes - before.bytes + after.bytes,
+    items: plan.items - before.items + after.items,
+  };
 }
 
 export function planStoredChatMessages(
@@ -317,21 +362,16 @@ export function planStoredChatMessages(
   if (summary.kind !== 'chat')
     throw new JournalFormatError('Request format has no chat summary');
   const root = summary.variants[selected];
-  const state = 3;
-  const end = root.out[state];
-  let flush = 0;
-  if (end % 3 !== 0)
-    flush =
-      Number(end >= 3) + chatMediaFrameBytes(end % 3 === 2) + root.p[state];
+  const finalized = finalizedChat(root);
   return Object.freeze({
+    root,
     tokens: summary.tokens?.[selected] ?? 0,
     lastThinking: (summary.thinkingRank?.last ?? 0) - 1,
     bytes:
       2 +
       jsonBytes({ role: 'system', content: systemInstruction }) +
-      root.bytes[state] +
-      flush,
-    items: 1 + root.count[state] + (end % 3 === 0 ? 0 : 1),
+      finalized.bytes,
+    items: 1 + finalized.items,
     key,
     generation: format.gen,
     settings: captureRowFormatSettings(settings),
