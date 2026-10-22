@@ -29,8 +29,6 @@ export const MAP_NAMESPACE = { meta: 0x80, state: 0x81 } as const;
 export type MapKind = keyof typeof MAP_NAMESPACE;
 
 const REF_BYTES = 8;
-/** A `VALUE` frame head plus a key and a small value arrive in one read. */
-const VALUE_PREFETCH_BYTES = 1024;
 const UTF8 = new TextEncoder();
 
 function encodeKey(key: string): Uint8Array {
@@ -133,11 +131,7 @@ export class KeyedMapReader {
     offset: number,
     key: Uint8Array,
   ): Promise<Uint8Array> {
-    const head = await access.readRecordHead(
-      offset,
-      'VALUE',
-      VALUE_PREFETCH_BYTES,
-    );
+    const head = await access.readRecordHead(offset, 'VALUE');
     if (head.kind !== RECORD_KIND.VALUE) {
       throw new JournalFormatError(
         `Record at offset ${offset} is not a value (kind ${head.kind})`,

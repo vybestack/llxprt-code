@@ -228,25 +228,48 @@ async function measurePlans(
       resolver === undefined
         ? undefined
         : await nativeMistralRow(row, resolver);
+    const hasThinking = row.blocks.some((block) => block.type === 'thinking');
     const kept = factsOf(row, false, settings, keptIds, mapper);
-    const removed = factsOf(row, true, settings, removedIds, mapper);
+    const removed = hasThinking
+      ? factsOf(row, true, settings, removedIds, mapper)
+      : kept;
+    const omitted =
+      hasThinking && settings.chat?.includeInContext !== false
+        ? factsOf(
+            row,
+            false,
+            {
+              ...settings,
+              chat: { ...settings.chat, includeInContext: false },
+            },
+            keptIds,
+            mapper,
+          )
+        : kept;
+    const omittedReasoningBytes =
+      kept.facts.messages.reduce(
+        (sum, message) => sum + (message.dropped ? 0 : message.bytes),
+        0,
+      ) -
+      omitted.facts.messages.reduce(
+        (sum, message) => sum + (message.dropped ? 0 : message.bytes),
+        0,
+      );
     keptIds = kept.lastIds;
     removedIds = removed.lastIds;
     lens.push([kept.facts, removed.facts]);
+    const keptTokens = await count?.(kept.messages);
+    const removedTokens = await count?.(removed.messages);
     summary = composeSlotSummaries(summary, {
       kind: 'chat',
+      omittedReasoningBytes,
       thinkingRank: {
         units: 1,
         last: row.blocks.some((block) => block.type === 'thinking') ? 1 : 0,
       },
-      ...(count === undefined
+      ...(keptTokens === undefined || removedTokens === undefined
         ? {}
-        : {
-            tokens: [
-              await count(kept.messages),
-              await count(removed.messages),
-            ] as const,
-          }),
+        : { tokens: [keptTokens, removedTokens] as const }),
       variants: [chatUnitSummary(kept.facts), chatUnitSummary(removed.facts)],
     });
   }
@@ -340,6 +363,7 @@ export interface StoredChatMessagePlan {
   readonly generation: number;
   readonly settings: RowFormatSettings;
   readonly lastThinking: number;
+  readonly omittedReasoningBytes: number;
   readonly root: ChatVariant;
 }
 
@@ -421,6 +445,8 @@ export function planStoredChatMessages(
   const finalized = finalizedChat(root);
   return Object.freeze({
     root,
+    omittedReasoningBytes:
+      selected === 0 ? (summary.omittedReasoningBytes ?? 0) : 0,
     tokens: summary.tokens?.[selected] ?? 0,
     lastThinking: (summary.thinkingRank?.last ?? 0) - 1,
     bytes:
@@ -441,6 +467,9 @@ function selectChatSummary(value: SlotSummary, kept: boolean): SlotSummary {
   return {
     ...value,
     variants: [value.variants[index], value.variants[index]],
+    ...(value.omittedReasoningBytes === undefined
+      ? {}
+      : { omittedReasoningBytes: kept ? value.omittedReasoningBytes : 0 }),
     ...(value.tokens === undefined
       ? {}
       : { tokens: [value.tokens[index], value.tokens[index]] as const }),
@@ -456,12 +485,18 @@ export async function planRequestChatMessages(
   count?: ChatUnitTokenMeasurer,
 ): Promise<StoredChatMessagePlan> {
   const variant = selected === 2 ? 1 : selected;
-  const base = planStoredChatMessages(
-    snapshot,
-    settings,
-    variant,
-    systemInstruction,
-  );
+  const planned = (
+    choice: 0 | 1,
+    summary?: SlotSummary,
+  ): StoredChatMessagePlan =>
+    planStoredChatMessages(
+      snapshot,
+      settings,
+      choice,
+      systemInstruction,
+      summary,
+    );
+  const base = planned(variant);
   if (indexed.viewPlan.changedSources.length === 0 && selected !== 2)
     return base;
   const slot = snapshot.version?.slots.formatSlots.findIndex(
@@ -485,25 +520,11 @@ export async function planRequestChatMessages(
     undefined,
     resolver?.affectedSources(),
   );
-  if (selected !== 2)
-    return planStoredChatMessages(
-      snapshot,
-      settings,
-      selected,
-      systemInstruction,
-      summary,
-    );
+  if (selected !== 2) return planned(selected, summary);
   if (summary.kind !== 'chat')
     throw new JournalFormatError('Expected Chat summary');
   const lastThinking = (summary.thinkingRank?.last ?? 0) - 1;
-  if (lastThinking < 0)
-    return planStoredChatMessages(
-      snapshot,
-      settings,
-      1,
-      systemInstruction,
-      summary,
-    );
+  if (lastThinking < 0) return planned(1, summary);
   const target = await indexed.unitEntryAt(lastThinking);
   const mixed = await indexed.formatSummary(
     snapshot,
@@ -516,7 +537,7 @@ export async function planRequestChatMessages(
     resolver?.affectedSources(),
   );
   return Object.freeze({
-    ...planStoredChatMessages(snapshot, settings, 0, systemInstruction, mixed),
+    ...planned(0, mixed),
     lastThinking,
   });
 }

@@ -183,6 +183,14 @@ function composeChat(left: ChatSummary, right: ChatSummary): ChatSummary {
   const rightUnits = right.thinkingRank?.units ?? 0;
   const rightLast = right.thinkingRank?.last ?? 0;
   return {
+    ...(left.omittedReasoningBytes === undefined &&
+    right.omittedReasoningBytes === undefined
+      ? {}
+      : {
+          omittedReasoningBytes:
+            (left.omittedReasoningBytes ?? 0) +
+            (right.omittedReasoningBytes ?? 0),
+        }),
     ...(leftUnits + rightUnits === 0
       ? {}
       : {

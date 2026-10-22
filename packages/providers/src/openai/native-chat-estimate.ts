@@ -5,7 +5,10 @@ import type {
   RuntimeTokenizerFactory,
 } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import type { NativeProviderFormat } from '@vybestack/llxprt-code-core/services/history/native-provider-format.js';
-import type { RowFormatSettings } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
+import type {
+  RowFormatRegistration,
+  RowFormatSettings,
+} from '@vybestack/llxprt-code-core/journal/rowFormat.js';
 import { captureRowFormatSettings } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
 import { projectOpenAIChatPromptEnvelope } from '../runtime/promptEnvelopeProjections.js';
 import { O200K_BASE_ASSET_REVISION } from '../tokenizers/o200kBaseCounter.js';
@@ -61,6 +64,49 @@ function unitCounter(
   };
 }
 
+export async function chatTokenRegistration(
+  settings: RowFormatSettings,
+  identity: EstimateIdentity,
+  factory: RuntimeTokenizerFactory,
+): Promise<{
+  readonly registration: RowFormatRegistration;
+  readonly count: ChatUnitTokenMeasurer;
+  readonly estimate: ReturnType<typeof unitEstimator>;
+}> {
+  const estimate = unitEstimator(factory, identity);
+  const empty = await estimate([]);
+  if (empty.method === 'exact')
+    throw new Error(
+      'Native Chat exact whole-prompt token boundaries are not installed',
+    );
+  if (!empty.family.startsWith('legacy-'))
+    throw new Error(
+      'Native Chat calibrated family unit measurements are not installed',
+    );
+  const captured: RowFormatSettings = {
+    ...settings,
+    chat: {
+      includeInContext: settings.chat?.includeInContext ?? true,
+      ...settings.chat,
+      toolFormat: settings.chat?.toolFormat ?? 'openai',
+      estimatorKey: JSON.stringify({
+        contract: 'chat-unit-repeat-delta-v2',
+        legacyEncoding: O200K_BASE_ASSET_REVISION,
+        ...identity,
+        family: empty.family,
+        revision: empty.estimatorVersion,
+        assets: empty.assetRevision,
+      }),
+    },
+  };
+  const count = unitCounter(estimate);
+  return {
+    registration: plainChatLengthRegistration(captured, count),
+    count,
+    estimate,
+  };
+}
+
 export class NativeChatEstimateProjection {
   private closed = false;
   private readonly settings: RowFormatSettings;
@@ -87,49 +133,25 @@ export class NativeChatEstimateProjection {
       wireMethod: request.wireMethod,
       projectionRevision: request.projectionRevision,
     };
-    const estimate = unitEstimator(factory, identity);
-    const empty = await estimate([]);
-    if (empty.method === 'exact')
-      throw new Error(
-        'Native Chat exact whole-prompt token boundaries are not installed',
-      );
-    if (!empty.family.startsWith('legacy-'))
-      throw new Error(
-        'Native Chat calibrated family unit measurements are not installed',
-      );
-    const settings: RowFormatSettings = {
-      ...this.settings,
-      chat: {
-        includeInContext: this.settings.chat?.includeInContext ?? true,
-        ...this.settings.chat,
-        toolFormat: this.settings.chat?.toolFormat ?? 'openai',
-        estimatorKey: JSON.stringify({
-          contract: 'chat-unit-repeat-delta-v2',
-          legacyEncoding: O200K_BASE_ASSET_REVISION,
-          ...identity,
-          family: empty.family,
-          revision: empty.estimatorVersion,
-          assets: empty.assetRevision,
-        }),
-      },
-    };
-    const count = unitCounter(estimate);
+    const { registration, count, estimate } = await chatTokenRegistration(
+      this.settings,
+      identity,
+      factory,
+    );
     const envelope = await estimate(
       [{ role: 'system', content: this.system }],
       this.tools,
     );
     this.requireOpen();
-    const plan = await this.native.withFormat(
-      plainChatLengthRegistration(settings, count),
-      (snapshot) =>
-        planRequestChatMessages(
-          snapshot,
-          this.native.indexed,
-          settings,
-          this.selected,
-          this.system,
-          count,
-        ),
+    const plan = await this.native.withFormat(registration, (snapshot) =>
+      planRequestChatMessages(
+        snapshot,
+        this.native.indexed,
+        registration.settings,
+        this.selected,
+        this.system,
+        count,
+      ),
     );
     this.requireOpen();
     return { ...envelope, count: envelope.count + plan.tokens };

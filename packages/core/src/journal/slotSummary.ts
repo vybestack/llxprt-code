@@ -58,6 +58,8 @@ export interface ChatSummary {
   readonly variants: Pair<ChatVariant>;
   readonly tokens?: Pair<number>;
   readonly thinkingRank?: { readonly units: number; readonly last: number };
+  /** Bytes removed by includeInContext:false from the kept variant. */
+  readonly omittedReasoningBytes?: number;
 }
 
 export interface ResponsesSummary {
@@ -209,10 +211,22 @@ function encodeChat(view: DataView, summary: ChatSummary): void {
   putU64(view, 256, 'Chat kept tokens', summary.tokens?.[0] ?? 0);
   putU64(view, 264, 'Chat stripped tokens', summary.tokens?.[1] ?? 0);
   if (summary.thinkingRank !== undefined) {
-    putU32(view, 272, 'Chat thinking rank revision', 1);
+    putU32(
+      view,
+      272,
+      'Chat thinking rank revision',
+      summary.omittedReasoningBytes === undefined ? 1 : 2,
+    );
     putU32(view, 276, 'Chat units', summary.thinkingRank.units);
     putU32(view, 280, 'Chat last thinking', summary.thinkingRank.last);
   }
+  if (summary.omittedReasoningBytes !== undefined)
+    putU64(
+      view,
+      284,
+      'Chat omitted reasoning bytes',
+      summary.omittedReasoningBytes,
+    );
   for (const index of [0, 1] as const) {
     const base = at.variants[index];
     const variant = summary.variants[index];
@@ -291,11 +305,13 @@ export function decodeSlotSummary(
   }
   assertLength(bytes, SLOT_SUMMARY_BYTES, 'Slot summary');
   const view = viewOf(bytes);
-  const ranked = kind === 'chat' && view.getUint32(272, true) === 1;
+  const rankRevision = kind === 'chat' ? view.getUint32(272, true) : 0;
+  const ranked = rankRevision === 1 || rankRevision === 2;
+  const rankEnd = rankRevision === 2 ? 292 : 284;
   for (const [start, end] of SLOT_SUMMARY_LAYOUT[kind].padding) {
     assertAllZero(
       bytes,
-      ranked && start === 272 ? 284 : start,
+      ranked && start === 272 ? rankEnd : start,
       end,
       `Slot summary ${kind} padding`,
     );
@@ -311,6 +327,15 @@ export function decodeSlotSummary(
     const at = SLOT_SUMMARY_LAYOUT.chat;
     return {
       kind,
+      ...(rankRevision === 2
+        ? {
+            omittedReasoningBytes: getU64(
+              view,
+              284,
+              'Chat omitted reasoning bytes',
+            ),
+          }
+        : {}),
       ...(ranked
         ? {
             thinkingRank: {

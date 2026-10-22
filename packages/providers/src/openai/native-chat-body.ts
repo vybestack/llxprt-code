@@ -25,7 +25,14 @@ import { nativeChatMessages, nativeChatValue } from './native-chat-messages.js';
 import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { ChatContinuation } from './OpenAIChatContinuation.js';
 import { buildContinuationTail } from './OpenAIRequestBuilder.js';
-import { NativeChatEstimateProjection } from './native-chat-estimate.js';
+import {
+  NativeChatEstimateProjection,
+  chatTokenRegistration,
+} from './native-chat-estimate.js';
+import { createRuntimeTokenizerFactory } from '../composition/runtimeTokenizerFactory.js';
+import { PROJECTION_REVISION } from '../runtime/promptEnvelopeProjections.js';
+import type { RowFormatRegistration } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
+import type { ChatUnitTokenMeasurer } from './journal-chat-length.js';
 import type {
   ChatRowInput,
   RequestContext,
@@ -136,8 +143,10 @@ async function captureChatPlan(
   envelope: Readonly<Record<string, unknown>>,
   rows: ProviderRequestRows,
   options: NormalizedGenerateChatOptions,
-  settings: RowFormatSettings,
+  registration: RowFormatRegistration,
+  count?: ChatUnitTokenMeasurer,
 ): Promise<CapturedNativeChatPlan> {
+  const settings = registration.settings;
   const native = rows.native;
   if (native === undefined)
     throw new Error('Native Chat requires indexed request rows');
@@ -149,44 +158,42 @@ async function captureChatPlan(
     release?: () => void | Promise<void>;
   } = {};
   try {
-    const plan = await native.withFormat(
-      plainChatLengthRegistration(settings),
-      async (snapshot) => {
-        if (settings.chat?.toolFormat === 'mistral') {
-          mapping.resolver = await native.indexed.mistralForSnapshot(
-            snapshot,
-            requestFormatSlot(snapshot, settings),
-          );
-        }
-        const result = await planRequestChatMessages(
+    let omitted: StoredChatMessagePlan | undefined;
+    const plan = await native.withFormat(registration, async (snapshot) => {
+      if (settings.chat?.toolFormat === 'mistral') {
+        mapping.resolver = await native.indexed.mistralForSnapshot(
           snapshot,
-          native.indexed,
-          settings,
-          selected,
-          system,
+          requestFormatSlot(snapshot, settings),
         );
-        if (mapping.resolver !== undefined) mapping.release = snapshot.hold();
-        return result;
-      },
-    );
+      }
+      const result = await planRequestChatMessages(
+        snapshot,
+        native.indexed,
+        settings,
+        selected,
+        system,
+        count,
+      );
+      omitted = {
+        ...result,
+        bytes: result.bytes - result.omittedReasoningBytes,
+        root: {
+          ...result.root,
+          bytes: result.root.bytes.map(
+            (bytes) => bytes - result.omittedReasoningBytes,
+          ),
+        },
+      };
+      if (mapping.resolver !== undefined) mapping.release = snapshot.hold();
+      return result;
+    });
     const continuationSettings: RowFormatSettings = {
       ...settings,
       chat: { ...settings.chat, includeInContext: false },
     };
-    const stripped =
-      selected === 1 || settings.chat?.includeInContext === false
-        ? plan
-        : await native.withFormat(
-            plainChatLengthRegistration(continuationSettings),
-            (snapshot) =>
-              planRequestChatMessages(
-                snapshot,
-                native.indexed,
-                continuationSettings,
-                selected,
-                system,
-              ),
-          );
+    if (omitted === undefined)
+      throw new Error('Missing captured continuation plan');
+    const stripped = omitted;
     const { head, tail } = await envelopeParts(envelope);
     const continuationEnvelope = await envelopeParts({
       ...envelope,
@@ -272,15 +279,23 @@ async function prepareNativeChatBody(
   envelope: Readonly<Record<string, unknown>>,
   rows: ProviderRequestRows,
   options: NormalizedGenerateChatOptions,
-  settings: RowFormatSettings,
+  registration: RowFormatRegistration,
   rowInput: ChatRowInput,
+  count?: ChatUnitTokenMeasurer,
 ): Promise<{
   spool: NativeChatBody;
   messageCount: number;
   continuation: ChatContinuation;
   release: () => Promise<void>;
 }> {
-  const captured = await captureChatPlan(envelope, rows, options, settings);
+  const settings = registration.settings;
+  const captured = await captureChatPlan(
+    envelope,
+    rows,
+    options,
+    registration,
+    count,
+  );
   const { plan, signal } = captured;
   const { stripped, continuationSettings } = captured;
   const continuations = new Set<NativeChatBody>();
@@ -378,6 +393,7 @@ export async function prepareNativePlainRequest(
   use: { readonly estimate: boolean; readonly dump: boolean },
   rowInput: ChatRowInput,
   toolFormat: ToolFormat = 'openai',
+  providerName = 'openai',
 ): Promise<
   Pick<
     RequestContext,
@@ -387,12 +403,30 @@ export async function prepareNativePlainRequest(
   if (use.dump)
     throw new Error('Native plain Chat dump projection is not installed');
   const settings = nativeChatSettings(options, toolFormat);
+  const measured =
+    toolFormat === 'mistral'
+      ? await chatTokenRegistration(
+          settings,
+          {
+            activeProvider: providerName,
+            canonicalModel: settings.model,
+            protocol: 'openai-chat',
+            wireMethod: 'chat/completions/v1',
+            projectionRevision: PROJECTION_REVISION,
+          },
+          createRuntimeTokenizerFactory(),
+        )
+      : {
+          registration: plainChatLengthRegistration(settings),
+          count: undefined,
+        };
   const body = await prepareNativeChatBody(
     envelope,
     rows,
     options,
-    settings,
+    measured.registration,
     rowInput,
+    measured.count,
   );
   const native = rows.native;
   if (native === undefined)

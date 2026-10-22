@@ -527,6 +527,7 @@ export async function prepareRequest(
           use,
           rowInput,
           detectedFormat,
+          resolvedProviderName,
         )
       : await spoolChatBody(envelope, options, detectedFormat, rowInput, use);
   return {
