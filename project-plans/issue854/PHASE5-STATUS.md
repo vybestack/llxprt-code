@@ -1,3 +1,13 @@
+## Mistral bounded holder merge is tested; phase acceptance stays open, 2026-10-22
+
+[Merge proof](PHASE6-SOURCE-BOUND-MISTRALMERGE-PROOF.json) supersedes the historical per-label replay limitation below for implementation `686b32807`. Changed historical IDs stream once through a 64-cursor heap or bounded scalar spill into the persistent native index. A one-pending-ID/129-historical-ID cascade visits 258 occurrences and writes 9,120 journal bytes while preserving roots and live aggregates. State follows fixed cursor/batch/cache caps plus pending input; it does not grow a heap or map with all displaced historical IDs. Salt-search work and total request/capacity bounds are separate claims.
+
+Early test checkpoint `7771f0b1d` and completed receipts retain 872 passing tests across 29 files, 208,330 assertions, independent body/token oracles, restored assertion-failing controls and passing affected type/test-lint/format/graph/audit gates. All 1,204 inherited hashes match and owned processes have exited. Four production lint diagnostics remain RED: the store's 810-versus-800 line count and three merge nesting violations. Production is unchanged in this tests/proof-only finalization, so overall delivery is not green.
+
+Full current-source memory/traps, 100,000-call and aggregate capacity, cold-fill fusion, other provider migrations, native log/dump and accounting remain open. Existing separate REDs are preserved. Phase 5 is incomplete; no default flip or enforcement change.
+
+---
+
 ## Mistral multi-ID functional checkpoint, 2026-10-22
 
 [Multi-ID proof](PHASE6-SOURCE-BOUND-MISTRALMULTIID-PROOF.json) maps the new 2/17/129-group old-byte/length/per-unit-token tests, two-group first-holder removal with old pins, seven additional public two-POST continuation cases and 40/4,000-row physical cost cases. Current nonempty mappings match the old converter in the tested normal-history domain; the lazy-empty-ID correction remains covered. Wrong-winner and decoded-holder retention controls fail their intended assertions. This is coverage of existing production behavior, not a new mapping implementation. General multi-changed-ID replay complexity, complete retained memory, 100,000-call capacity, fused cold fill, other providers, log/dump and total live-byte accounting remain open. Phase 5/6/W26 and unrelated REDs are unchanged.

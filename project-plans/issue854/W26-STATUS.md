@@ -1,3 +1,13 @@
+## Mistral merge is implemented and tested; W26 is incomplete, 2026-10-22
+
+`686b32807` removes multi-changed-ID replay per holder. The bounded heap spills larger sets through the existing persistent index; a corrected one-pending-ID cascade changes 129 historical mappings with exactly 258 occurrence reads. It writes 9,120 journal bytes without changing history roots or live aggregates. The repair frontier follows pending input, while cursor and scalar-batch counts are fixed; no historical-ID-sized heap/map or linear salt-resolution claim is made.
+
+[Merge receipt](PHASE6-SOURCE-BOUND-MISTRALMERGE-PROOF.json) records early green checkpoint `7771f0b1d`, 872 passing tests across 29 files, 208,330 assertions, restored negative controls, current source hashes and exited owned processes. Affected types, owned-test lint, formatting, graph, audit execution and all 1,204 preserved hashes pass. Production lint remains RED on the store line limit and three merge nesting errors. Production was not edited in this tests/proof-only run, so this is not all-green delivery.
+
+Full native memory/traps, Mistral 100,000-call and aggregate capacity, fused cold fill, other providers, log/dump and accounting remain open. Existing separate REDs are unchanged. W26 and Phase 5/6 are incomplete. Review skipped per Andrew 2026-10-09; no cleanup, push, merge, default flip or enforcement weakening.
+
+---
+
 ## Mistral multi-ID functional checkpoint, 2026-10-22
 
 [Multi-ID proof](PHASE6-SOURCE-BOUND-MISTRALMULTIID-PROOF.json) records independent normal-history parity through 129 collision groups, two changed current mappings after first-holder removal with unchanged old pins, seven additional public two-POST cases, 4,000-holder physical costs and assertion-failing wrong-winner/decoded-holder controls. Production code is unchanged. The tests do not establish a bounded sorted merge for arbitrary multiple historical displacement chains; that existing branch still replays queries per label. W26 remains incomplete with full retained-memory/100,000-call capacity, cold-fill fusion, other providers, log/dump, accounting and existing separate REDs open. Review skipped per Andrew 2026-10-09.

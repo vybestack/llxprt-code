@@ -1,3 +1,20 @@
+## Mistral multi-changed-ID holder merge, 2026-10-22
+
+[Source-bound merge proof](PHASE6-SOURCE-BOUND-MISTRALMERGE-PROOF.json) binds implementation `686b32807`, early green tests `7771f0b1d`, the corrected one-pending-ID cascade and completed gate/control logs. It supersedes earlier statements that the per-label replay algorithm was unchanged.
+
+| Contract | Executed evidence |
+| --- | --- |
+| Real simultaneous historical changes | 40/4,000 rows with 2/17/129 changed IDs; exact occurrence visits, physical-read budgets, old/new mapping witnesses and independent legacy bytes/tokens |
+| Historical cascade beyond cursor cap | One pending identity displaces 129 historical IDs; 258 occurrence reads; sorted unique holders; exact salts; 9,120 persistent bytes with unchanged history roots/aggregate |
+| Bounded source state | 64 heap cursors plus the admitted spill cursor; at most 133 charged scalar entries before flush; fixed node caches and source-backed traversal; pending-sized repair frontiers |
+| Regression/parity | 872 tests/208,330 assertions in 29 files, including 15,000 frozen production comparisons, public sends, slot lifecycle, continuation, plain Chat, #3919 and both immutable unit oracles |
+| Sensitivity and preservation | Three actual assertion-failing controls, byte/SHA restoration, post-control positives, all 1,204 inherited hashes and exited owned processes |
+| Remaining gate failure | Four unchanged production lint errors: store max-lines and merge nesting. Owned-test lint/types/format/graph/audit pass; overall delivery is not green |
+
+Scalar spill writes journal garbage and is not a no-write or aggregate-capacity claim. Full current native memory/traps, Mistral 100,000-call capacity, fused cold fill, other providers, native log/dump, accounting and Phase 5/6/W26 remain open. Older receipts retain their stated source and domain limits.
+
+---
+
 ## Dense Mistral descriptor-read cost, 2026-10-22
 
 [Dense-cost proof](PHASE6-SOURCE-BOUND-MISTRALDENSECOST-PROOF.json), implementation `ff2ae2078`: descriptor-level RED at 40/400/4,000 dense holders; forward row-tree/occurrence traversal and validated ROW context reuse; 4,000-row improvement from 201,572 reads / 824,989,362 bytes to 6,834 / 12,211,784; sparse lookup remains indexed. Includes independent length/token oracles and bounded ROW-buffer observations. Does not establish arbitrary many-displaced-ID traversal, complete retained memory, fused fill or new capacity acceptance. Older proof entries retain their stated scope.

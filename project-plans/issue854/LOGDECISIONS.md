@@ -1,3 +1,17 @@
+## Finalize the existing bounded Mistral merge without changing production, 2026-10-22
+
+Retain implementation `686b32807`. The previous multi-ID branch reran `changedIds` for every output label and used binary occurrence searches; it did not linearly rescan every old occurrence on every query. The replacement consumes changed IDs once, walks each ID's occurrences once, and deduplicates holder labels through a heap capped at 64. The next nonempty cursor switches to scalar streaming through the journal's existing trie. There is no all-changed-ID array or suffix-replay fallback.
+
+Correct the cascade fixture at the API boundary: append and mapping activation must be separate groups. One pending seed then displaces 129 historical mappings and visits exactly 258 occurrences. The forced same-candidate salt search still costs 17,548 fact lookups; removal of per-holder replay does not imply linear total salt resolution. The spill adds 9,120 durable bytes with unchanged history roots and aggregates. Treat this as unreachable persistent index storage charged to journal garbage, not zero disk growth or accepted aggregate capacity. The scalar batch flushes at at most 133 entries/65,968 charged bytes, rather than an invented fixed 128-entry buffer.
+
+Preserve the provider lifecycle assertions. Their WIP correction supplies the real store sorter required by the snapshot constructor; it does not reduce format counts or assume slot 2. Early green commit `7771f0b1d` records those three helpers and exact merge occurrence/physical-read/no-file checks. Finalize the two existing core probes with original input-error identity and early-stop descriptor ownership. Test-only collected label arrays are oracle observations and do not enter production.
+
+[Merge proof](PHASE6-SOURCE-BOUND-MISTRALMERGE-PROOF.json) retains all failed attempts and passing replacements, 872 tests/208,330 assertions in 29 files, current source/control restoration hashes, source-bridge limits and all 1,204 preservation hashes. Fix test nesting/conditional-expect lint by restructuring test observations, without suppressions or weaker assertions. Leave the four production lint errors explicit under the tests/proof-only scope: store max-lines and merge nesting still require production extraction/refactoring before green delivery.
+
+Full current native memory/traps, Mistral 100,000-call and aggregate capacity, cold-fill fusion, other provider migrations, native log/dump and accounting remain open. Known independent REDs stay unchanged. All owned processes have exited. No production edit, review, cleanup, .llxprt staging, OCR, push, merge, default flip or enforcement change.
+
+---
+
 ## Separate multi-ID functional parity from displacement complexity, 2026-10-22
 
 Do not manufacture a nonempty mapping defect from a late response. `observeNormalizedMistralRow` observes all emitted nonempty calls, including human-row calls. The two-group pending fixture therefore already has salt-one mappings before the tail arrives. Tests compare independent old curated units, the old Mistral mapper and old per-unit token totals through 129 groups and three reasoning policies. They also remove two first holders to prove actual current/old-pin mapping differences. No runtime change was justified by those passing normal-history cases.
