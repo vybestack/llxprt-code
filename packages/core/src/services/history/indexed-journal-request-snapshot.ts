@@ -168,7 +168,7 @@ export class IndexedJournalRequestSnapshot {
     try {
       let next = await extra.next();
       while (index < this.rows.length || next.done !== true) {
-        const row = this.rows.at(index);
+        const row = index < this.rows.length ? this.rows[index] : undefined;
         if (
           row !== undefined &&
           (next.done === true || row.entry.label <= next.value)

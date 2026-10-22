@@ -1,3 +1,11 @@
+## Historical lazy Mistral token holders are remeasured, 2026-10-22
+
+Early commit `67cf0081a` fixes a reproduced mandatory-estimate error. Three historical empty-ID calls plus a pending user and reconstructed `4Q3rUlnAu` call emit the old converter's `RDWBIGMqO` historical IDs, but baseline reports 211 tokens instead of the independent per-unit expectation of 205. Request summaries now merge additional indexed holder sources with changed sources in label order without changing stored facts or old pins. Sparse and all-holder 40/4,000-row sweeps check unit measurement scope. [Displacement receipt](PHASE6-SOURCE-BOUND-NATIVEMISTRALDISPLACEMENT-PROOF.json) distinguishes this lazy-empty-ID case from the still-unproven requested nonempty earlier-tail example.
+
+This checkpoint does not close the requested acceptance. General nonempty displacement chains, exact ROW/LENS and metadata-query receipts, occupied-slot public HTTP plus eviction/pop/clone/compaction/reopen, remaining mutation controls and fresh full memory/traps remain open. Existing public and lifecycle regressions establish only their own domains. Phase 5/6/W26, other providers, log/dump, media provenance, capacity and separate known REDs remain unchanged. Review skipped per Andrew 2026-10-09. No OCR, cleanup, .llxprt staging, push, merge or default flip.
+
+---
+
 ## Mistral occupied-slot checkpoint; tail acceptance remains incomplete, 2026-10-22
 
 `61184e88e` removes the native slot-2 assumption. The registry selects its normal LRU slot before mapping activation, without rebuilding or dropping unrelated formats. A three-family occupied-slot test selects slot 0 generation 2, preserves Anthropic/Responses summaries and reuses the same key on warm reentry. The new immutable 5,000-input differential checks production stored planning and native message emission against old bytes and frozen normalization hashes; it does not represent 5,000 HTTP sends.

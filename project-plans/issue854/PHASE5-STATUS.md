@@ -1,3 +1,9 @@
+## Mistral holder-token correction checkpoint, 2026-10-22
+
+`67cf0081a` adds indexed historical holder remeasurement to the request summary overlay. A real lazy-empty-ID counterexample changes baseline 211 to the independent per-unit expectation 205 while preserving old converter body bytes and old-pin estimates. [Displacement receipt](PHASE6-SOURCE-BOUND-NATIVEMISTRALDISPLACEMENT-PROOF.json) records exact scope, controls, current-source gates and open acceptance. No persistent index format changed. General nonempty earlier-tail displacement and occupied-slot public lifecycle acceptance are not established. Phase 5 remains open with the existing provider, accounting, capacity and memory obligations.
+
+---
+
 ## Mistral occupied-slot checkpoint; tail acceptance remains incomplete, 2026-10-22
 
 `61184e88e` removes the native slot-2 assumption. The registry selects its normal LRU slot before mapping activation, without rebuilding or dropping unrelated formats. A three-family occupied-slot test selects slot 0 generation 2, preserves Anthropic/Responses summaries and reuses the same key on warm reentry. The new immutable 5,000-input differential checks production stored planning and native message emission against old bytes and frozen normalization hashes; it does not represent 5,000 HTTP sends.

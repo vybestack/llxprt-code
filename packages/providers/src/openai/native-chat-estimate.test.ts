@@ -183,17 +183,28 @@ describe('stored native Chat estimates through production preparation', () => {
         logger,
         'openai',
       );
-      const messages = old.requestBody.messages;
-      if (!Array.isArray(messages)) throw new Error('Missing old messages');
-      let expected = await count([messages[0]]);
-      for (const message of messages.slice(1))
-        expected +=
-          (await count([message, message])) - (await count([message]));
-      expect(JSON.stringify(messages)).toContain('RDWBIGMqO');
+      async function perUnits(messages: unknown): Promise<number> {
+        if (!Array.isArray(messages)) throw new Error('Missing old messages');
+        let tokens = await count([messages[0]]);
+        for (const message of messages.slice(1))
+          tokens +=
+            (await count([message, message])) - (await count([message]));
+        return tokens;
+      }
+      const expected = await perUnits(old.requestBody.messages);
+      const oldBase = await prepareRequestBody(
+        options(rowsSelection(await normalizedRows(base)), model, policy),
+        model,
+        undefined,
+        logger,
+        'openai',
+      );
+      const baseline = await perUnits(oldBase.requestBody.messages);
+      expect(JSON.stringify(old.requestBody.messages)).toContain('RDWBIGMqO');
       await withHistory(base, async (history) => {
         const before = await history.prepareCuratedForProviderSnapshot([], {});
         try {
-          const baseline = await estimate(before, model, policy, factory);
+          expect(await estimate(before, model, policy, factory)).toBe(baseline);
           const selected = await history.prepareCuratedForProviderSnapshot(
             tail,
             {},
@@ -224,6 +235,104 @@ describe('stored native Chat estimates through production preparation', () => {
           }
         } finally {
           await before.close();
+        }
+      });
+    },
+  );
+
+  it.each(
+    [40, 4000].flatMap((size) => [false, true].map((all) => ({ size, all }))),
+  )(
+    'measures only displaced holders among $size historical rows, all=$all',
+    async ({ size, all }) => {
+      const base: readonly IContent[] = Array.from(
+        { length: size },
+        (_, index) =>
+          all || (index % Math.floor(size / 3) === 0 && index < size - 1)
+            ? {
+                speaker: 'ai',
+                blocks: [
+                  {
+                    type: 'tool_call',
+                    id: '',
+                    name: `holder-${index}`,
+                    parameters: {},
+                  },
+                ],
+              }
+            : textRow(`unaffected-${index}`),
+      );
+      const holders = base.filter((row) => row.speaker === 'ai').length;
+      await withHistory(base, async (history) => {
+        let projections: string[] = [];
+        const actual = createRuntimeTokenizerFactory();
+        const factory = withGpt56DiskSources(
+          {
+            ...actual,
+            async estimatePrompt(request) {
+              projections.push(JSON.stringify(request.finalizedProjection));
+              return actual.estimatePrompt(request);
+            },
+          },
+          directory(),
+        );
+        const old = await history.prepareCuratedForProviderSnapshot([], {});
+        try {
+          const before = await estimate(
+            old,
+            'mistral-large-latest',
+            {},
+            factory,
+          );
+          projections = [];
+          const neutral = await history.prepareCuratedForProviderSnapshot(
+            [textRow('neutral pending')],
+            {},
+          );
+          try {
+            await estimate(neutral, 'mistral-large-latest', {}, factory);
+            expect(
+              projections.some(
+                (value) =>
+                  value.includes('holder-') || value.includes('unaffected-'),
+              ),
+            ).toBe(false);
+          } finally {
+            await neutral.close();
+          }
+          projections = [];
+          const displaced = await history.prepareCuratedForProviderSnapshot(
+            [
+              {
+                speaker: 'tool',
+                blocks: [
+                  {
+                    type: 'tool_response',
+                    callId: '4Q3rUlnAu',
+                    toolName: 'pending',
+                    result: 'done',
+                  },
+                ],
+              },
+            ],
+            {},
+          );
+          try {
+            await estimate(displaced, 'mistral-large-latest', {}, factory);
+            expect(
+              projections.filter((value) => value.includes('holder-')),
+            ).toHaveLength(holders * 4);
+            expect(
+              projections.some((value) => value.includes('unaffected-')),
+            ).toBe(false);
+            expect(
+              await estimate(old, 'mistral-large-latest', {}, factory),
+            ).toBe(before);
+          } finally {
+            await displaced.close();
+          }
+        } finally {
+          await old.close();
         }
       });
     },

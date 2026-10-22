@@ -1,3 +1,9 @@
+## Historical Mistral token correction checkpoint, 2026-10-22
+
+Early implementation `67cf0081a` corrects the reproduced lazy-empty-ID historical-holder estimate from 211 to 205, with independent old-body and per-unit estimator assertions. Sparse/all-holder sweeps cover 40/4,000 rows. [Displacement receipt](PHASE6-SOURCE-BOUND-NATIVEMISTRALDISPLACEMENT-PROOF.json) keeps the nonempty earlier-tail example, physical read accounting, general collision-chain cost, occupied-slot public lifecycle, remaining controls and full memory/traps open. W26 and Phase 5/6 are not complete. Other provider/log/media/capacity obligations and known REDs are unchanged; no default flip, OCR, push, merge or unrelated cleanup.
+
+---
+
 ## Mistral occupied-slot checkpoint; tail acceptance remains incomplete, 2026-10-22
 
 `61184e88e` removes the native slot-2 assumption. The registry selects its normal LRU slot before mapping activation, without rebuilding or dropping unrelated formats. A three-family occupied-slot test selects slot 0 generation 2, preserves Anthropic/Responses summaries and reuses the same key on warm reentry. The new immutable 5,000-input differential checks production stored planning and native message emission against old bytes and frozen normalization hashes; it does not represent 5,000 HTTP sends.

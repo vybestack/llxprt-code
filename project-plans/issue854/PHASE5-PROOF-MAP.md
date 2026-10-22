@@ -1,3 +1,9 @@
+## Mistral request-token holder overlay, 2026-10-22
+
+[Displacement proof](PHASE6-SOURCE-BOUND-NATIVEMISTRALDISPLACEMENT-PROOF.json), implementation `67cf0081a`: reproduced lazy-empty-ID RED 211 versus 205; old converter body parity; indexed source occurrence and normalized repair-target remeasurement; immutable old-pin estimates; 40/4,000 sparse/all-holder unit-measurement sweeps. This is a partial checkpoint, not proof of nonempty arbitrary earlier-tail displacement, occupied-slot public lifecycle, exact physical/query cost or full memory/capacity. Existing proof entries below retain their stated scope.
+
+---
+
 ## Mistral occupied-slot checkpoint; tail acceptance remains incomplete, 2026-10-22
 
 `61184e88e` removes the native slot-2 assumption. The registry selects its normal LRU slot before mapping activation, without rebuilding or dropping unrelated formats. A three-family occupied-slot test selects slot 0 generation 2, preserves Anthropic/Responses summaries and reuses the same key on warm reentry. The new immutable 5,000-input differential checks production stored planning and native message emission against old bytes and frozen normalization hashes; it does not represent 5,000 HTTP sends.

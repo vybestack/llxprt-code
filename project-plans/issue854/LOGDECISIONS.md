@@ -1,3 +1,11 @@
+## Remeasure indexed historical Mistral token holders, 2026-10-22
+
+Use source-backed mapping replay to identify changed raw mappings, including lazy empty-ID allocation. Query existing exact source occurrence lists and reconstruction/response targets, then merge holder labels with changed sources before composing immutable range summaries. Do not persist pending rows, clone historical ID authority or recount the history prefix. Early `67cf0081a` fixes a reproduced 211-versus-205 mandatory estimate while old converter bytes already match. The 40/4,000 sweeps check actual unit token measurement scope, not physical ROW/LENS or whole-heap cost.
+
+The concrete RED uses empty historical IDs and `generateDeterministicMistralId('', 0) = 4Q3rUlnAu`; it does not validate the requested nonempty `4SftZvDMX`/`4Uq1sY29c` earlier-tail scenario. Bounded deterministic exploratory searches did not establish that scenario. Keep general chain cost and source/speaker occurrence completeness open. An attempted occupied-slot public assertion read the published registry even for a purge's immutable request view. Remove that invalid observation fixture, preserve its patch/log, and do not count it as product failure or acceptance. [Receipt](PHASE6-SOURCE-BOUND-NATIVEMISTRALDISPLACEMENT-PROOF.json) separates executed evidence from remaining work. Review skipped per Andrew 2026-10-09.
+
+---
+
 ## Mistral occupied-slot checkpoint; tail acceptance remains incomplete, 2026-10-22
 
 `61184e88e` removes the native slot-2 assumption. The registry selects its normal LRU slot before mapping activation, without rebuilding or dropping unrelated formats. A three-family occupied-slot test selects slot 0 generation 2, preserves Anthropic/Responses summaries and reuses the same key on warm reentry. The new immutable 5,000-input differential checks production stored planning and native message emission against old bytes and frozen normalization hashes; it does not represent 5,000 HTTP sends.
