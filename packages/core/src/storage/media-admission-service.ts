@@ -18,6 +18,10 @@ import { isMediaReferenceBlock } from '../services/history/IContent.js';
 import { MediaStoreError, type LocalMediaStore } from './local-media-store.js';
 import { MIME_TYPE_PATTERN } from './local-media-store-validation.js';
 import { verifyHistoryMedia } from './media-reference-lifecycle.js';
+import {
+  captureAdmittedMediaSource,
+  closeAdmittedMediaSources,
+} from './admitted-media-source.js';
 
 const MAX_DATA_URI_PREFIX_LENGTH = 256;
 const CANONICAL_BASE64_PATTERN =
@@ -264,6 +268,7 @@ export class MediaAdmissionService {
   ): Promise<void> {
     const reservations: AdmissionReservation[] = [];
     for (const admission of admissions) {
+      await closeAdmittedMediaSources(admission.contents);
       for (const reservation of this.contentReservations(
         admission.contents,
         admission.context,
@@ -417,6 +422,18 @@ export class MediaAdmissionService {
           error,
         );
       }
+      if (
+        context.reservationOwnerScope !== undefined &&
+        context.heldReservations?.has(block.contentId) !== true
+      )
+        return {
+          block: captureAdmittedMediaSource(
+            block,
+            this.store,
+            ownerIdFor(context, mediaIndex, block.contentId),
+          ),
+          changed: true,
+        };
       return { block, changed: false };
     }
     if (
@@ -528,7 +545,13 @@ export class MediaAdmissionService {
           ownerId,
         });
       }
-      return presented;
+      return context.reservationOwnerScope !== undefined && !alreadyHeld
+        ? captureAdmittedMediaSource(
+            presented,
+            this.store,
+            ownerIdFor(context, mediaIndex, presented.contentId),
+          )
+        : presented;
     } catch (error) {
       const knownContentId =
         error instanceof MediaStoreError

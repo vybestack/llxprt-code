@@ -1,6 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalFormatError } from '../../journal/errors.js';
 import {
+  admittedMediaSource,
+  type AdmittedMediaSource,
+} from '../../storage/admitted-media-source.js';
+import { isMediaReferenceBlock } from './IContent.js';
+import {
   EMPTY_ID_FACT,
   type BlockPosition,
   type IdFact,
@@ -30,6 +35,7 @@ interface TailRow {
   readonly entry: RowEntry;
   readonly stored: StoredRow;
   readonly origins: readonly number[];
+  readonly admissions: ReadonlyArray<AdmittedMediaSource | undefined>;
 }
 
 function tailRow(
@@ -51,6 +57,9 @@ function tailRow(
       meta: draft.meta,
       blocks: draft.blocks.map((block) => block.bytes),
     },
+    admissions: row.blocks.map((block) =>
+      isMediaReferenceBlock(block) ? admittedMediaSource(block) : undefined,
+    ),
     origins: row.blocks.map((block) => {
       let id = origins.get(block);
       if (id === undefined) {
@@ -199,7 +208,16 @@ export class JournalTailSource implements JournalResponseSource {
     return { ...this.tailAt(entry.label).stored, blocks: [] };
   }
 
+  captureAdmission(at: BlockPosition, block: ContentBlock): void {
+    if (this.isTail(at.label) && isMediaReferenceBlock(block))
+      this.tailAt(at.label).admissions[this.blockIndex(at)]?.capture(block);
+  }
+
   private origin(at: BlockPosition): number {
+    return this.tailAt(at.label).origins[this.blockIndex(at)];
+  }
+
+  private blockIndex(at: BlockPosition): number {
     const row = this.tailAt(at.label);
     const split =
       row.stored.header.speaker === ROW_SPEAKER.tool &&
@@ -217,7 +235,7 @@ export class JournalTailSource implements JournalResponseSource {
       at.block >= indices.length
     )
       throw new JournalFormatError('Tail source block is absent');
-    return row.origins[indices[at.block]];
+    return indices[at.block];
   }
 
   readonly sameBlock = (left: BlockPosition, right: BlockPosition): boolean =>

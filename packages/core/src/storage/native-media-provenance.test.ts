@@ -7,10 +7,93 @@ import { HistoryMediaOwnership } from './history-media-ownership.js';
 import { RequestMediaResolver } from './request-media-resolver.js';
 import { useTempDir as tempDirectory } from '../journal/__tests__/support/useTempDir.js';
 import type { IContent } from '../services/history/IContent.js';
+import { MediaAdmissionService } from './media-admission-service.js';
 
 const directory = tempDirectory('native-media-provenance-');
 
 describe('native media reference provenance', () => {
+  it.each([false, true])(
+    'uses a live pending admission after prior history ownership=%s without a second reservation',
+    async (previouslyOwned) => {
+      const store = new LocalMediaStore({
+        rootDirectory: join(directory(), 'pending'),
+        quotaBytes: 1024,
+      });
+      const history = new HistoryService({ backend: 'journal' });
+      await history.registerMediaOwner(new HistoryMediaOwnership(store));
+      const admission = new MediaAdmissionService(store);
+      const context = {
+        turnId: 'pending',
+        source: 'user-input',
+        reservationOwnerScope: 'turn:pending',
+      };
+      const row = await admission.admitContent(
+        {
+          speaker: 'human',
+          blocks: [
+            {
+              type: 'media',
+              encoding: 'base64',
+              mimeType: 'image/png',
+              data: 'AQID',
+            },
+          ],
+        },
+        context,
+      );
+      if (previouslyOwned) {
+        await history.addBatch([row]);
+        await history.clear();
+        await history.waitForOwnershipSettlement();
+      }
+      const source = await history.prepareCuratedForProviderSnapshot([row]);
+      try {
+        const resolved = await new RequestMediaResolver(store).resolve({
+          contents: [await source.readAt(0)],
+          requestId: 'pending',
+          turnId: 'pending',
+          aggregateBudgetBytes: 1024,
+          lease: source.native?.mediaLease,
+        });
+        try {
+          expect(resolved.accounting().reservedContentCount).toBe(0);
+          expect(
+            resolved.withContents((rows) => rows[0].blocks),
+          ).toContainEqual(
+            expect.objectContaining({ data: 'AQID', encoding: 'base64' }),
+          );
+        } finally {
+          await resolved.release();
+        }
+        const captured = await source.readAt(0);
+        await source.close();
+        expect(
+          (await store.reclaimUnreferenced(new Set(), Date.now()))
+            .objectsRemoved,
+        ).toBe(0);
+        await admission.releaseContents([row], context);
+        const external = await new RequestMediaResolver(store).resolve({
+          contents: [captured],
+          requestId: 'released-admission',
+          turnId: 'pending',
+          aggregateBudgetBytes: 1024,
+        });
+        try {
+          expect(external.accounting().reservedContentCount).toBe(1);
+        } finally {
+          await external.release();
+        }
+        expect(
+          (await store.reclaimUnreferenced(new Set(), Date.now()))
+            .objectsRemoved,
+        ).toBe(1);
+      } finally {
+        await source.close();
+        await history.dispose();
+        await store.close();
+      }
+    },
+  );
   it('reserves an unowned reference even when its content ID and row metadata match history', async () => {
     const store = new LocalMediaStore({
       rootDirectory: join(directory(), 'media'),

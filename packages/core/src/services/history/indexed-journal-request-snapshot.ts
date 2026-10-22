@@ -187,6 +187,7 @@ export class IndexedJournalRequestSnapshot {
     ordinal: number,
     block: ContentBlock,
   ): void {
+    this.source.captureAdmission(plan.blocks[ordinal].at, block);
     if (
       this.mediaReferences === undefined ||
       !isMediaReferenceBlock(block) ||

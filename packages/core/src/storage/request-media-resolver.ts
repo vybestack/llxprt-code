@@ -5,6 +5,7 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { admittedMediaSource } from './admitted-media-source.js';
 import {
   isMediaReferenceBlock,
   type IContent,
@@ -456,7 +457,10 @@ export class RequestMediaResolver {
       resources.readCount += 1;
       let bytes: Uint8Array;
       try {
-        if (
+        const admitted = admittedMediaSource(entry.reference);
+        if (admitted?.allows(this.store) === true) {
+          bytes = await admitted.read(entry.reference);
+        } else if (
           input.lease instanceof PinnedHistoryMediaLease &&
           input.lease.allows(this.store, entry.reference)
         ) {

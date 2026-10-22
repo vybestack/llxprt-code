@@ -58,11 +58,17 @@ class RowCensus {
 
 class ObservedResolver extends RequestMediaResolver {
   readonly census = new RowCensus();
-  override async resolve(
+  override resolve(
     input: RequestMediaResolutionInput,
   ): Promise<ResolvedMediaRequest> {
     for (const row of input.contents) this.census.track(row);
-    const resolved = await super.resolve(input);
+    return this.observe(super.resolve(input));
+  }
+
+  private async observe(
+    pending: Promise<ResolvedMediaRequest>,
+  ): Promise<ResolvedMediaRequest> {
+    const resolved = await pending;
     try {
       await assertLiveResolution(this, resolved);
       return resolved;
@@ -96,6 +102,7 @@ async function assertLiveResolution(
   expect(live.text).toBeLessThanOrEqual(2);
   expect(live.textBytes).toBeLessThanOrEqual(2 * payloadBytes);
   expect(resolver.accounting().activeRequestCount).toBe(1);
+  expect(resolver.accounting().reservedContentCount).toBe(0);
   expect(resolver.accounting().materializedNormalizedBytes).toBe(4);
 }
 
@@ -106,6 +113,7 @@ function textAt(index: number, bytes: number): string {
 async function verifyLifetime(
   count: number,
   textBytes: number,
+  distinct = false,
 ): Promise<number> {
   const parent = join(
     import.meta.dir,
@@ -121,6 +129,25 @@ async function verifyLifetime(
     mimeType: 'image/png',
     semanticMetadata: {},
   });
+  function bytesAt(index: number): Uint8Array {
+    return new Uint8Array([distinct ? index + 1 : 1, 2, 3]);
+  }
+  if (distinct)
+    for (let index = 0; index < count; index++)
+      await store.admit({
+        bytes: bytesAt(index),
+        mimeType: 'image/png',
+        semanticMetadata: {},
+      });
+  function referenceAt(index: number): typeof reference {
+    if (!distinct) return { ...reference };
+    return store.identityReferenceForKnown({
+      contentId: `sha256:${createHash('sha256').update(bytesAt(index)).digest('hex')}`,
+      knownByteLength: 3,
+      mimeType: 'image/png',
+      semanticMetadata: {},
+    });
+  }
   const fixture = await journalSendFixture(
     (function* (): Generator<IContent> {
       for (let index = 0; index < count; index++)
@@ -128,7 +155,7 @@ async function verifyLifetime(
           speaker: 'human',
           blocks: [
             { type: 'text', text: textAt(index, textBytes) },
-            { ...reference },
+            referenceAt(index),
           ],
         };
     })(),
@@ -157,7 +184,9 @@ async function verifyLifetime(
             { type: 'text', text: textAt(index, textBytes) },
             {
               type: 'image_url',
-              image_url: { url: 'data:image/png;base64,AQID' },
+              image_url: {
+                url: `data:image/png;base64,${Buffer.from(bytesAt(index)).toString('base64')}`,
+              },
             },
           ],
         }),
@@ -204,6 +233,7 @@ async function verifyLifetime(
         JSON.stringify({
           count,
           textBytes,
+          distinct,
           acquired: resolver.census.acquired,
           peakRows: resolver.census.peakRows,
           peakText: resolver.census.peakText,
@@ -226,4 +256,14 @@ describe('actual native historical reference-media row lifetime', () => {
   it('releases 64 historical rows with 64 KiB text while resolving one payload at a time', async () => {
     expect(await verifyLifetime(64, 65536)).toBe(64);
   }, 170000);
+  it('releases 64 distinct references with 64 KiB text rows', async () => {
+    expect(await verifyLifetime(64, 65536, true)).toBe(64);
+  }, 170000);
+  it.each([512, 8192])(
+    'releases %s historical reference rows with 128-byte text',
+    async (count) => {
+      expect(await verifyLifetime(count, 128)).toBe(count);
+    },
+    170000,
+  );
 });

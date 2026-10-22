@@ -5,6 +5,7 @@
  */
 
 import { isMediaReferenceBlock } from '../services/history/IContent.js';
+import { closeAdmissionReservation } from './admitted-media-source.js';
 import type {
   MediaReferenceBlock,
   MediaSemanticMetadata,
@@ -385,6 +386,7 @@ export class LocalMediaStore {
   }
 
   async release(contentId: string, ownerId: string): Promise<void> {
+    await closeAdmissionReservation(this, contentId, ownerId);
     await this.persistence.release(contentId, ownerId);
   }
 
@@ -393,6 +395,8 @@ export class LocalMediaStore {
     contentIds: readonly string[],
     ownerId: string,
   ): Promise<void> {
+    for (const contentId of contentIds)
+      await closeAdmissionReservation(this, contentId, ownerId);
     await this.persistence.releaseAll(contentIds, ownerId);
   }
 
