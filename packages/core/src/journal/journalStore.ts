@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { journalLabelSorter } from './ordered-labels.js';
+import { finishStoreFormats } from './store-format-fill.js';
 import {
   readContextSpans,
   type ContextSpan,
@@ -7,23 +8,14 @@ import {
 } from './contextSpanFacts.js';
 import { pinnedFormatPreparation } from './pinned-format-fill.js';
 import {
-  fillToolRanking,
   warmToolRanking,
   toolRankingPolicy,
   type ToolRankingPolicy,
 } from './tool-ranking-fill.js';
-import {
-  fillDensityFiles,
-  warmDensityFiles,
-  densityFilePolicy,
-} from './density-file-fill.js';
+import { warmDensityFiles, densityFilePolicy } from './density-file-fill.js';
 import type { DensityFilePolicy } from './density-file-facts.js';
 import type { RecencyFactPolicy } from './recencyFacts.js';
-import {
-  fillNativeFacts,
-  requireNativeFactWriter,
-  warmNativeFacts,
-} from './nativeFactFill.js';
+import { requireNativeFactWriter, warmNativeFacts } from './nativeFactFill.js';
 import type { NativeFactIndexRegistration } from './nativeFactIndex.js';
 import {
   checkpointKey,
@@ -95,12 +87,9 @@ import {
   writeUnlinkedCompactionCandidate,
 } from './storeCompaction.js';
 import type { SlotKinds } from './aggregateComposition.js';
+import { requireIncrementalFormats } from './formatFillLifecycle.js';
 import {
-  invalidateAnthropicFormats,
-  requireIncrementalFormats,
-} from './formatFillLifecycle.js';
-import {
-  fillRowFormats,
+  type fillRowFormats,
   warmRowFormat,
   type RegisteredRowFormat,
 } from './formatFill.js';
@@ -690,47 +679,6 @@ export class JournalStore {
     };
   }
 
-  private async fillFormats(
-    built: BuiltGroup,
-    appender: RecordAppender,
-    edits: readonly VersionEdit[],
-    facts: NativeFactIndexRegistration | undefined,
-  ): ReturnType<typeof fillRowFormats> {
-    const ranking = toolRankingPolicy(edits, this.toolRanking);
-    const ranked = await fillToolRanking(
-      this.buildContext(),
-      built,
-      appender,
-      edits,
-      ranking,
-    );
-    const withFiles = await fillDensityFiles(
-      this.buildContext(),
-      ranked,
-      appender,
-      edits,
-      densityFilePolicy(edits, this.densityFiles),
-    );
-    const indexed = await fillNativeFacts(
-      this.buildContext(),
-      withFiles,
-      appender,
-      facts,
-      edits,
-    );
-    return fillRowFormats(
-      this.buildContext(),
-      indexed.invalidated
-        ? invalidateAnthropicFormats(indexed.built)
-        : indexed.built,
-      appender,
-      edits,
-      this.rowFormats,
-      indexed.invalidated,
-      facts?.scope,
-    );
-  }
-
   private async nativeFactRegistration(
     edits: readonly VersionEdit[],
   ): Promise<NativeFactIndexRegistration | undefined> {
@@ -842,21 +790,19 @@ export class JournalStore {
     facts: NativeFactIndexRegistration | undefined,
     effect: CommitEffect | undefined,
   ): ReturnType<typeof fillRowFormats> {
-    const filled = await this.fillFormats(built, appender, edits, facts);
-    if (effect === undefined) return filled;
-    return {
-      ...filled,
-      built: {
-        ...filled.built,
-        state: {
-          ...filled.built.state,
-          stateRoot: await effect.finish(
-            filled.built.state.stateRoot,
-            appender,
-          ),
-        },
+    return finishStoreFormats(
+      this.buildContext(),
+      built,
+      appender,
+      edits,
+      {
+        ranking: this.toolRanking,
+        files: this.densityFiles,
+        facts,
+        formats: this.rowFormats,
       },
-    };
+      effect,
+    );
   }
 
   private unchangedGroup(): CommittedGroup {
