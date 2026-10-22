@@ -6,9 +6,50 @@ import { JournalProviderRequestSnapshot } from '../services/history/journal-prov
 import { LocalMediaStore } from './local-media-store.js';
 import { HistoryMediaOwnership } from './history-media-ownership.js';
 import { RequestMediaResolver } from './request-media-resolver.js';
+import { encodeSessionFact } from '../recording/sessionMetaKeys.js';
 
-export async function deferredMediaFixture(directory: string) {
+import type {
+  IContent,
+  MediaReferenceBlock,
+} from '../services/history/IContent.js';
+
+interface DeferredMediaFixture {
+  readonly session: JournalSession;
+  readonly media: LocalMediaStore;
+  readonly reference: MediaReferenceBlock;
+  readonly row: IContent;
+  readonly owner: HistoryMediaOwnership;
+  readonly request: JournalProviderRequestSnapshot;
+  readonly bytes: Uint8Array;
+}
+
+export async function deferredMediaFixture(
+  directory: string,
+  retainCheckpoint = false,
+): Promise<DeferredMediaFixture> {
   const session = await JournalSession.create(join(directory, 'history.llxj'));
+  await session.store.commit([
+    {
+      kind: 'setState',
+      key: 'session:id',
+      value: encodeSessionFact('queue-lifecycle'),
+    },
+    {
+      kind: 'setState',
+      key: 'session:start',
+      value: encodeSessionFact({
+        startTime: '2026-10-22T00:00:00Z',
+        projectHash: 'queue',
+        workspaceDirs: [],
+        kind: 'main',
+      }),
+    },
+    {
+      kind: 'setState',
+      key: 'session:provider',
+      value: encodeSessionFact({ provider: 'openai', model: 'fixture' }),
+    },
+  ]);
   const media = new LocalMediaStore({
     rootDirectory: join(directory, 'media'),
     quotaBytes: 1024,
@@ -19,11 +60,12 @@ export async function deferredMediaFixture(directory: string) {
     mimeType: 'image/png',
     semanticMetadata: {},
   });
-  const row = {
-    speaker: 'human',
-    blocks: [reference],
-  } satisfies import('../services/history/IContent.js').IContent;
+  const row: IContent = { speaker: 'human', blocks: [reference] };
   await session.append([row]);
+  if (retainCheckpoint)
+    await session.store.commit([
+      { kind: 'checkpoint', id: 'media', name: 'media', createdAtMs: 1 },
+    ]);
   const owner = new HistoryMediaOwnership(media);
   owner.adopt([row]);
   await owner.bindNativeMedia(session.store);
@@ -42,7 +84,7 @@ export async function deferredMediaFixture(directory: string) {
 }
 
 if (import.meta.main) {
-  const directory = process.argv[2];
+  const directory = process.argv.slice(2).shift();
   if (directory === undefined) throw new Error('Missing fixture directory');
   const fixture = await deferredMediaFixture(directory);
   const protectedObjects = await fixture.media.reclaimUnreferenced(
@@ -69,5 +111,5 @@ if (import.meta.main) {
     },
   ]);
   assert.notEqual(fixture.session.store.mediaPins.oldestVersion, undefined);
-  process.exit(77);
+  process.kill(process.pid, 'SIGKILL');
 }

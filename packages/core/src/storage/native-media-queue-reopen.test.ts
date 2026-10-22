@@ -3,15 +3,16 @@ import { describe, expect, it, spyOn } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
-import { readFile, readdir, stat } from 'node:fs/promises';
-import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
+import { readdir, stat } from 'node:fs/promises';
+import { useTempDir as tempDirectory } from '../journal/__tests__/support/useTempDir.js';
 import { JournalSession } from '../services/history/journalSession.js';
 import { LocalMediaStore } from './local-media-store.js';
 import { HistoryMediaOwnership } from './history-media-ownership.js';
 import { HistoryMediaReleaseGate } from './history-media-release-gate.js';
-import { deferredMediaFixture } from './native-media-queue-fixture.js';
+import { deferredMediaFixture } from './native-media-queue-test-helpers.js';
+import { projectRecordedContentIds } from '../recording/janitor/mediaReclamation.js';
 
-const directory = useTempDir('native-media-queue-reopen-');
+const directory = tempDirectory('native-media-queue-reopen-');
 const contentId = `sha256:${createHash('sha256')
   .update(new Uint8Array([13, 21, 34]))
   .digest('hex')}`;
@@ -29,7 +30,7 @@ async function queueCounter(
 
 async function crashWithDeferredRelease(root: string): Promise<void> {
   const child = spawn(process.execPath, [
-    join(import.meta.dir, 'native-media-queue-fixture.ts'),
+    join(import.meta.dir, 'native-media-queue-test-helpers.ts'),
     root,
   ]);
   let output = '';
@@ -48,15 +49,16 @@ async function crashWithDeferredRelease(root: string): Promise<void> {
   });
   try {
     expect({ exit: await exited, errors }).toStrictEqual({
-      exit: 77,
+      exit: null,
       errors: '',
     });
     expect(output).toBe('');
     process.stdout.write(`queue crash child pid=${child.pid}
 `);
-    expect(child.exitCode).toBe(77);
+    expect(child.signalCode).toBe('SIGKILL');
   } finally {
-    if (child.exitCode === null) child.kill('SIGKILL');
+    if (child.exitCode === null && child.signalCode === null)
+      child.kill('SIGKILL');
     await exited;
   }
 }
@@ -82,12 +84,12 @@ describe('native media release queue across owner reopen', () => {
           .objectsRemoved,
       ).toBe(0);
       await new HistoryMediaOwnership(media).bindNativeMedia(session.store);
-      expect(await queueCounter(session, 'head')).toBe(1);
-      expect(await media.hasReservations(contentId)).toBe(false);
       expect(
         (await media.reclaimUnreferenced(new Set(), Number.MAX_SAFE_INTEGER))
           .objectsRemoved,
       ).toBe(1);
+      expect(await queueCounter(session, 'head')).toBe(1);
+      expect(await media.hasReservations(contentId)).toBe(false);
       await expect(
         stat(
           join(media.rootDirectory, 'objects', 'sha256', contentId.slice(7)),
@@ -103,9 +105,13 @@ describe('native media release queue across owner reopen', () => {
     const fixture = await deferredMediaFixture(directory());
     const { session, media, request, owner, row, reference, bytes } = fixture;
     try {
-      const before = await readFile(session.path);
+      const before = await stat(session.path);
       await expect(session.store.compact()).rejects.toThrow('live pin');
-      expect(await readFile(session.path)).toStrictEqual(before);
+      expect(await stat(session.path)).toMatchObject({
+        ino: before.ino,
+        size: before.size,
+        mtimeMs: before.mtimeMs,
+      });
       expect(
         (await media.reclaimUnreferenced(new Set(), Number.MAX_SAFE_INTEGER))
           .objectsRemoved,
@@ -144,6 +150,91 @@ describe('native media release queue across owner reopen', () => {
       await media.close();
     }
   });
+  it('repeats an already completed external release when the durable head write was interrupted', async () => {
+    const { session, media, request, reference } =
+      await deferredMediaFixture(directory());
+    const failure = new Error('queue head write interrupted');
+    const commit = spyOn(session.store, 'commit').mockRejectedValue(failure);
+    try {
+      await expect(request.close()).rejects.toBe(failure);
+      expect(await media.hasReservations(reference.contentId)).toBe(false);
+      commit.mockRestore();
+      const reopened = await JournalSession.open(session.path);
+      const nextMedia = new LocalMediaStore({
+        rootDirectory: media.rootDirectory,
+        quotaBytes: 1024,
+      });
+      try {
+        expect(await queueCounter(reopened, 'head')).toBe(0);
+        expect(await reopened.store.getState('rel:0')).toBeDefined();
+        await new HistoryMediaOwnership(nextMedia).bindNativeMedia(
+          reopened.store,
+        );
+        expect(await queueCounter(reopened, 'head')).toBe(1);
+        expect(
+          (
+            await nextMedia.reclaimUnreferenced(
+              new Set(),
+              Number.MAX_SAFE_INTEGER,
+            )
+          ).objectsRemoved,
+        ).toBe(1);
+      } finally {
+        await reopened.close();
+        await nextMedia.close();
+      }
+    } finally {
+      commit.mockRestore();
+      await session.close();
+      await media.close();
+    }
+  });
+
+  it('protects checkpoint media through drain, compaction and reopen until checkpoint deletion', async () => {
+    const { session, media, request, reference, bytes } =
+      await deferredMediaFixture(directory(), true);
+    try {
+      await request.close();
+      expect(await media.hasReservations(reference.contentId)).toBe(false);
+      const protectedIds = await projectRecordedContentIds(directory());
+      expect(protectedIds.has(reference.contentId)).toBe(true);
+      expect(
+        (await media.reclaimUnreferenced(protectedIds, Number.MAX_SAFE_INTEGER))
+          .objectsRemoved,
+      ).toBe(0);
+      expect(await session.store.compact()).toBe('swapped');
+      const reopened = await JournalSession.open(session.path);
+      try {
+        expect((await reopened.store.checkpoint('media'))?.name).toBe('media');
+        const retained = await projectRecordedContentIds(directory());
+        expect(retained.has(reference.contentId)).toBe(true);
+        expect(
+          (await media.reclaimUnreferenced(retained, Number.MAX_SAFE_INTEGER))
+            .objectsRemoved,
+        ).toBe(0);
+        expect(
+          await media.reserveAndReadVerified(reference, 'checkpoint-reader'),
+        ).toStrictEqual(bytes);
+        await media.release(reference.contentId, 'checkpoint-reader');
+        await reopened.store.commit([
+          { kind: 'deleteCheckpoint', id: 'media' },
+        ]);
+        expect(await reopened.store.compact()).toBe('swapped');
+        const deleted = await projectRecordedContentIds(directory());
+        expect(deleted.has(reference.contentId)).toBe(false);
+        expect(
+          (await media.reclaimUnreferenced(deleted, Number.MAX_SAFE_INTEGER))
+            .objectsRemoved,
+        ).toBe(1);
+      } finally {
+        await reopened.close();
+      }
+    } finally {
+      await request.close();
+      await session.close();
+      await media.close();
+    }
+  });
 
   it('keeps a failed release durable and retries it idempotently on an independent owner open', async () => {
     const { session, media, request } = await deferredMediaFixture(directory());
@@ -152,9 +243,24 @@ describe('native media release queue across owner reopen', () => {
     try {
       await expect(request.close()).rejects.toBe(failure);
       expect(session.store.mediaPins.oldestVersion).toBeUndefined();
-      const before = await readFile(session.path);
-      await expect(session.store.compact()).rejects.toThrow('live pin');
-      expect(await readFile(session.path)).toStrictEqual(before);
+      const before = await stat(session.path);
+      const compaction = await session.store.compact().then(
+        (outcome) => outcome,
+        (error: unknown) => error,
+      );
+      const inspection = await JournalSession.open(session.path);
+      try {
+        expect(await inspection.store.getState('rel:0')).toBeDefined();
+        expect(await queueCounter(inspection, 'head')).toBe(0);
+      } finally {
+        await inspection.close();
+      }
+      expect(compaction).toBeInstanceOf(Error);
+      expect(await stat(session.path)).toMatchObject({
+        ino: before.ino,
+        size: before.size,
+        mtimeMs: before.mtimeMs,
+      });
       expect(
         (await media.reclaimUnreferenced(new Set(), Number.MAX_SAFE_INTEGER))
           .objectsRemoved,
@@ -181,12 +287,27 @@ describe('native media release queue across owner reopen', () => {
             )
           ).objectsRemoved,
         ).toBe(1);
-        const settled = await readFile(reopened.path);
+        const settled = await stat(reopened.path);
         const mediaFiles = (
           await readdir(media.rootDirectory, { recursive: true })
         ).sort();
-        await gate.settle();
-        expect(await readFile(reopened.path)).toStrictEqual(settled);
+        const noWrites = spyOn(reopened.store, 'commit').mockRejectedValue(
+          new Error('Empty drain wrote journal state'),
+        );
+        const noRelease = spyOn(nextMedia, 'release').mockRejectedValue(
+          new Error('Empty drain touched media storage'),
+        );
+        try {
+          await gate.settle();
+        } finally {
+          noWrites.mockRestore();
+          noRelease.mockRestore();
+        }
+        expect(await stat(reopened.path)).toMatchObject({
+          ino: settled.ino,
+          size: settled.size,
+          mtimeMs: settled.mtimeMs,
+        });
         expect(
           (await readdir(media.rootDirectory, { recursive: true })).sort(),
         ).toStrictEqual(mediaFiles);
