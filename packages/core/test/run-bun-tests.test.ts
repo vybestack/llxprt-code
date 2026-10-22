@@ -180,10 +180,14 @@ describe('core Bun test runner process lifecycle', () => {
       'await Bun.sleep(350);',
     ].join('\n');
     const parentScript = [
-      `Bun.spawn([process.execPath, '-e', ${JSON.stringify(descendantScript)}], {`,
+      `const descendant = Bun.spawn([process.execPath, '-e', ${JSON.stringify(descendantScript)}], {`,
       "  stdout: 'inherit',",
       "  stderr: 'inherit',",
       '});',
+      // Without unref the parent stays alive until the descendant exits, so
+      // 'exit' and 'close' arrive together and the ordering the test observes
+      // depends only on microtask scheduling, which Bun 1.4 changed.
+      'descendant.unref();',
       `while (!(await Bun.file(${JSON.stringify(descendantPidFile)}).exists())) {`,
       '  await Bun.sleep(5);',
       '}',

@@ -6,7 +6,6 @@
 
 import { mkdtempSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { once } from 'node:events';
 import { createServer, type Server, type Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -243,7 +242,13 @@ export async function withTerminalFixture(
 async function stopFixtures(sockets: Socket[]): Promise<void> {
   for (const socket of sockets) {
     if (!socket.destroyed) {
-      const closed = once(socket, 'close');
+      // A fixture that was already killed answers this write with a reset,
+      // which Bun 1.4 delivers as an 'error' before the EOF. The fixture is
+      // gone either way, so wait for 'close' without rejecting on 'error'
+      // (awaitReadiness keeps an error listener attached to every socket).
+      const closed = new Promise<void>((resolve) =>
+        socket.once('close', () => resolve()),
+      );
       socket.write('stop\n');
       await deadline(closed);
     }

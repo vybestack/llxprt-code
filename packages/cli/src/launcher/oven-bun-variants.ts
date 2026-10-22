@@ -20,7 +20,7 @@ import { existsSync, readFileSync } from 'node:fs';
  * a host from that set.
  *
  * The platform table is transcribed verbatim from `node_modules/bun/install.js`
- * (bun@1.3.14). One DELIBERATE deviation from upstream is documented below:
+ * (bun@1.4.4). One DELIBERATE deviation from upstream is documented below:
  * on a musl host, musl variants are ordered FIRST with glibc as a last resort.
  *
  * This module's selection logic is pure (no I/O) so it can be tested across
@@ -45,7 +45,7 @@ interface PlatformRow {
 
 /**
  * The authoritative platform table, transcribed from
- * `node_modules/bun/install.js` (bun@1.3.14). Order within an (os, arch) group
+ * `node_modules/bun/install.js` (bun@1.4.4). Order within an (os, arch) group
  * matches upstream so stable sort preserves it for abi-neutral rows.
  */
 const PLATFORM_TABLE: readonly PlatformRow[] = [
@@ -151,7 +151,7 @@ export const OVEN_PACKAGE_NAMES: readonly string[] = PLATFORM_TABLE.map(
 );
 
 /** The version every `@oven/bun-*` package is pinned to. */
-export const OVEN_PACKAGE_VERSION = '1.3.14';
+export const OVEN_PACKAGE_VERSION = '1.4.4';
 
 /**
  * Normalized host architecture. `process.arch` and `uname -m` aliases are

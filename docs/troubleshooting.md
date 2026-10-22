@@ -224,6 +224,17 @@ export NODE_USE_SYSTEM_CA=1
 export NODE_EXTRA_CA_CERTS=/path/to/your/corporate-ca.crt
 ```
 
+**Bun runtime.** LLxprt Code runs on the bundled Bun runtime, and Bun compiles its own root certificate store into the executable. Updating the operating system trust store does not change which CAs Bun trusts, so the only way to trust a private corporate CA is to point Bun at it explicitly. Bun reads `NODE_EXTRA_CA_CERTS` (checked against Bun 1.4.4 with a locally issued CA), so the variable above works for the CLI. Bun also has a `--use-system-ca` option on the `bun` executable. The `NODE_USE_SYSTEM_CA` variable is a Node.js setting, and it is not confirmed to have any effect under Bun, so prefer `NODE_EXTRA_CA_CERTS` when running LLxprt Code.
+
+**Minimum runtime versions.** In October 2026 several eMudhra intermediate CAs were found to have trivially weak private keys. They chain to `emSign ECC Root CA - G3` and, through a cross-signature, to Sectigo `AAA Certificate Services`. Runtimes that embed their own root store keep trusting those intermediates until they are updated. The fix is in these releases:
+
+| Runtime | Minimum version                         |
+| ------- | --------------------------------------- |
+| Bun     | 1.4.4                                   |
+| Node.js | 22.23.4, 24.22.1, or 26.12.1 (per line) |
+
+LLxprt Code pins Bun 1.4.4 and requires Node.js 24.22.1 or newer for the checkout, the `engines` fields, and the sandbox image. If you run the CLI from a global install, check `bun --version` for the bundled runtime, and upgrade Node.js if you use it for npm or the tooling around the CLI.
+
 ### OAuth Troubleshooting
 
 OAuth tokens are stored in the OS keyring (same as named keys). If authentication fails:

@@ -54,7 +54,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # ratchet:actions/setup-node@v7
         with:
-          node-version: '24'
+          node-version-file: '.nvmrc'
           # This job publishes a Docker image with packages:write; disable the
           # implicit package-manager cache that setup-node v6 auto-enables when
           # package.json declares packageManager, to avoid a cache-poisoning path.
@@ -72,7 +72,12 @@ jobs:
           no-cache: true
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: 'Run first-party postinstall (bun runtime, dependency patches)'
+        run: |-
+          npm rebuild bun
+          node scripts/postinstall.cjs
 
       - name: Build packages
         run: npm run build

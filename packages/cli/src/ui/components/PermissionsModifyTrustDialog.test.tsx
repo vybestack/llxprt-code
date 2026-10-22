@@ -140,7 +140,7 @@ describe('PermissionsModifyTrustDialog', () => {
   });
 
   afterEach(() => {
-    vi.resetAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should render the dialog with title', () => {

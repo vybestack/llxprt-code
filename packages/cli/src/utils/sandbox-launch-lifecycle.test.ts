@@ -197,7 +197,7 @@ describe('#3450 private dependency storage lifecycle on a failed launch', () => 
     // runContainerSandbox resolves the workspace from process.cwd(); launch
     // against the empty fixture instead of this repository's own tree.
     process.chdir(fixturePath);
-    vi.resetAllMocks();
+    vi.clearAllMocks();
     (
       childProcess.execSync as Mock<typeof childProcess.execSync>
     ).mockReturnValue(Buffer.from('image-id\\n'));

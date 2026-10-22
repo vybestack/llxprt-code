@@ -106,11 +106,11 @@ This section guides contributors on how to build, modify, and understand the dev
 **Prerequisites:**
 
 1.  **Node.js**:
-    - **Development:** Please use the Node.js version pinned in `.nvmrc` (currently Node.js 24). You can use a tool like [nvm](https://github.com/nvm-sh/nvm) to manage Node.js versions (`nvm use`).
-    - **Production:** For running the CLI in a production environment, any version of Node.js `>=24` is acceptable.
-2.  **Bun**: Install [Bun](https://bun.sh) (version pinned in [`.bun-version`](./.bun-version), currently `1.3.14`). Bun is the runtime for the CLI run path and the package manager for development. The npm/npx/Homebrew install flows still work, but the development workflow uses Bun directly. See [dev-docs/bun.md](./dev-docs/bun.md) for details on the dual-lockfile policy and Bun-specific configuration.
+    - **Development:** Please use the Node.js version pinned in `.nvmrc` (currently Node.js 24.22.1). You can use a tool like [nvm](https://github.com/nvm-sh/nvm) to manage Node.js versions (`nvm use`).
+    - **Production:** For running the CLI in a production environment, any version of Node.js `>=24.22.1` is acceptable.
+2.  **Bun**: Install [Bun](https://bun.sh) (version pinned in [`.bun-version`](./.bun-version), currently `1.4.4`). Bun is the runtime for the CLI run path and the package manager for development. The npm/npx/Homebrew install flows still work, but the development workflow uses Bun directly. See [dev-docs/bun.md](./dev-docs/bun.md) for details on the dual-lockfile policy and Bun-specific configuration.
 
-    > **Note:** The root `package.json` still declares `packageManager: npm@11.6.2`, and several root scripts (`presubmit`, `preflight`, `build:all`) chain to `npm run ...` internally. During the migration transition, `bun run presubmit` delegates to npm internally. This will be reconciled in a later subissue.
+    > **Note:** The root `package.json` still declares `packageManager: npm@11.19.1`, and several root scripts (`presubmit`, `preflight`, `build:all`) chain to `npm run ...` internally. During the migration transition, `bun run presubmit` delegates to npm internally. This will be reconciled in a later subissue.
 
 3.  **Git**
 
@@ -179,8 +179,8 @@ and builds do not install plugin dependencies. Before running the full test
 suite from a checkout, install them separately, as the CI test job does:
 
 ```bash
-# Use a separate Bun >= 1.4.2 executable for plugin installs.
-BUN_PLUGIN=/absolute/path/to/bun-1.4.2
+# Use a separate Bun >= 1.4.4 executable for plugin installs.
+BUN_PLUGIN=/absolute/path/to/bun-1.4.4
 for plugin in plugins/*/; do
   if [ -f "${plugin}package.json" ]; then
     (cd "$plugin" && "$BUN_PLUGIN" install --omit=peer)
@@ -190,7 +190,7 @@ npm run test
 ```
 
 The root runtime remains pinned by `.bun-version`. Plugin installs need Bun
-1.4.2 or newer to handle their unresolved host peers; `--omit=peer` leaves the
+1.4.4 or newer to handle their unresolved host peers; `--omit=peer` leaves the
 host packages supplied by the checkout. See [plugins/README.md](./plugins/README.md).
 Checkout discovery loads marked packages from `plugins/` only when each has
 its own `node_modules`. Without the Gemini plugin install, selecting `gemini`

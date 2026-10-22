@@ -148,7 +148,7 @@ function isNativeBun(thePath) {
 // Host detection + @oven/bun-<variant> selection.
 //
 // The platform table is transcribed verbatim from node_modules/bun/install.js
-// (bun@1.3.14) and mirrors packages/cli/src/launcher/oven-bun-variants.ts and
+// (bun@1.4.4) and mirrors packages/cli/src/launcher/oven-bun-variants.ts and
 // packages/cli/scripts/install-native-launchers.cjs. One deliberate deviation
 // from upstream: on a musl host, musl variants are ordered FIRST with glibc as
 // a last resort (upstream's postinstall already picked a binary, so its filter

@@ -25,7 +25,7 @@ for the topology, naming, and host-contract rules.
 
 ## Development
 
-Run from inside this directory (requires Bun >= 1.4.2):
+Run from inside this directory (requires Bun >= 1.4.4):
 
 ```
 bun install --omit=peer

@@ -23,9 +23,11 @@ const mockServiceName = 'service-name';
 const mockCryptoRandomBytesString = 'random-string';
 
 void vi.mock('node:crypto', () => ({
-  randomBytes: vi.fn(() => ({
-    toString: vi.fn(() => mockCryptoRandomBytesString),
-  })),
+  // Plain functions: vi.resetAllMocks() in beforeEach clears vi.fn()
+  // implementations, and nothing asserts on calls to randomBytes.
+  randomBytes: () => ({
+    toString: () => mockCryptoRandomBytesString,
+  }),
 }));
 
 describe('KeychainTokenStorage', () => {

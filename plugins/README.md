@@ -54,7 +54,7 @@ stale every time a host package's dependencies change.
 
 ## Flows (run from inside a plugin directory)
 
-Plugin-local installs use Bun >= 1.4.2 (enforced by `engines.bun`) and omit
+Plugin-local installs use Bun >= 1.4.4 (enforced by `engines.bun`) and omit
 peers, because the peers are provided by the host at runtime and no registry
 publish of `@vybestack/llxprt-code-*@^0.12.0` exists to satisfy them:
 
