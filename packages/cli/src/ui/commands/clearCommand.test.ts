@@ -73,11 +73,11 @@ import { z } from 'zod';
 import {
   HookEventName,
   HookType,
-  escapeShellArg,
   CONTINUE_LATEST,
 } from '@vybestack/llxprt-code-core';
 import { type Agent } from '@vybestack/llxprt-code-agents';
 import { drain } from '../../../../agents/src/api/__tests__/helpers/agentHarness.js';
+import { physicalHookCommand } from '../../../../agents/src/api/__tests__/helpers/physicalHookCommand.js';
 import { setupOwnerSessionRecording } from '../../cliSessionBootstrap.js';
 import { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
 import { launchHeldNotificationTask } from '../../__tests__/task-notification-fixture.js';
@@ -371,7 +371,7 @@ if (existsSync(failure) && readFileSync(failure, 'utf8') === input.hook_event_na
 console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'}));
 `,
     );
-    const command = `exec ${escapeShellArg(process.execPath, 'bash')} ${escapeShellArg(script, 'bash')}`;
+    const command = physicalHookCommand(script);
     await openbuiltCaller('multi-turn-text.jsonl', {
       workingDir: directory,
       hooks: {

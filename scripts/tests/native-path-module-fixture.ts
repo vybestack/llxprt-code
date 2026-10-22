@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { expect } from 'bun:test';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import type { BunPlugin } from 'bun';
 import { pathToFileURL } from 'node:url';
@@ -13,7 +13,9 @@ export function nativePathModuleFixture(root: string): {
   readonly put: (file: string, text: string) => void;
   readonly run: (source: string) => Promise<unknown>;
 } {
-  const physical = join(root, 'filesystem');
+  // One long-name, symlink-free root: the adapter and the compiler then agree
+  // on the physical prefix, whatever spelling tmpdir() produced.
+  const physical = join(realpathSync.native(root), 'filesystem');
   const modules = resolve(import.meta.dir, '..');
   const adapter = join(root, 'filesystem-adapter.ts');
   const compiler = resolve(
@@ -23,7 +25,7 @@ export function nativePathModuleFixture(root: string): {
   writeFileSync(
     adapter,
     `import * as fs from 'node:fs';
-import { resolve } from 'node:path';
+import { isAbsolute, relative, resolve, sep } from 'node:path';
 import ts from ${JSON.stringify(compiler)};
 const originalReadDirectory = ts.sys.readDirectory;
 const root = ${JSON.stringify(physical)};
@@ -38,7 +40,13 @@ export const readFileSync = (path: string, encoding: 'utf8' | 'utf-8'): string =
 export const readdirSync: typeof fs.readdirSync = (path, options) => fs.readdirSync(native(String(path)), options);
 export const statSync = (path: string): fs.Stats => fs.statSync(native(path));
 export const realpathSync = (path: string): string => path;
-export const readDirectory: typeof ts.sys.readDirectory = (path, ...args) => originalReadDirectory(native(path), ...args).map(file => file.startsWith(root + '/') ? 'C:/fixture/' + file.slice(root.length + 1) : file);
+function fixturePath(file: string): string {
+  const local = relative(root, resolve(file));
+  return local === '..' || local.startsWith('..' + sep) || isAbsolute(local)
+    ? file
+    : 'C:/fixture/' + local.split(sep).join('/');
+}
+export const readDirectory: typeof ts.sys.readDirectory = (path, ...args) => originalReadDirectory(native(path), ...args).map(fixturePath);
 `,
   );
   const infrastructure: BunPlugin = {

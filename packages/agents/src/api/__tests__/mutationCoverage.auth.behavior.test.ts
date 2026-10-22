@@ -30,6 +30,7 @@ import {
   drain,
   ToolConfirmationOutcome,
   ASYNC_PROPERTY_TIMEOUT_MS,
+  buildPropertyAgent,
 } from './helpers/agentHarness.js';
 
 // ─── auth.status() winner mapping (line 1208) ───────────────────────────────
@@ -189,7 +190,7 @@ describe('mutation P23.c — property cases @plan:PLAN-20260621-COREAPIREMED.P23
   it('PROP auth.status: for any provider string, a no-auth agent reports unauthenticated (REQ-002)', async () => {
     await fc.assert(
       fc.asyncProperty(nonBlankStringArbitrary, async (provider) => {
-        const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+        const { agent, cleanup } = await buildPropertyAgent('plain-text.jsonl');
         try {
           return agent.auth.status(provider) === 'unauthenticated';
         } finally {
@@ -211,9 +212,12 @@ describe('mutation P23.c — property cases @plan:PLAN-20260621-COREAPIREMED.P23
     return fc.asyncProperty(
       fc.string({ minLength: 1, maxLength: 50 }),
       async (keyName) => {
-        const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
-          auth: { keyName, apiKeyFile: '/tmp/competing.pem' },
-        });
+        const { agent, cleanup } = await buildPropertyAgent(
+          'plain-text.jsonl',
+          {
+            auth: { keyName, apiKeyFile: '/tmp/competing.pem' },
+          },
+        );
         try {
           const status = agent.getProviderStatus();
           return (
@@ -244,7 +248,7 @@ describe('mutation P23.c — property cases @plan:PLAN-20260621-COREAPIREMED.P23
         if (first === second) {
           return true; // overwrite with same value is trivially correct
         }
-        const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+        const { agent, cleanup } = await buildPropertyAgent('plain-text.jsonl');
         try {
           agent.setModelParam('temperature', first);
           agent.setModelParam('temperature', second);
@@ -259,7 +263,7 @@ describe('mutation P23.c — property cases @plan:PLAN-20260621-COREAPIREMED.P23
   it('PROP setBaseUrl: for any non-empty URL, getProviderStatus surfaces it (REQ-002)', async () => {
     await fc.assert(
       fc.asyncProperty(fc.webUrl(), async (url) => {
-        const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+        const { agent, cleanup } = await buildPropertyAgent('plain-text.jsonl');
         try {
           await agent.auth.setBaseUrl(url);
           return agent.getProviderStatus().baseUrl === url;
@@ -277,7 +281,8 @@ describe('mutation P23.c — property cases @plan:PLAN-20260621-COREAPIREMED.P23
           .string({ minLength: 1, maxLength: 20 })
           .filter((s) => !s.includes('__proto__')),
         async (key) => {
-          const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+          const { agent, cleanup } =
+            await buildPropertyAgent('plain-text.jsonl');
           try {
             agent.setModelParam(key, 42);
             agent.clearModelParam(key);
@@ -355,7 +360,8 @@ describe('mutation P23.d — compress + generate NoCoverage (REQ-005)', () => {
             .string({ minLength: 1, maxLength: 30 })
             .filter((s) => !s.includes('__proto__')),
           async (id) => {
-            const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+            const { agent, cleanup } =
+              await buildPropertyAgent('plain-text.jsonl');
             try {
               await drain(agent.stream('init'));
               const result = await agent.compress({ promptId: id });
@@ -448,7 +454,7 @@ describe('mutation P23.e — rebuild with approval + display callbacks (REQ-005)
         .string({ minLength: 1, maxLength: 30 })
         .filter((s) => !s.includes('__proto__') && s.trim() !== ''),
       async (model) => {
-        const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+        const { agent, cleanup } = await buildPropertyAgent('plain-text.jsonl');
         try {
           await agent.setModel(model);
           return agent.getModel() === model;

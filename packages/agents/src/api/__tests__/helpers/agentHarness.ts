@@ -34,7 +34,7 @@ export { fixtureAgentResources } from './agent-resource-capture.js';
 
 import { fileURLToPath } from 'node:url';
 import { resolve, join } from 'node:path';
-import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { writeFileSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -274,6 +274,43 @@ export async function buildAgentFromContent(
     rmSync(dir, { recursive: true, force: true });
   };
   return { agent, cleanup };
+}
+
+let scratchWorkspaceDir: string | undefined;
+
+/**
+ * One small empty workspace per test process for generated cases. They never
+ * read workspace content, and building a real agent over the default workspace
+ * (the test tree inside the repository) makes every generated case admit and
+ * scan that tree, which dominates a property's time on slow filesystems.
+ */
+function scratchWorkspace(): string {
+  scratchWorkspaceDir ??= realpathSync(
+    mkdtempSync(join(TEMP_ROOT, 'property-workspace-')),
+  );
+  return scratchWorkspaceDir;
+}
+
+/** `buildAgent` over the shared small workspace, for generated cases. */
+export function buildPropertyAgent(
+  fixtureRelPath: string,
+  configOverrides: Readonly<Partial<AgentConfig>> = {},
+): Promise<BuiltAgent> {
+  return buildAgent(fixtureRelPath, {
+    workingDir: scratchWorkspace(),
+    ...configOverrides,
+  });
+}
+
+/** `buildAgentFromContent` over the shared small workspace. */
+export function buildPropertyAgentFromContent(
+  jsonlContent: string,
+  configOverrides: Readonly<Partial<AgentConfig>> = {},
+): Promise<BuiltAgent> {
+  return buildAgentFromContent(jsonlContent, {
+    workingDir: scratchWorkspace(),
+    ...configOverrides,
+  });
 }
 
 /**

@@ -21,6 +21,7 @@ import {
   buildContainerRunArgs,
 } from '../utils/sandbox-containers.js';
 import { isUserGlobalEnvFile } from './sandboxEnvGuard.js';
+import { windowsChildEnv } from '../__tests__/windows-child-env.js';
 
 void vi.mock('command-exists', () => ({
   default: {
@@ -179,12 +180,14 @@ describe('sandbox-env-guard', () => {
       ].join(NEWLINE),
     );
 
+    const home = makeTempDir('home-');
     const result = spawnSync(process.execPath, [probePath], {
       cwd: repoDir,
       encoding: 'utf8',
       env: {
         PATH: process.env.PATH ?? '',
-        HOME: makeTempDir('home-'),
+        HOME: home,
+        ...windowsChildEnv(home, home),
         // Computed key: a literal Gemini-prefixed object property would trip the
         // provider-agnostic naming guard in packages/agents.
         [AMBIENT_API_KEY_VAR]: SENTINEL,

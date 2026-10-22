@@ -184,6 +184,7 @@ const HOST_PEER_PACKAGES = [
   '@vybestack/llxprt-code-mcp',
   '@vybestack/llxprt-code-providers',
   '@vybestack/llxprt-code-settings',
+  '@vybestack/llxprt-code-storage',
   '@vybestack/llxprt-code-telemetry',
 ] as const;
 
@@ -235,15 +236,16 @@ function linkPluginLocalDependencies(sourceDir: string, destDir: string): void {
 }
 
 /**
- * Links a directory into the fixture. Windows symlinks need privileges, so
- * that platform gets a dereferencing copy, which resolves identically.
+ * Links a directory into the fixture. The link target is the real workspace
+ * directory, so the module graph resolves its own dependencies (hoisted
+ * third-party packages, workspace packages such as storage) from the repo's
+ * node_modules, exactly as the POSIX symlink does. Directory symlinks need
+ * elevated privileges on Windows; junctions do not and resolve identically.
+ * A dereferencing copy would sever that ancestor lookup and leave the copied
+ * package without strip-json-comments, debug and the workspace packages.
  */
 function materializeNode(source: string, dest: string): void {
-  if (isWindows) {
-    cpSync(source, dest, { recursive: true, dereference: true });
-    return;
-  }
-  symlinkSync(source, dest, 'dir');
+  symlinkSync(source, dest, isWindows ? 'junction' : 'dir');
 }
 
 function parseJsonObjectFile(path: string): Record<string, unknown> {

@@ -36,7 +36,6 @@ import type {
 } from '@vybestack/llxprt-code-agents';
 import {
   buildAgent,
-  buildAgentFromContent,
   scriptToolCallFixture,
   drain,
   typesOf,
@@ -49,6 +48,7 @@ import {
   respondToFirstConfirmation,
   ToolConfirmationOutcome,
   ASYNC_PROPERTY_TIMEOUT_MS,
+  buildPropertyAgentFromContent,
 } from './helpers/agentHarness.js';
 import { ToolControlError } from '../control/toolControl.js';
 import {
@@ -387,7 +387,7 @@ describe('Core tools @plan:PLAN-20260617-COREAPI.P11 @requirement:REQ-006 @requi
             // (fixture parameters → FakeProvider → turn → eventAdapter.projectToolCall
             // echoes request args before validation), mirroring the inject-then-assert
             // shape of the switch-context property tests (T4dp/T5p).
-            const { agent, cleanup } = await buildAgentFromContent(
+            const { agent, cleanup } = await buildPropertyAgentFromContent(
               scriptToolCallFixture('read_file', args),
             );
             try {

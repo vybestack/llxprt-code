@@ -18,6 +18,7 @@ import {
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
+import { windowsChildEnv } from '../__tests__/windows-child-env.js';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const preload = fileURLToPath(
@@ -93,8 +94,8 @@ function isolatedEnv(dir: string): Record<string, string> {
   return {
     PATH: process.env.PATH ?? '',
     HOME: dir,
-    USERPROFILE: dir,
     TMPDIR: join(dir, 'temp'),
+    ...windowsChildEnv(dir, join(dir, 'temp')),
     LLXPRT_CONFIG_HOME: join(dir, 'config'),
     LLXPRT_DATA_HOME: join(dir, 'data'),
     LLXPRT_STATE_HOME: join(dir, 'state'),

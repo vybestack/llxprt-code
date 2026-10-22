@@ -11,11 +11,23 @@
  */
 
 import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
+import { devNull } from 'node:os';
 import { isAbsolute } from 'node:path';
 
 /** Bounded fixture Git timeout and output allowance. */
 export const GIT_FIXTURE_TIMEOUT_MS = 30_000;
 export const GIT_FIXTURE_MAX_BUFFER = 64 * 1024 * 1024;
+
+/**
+ * Fixture repositories are synthetic, so the machine's system and user Git
+ * configuration must not leak in. Git for Windows ships `core.autocrlf=true`
+ * in its system config, which makes every fixture file go through LF to CRLF
+ * conversion and a per-file warning.
+ */
+const ISOLATED_GIT_CONFIG_ENV = {
+  GIT_CONFIG_NOSYSTEM: '1',
+  GIT_CONFIG_GLOBAL: devNull,
+};
 
 /** Render every failure mode of a checked fixture Git run. */
 function describeGitFailure(
@@ -46,6 +58,7 @@ export function gitCheck(dir: string, args: string[]): string {
   const result = spawnSync('git', ['-C', dir, ...args], {
     encoding: 'utf-8',
     stdio: 'pipe',
+    env: { ...process.env, ...ISOLATED_GIT_CONFIG_ENV },
     timeout: GIT_FIXTURE_TIMEOUT_MS,
     maxBuffer: GIT_FIXTURE_MAX_BUFFER,
   });
@@ -69,6 +82,12 @@ export function gitInit(dir: string): void {
   // It is a no-op on POSIX, so the setting is applied unconditionally rather
   // than behind a platform branch.
   gitCheck(dir, ['config', 'core.longpaths', 'true']);
+  // Fixture content is committed byte-for-byte: no line-ending conversion, and
+  // no durability work (fsync per object, background gc) for throwaway trees.
+  gitCheck(dir, ['config', 'core.autocrlf', 'false']);
+  gitCheck(dir, ['config', 'core.safecrlf', 'false']);
+  gitCheck(dir, ['config', 'core.fsync', 'none']);
+  gitCheck(dir, ['config', 'gc.auto', '0']);
 }
 
 /** Stages and commits every fixture change; returns the resulting commit SHA. */

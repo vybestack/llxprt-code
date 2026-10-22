@@ -5,7 +5,7 @@
  */
 import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
-import { describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it, setSystemTime } from 'bun:test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
@@ -40,6 +40,12 @@ async function registered(command: SlashCommand): Promise<SlashCommand> {
 
 describe('registered statistics and logging owners', () => {
   const makeOwner = useCommandOwners();
+  // The clock is frozen for the duration assertion: building the registry
+  // takes a machine-dependent amount of real time, which would otherwise be
+  // added to the two minutes the session is declared to have run.
+  afterEach(() => {
+    setSystemTime();
+  });
   it('uses registered session time and reports through its registered UI', async () => {
     await makeOwner('owner');
     const history: Array<Parameters<CommandOwnerFixture['ui']['addItem']>[0]> =
@@ -48,7 +54,9 @@ describe('registered statistics and logging owners', () => {
       history.push(item);
       return history.length;
     };
-    const startTime = new Date(Date.now() - 120000);
+    const now = new Date('2026-10-14T00:02:00Z');
+    setSystemTime(now);
+    const startTime = new Date(now.getTime() - 120000);
     const readStartTime = () => startTime;
     const command = await registered(
       createStatsCommand({

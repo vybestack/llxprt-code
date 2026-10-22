@@ -1,49 +1,13 @@
 import { capturedSessionClient } from './helpers/session-client-capture.js';
 import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
-import {
-  useConsumerPromptDirectory,
-  acquireConsumerRelease,
-  selectConsumerTokenizer,
-  createConsumerContentGenerator,
-  acquireConsumerPolicy,
-  acquireConsumerMedia,
-  createConsumerSessionClient,
-} from './helpers/consumer-owner-primitives.js';
-import type { RuntimePolicyOwner } from '@vybestack/llxprt-code-core';
-import { Config } from '@vybestack/llxprt-code-core';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
-import { toConfigParameters } from '../agentConfig.adapter.js';
-import { mkdtemp, realpath, rm } from 'node:fs/promises';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
-
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core';
-import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-
+import { useConsumerPromptDirectory } from './helpers/consumer-owner-primitives.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import {
-  acquirePreferredProviderManager,
-  acquirePreferredOAuth,
-  preparePreferredProviderCompletion,
-} from '../preferred-provider-acquisition.js';
-
-import { randomUUID } from 'node:crypto';
-import {
-  runCleanupSteps,
-  cleanupAfterFailure,
-} from '../../core/subagent-cleanup.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
-
-import { describe, expect, it } from 'bun:test';
-
-import { fileURLToPath } from 'node:url';
-import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
+  openCaller,
+  useFakeResponsesReplay,
+} from './helpers/caller-fixture.js';
 import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
-
-import { executeProviderActivation } from '../providerActivationExecutor.js';
-import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
-import { assembleModelSelection } from '../model-selection.js';
+import { describe, expect, it } from 'bun:test';
 import { type Agent, type AgentEvent } from '@vybestack/llxprt-code-agents';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import {
@@ -92,183 +56,27 @@ describe('config-injection parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
   useConsumerPromptDirectory();
 
   const credentials = useOwnedCredentials();
-  let callerConfig: Config;
-  let callerSettings: SettingsService;
-  let callerSettingsOwner: SessionSettingsOwner;
-  let callerPolicy: RuntimePolicyOwner;
-  let callerMcp: McpRuntimeOwner;
-  let callerManager: ReturnType<typeof acquirePreferredProviderManager>;
-  let callerOwner: SessionClientOwner;
-  let callerClose: () => Promise<void>;
   const callerFactories = createAgentRuntimeFactoryBindings();
-  let callerRelease: ReturnType<typeof acquireConsumerRelease>;
-  let callerFiles: ProviderFileLifecycle;
-  let callerRuntimeId: string;
-  let callerOAuth: ReturnType<typeof acquirePreferredOAuth>;
-  let callerTokenizer: ReturnType<typeof selectConsumerTokenizer>;
-  let callerContent: ReturnType<typeof createConsumerContentGenerator>;
-
-  async function openCaller(fixture: string): Promise<void> {
-    const previousReplay = process.env.LLXPRT_FAKE_RESPONSES;
-    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
-      new URL('./fixtures/' + fixture, import.meta.url),
-    );
-    const directory = await realpath(
-      await mkdtemp(join(tmpdir(), 'caller-adoption-')),
-    );
-    callerConfig = new Config({
-      ...toConfigParameters({
-        provider: 'fake',
-        model: 'fake-model',
-        sessionId: randomUUID(),
-        workingDir: directory,
-      }),
-      interactive: true,
-      includeDirectories: [process.cwd()],
-    });
-    callerSettings = new SettingsService();
-    callerPolicy = acquireConsumerPolicy(callerConfig);
-
-    callerMcp = await buildTestMcpRuntime(
-      callerConfig,
-      callerPolicy.session.messageBus,
-      {},
-      undefined,
-      callerPolicy,
-    );
-    acquireCallerProviders();
-    const media = acquireConsumerMedia(callerConfig, 1024 * 1024 * 1024);
-    callerOwner = await createConsumerSessionClient(
-      callerConfig,
-      callerSettings,
-      callerManager,
-      callerFactories.agentClientFactory,
-      media.store,
-      callerMcp.readInstructions,
-      callerMcp.workspacePaths,
-      callerSettingsOwner,
-      callerContent,
-      callerTokenizer,
-    );
-    callerOwner.bindMcpRuntime(callerMcp);
-    callerOwner.bindProviderFiles(callerFiles, (provider) =>
-      callerOAuth.composeRetryOperations(provider),
-    );
-    callerOwner.bindHooks();
-    callerClose = settleEngineRelease.bind(
-      undefined,
-      [
-        () => callerOwner.dispose(),
-        () => callerRelease.close(),
-        () => media.dispose(),
-        () => callerMcp.dispose(),
-        () => callerConfig.dispose(),
-        () => rm(directory, { recursive: true, force: true }),
-      ],
-      previousReplay,
-    );
-    try {
-      await preparePreferredProviderCompletion(
-        callerConfig,
-        callerSettings,
-        callerSettingsOwner,
-        callerManager,
-        callerOAuth,
-        callerRuntimeId,
-        callerTokenizer,
-        undefined,
-      );
-      await callerMcp.initialize();
-      await activateCallerClient();
-    } catch (primary) {
-      await cleanupAfterFailure(primary, callerClose);
-    }
-  }
-  function acquireCallerProviders(): void {
-    callerRuntimeId = 'caller-' + randomUUID();
-
-    callerSettingsOwner = new SessionSettingsOwner(callerSettings);
-
-    callerSettingsOwner.initializeProviderSelection(
-      callerConfig.getProvider(),
-      callerConfig.getModel(),
-    );
-    callerSettingsOwner.bindTelemetry(callerConfig);
-    callerFiles = new ProviderFileLifecycle({
-      maxFiles: 100,
-      maxBytes: 512 * 1024 * 1024,
-    });
-    callerRelease = acquireConsumerRelease(
-      callerSettingsOwner,
-      callerFiles,
-      callerRuntimeId,
-      callerConfig.getSessionId(),
-    );
-    callerManager = acquirePreferredProviderManager(
-      callerConfig,
-      callerSettings,
-      callerSettingsOwner,
-      callerFiles,
-      callerRuntimeId,
-      credentials().authority,
-      callerRelease,
-    );
-    callerTokenizer = selectConsumerTokenizer(callerManager);
-    callerContent = createConsumerContentGenerator();
-
-    callerOAuth = acquirePreferredOAuth(
-      undefined,
-      callerPolicy.session.messageBus,
-      callerConfig,
-      callerSettings,
-      callerManager,
-      callerRuntimeId,
-      callerMcp.profileDefinitions,
-      credentials().authority,
-      callerRelease,
-      undefined,
-    );
-  }
-  async function activateCallerClient(): Promise<void> {
-    const activation = await executeProviderActivation(
-      callerConfig,
-      { provider: callerConfig.getProvider(), model: callerConfig.getModel() },
-      assembleProviderSwitch(
-        callerConfig,
-        callerSettings,
-        callerManager,
-        callerOAuth,
-        () => 'agent',
-        () => callerOwner.refreshAuth(),
-        callerSettingsOwner,
-      ),
-      callerSettings,
-      callerManager,
-      (method) => callerOwner.refreshAuth(method),
-      assembleModelSelection(callerSettingsOwner),
-    );
-    requireCallerActivation(activation);
-    await callerOwner.initializeTools();
-    await capturedSessionClient(callerOwner).startChat();
-  }
+  const replayFixture = useFakeResponsesReplay('plain-text.jsonl');
 
   it('T1 fromConfig adopts the external Config: internalConfig() identity, non-empty runtimeId, single terminal done (REQ-INT-001)', async () => {
-    await openCaller('parity-toolcall.jsonl');
+    replayFixture('parity-toolcall.jsonl');
+    const caller = await openCaller(credentials().authority, callerFactories);
     try {
-      const config = callerConfig;
+      const config = caller.config;
       // onApproval mirrors Path B's ProceedOnce so the tool's confirmation
       // request is answered (the established headless-approval pattern).
       const agent: Agent = await fromConfig(
         config,
-        callerSettings,
+        caller.settings,
         {},
-        callerSettingsOwner,
-        callerManager,
+        caller.settingsOwner,
+        caller.manager,
         undefined,
         undefined,
-        callerMcp,
+        caller.mcp,
         undefined,
-        capturedSessionClient(callerOwner),
+        capturedSessionClient(caller.owner),
         undefined,
         undefined,
         undefined,
@@ -307,25 +115,25 @@ describe('config-injection parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
         await agent.dispose();
       }
     } finally {
-      await callerClose();
+      await caller.close();
     }
   }, 30000);
 
   it('T6 runtime reuse: the adopted Config active provider/model are reflected on the agent (no second ProviderManager) (REQ-INT-001.2)', async () => {
-    await openCaller('plain-text.jsonl');
+    const caller = await openCaller(credentials().authority, callerFactories);
     try {
-      const config = callerConfig;
+      const config = caller.config;
       const agent: Agent = await fromConfig(
         config,
-        callerSettings,
+        caller.settings,
         {},
-        callerSettingsOwner,
-        callerManager,
+        caller.settingsOwner,
+        caller.manager,
         undefined,
         undefined,
-        callerMcp,
+        caller.mcp,
         undefined,
-        capturedSessionClient(callerOwner),
+        capturedSessionClient(caller.owner),
       );
       try {
         // The agent's provider/model reflect the ADOPTED Config's active runtime.
@@ -342,35 +150,35 @@ describe('config-injection parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
         await agent.dispose();
       }
     } finally {
-      await callerClose();
+      await caller.close();
     }
   }, 30000);
 
   it('T7 ownership contrast (half A): a fromConfig-supplied Config stays CALLER-owned — still usable after agent.dispose() (REQ-INT-001.3)', async () => {
-    await openCaller('plain-text.jsonl');
+    const caller = await openCaller(credentials().authority, callerFactories);
     try {
-      const config = callerConfig;
+      const config = caller.config;
       const agent: Agent = await fromConfig(
         config,
-        callerSettings,
+        caller.settings,
         {},
-        callerSettingsOwner,
-        callerManager,
+        caller.settingsOwner,
+        caller.manager,
         undefined,
         undefined,
-        callerMcp,
+        caller.mcp,
         undefined,
-        capturedSessionClient(callerOwner),
+        capturedSessionClient(caller.owner),
       );
       await agent.dispose();
 
       // The caller-supplied Config is STILL usable: reading ephemeral settings
       // does not throw and returns a real object.
-      const settings = callerSettings.getAllGlobalSettings();
+      const settings = caller.settings.getAllGlobalSettings();
       expect(typeof settings).toBe('object');
       expect(settings).not.toBeNull();
     } finally {
-      await callerClose();
+      await caller.close();
     }
   }, 30000);
 
@@ -395,87 +203,74 @@ describe('config-injection parity @plan:PLAN-20260621-COREAPIREMED.P19 @requirem
   it('PROP runtime reuse: for any non-empty sessionId, the adopted Config provider/model are reflected on the agent (REQ-INT-001.2)', async () => {
     await expect(
       fc.assert(
-        createPROPRuntimeReuseForAnyNonEmptySessionIdTheAdoptedConfigProviderProperty(),
+        createPROPRuntimeReuseForAnyNonEmptySessionIdTheAdoptedConfigProviderProperty(
+          credentials().authority,
+        ),
       ),
     ).resolves.toBeUndefined();
   }, 30000);
 
-  function createPROPRuntimeReuseForAnyNonEmptySessionIdTheAdoptedConfigProviderProperty() {
+  function createPROPRuntimeReuseForAnyNonEmptySessionIdTheAdoptedConfigProviderProperty(
+    authority: ReturnType<typeof credentials>['authority'],
+  ) {
     return fc.asyncProperty(nonBlankStringArbitrary, async (sessionId) => {
-      await openCaller('plain-text.jsonl');
+      const caller = await openCaller(authority, callerFactories);
       try {
         const agent: Agent = await fromConfig(
-          callerConfig,
-          callerSettings,
+          caller.config,
+          caller.settings,
           { sessionId },
-          callerSettingsOwner,
-          callerManager,
+          caller.settingsOwner,
+          caller.manager,
           undefined,
           undefined,
-          callerMcp,
+          caller.mcp,
           undefined,
-          capturedSessionClient(callerOwner),
+          capturedSessionClient(caller.owner),
         );
         try {
           return (
             agent.getProvider() === 'fake' &&
             agent.getModel() === 'fake-model' &&
-            agent.getProvider() === callerConfig.getProvider() &&
-            agent.getModel() === callerConfig.getModel()
+            agent.getProvider() === caller.config.getProvider() &&
+            agent.getModel() === caller.config.getModel()
           );
         } finally {
           await agent.dispose();
         }
       } finally {
-        await callerClose();
+        await caller.close();
       }
     });
   }
 
   it('PROP adoption identity: for any non-empty sessionId, internalConfig(agent) === the caller-supplied Config (REQ-INT-001)', async () => {
+    const authority = credentials().authority;
     await fc.assert(
       fc.asyncProperty(nonBlankStringArbitrary, async (sessionId) => {
-        await openCaller('plain-text.jsonl');
+        const caller = await openCaller(authority, callerFactories);
         try {
           const agent: Agent = await fromConfig(
-            callerConfig,
-            callerSettings,
+            caller.config,
+            caller.settings,
             { sessionId },
-            callerSettingsOwner,
-            callerManager,
+            caller.settingsOwner,
+            caller.manager,
             undefined,
             undefined,
-            callerMcp,
+            caller.mcp,
             undefined,
-            capturedSessionClient(callerOwner),
+            capturedSessionClient(caller.owner),
           );
           try {
-            return internalConfig(agent) === callerConfig;
+            return internalConfig(agent) === caller.config;
           } finally {
             await agent.dispose();
           }
         } finally {
-          await callerClose();
+          await caller.close();
         }
       }),
     );
   }, 30000);
 });
-
-async function settleEngineRelease(
-  steps: ReadonlyArray<() => void | Promise<void>>,
-  previousReplay: string | undefined,
-): Promise<void> {
-  try {
-    await runCleanupSteps(steps);
-  } finally {
-    if (previousReplay === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
-    else process.env.LLXPRT_FAKE_RESPONSES = previousReplay;
-  }
-}
-
-function requireCallerActivation(
-  result: Awaited<ReturnType<typeof executeProviderActivation>>,
-): void {
-  if (result.authFailed) throw result.authError;
-}

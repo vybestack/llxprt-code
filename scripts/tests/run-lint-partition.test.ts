@@ -26,6 +26,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { execa } from 'execa';
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -60,7 +61,11 @@ interface RunnerModule {
     packageDirs?: readonly string[];
   }) => readonly LintCommand[];
   readPackageDirs: (repoRoot: string) => readonly string[];
-  executeLintCommands: (commands: readonly LintCommand[]) => Promise<void>;
+  executeLintCommands: (
+    commands: readonly LintCommand[],
+    cancelSignal?: AbortSignal,
+  ) => Promise<void>;
+  classifyRunnerFailure: (error: unknown) => { exitCode: number };
 }
 
 /** Imports the real runner module under test; nothing here is stubbed. */
@@ -193,7 +198,7 @@ describe('lint partition covers exactly what `eslint .` covers (#3387)', () => {
 /** A command that runs a real shell snippet, shaped like a LintCommand. */
 function shellCommand(
   label: string,
-  status: number | 'signal',
+  status: number | 'signal' | 'hold',
   marker?: string,
 ): LintCommand {
   const { executable, argsPrefix, shell } = getShellConfiguration();
@@ -205,6 +210,16 @@ function shellCommand(
     ...(marker === undefined ? [] : [marker]),
   ];
   const invocation = args.map((arg) => escapeShellArg(arg, shell)).join(' ');
+  if (status === 'hold') {
+    // No shell wrapper: cancellation must terminate the long-lived process
+    // itself, not only a shell that would leave it running on Windows.
+    return {
+      cmd: process.execPath,
+      args: args.slice(1),
+      nodeOptions: '',
+      label,
+    };
+  }
   if (status === 'signal') {
     const script =
       shell === 'powershell'
@@ -265,16 +280,45 @@ describe('partitioned execution semantics (#3387)', () => {
     await executeLintCommands([shellCommand('a', 0), shellCommand('b', 0)]);
   });
 
-  it('aborts the remaining groups when a group is killed by a signal', async () => {
-    const { executeLintCommands } = await loadRunner();
-    const marker = join(fixtureRoot, 'signal.txt');
+  // Windows has no signals: a child it terminates is only an exit code. The
+  // cancellation test below covers the interruption path that exists there.
+  it.skipIf(process.platform === 'win32')(
+    'aborts the remaining groups when a group is killed by a signal',
+    async () => {
+      const { executeLintCommands } = await loadRunner();
+      const marker = join(fixtureRoot, 'signal.txt');
+      rmSync(marker, { force: true });
+      const commands = [
+        shellCommand('killed', 'signal'),
+        shellCommand('after', 0, marker),
+      ];
+      await expect(executeLintCommands(commands)).rejects.toThrow();
+      // An interruption is not a lint result: nothing after it should run.
+      expect(() => readFileSync(marker, 'utf8')).toThrow();
+    },
+  );
+
+  it('aborts the remaining groups when the runner cancels the running group', async () => {
+    const { executeLintCommands, classifyRunnerFailure } = await loadRunner();
+    const started = join(fixtureRoot, 'cancel-started.txt');
+    const marker = join(fixtureRoot, 'cancel-after.txt');
+    rmSync(started, { force: true });
     rmSync(marker, { force: true });
-    const commands = [
-      shellCommand('killed', 'signal'),
-      shellCommand('after', 0, marker),
-    ];
-    await expect(executeLintCommands(commands)).rejects.toThrow();
-    // An interruption is not a lint result: nothing after it should run.
-    expect(() => readFileSync(marker, 'utf8')).toThrow();
-  });
+    const cancellation = new AbortController();
+    const outcome = executeLintCommands(
+      [shellCommand('held', 'hold', started), shellCommand('after', 0, marker)],
+      cancellation.signal,
+    ).then(
+      () => undefined,
+      (caught: unknown) => caught,
+    );
+    // Cancel only once the real child is running, so the runner has to
+    // terminate an admitted process rather than refuse to start one.
+    while (!existsSync(started)) await Bun.sleep(10);
+    cancellation.abort();
+    const error = await outcome;
+    expect(error).toBeDefined();
+    expect(classifyRunnerFailure(error).exitCode).toBe(143);
+    expect(existsSync(marker)).toBe(false);
+  }, 30_000);
 });

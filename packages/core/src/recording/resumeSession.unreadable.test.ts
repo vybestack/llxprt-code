@@ -8,9 +8,11 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { execFile } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { promisify } from 'node:util';
 import { SessionRecordingService } from './SessionRecordingService.js';
 import { SessionLockManager } from './SessionLockManager.js';
 import {
@@ -47,6 +49,30 @@ async function createHealthySession(
   await recording.dispose();
   return filePath;
 }
+
+const execFileAsync = promisify(execFile);
+
+/**
+ * Makes `directory` refuse new entries for the current user and returns the
+ * function that restores access. chmod(0500) does nothing on Windows, where
+ * access is decided by the ACL, so Windows gets a real deny entry instead.
+ */
+async function denyNewEntries(directory: string): Promise<() => Promise<void>> {
+  if (process.platform !== 'win32') {
+    await fs.chmod(directory, 0o500);
+    return () => fs.chmod(directory, 0o700);
+  }
+  const account = os.userInfo().username;
+  // WD/AD are "add file" / "add subdirectory" on a directory; no inheritance
+  // flags, so only this directory is affected.
+  await execFileAsync('icacls', [directory, '/deny', `${account}:(WD,AD)`]);
+  return async () => {
+    await execFileAsync('icacls', [directory, '/remove:d', account]);
+  };
+}
+
+// libuv reports ERROR_ACCESS_DENIED as EPERM, POSIX reports EACCES.
+const DENIED_CODE = process.platform === 'win32' ? 'EPERM' : 'EACCES';
 
 async function setModifiedTime(filePath: string, iso: string): Promise<void> {
   const when = new Date(iso);
@@ -313,19 +339,25 @@ describe('resumeSession with legacy and unreadable recordings (issue #3732)', ()
   });
 
   describe('when the chats directory cannot be written', () => {
+    let restoreAccess: (() => Promise<void>) | undefined;
+
     afterEach(async () => {
-      await fs.chmod(chatsDir, 0o700);
+      await restoreAccess?.();
+      restoreAccess = undefined;
     });
 
     it('propagates the permission error instead of reporting lock contention', async () => {
       await createHealthySession(chatsDir, 'locked-out-0010');
-      await fs.chmod(chatsDir, 0o500);
+      restoreAccess = await denyNewEntries(chatsDir);
+      await expect(
+        fs.writeFile(path.join(chatsDir, 'probe'), ''),
+      ).rejects.toMatchObject({ code: DENIED_CODE });
 
       await expect(resume(CONTINUE_LATEST)).rejects.toMatchObject({
-        code: 'EACCES',
+        code: DENIED_CODE,
       });
       await expect(resume('locked-out-0010')).rejects.toMatchObject({
-        code: 'EACCES',
+        code: DENIED_CODE,
       });
     });
   });

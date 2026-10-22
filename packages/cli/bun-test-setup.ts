@@ -353,8 +353,10 @@ traceNativePreloadPhase('cli.matchers-import.exit');
 // afterEach cleanup (mirrors test-setup.ts)
 // ---------------------------------------------------------------------------
 traceNativePreloadPhase('cli.cleanup-core-import.entry');
+// Import the reset from the module that owns the state; utils/cleanup.js
+// re-exports it but also evaluates the whole core barrel.
 const { __resetCleanupStateForTesting } = await import(
-  './src/utils/cleanup.js'
+  './src/utils/cleanup-state.js'
 );
 traceNativePreloadPhase('cli.cleanup-core-import.exit');
 
@@ -409,9 +411,11 @@ function restoreProcessListeners(eventName: ManagedProcessEvent): void {
 // reset, so it is invoked at the top of the same hook rather than registered
 // separately. Without this, a component mounted in one test stays mounted for
 // the rest of the file, leaking effects, timers and the global active stdin.
+// The registry is imported instead of the renderer helper so files that never
+// render do not pay for loading the real Ink runtime.
 traceNativePreloadPhase('cli.ink-import.entry');
 const { cleanup: cleanupInkRenders } = await import(
-  './test-utils/ink-testing-library.js'
+  './test-utils/ink-render-registry.js'
 );
 traceNativePreloadPhase('cli.ink-import.exit');
 

@@ -68,6 +68,12 @@ async function runShell(
   }
 }
 
+// The history is searched as JSON text, where a native Windows path appears
+// with its backslashes escaped.
+function jsonEncoded(text: string): string {
+  return JSON.stringify(text).slice(1, -1);
+}
+
 describe('shell lifecycle session owner', () => {
   const makeOwner = useCommandOwners();
   it('appends real shell output only to the captured session and preserves its sibling', async () => {
@@ -85,7 +91,11 @@ describe('shell lifecycle session owner', () => {
     const sibling = await makeOwner('shell-directory-sibling');
     await runShell(owner, sibling, 'node -p "process.cwd()"', sibling);
     const history = JSON.stringify(await owner.getHistory());
-    expect(history).toContain(owner.workspace.getWorkingDirectory());
-    expect(history).not.toContain(sibling.workspace.getWorkingDirectory());
+    expect(history).toContain(
+      jsonEncoded(owner.workspace.getWorkingDirectory()),
+    );
+    expect(history).not.toContain(
+      jsonEncoded(sibling.workspace.getWorkingDirectory()),
+    );
   });
 });

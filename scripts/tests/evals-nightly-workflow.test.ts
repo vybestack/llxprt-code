@@ -11,6 +11,7 @@ import * as path from 'node:path';
 import {
   asOptionalRecord,
   asRecord,
+  compositeActionSteps,
   parseWorkflowYaml,
 } from './typed-test-helpers.ts';
 import type {
@@ -27,6 +28,35 @@ type WorkflowObject = WorkflowDocument;
 function loadWorkflow(relPath: string): WorkflowObject {
   const source = fs.readFileSync(path.join(ROOT, relPath), 'utf8');
   return parseWorkflowYaml(source);
+}
+
+const SETUP_ACTION_PATH = './.github/actions/setup-local-gemma';
+
+function setupActionSteps(): WorkflowStep[] {
+  return compositeActionSteps(
+    fs.readFileSync(
+      path.join(ROOT, '.github/actions/setup-local-gemma/action.yml'),
+      'utf8',
+    ),
+  );
+}
+
+/** The `KEY=value` pairs the setup action appends to GITHUB_ENV. */
+function exportedProviderEnvironment(): Record<string, string> {
+  const exportStep = setupActionSteps().find(
+    (candidate) => candidate.name === 'Export local model test environment',
+  );
+  const exported: Record<string, string> = {};
+  for (const match of String(exportStep?.run).matchAll(
+    /echo '([A-Z0-9_]+)=([^']*)'/g,
+  )) {
+    exported[match[1]] = match[2];
+  }
+  return exported;
+}
+
+function hasSecretOrVariable(value: unknown): boolean {
+  return /\b(?:secrets|vars)(?:\.|\[)/.test(JSON.stringify(value));
 }
 
 function jobsOf(workflow: WorkflowObject): Record<string, WorkflowJob> {
@@ -70,22 +100,18 @@ describe('evals-nightly.yml delegates to the shared reusable eval workflow', () 
     expect(perms['actions']).toBe('read');
   });
 
-  it('calls the reusable eval workflow with an explicit secret, not broad inheritance', () => {
+  it('calls the reusable eval workflow without passing any secret', () => {
     const jobs = jobsOf(nightly);
     const evalsJob = jobs['evals'];
     expect(evalsJob, 'workflow should define evals job').toBeDefined();
     expect(evalsJob?.uses).toBe('./.github/workflows/_evals-run.yml');
-    // Broad secrets:inherit leaks every repository secret into the reusable
-    // workflow. Only the one declared secret may be passed explicitly.
-    expect(evalsJob?.secrets, 'must not use secrets: inherit').not.toBe(
-      'inherit',
-    );
-    const evalsSecrets = asOptionalRecord(evalsJob?.secrets);
-    expect(typeof evalsSecrets).toBe('object');
-    expect(Object.keys(evalsSecrets ?? {})).toEqual(['provider-api-key']);
-    expect(evalsSecrets?.['provider-api-key']).toBe(
-      '${{ secrets[vars.KEY_VAR_NAME] }}',
-    );
+    // Evals run against the local model, so neither a named secret nor broad
+    // secrets:inherit may reach the reusable workflow.
+    expect(
+      evalsJob?.secrets,
+      'must not pass or inherit secrets',
+    ).toBeUndefined();
+    expect(hasSecretOrVariable(evalsJob)).toBe(false);
   });
 
   it('preserves three statistical matrix samples by not overriding run-attempts', () => {
@@ -172,25 +198,18 @@ describe('_evals-run.yml: shared provider configuration', () => {
     expect(String(attempts)).toContain('fromJSON(inputs.run-attempts)');
   });
 
-  it('declares exactly one workflow_call secret (provider-api-key), rejecting broad inheritance', () => {
+  it('declares no workflow_call secrets and references no repository secret or variable', () => {
     const on = asOptionalRecord(reusable['on']);
     const workflowCall = on?.['workflow_call'];
     expect(workflowCall, 'must define on.workflow_call').toBeDefined();
     const workflowCallRec = asOptionalRecord(workflowCall);
-    const secrets = asOptionalRecord(workflowCallRec?.['secrets']);
-    expect(
-      secrets,
-      'must declare workflow_call secrets explicitly',
-    ).toBeDefined();
-    expect(typeof secrets).toBe('object');
-    // Broad secrets:inherit at the caller is only safe when the callee declares
-    // exactly the secrets it needs. Exactly one secret must be declared.
-    expect(Object.keys(secrets ?? {})).toEqual(['provider-api-key']);
-    expect(
-      asOptionalRecord(asOptionalRecord(secrets?.['provider-api-key']))?.[
-        'required'
-      ],
-    ).toBe(true);
+    expect(workflowCallRec?.['secrets']).toBeUndefined();
+    expect(Object.keys(asRecord(workflowCallRec?.['inputs']))).toEqual([
+      'run-attempts',
+    ]);
+    // The paid provider key and its repository variables are retired: nothing
+    // in the reusable workflow may read them.
+    expect(hasSecretOrVariable(reusable)).toBe(false);
   });
 
   it('keeps the minimal required permissions (contents: read)', () => {
@@ -206,49 +225,46 @@ describe('_evals-run.yml: shared provider configuration', () => {
     expect(checkout.with?.['persist-credentials']).toBe(false);
   });
 
-  it('exports the complete known-working provider configuration on the eval step', () => {
+  it('runs the evals against the shared local Gemma model configuration', () => {
+    const steps = evalsJob?.steps ?? [];
+    const setup = localStepNamed(evalsJob, 'Set up local Gemma 4 E2B model');
+    expect(setup.uses).toBe(SETUP_ACTION_PATH);
     const runStep = localStepNamed(evalsJob, 'Run all evals');
-    const env = envOf(runStep);
-    // The reusable workflow receives the key via its one declared
-    // workflow_call secret (provider-api-key), which the callers populate
-    // from secrets[vars.KEY_VAR_NAME].
-    expect(env.OPENAI_API_KEY).toBe('${{ secrets.provider-api-key }}');
-    expect(env.OPENAI_BASE_URL).toBe('${{ vars.OPENAI_BASE_URL }}');
-    expect(env.LLXPRT_DEFAULT_MODEL).toBe('${{ vars.LLXPRT_DEFAULT_MODEL }}');
-    expect(env.LLXPRT_DEFAULT_PROVIDER).toBe(
-      '${{ vars.LLXPRT_DEFAULT_PROVIDER }}',
+    expect(steps.indexOf(setup)).toBeGreaterThan(
+      steps.indexOf(localStepNamed(evalsJob, 'Build project')),
     );
-    expect(env.LLXPRT_AUTH_TYPE).toBe('provider');
-    expect(env.LLXPRT_FORCE_FILE_STORAGE).toBe('true');
-    expect(env.RUN_EVALS).toBe('1');
+    expect(steps.indexOf(setup)).toBeLessThan(steps.indexOf(runStep));
+    // The provider environment comes from the setup action's GITHUB_ENV
+    // export, so the eval step only carries eval-specific variables.
+    expect(envOf(runStep)).toEqual({
+      LLXPRT_FORCE_FILE_STORAGE: 'true',
+      RUN_EVALS: '1',
+    });
+    expect(exportedProviderEnvironment()).toEqual({
+      OPENAI_API_KEY: 'ollama-local-only',
+      OPENAI_BASE_URL: 'http://127.0.0.1:12644/v1',
+      LLXPRT_DEFAULT_MODEL: 'gemma4:e2b-it-qat',
+      LLXPRT_DEFAULT_PROVIDER: 'openai',
+      LLXPRT_AUTH_TYPE: 'provider',
+      LLXPRT_TEST_PROFILE: 'local-gemma4-e2e',
+      LLXPRT_CONTEXT_LIMIT: '32768',
+      LLXPRT_MAX_OUTPUT_TOKENS: '8192',
+      LLXPRT_LOCAL_MODEL_E2E: 'true',
+    });
+    expect(hasSecretOrVariable(setupActionSteps())).toBe(false);
   });
 
-  it('runs a safe preflight that verifies required provider values without printing secrets', () => {
-    const preflight = localStepNamed(
-      evalsJob,
-      'Provider configuration preflight',
+  it('has no paid-provider preflight and keeps the local model server log with the eval artifact', () => {
+    const names = (evalsJob?.steps ?? []).map((s: WorkflowStep) => s.name);
+    expect(names).not.toContain('Provider configuration preflight');
+    const collect = localStepNamed(evalsJob, 'Collect local model log');
+    expect(collect.if).toBe('always()');
+    expect(String(collect.run)).toContain('$RUNNER_TEMP/ollama-server.log');
+    expect(String(collect.run)).toContain('evals/logs/');
+    // The log is copied into evals/logs before the artifact is staged from it.
+    expect(names.indexOf('Collect local model log')).toBeLessThan(
+      names.indexOf('Prepare eval artifact'),
     );
-    const run = String(preflight.run).replace(/\s+/g, ' ').trim();
-    // The env wiring reads the key via the declared workflow_call secret.
-    expect(envOf(preflight).OPENAI_API_KEY).toBe(
-      '${{ secrets.provider-api-key }}',
-    );
-    expect(envOf(preflight).KEY_VAR_NAME).toBe('${{ vars.KEY_VAR_NAME }}');
-    expect(envOf(preflight).OPENAI_BASE_URL).toBe(
-      '${{ vars.OPENAI_BASE_URL }}',
-    );
-    expect(envOf(preflight).LLXPRT_DEFAULT_MODEL).toBe(
-      '${{ vars.LLXPRT_DEFAULT_MODEL }}',
-    );
-    expect(envOf(preflight).LLXPRT_DEFAULT_PROVIDER).toBe(
-      '${{ vars.LLXPRT_DEFAULT_PROVIDER }}',
-    );
-    // Must fail when required values are empty.
-    expect(run).toMatch(/exit 1/);
-    // Must NOT echo the secret value into logs.
-    expect(run.toLowerCase()).not.toContain('echo "${openai_api_key');
-    // Reports the consulted key variable NAME, never the value.
-    expect(run).toContain('Consulted API key secret named');
   });
 
   it('builds the project explicitly before running the eval suite', () => {
@@ -343,19 +359,15 @@ describe('_evals-run.yml: shared provider configuration', () => {
 describe('nightly.yml behavioral_evals delegates to the shared reusable workflow', () => {
   const nightly = loadWorkflow('.github/workflows/nightly.yml');
 
-  it('calls _evals-run.yml with an explicit secret, not broad inheritance', () => {
+  it('calls _evals-run.yml without passing or inheriting any secret', () => {
     const evalsJob = jobsOf(nightly)['behavioral_evals'];
     expect(evalsJob, 'nightly.yml should define behavioral_evals').toBeTruthy();
     expect(evalsJob?.uses).toBe('./.github/workflows/_evals-run.yml');
-    expect(evalsJob?.secrets, 'must not use secrets: inherit').not.toBe(
-      'inherit',
-    );
-    const evalsSecrets2 = asOptionalRecord(evalsJob?.secrets);
-    expect(typeof evalsSecrets2).toBe('object');
-    expect(Object.keys(evalsSecrets2 ?? {})).toEqual(['provider-api-key']);
-    expect(evalsSecrets2?.['provider-api-key']).toBe(
-      '${{ secrets[vars.KEY_VAR_NAME] }}',
-    );
+    expect(
+      evalsJob?.secrets,
+      'must not pass or inherit secrets',
+    ).toBeUndefined();
+    expect(hasSecretOrVariable(evalsJob)).toBe(false);
   });
 
   it('declares least-privilege permissions instead of inheriting broad workflow grants', () => {

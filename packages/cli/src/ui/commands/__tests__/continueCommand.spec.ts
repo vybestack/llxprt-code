@@ -648,8 +648,9 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
         expect(result.content).toBe(
           'Session package export and cleanup failed',
         );
+        // Windows reports a path that runs through a file as ENOENT.
         await expect(stat(destination)).rejects.toMatchObject({
-          code: 'ENOTDIR',
+          code: process.platform === 'win32' ? 'ENOENT' : 'ENOTDIR',
         });
       });
     }, 30000);

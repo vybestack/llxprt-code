@@ -453,6 +453,10 @@ async function main(): Promise<void> {
               result.timedOut ? ' [timeout]' : ''
             }`,
           );
+          // Emit the failure detail now: a job cancelled before every worker
+          // finishes must still leave the cause of each completed failure.
+          console.error(`\n----- ${result.file} -----`);
+          console.error(failureExcerpt(stripAnsi(result.output), 6000));
         }
       }
     }
@@ -467,11 +471,6 @@ async function main(): Promise<void> {
 
     results.sort((a, b) => a.file.localeCompare(b.file));
     const failed = results.filter((result) => !result.passed);
-
-    for (const result of failed) {
-      console.error(`\n----- ${result.file} -----`);
-      console.error(failureExcerpt(stripAnsi(result.output), 6000));
-    }
 
     const cases = results.reduce(
       (total, result) => {

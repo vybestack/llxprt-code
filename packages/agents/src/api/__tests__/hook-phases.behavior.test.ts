@@ -27,19 +27,10 @@ import {
   HookEventName,
   HookType,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
-import {
-  escapeShellArg,
-  getShellConfiguration,
-} from '@vybestack/llxprt-code-core/utils/shell-utils.js';
 import type { HookExecutionPhase } from '../agent.js';
 import { HookControl } from '../control/hooks.js';
 import { createHookControlDeps } from './helpers/fakeHookControlDeps.js';
-
-function physicalHookCommand(script: string): string {
-  const { shell } = getShellConfiguration();
-  const invocation = shell === 'powershell' ? '&' : 'exec';
-  return `${invocation} ${escapeShellArg(process.execPath, shell)} ${escapeShellArg(script, shell)}`;
-}
+import { physicalHookCommand } from './helpers/physicalHookCommand.js';
 
 async function waitForMarker(path: string): Promise<void> {
   const deadline = Date.now() + 5000;

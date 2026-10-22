@@ -694,6 +694,12 @@ describe('issue-2994 classifyRunnerFailure (loud interruption)', () => {
     expect(failure.message).toContain('interruption');
   });
 
+  it('maps a runner cancellation to exit 143 even when the child reports an exit code', () => {
+    const failure = classifyRunnerFailure({ isCanceled: true, exitCode: 1 });
+    expect(failure.exitCode).toBe(143);
+    expect(failure.message).toContain('interruption');
+  });
+
   it('falls back to exit 1 with the underlying message for a generic error', () => {
     const failure = classifyRunnerFailure(new Error('boom'));
     expect(failure.exitCode).toBe(1);

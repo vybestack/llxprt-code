@@ -367,8 +367,9 @@ describe('.github/workflows/release.yml', () => {
     fs.writeFileSync(
       installer,
       `#!/bin/sh
-printf "%s|%s\n" "$PWD" "$*" >> "$INSTALL_LOG"
-if [ -n "$FAIL_PLUGIN" ]; then case "$PWD" in */"$FAIL_PLUGIN") exit 17 ;; esac; fi
+plugin_dir="$(pwd -P)"
+printf "%s|%s\n" "$plugin_dir" "$*" >> "$INSTALL_LOG"
+if [ -n "$FAIL_PLUGIN" ]; then case "$plugin_dir" in */"$FAIL_PLUGIN") exit 17 ;; esac; fi
 `,
     );
     fs.chmodSync(installer, 0o755);

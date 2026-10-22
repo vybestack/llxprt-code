@@ -10,4 +10,9 @@ if (label === undefined || status === undefined) {
   throw new Error('Expected lint command label and status');
 }
 if (marker !== undefined) appendFileSync(marker, label + '\n', 'utf8');
-process.exit(Number(status));
+if (status === 'hold') {
+  // Stay alive until the runner terminates this process; the long timer only
+  // bounds a runner that never cancels, which the caller's assertions reject.
+  await Bun.sleep(120_000);
+}
+process.exit(status === 'hold' ? 0 : Number(status));

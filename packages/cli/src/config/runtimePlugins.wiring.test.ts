@@ -15,7 +15,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, parse } from 'node:path';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -73,8 +73,21 @@ const PLUGIN_PROVIDER_ID = 'wiring-provider';
 const CONTRIBUTED_ALIAS = 'wiring-alias';
 const RUNTIME_ID = 'issue2758-wiring-test';
 
-const NODE_MODULES = '/g/lib/node_modules';
-const HOST_FILE = `${NODE_MODULES}/@vybestack/llxprt-code-providers/dist/x.js`;
+// Discovery walks these paths with the native path module, so every key is
+// built with it too: a hard-coded POSIX spelling never matches on Windows.
+const NODE_MODULES = join(
+  parse(process.cwd()).root,
+  'g',
+  'lib',
+  'node_modules',
+);
+const HOST_FILE = join(
+  NODE_MODULES,
+  '@vybestack',
+  'llxprt-code-providers',
+  'dist',
+  'x.js',
+);
 
 /**
  * A node_modules layout containing the CLI's own package plus one installed
@@ -83,17 +96,17 @@ const HOST_FILE = `${NODE_MODULES}/@vybestack/llxprt-code-providers/dist/x.js`;
 function discoveryDeps(): RuntimePluginDiscoveryDeps {
   const dirs: Record<string, string[]> = {
     [NODE_MODULES]: ['@vybestack', PLUGIN_PACKAGE, 'unrelated-package'],
-    [`${NODE_MODULES}/@vybestack`]: ['llxprt-code-providers'],
+    [join(NODE_MODULES, '@vybestack')]: ['llxprt-code-providers'],
   };
   const files: Record<string, string> = {
-    [`${NODE_MODULES}/${PLUGIN_PACKAGE}/package.json`]: JSON.stringify({
+    [join(NODE_MODULES, PLUGIN_PACKAGE, 'package.json')]: JSON.stringify({
       name: PLUGIN_PACKAGE,
       llxprt: { runtimePlugin: true },
     }),
-    [`${NODE_MODULES}/unrelated-package/package.json`]: JSON.stringify({
+    [join(NODE_MODULES, 'unrelated-package', 'package.json')]: JSON.stringify({
       name: 'unrelated-package',
     }),
-    [`${NODE_MODULES}/@vybestack/llxprt-code-providers/package.json`]:
+    [join(NODE_MODULES, '@vybestack', 'llxprt-code-providers', 'package.json')]:
       JSON.stringify({ name: '@vybestack/llxprt-code-providers' }),
   };
   return {

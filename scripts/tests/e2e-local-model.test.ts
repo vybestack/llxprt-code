@@ -6,245 +6,21 @@
 
 import { describe, expect, it } from 'bun:test';
 import {
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs';
-import { spawnSync } from 'node:child_process';
-import { posix, resolve } from 'node:path';
-import {
   asOptionalRecord,
   asRecord,
   asString,
-  parseWorkflowYaml,
   workflowJob,
 } from './typed-test-helpers.ts';
-
-const root = resolve(import.meta.dirname, '../..');
-const requiredText = readFileSync(
-  resolve(root, '.github/workflows/e2e.yml'),
-  'utf8',
-);
-const required = parseWorkflowYaml(requiredText);
-
-type BackendVerifierResult = {
-  stdout: string;
-  stderr: string;
-  status: number;
-};
-
-let fixtureCounter = 0;
-
-function writeExecutable(bin: string, name: string, body: string): void {
-  const path = resolve(bin, name);
-  writeFileSync(
-    path,
-    `#!/bin/bash
-${body}
-`,
-  );
-  Bun.spawnSync(['chmod', '+x', path]);
-}
-
-function runBackendVerifier(
-  maps: string,
-  livePid = true,
-  options: {
-    cmdline?: string;
-    vendor?: string;
-    mapsFifo?: boolean;
-    mapsDisappearAfterPgrep?: boolean;
-  } = {},
-): BackendVerifierResult {
-  const fixture = resolve(root, `tmp/verify3764/behavior-${fixtureCounter++}`);
-  rmSync(fixture, { recursive: true, force: true });
-  const runnerTemp = resolve(fixture, 'runner-temp');
-  const procRoot = resolve(fixture, 'proc');
-  const bin = resolve(fixture, 'bin');
-  const processDir = resolve(procRoot, '4242');
-  const parentDir = resolve(procRoot, '4200');
-  const ollamaDir = resolve(runnerTemp, 'ollama/lib/ollama');
-  mkdirSync(bin, { recursive: true });
-  mkdirSync(processDir, { recursive: true });
-  mkdirSync(parentDir, { recursive: true });
-  mkdirSync(ollamaDir, { recursive: true });
-  const shellDirectory = spawnSync('bash', ['-c', 'pwd -P'], {
-    cwd: fixture,
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  if (shellDirectory.error) throw shellDirectory.error;
-  if (shellDirectory.status !== 0) {
-    throw new Error(shellDirectory.stderr);
-  }
-  const shellRoot = shellDirectory.stdout.trim();
-  const shellRunnerTemp = posix.join(shellRoot, 'runner-temp');
-  const shellProcRoot = posix.join(shellRoot, 'proc');
-  const shellBin = posix.join(shellRoot, 'bin');
-  writeFileSync(
-    resolve(procRoot, 'cpuinfo'),
-    `vendor_id : ${options.vendor ?? 'GenuineIntel'}\n`,
-  );
-  writeFileSync(
-    resolve(processDir, 'cmdline'),
-    options.cmdline ??
-      `${posix.join(shellRunnerTemp, 'ollama/lib/ollama/llama-server')}\0--model\0gemma\0`,
-  );
-  writeFileSync(
-    resolve(processDir, 'status'),
-    'Name:\tllama-server\nPPid:\t4200\n',
-  );
-  writeFileSync(resolve(parentDir, 'cmdline'), 'ollama\0serve\0');
-  const mapsPath = resolve(processDir, 'maps');
-  if (options.mapsFifo) {
-    const fifo = spawnSync('mkfifo', [mapsPath]);
-    if (fifo.status !== 0) throw new Error(fifo.stderr);
-    if (statSync(mapsPath).size !== 0) {
-      throw new Error('FIFO maps fixture must report zero stat size');
-    }
-    const writer = Bun.spawn([
-      'bash',
-      '-c',
-      'printf %s "$1" > "$2"',
-      '--',
-      maps.replaceAll('/runner-temp', shellRunnerTemp),
-      posix.join(shellProcRoot, '4242/maps'),
-    ]);
-    writer.unref();
-  } else {
-    writeFileSync(mapsPath, maps.replaceAll('/runner-temp', shellRunnerTemp));
-  }
-  writeFileSync(
-    resolve(runnerTemp, 'ollama-server.log'),
-    'cmn  common_param: system_info: n_threads = 2 (n_threads_batch = 2) / 4 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | LLAMAFILE = 1 | REPACK = 1 | \n',
-  );
-  writeFileSync(resolve(ollamaDir, 'llama-server'), 'fixture process');
-  writeExecutable(
-    bin,
-    'curl',
-    `printf '%s\\n' '{"done":true,"error":null,"response":"Hello"}'`,
-  );
-  writeExecutable(bin, 'jq', 'cat >/dev/null; exit 0');
-  let pgrepBody = 'exit 1';
-  if (options.mapsDisappearAfterPgrep) {
-    pgrepBody = `rm -rf -- "$LLXPRT_PROC_ROOT/4242"; printf '%s\\n' 4242`;
-  } else if (livePid) {
-    pgrepBody = `printf '%s\\n' 4242`;
-  }
-  writeExecutable(bin, 'pgrep', pgrepBody);
-  const script = asString(step('Verify CPU backend warm-up').run);
-  const result = spawnSync(
-    'bash',
-    ['-c', `export PATH="$LLXPRT_FIXTURE_BIN:$PATH"\n${script}`],
-    {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        LLXPRT_FIXTURE_BIN: shellBin,
-        RUNNER_TEMP: shellRunnerTemp,
-        LLXPRT_PROC_ROOT: shellProcRoot,
-        OLLAMA_HOST: '127.0.0.1:12644',
-      },
-    },
-  );
-  rmSync(fixture, { recursive: true, force: true });
-  return {
-    stdout: result.stdout,
-    stderr: result.stderr,
-    status: result.status ?? 1,
-  };
-}
-
-function runLiveLinuxProcVerifier(): BackendVerifierResult {
-  const fixture = resolve(root, `tmp/verify3764/live-proc-${fixtureCounter++}`);
-  const runnerTemp = resolve(fixture, 'runner-temp');
-  const bin = resolve(fixture, 'bin');
-  const ollamaDir = resolve(runnerTemp, 'ollama/lib/ollama');
-  mkdirSync(bin, { recursive: true });
-  mkdirSync(ollamaDir, { recursive: true });
-  const library = resolve(ollamaDir, 'libggml-cpu-haswell.so');
-  const executable = resolve(ollamaDir, 'llama-server');
-  const compiledLibrary = spawnSync(
-    'cc',
-    ['-shared', '-fPIC', '-x', 'c', '-o', library, '-'],
-    { input: 'int haswell_fixture(void) { return 1; }', encoding: 'utf8' },
-  );
-  if (compiledLibrary.status !== 0) {
-    throw new Error(`${compiledLibrary.stdout}\n${compiledLibrary.stderr}`);
-  }
-  const compiledServer = spawnSync(
-    'cc',
-    ['-x', 'c', '-o', executable, '-', '-ldl'],
-    {
-      input:
-        '#include <dlfcn.h>\n#include <unistd.h>\nint main(int argc, char **argv) { if (argc < 4 || !dlopen(argv[3], RTLD_NOW)) return 2; for (;;) pause(); }',
-      encoding: 'utf8',
-    },
-  );
-  if (compiledServer.status !== 0) {
-    throw new Error(`${compiledServer.stdout}\n${compiledServer.stderr}`);
-  }
-  writeExecutable(bin, 'curl', `printf '%s\\n' '{"done":true,"error":null}'`);
-  writeExecutable(bin, 'jq', 'cat >/dev/null; exit 0');
-  writeFileSync(
-    resolve(runnerTemp, 'ollama-server.log'),
-    'system_info: CPU : AVX2 = 1\n',
-  );
-  const server = Bun.spawn([executable, '--model', 'gemma', library], {
-    stdout: 'ignore',
-    stderr: 'ignore',
-  });
-  try {
-    const mapsPath = `/proc/${server.pid}/maps`;
-    let maps = '';
-    for (let attempt = 0; attempt < 100; attempt++) {
-      try {
-        maps = readFileSync(mapsPath, 'utf8');
-      } catch {
-        maps = '';
-      }
-      if (maps.includes(library)) break;
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
-    }
-    if (!maps.includes(library))
-      throw new Error('live helper did not map the haswell fixture library');
-    if (statSync(mapsPath).size !== 0)
-      throw new Error('Linux proc maps fixture must report zero stat size');
-    const script = asString(step('Verify CPU backend warm-up').run).replace(
-      '"$proc_root/cpuinfo"',
-      `'${resolve(fixture, 'cpuinfo')}'`,
-    );
-    writeFileSync(resolve(fixture, 'cpuinfo'), 'vendor_id : GenuineIntel\n');
-    const result = spawnSync('bash', ['-c', script], {
-      encoding: 'utf8',
-      env: {
-        ...process.env,
-        PATH: `${bin}:${process.env.PATH ?? ''}`,
-        RUNNER_TEMP: runnerTemp,
-        OLLAMA_HOST: '127.0.0.1:12644',
-      },
-    });
-    return {
-      stdout: result.stdout,
-      stderr: result.stderr,
-      status: result.status ?? 1,
-    };
-  } finally {
-    server.kill();
-    rmSync(fixture, { recursive: true, force: true });
-  }
-}
-
-const steps = workflowJob(required, 'e2e_linux').steps ?? [];
-
-function step(name: string) {
-  const found = steps.find((candidate) => candidate.name === name);
-  if (!found) throw new Error(`Missing local model E2E step: ${name}`);
-  return found;
-}
+import {
+  actionStep,
+  exportedTestEnvironment,
+  required,
+  requiredText,
+  setupStep,
+  step,
+  steps,
+  setupActionSteps,
+} from './e2e-local-model-fixture.ts';
 
 describe('ordinary local-model E2E', () => {
   it('dispatches the selected branch through the ordinary E2E job with no extra input', () => {
@@ -297,12 +73,15 @@ describe('ordinary local-model E2E', () => {
     expect(asRecord(asRecord(linux.strategy).matrix).sandbox).toBe(
       '${{ fromJSON(github.event_name == \'push\' && \'["sandbox:none"]\' || \'["sandbox:none","sandbox:docker"]\') }}',
     );
+    expect(setupStep?.name).toBe('Set up local Gemma 4 E2B model');
+    expect(setupStep?.with).toBeUndefined();
     for (const name of [
       'Install Ollama CPU runtime',
       'Select CPU backend on Intel',
       'Start local Gemma 4 E2B model',
       'Verify CPU backend warm-up',
       'Verify CPU-only model inference',
+      'Export local model test environment',
       'Run E2E tests',
       'Check E2E real-model budget (issue #2278)',
       'Upload local model diagnostics',
@@ -343,7 +122,7 @@ describe('ordinary local-model E2E', () => {
 
   it('pins Intel backend selection before startup and verifies live mapped backends', () => {
     const select = step('Select CPU backend on Intel');
-    expect(select.if).toBeUndefined();
+    expect(select.if).toBe("runner.os == 'Linux'");
     const script = asString(select.run);
     expect(script).toContain('set -euo pipefail');
     expect(script).toContain('grep -qm1');
@@ -359,7 +138,7 @@ describe('ordinary local-model E2E', () => {
       steps.indexOf(step('Start local Gemma 4 E2B model')),
     );
     const verify = step('Verify CPU backend warm-up');
-    expect(verify.if).toBeUndefined();
+    expect(verify.if).toBe("runner.os == 'Linux'");
     expect(asString(verify.run)).toContain(
       'http://127.0.0.1:12644/api/generate',
     );
@@ -434,21 +213,39 @@ describe('ordinary local-model E2E', () => {
       expect(normalizedCommand).toContain(shellInvocation);
     }
     expect(command.match(/--exclude=/g)).toHaveLength(6);
-    const env = asOptionalRecord(run.env);
-    expect(env?.OPENAI_BASE_URL).toBe('http://127.0.0.1:12644/v1');
-    expect(env?.LLXPRT_DEFAULT_PROVIDER).toBe('openai');
-    expect(env?.LLXPRT_DEFAULT_MODEL).toBe('gemma4:e2b-it-qat');
-    expect(env?.OPENAI_API_KEY).toBe('ollama-local-only');
-    expect(env?.LLXPRT_TEST_PROFILE).toBe('local-gemma4-e2e');
-    expect(env?.LLXPRT_CONTEXT_LIMIT).toBe('32768');
-    expect(env?.LLXPRT_MAX_OUTPUT_TOKENS).toBe('8192');
-    expect(env?.LLXPRT_LOCAL_MODEL_E2E).toBe('true');
-    expect(Number(env?.LLXPRT_CONTEXT_LIMIT)).toBe(
+    // The local-model provider environment is exported by the shared setup
+    // action (via GITHUB_ENV) before 'Run E2E tests' starts.
+    const exported = exportedTestEnvironment();
+    expect(exported).toEqual({
+      OPENAI_API_KEY: 'ollama-local-only',
+      OPENAI_BASE_URL: 'http://127.0.0.1:12644/v1',
+      LLXPRT_DEFAULT_MODEL: 'gemma4:e2b-it-qat',
+      LLXPRT_DEFAULT_PROVIDER: 'openai',
+      LLXPRT_AUTH_TYPE: 'provider',
+      LLXPRT_TEST_PROFILE: 'local-gemma4-e2e',
+      LLXPRT_CONTEXT_LIMIT: '32768',
+      LLXPRT_MAX_OUTPUT_TOKENS: '8192',
+      LLXPRT_LOCAL_MODEL_E2E: 'true',
+    });
+    expect(
+      asString(actionStep('Export local model test environment').run),
+    ).toContain('>>"$GITHUB_ENV"');
+    expect(
+      steps.indexOf(step('Export local model test environment')),
+    ).toBeLessThan(steps.indexOf(run));
+    expect(Number(exported.LLXPRT_CONTEXT_LIMIT)).toBe(
       Number(step('Start local Gemma 4 E2B model').env?.OLLAMA_CONTEXT_LENGTH),
     );
-    expect(Number(env?.LLXPRT_MAX_OUTPUT_TOKENS)).toBeLessThan(
-      Number(env?.LLXPRT_CONTEXT_LIMIT),
+    expect(Number(exported.LLXPRT_MAX_OUTPUT_TOKENS)).toBeLessThan(
+      Number(exported.LLXPRT_CONTEXT_LIMIT),
     );
+    const env = asOptionalRecord(run.env);
+    for (const name of Object.keys(exported)) {
+      expect(
+        env?.[name],
+        `${name} must come from the setup action`,
+      ).toBeUndefined();
+    }
     expect(env?.GIT_CEILING_DIRECTORIES).toBe(
       '${{ github.workspace }}/.integration-tests',
     );
@@ -457,6 +254,8 @@ describe('ordinary local-model E2E', () => {
       'integration-tests/run_shell_command.test.ts',
     );
     expect(JSON.stringify(job)).not.toMatch(/\bsecrets(?:\.|\[)/);
+    expect(JSON.stringify(setupActionSteps)).not.toMatch(/\bsecrets(?:\.|\[)/);
+    expect(JSON.stringify(setupActionSteps)).not.toContain('vars.');
     const budget = step('Check E2E real-model budget (issue #2278)');
     expect(budget.if).toBe('success()');
     expect(asString(budget.run).trim()).toBe(
@@ -464,6 +263,66 @@ describe('ordinary local-model E2E', () => {
     );
     expect(asOptionalRecord(budget.env)?.LLXPRT_E2E_MODEL_LEDGER).toBe(
       '${{ runner.temp }}/e2e-model-ledger.jsonl',
+    );
+  });
+
+  it('installs the same pinned Ollama version natively on macOS and Windows with checksum verification before extraction', () => {
+    const macos = actionStep('Install Ollama runtime (macOS)');
+    expect(macos.if).toBe("runner.os == 'macOS'");
+    const macosScript = asString(macos.run);
+    expect(macosScript).toContain('/v0.31.1/ollama-darwin.tgz');
+    expect(macosScript).toContain(
+      '0c4f92389fcc1f651c17282e2eaffd68c8d3d06e1f7b307604102ad0e09a10c9',
+    );
+    expect(macosScript.indexOf('shasum -a 256 -c')).toBeGreaterThan(-1);
+    expect(macosScript.indexOf('shasum -a 256 -c')).toBeLessThan(
+      macosScript.indexOf('tar -xzf'),
+    );
+
+    const windows = actionStep('Install Ollama runtime (Windows)');
+    expect(windows.if).toBe("runner.os == 'Windows'");
+    const windowsScript = asString(windows.run);
+    expect(windowsScript).toContain('/v0.31.1/ollama-windows-amd64.zip');
+    expect(windowsScript).toContain(
+      '9ecf5a631561c7dff3a143925f11e2008327be738a7279fcf0c5462b9c422700',
+    );
+    expect(windowsScript.indexOf('Get-FileHash')).toBeLessThan(
+      windowsScript.indexOf('7z x'),
+    );
+    expect(windowsScript).toContain('checksum mismatch');
+  });
+
+  it('starts the Windows server with the same version, context and digest checks as the POSIX start', () => {
+    const posix = actionStep('Start local Gemma 4 E2B model');
+    expect(posix.if).toBe("runner.os != 'Windows'");
+    const windows = actionStep('Start local Gemma 4 E2B model (Windows)');
+    expect(windows.if).toBe("runner.os == 'Windows'");
+    expect(windows.env).toEqual({
+      OLLAMA_HOST: '127.0.0.1:12644',
+      OLLAMA_CONTEXT_LENGTH: '32768',
+      OLLAMA_NUM_PARALLEL: '1',
+      OLLAMA_MODELS: '${{ runner.temp }}\\ollama-models',
+    });
+    const script = asString(windows.run);
+    expect(script).toContain("'0.31.1'");
+    expect(script).toContain('pull gemma4:e2b-it-qat');
+    expect(script).toContain(
+      '07ea59a474013479c8b6b802bef095c40e964a1d776ba02f264c0e30e1aede0c',
+    );
+  });
+
+  it('proves a real generation on macOS and Windows where CPU-only evidence is unavailable', () => {
+    const inference = actionStep('Verify model inference (macOS and Windows)');
+    expect(inference.if).toBe("runner.os != 'Linux'");
+    expect(inference.env?.OLLAMA_HOST).toBe('127.0.0.1:12644');
+    const script = asString(inference.run);
+    expect(script).toContain('/api/generate');
+    expect(script).toContain('think   = $false');
+    expect(script).toContain('num_predict = 16');
+    expect(script).toContain('ollama-inference.json');
+    expect(script).toContain('did not return a completed non-empty response');
+    expect(asString(actionStep('Verify CPU-only model inference').if)).toBe(
+      "runner.os == 'Linux'",
     );
   });
 
@@ -494,290 +353,5 @@ describe('ordinary local-model E2E', () => {
     );
     expect(asOptionalRecord(upload.with)?.['if-no-files-found']).toBe('error');
     expect(asOptionalRecord(upload.with)?.['include-hidden-files']).toBe(true);
-  });
-});
-
-describe('workflow CPU variant selection behavior', () => {
-  const runSelection = (
-    intel: boolean,
-    variants: string[],
-    cpuinfoName = 'cpuinfo',
-  ): string[] => {
-    const fixture = resolve(
-      root,
-      `tmp/verify3764/selection-${fixtureCounter++}`,
-    );
-    const temp = resolve(fixture, 'temp');
-    const libdir = resolve(temp, 'ollama/lib/ollama');
-    mkdirSync(libdir, { recursive: true });
-    mkdirSync(temp, { recursive: true });
-    for (const variant of variants)
-      writeFileSync(resolve(libdir, variant), 'variant');
-    const cpuinfo = resolve(fixture, cpuinfoName);
-    writeFileSync(
-      cpuinfo,
-      intel ? 'vendor_id : GenuineIntel\n' : 'vendor_id : AuthenticAMD\n',
-    );
-    const script = asString(step('Select CPU backend on Intel').run).replaceAll(
-      '/proc/cpuinfo',
-      '"$LLXPRT_TEST_CPUINFO"',
-    );
-    const result = spawnSync('bash', ['-c', script], {
-      encoding: 'utf8',
-      env: { ...process.env, RUNNER_TEMP: temp, LLXPRT_TEST_CPUINFO: cpuinfo },
-    });
-    if (result.status !== 0)
-      throw new Error(`${result.stdout}\n${result.stderr}`);
-    const selected = Bun.spawnSync([
-      'find',
-      libdir,
-      '-maxdepth',
-      '1',
-      '-type',
-      'f',
-      '-name',
-      'libggml-cpu-*.so',
-    ]);
-    const files = selected.stdout
-      .toString()
-      .trim()
-      .split('\n')
-      .filter(Boolean)
-      .map((path) => path.slice(libdir.length + 1))
-      .sort();
-    rmSync(fixture, { recursive: true, force: true });
-    return files;
-  };
-
-  it('forces haswell in each Intel matrix leg and leaves AMD variants unchanged', () => {
-    const variants = [
-      'libggml-cpu-haswell.so',
-      'libggml-cpu-avx512.so',
-      'libggml-cpu-amx.so',
-    ];
-    for (const _matrixLeg of ['sandbox:none', 'sandbox:docker']) {
-      expect(runSelection(true, variants)).toEqual(['libggml-cpu-haswell.so']);
-    }
-    expect(runSelection(false, variants)).toEqual(variants.sort());
-  });
-
-  it('selects Intel and AMD variants with shell syntax in the CPU fixture path', () => {
-    const variants = ['libggml-cpu-haswell.so', 'libggml-cpu-avx512.so'];
-    const cpuinfoName = "cpu info '$(printf injected)'";
-    expect(runSelection(true, variants, cpuinfoName)).toEqual([
-      'libggml-cpu-haswell.so',
-    ]);
-    expect(runSelection(false, variants, cpuinfoName)).toEqual([
-      'libggml-cpu-avx512.so',
-      'libggml-cpu-haswell.so',
-    ]);
-  });
-});
-
-describe('workflow backend verification behavior', () => {
-  it('reports the mapped native backend on AMD without imposing the Intel Haswell pin', () => {
-    const result = runBackendVerifier(
-      '7f000000-7f100000 r-xp 00000000 08:01 42 /runner-temp/ollama/lib/ollama/libggml-cpu-avx2.so\n',
-      true,
-      { vendor: 'AuthenticAMD' },
-    );
-    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
-    expect(result.stdout).toContain('Host CPU vendor: AuthenticAMD');
-    expect(result.stdout).toContain('libggml-cpu-avx2.so');
-  });
-
-  const haswell = '/runner-temp/ollama/lib/ollama/libggml-cpu-haswell.so';
-  const mapping = (path: string): string =>
-    `7f000000-7f100000 r-xp 00000000 08:01 42 ${path}\n`;
-
-  it.skipIf(process.platform !== 'linux')(
-    'accepts the sole haswell mapping from a live stat-zero Linux proc maps file',
-    () => {
-      const result = runLiveLinuxProcVerifier();
-      expect(result.status, `${result.stdout}\\n${result.stderr}`).toBe(0);
-      expect(result.stdout).toContain('Loaded CPU backends:');
-      expect(result.stdout).toContain('llama-server cmdline:');
-      expect(result.stdout).toContain('llama-server PPid:');
-    },
-    15_000,
-  );
-
-  it('accepts the exact sole haswell mapping when the incident log omits AVX512 and AMX fields', () => {
-    const result = runBackendVerifier(mapping(haswell));
-    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
-    expect(result.stdout).toContain('Loaded CPU backends:');
-    expect(result.stdout).toContain('llama-server cmdline:');
-    expect(result.stdout).toContain(
-      'llama-server PPid: 4200; parent cmdline: ollama serve',
-    );
-  });
-
-  it('fails when the live process is absent even though the log reports AVX2', () => {
-    const result = runBackendVerifier(mapping(haswell), false);
-    expect(result.status, `${result.stdout}\\n${result.stderr}`).not.toBe(0);
-    expect(result.stderr).toContain('Live llama-server process not found');
-  });
-
-  it('fails explicitly when the PID vanishes after pgrep returns it', () => {
-    const result = runBackendVerifier(mapping(haswell), true, {
-      mapsDisappearAfterPgrep: true,
-    });
-    expect(result.status, `${result.stdout}\\n${result.stderr}`).not.toBe(0);
-    expect(result.stderr).toContain('Live llama-server maps are unavailable');
-  });
-
-  it('fails specifically when readable live-process maps contain no CPU backend despite an AVX2 log', () => {
-    const result = runBackendVerifier(mapping('/usr/lib/libc.so.6'));
-    expect(result.status, `${result.stdout}\n${result.stderr}`).not.toBe(0);
-    expect(result.stderr).toContain('No mapped llama-server CPU backend');
-    expect(result.stderr).not.toContain('maps are unavailable or empty');
-  });
-
-  it('rejects additional and alternative mapped CPU library variants', () => {
-    for (const maps of [
-      `${mapping(haswell)}${mapping('/other/libggml-cpu-avx512.so')}`,
-      mapping('/runner-temp/ollama/lib/ollama/libggml-cpu-skylake.so'),
-      mapping('/runner-temp/ollama/lib/ollama/libggml-cpu-avx512-vnni.so'),
-      mapping('/runner-temp/ollama/lib/ollama/libggml-cpu-amx.so'),
-      mapping('/runner-temp/ollama/lib/ollama/libggml-cpu-sapphirerapids.so'),
-      mapping(`${haswell} (deleted)`),
-    ]) {
-      const result = runBackendVerifier(maps);
-      expect(result.status, `${result.stdout}\\n${result.stderr}`).not.toBe(0);
-      expect(result.stderr).toContain(
-        'Unexpected mapped llama-server CPU library',
-      );
-    }
-  }, 15_000);
-
-  it('reads nonempty maps from a zero-size-reported FIFO', () => {
-    const result = runBackendVerifier(mapping(haswell), true, {
-      mapsFifo: true,
-    });
-    expect(result.status, `${result.stdout}\\n${result.stderr}`).toBe(0);
-    expect(result.stdout).toContain('Loaded CPU backends:');
-  }, 15_000);
-
-  it('rejects a process whose cmdline does not match the expected server', () => {
-    const result = runBackendVerifier(mapping(haswell), true, {
-      cmdline: 'spoofed\\0--model\\0gemma\\0',
-    });
-    expect(result.status, `${result.stdout}\\n${result.stderr}`).not.toBe(0);
-    expect(result.stderr).toContain(
-      'Matched PID is not the expected llama-server process',
-    );
-  });
-});
-
-describe('workflow CPU inference warm-up behavior', () => {
-  function runInference(
-    generated: { done: boolean; error: string | null; response: string },
-    vram: number,
-  ): { result: BackendVerifierResult; request: unknown; diagnostic: string } {
-    const fixture = resolve(
-      root,
-      `tmp/verify3764/inference-${fixtureCounter++}`,
-    );
-    const bin = resolve(fixture, 'bin');
-    mkdirSync(bin, { recursive: true });
-    const generation = JSON.stringify(generated);
-    const ps = JSON.stringify({
-      models: [{ name: 'gemma4:e2b-it-qat', size_vram: vram }],
-    });
-    writeExecutable(
-      bin,
-      'curl',
-      `while (( $# )); do
-  case "$1" in
-    */api/generate) endpoint=generate ;;
-    */api/ps) endpoint=ps ;;
-    -d) printf '%s' "$2" >"$RUNNER_TEMP/request.json"; shift ;;
-    -o) output="$2"; shift ;;
-  esac
-  shift
-done
-if [[ "$endpoint" == generate ]]; then
-  if [[ -n "\${output:-}" ]]; then
-    printf '%s\\n' '${generation}' >"$output"
-  else
-    printf '%s\\n' '${generation}'
-  fi
-else
-  printf '%s\\n' '${ps}'
-fi`,
-    );
-    const script = asString(step('Verify CPU-only model inference').run);
-    const executed = spawnSync('bash', ['-c', script], {
-      encoding: 'utf8',
-      env: {
-        ...process.env,
-        PATH: `${bin}:${process.env.PATH ?? ''}`,
-        RUNNER_TEMP: fixture,
-        OLLAMA_HOST: '127.0.0.1:12644',
-      },
-    });
-    const request = JSON.parse(
-      readFileSync(resolve(fixture, 'request.json'), 'utf8'),
-    );
-    const diagnostic = readFileSync(
-      resolve(fixture, 'ollama-inference.json'),
-      'utf8',
-    );
-    rmSync(fixture, { recursive: true, force: true });
-    return {
-      result: {
-        status: executed.status ?? 1,
-        stdout: executed.stdout,
-        stderr: executed.stderr,
-      },
-      request,
-      diagnostic,
-    };
-  }
-
-  it('disables thinking, requests sixteen tokens and retains the raw generation response on success', () => {
-    const output = runInference(
-      { done: true, error: null, response: 'Hello' },
-      0,
-    );
-    expect(output.result.status, output.result.stderr).toBe(0);
-    expect(output.request).toMatchObject({
-      model: 'gemma4:e2b-it-qat',
-      think: false,
-      options: { num_predict: 16 },
-    });
-    expect(JSON.parse(output.diagnostic)).toEqual({
-      done: true,
-      error: null,
-      response: 'Hello',
-    });
-  });
-
-  it('reports raw JSON and rejects empty text or unsuccessful completion', () => {
-    for (const generated of [
-      { done: true, error: null, response: '' },
-      { done: false, error: null, response: 'Hello' },
-      { done: true, error: 'failure', response: 'Hello' },
-    ]) {
-      const output = runInference(generated, 0);
-      expect(output.result.status).not.toBe(0);
-      expect(output.result.stderr).toContain(JSON.stringify(generated));
-      expect(output.diagnostic.trim()).toBe(JSON.stringify(generated));
-    }
-  });
-
-  it('rejects nonzero VRAM despite successful generation', () => {
-    const output = runInference(
-      { done: true, error: null, response: 'Hello' },
-      1,
-    );
-    expect(output.result.status).not.toBe(0);
-  });
-
-  it('uploads the raw inference JSON alongside the existing diagnostics', () => {
-    const paths = asString(
-      asOptionalRecord(step('Upload local model diagnostics').with)?.path,
-    ).split('\n');
-    expect(paths).toContain('${{ runner.temp }}/ollama-inference.json');
   });
 });

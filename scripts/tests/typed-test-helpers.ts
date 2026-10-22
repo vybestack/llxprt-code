@@ -438,6 +438,14 @@ export function parseWorkflowYaml(source: string): WorkflowDocument {
 }
 
 /**
+ * Parse the steps of a composite GitHub Action (`runs.steps` in action.yml).
+ */
+export function compositeActionSteps(source: string): WorkflowStep[] {
+  const runs = asRecord(asRecord(yaml.load(source))['runs']);
+  return asArray(runs['steps']).map(parseStep);
+}
+
+/**
  * Get a job from a workflow document by name.
  * Throws if the job does not exist.
  */

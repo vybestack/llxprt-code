@@ -353,7 +353,11 @@ export async function killChildTreeAndWait(
   const timeoutMs = options.reapTimeoutMs ?? REAP_TIMEOUT_MS;
   const deadlineAt = performance.now() + timeoutMs;
   const owned = new Map<number, ProcessIdentity>();
-  for (const [memberPid, identity] of readProcessTable(timeoutMs)) {
+  for (const [memberPid, identity] of readProcessTable(
+    pid,
+    timeoutMs,
+    deadlineAt,
+  )) {
     if (identity.group === pid) owned.set(memberPid, identity);
   }
   // POSIX: kill the entire per-test process group by negative PID. The
@@ -377,13 +381,35 @@ interface ProcessIdentity {
   readonly started: string;
 }
 
-function readProcessTable(timeoutMs: number): Map<number, ProcessIdentity> {
+function reapDeadlineError(
+  pid: number,
+  timeoutMs: number,
+  cause?: unknown,
+): Error {
+  return new Error(
+    `Timed-out child (pid ${pid}) process group close lifecycle did not complete within ${timeoutMs}ms`,
+    { cause },
+  );
+}
+
+function readProcessTable(
+  pid: number,
+  timeoutMs: number,
+  deadlineAt: number,
+): Map<number, ProcessIdentity> {
+  const remainingMs = deadlineAt - performance.now();
+  if (remainingMs <= 0) throw reapDeadlineError(pid, timeoutMs);
   const result = spawnSync('ps', ['-axo', 'pid=,pgid=,lstart='], {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
-    timeout: Math.max(1, Math.ceil(timeoutMs)),
+    timeout: Math.ceil(remainingMs),
   });
-  if (result.error) throw result.error;
+  if (result.error) {
+    if ('code' in result.error && result.error.code === 'ETIMEDOUT') {
+      throw reapDeadlineError(pid, timeoutMs, result.error);
+    }
+    throw result.error;
+  }
   if (result.status !== 0) {
     throw new Error(`Cannot observe owned test processes: ${result.stderr}`);
   }
@@ -428,17 +454,13 @@ function waitForPosixTreeClose(
     };
     const deadline = setTimeout(
       () => {
-        fail(
-          new Error(
-            `Timed-out child (pid ${pid}) process group close lifecycle did not complete within ${timeoutMs}ms`,
-          ),
-        );
+        fail(reapDeadlineError(pid, timeoutMs));
       },
       Math.max(0, deadlineAt - performance.now()),
     );
     const observeGroupExit = (): void => {
       try {
-        const current = readProcessTable(deadlineAt - performance.now());
+        const current = readProcessTable(pid, timeoutMs, deadlineAt);
         // A descendant's kernel entry can outlive the direct child's close.
         // Retain its start identity so PID reuse cannot adopt unrelated work.
         if (

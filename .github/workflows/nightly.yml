@@ -90,6 +90,12 @@ jobs:
         run: |-
           npm run build
 
+      # scripts/tests/tmux-harness-input-diagnostics.bun.test.ts drives a real
+      # tmux server, so the scripts shard needs the executable provisioned.
+      - name: 'Install tmux (scripts shard)'
+        if: matrix.shard == 'scripts'
+        uses: './.github/actions/install-tmux'
+
       - name: 'Verify test shard completeness'
         run: 'npm run lint:test-shards'
 
@@ -102,6 +108,10 @@ jobs:
           LLXPRT_DEFAULT_MODEL: ${{ vars.LLXPRT_DEFAULT_MODEL }}
           LLXPRT_DEFAULT_PROVIDER: ${{ vars.LLXPRT_DEFAULT_PROVIDER }}
           LLXPRT_AUTH_TYPE: provider
+          # The install-tmux action provisions psmux (a tmux-compatible
+          # multiplexer) on the scripts shard; this declares it present so the
+          # native terminal tests run instead of being skipped on win32.
+          LLXPRT_E2E_TMUX: "${{ matrix.shard == 'scripts' && '1' || '' }}"
           NO_COLOR: true
           CI: true
         run: 'bun scripts/test.ts --shard "${{ matrix.shard }}"'
@@ -184,6 +194,12 @@ jobs:
         if: matrix.shard == 'agents' || matrix.shard == 'scripts'
         run: |-
           npm run build
+
+      # scripts/tests/tmux-harness-input-diagnostics.bun.test.ts drives a real
+      # tmux server, so the scripts shard needs the executable provisioned.
+      - name: 'Install tmux (scripts shard)'
+        if: matrix.shard == 'scripts'
+        uses: './.github/actions/install-tmux'
 
       - name: 'Verify test shard completeness'
         run: 'npm run lint:test-shards'
@@ -352,18 +368,19 @@ jobs:
         if: "matrix.sandbox == 'sandbox:docker'"
         uses: 'docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c' # ratchet:docker/setup-buildx-action@v4
 
+      # Same pinned Ollama + Gemma 4 E2B runtime as the PR E2E workflow. It
+      # exports the provider environment (OPENAI_*, LLXPRT_DEFAULT_*, ...) for
+      # the steps below, so no paid provider secret is needed.
+      - name: 'Set up local Gemma 4 E2B model'
+        uses: './.github/actions/setup-local-gemma'
+
       - name: 'Run E2E tests'
         if: runner.os != 'Windows'
         env:
-          # Provider configuration from repository secrets/variables
-          OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}'
-          OPENAI_API_KEY_2: '${{ secrets[vars.KEY_VAR_NAME_2] }}'
-          KEY_VAR_NAME: '${{ vars.KEY_VAR_NAME }}'
-          OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
-          LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
-          LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
-          # Set auth type to provider for API key authentication
-          LLXPRT_AUTH_TYPE: 'provider'
+          GIT_CEILING_DIRECTORIES: '${{ github.workspace }}/.integration-tests'
+          # The sandbox container shares the host network namespace, so the
+          # loopback Ollama endpoint in OPENAI_BASE_URL reaches the host server.
+          SANDBOX_FLAGS: "${{ matrix.sandbox == 'sandbox:docker' && '--network host' || '' }}"
           KEEP_OUTPUT: 'true'
           VERBOSE: 'true'
           # Force file storage to avoid keytar/libsecret dependency in CI
@@ -379,15 +396,6 @@ jobs:
       - name: 'Run E2E tests (Windows)'
         if: runner.os == 'Windows'
         env:
-          # Provider configuration from repository secrets/variables
-          OPENAI_API_KEY: '${{ secrets[vars.KEY_VAR_NAME] }}'
-          OPENAI_API_KEY_2: '${{ secrets[vars.KEY_VAR_NAME_2] }}'
-          KEY_VAR_NAME: '${{ vars.KEY_VAR_NAME }}'
-          OPENAI_BASE_URL: '${{ vars.OPENAI_BASE_URL }}'
-          LLXPRT_DEFAULT_MODEL: '${{ vars.LLXPRT_DEFAULT_MODEL }}'
-          LLXPRT_DEFAULT_PROVIDER: '${{ vars.LLXPRT_DEFAULT_PROVIDER }}'
-          # Set auth type to provider for API key authentication
-          LLXPRT_AUTH_TYPE: 'provider'
           # Force file storage to avoid keytar/libsecret dependency in CI
           LLXPRT_FORCE_FILE_STORAGE: 'true'
           KEEP_OUTPUT: 'true'
@@ -404,13 +412,22 @@ jobs:
             npm run test:integration:sandbox:none
           }
 
+      - name: 'Upload local model diagnostics'
+        if: always()
+        uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # ratchet:actions/upload-artifact@v7
+        with:
+          name: "local-gemma4-nightly-${{ matrix.os }}-${{ matrix.sandbox == 'sandbox:docker' && 'docker' || 'none' }}"
+          if-no-files-found: 'warn'
+          path: |
+            ${{ runner.temp }}/ollama-server.log
+            ${{ runner.temp }}/ollama-server.err.log
+            ${{ runner.temp }}/ollama-inference.json
+
   behavioral_evals:
     name: 'Behavioral Evals (Nightly)'
     uses: './.github/workflows/_evals-run.yml'
     permissions:
       contents: 'read'
-    secrets:
-      provider-api-key: ${{ secrets[vars.KEY_VAR_NAME] }}
     with:
       # The broad nightly only needs a single behavioral signal; the dedicated
       # evals-nightly.yml gathers the 3-sample statistical matrix.

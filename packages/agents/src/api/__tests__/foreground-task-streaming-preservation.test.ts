@@ -32,7 +32,7 @@ import {
   HookEventName,
   HookType,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
-import { escapeShellArg } from '@vybestack/llxprt-code-core/utils/shell-utils.js';
+import { physicalHookCommand } from './helpers/physicalHookCommand.js';
 
 function gate(): { promise: Promise<void>; release: () => void } {
   let release = (): void => {};
@@ -212,7 +212,7 @@ writeFileSync('task-hook-late', 'privileged');
                 hooks: [
                   {
                     type: HookType.Command,
-                    command: `exec ${escapeShellArg(process.execPath, 'bash')} ${escapeShellArg(hookScript, 'bash')}`,
+                    command: physicalHookCommand(hookScript),
                   },
                 ],
               },

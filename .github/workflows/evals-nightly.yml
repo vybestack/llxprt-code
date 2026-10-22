@@ -17,8 +17,6 @@ jobs:
   evals:
     name: Run Evals
     uses: ./.github/workflows/_evals-run.yml
-    secrets:
-      provider-api-key: ${{ secrets[vars.KEY_VAR_NAME] }}
 
   aggregate-results:
     name: Aggregate Results

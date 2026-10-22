@@ -62,7 +62,7 @@ it.each(['plain-', 'reserved-#-%-'] as const)(
       const child = spawn(process.execPath, [entry], {
         cwd: root,
         env: { ...process.env, LSP_BOOTSTRAP: JSON.stringify(bootstrap) },
-        stdio: ['pipe', 'pipe', 'pipe', 'pipe', 'pipe'],
+        stdio: ['pipe', 'pipe', 'pipe'],
       });
       const closed = once(child, 'close');
       const stderr: Buffer[] = [];
@@ -85,7 +85,7 @@ it.each(['plain-', 'reserved-#-%-'] as const)(
                   argv: [entry],
                   cwd: root,
                   bootstrap,
-                  stdio: ['pipe', 'pipe', 'pipe', 'pipe', 'pipe'],
+                  stdio: ['pipe', 'pipe', 'pipe'],
                   code,
                   signal,
                   stderr: Buffer.concat(stderr).toString('utf8'),

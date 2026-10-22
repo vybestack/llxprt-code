@@ -7,7 +7,6 @@ import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/wo
 
 import { describe, it, expect, spyOn } from 'bun:test';
 import fs from 'node:fs/promises';
-import type { OpenMode, ObjectEncodingOptions } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Storage } from '@vybestack/llxprt-code-settings';
@@ -22,6 +21,7 @@ import {
 } from '@vybestack/llxprt-code-policy';
 import { MessageBus } from '../confirmation-bus/message-bus.js';
 import { WorkspacePolicyOwner, SessionPolicyOwner } from './policy-owner.js';
+import { gateReadFile } from '../utils/__tests__/gated-read-file.js';
 
 function fixture(): {
   config: Config;
@@ -193,50 +193,13 @@ async function gatedPolicyReload(
   const storage = spyOn(Storage, 'getUserPoliciesDir').mockReturnValue(
     policies,
   );
-  let release!: () => void;
-  let enter!: () => void;
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const entered = new Promise<void>((resolve) => {
-    enter = resolve;
-  });
-  const read = fs.readFile;
-  type ReadPath = Parameters<typeof fs.readFile>[0];
-  type ReadOptions = Parameters<typeof fs.readFile>[1];
-  function gatedRead(
-    path: ReadPath,
-    options?: { encoding?: null; flag?: OpenMode; signal?: AbortSignal } | null,
-  ): Promise<Buffer<ArrayBuffer>>;
-  function gatedRead(
-    path: ReadPath,
-    options:
-      | BufferEncoding
-      | { encoding: BufferEncoding; flag?: OpenMode; signal?: AbortSignal },
-  ): Promise<string>;
-  function gatedRead(
-    path: ReadPath,
-    options?:
-      | BufferEncoding
-      | (ObjectEncodingOptions & { flag?: OpenMode; signal?: AbortSignal })
-      | null,
-  ): Promise<string | Buffer<ArrayBuffer>>;
-  async function gatedRead(
-    path: ReadPath,
-    options?: ReadOptions,
-  ): Promise<string | Buffer<ArrayBuffer>> {
-    if (String(path).endsWith('new.toml')) {
-      enter();
-      await gate;
-    }
-    return read(path, options);
-  }
-  const reading = spyOn(fs, 'readFile').mockImplementation(gatedRead);
+  const { entered, release, restore } = gateReadFile((path) =>
+    String(path).endsWith('new.toml'),
+  );
   try {
     await run({ entered, release });
   } finally {
-    release();
-    reading.mockRestore();
+    restore();
     storage.mockRestore();
     await fs.rm(directory, { recursive: true, force: true });
   }

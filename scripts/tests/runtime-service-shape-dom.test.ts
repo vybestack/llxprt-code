@@ -29,6 +29,11 @@ for (const augmentation of [
     );
     const source = `import 'buffer'; import type { ProviderManager as Clock } from './ProviderManager.js'; import type { OAuthManager as Session } from './auth/oauth-manager.js'; export type { Clock, Session };\n${augmentation === undefined ? '' : "declare global { interface HTMLTextAreaElement { readonly resourceConstructor: typeof import('buffer').Blob } }"}\n${augmentation ?? ''}`;
     const base = ts.createCompilerHost(config.options, true);
+    // The compiler hands the host slash-normalized names, so compare by the
+    // host's own filename identity instead of the native spelling.
+    const isVirtual = (name: string): boolean =>
+      base.getCanonicalFileName(name.replaceAll('\\', '/')) ===
+      base.getCanonicalFileName(file.replaceAll('\\', '/'));
     const program = ts.createProgram({
       rootNames: [
         ...config.fileNames.filter(
@@ -40,9 +45,11 @@ for (const augmentation of [
       projectReferences: config.projectReferences,
       host: {
         ...base,
+        fileExists: (name) => isVirtual(name) || base.fileExists(name),
+        readFile: (name) => (isVirtual(name) ? source : base.readFile(name)),
         getSourceFile: (name, version) =>
-          name === file
-            ? ts.createSourceFile(file, source, version, true)
+          isVirtual(name)
+            ? ts.createSourceFile(name, source, version, true)
             : base.getSourceFile(name, version),
       },
     });
