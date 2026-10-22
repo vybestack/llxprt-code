@@ -1,3 +1,54 @@
+# Cold Chat cost and original native memory protocols pass, 2026-10-22
+
+[Source-bound receipt](PHASE6-SOURCE-BOUND-CHATCOLDCOST-PROOF.json). Native memory acceptance is limited to the completed plain-Chat text/tool protocol; overall delivery and the two scoped RED gate files remain open.
+
+`9cfb35bde` removes repeated successor-tree point searches and reuses the current response-part entry/IDs. `f0657a4ae` batches small ROW ranges in a fill-owned positional reader. Existing bulk tree construction, one-unit conversion, format keys/generations, kept/stripped token semantics and large reads remain unchanged. The measured cause was repeated indexed reads, not serialization of an ever-growing history prefix.
+
+| Rows | Cold prepare calls, before → final | Requested/returned bytes, before → final | Prepare ms, before → final |
+| --- | --- | --- | --- |
+| 40 | 722 → 42 | 3,839,672 → 594,188 | 32.468 → 17.270 |
+| 400 | 8,852 → 499 | 55,073,992 → 7,407,648 | 216.995 → 41.375 |
+| 4000 | 104,564 → 2296 | 709,459,144 → 30,180,032 | 2276.578 → 276.826 |
+
+| Rows | Cold estimate calls, before → final | Requested/returned bytes, before → final | Estimate ms, before → final |
+| --- | --- | --- | --- |
+| 40 | 726 → 46 | 3,591,486 → 593,586 | 130.725 → 121.543 |
+| 400 | 8856 → 503 | 55,076,047 → 7,409,703 | 519.055 → 333.348 |
+| 4000 | 104,568 → 2300 | 709,461,200 → 30,182,088 | 5094.664 → 2921.714 |
+
+These are same-instrumentation fixed-payload, one-row-commit diagnostics without the memory sampler. Each estimate still uses 4N+2 tokenizer encodes/registry estimates; encoder initialization occurs once at 40 rows and zero times at 400/4000. ROW/block decoding remains once per unit per format pass. Estimated tokens stay 8015/80015/800015; request lengths stay 39686/395726/3956126 and body hashes match. Replay and actual HTTP are recorded separately. No general quadratic-cost claim follows from these samples.
+
+Final diagnostic journal file sizes, before → final: 644732 → 645223 bytes (40), 9215457 → 9215948 (400), 44270133 → 44270624 (4000). Session identities differ. First-large actual native sends add 24951528 text / 24922860 tool journal bytes; later warm sends add zero. Physical write-call counts were not collected by the existing diagnostic seam. File size and Darwin zero I/O counters are not substituted for those counts; that requested write-call evidence remains unavailable.
+
+The new reader retains two 16,384-byte windows, at most 32,768 payload bytes plus fixed metadata. A pending miss can coexist with both old windows, briefly totaling 49,152 window bytes, before replacement. Returned small ranges are copies of at most 16,384 bytes. Adjacent ROW bytes can be prefetched, so this is additional fixed working state, not zero extra history bytes. Reads larger than 16 KiB bypass the window at their ordinary size; the unchanged 17/40/200 MiB identity/last-byte assertions pass. The existing 64 KiB I/O working buffer and independently charged 65,536-byte ID caches are separate. Each concurrent fill owns its own window capacity; aggregate heap/cache/pin/overlay capacity remains unaccepted.
+
+The window is created only for the fill snapshot. `fillSlot` closes the prepared successor iterator and then the snapshot in `finally`, including failures, before a prepared HTTP body is returned. Fill-local source/window closures are not published into the body or format registration. There is no explicit window clear/zeroing method; storage becomes unreachable with the fill context, so close does not prove immediate reclamation. Frame/range bounds, requested-piece CRC verification and malformed-row/wrong-offset failure paths remain enabled. Prefetched neighboring bytes are not treated as verified ROWs. Reader cancellation/error/#3919 lifetime checks pass.
+
+Both final-source text and tool-heavy actual-HTTP runs complete the original three small/large pairs and six retention sends. All four original array/fill/estimate/retain controls also complete all 12 measured sends and reject on their intended memory predicates, with matching wire bytes. Inputs remain 1024/8192, small-only warmup, 170000/180000 ms test/command budgets, unchanged GC/engine/sampling and signed median/Theil-Sen arithmetic, and 1 MiB bounds. No retry, large prefill or altered threshold was used. This supersedes the earlier native-protocol RED only for the final production bytes.
+
+| Final lane | Peak heap growth, bytes | ArrayBuffer growth, bytes | Retained growth, bytes | Verdict |
+| --- | --- | --- | --- | --- |
+| Text | 199700 | 0 | 380661.667 | PASS |
+| Tools | -958185 | 200 | 163226.25 | PASS |
+| Array trap | 14280950 | 193 | 0 | Memory rejected |
+| Fill trap | 29335854 | 193 | 0 | Memory rejected |
+| Estimate trap | 14605607 | 193 | 18871 | Memory rejected |
+| Retain trap | 230304 | 193 | 84675090 | Memory rejected |
+
+Every lane has six peak sends and six retention sends. Fixed legacy-converter SHA256/Content-Length, nonzero native estimates, one native stream, zero legacy spools and zero estimator files are enforced.
+
+All production and protocol-helper bytes match the final run manifests. `8f2b611da` changes only a different test: equivalent last-byte indexing replaces `Uint8Array.at`, which the unchanged core TypeScript library target does not expose. The receipt records both test hashes and reuses the completed protocols explicitly; it does not claim a fresh whole-suite run.
+
+The 36 original gate invocations have 33 passes and 3 failures. The equivalent test-only indexing correction resolves core typechecking; all 7 affected/current-hash invocations pass, leaving 34/36 original gate slots passing. Two files remain RED without retries or assertion changes: `journal-chat-length-lifecycle.test.ts:124` requires >128 cold reads but receives 50; `native-chat-preparation.test.ts:293` requires >N but receives fewer reads after batching (8 pass/2 fail). Their later statements are not counted as executed. These are reported as cold-read minimum conflicts, not silently excluded successes. Core/providers/agents declarations and types, provider/agent Bun types, lint, format, import graph and audit have passing receipts. The 155 frozen wire cases, two unchanged 5000-input oracle files, native HTTP/pending-user checks and reader-lifetime checks pass. The early mixed reference-media file remains 21 pass/1 fail and is excluded from passing-file totals.
+
+The old traversal control fails the original <=10N+100 physical-call budget; disabling the window fails the additional <=2N+100 budget. Both remain enabled. The constructor Map-retention mutant fails the unchanged one-unit assertion (40 acquisitions instead of 1). Seven controlled source paths match their saved originals and current HEAD byte-for-byte after restoration. No wall-clock acceptance threshold was added.
+
+Pipeline 53221 (parents 53220/53219), final-gates 61669 and affected-gates 64471 have exited. The receipt records 146 observed original pipeline, gate, protocol, probe and HTTP-sink PIDs; none remains active. The 1204 inherited hashes, including 306 declarations and raw recovery, still verify. No cleanup, .llxprt edit/staging, OCR, push, merge or default flip was performed. Review skipped per Andrew 2026-10-09.
+
+Phase 5/6/W26 remain open for last-thinking/pruned views, broader/exact estimators, Kimi/Mistral/old continuation, Responses/Anthropic native paths, native log/dump, automatic compression round trips, reference-media reservations, global LENS/live-byte accounting and aggregate retained heap/cache/pin/overlay capacity. #3917, the two earlier durable failures, 8192 blanket-compaction/public-fixture REDs and reference-media RED remain separate, enabled and unsuppressed.
+
+---
+
 # Original three-pair native memory verification remains RED
 
 2026-10-22. [The original-protocol native-memory receipt](PHASE6-SOURCE-BOUND-NATIVEMEMORYFULL-PROOF.json) records final-source actual-native text/tool-heavy invocations and array/fill/estimate/retain controls under the original three small/large pairs, small-only warmup and six retention sends. The 1,024/8,192-row corpus, independent fixed wire hashes, Content-Length, positive native estimates, one actual native body stream and zero legacy spool/estimator-file operations are unchanged. Test/command budgets remain 170000/180000 ms; sampling, GC, engine settings, the signed median growth calculation, Theil-Sen predicate and 1 MiB bounds are unchanged. The added harness profile refuses a reduced pair count. The old tests and separate native one-pair warm diagnostic are preserved.
