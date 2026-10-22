@@ -75,7 +75,7 @@ describe('fill-owned bounded ROW reads', () => {
       );
       const result = await window.readAt(0, bytes.length);
       expect(result).toBe(bytes);
-      expect(result.at(-1)).toBe(127);
+      expect(result[result.length - 1]).toBe(127);
       expect(await window.readAt(0, bytes.length)).toBe(bytes);
       expect(reads).toBe(2);
     },
