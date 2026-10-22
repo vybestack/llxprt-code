@@ -1518,7 +1518,7 @@
       "tail": "bun test v1.3.14 (0d9b296a)\n\npackages/agents/src/core/__tests__/native-chat-session-http.test.ts:\n87 |   messageCount: number;\n88 |   release: () => Promise<void>;\n89 | }> {\n90 |   const native = rows.native;\n91 |   if (native === undefined)\n92 |     throw new Error('Native Chat requires indexed request rows');\n                   ^\nerror: Native Chat requires indexed request rows\n      at prepareNativeChatBody (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/native-chat-body.ts:92:15)\n      at prepareNativePlainRequest (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/native-chat-body.ts:176:22)\n      at prepareRequest (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/OpenAIRequestPreparation.ts:525:15)\n      at prepareRequestBody (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/__tests__/support/prepareRequestBody.ts:69:25)\n      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/core/__tests__/native-chat-session-http.test.ts:148:33)\n(fail) public native plain Chat pending user HTTP > sends allButLast thinking through mandatory estimation and HTTP without operation files [97.86ms]\n\n 0 pass\n 2 filtered out\n 1 fail\nRan 1 test across 1 file. [1100.00ms]\n"
     }
   ],
-  "controlQualification": "v2 wrong-target, keeps-all, drops-latest and stale-settings reject at the progressive-body declared-byte guard, not actual HTTP byte equality. Wrong-tail-shift rejects independent body equality. All sources restored by cmp and SHA256 before both memory lanes. The invalid v2 forced-spool is excluded; final corrected forced-spool fails the public mandatory-estimate creation guard. Actual public HTTP policy-constant controls are not yet claimed.",
+  "controlQualification": "Earlier v2 direct controls reject at the progressive-body guard or direct byte equality. Three additional current-source controls now reject actual public HTTP bytes: consistently treating allButLast as none, treating it as all, and omitting the left normalized-unit shift. Each gets one local HTTP response and passes the operation-wide no-creation assertion before failing complete-body equality at line 195. All mutated files restore by cmp/SHA256. The unchanged full public three-policy file then passes 3/0, 45 assertions. The corrected final forced-spool control independently fails the mandatory public estimator creation guard. The invalid v2 forced-spool precondition attempt remains excluded.",
   "memory": {
     "acceptance": "NOT ACCEPTED as a full current-source native memory protocol: text PASS; tools RED timeout with incomplete six-retention series; current-source original four trap controls pending. Neither fresh lane exercises allButLast: the harness omits reasoning.stripFromContext, so native defaults to none. These fixtures do not establish last-thinking-specific heap behavior.",
     "bounds": {
@@ -1555,7 +1555,8 @@
         "path": "tmp/p6/chat-last-thinking-run-bd/current-native-full-text.source.json",
         "sha256": "26d8898535e28733b77763946e6aab8b96d301bcd55ecd3046ccec5ddd119d0f",
         "paths": 5042,
-        "currentConflicts": []
+        "currentConflicts": [],
+        "postHttpConflicts": []
       },
       "log": {
         "path": "tmp/p6/chat-last-thinking-run-bd/current-native-full-text.log",
@@ -2134,7 +2135,8 @@
         "path": "tmp/p6/chat-last-thinking-run-bd/current-native-full-tools.source.json",
         "sha256": "59ff529adb0c2426953fff7aad2ec04c46b216ea804050c8cb797ae03d186135",
         "paths": 5045,
-        "currentConflicts": []
+        "currentConflicts": [],
+        "postHttpConflicts": []
       },
       "log": {
         "path": "tmp/p6/chat-last-thinking-run-bd/current-native-full-tools.log",
@@ -2453,7 +2455,25 @@
       ],
       "oldReceipt": "PHASE6-SOURCE-BOUND-CHATCOLDCOST-PROOF.json",
       "reuse": false
-    }
+    },
+    "policyEvidence": [
+      {
+        "path": "packages/providers/src/__tests__/support/sendPeakShapes.ts",
+        "sha256": "71186bf13f48a965f4b80c15cf05a6e4a44c6a1c8d43450f52cd06d2ee8ce9c0"
+      },
+      {
+        "path": "packages/providers/src/__tests__/support/send-peak-probe.ts",
+        "sha256": "e422bb1411f76ddbd828ec83aab71f850374631739445f5482eb1834d9b203fc"
+      },
+      {
+        "path": "packages/providers/src/__tests__/support/wireBodyCapture.ts",
+        "sha256": "3487947dfc814733f077aab8002fa2ff6037cfeb2f09ae5b42b3d1c1230933f6"
+      },
+      {
+        "path": "packages/providers/src/openai/native-chat-body.ts",
+        "sha256": "ad5731fda70e1946c38706a026d1f9f031bf0388928a716f2b97d1b3d7a3356d"
+      }
+    ]
   },
   "preservation": "Final 1204 inherited SHA256 checks pass, including 306 untracked declarations and raw recovery. Unchanged #3919 suites pass 11/29 and 3/20. No inherited files deleted/moved. Pre-existing .llxprt/LLXPRT.md modification is untouched and must not be staged. Review skipped per Andrew 2026-10-09. No cleanup, OCR, default flip, push or merge.",
   "remaining": [
@@ -2544,7 +2564,116 @@
     },
     "activeMemoryFileIsHistorical": true,
     "activeGateFileIsHistorical": true,
-    "rule": "No new heavy memory lane. Original memory traps remain pending; tools timeout must not be converted to a PASS from partial output."
+    "rule": "No new heavy memory lane. Original memory traps remain pending; tools timeout must not be converted to a PASS from partial output.",
+    "observedAt": "2026-10-22T08:52:00.321Z",
+    "ownedPids": [
+      257,
+      261,
+      271,
+      289,
+      301,
+      322,
+      337,
+      354,
+      357,
+      424,
+      788,
+      840,
+      915,
+      1047,
+      1050,
+      1501,
+      1533,
+      1599,
+      1636,
+      1721,
+      1748,
+      1772,
+      1804,
+      1829,
+      1875,
+      1914,
+      1916,
+      1948,
+      2348,
+      2408,
+      2456,
+      3667,
+      3697,
+      3818,
+      3852,
+      3927,
+      3977,
+      4037,
+      4121,
+      4177,
+      4242,
+      4291,
+      4293,
+      4314,
+      4360,
+      4405,
+      4454,
+      4465,
+      4472,
+      4486,
+      4529,
+      4557,
+      4601,
+      4708,
+      4849,
+      4984,
+      5020,
+      5090,
+      5237,
+      5246,
+      5275,
+      5306,
+      8414,
+      8430,
+      8445,
+      8462,
+      94122,
+      94144,
+      94174,
+      94220,
+      94228,
+      94234,
+      94288,
+      94334,
+      94432,
+      94453,
+      94523,
+      94540,
+      94541,
+      94547,
+      94548,
+      94552,
+      94560,
+      94743,
+      95551,
+      95569,
+      95590,
+      95650,
+      95697,
+      95719,
+      95800,
+      95939,
+      96058,
+      96114,
+      96200,
+      96311,
+      96318,
+      96346,
+      96394
+    ],
+    "processOutput": "  PID  PPID ELAPSED COMMAND\n",
+    "ownedRemaining": [],
+    "controlsDone": {
+      "pid": 8413,
+      "ended": "2026-10-22T08:49:06.131Z"
+    },
+    "next": "No verification process is left running. Tools native memory remains RED timeout, original memory traps and allButLast-specific heap acceptance remain pending. Do not retry or widen the budget without identifying the runtime cause."
   },
   "finalGatesDone": {
     "pid": 4291,
@@ -2598,13 +2727,271 @@
     "log": {
       "path": "tmp/p6/chat-last-thinking-run-bd/final-audit.log",
       "sha256": "dc752d48106c097dbb47e3074fe74a1dd3b79072347cb85be73ebc58b8cd50d4"
-    }
+    },
+    "scoped": [
+      {
+        "file": "packages/providers/src/openai/journal-chat-length-lifecycle.test.ts",
+        "line": 122,
+        "flag": "DUP_ASSERT",
+        "count": 2,
+        "classification": "Repeated nonzero cold-read and zero warm-read assertions at distinct cold/append/endpoint phases; unchanged and retained."
+      },
+      {
+        "file": "packages/providers/src/openai/journal-chat-length-lifecycle.test.ts",
+        "line": 207,
+        "flag": "DUP_ASSERT",
+        "count": 2,
+        "classification": "Repeated before/after length equalities across distinct pop/rewrite/clone/compaction/reopen states; unchanged and retained."
+      }
+    ],
+    "newPolicyTestFindings": 0
   },
   "scopeLimits": {
-    "public": "Actual public ChatSession, mandatory production estimator and local HTTP; gpt-4o model, reasoning.includeInContext=true, none/all/allButLast, pending user; no reasoning effort parameter supplied. Runtime/session/recording directories, fixture registration and old oracle are initialized before operation-wide creation denial.",
+    "public": "Actual public ChatSession, mandatory production estimator and local HTTP; gpt-4o, reasoning.includeInContext=true, none/all/allButLast, pending user; no reasoning effort parameter supplied. Runtime/session/recording directories, seeded history and old oracle precede operation-wide creation denial. Native format registration/fill can write through the already-open persistent journal descriptor during estimation; no-created-file proof is not no persistent-write proof.",
     "policy": "Only exact none/all/allButLast values supported, with absent policy default none. last, allbutlast, empty string and invalid reject before transport.",
     "pruned": "Current/purge/pruned views are not accepted by this proof. Rendering ability must not be inferred from native plain unpruned acceptance.",
     "largerCost": "No fresh 9 MiB or 512/8192 physical-read-cost claim. Fresh 1024/8192 wire/memory samples are recorded separately. Older cost receipts remain historical unless an explicit source bridge validates them.",
     "source": "All production and helper paths listed in each fresh source manifest match current bytes. Different manifest path counts reflect tracked input inventories at their respective launch points, not a claim that one manifest covers absent paths."
+  },
+  "publicHttpControls": [
+    {
+      "name": "http-keeps-all",
+      "path": "packages/providers/src/openai/native-chat-body.ts",
+      "before": "ad5731fda70e1946c38706a026d1f9f031bf0388928a716f2b97d1b3d7a3356d",
+      "mutation": "Native preparation and estimate read allButLast as none; old array oracle is unchanged.",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "packages/agents/src/core/__tests__/native-chat-session-http.test.ts",
+        "--timeout",
+        "180000",
+        "-t",
+        "allButLast"
+      ],
+      "pid": 8414,
+      "exit": 1,
+      "timeout": false,
+      "log": {
+        "path": "tmp/p6/chat-last-thinking-run-bd/http-keeps-all.log",
+        "sha256": "0a07b11499e9abab4fbb39e1559cba37e0d5bb29733e5187f7d0b5737767dc25",
+        "tail": "bun test v1.3.14 (0d9b296a)\n\npackages/agents/src/core/__tests__/native-chat-session-http.test.ts:\n190 |           );\n191 |         }, true);\n192 |         expect(output).toBe('ok');\n193 |         expect(receipt).toStrictEqual({ files: [], directories: [] });\n194 |         expect(requests).toHaveLength(1);\n195 |         expect(requests[0]).toBe(JSON.stringify(reference.requestBody));\n                                  ^\nerror: expect(received).toBe(expected)\n\nExpected: \"{\"model\":\"gpt-4o\",\"messages\":[{\"role\":\"system\",\"content\":\"system\"},{\"role\":\"assistant\",\"content\":\"older answer\"},{\"role\":\"user\",\"content\":\"prior\"},{\"role\":\"assistant\",\"content\":\"answer\",\"reasoning_content\":\"latest first\\nlatest second\"},{\"role\":\"user\",\"content\":\"new user 雪\"}],\"stream\":false}\"\nReceived: \"{\"model\":\"gpt-4o\",\"messages\":[{\"role\":\"system\",\"content\":\"system\"},{\"role\":\"assistant\",\"content\":\"older answer\",\"reasoning_content\":\"old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old \"},{\"role\":\"user\",\"content\":\"prior\"},{\"role\":\"assistant\",\"content\":\"answer\",\"reasoning_content\":\"latest first\\nlatest second\"},{\"role\":\"user\",\"content\":\"new user 雪\"}],\"stream\":false}\"\n\n      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/core/__tests__/native-chat-session-http.test.ts:195:29)\n(fail) public native plain Chat pending user HTTP > sends allButLast thinking through mandatory estimation and HTTP without operation files [223.31ms]\n\n 0 pass\n 2 filtered out\n 1 fail\n 4 expect() calls\nRan 1 test across 1 file. [1329.00ms]\n"
+      },
+      "restoration": {
+        "cmp": true,
+        "after": "ad5731fda70e1946c38706a026d1f9f031bf0388928a716f2b97d1b3d7a3356d"
+      },
+      "wire": {
+        "expected": {
+          "bytes": 294,
+          "sha256": "4803b6f58303dc0204fc11e8d723296721e9d69e5f44443fc93e8c09ddef7f28"
+        },
+        "received": {
+          "bytes": 717,
+          "sha256": "9c7e3323f5c96639ff5fae64ea7b787585412d641f1a328ee63fa52d82c7e07c"
+        }
+      },
+      "observation": "Public ChatSession mandatory estimation completes, local HTTP responds ok, creation receipt is empty, one request is captured, and exact complete-body comparison fails at line 195. This is not a declared-length/precondition failure."
+    },
+    {
+      "name": "http-drops-latest",
+      "path": "packages/providers/src/openai/native-chat-body.ts",
+      "before": "ad5731fda70e1946c38706a026d1f9f031bf0388928a716f2b97d1b3d7a3356d",
+      "mutation": "Native preparation and estimate read allButLast as all; old array oracle is unchanged.",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "packages/agents/src/core/__tests__/native-chat-session-http.test.ts",
+        "--timeout",
+        "180000",
+        "-t",
+        "allButLast"
+      ],
+      "pid": 8430,
+      "exit": 1,
+      "timeout": false,
+      "log": {
+        "path": "tmp/p6/chat-last-thinking-run-bd/http-drops-latest.log",
+        "sha256": "b6e4b628ea9615f3ae8b0e303c314c702b8ff5b4eae3a51fbb1a61a54fea4970",
+        "tail": "bun test v1.3.14 (0d9b296a)\n\npackages/agents/src/core/__tests__/native-chat-session-http.test.ts:\n190 |           );\n191 |         }, true);\n192 |         expect(output).toBe('ok');\n193 |         expect(receipt).toStrictEqual({ files: [], directories: [] });\n194 |         expect(requests).toHaveLength(1);\n195 |         expect(requests[0]).toBe(JSON.stringify(reference.requestBody));\n                                  ^\nerror: expect(received).toBe(expected)\n\nExpected: \"{\"model\":\"gpt-4o\",\"messages\":[{\"role\":\"system\",\"content\":\"system\"},{\"role\":\"assistant\",\"content\":\"older answer\"},{\"role\":\"user\",\"content\":\"prior\"},{\"role\":\"assistant\",\"content\":\"answer\",\"reasoning_content\":\"latest first\\nlatest second\"},{\"role\":\"user\",\"content\":\"new user 雪\"}],\"stream\":false}\"\nReceived: \"{\"model\":\"gpt-4o\",\"messages\":[{\"role\":\"system\",\"content\":\"system\"},{\"role\":\"assistant\",\"content\":\"older answer\"},{\"role\":\"user\",\"content\":\"prior\"},{\"role\":\"assistant\",\"content\":\"answer\"},{\"role\":\"user\",\"content\":\"new user 雪\"}],\"stream\":false}\"\n\n      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/core/__tests__/native-chat-session-http.test.ts:195:29)\n(fail) public native plain Chat pending user HTTP > sends allButLast thinking through mandatory estimation and HTTP without operation files [210.43ms]\n\n 0 pass\n 2 filtered out\n 1 fail\n 4 expect() calls\nRan 1 test across 1 file. [1266.00ms]\n"
+      },
+      "restoration": {
+        "cmp": true,
+        "after": "ad5731fda70e1946c38706a026d1f9f031bf0388928a716f2b97d1b3d7a3356d"
+      },
+      "wire": {
+        "expected": {
+          "bytes": 294,
+          "sha256": "4803b6f58303dc0204fc11e8d723296721e9d69e5f44443fc93e8c09ddef7f28"
+        },
+        "received": {
+          "bytes": 244,
+          "sha256": "933568208d8aa223689b8518e54301f1165876a5c53805db6292c5e7ef3dee89"
+        }
+      },
+      "observation": "Public ChatSession mandatory estimation completes, local HTTP responds ok, creation receipt is empty, one request is captured, and exact complete-body comparison fails at line 195. This is not a declared-length/precondition failure."
+    },
+    {
+      "name": "http-wrong-tail-shift",
+      "path": "packages/core/src/journal/summaryComposition.ts",
+      "before": "dacda37726c098d38952d5d6098fd1631ab0305a9e730e1a53a3f24304e97364",
+      "mutation": "Omit left normalized-unit rank shift when composing right last-thinking facts.",
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "packages/agents/src/core/__tests__/native-chat-session-http.test.ts",
+        "--timeout",
+        "180000",
+        "-t",
+        "allButLast"
+      ],
+      "pid": 8445,
+      "exit": 1,
+      "timeout": false,
+      "log": {
+        "path": "tmp/p6/chat-last-thinking-run-bd/http-wrong-tail-shift.log",
+        "sha256": "dca70e55d9ec4b5cdd2e38c8bc41e838bf4a0f629ce4bd2a1371a36186539532",
+        "tail": "bun test v1.3.14 (0d9b296a)\n\npackages/agents/src/core/__tests__/native-chat-session-http.test.ts:\n190 |           );\n191 |         }, true);\n192 |         expect(output).toBe('ok');\n193 |         expect(receipt).toStrictEqual({ files: [], directories: [] });\n194 |         expect(requests).toHaveLength(1);\n195 |         expect(requests[0]).toBe(JSON.stringify(reference.requestBody));\n                                  ^\nerror: expect(received).toBe(expected)\n\nExpected: \"{\"model\":\"gpt-4o\",\"messages\":[{\"role\":\"system\",\"content\":\"system\"},{\"role\":\"assistant\",\"content\":\"older answer\"},{\"role\":\"user\",\"content\":\"prior\"},{\"role\":\"assistant\",\"content\":\"answer\",\"reasoning_content\":\"latest first\\nlatest second\"},{\"role\":\"user\",\"content\":\"new user 雪\"}],\"stream\":false}\"\nReceived: \"{\"model\":\"gpt-4o\",\"messages\":[{\"role\":\"system\",\"content\":\"system\"},{\"role\":\"assistant\",\"content\":\"older answer\",\"reasoning_content\":\"old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old \"},{\"role\":\"user\",\"content\":\"prior\"},{\"role\":\"assistant\",\"content\":\"answer\"},{\"role\":\"user\",\"content\":\"new user 雪\"}],\"stream\":false}\"\n\n      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/core/__tests__/native-chat-session-http.test.ts:195:29)\n(fail) public native plain Chat pending user HTTP > sends allButLast thinking through mandatory estimation and HTTP without operation files [220.84ms]\n\n 0 pass\n 2 filtered out\n 1 fail\n 4 expect() calls\nRan 1 test across 1 file. [1273.00ms]\n"
+      },
+      "restoration": {
+        "cmp": true,
+        "after": "dacda37726c098d38952d5d6098fd1631ab0305a9e730e1a53a3f24304e97364"
+      },
+      "wire": {
+        "expected": {
+          "bytes": 294,
+          "sha256": "4803b6f58303dc0204fc11e8d723296721e9d69e5f44443fc93e8c09ddef7f28"
+        },
+        "received": {
+          "bytes": 667,
+          "sha256": "22a81b4fbccafd703704bce179b6493d1556cb497ff7a5a43a5e686ddc5c10b2"
+        }
+      },
+      "observation": "Public ChatSession mandatory estimation completes, local HTTP responds ok, creation receipt is empty, one request is captured, and exact complete-body comparison fails at line 195. This is not a declared-length/precondition failure."
+    },
+    {
+      "name": "http-restored-positive",
+      "mutation": null,
+      "args": [
+        "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+        "test",
+        "packages/agents/src/core/__tests__/native-chat-session-http.test.ts",
+        "--timeout",
+        "180000"
+      ],
+      "pid": 8462,
+      "exit": 0,
+      "timeout": false,
+      "log": {
+        "path": "tmp/p6/chat-last-thinking-run-bd/http-restored-positive.log",
+        "sha256": "5a84f68fadb64c6a456d01e2a8c43ed9e0bd80bac5ec45873060a5e7bbe93c30",
+        "tail": "bun test v1.3.14 (0d9b296a)\n\npackages/agents/src/core/__tests__/native-chat-session-http.test.ts:\n(pass) public native plain Chat pending user HTTP > sends none thinking through mandatory estimation and HTTP without operation files [212.75ms]\n(pass) public native plain Chat pending user HTTP > sends all thinking through mandatory estimation and HTTP without operation files [53.09ms]\n(pass) public native plain Chat pending user HTTP > sends allButLast thinking through mandatory estimation and HTTP without operation files [55.14ms]\n\n 3 pass\n 0 fail\n 45 expect() calls\nRan 3 tests across 1 file. [1353.00ms]\n"
+      }
+    }
+  ],
+  "publicGolden": {
+    "source": "tmp/p6/chat-last-thinking-run-bd/http-keeps-all.log",
+    "bytes": 294,
+    "sha256": "4803b6f58303dc0204fc11e8d723296721e9d69e5f44443fc93e8c09ddef7f28",
+    "body": {
+      "model": "gpt-4o",
+      "messages": [
+        {
+          "role": "system",
+          "content": "system"
+        },
+        {
+          "role": "assistant",
+          "content": "older answer"
+        },
+        {
+          "role": "user",
+          "content": "prior"
+        },
+        {
+          "role": "assistant",
+          "content": "answer",
+          "reasoning_content": "latest first\nlatest second"
+        },
+        {
+          "role": "user",
+          "content": "new user 雪"
+        }
+      ],
+      "stream": false
+    },
+    "expectedMessagesTokens": 59,
+    "actualEstimateQualification": "The unchanged public test asserts positive estimates within 16 tokens of this independent old-messages estimate; exact actual estimator readings were not logged."
+  },
+  "sourceInventorySha256": "efaaa0e7283feb2442b83f74ef58ee274020ba99a2c5562ccabe991b15333f65",
+  "postHttpSourceBridge": {
+    "finalGates": "All 19 positive final-gate results reused by exact unchanged source bytes after temporary mutations. No declaration, source, test or enforcement changes persist.",
+    "changedPaths": 16,
+    "conflicts": []
+  },
+  "rootRedToPass": {
+    "public": {
+      "before": "Mandatory initial projection refused allButLast before transport; none/all passed.",
+      "red": {
+        "path": "tmp/p6/chat-last-thinking-run-bd/public-red.log",
+        "sha256": "0dcc86a790070164dfaf721e0606c873a1b2f5b3dba1a9f854cacf21e9578f50",
+        "result": "none/all pass; allButLast throws mandatory initial projection before HTTP"
+      },
+      "after": "Full public file passes 3/0,45 assertions; final native allButLast body equals the independent old converter, 294 bytes, 59 reference messages tokens. Actual estimate is checked within the existing 16-token tolerance; exact actual values were not logged."
+    },
+    "reads": {
+      "before": [
+        {
+          "rows": 40,
+          "calls": 18,
+          "returned": 163200,
+          "payloadOverlaps": 50
+        },
+        {
+          "rows": 4000,
+          "calls": 44,
+          "returned": 435424,
+          "payloadOverlaps": 50
+        }
+      ],
+      "after": [
+        {
+          "rows": 40,
+          "calls": 20,
+          "requested": 78376,
+          "returned": 78376,
+          "payloadOverlaps": 0,
+          "plan": {
+            "bytes": 1939,
+            "tokens": 563
+          }
+        },
+        {
+          "rows": 4000,
+          "calls": 56,
+          "requested": 267376,
+          "returned": 267376,
+          "payloadOverlaps": 0,
+          "plan": {
+            "bytes": 163319,
+            "tokens": 51103
+          }
+        }
+      ],
+      "mechanism": "Exact bounded node-head reads avoid adjacent LENS prefetch; targeted boundary traversal replaces per-row metadata point queries while retaining the original <=80-call bound. Physical metadata reads increase slightly while payload overlap falls to zero. Zero payload reads is not zero total I/O.",
+      "redLog": {
+        "path": "tmp/p6/chat-last-thinking-run-bd/reads-red.log",
+        "sha256": "cb2fdf9905850d523335ad99c63b6aabb7d3801d8971b64c4f454aaa9a5ab66c"
+      },
+      "redReceipt": {
+        "path": "tmp/p6/chat-last-thinking-run-bd/physical-reads-red.json",
+        "sha256": "75f5c8713d3f6815567241cd534d3c0b401495476e5fc930373cdf66591820f7"
+      }
+    }
+  },
+  "postHttpPreservation": {
+    "path": "tmp/p6/chat-last-thinking-run-bd/post-http-preservation.log",
+    "sha256": "0e4199bb6c410cc6f1e5bd39e3d87c8159795d9dc60279f003e975a7ea37b454",
+    "checked": 1204,
+    "failed": 0
   }
 }
