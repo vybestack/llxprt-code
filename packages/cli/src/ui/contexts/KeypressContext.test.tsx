@@ -40,6 +40,7 @@ const PASTE_END = '\x1B[201~';
 class MockStdin extends EventEmitter {
   isTTY = true;
   setRawMode = vi.fn();
+  setEncoding = vi.fn();
   override on = this.addListener;
   override removeListener = super.removeListener;
   resume = vi.fn();

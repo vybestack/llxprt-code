@@ -256,13 +256,17 @@ jobs:
           VERBOSE: 'true'
           LLXPRT_FORCE_FILE_STORAGE: 'true'
           LLXPRT_E2E_MODEL_LEDGER: '${{ runner.temp }}/e2e-model-ledger.jsonl'
+          # Sends reasoning_effort=none so the CPU model skips its thinking
+          # pass; with it on, gemma sometimes writes the tool call as text.
+          LLXPRT_LOCAL_MODEL_THINKING: 'none'
         shell: 'bash'
         run: |
           set -euo pipefail
           if [[ "${{ matrix.sandbox }}" == "sandbox:docker" ]]; then
             npm run test:integration:sandbox:docker -- \
               --exclude="**/todo-continuation.e2e.test.ts" \
-              --exclude="**/run_shell_command.test.ts"
+              --exclude="**/run_shell_command.test.ts" \
+              --exclude="**/run_shell_command.full.*.test.ts"
             npm run test:integration:sandbox:docker -- \
               --exclude="**/todo-continuation.e2e.test.ts" \
               integration-tests/run_shell_command.test.ts \
@@ -270,7 +274,8 @@ jobs:
           else
             npm run test:integration:sandbox:none -- \
               --exclude="**/todo-continuation.e2e.test.ts" \
-              --exclude="**/run_shell_command.test.ts"
+              --exclude="**/run_shell_command.test.ts" \
+              --exclude="**/run_shell_command.full.*.test.ts"
             npm run test:integration:sandbox:none -- \
               --exclude="**/todo-continuation.e2e.test.ts" \
               integration-tests/run_shell_command.test.ts \

@@ -198,7 +198,9 @@ No third-party model credentials are available: the OpenAI-compatible `/v1`
 endpoint uses a local placeholder key.
 
 Each leg runs the selected integration suite excluding
-`todo-continuation.e2e.test.ts` and `run_shell_command.test.ts`, followed by
+`todo-continuation.e2e.test.ts`, `run_shell_command.test.ts` and
+`run_shell_command.full.*.test.ts` (the nightly-only real-model shell
+scenarios, one per file), followed by
 exactly three named shell cases. The shell assertion permits only successful
 literal `echo hello-world` commands; replace requires the `replace` tool,
 exact `bar content`, and no unrelated tools. File-level retries stay enabled.
@@ -209,7 +211,12 @@ across two distinct tests; retries are reported separately. Logs,
 telemetry, inference JSON and ledger are uploaded even on failure.
 
 The local-model E2E profile sets a 32,768-token context and reserves 8,192
-output tokens. Only when `LLXPRT_LOCAL_MODEL_E2E=true`, the generated inline
+output tokens. The E2E run steps set `LLXPRT_LOCAL_MODEL_THINKING=none`, which
+adds `reasoning_effort: none` to the profile so the CPU model does not spend a
+thinking pass (and does not write a tool call as text inside it) before each
+native tool call. Real-model tests declare only the tools they exercise
+(`integration-tests/helpers/focusedToolSettings.ts`), which shortens each
+request by about 750 prompt tokens. Only when `LLXPRT_LOCAL_MODEL_E2E=true`, the generated inline
 profile extends first-response, SDK request and transport headers deadlines
 to 750,000, 850,000 and 900,000 ms respectively. The shell case has a
 360,000 ms TestRig deadline and 450,000 ms Bun timeout; replace has a
@@ -228,10 +235,12 @@ instance, `OPENAI_API_KEY=ollama-local-only`,
 `LLXPRT_DEFAULT_PROVIDER=openai`,
 `LLXPRT_DEFAULT_MODEL=gemma4:e2b-it-qat`,
 `LLXPRT_TEST_PROFILE=local-gemma4-e2e`, `LLXPRT_CONTEXT_LIMIT=32768`,
-`LLXPRT_MAX_OUTPUT_TOKENS=8192`, and `LLXPRT_LOCAL_MODEL_E2E=true`.
+`LLXPRT_MAX_OUTPUT_TOKENS=8192`, `LLXPRT_LOCAL_MODEL_E2E=true` and
+`LLXPRT_LOCAL_MODEL_THINKING=none`.
 Run `npm run test:integration:sandbox:none --
 --exclude="**/todo-continuation.e2e.test.ts"
---exclude="**/run_shell_command.test.ts"` and then the three named shell
+--exclude="**/run_shell_command.test.ts"
+--exclude="**/run_shell_command.full.*.test.ts"` and then the three named shell
 cases with the same invocations as the workflow. Keep local evidence under the
 repository's ignored `tmp/` directory.
 

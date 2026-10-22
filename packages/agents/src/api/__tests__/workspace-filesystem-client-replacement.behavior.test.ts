@@ -218,12 +218,14 @@ describe('production filesystem roots', () => {
       expect(builtOwner.workspaceDirectories()).toContain(directory);
       await capturedSessionClient(builtOwner).startChat();
       const generate = FakeProvider.prototype.generateChatCompletion;
-      const requests: string[] = [];
+      const instructions: string[] = [];
       const observation = spyOn(
         FakeProvider.prototype,
         'generateChatCompletion',
       ).mockImplementation(async function* (this: FakeProvider, input) {
-        requests.push(JSON.stringify(input));
+        if (Array.isArray(input))
+          throw new Error('Expected structured chat options');
+        instructions.push(input.systemInstruction ?? '');
         yield* generate.call(this, input);
       });
       for await (const event of capturedSessionClient(
@@ -235,8 +237,8 @@ describe('production filesystem roots', () => {
       )) {
         if (event.type === 'error') throw new Error(JSON.stringify(event));
       }
-      expect(requests.join('\n')).toContain(directory);
-      requests.length = 0;
+      expect(instructions.join('\n')).toContain(directory);
+      instructions.length = 0;
       builtMcp.workspaceFilesystem.setDirectories([builtConfig.getTargetDir()]);
       await builtOwner.refreshAuth();
       expect(builtOwner.workspaceDirectories()).not.toContain(directory);
@@ -250,7 +252,7 @@ describe('production filesystem roots', () => {
       )) {
         if (event.type === 'error') throw new Error(JSON.stringify(event));
       }
-      expect(requests.join('\n')).not.toContain(directory);
+      expect(instructions.join('\n')).not.toContain(directory);
       observation.mockRestore();
     } finally {
       await builtClose();

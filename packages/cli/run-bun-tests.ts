@@ -390,10 +390,9 @@ export function generateJUnit(results: readonly TestResult[]): string {
 }
 
 /**
- * Writes the report for the files completed so far. The runner calls this as
- * each file finishes so a job cancelled at its time limit still leaves the
- * results it had. The report is written beside its destination and renamed
- * into place, so a cancellation mid-write cannot leave a truncated document.
+ * Writes the report for the given files. The report is written beside its
+ * destination and renamed into place, so a cancellation mid-write cannot leave
+ * a truncated document.
  */
 export function writeJUnitReport(
   reportPath: string,
@@ -408,6 +407,111 @@ export function writeJUnitReport(
     rmSync(temporaryPath, { force: true });
     throw error;
   }
+}
+
+/**
+ * Minimum spacing between partial-report snapshots. A snapshot sorts and
+ * serialises every completed file, so writing one per completed file costs
+ * quadratic work across the run. A job cancelled at its time limit loses at
+ * most this much progress from the report; the runner also flushes on
+ * SIGTERM/SIGINT/SIGHUP and at the end of the run.
+ */
+export const JUNIT_SNAPSHOT_INTERVAL_MS = 30_000;
+
+export interface JUnitCheckpoint {
+  /** Retains a completed file; snapshots only when the interval has elapsed. */
+  record(result: TestResult): void;
+  /** Writes every file recorded so far, regardless of the interval. */
+  flush(): void;
+  /** True when the most recent write failed. */
+  readonly writeFailed: boolean;
+  /** Number of report writes attempted and the time they took. */
+  readonly stats: { readonly writes: number; readonly elapsedMs: number };
+}
+
+export interface JUnitCheckpointOptions {
+  readonly reportPath: string;
+  readonly intervalMs?: number;
+  readonly now?: () => number;
+  readonly write?: (reportPath: string, results: readonly TestResult[]) => void;
+  readonly logError?: (message: string) => void;
+}
+
+export function createJUnitCheckpoint(
+  options: JUnitCheckpointOptions,
+): JUnitCheckpoint {
+  const {
+    reportPath,
+    intervalMs = JUNIT_SNAPSHOT_INTERVAL_MS,
+    now = () => performance.now(),
+    write = writeJUnitReport,
+    logError = (message) => console.error(message),
+  } = options;
+  const recorded: TestResult[] = [];
+  let lastWriteAt = now();
+  let writeFailed = false;
+  let writes = 0;
+  let elapsedMs = 0;
+
+  const flush = (): void => {
+    const startedAt = now();
+    writes++;
+    try {
+      write(reportPath, recorded);
+      writeFailed = false;
+    } catch (error) {
+      // A write failure must not replace the run's verdict with an unhandled
+      // exception, but losing the required CI artifact is still a failed run.
+      writeFailed = true;
+      logError(
+        `Failed to write junit.xml: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+    lastWriteAt = now();
+    elapsedMs += lastWriteAt - startedAt;
+  };
+
+  return {
+    record(result) {
+      recorded.push(result);
+      if (now() - lastWriteAt >= intervalMs) flush();
+    },
+    flush,
+    get writeFailed() {
+      return writeFailed;
+    },
+    get stats() {
+      return { writes, elapsedMs };
+    },
+  };
+}
+
+/**
+ * Bun prints this summary line only after every test in the file has run, so
+ * a child that timed out with the line present finished its tests and then
+ * failed to exit.
+ */
+const TESTS_FINISHED_PATTERN = /^Ran \d+ tests? across \d+ files?\./m;
+
+/** One-line progress record: verdict, position, file and wall-clock time. */
+export function formatFileProgress(
+  result: Pick<TestResult, 'file' | 'passed' | 'timedOut' | 'output'>,
+  position: number,
+  total: number,
+  durationMs: number,
+): string {
+  const verdict = result.passed ? 'PASS' : 'FAIL';
+  let suffix = '';
+  if (result.timedOut) {
+    suffix = TESTS_FINISHED_PATTERN.test(stripAnsi(result.output))
+      ? ' [timeout: tests finished, process did not exit]'
+      : ' [timeout]';
+  }
+  return `${verdict} (${position}/${total}) ${result.file} ${(
+    durationMs / 1000
+  ).toFixed(2)}s${suffix}`;
 }
 
 export function exitCodeForRun(
@@ -447,32 +551,19 @@ async function main(): Promise<void> {
     );
   }
 
+  const reportPath = join(root, 'junit.xml');
+  const checkpoint = createJUnitCheckpoint({ reportPath });
   // Session-scoped fake system root (issue #3622): every spawned test process
   // gets HOME/TMPDIR/XDG_* inside a throwaway root while this runner keeps
   // its real environment for the sentinel guard.
   const isolation = createBespokeRunnerIsolation(process.env);
   const removeSignalHandlers = installRunnerSignalHandlers(() => {
+    // Leave the results gathered so far when the job is cancelled.
+    checkpoint.flush();
     isolation.finalize();
   });
   let exitCode = 1;
   let failFast = false;
-  const reportPath = join(root, 'junit.xml');
-  // A write failure must not replace the run's verdict with an unhandled
-  // exception, but losing the required CI artifact is still a failed run.
-  let junitWriteFailed = false;
-  const checkpointReport = (completedResults: readonly TestResult[]): void => {
-    try {
-      writeJUnitReport(reportPath, completedResults);
-      junitWriteFailed = false;
-    } catch (error) {
-      junitWriteFailed = true;
-      console.error(
-        `Failed to write junit.xml: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    }
-  };
   try {
     const results: TestResult[] = [];
     let nextIndex = 0;
@@ -483,6 +574,7 @@ async function main(): Promise<void> {
         const index = nextIndex++;
         if (index >= selectedFiles.length) return;
         const file = selectedFiles[index];
+        const startedAt = performance.now();
         const result = await isolation.runFile(file, () =>
           runTestFileWithTimeoutRetry(file, () =>
             runTestFile(file, isolation.sessionEnv, () => {
@@ -490,15 +582,20 @@ async function main(): Promise<void> {
             }),
           ),
         );
+        const durationMs = performance.now() - startedAt;
         results.push(result);
         completed++;
-        checkpointReport(results);
-        if (!result.passed) {
-          console.error(
-            `FAIL (${completed}/${selectedFiles.length}) ${result.file}${
-              result.timedOut ? ' [timeout]' : ''
-            }`,
-          );
+        checkpoint.record(result);
+        const progress = formatFileProgress(
+          result,
+          completed,
+          selectedFiles.length,
+          durationMs,
+        );
+        if (result.passed) {
+          console.log(progress);
+        } else {
+          console.error(progress);
           // Emit the failure detail now: a job cancelled before every worker
           // finishes must still leave the cause of each completed failure.
           console.error(`\n----- ${result.file} -----`);
@@ -541,8 +638,14 @@ async function main(): Promise<void> {
         `(${cases.pass + cases.fail + cases.skip + cases.todo} total)`,
     );
 
-    checkpointReport(results);
-    exitCode = exitCodeForRun(failed.length, junitWriteFailed);
+    checkpoint.flush();
+    const { writes, elapsedMs } = checkpoint.stats;
+    console.log(`junit.xml: ${writes} writes, ${elapsedMs.toFixed(0)}ms total`);
+    exitCode = exitCodeForRun(failed.length, checkpoint.writeFailed);
+  } catch (error) {
+    // A worker failure ends the run early; keep what had completed.
+    checkpoint.flush();
+    throw error;
   } finally {
     try {
       if (isolation.finalize() > 0) exitCode = 1;

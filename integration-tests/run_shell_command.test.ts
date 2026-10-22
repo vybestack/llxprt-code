@@ -8,26 +8,17 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { join } from 'node:path';
 import { env } from 'node:process';
 import { TestRig, printDebugInfo, validateModelOutput } from './test-helper.js';
-import { getShellConfiguration } from '../packages/core/src/utils/shell-utils.js';
+import { focusedToolSettings } from './helpers/focusedToolSettings.js';
 
-const { shell } = getShellConfiguration();
+// The other real-model scenarios of this suite live in
+// run_shell_command.full.*.test.ts so each file's serial model rounds fit the
+// per-file process budget.
 const localModelE2E = env['LLXPRT_LOCAL_MODEL_E2E'] === 'true';
 
 function shellE2ERunTimeoutMs(localModelE2E: boolean): number | undefined {
   // Docker's observed 238s model response leaves no room for a tool round trip
   // under the original 240s TestRig deadline.
   return localModelE2E ? 360_000 : undefined;
-}
-
-function getLineCountCommand(): { command: string; tool: string } {
-  switch (shell) {
-    case 'powershell':
-    case 'cmd':
-      return { command: `find /c /v`, tool: 'find' };
-    case 'bash':
-    default:
-      return { command: `wc -l`, tool: 'wc' };
-  }
 }
 
 function isExpectedEchoCommand(args: string): boolean {
@@ -133,7 +124,7 @@ describe('run_shell_command', () => {
     { timeout: localModelE2E ? 450_000 : undefined },
     async () => {
       await rig.setup('should be able to run a shell command', {
-        settings: { tools: { core: ['run_shell_command'] } },
+        settings: focusedToolSettings(['run_shell_command']),
       });
 
       const prompt = `Use the run_shell_command tool to execute exactly "echo hello-world". Show me the output.`;
@@ -265,41 +256,6 @@ describe('run_shell_command', () => {
       args: ['--allowed-tools=run_shell_command'],
       stdin: 'Count lines in test.txt',
       yolo: false,
-    });
-
-    const foundToolCall = await rig.waitForToolCall('run_shell_command', 15000);
-
-    if (!foundToolCall) {
-      printDebugInfo(rig, result, {
-        'Found tool call': foundToolCall,
-      });
-    }
-
-    expect(
-      foundToolCall,
-      'Expected to find a run_shell_command tool call',
-    ).toBeTruthy();
-
-    const toolCall = rig
-      .readToolLogs()
-      .filter(
-        (toolCall) => toolCall.toolRequest.name === 'run_shell_command',
-      )[0];
-    expect(toolCall.toolRequest.success).toBe(true);
-  });
-
-  it('should succeed with --yolo mode', async () => {
-    await rig.setup('should succeed with --yolo mode', {
-      settings: { tools: { core: ['run_shell_command'] } },
-    });
-
-    const testFile = rig.createFile('test.txt', 'Lorem\nIpsum\nDolor\n');
-    const { command } = getLineCountCommand();
-    const prompt = `use ${command} to tell me how many lines there are in ${testFile}`;
-
-    const result = await rig.run({
-      args: prompt,
-      yolo: true,
     });
 
     const foundToolCall = await rig.waitForToolCall('run_shell_command', 15000);
@@ -457,88 +413,6 @@ describe('run_shell_command', () => {
       'Expected failing run_shell_command invocation',
     ).toBeTruthy();
     expect(failureLog!.toolRequest.success).toBe(false);
-  });
-
-  it('should allow all with "ShellTool" and other specific tools', async () => {
-    await rig.setup(
-      'should allow all with "ShellTool" and other specific tools',
-      {
-        settings: { tools: { core: ['run_shell_command'] } },
-      },
-    );
-
-    const { tool } = getLineCountCommand();
-    const prompt = `Please run the command "echo test-allow-all" and show me the output`;
-
-    const result = await rig.run({
-      args: [
-        `--allowed-tools=run_shell_command(${tool})`,
-        '--allowed-tools=run_shell_command',
-      ],
-      stdin: prompt,
-      yolo: false,
-    });
-
-    const foundToolCall = await rig.waitForToolCall('run_shell_command', 15000);
-
-    if (!foundToolCall || !result.includes('test-allow-all')) {
-      printDebugInfo(rig, result, {
-        'Found tool call': foundToolCall,
-        Result: result,
-      });
-    }
-
-    expect(
-      foundToolCall,
-      'Expected to find a run_shell_command tool call',
-    ).toBeTruthy();
-
-    const toolCall = rig
-      .readToolLogs()
-      .filter(
-        (toolCall) => toolCall.toolRequest.name === 'run_shell_command',
-      )[0];
-    expect(toolCall.toolRequest.success).toBe(true);
-
-    // Validate model output - will throw if no output, warn if missing expected content
-    validateModelOutput(
-      result,
-      'test-allow-all',
-      'Shell command stdin allow all',
-    );
-  });
-
-  it('should propagate environment variables to the child process', async () => {
-    await rig.setup('should propagate environment variables', {
-      settings: { tools: { core: ['run_shell_command'] } },
-    });
-
-    const varName = 'LLXPRT_CODE_TEST_VAR';
-    const varValue = `test-value-${Math.random().toString(36).substring(7)}`;
-    process.env[varName] = varValue;
-
-    try {
-      const prompt = `Use echo to learn the value of the environment variable named ${varName} and tell me what it is.`;
-      const result = await rig.run({ args: prompt });
-
-      const foundToolCall = await rig.waitForToolCall('run_shell_command');
-
-      if (!foundToolCall || !result.includes(varValue)) {
-        printDebugInfo(rig, result, {
-          'Found tool call': foundToolCall,
-          'Contains varValue': result.includes(varValue),
-        });
-      }
-
-      expect(
-        foundToolCall,
-        'Expected to find a run_shell_command tool call',
-      ).toBeTruthy();
-      validateModelOutput(result, varValue, 'Env var propagation test');
-      expect(result).toContain(varValue);
-    } finally {
-      delete process.env[varName];
-    }
   });
 
   it('should run a platform-specific file listing command', async () => {

@@ -54,13 +54,14 @@ void vi.mock('fs', () => {
   };
   return { ...mocked, default: mocked };
 });
-// Mock os to always return 'linux' for consistent testing across platforms
+// Mock os to always return 'linux' for consistent testing across platforms.
+// tmpdir stays real: Agent fixtures create their directories with the real
+// mkdtemp, which fails on a host that has no '/tmp'.
 const actual = { ...(await import('os')) };
 void vi.mock('os', () => {
   const mockedOs = {
     ...actual,
     platform: vi.fn(() => 'linux'),
-    tmpdir: vi.fn(() => '/tmp'),
     homedir: vi.fn(() => '/home/testuser'),
   };
   return {

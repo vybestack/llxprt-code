@@ -14,6 +14,10 @@ import { createChatPolicyFixture } from './__tests__/session-policy-fixture.js';
 import type { CompletedToolCall } from './coreToolScheduler.js';
 import type { ToolResultDisplay } from '@vybestack/llxprt-code-tools';
 import { HookType } from '@vybestack/llxprt-code-core/hooks/types.js';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { physicalHookCommand } from '../api/__tests__/helpers/physicalHookCommand.js';
 
 /**
  * SubAgentScope buildPartsFromCompletedCalls dedup, hook delegation to parent config.
@@ -700,6 +704,24 @@ describe('subagent.ts', () => {
   });
 
   describe('Hook delegation to parent config', () => {
+    const hookDirectories: string[] = [];
+
+    afterEach(async () => {
+      for (const directory of hookDirectories.splice(0))
+        await rm(directory, { recursive: true, force: true });
+    });
+
+    async function denyingHookCommand(): Promise<string> {
+      const directory = await mkdtemp(join(tmpdir(), 'child-hook-denied-'));
+      hookDirectories.push(directory);
+      const script = join(directory, 'deny.ts');
+      await writeFile(
+        script,
+        "process.stderr.write('child-hook-denied\\n');\nprocess.exit(2);\n",
+      );
+      return physicalHookCommand(script);
+    }
+
     it('should trigger BeforeTool hook when subagent executes a tool', async () => {
       const effects: string[] = [];
       const tool = new MockTool({
@@ -737,6 +759,7 @@ describe('subagent.ts', () => {
         decision: PolicyDecision.ALLOW,
         priority: 100,
       });
+      const denyCommand = await denyingHookCommand();
       vi.spyOn(config, 'getEnableHooks').mockReturnValue(true);
       vi.spyOn(config, 'getHooks').mockReturnValue({
         BeforeTool: [
@@ -745,7 +768,7 @@ describe('subagent.ts', () => {
             hooks: [
               {
                 type: HookType.Command,
-                command: 'echo child-hook-denied >&2; exit 2',
+                command: denyCommand,
                 timeout: 5000,
               },
             ],

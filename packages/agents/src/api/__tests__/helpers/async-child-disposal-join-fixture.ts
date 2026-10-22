@@ -16,7 +16,7 @@ import { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTask
 import { McpRuntimeOwner } from '../../mcpRuntimeAssembly.js';
 
 import { createServer } from 'node:http';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
@@ -235,12 +235,17 @@ function createDisposalSettings(
   };
 }
 
+/** Canonical path so owned and expected directories agree on Windows 8.3 names. */
+async function createFixtureDirectory(): Promise<string> {
+  return realpath(await mkdtemp(join(tmpdir(), 'async-child-disposal-join-')));
+}
+
 export async function withDisposalJoinFixture(
   scenario: (fixture: DisposalJoinFixture) => Promise<void>,
   toolSchedulerFactory?: AgentSchedulerFactory,
   extraTools: readonly string[] = [],
 ): Promise<void> {
-  const directory = await mkdtemp(join(tmpdir(), 'async-child-disposal-join-'));
+  const directory = await createFixtureDirectory();
   const server = await createParentServer();
   const timeline: string[] = [];
   const external = createHeldFetch(`${server.baseUrl}/child`, timeline);

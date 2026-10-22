@@ -197,7 +197,7 @@ describe('ordinary local-model E2E', () => {
     const normalize = (script: string): string =>
       script.replace(/\\\s*/g, ' ').replace(/\s+/g, ' ');
     const fullArgs =
-      '--exclude="**/todo-continuation.e2e.test.ts" --exclude="**/run_shell_command.test.ts"';
+      '--exclude="**/todo-continuation.e2e.test.ts" --exclude="**/run_shell_command.test.ts" --exclude="**/run_shell_command.full.*.test.ts"';
     const shellArgs =
       'integration-tests/run_shell_command.test.ts --testNamePattern="should be able to run a shell command|should be able to run a shell command via stdin|should run a platform-specific file listing command"';
     const normalizedCommand = normalize(command);
@@ -212,7 +212,7 @@ describe('ordinary local-model E2E', () => {
       const shellInvocation = `npm run test:integration:${sandbox} -- --exclude="**/todo-continuation.e2e.test.ts" ${shellArgs}`;
       expect(normalizedCommand).toContain(shellInvocation);
     }
-    expect(command.match(/--exclude=/g)).toHaveLength(6);
+    expect(command.match(/--exclude=/g)).toHaveLength(8);
     // The local-model provider environment is exported by the shared setup
     // action (via GITHUB_ENV) before 'Run E2E tests' starts.
     const exported = exportedTestEnvironment();

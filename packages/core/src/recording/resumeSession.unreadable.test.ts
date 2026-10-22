@@ -65,7 +65,13 @@ async function denyNewEntries(directory: string): Promise<() => Promise<void>> {
   }
   const account = os.userInfo().username;
   // WD/AD are "add file" / "add subdirectory" on a directory; no inheritance
-  // flags, so only this directory is affected.
+  // flags, so only this directory is affected. FILE_ADD_FILE on the directory
+  // is the right the lock path needs for both of its creating operations: a
+  // CREATE_NEW open of the temp file (MS-FSA 2.1.5.1.1, "Creation of a New
+  // File") and the hard link that publishes it (MS-FSA FileLinkInformation,
+  // which opens the destination directory with FILE_ADD_FILE). Both checks
+  // are skipped for an open that holds restore access, so the test verifies
+  // the denial with those same operations instead of assuming it.
   await execFileAsync('icacls', [directory, '/deny', `${account}:(WD,AD)`]);
   return async () => {
     await execFileAsync('icacls', [directory, '/remove:d', account]);
@@ -74,6 +80,26 @@ async function denyNewEntries(directory: string): Promise<() => Promise<void>> {
 
 // libuv reports ERROR_ACCESS_DENIED as EPERM, POSIX reports EACCES.
 const DENIED_CODE = process.platform === 'win32' ? 'EPERM' : 'EACCES';
+
+/**
+ * Proves `directory` refuses the two operations SessionLockManager uses to
+ * publish a lock: an exclusive create of a temp file and a hard link of an
+ * existing file into the directory. A plain writeFile denial is not enough,
+ * because the lock path never calls writeFile.
+ */
+async function expectLockPublicationDenied(
+  directory: string,
+  existingFile: string,
+): Promise<void> {
+  const exclusive = await settle(
+    fs.open(path.join(directory, 'probe-exclusive'), 'wx'),
+  );
+  if ('resolved' in exclusive) await exclusive.resolved.close();
+  expect(exclusive).toMatchObject({ rejected: { code: DENIED_CODE } });
+  expect(
+    await settle(fs.link(existingFile, path.join(directory, 'probe-link'))),
+  ).toMatchObject({ rejected: { code: DENIED_CODE } });
+}
 
 async function settle<T>(
   promise: Promise<T>,
@@ -358,11 +384,15 @@ describe('resumeSession with legacy and unreadable recordings (issue #3732)', ()
     });
 
     it('propagates the permission error instead of reporting lock contention', async () => {
-      await createHealthySession(chatsDir, 'locked-out-0010');
+      const recordingPath = await createHealthySession(
+        chatsDir,
+        'locked-out-0010',
+      );
       restoreAccess = await denyNewEntries(chatsDir);
       await expect(
         fs.writeFile(path.join(chatsDir, 'probe'), ''),
       ).rejects.toMatchObject({ code: DENIED_CODE });
+      await expectLockPublicationDenied(chatsDir, recordingPath);
 
       // The denial covers new entries only, so the healthy recording stays
       // discoverable and the lock file is what cannot be created.

@@ -4,8 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { spawnSync } from 'node:child_process';
-import { lstatSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { join, resolve } from 'node:path';
 import { FIRST_PARTY_RUNTIME_PLUGIN_RELEASES } from './utils/release-packages.ts';
 
@@ -24,6 +32,12 @@ const environment = {
   XDG_CONFIG_HOME: home,
   BUN_NO_INSTALL_COMPLETIONS: '1',
 };
+
+const privateImagePath = join(
+  toolRoot,
+  'bin',
+  process.platform === 'win32' ? 'bun.exe' : 'bun',
+);
 
 interface InstallerCommand {
   readonly command: string;
@@ -73,6 +87,9 @@ function run(command: string, args: string[], cwd: string): string {
   }
   return result.stdout;
 }
+
+const processObserver =
+  process.platform === 'win32' ? startProcessObserver() : undefined;
 
 try {
   const windows = process.platform === 'win32';
@@ -135,98 +152,145 @@ interface NativeProcessCandidate {
 
 /**
  * Outcome of the Windows process snapshot. A failed snapshot keeps its
- * status, signal, spawn error and PowerShell stderr instead of collapsing to
- * "no candidates", so a diagnostic reader can tell a timeout from a query
- * failure.
+ * reason instead of collapsing to "no candidates", so a diagnostic reader
+ * can tell an observer that never answered from a query failure.
  */
 interface NativeProcessProbe {
-  readonly status: number | null;
-  readonly signal: NodeJS.Signals | null;
+  readonly observerPid: number | undefined;
   readonly error: string | undefined;
-  readonly stderr: string;
   readonly budgetMs: number;
   readonly elapsedMs: number;
   readonly processCandidates: readonly NativeProcessCandidate[] | null;
 }
 
-function nativeProcessSnapshotScript(image: string): string {
-  // One CIM query, indexed by pid: the ancestor walk is hash lookups rather
-  // than a pipeline scan per step, and only the properties used are fetched,
-  // so the snapshot stays inside the shared cleanup budget on a cold start.
-  return [
-    "$ErrorActionPreference='Stop';",
-    `$image='${image.replaceAll("'", "''")}';`,
+/**
+ * A PowerShell process started before the installer runs. Launching
+ * powershell.exe and loading its CIM provider takes seconds on a cold
+ * Windows runner, which does not fit in the 2 second cleanup budget. The
+ * observer pays that cost while the installer works, then waits for a
+ * request file and answers with one process snapshot, so cleanup only
+ * writes a file and reads the reply.
+ */
+interface ProcessObserver {
+  readonly child: ChildProcess;
+  readonly requestPath: string;
+  readonly responsePath: string;
+}
+
+function powerShellString(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`;
+}
+
+function processObserverScript(
+  image: string,
+  requestPath: string,
+  responsePath: string,
+): string {
+  // The snapshot is one CIM query, indexed by pid, so the ancestor walk is
+  // hash lookups rather than a pipeline scan per step. The warm-up query
+  // loads the CIM provider before the observer starts waiting.
+  const snapshot = [
     '$byId=@{}; $selected=@{};',
     'foreach ($p in Get-CimInstance -ClassName Win32_Process -Property ProcessId,ParentProcessId,ExecutablePath,CreationDate) { $byId[[int]$p.ProcessId]=$p };',
     `foreach ($p in $byId.Values) { if ($p.ExecutablePath -eq $image) { $selected[[int]$p.ProcessId]='exact-private-bun' } elseif ($p.ProcessId -eq ${process.pid}) { $selected[[int]$p.ProcessId]='installer' } };`,
     "foreach ($id in @($selected.Keys)) { $seen=@{}; $p=$byId[[int]$id]; while ($p -and -not $seen.ContainsKey([int]$p.ProcessId)) { $seen[[int]$p.ProcessId]=$true; $p=$byId[[int]$p.ParentProcessId]; if ($p -and -not $selected.ContainsKey([int]$p.ProcessId)) { $selected[[int]$p.ProcessId]='ancestor-candidate' } } };",
-    "ConvertTo-Json -Compress -InputObject @($selected.Keys | ForEach-Object { $p=$byId[[int]$_]; [pscustomobject]@{ pid=$p.ProcessId; parentPid=$p.ParentProcessId; created=$p.CreationDate.ToUniversalTime().ToString('o'); image=[IO.Path]::GetFileName($p.ExecutablePath); role=$selected[[int]$_] } })",
+    "@($selected.Keys | ForEach-Object { $p=$byId[[int]$_]; [pscustomobject]@{ pid=$p.ProcessId; parentPid=$p.ParentProcessId; created=$p.CreationDate.ToUniversalTime().ToString('o'); image=[IO.Path]::GetFileName($p.ExecutablePath); role=$selected[[int]$_] } })",
+  ].join(' ');
+  return [
+    "$ErrorActionPreference='Stop';",
+    `$image=${powerShellString(image)};`,
+    `$request=${powerShellString(requestPath)};`,
+    `$response=${powerShellString(responsePath)};`,
+    `$installer=[Diagnostics.Process]::GetProcessById(${process.pid});`,
+    `$null=& { ${snapshot} };`,
+    'while (-not (Test-Path -LiteralPath $request)) { if ($installer.HasExited) { exit 0 }; Start-Sleep -Milliseconds 20 };',
+    `try { $body=[pscustomobject]@{ error=$null; candidates=@(& { ${snapshot} }) } } catch { $body=[pscustomobject]@{ error=$_.Exception.Message; candidates=$null } };`,
+    "$staged=$response + '.tmp'; [IO.File]::WriteAllText($staged, (ConvertTo-Json -Compress -Depth 4 -InputObject $body));",
+    'Move-Item -LiteralPath $staged -Destination $response',
   ].join(' ');
 }
 
-function probeNativeProcesses(
-  image: string,
-  budgetMs: number,
-): NativeProcessProbe {
-  const startedAt = performance.now();
-  const result = spawnSync(
+function startProcessObserver(): ProcessObserver {
+  const requestPath = join(toolRoot, 'observer.request');
+  const responsePath = join(toolRoot, 'observer.response');
+  const child = spawn(
     'powershell.exe',
     [
       '-NoLogo',
       '-NoProfile',
       '-NonInteractive',
       '-Command',
-      nativeProcessSnapshotScript(image),
+      processObserverScript(privateImagePath, requestPath, responsePath),
     ],
-    {
-      cwd: repoRoot,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      encoding: 'utf8',
-      windowsHide: true,
-      timeout: budgetMs,
-      maxBuffer: 32 * 1024,
-    },
+    { cwd: repoRoot, stdio: 'ignore', windowsHide: true },
   );
-  const elapsedMs = Math.round(performance.now() - startedAt);
-  const common = {
-    status: result.status,
-    signal: result.signal,
-    stderr: result.stderr,
-    budgetMs,
-    elapsedMs,
+  // A late spawn failure must not become an unhandled error; the probe
+  // reports the missing pid instead.
+  child.on('error', () => {});
+  child.unref();
+  return { child, requestPath, responsePath };
+}
+
+function sleepSync(milliseconds: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+}
+
+function parseObserverResponse(
+  text: string,
+): Pick<NativeProcessProbe, 'error' | 'processCandidates'> {
+  const parsed: unknown = JSON.parse(text);
+  if (
+    typeof parsed !== 'object' ||
+    parsed === null ||
+    !('candidates' in parsed)
+  )
+    return { error: 'Unrecognized process snapshot', processCandidates: null };
+  const { candidates } = parsed;
+  const reported =
+    'error' in parsed && typeof parsed.error === 'string'
+      ? parsed.error
+      : undefined;
+  return {
+    error: reported,
+    processCandidates: Array.isArray(candidates) ? candidates : null,
   };
-  if (result.error !== undefined) {
-    return {
-      ...common,
-      error: result.error.message,
+}
+
+function probeNativeProcesses(
+  observer: ProcessObserver,
+  budgetMs: number,
+): NativeProcessProbe {
+  const startedAt = performance.now();
+  const observerPid = observer.child.pid;
+  const finish = (
+    outcome: Pick<NativeProcessProbe, 'error' | 'processCandidates'>,
+  ): NativeProcessProbe => ({
+    observerPid,
+    budgetMs,
+    elapsedMs: Math.round(performance.now() - startedAt),
+    ...outcome,
+  });
+  if (observerPid === undefined)
+    return finish({
+      error: 'Process observer failed to start',
       processCandidates: null,
-    };
+    });
+  writeFileSync(observer.requestPath, '');
+  while (performance.now() - startedAt < budgetMs) {
+    if (existsSync(observer.responsePath))
+      return finish(
+        parseObserverResponse(readFileSync(observer.responsePath, 'utf8')),
+      );
+    sleepSync(10);
   }
-  if (result.status !== 0) {
-    return { ...common, error: undefined, processCandidates: null };
-  }
-  try {
-    const parsed: unknown = JSON.parse(result.stdout);
-    return {
-      ...common,
-      error: undefined,
-      processCandidates: Array.isArray(parsed) ? parsed : null,
-    };
-  } catch (parseError) {
-    return {
-      ...common,
-      error: `Unparseable process snapshot: ${String(parseError)}`,
-      processCandidates: null,
-    };
-  }
+  return finish({
+    error: 'Process observer did not answer within the cleanup budget',
+    processCandidates: null,
+  });
 }
 
 function privateImageContext(deadline: number): object {
-  const path = join(
-    toolRoot,
-    'bin',
-    process.platform === 'win32' ? 'bun.exe' : 'bun',
-  );
+  const path = privateImagePath;
   const file = lstatSync(path, { throwIfNoEntry: false });
   const context = {
     path,
@@ -237,10 +301,13 @@ function privateImageContext(deadline: number): object {
       modified: file.mtimeMs,
     },
   };
-  if (process.platform !== 'win32') return context;
+  if (processObserver === undefined) return context;
   const remaining = Math.floor(deadline - performance.now());
   if (remaining <= 0) return { ...context, probe: { budgetExhausted: true } };
-  return { ...context, probe: probeNativeProcesses(path, remaining) };
+  return {
+    ...context,
+    probe: probeNativeProcesses(processObserver, remaining),
+  };
 }
 
 function cleanupInstaller(): void {
@@ -274,5 +341,7 @@ function cleanupInstaller(): void {
       throw error;
     }
     throw error;
+  } finally {
+    processObserver?.child.kill();
   }
 }

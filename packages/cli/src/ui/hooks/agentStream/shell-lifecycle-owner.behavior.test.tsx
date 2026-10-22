@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, expect, it } from 'bun:test';
+import { realpathSync } from 'node:fs';
 import { act } from 'react';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { renderHook } from '../../../__tests__/render.js';
@@ -68,10 +69,28 @@ async function runShell(
   }
 }
 
-// The history is searched as JSON text, where a native Windows path appears
-// with its backslashes escaped.
-function jsonEncoded(text: string): string {
-  return JSON.stringify(text).slice(1, -1);
+const RESULT_FENCE =
+  /This produced the following result:\n```\n([\s\S]*?)\n```/;
+
+// The shell reports its working directory in whatever spelling the platform
+// gives it (Windows temp paths come back as either the 8.3 short form or the
+// long form), so the printed text is extracted and compared by real path.
+async function printedWorkingDirectory(owner: Agent): Promise<string> {
+  const history = await owner.getHistory();
+  const texts = history.flatMap((entry) =>
+    entry.blocks.flatMap((block) =>
+      block.type === 'text' ? [block.text] : [],
+    ),
+  );
+  const printed = texts
+    .map((text) => RESULT_FENCE.exec(text)?.[1])
+    .find((output) => output !== undefined);
+  if (printed === undefined) {
+    throw new Error(`No shell result in history: ${JSON.stringify(texts)}`);
+  }
+  // The shell may print warnings before the command's own output.
+  const lines = printed.trim().split('\n');
+  return lines[lines.length - 1].trim();
 }
 
 describe('shell lifecycle session owner', () => {
@@ -90,12 +109,12 @@ describe('shell lifecycle session owner', () => {
     const owner = await makeOwner('shell-directory-owner');
     const sibling = await makeOwner('shell-directory-sibling');
     await runShell(owner, sibling, 'node -p "process.cwd()"', sibling);
-    const history = JSON.stringify(await owner.getHistory());
-    expect(history).toContain(
-      jsonEncoded(owner.workspace.getWorkingDirectory()),
+    const printed = realpathSync.native(await printedWorkingDirectory(owner));
+    expect(printed).toBe(
+      realpathSync.native(owner.workspace.getWorkingDirectory()),
     );
-    expect(history).not.toContain(
-      jsonEncoded(sibling.workspace.getWorkingDirectory()),
+    expect(printed).not.toBe(
+      realpathSync.native(sibling.workspace.getWorkingDirectory()),
     );
   });
 });

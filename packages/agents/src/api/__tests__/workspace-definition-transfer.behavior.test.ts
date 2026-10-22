@@ -19,7 +19,7 @@ import {
   mkdir,
   writeFile,
 } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
@@ -67,7 +67,7 @@ import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
 import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
 import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
 import { WorkspaceDefinitionOwner } from '@vybestack/llxprt-code-core';
-import { execFileSync } from 'node:child_process';
+import { gateReadFile } from './helpers/gated-read-file.js';
 
 async function settleEngineRelease(
   steps: ReadonlyArray<() => void | Promise<void>>,
@@ -381,21 +381,27 @@ describe('public Agent workspace definition lifetime', () => {
       definitions,
     );
     await mkdir(join(root, 'owned/profiles'), { recursive: true });
-    const fifo = join(root, 'owned/profiles/held.json');
-    execFileSync('mkfifo', [fifo]);
-    const accepted = agent.workspace.profileDefinitions.loadProfile('held');
-    let finished = false;
-    const closing = agent.dispose().then(() => {
-      finished = true;
-    });
+    await writeFile(
+      join(root, 'owned/profiles/held.json'),
+      JSON.stringify(agent.captureProfile()),
+    );
+    const read = gateReadFile((file) => basename(String(file)) === 'held.json');
     try {
+      const accepted = agent.workspace.profileDefinitions.loadProfile('held');
+      await read.entered;
+      let finished = false;
+      const closing = agent.dispose().then(() => {
+        finished = true;
+      });
       expect(() => definitions.profileReads.listProfiles()).toThrow('closed');
       await new Promise<void>((resolve) => setTimeout(resolve, 20));
       expect(finished).toBe(false);
-    } finally {
-      await writeFile(fifo, JSON.stringify(agent.captureProfile()));
+      read.release();
       await accepted;
       await closing;
+      expect(finished).toBe(true);
+    } finally {
+      read.restore();
     }
     try {
       expect(callerCallerMcp.isStopped()).toBe(false);

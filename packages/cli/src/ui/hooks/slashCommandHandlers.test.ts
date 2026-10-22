@@ -15,6 +15,7 @@ import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js'
 import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
 const composeFixtureRuntime = installWorkspaceRuntimeFixture();
 import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
+import { directoriesChangedRecords } from '../../__tests__/recorded-directories.js';
 import {
   bindFixtureHistoryLoader,
   bindFixtureOwnerResume,
@@ -258,10 +259,9 @@ describe('slashCommandHandlers', () => {
           `/directory add ${addedDirectory}`,
         );
         const lines = (await readFile(path, 'utf8')).split('\n');
-        expect(
-          lines.filter((line) => line.includes('directories_changed')),
-        ).toHaveLength(1);
-        expect(lines.join('\n')).toContain(addedDirectory);
+        const records = directoriesChangedRecords(lines);
+        expect(records).toHaveLength(1);
+        expect(records[0]).toContain(addedDirectory);
         expect(agent.workspace.containsPath(addedDirectory)).toBe(true);
       } finally {
         await rm(addedDirectory, { recursive: true, force: true });

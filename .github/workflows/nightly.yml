@@ -375,6 +375,9 @@ jobs:
           VERBOSE: 'true'
           # Force file storage to avoid keytar/libsecret dependency in CI
           LLXPRT_FORCE_FILE_STORAGE: 'true'
+          # Sends reasoning_effort=none so the CPU model skips its thinking
+          # pass; with it on, gemma sometimes writes the tool call as text.
+          LLXPRT_LOCAL_MODEL_THINKING: 'none'
         shell: 'bash'
         run: |
           if [[ "${{ matrix.sandbox }}" == "sandbox:docker" ]]; then
@@ -388,6 +391,9 @@ jobs:
         env:
           # Force file storage to avoid keytar/libsecret dependency in CI
           LLXPRT_FORCE_FILE_STORAGE: 'true'
+          # Sends reasoning_effort=none so the CPU model skips its thinking
+          # pass; with it on, gemma sometimes writes the tool call as text.
+          LLXPRT_LOCAL_MODEL_THINKING: 'none'
           KEEP_OUTPUT: 'true'
           VERBOSE: 'true'
           SANDBOX: '${{ matrix.sandbox }}'

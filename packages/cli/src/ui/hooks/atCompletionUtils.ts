@@ -108,7 +108,13 @@ export async function findFilesRecursively(
 
     for (const entry of entries) {
       if (foundSuggestions.length >= maxResults) break;
-      const entryPathRelative = path.join(currentRelativePath, entry.name);
+      // Suggestion labels and values are always '/'-separated (the sort,
+      // directory detection and ignore matching all assume it), whatever the
+      // host separator is.
+      const entryPathRelative = path.posix.join(
+        currentRelativePath,
+        entry.name,
+      );
 
       const shouldProcessEntry =
         !shouldIgnoreDotfile(entry.name, searchPrefix) &&

@@ -33,10 +33,12 @@ import {
 
 const PER_FILE_TIMEOUT_ENV_VAR = 'LLXPRT_TEST_FILE_TIMEOUT_MS';
 import {
+  createJUnitCheckpoint,
   discoverTestFiles,
   escapeXml,
   exitCodeForRun,
   failureExcerpt,
+  formatFileProgress,
   isTestFile,
   fileTimeoutForFile,
   parseCaseCounts,
@@ -119,6 +121,159 @@ describe('writeJUnitReport', () => {
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
+  });
+});
+
+describe('createJUnitCheckpoint', () => {
+  const resultFor = (file: string, passed = true) => ({
+    file,
+    passed,
+    exitCode: passed ? 0 : 1,
+    timedOut: false,
+    output: passed
+      ? ' 1 pass\n 0 fail\nRan 1 test across 1 file.'
+      : ' 0 pass\n 1 fail\nRan 1 test across 1 file.',
+  });
+
+  it('does not rewrite the report on every completed file', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'cli-junit-throttle-'));
+    try {
+      const reportPath = join(directory, 'junit.xml');
+      let clock = 0;
+      const checkpoint = createJUnitCheckpoint({
+        reportPath,
+        intervalMs: 1000,
+        now: () => clock,
+      });
+
+      checkpoint.record(resultFor('src/a.test.ts'));
+      clock = 999;
+      checkpoint.record(resultFor('src/b.test.ts'));
+      expect(existsSync(reportPath)).toBe(false);
+      expect(checkpoint.stats.writes).toBe(0);
+
+      clock = 1000;
+      checkpoint.record(resultFor('src/c.test.ts'));
+      const snapshot = readFileSync(reportPath, 'utf8');
+      expect(snapshot).toContain('name="src/a"');
+      expect(snapshot).toContain('name="src/b"');
+      expect(snapshot).toContain('name="src/c"');
+      expect(checkpoint.stats.writes).toBe(1);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('flush writes every recorded file, in order, even inside the interval', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'cli-junit-flush-'));
+    try {
+      const reportPath = join(directory, 'junit.xml');
+      const checkpoint = createJUnitCheckpoint({
+        reportPath,
+        intervalMs: 60_000,
+        now: () => 0,
+      });
+      checkpoint.record(resultFor('src/b.test.ts', false));
+      checkpoint.record(resultFor('src/a.test.ts'));
+      checkpoint.flush();
+
+      const report = readFileSync(reportPath, 'utf8');
+      expect(report).toContain('<testsuites tests="2" failures="1">');
+      expect(report.indexOf('name="src/a"')).toBeLessThan(
+        report.indexOf('name="src/b"'),
+      );
+      expect(checkpoint.writeFailed).toBe(false);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('reports a failed write and clears it once a later write succeeds', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'cli-junit-write-failure-'));
+    try {
+      const logged: string[] = [];
+      const missingDirectoryPath = join(directory, 'missing', 'junit.xml');
+      const reportPath = join(directory, 'junit.xml');
+      let target = missingDirectoryPath;
+      const checkpoint = createJUnitCheckpoint({
+        reportPath,
+        now: () => 0,
+        write: (_destination, results) => writeJUnitReport(target, results),
+        logError: (message) => logged.push(message),
+      });
+      checkpoint.record(resultFor('src/a.test.ts'));
+
+      checkpoint.flush();
+      expect(checkpoint.writeFailed).toBe(true);
+      expect(logged).toHaveLength(1);
+      expect(logged[0]).toContain('Failed to write junit.xml');
+
+      target = reportPath;
+      checkpoint.flush();
+      expect(checkpoint.writeFailed).toBe(false);
+      expect(readFileSync(reportPath, 'utf8')).toContain('name="src/a"');
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('formatFileProgress', () => {
+  it('reports position, file and elapsed seconds so slow files can be attributed', () => {
+    expect(
+      formatFileProgress(
+        { file: 'src/a.test.ts', passed: true, timedOut: false, output: '' },
+        3,
+        10,
+        2345,
+      ),
+    ).toBe('PASS (3/10) src/a.test.ts 2.35s');
+  });
+
+  it('marks a timeout that never produced a summary', () => {
+    expect(
+      formatFileProgress(
+        {
+          file: 'src/b.test.ts',
+          passed: false,
+          timedOut: true,
+          output: '(pass) b > starts\n',
+        },
+        4,
+        10,
+        300_000,
+      ),
+    ).toBe('FAIL (4/10) src/b.test.ts 300.00s [timeout]');
+  });
+
+  it('distinguishes a timeout after the tests finished from a hung test', () => {
+    expect(
+      formatFileProgress(
+        {
+          file: 'src/c.test.ts',
+          passed: false,
+          timedOut: true,
+          output:
+            '(pass) c > ok\n\n 1 pass\n 0 fail\nRan 1 test across 1 file. [1.88s]\n',
+        },
+        5,
+        10,
+        300_000,
+      ),
+    ).toBe(
+      'FAIL (5/10) src/c.test.ts 300.00s [timeout: tests finished, process did not exit]',
+    );
+  });
+
+  it('marks an ordinary failure without a timeout suffix', () => {
+    expect(
+      formatFileProgress(
+        { file: 'src/d.test.ts', passed: false, timedOut: false, output: '' },
+        6,
+        10,
+        1200,
+      ),
+    ).toBe('FAIL (6/10) src/d.test.ts 1.20s');
   });
 });
 

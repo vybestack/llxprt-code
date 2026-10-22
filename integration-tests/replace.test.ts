@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { env } from 'node:process';
 import { TestRig } from './test-helper.js';
+import { focusedToolSettings } from './helpers/focusedToolSettings.js';
 
 const localModelE2E = env['LLXPRT_LOCAL_MODEL_E2E'] === 'true';
 const replaceTestOptions = localModelE2E ? { timeout: 1_500_000 } : {};
@@ -23,12 +24,11 @@ describe('replace', () => {
     'should be able to replace content in a file',
     replaceTestOptions,
     async () => {
+      const focused = focusedToolSettings(['replace', 'read_file']);
       await rig.setup('should be able to replace content in a file', {
         settings: {
-          tools: {
-            core: ['replace', 'read_file'],
-            exclude: ['run_shell_command'],
-          },
+          ...focused,
+          tools: { ...focused.tools, exclude: ['run_shell_command'] },
         },
       });
 
@@ -39,7 +39,7 @@ describe('replace', () => {
       const filePath = rig.createFile(fileName, originalContent);
 
       await rig.run({
-        args: `Use the replace tool on '${filePath}' to replace the exact text 'foo content' with 'bar content'. Do not add any whitespace.`,
+        args: `Use the replace tool on '${filePath}' to replace the exact text 'foo content' with the exact text 'bar content'. The new text is 11 characters: the word bar, one space, then the word content. Do not add leading or trailing whitespace.`,
         timeoutMs: localModelE2E ? 1_200_000 : undefined,
       });
 
