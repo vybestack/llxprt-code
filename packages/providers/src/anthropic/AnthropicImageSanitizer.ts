@@ -4,7 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type {
+  IContent,
+  TextBlock,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type {
   AnthropicDocumentBlock,
   AnthropicImageBlock,
@@ -67,18 +70,28 @@ export function sanitizeRowImages(
   }
   let replacedCount = 0;
   const blocks = row.blocks.map((block) => {
-    if (block.type !== 'media' || block.encoding !== 'base64') {
-      return block;
-    }
-    const violation = checkImageDimensionBudget(block.data, budget);
-    if (violation === undefined) {
-      return block;
-    }
+    if (block.type !== 'media' || block.encoding === 'url') return block;
+    const dimensions =
+      block.encoding === 'reference' ? block.dimensions : undefined;
+    const exceedsDimension =
+      dimensions !== undefined &&
+      budget.maxDimension !== undefined &&
+      Math.max(dimensions.width, dimensions.height) > budget.maxDimension;
+    const exceedsPixels =
+      dimensions !== undefined &&
+      budget.maxPixels !== undefined &&
+      BigInt(dimensions.width) * BigInt(dimensions.height) >
+        BigInt(budget.maxPixels);
+    const oversized =
+      block.encoding === 'reference'
+        ? exceedsDimension || exceedsPixels
+        : checkImageDimensionBudget(block.data, budget) !== undefined;
+    if (!oversized) return block;
     replacedCount++;
     return {
-      type: 'text' as const,
+      type: 'text',
       text: DROPPED_IMAGE_PLACEHOLDER,
-    };
+    } satisfies TextBlock;
   });
   return { row: { ...row, blocks }, replacedCount };
 }

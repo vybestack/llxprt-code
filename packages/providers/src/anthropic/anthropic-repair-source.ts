@@ -66,6 +66,7 @@ export class AnthropicRepairSource {
     readonly query: IndexedJournalRequestSnapshot,
     readonly settings: RowFormatSettings,
     readonly index?: AnthropicRequestRepairIndex,
+    private readonly observeRow?: (row: IContent, at: number) => Promise<void>,
   ) {
     this.options = {
       isOAuth: settings.isOAuth,
@@ -78,7 +79,9 @@ export class AnthropicRepairSource {
   }
   async row(index: number): Promise<IContent | undefined> {
     this.work.unitReads++;
-    return projectAnthropicUnit(await this.query.readAt(index), this.settings);
+    const row = await this.query.readAt(index);
+    await this.observeRow?.(row, index);
+    return projectAnthropicUnit(row, this.settings);
   }
   async describe(index: number): Promise<UnitDescription | undefined> {
     this.work.descriptions++;

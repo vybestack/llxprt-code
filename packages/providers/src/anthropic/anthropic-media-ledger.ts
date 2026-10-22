@@ -21,17 +21,24 @@ function unsupported(
   );
 }
 
-export async function writeAnthropicMediaLedger(
-  query: IndexedJournalRequestSnapshot,
+export function anthropicMediaLedgerWriter(
   writer: NativeFactIndexWriter,
   settings: RowFormatSettings,
-): Promise<void> {
+): {
+  observe(row: IContent, at: number): Promise<void>;
+  finish(): Promise<void>;
+} {
   let count = 0;
-  for (let at = 0; at < query.count; at++) {
-    if (unsupported(await query.readAt(at), settings).length !== 0)
-      await writer.set(['unsupported-row', count++], [at]);
-  }
-  await writer.set(['unsupported-rows'], [count]);
+  let through = -1;
+  return {
+    async observe(row, at) {
+      if (at <= through) return;
+      through = at;
+      if (unsupported(row, settings).length !== 0)
+        await writer.set(['unsupported-row', count++], [at]);
+    },
+    finish: () => writer.set(['unsupported-rows'], [count]),
+  };
 }
 
 export async function readAnthropicMediaLedger(

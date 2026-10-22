@@ -108,7 +108,17 @@ function nativeSettings(
     anthropic: {
       cache: 'off',
       cacheFacts: true,
-      imageBudget: plan.imageBudget ?? null,
+      imageBudget:
+        plan.imageBudget === undefined
+          ? null
+          : {
+              ...(plan.imageBudget.maxDimension === undefined
+                ? {}
+                : { maxDimension: plan.imageBudget.maxDimension }),
+              ...(plan.imageBudget.maxPixels === undefined
+                ? {}
+                : { maxPixels: plan.imageBudget.maxPixels }),
+            },
     },
   };
 }
@@ -347,11 +357,19 @@ async function canUseNativeAnthropic(
   if (native === undefined) return false;
   if (wantsRequestDump(params.options.invocation.ephemerals.dumpcontext))
     return false;
-  return (
-    (options.recoveryBudget === undefined &&
-      planAnthropicRequest(params).imageBudget === undefined) ||
-    !(await native.indexed.hasPersistedMedia())
-  );
+  if (options.recoveryBudget === undefined) return true;
+  if (await native.indexed.hasPersistedMedia()) return false;
+  for (const source of native.indexed.viewPlan.changedSources) {
+    for (let at = source.start; at < source.start + source.count; at++) {
+      if (
+        (await native.indexed.readAt(at)).blocks.some(
+          (block) => block.type === 'media',
+        )
+      )
+        return false;
+    }
+  }
+  return true;
 }
 
 export async function prepareAnthropicRequestRows(

@@ -27,6 +27,7 @@ class ObservedMediaProvider extends AnthropicProvider {
   reference: GenerateChatOptions | undefined;
   estimate: PromptEnvelopeEstimate | undefined;
   route: string | undefined;
+  readonly estimatePayloadReads: number[] = [];
 
   override async projectPromptEnvelope(
     options: GenerateChatOptions,
@@ -44,12 +45,16 @@ class ObservedMediaProvider extends AnthropicProvider {
       contents: selection.openReader(),
       contentCount: selection.count,
     };
+    const before = this.requestMediaResolver.accounting().storeReadCount;
     const projection = await super.projectPromptEnvelope(options);
     this.route = projection.finalizedProjection?.constructor.name;
     this.estimate = await estimatePromptEnvelope(
       this.name,
       projection,
       createRuntimeTokenizerFactory(),
+    );
+    this.estimatePayloadReads.push(
+      this.requestMediaResolver.accounting().storeReadCount - before,
     );
     return projection;
   }
@@ -59,6 +64,11 @@ async function publicMediaCase(
   unsupported: boolean,
   mode: 'history' | 'pending' | 'changed' | 'merged' = 'history',
   cache: 'off' | '5m' | '1h' = 'off',
+  budget?: {
+    readonly maxDimension?: number;
+    readonly maxPixels?: number;
+    readonly dropped: boolean;
+  },
 ): Promise<void> {
   const sink = await anthropicJournalSink();
   const parent = `${import.meta.dir}/../../../../tmp/anthropic-media2/fixtures`;
@@ -70,13 +80,27 @@ async function publicMediaCase(
   });
   const png = Buffer.alloc(24);
   png.set([137, 80, 78, 71, 13, 10, 26, 10]);
+  png.write('IHDR', 12, 'ascii');
   png.writeUInt32BE(1024, 16);
   png.writeUInt32BE(512, 20);
   const image = await store.admit({
     bytes: png,
+    dimensions: { width: 1024, height: 512 },
     mimeType: 'image/png',
     semanticMetadata: {},
   });
+  const smallPng = Buffer.from(png);
+  smallPng.writeUInt32BE(64, 16);
+  smallPng.writeUInt32BE(64, 20);
+  const smallImage =
+    budget === undefined
+      ? undefined
+      : await store.admit({
+          bytes: smallPng,
+          dimensions: { width: 64, height: 64 },
+          mimeType: 'image/png',
+          semanticMetadata: {},
+        });
   const audio = unsupported
     ? await store.admit({
         bytes: new Uint8Array([1, 2, 3]),
@@ -92,6 +116,10 @@ async function publicMediaCase(
   settings.setProviderSetting('anthropic', 'base-url', sink.route.baseURL);
   settings.setProviderSetting('anthropic', 'auth-key', 'test-api-key');
   settings.setProviderSetting('anthropic', 'prompt-caching', cache);
+  if (budget?.maxDimension !== undefined)
+    settings.set('max-image-dimension', budget.maxDimension);
+  if (budget?.maxPixels !== undefined)
+    settings.set('max-image-pixels', budget.maxPixels);
   settings.set('model', sink.route.model);
   settings.set('streaming', 'disabled');
   settings.set('token-usage-log', false);
@@ -116,9 +144,11 @@ async function publicMediaCase(
   );
   const read = store.readReserved.bind(store);
   const mediaReads: number[] = [];
+  const mediaReadIds: string[] = [];
   const reading = spyOn(store, 'readReserved').mockImplementation(
     async (reference) => {
       mediaReads.push(resolver.accounting().reservedContentCount);
+      mediaReadIds.push(reference.contentId);
       const bytes = await read(reference);
       expect(bytes.length).toBeGreaterThan(0);
       return bytes;
@@ -131,6 +161,7 @@ async function publicMediaCase(
         blocks: [
           { type: 'text', text: 'look 雪' },
           image,
+          ...(smallImage === undefined ? [] : [smallImage]),
           ...(audio === undefined ? [] : [audio]),
         ],
       },
@@ -207,6 +238,7 @@ async function publicMediaCase(
       );
     });
     const publicReads = [...mediaReads];
+    const publicReadIds = [...mediaReadIds];
     const reference = provider.reference;
     if (reference === undefined)
       throw new Error('Public projection was not used');
@@ -247,7 +279,14 @@ async function publicMediaCase(
     expect(sink.requests[0].length).toBe(
       String(Buffer.byteLength(sink.requests[0].body)),
     );
-    expect(sink.requests[0].body).toContain(png.toString('base64'));
+    if (budget?.dropped === true) {
+      expect(sink.requests[0].body).not.toContain(png.toString('base64'));
+      expect(sink.requests[0].body).toContain('Image dropped');
+      expect(publicReadIds).not.toContain(image.contentId);
+    } else expect(sink.requests[0].body).toContain(png.toString('base64'));
+    if (smallImage !== undefined)
+      expect(sink.requests[0].body).toContain(smallPng.toString('base64'));
+    expect(provider.estimatePayloadReads).toStrictEqual([0]);
     expect(publicReads.length).toBeGreaterThan(0);
     expect(publicReads.every((count) => count === 0)).toBe(true);
     expect(created).toStrictEqual({ files: [], directories: [] });
@@ -282,6 +321,22 @@ describe('native Anthropic public history media estimation and send', () => {
     'keeps native bytes, estimates and history leases with $mode media and $cache caching',
     async ({ mode, cache }) => {
       expect(await publicMediaCase(true, mode, cache)).toBeUndefined();
+    },
+  );
+  it.each([
+    { maxDimension: 512, dropped: true },
+    { maxDimension: 2048, dropped: false },
+    { maxPixels: 100000, dropped: true },
+    { maxPixels: 1000000, dropped: false },
+  ])(
+    'uses stored media dimensions for configured budget %j',
+    async (budget) => {
+      expect(
+        await publicMediaCase(true, 'history', '1h', budget),
+      ).toBeUndefined();
+      expect(
+        await publicMediaCase(true, 'changed', '5m', budget),
+      ).toBeUndefined();
     },
   );
 });
