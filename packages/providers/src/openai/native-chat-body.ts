@@ -8,6 +8,7 @@ import {
   planRequestChatMessages,
   PLAIN_CHAT_FORMAT_REV,
   appendStoredChatTail,
+  type StoredChatMessagePlan,
 } from './journal-chat-length.js';
 import { ProgressiveJsonBody } from '../utils/progressive-json-body.js';
 import {
@@ -77,62 +78,14 @@ function selectedVariant(strip: unknown): 0 | 1 | 2 {
     `Invalid reasoning.stripFromContext: ${String(strip)}`,
   );
 }
-
-async function prepareNativeChatBody(
-  envelope: Readonly<Record<string, unknown>>,
+function initialNativeChatBody(
   rows: ProviderRequestRows,
-  options: NormalizedGenerateChatOptions,
-  settings: RowFormatSettings,
   rowInput: ChatRowInput,
-): Promise<{
-  spool: NativeChatBody;
-  messageCount: number;
-  continuation: ChatContinuation;
-  release: () => Promise<void>;
-}> {
-  const native = rows.native;
-  if (native === undefined)
-    throw new Error('Native Chat requires indexed request rows');
-  const strip =
-    readInvocationPolicyValue(
-      options.invocation.ephemerals,
-      'reasoning.stripFromContext',
-    ) ?? 'none';
-  const selected = selectedVariant(strip);
-  const system = options.systemInstruction ?? '';
-  const { plan, stripped } = await native.withFormat(
-    plainChatLengthRegistration(settings),
-    async (snapshot) => {
-      const plan = await planRequestChatMessages(
-        snapshot,
-        native.indexed,
-        settings,
-        selected,
-        system,
-      );
-      const stripped =
-        selected === 1
-          ? plan
-          : await planRequestChatMessages(
-              snapshot,
-              native.indexed,
-              settings,
-              1,
-              system,
-            );
-      return { plan, stripped };
-    },
-  );
-  const { head, tail } = await envelopeParts(envelope);
-  const continuationEnvelope = await envelopeParts({
-    ...envelope,
-    stream: true,
-  });
-  const signal = getRequestSignal(options);
-  const continuations = new Set<NativeChatBody>();
-  let closed = false;
-  let closing: Promise<void> | undefined;
-  const spool = new NativeChatBody(
+  settings: RowFormatSettings,
+  captured: CapturedNativeChatPlan,
+): NativeChatBody {
+  const { signal, head, system, strip, plan, tail } = captured;
+  return new NativeChatBody(
     async function* () {
       signal?.throwIfAborted();
       yield head;
@@ -150,6 +103,104 @@ async function prepareNativeChatBody(
     },
     head.byteLength + plan.bytes + tail.byteLength,
   );
+}
+
+interface CapturedNativeChatPlan {
+  readonly plan: StoredChatMessagePlan;
+  readonly stripped: StoredChatMessagePlan;
+  readonly continuationSettings: RowFormatSettings;
+  readonly system: string;
+  readonly strip: unknown;
+  readonly head: Buffer;
+  readonly tail: Buffer;
+  readonly continuationEnvelope: { head: Buffer; tail: Buffer };
+  readonly signal: AbortSignal | undefined;
+}
+
+async function captureChatPlan(
+  envelope: Readonly<Record<string, unknown>>,
+  rows: ProviderRequestRows,
+  options: NormalizedGenerateChatOptions,
+  settings: RowFormatSettings,
+): Promise<CapturedNativeChatPlan> {
+  const native = rows.native;
+  if (native === undefined)
+    throw new Error('Native Chat requires indexed request rows');
+  const strip =
+    readInvocationPolicyValue(
+      options.invocation.ephemerals,
+      'reasoning.stripFromContext',
+    ) ?? 'none';
+  const selected = selectedVariant(strip);
+  const system = options.systemInstruction ?? '';
+  const plan = await native.withFormat(
+    plainChatLengthRegistration(settings),
+    (snapshot) =>
+      planRequestChatMessages(
+        snapshot,
+        native.indexed,
+        settings,
+        selected,
+        system,
+      ),
+  );
+  const continuationSettings: RowFormatSettings = {
+    ...settings,
+    chat: { ...settings.chat, includeInContext: false },
+  };
+  const stripped =
+    selected === 1 || settings.chat?.includeInContext === false
+      ? plan
+      : await native.withFormat(
+          plainChatLengthRegistration(continuationSettings),
+          (snapshot) =>
+            planRequestChatMessages(
+              snapshot,
+              native.indexed,
+              continuationSettings,
+              selected,
+              system,
+            ),
+        );
+  const { head, tail } = await envelopeParts(envelope);
+  const continuationEnvelope = await envelopeParts({
+    ...envelope,
+    stream: true,
+  });
+  const signal = getRequestSignal(options);
+  return {
+    plan,
+    stripped,
+    continuationSettings,
+    system,
+    strip,
+    head,
+    tail,
+    continuationEnvelope,
+    signal,
+  };
+}
+
+async function prepareNativeChatBody(
+  envelope: Readonly<Record<string, unknown>>,
+  rows: ProviderRequestRows,
+  options: NormalizedGenerateChatOptions,
+  settings: RowFormatSettings,
+  rowInput: ChatRowInput,
+): Promise<{
+  spool: NativeChatBody;
+  messageCount: number;
+  continuation: ChatContinuation;
+  release: () => Promise<void>;
+}> {
+  const captured = await captureChatPlan(envelope, rows, options, settings);
+  const { plan, signal } = captured;
+  const { stripped, continuationSettings } = captured;
+  const { system, strip, continuationEnvelope } = captured;
+  const continuations = new Set<NativeChatBody>();
+  let closed = false;
+  let closing: Promise<void> | undefined;
+  const spool = initialNativeChatBody(rows, rowInput, settings, captured);
   return {
     spool,
     messageCount: plan.items,
@@ -170,8 +221,8 @@ async function prepareNativeChatBody(
             const source = rows.openReader(signal);
             yield* nativeChatMessages(
               rowInput.mediaStage?.(source) ?? source,
-              settings,
-              'all',
+              continuationSettings,
+              strip,
               stripped.lastThinking,
             );
             for (const message of messages) {

@@ -1,11 +1,21 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
+import {
+  afterAll,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  setSystemTime,
+} from 'bun:test';
 import { createHash } from 'node:crypto';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { operationFileCreates } from '../../../agents/src/compression/__tests__/support/operation-file-creates.js';
 import { journalSendFixture } from './support/journal-send-fixture.js';
 import { localWireHashSink } from './support/local-wire-hash-sink.js';
+import { createCorpus } from './support/wireBodyCorpus.js';
+import { PINNED_CLOCK } from './support/wireBodyFixtures.js';
 import {
   buildHistoryCallOptions,
   WIRE_ROUTES,
@@ -40,20 +50,48 @@ const rows: IContent[] = [
     ],
   },
 ];
+const corpus = await createCorpus();
+const cases = [
+  {
+    id: 'reasoning-utf8',
+    description: 'tool-only reply',
+    rows,
+    systemInstruction: 'system 雪',
+  },
+  ...corpus.histories,
+];
 
 describe('native plain Chat continuation over actual HTTP', () => {
-  for (const strip of ['none', 'all', 'allButLast']) {
-    it(`sends both old-converter bodies without operation files for ${strip}`, async () => {
+  beforeAll(() => setSystemTime(new Date(PINNED_CLOCK)));
+  afterAll(async () => {
+    setSystemTime();
+    await corpus.dispose();
+  });
+  for (const { history, strip } of cases.flatMap((history) =>
+    ['none', 'all', 'allButLast'].map((strip) => ({ history, strip })),
+  )) {
+    it(`${history.id}/${strip} sends both old-converter bodies without operation files`, async () => {
       const input = {
-        id: 'continuation',
-        description: 'tool-only reply',
-        rows,
-        systemInstruction: 'system 雪',
+        ...history,
         ephemerals: {
+          ...('ephemerals' in history ? history.ephemerals : {}),
           streaming: 'enabled',
           'reasoning.includeInContext': true,
           'reasoning.stripFromContext': strip,
         },
+      };
+      const reference =
+        'usesMediaReferences' in history &&
+        history.usesMediaReferences === true;
+      const provider = (): ReturnType<typeof route.createProvider> => {
+        const created = route.createProvider();
+        return reference
+          ? bindProviderMedia(
+              created,
+              corpus.binding.resolver,
+              corpus.binding.budgetBytes,
+            )
+          : created;
       };
       const expected: CapturedWireRequest[] = [];
       let oraclePosts = 0;
@@ -64,13 +102,11 @@ describe('native plain Chat continuation over actual HTTP', () => {
       try {
         const options = buildHistoryCallOptions(
           route,
-          { ...input, rows: await normalizedRows(rows) },
+          { ...input, rows: await normalizedRows(history.rows) },
           'rows',
           new SettingsService(),
         );
-        for await (const chunk of route
-          .createProvider()
-          .generateChatCompletion(options))
+        for await (const chunk of provider().generateChatCompletion(options))
           void chunk;
       } finally {
         restore();
@@ -81,8 +117,9 @@ describe('native plain Chat continuation over actual HTTP', () => {
         ...route,
         respond: () => reply(posts++ !== 0),
       });
-      const fixture = await journalSendFixture(rows, [], {
+      const fixture = await journalSendFixture(history.rows, [], {
         directory: 'tmp/p6/chat-continuation-run-bh/fixtures',
+        mediaStore: reference ? corpus.store : undefined,
       });
       const output: IContent[] = [];
       try {
@@ -94,9 +131,7 @@ describe('native plain Chat continuation over actual HTTP', () => {
           fixture.selection,
         );
         const receipt = await operationFileCreates(async () => {
-          for await (const chunk of route
-            .createProvider()
-            .generateChatCompletion(options))
+          for await (const chunk of provider().generateChatCompletion(options))
             output.push(chunk);
         }, true);
         expect(receipt).toStrictEqual({ files: [], directories: [] });

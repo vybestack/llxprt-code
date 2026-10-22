@@ -16,7 +16,7 @@ import { prepareRequest } from './OpenAIRequestPreparation.js';
 import { observeRowFormat } from './__tests__/support/observeRowFormat.js';
 import {
   prepareRequestBody,
-  readSpooledChatBody,
+  readPreparedChatBody,
 } from './__tests__/support/prepareRequestBody.js';
 
 const logger = new DebugLogger('native-chat-preparation');
@@ -159,6 +159,20 @@ describe('native Chat preparation ownership and planning', () => {
               first.spool.byteLength,
             );
             expect(history.length()).toBe(size);
+            expect(counter.reads).toBe(0);
+            const continuation = await prepared.continuation.build([
+              {
+                id: 'call_current',
+                type: 'function',
+                function: { name: 'lookup', arguments: '{}' },
+              },
+            ]);
+            expect(continuation.spool.byteLength).toBeGreaterThan(
+              prepared.spool.byteLength,
+            );
+            expect(counter.reads).toBe(0);
+            await continuation.release();
+            await continuation.release();
             expect(counter.reads).toBe(0);
             await prepared.release();
           } finally {
@@ -500,7 +514,7 @@ describe('native Chat preparation ownership and planning', () => {
     });
   });
 
-  it('preserves the explicit old continuation route and the streamed test-helper contract', async () => {
+  it('preserves continuation messages through the streamed test-helper contract', async () => {
     await withHistory(2, async (history) => {
       const rows = await history.prepareCuratedForProviderSnapshot([], {});
       try {
@@ -520,7 +534,7 @@ describe('native Chat preparation ownership and planning', () => {
             },
           ]);
           try {
-            const body = readSpooledChatBody(continued.spool);
+            const body = await readPreparedChatBody(continued.spool);
             expect(body.messages.slice(0, 3)).toStrictEqual([
               { role: 'system', content: 'system 雪' },
               { role: 'user', content: 'row-0 雪' },
@@ -528,7 +542,7 @@ describe('native Chat preparation ownership and planning', () => {
             ]);
             expect(body.messages.length).toBeGreaterThan(3);
           } finally {
-            continued.release();
+            await continued.release();
           }
         } finally {
           await prepared.release();

@@ -1,3 +1,11 @@
+# Native plain Chat continuation now uses the captured source
+
+2026-10-22. Checkpoint `b9a808b7a` replaces the production native plain continuation spool. Expanded two-post HTTP parity is 69/0 with 759 assertions; ten lifecycle cases cover streamed/nonstreamed prepared envelopes, current tail/media boundaries and awaited disposal. [Receipt](PHASE6-SOURCE-BOUND-NATIVECONTINUATION-PROOF.json) records current gate status and five restored controls. Legacy omitReasoning retains empty assistant messages for selected thinking-only rows, so exact parity requires a captured omission-specific format rather than unconditional block stripping. That first cold fill is separate from zero-read continuation build at 40/4,000 rows.
+
+This does not close Phase 5. Public continuation history commitment, selected purge/preimage continuation proof, pending-reference lifetime and second-body abort/128MiB evidence remain open. Kimi/Mistral, Responses/Anthropic, native log/dump, media queue combinations, accounting/capacity and full native memory refresh remain open. Original tools timeout and other separate REDs are unchanged; no default flip, push or merge. Review skipped per Andrew 2026-10-09.
+
+---
+
 # The #3929 journal regression passes; Phase 5 remains open
 
 2026-10-22. Early `795ea443d` commits four green cases before broader gates. Final journal coverage is **4/0, 192 assertions**, with fixture error identity/order **3/11**. The fourth release Error occurs during old-pin retirement, after rollback's publication Error; teardown now preserves both and recovers the durable queue before journal disposal. No production change or extra settlement loop was needed.

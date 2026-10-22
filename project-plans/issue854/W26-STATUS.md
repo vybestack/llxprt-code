@@ -1,3 +1,11 @@
+# Native plain Chat continuation migration is implemented; W26 remains open
+
+2026-10-22. Early checkpoint `b9a808b7a` reaches the real second native HTTP request without a spool. Expanded actual-provider parity passes 69/0, 759 assertions; ten lifecycle cases and warm 40/4,000 zero-read build checks supplement it. [Receipt](PHASE6-SOURCE-BOUND-NATIVECONTINUATION-PROOF.json) records serial verification status, source hashes and restored controls. Exact legacy omitReasoning needs inclusion-disabled facts with the original strip policy to preserve empty assistant messages from thinking-only rows; necessary cold fill is captured initially and excluded from the zero-read build claim.
+
+Public continuation history commitment, continuation purge/preimage and pending-reference/second-body abort/128MiB evidence remain unproved here. Kimi/Mistral, Responses/Anthropic, native log/dump, media queue combinations, accounting/capacity, full native memory refresh and the separately recorded REDs remain open. No memory timeout retry, enforcement change, cleanup, .llxprt staging, OCR, default flip, push or merge. Review skipped per Andrew 2026-10-09.
+
+---
+
 # W26 remains open after the four #3929 journal cases pass
 
 2026-10-22. Early checkpoint `795ea443d` commits 4/0 before broader gates; the final file executes 192 assertions. The fourth failure was deferred physical release at old-pin retirement, masked by fixture disposal ordering. Errors retain identity and order, ownership recovery precedes journal closure, and all four cases prove final reclamation plus continued writer use. Production is unchanged.

@@ -1,3 +1,7 @@
+## 2026-10-22: native plain Chat continuation production closure
+
+[Native continuation receipt](PHASE6-SOURCE-BOUND-NATIVECONTINUATION-PROOF.json): early green `b9a808b7a`; 69 actual two-post HTTP parity cases, ten lifecycle cases, 40/4,000 zero-descriptor-read continuation build, five restored assertion controls. Omission-specific cold format filling preserves legacy empty assistant messages from thinking-only rows; continuation build reuses captured facts and only measures the current reply's SDK tail. The receipt distinguishes prepared nonstreaming-envelope coverage from actual streaming-triggered continuation. Public continuation commit/purge/pending-reference/second-body abort/128MiB proof, other providers, native log/dump, accounting/capacity and full memory acceptance remain open. The original tools RED is unchanged.
+
 # Journal media retirement proof, 2026-10-22
 
 [Source-bound #3929 receipt](PHASE6-SOURCE-BOUND-JOURNALMEDIAREGRESSION-PROOF.json). Early checkpoint `795ea443d`; production unchanged. #3929 stays open until merge.
