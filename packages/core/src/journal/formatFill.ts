@@ -137,6 +137,8 @@ export function snapshotOf(
   ctx: BuildContext,
   built: BuiltGroup,
   appender: RecordAppender,
+  release: () => void | Promise<void> = () => undefined,
+  file?: object,
 ): VersionSnapshot {
   const state = built.state;
   const version = {
@@ -159,10 +161,11 @@ export function snapshotOf(
     new PinnedRead(
       version,
       ctx.readGroup(appender.nextOffset, true),
-      new PinLease(() => undefined),
+      new PinLease(release),
     ),
     ctx.idDeps,
     ctx.idCache,
+    file,
   );
 }
 

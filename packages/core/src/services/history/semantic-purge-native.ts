@@ -22,6 +22,7 @@ export interface SemanticPurgeSnapshot extends SemanticPurgeRowSource {
   readonly requestSnapshot?: VersionSnapshot;
   readonly prepareRequestFormat?: PrepareNativeRequestFormat;
   readonly mediaStore?: LocalMediaStore;
+  readonly holdRequestFormats?: () => () => Promise<void>;
   readRow(index: number): Promise<IContent>;
   isCurrent(): boolean;
   restore(): Promise<void>;
@@ -166,6 +167,18 @@ export class NativeSemanticPurgeCandidate
     const result = { ...row, blocks, metadata };
     freezeSemanticPurgeValue(result);
     return result;
+  }
+
+  projectRequestRow(row: IContent): IContent {
+    const projected = this.transformed(
+      row,
+      this.location.contentIndex,
+      this.location.contentIndex,
+      true,
+    );
+    if (projected === undefined)
+      throw new Error('Semantic purge selected a removed request row');
+    return projected;
   }
 
   async readRow(index: number, annotate = true): Promise<IContent> {

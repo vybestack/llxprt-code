@@ -53,7 +53,7 @@ export async function indexedOverlay(
 }> {
   const rows: IndexedOverlayRow[] = [];
   let delta = 0;
-  for (const label of source.affectedJournalLabels()) {
+  for (const label of await source.affectedJournalLabels()) {
     const entry = await snapshot.entryByLabel(label);
     if (entry === undefined)
       throw new JournalFormatError(

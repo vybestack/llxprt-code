@@ -4,6 +4,7 @@ import {
   type ContextSpan,
   type ContextSpanPolicy,
 } from './contextSpanFacts.js';
+import { pinnedFormatPreparation } from './pinned-format-fill.js';
 import {
   fillToolRanking,
   warmToolRanking,
@@ -53,8 +54,7 @@ import type { OccurrencePlanner, VersionEdit } from './groupEdits.js';
 import type { RecordAppender } from './groupAppender.js';
 import { prepareBuild } from './preparedGroup.js';
 import type { GroupPlan, PlanContext } from './groupPlanTypes.js';
-import type { CommitAck } from './groupWriter.js';
-import type { JournalGroupWriter } from './groupWriter.js';
+import type { CommitAck, JournalGroupWriter } from './groupWriter.js';
 import type { IdFactDeps } from './idFactQueries.js';
 import { BoundedIdNodeCache, type IdNodeCache } from './idTrieCache.js';
 import { IdTrieReader } from './idTrieReader.js';
@@ -320,10 +320,13 @@ export class JournalStore {
    * to mirrors (design 5.2). The group holds a pin until the caller closes it.
    */
   commitDetailed(edits: readonly VersionEdit[]): Promise<CommittedGroup> {
-    if (this.closing)
-      return Promise.reject(new Error('The journal store is closed'));
+    return this.enqueueCommit(() => this.runCommit(edits));
+  }
+
+  private async enqueueCommit<T>(run: () => Promise<T>): Promise<T> {
+    if (this.closing) throw new Error('The journal store is closed');
     this.queued += 1;
-    const turn = this.tail.then(() => this.runCommit(edits));
+    const turn = this.tail.then(run);
     this.tail = turn.then(noop, noop).then(() => this.afterCommit());
     return turn;
   }
@@ -512,6 +515,13 @@ export class JournalStore {
       this.writer.reader,
     );
   }
+
+  prepareSnapshotFormat = pinnedFormatPreparation({
+    enqueue: (run) => this.enqueueCommit(run),
+    writer: () => this.writer,
+    context: () => ({ build: this.buildContext(), plan: this.planContext() }),
+    installed: () => this.install(this.writer.published?.trailer),
+  });
 
   restorationOf(saved: VersionSnapshot): VersionEdit {
     return saved.restorationIn(this.writer.reader);

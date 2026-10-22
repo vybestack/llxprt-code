@@ -40,6 +40,10 @@ class RowCensus {
   async sample(): Promise<{ rows: number; text: number; textBytes: number }> {
     await sleep(0);
     gcAndSweep();
+    return this.countLive();
+  }
+
+  private countLive(): { rows: number; text: number; textBytes: number } {
     let rows = 0;
     let textBytes = 0;
     for (const ref of this.rows) {

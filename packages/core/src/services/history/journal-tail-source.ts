@@ -140,9 +140,25 @@ export class JournalTailSource implements JournalResponseSource {
     return this.overlay.has(rawId);
   }
 
-  affectedJournalLabels(): readonly bigint[] {
+  async affectedJournalLabels(): Promise<readonly bigint[]> {
     const labels = new Set<bigint>();
-    if (this.projection?.label !== undefined) labels.add(this.projection.label);
+    if (this.projection?.label !== undefined) {
+      const label = this.projection.label;
+      labels.add(label);
+      const entry = await this.snapshot.entryByLabel(label);
+      if (entry === undefined)
+        throw new JournalFormatError('Projected request row is absent');
+      const { rawIds } = await this.snapshot.readIds(entry);
+      for (const id of rawIds) {
+        if (id === '') continue;
+        const fact = await this.base.facts.fact(id);
+        const target = fact === undefined ? undefined : callTarget(fact);
+        if (target !== undefined) labels.add(target.at.label);
+      }
+      const before = await this.snapshot.unitsBelow(label);
+      if (before > 0)
+        labels.add((await this.snapshot.unitAt(before - 1)).entry.label);
+    }
     for (const [id, fact] of this.overlay) {
       if (id === '') continue;
       const target = callTarget(fact);

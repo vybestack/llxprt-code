@@ -61,6 +61,7 @@ export class JournalProjectedSource implements JournalRequestBase {
       };
     },
   };
+  private changedFlags: number | undefined;
   private removedPartBlock:
     | { readonly part: number; readonly block: number }
     | undefined;
@@ -94,6 +95,11 @@ export class JournalProjectedSource implements JournalRequestBase {
         block: indices.indexOf(projection.removedBlock),
       };
     }
+    if (projection.label !== undefined)
+      source.changedFlags =
+        projection.removedRow === true
+          ? 0
+          : (await source.changed()).header.flags;
     return source;
   }
 
@@ -119,7 +125,9 @@ export class JournalProjectedSource implements JournalRequestBase {
   async *entries(): AsyncGenerator<RowEntry> {
     for await (const entry of this.snapshot.entries()) {
       if (this.selected(entry) && this.projection.removedRow === true) continue;
-      yield entry;
+      yield this.selected(entry)
+        ? ((await this.entryByLabel(entry.label)) ?? entry)
+        : entry;
     }
   }
 
@@ -127,8 +135,13 @@ export class JournalProjectedSource implements JournalRequestBase {
     const entry = await this.snapshot.entryByLabel(label);
     return entry !== undefined &&
       label === this.projection.label &&
-      this.projection.removedRow === true
-      ? { ...entry, flags: entry.flags & ~ROW_FLAG.curated }
+      this.changedFlags !== undefined
+      ? {
+          ...entry,
+          flags:
+            (entry.flags & ~ROW_FLAG.curated) |
+            (this.changedFlags & ROW_FLAG.curated),
+        }
       : entry;
   }
 
@@ -137,9 +150,9 @@ export class JournalProjectedSource implements JournalRequestBase {
 
   async nextCuratedAfter(label: bigint): Promise<RowEntry | undefined> {
     const next = await this.snapshot.nextCuratedAfter(label);
-    return next !== undefined &&
-      next.label === this.projection.label &&
-      this.projection.removedRow === true
+    if (next === undefined) return undefined;
+    return next.label === this.projection.label &&
+      ((this.changedFlags ?? ROW_FLAG.curated) & ROW_FLAG.curated) === 0
       ? this.snapshot.nextCuratedAfter(next.label)
       : next;
   }

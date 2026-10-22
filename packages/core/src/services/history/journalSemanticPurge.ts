@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { PinnedRequestFormats } from './pinned-request-formats.js';
 import type { DetachedHistoryHost } from './detachedHistoryMutation.js';
 import type { JournalHistoryStore } from './journalHistoryStore.js';
 import { JournalDumpSnapshot } from './journalDumpSnapshot.js';
@@ -15,14 +16,20 @@ export async function openJournalSemanticPurge(
     host.waitForTokenUpdates(),
   );
   const dump = new JournalDumpSnapshot(snapshot, store.resumeBoundary);
+  const resources = store.pinnedRequestResources();
+  const formats = new PinnedRequestFormats(
+    snapshot,
+    resources.prepareRequestFormat,
+  );
   const mark = store.captureCompensation();
   const state = host.snapshot();
   const mutation = store.mutationMark();
   let closed = false;
   return {
     requestSnapshot: snapshot,
-    prepareRequestFormat: store.prepareRequestFormat,
-    mediaStore: store.pinnedMediaStore(),
+    prepareRequestFormat: formats.prepare,
+    holdRequestFormats: () => formats.hold(),
+    mediaStore: resources.mediaStore,
     length: dump.rawLength,
     readRow: async (index) => {
       const row = await dump.readRawRow(index);
@@ -53,6 +60,7 @@ export async function openJournalSemanticPurge(
       closed = true;
       const failures: unknown[] = [];
       for (const close of [
+        () => formats.close(),
         () => dump.close(),
         () => store.releaseCompensation(mark),
       ]) {

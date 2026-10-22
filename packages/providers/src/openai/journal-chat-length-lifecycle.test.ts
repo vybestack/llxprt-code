@@ -119,6 +119,50 @@ describe('native format registration lifecycle', () => {
     }
   }
 
+  it('fills an immutable older view without changing the published rows', async () => {
+    await withSession('old-view-fill', async (session) => {
+      await session.append([textRow('before purge')]);
+      const old = await session.store.snapshot();
+      try {
+        await session.append([textRow('current only')]);
+        const measured = await session.store.prepareSnapshotFormat(
+          old,
+          plainChatLengthRegistration(SETTINGS),
+        );
+        try {
+          expect(planStoredChatMessages(measured, SETTINGS, 0, '').bytes).toBe(
+            textMessageLength(['before purge']),
+          );
+          expect(session.store.published?.rows).toBe(2);
+          expect(old.rows).toBe(1);
+          const other = await session.store.prepareSnapshotFormat(
+            measured,
+            plainChatLengthRegistration({ ...SETTINGS, endpoint: 'other' }),
+          );
+          try {
+            expect(
+              planStoredChatMessages(
+                other,
+                { ...SETTINGS, endpoint: 'other' },
+                0,
+                '',
+              ).bytes,
+            ).toBe(textMessageLength(['before purge']));
+            expect(
+              planStoredChatMessages(measured, SETTINGS, 0, '').bytes,
+            ).toBe(textMessageLength(['before purge']));
+          } finally {
+            await other.close();
+          }
+        } finally {
+          await measured.close();
+        }
+      } finally {
+        await old.close();
+      }
+    });
+  });
+
   it('reads explicitly on cold fill, zero bytes for warm plans and bounded paths for an append', async () => {
     await withSession('reads', async (session, counter) => {
       await session.append(

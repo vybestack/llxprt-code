@@ -52,7 +52,13 @@ async function releaseQueryHold(
   }
 }
 
+export interface NativeRequestViewPlan {
+  readonly sourceVersion: VersionSnapshot['version'];
+  readonly changedSources: readonly IndexedOverlayRow[];
+}
+
 export class IndexedJournalRequestSnapshot {
+  readonly viewPlan: NativeRequestViewPlan;
   private closed = false;
   private kimi: Promise<JournalRequestKimi> | undefined;
   private readonly mistral = new Map<number, Promise<JournalRequestMistral>>();
@@ -68,7 +74,12 @@ export class IndexedJournalRequestSnapshot {
     },
     private readonly release: () => void | Promise<void>,
     private readonly mediaReferences?: WeakSet<MediaReferenceBlock>,
-  ) {}
+  ) {
+    this.viewPlan = Object.freeze({
+      sourceVersion: snapshot.version,
+      changedSources: rows,
+    });
+  }
 
   static async create(
     snapshot: VersionSnapshot,
@@ -96,10 +107,6 @@ export class IndexedJournalRequestSnapshot {
       await releaseQueryHold(release, true);
       throw error;
     }
-  }
-
-  get hasCorrections(): boolean {
-    return this.rows.length !== 0;
   }
 
   private requireOpen(): void {
@@ -134,7 +141,7 @@ export class IndexedJournalRequestSnapshot {
     let from = 1n;
     const end = snapshot.version?.nextLabel ?? 1n;
     let summary = await snapshot.formatSummaryRange(slot, 0n, 0n);
-    for (const row of this.rows) {
+    for (const row of this.viewPlan.changedSources) {
       if (row.entry.label > from)
         summary = composeSlotSummaries(
           summary,

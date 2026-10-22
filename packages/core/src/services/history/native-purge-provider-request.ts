@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { decodeStoredRow } from './journalRowCodec.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { LocalMediaStore } from '../../storage/local-media-store.js';
 import type { PrepareNativeRequestFormat } from './native-provider-format.js';
@@ -63,6 +64,31 @@ export function isNativeProviderHistory(
   );
 }
 
+async function readProjectedRow(
+  snapshot: VersionSnapshot,
+  candidate: NativeSemanticPurgeCandidate,
+): Promise<IContent> {
+  const entry = await snapshot.entryAt(candidate.location.contentIndex);
+  return candidate.projectRequestRow(
+    decodeStoredRow(await snapshot.readRow(entry)),
+  );
+}
+
+function holdPurgeRequest(
+  snapshot: VersionSnapshot,
+  candidate: NativeSemanticPurgeCandidate,
+): () => Promise<void> {
+  const releasePin = snapshot.hold();
+  const releaseFormats = candidate.snapshot.holdRequestFormats?.();
+  return async () => {
+    try {
+      await releaseFormats?.();
+    } finally {
+      await releasePin();
+    }
+  };
+}
+
 export function nativePurgeProviderRequest(
   candidate: NativeSemanticPurgeCandidate | undefined,
   explicit: boolean,
@@ -73,7 +99,7 @@ export function nativePurgeProviderRequest(
   if (candidate === undefined || snapshot === undefined) return undefined;
   return async (tail, options) => {
     options.signal?.throwIfAborted();
-    const release = snapshot.hold();
+    const release = holdPurgeRequest(snapshot, candidate);
     let projection: JournalRequestProjection;
     try {
       const changedLabel = (
@@ -98,8 +124,7 @@ export function nativePurgeProviderRequest(
                 ? candidate.location.blockIndex
                 : undefined,
               removedRow: candidate.removed,
-              readChangedRow: () =>
-                candidate.readRow(candidate.location.contentIndex),
+              readChangedRow: () => readProjectedRow(snapshot, candidate),
             }),
         header: (row, label) => {
           const metadata = { ...row.metadata };

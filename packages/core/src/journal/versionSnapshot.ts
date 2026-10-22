@@ -29,7 +29,7 @@ import { nextCuratedEntry, curatedEntryAt } from './curatedQueries.js';
 import { IdFactQueries, type IdFactDeps } from './idFactQueries.js';
 import type { IdNodeCache } from './idTrieCache.js';
 import { IdTrieReader } from './idTrieReader.js';
-import type { PinnedRead } from './pinLease.js';
+import { PinnedRead, PinLease } from './pinLease.js';
 import type { RowEntry } from './rowEntry.js';
 import {
   readRowIds,
@@ -69,7 +69,7 @@ export class VersionSnapshot {
   constructor(
     private readonly read: PinnedRead,
     private readonly idDeps: IdFactDeps,
-    idCache: IdNodeCache,
+    private readonly idCache: IdNodeCache,
     private readonly file: object = read,
   ) {
     this.kimi = new KimiOrdinalQueries(read, idDeps.hasher);
@@ -340,6 +340,20 @@ export class VersionSnapshot {
   /** Another hold on the snapshot's pin, for a reader that outlives its opener; the returned function releases it. */
   hold(): () => void | Promise<void> {
     return this.read.hold();
+  }
+
+  retain(): VersionSnapshot {
+    this.requireOpen();
+    return new VersionSnapshot(
+      new PinnedRead(
+        this.version,
+        this.version === undefined ? undefined : this.read.access,
+        new PinLease(this.hold()),
+      ),
+      this.idDeps,
+      this.idCache,
+      this.file,
+    );
   }
 
   /** Releases the snapshot's pin. */

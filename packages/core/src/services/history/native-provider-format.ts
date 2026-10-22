@@ -5,6 +5,8 @@ import {
 } from '../../journal/rowFormat.js';
 import type { VersionEdit } from '../../journal/groupEdits.js';
 import type { Version } from '../../journal/version.js';
+import type { JournalStore } from '../../journal/journalStore.js';
+import type { LocalMediaStore } from '../../storage/local-media-store.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { IndexedJournalRequestSnapshot } from './indexed-journal-request-snapshot.js';
 import type { PinnedMediaLease } from '../../storage/history-media-release-gate.js';
@@ -59,4 +61,15 @@ export function nativeRequestFormatPreparation(host: {
       );
       return host.snapshot();
     });
+}
+
+export function nativeRequestResources(store: JournalStore): {
+  readonly prepareRequestFormat: PrepareNativeRequestFormat;
+  readonly mediaStore: LocalMediaStore | undefined;
+} {
+  return {
+    prepareRequestFormat: (snapshot, registration) =>
+      store.prepareSnapshotFormat(snapshot, registration),
+    mediaStore: store.mediaPins.mediaStore,
+  };
 }

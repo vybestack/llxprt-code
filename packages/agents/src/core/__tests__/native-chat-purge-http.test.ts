@@ -19,9 +19,13 @@ import { loggingChatSession } from './support/chat-session-logging-fixture.js';
 
 describe('public native plain Chat semantic purge HTTP', () => {
   const directory = useTempDir('native-chat-purge-http-');
-  it.each(['none', 'all', 'allButLast'])(
-    'sends %s thinking through mandatory estimation and HTTP without operation files',
-    async (strip) => {
+  it.each(
+    ['none', 'all', 'allButLast'].flatMap((strip) =>
+      ['remove', 'summary'].map((purge) => ({ strip, purge })),
+    ),
+  )(
+    'sends $purge/$strip through mandatory estimation and HTTP without operation files',
+    async ({ strip, purge }) => {
       const requests: string[] = [];
       const contentLengths: number[] = [];
       const prior = [
@@ -40,6 +44,7 @@ describe('public native plain Chat semantic purge HTTP', () => {
               type: 'media',
               mimeType: 'image/png',
               encoding: 'base64',
+              caption: 'prior image summary',
               data: 'aW1hZ2U=',
             },
           ],
@@ -97,7 +102,7 @@ describe('public native plain Chat semantic purge HTTP', () => {
       settings.setProviderSetting('openai', 'base-url', baseURL);
       settings.setProviderSetting('openai', 'auth-key', 'test-key');
       settings.set('streaming', 'disabled');
-      settings.set('media.semantic-purge', 'remove');
+      settings.set('media.semantic-purge', purge);
       settings.set('reasoning.stripFromContext', strip);
       settings.set('reasoning.includeInContext', true);
       settings.set('token-usage-log', false);
@@ -160,7 +165,12 @@ describe('public native plain Chat semantic purge HTTP', () => {
             requestRows: rowsSelection([
               ...prior.map((row) => ({
                 ...row,
-                blocks: row.blocks.filter((block) => block.type !== 'media'),
+                blocks: row.blocks.flatMap((block) => {
+                  if (block.type !== 'media') return [block];
+                  return purge === 'remove'
+                    ? []
+                    : [{ type: 'text' as const, text: 'prior image summary' }];
+                }),
               })),
               {
                 speaker: 'human',
@@ -242,7 +252,9 @@ describe('public native plain Chat semantic purge HTTP', () => {
           }
           expect(messages).toStrictEqual([
             'ai:older answer',
-            'human:prior',
+            purge === 'remove'
+              ? 'human:prior'
+              : 'human:priorprior image summary',
             'ai:answer',
             'human:new user 雪',
             'ai:ok',

@@ -130,6 +130,7 @@ async function openSemanticPurge(
   return {
     requestSnapshot: snapshot.requestSnapshot,
     prepareRequestFormat: snapshot.prepareRequestFormat,
+    holdRequestFormats: snapshot.holdRequestFormats,
     mediaStore: snapshot.mediaStore,
     length: snapshot.length,
     streamRows: (signal) => snapshot.streamRows(signal),

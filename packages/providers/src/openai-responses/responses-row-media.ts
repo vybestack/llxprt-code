@@ -55,14 +55,9 @@ export async function* resolveRowsMedia(
   const budget =
     media.aggregateBudgetBytes ?? DEFAULT_REQUEST_MEDIA_BUDGET_BYTES;
   let used = 0;
-  let index = 0;
   let reservations: RequestMediaReservations | undefined;
   for await (const row of rows) {
-    const lease =
-      native?.mediaLease !== undefined && !native.indexed.isPending(index)
-        ? native.mediaLease
-        : undefined;
-    index++;
+    const lease = native?.mediaLease;
     const bytes = rowMediaBytes(row);
     const remaining = budget - used;
     used += bytes;

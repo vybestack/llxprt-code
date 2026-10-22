@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { openJournalSemanticPurge } from './journalSemanticPurge.js';
 import { prepareJournalProviderRequest } from './native-purge-provider-request.js';
-import { nativeRequestFormatPreparation } from './native-provider-format.js';
+import * as nativeFormat from './native-provider-format.js';
 import type { SemanticPurgeSnapshot } from './semantic-purge-native.js';
 import type { GroupPreparation } from '../../journal/preparedGroup.js';
 import type { EntryFill, VersionEdit } from '../../journal/groupEdits.js';
@@ -137,13 +137,10 @@ export class JournalHistoryStore implements HistoryStorePort {
     () => this.session.store.mediaPins.mediaStore,
   );
 
-  pinnedMediaStore():
-    | import('../../storage/local-media-store.js').LocalMediaStore
-    | undefined {
-    return this.session.store.mediaPins.mediaStore;
-  }
+  pinnedRequestResources = () =>
+    nativeFormat.nativeRequestResources(this.session.store);
 
-  prepareRequestFormat = nativeRequestFormatPreparation({
+  prepareRequestFormat = nativeFormat.nativeRequestFormatPreparation({
     exclusive: (run) => this.exclusive(run),
     current: () => this.session.store.published,
     commit: (edits) => this.commitStep(this.tentativeRows, edits),
