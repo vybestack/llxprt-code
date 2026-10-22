@@ -17,6 +17,36 @@ import { buildMessagesWithReasoning } from './OpenAIRequestBuilder.js';
 import { oldMistralUnitTokens } from './__tests__/support/mistral-unit-token-oracle.js';
 import { projectOpenAIChatPromptEnvelope } from '../runtime/promptEnvelopeProjections.js';
 import { oldTailUnits } from '../../../core/src/services/history/__tests__/support/tail-query-oracle.js';
+import { observeRowFormat } from './__tests__/support/observeRowFormat.js';
+import type { ProviderRequestRows } from '../../../core/src/services/history/provider-request-snapshot.js';
+
+function observedRows(
+  rows: ProviderRequestRows,
+  counts: { entries: number; units: number; formats: number },
+): ProviderRequestRows {
+  const native = rows.native;
+  if (native === undefined) throw new Error('Missing native cost input');
+  return {
+    count: rows.count,
+    openReader: (signal) => rows.openReader(signal),
+    readAt: (index, signal) => rows.readAt(index, signal),
+    native: {
+      ...native,
+      withFormat: (registration, consume) => {
+        counts.formats++;
+        return native.withFormat(
+          observeRowFormat(registration, (_entry, facts) => {
+            if (facts.summary.kind !== 'chat')
+              throw new Error('Missing measured Chat unit facts');
+            counts.entries++;
+            counts.units += facts.summary.thinkingRank?.units ?? 0;
+          }),
+          consume,
+        );
+      },
+    },
+  };
+}
 
 const marker = 'COLD_PAYLOAD_END_854';
 const payload = `${'cold payload 雪 '.repeat(1800)}${marker}`;
@@ -92,9 +122,12 @@ describe('native Mistral cold fill', () => {
       let active = false;
       let reads = 0;
       let bytes = 0;
+      let requestedBytes = 0;
       let payloadEnds = 0;
       let writes = 0;
       let writeBytes = 0;
+      let requestedWriteBytes = 0;
+      const counts = { entries: 0, units: 0, formats: 0 };
       const recording = JournalRecordingService.create({
         sessionId: `cold-${scenario}-${size}`,
         projectHash: 'cold-fill',
@@ -118,6 +151,7 @@ describe('native Mistral cold fill', () => {
                   );
                   if (active) {
                     reads++;
+                    requestedBytes += length;
                     bytes += result.bytesRead;
                     const text = Buffer.from(
                       buffer.buffer,
@@ -132,6 +166,10 @@ describe('native Mistral cold fill', () => {
                   const result = await file.writev(buffers, position);
                   if (active) {
                     writes++;
+                    requestedWriteBytes += buffers.reduce(
+                      (sum, buffer) => sum + buffer.byteLength,
+                      0,
+                    );
                     writeBytes += result.bytesWritten;
                   }
                   return result;
@@ -151,7 +189,7 @@ describe('native Mistral cold fill', () => {
           const prepared = await prepareRequest(
             {
               contents: [],
-              requestRows: rows,
+              requestRows: observedRows(rows, counts),
               contentCount: rows.count,
               metadata: {},
               systemInstruction: 'system 雪',
@@ -178,6 +216,7 @@ describe('native Mistral cold fill', () => {
             true,
           );
           try {
+            const preparedUnits = counts.units;
             const projected = requiredEstimate(prepared);
             const estimate = await estimatePromptEnvelope(
               'openai',
@@ -199,11 +238,19 @@ describe('native Mistral cold fill', () => {
               size,
               scenario,
               reads,
+              requestedBytes,
               bytes,
               payloadEnds,
               writes,
+              requestedWriteBytes,
               writeBytes,
+              measuredEntries: counts.entries,
+              measuredUnits: counts.units,
+              formatRequests: counts.formats,
+              estimateContinuationRemeasuredUnits: counts.units - preparedUnits,
             });
+            expect(preparedUnits).toBeGreaterThan(0);
+            expect(counts.units).toBe(preparedUnits);
             const body = await readPreparedChatBody(prepared.spool);
             const input = await oldTailUnits(
               Array.from({ length: size }, (_, index) =>
@@ -211,6 +258,7 @@ describe('native Mistral cold fill', () => {
               ),
               [],
             );
+            expect(counts.units).toBe(input.length);
             expect(body.messages).toStrictEqual([
               { role: 'system', content: 'system 雪' },
               ...buildMessagesWithReasoning(

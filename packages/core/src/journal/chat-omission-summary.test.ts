@@ -12,6 +12,32 @@ import {
 } from './summaryComposition.js';
 
 describe('Chat continuation omission summary', () => {
+  it('keeps both six-state transfer variants and token fields intact beside a wide omission value', () => {
+    const variant = {
+      ...identityAffineTable(6, CHAT_MEDIA_PENDING_MASK),
+      bytes: [11, 23, 37, 41, 59, 61],
+      count: [1, 2, 3, 4, 5, 6],
+      p: [71, 83, 97, 101, 103, 107],
+    };
+    const summary: ChatSummary = {
+      kind: 'chat',
+      variants: [
+        variant,
+        { ...variant, bytes: [109, 127, 131, 137, 139, 149] },
+      ],
+      tokens: [157, 163],
+      thinkingRank: { units: 167, last: 151 },
+      omittedReasoningBytes: 2 ** 40 + 173,
+    };
+    const encoded = encodeSlotSummary(summary);
+    expect(encoded.length).toBe(296);
+    expect(new DataView(encoded.buffer).getBigUint64(284, true)).toBe(
+      BigInt(2 ** 40 + 173),
+    );
+    expect(decodeSlotSummary(encoded, { summaryKind: 'chat' })).toStrictEqual(
+      summary,
+    );
+  });
   it('persists and composes typed continuation byte contributions without changing the transfer states', () => {
     const variant = identityAffineTable(6, CHAT_MEDIA_PENDING_MASK);
     const left: ChatSummary = {
