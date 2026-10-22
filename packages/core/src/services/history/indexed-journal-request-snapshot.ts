@@ -62,6 +62,12 @@ export class IndexedJournalRequestSnapshot {
   private closed = false;
   private kimi: Promise<JournalRequestKimi> | undefined;
   private readonly mistral = new Map<number, Promise<JournalRequestMistral>>();
+  private lastOccurrences:
+    | {
+        readonly key: string;
+        readonly view: Promise<JournalRequestOccurrences>;
+      }
+    | undefined;
 
   private constructor(
     private readonly snapshot: VersionSnapshot,
@@ -107,6 +113,29 @@ export class IndexedJournalRequestSnapshot {
       await releaseQueryHold(release, true);
       throw error;
     }
+  }
+
+  retain(
+    facts: VersionSnapshot = this.snapshot,
+  ): IndexedJournalRequestSnapshot {
+    this.requireOpen();
+    const releaseFacts = facts.hold();
+    const releaseSource = this.snapshot.hold();
+    return new IndexedJournalRequestSnapshot(
+      this.snapshot,
+      this.source,
+      this.rows,
+      this.count,
+      this.pending,
+      async () => {
+        try {
+          await releaseFacts();
+        } finally {
+          await releaseSource();
+        }
+      },
+      this.mediaReferences,
+    );
   }
 
   private requireOpen(): void {
@@ -315,7 +344,12 @@ export class IndexedJournalRequestSnapshot {
     id: string,
     range?: RequestUnitRange,
   ): Promise<JournalRequestOccurrences> {
-    return JournalRequestOccurrences.create(
+    const from = range?.from ?? 0;
+    const to = range?.to ?? this.count;
+    const key = JSON.stringify([family, kind, id, from, to]);
+    const last = this.lastOccurrences;
+    if (last?.key === key) return last.view;
+    const view = JournalRequestOccurrences.create(
       this.snapshot,
       this.source,
       this.rows,
@@ -323,8 +357,10 @@ export class IndexedJournalRequestSnapshot {
       kind,
       id,
       this.count,
-      range,
+      { from, to },
     );
+    this.lastOccurrences = { key, view };
+    return view;
   }
 
   private async query<T>(
@@ -626,6 +662,7 @@ export class IndexedJournalRequestSnapshot {
   close(): void | Promise<void> {
     if (this.closed) return;
     this.closed = true;
+    this.lastOccurrences = undefined;
     return this.release();
   }
 }

@@ -16,6 +16,7 @@ import { AnthropicToolRepair } from './anthropic-tool-repair.js';
 import {
   AnthropicRepairIndex,
   anthropicRepairScope,
+  type AnthropicRequestRepairIndex,
 } from './anthropic-repair-index.js';
 import {
   anthropicUnitTransfer,
@@ -97,10 +98,14 @@ export class AnthropicStreamRepair {
     query: IndexedJournalRequestSnapshot,
     settings: RowFormatSettings,
     policy: RepairPolicy = {},
+    preparedIndex?: AnthropicRequestRepairIndex,
   ): Promise<AnthropicStreamRepair> {
     projectAnthropicUnit({ speaker: 'human', blocks: [] }, settings);
-    const facts = await query.nativeFacts(anthropicRepairScope(settings));
-    const index = await AnthropicRepairIndex.read(facts);
+    const index =
+      preparedIndex ??
+      (await AnthropicRepairIndex.read(
+        await query.nativeFacts(anthropicRepairScope(settings)),
+      ));
     const source = new AnthropicRepairSource(query, settings, index);
     const last =
       policy.strip === 'allButLast' && policy.includeInContext !== false

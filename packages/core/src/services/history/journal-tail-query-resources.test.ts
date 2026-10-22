@@ -22,6 +22,13 @@ async function rangePositions(
   return positions;
 }
 
+async function repeatCount(
+  indexed: IndexedJournalRequestSnapshot,
+): Promise<void> {
+  for (let repeat = 0; repeat < 20; repeat++)
+    expect(await indexed.normalizedCount(1, 0, 'call_b')).toBe(1);
+}
+
 async function recordReadings(
   size: number,
   readings: Readonly<Record<string, number>>,
@@ -78,6 +85,8 @@ describe('normalized request-tail read bounds', () => {
           readings.count = stats.heads;
           expect(stats.heads).toBeLessThan(150);
           stats.heads = 0;
+          await repeatCount(indexed);
+          expect(stats.heads).toBe(0);
           expect(await indexed.firstAfter(1, 0, 'call_b', -1)).toBe(2);
           readings.successor = stats.heads;
           expect(stats.heads).toBeLessThan(150);

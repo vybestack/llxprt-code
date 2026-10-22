@@ -7,7 +7,7 @@ import type { IndexedJournalRequestSnapshot } from '@vybestack/llxprt-code-core/
 import type { RowFormatSettings } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
 import { normalizeToAnthropicToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
 import { projectAnthropicUnit } from './anthropic-unit-facts.js';
-import type { AnthropicRepairIndex } from './anthropic-repair-index.js';
+import type { AnthropicRequestRepairIndex } from './anthropic-repair-index.js';
 import {
   convertContentToMessages,
   convertBlockToAnthropicPart,
@@ -65,7 +65,7 @@ export class AnthropicRepairSource {
   constructor(
     readonly query: IndexedJournalRequestSnapshot,
     readonly settings: RowFormatSettings,
-    readonly index?: AnthropicRepairIndex,
+    readonly index?: AnthropicRequestRepairIndex,
   ) {
     this.options = {
       isOAuth: settings.isOAuth,

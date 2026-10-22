@@ -1,6 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { IndexedJournalRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/indexed-journal-request-snapshot.js';
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import type { VersionSnapshot } from '@vybestack/llxprt-code-core/journal/versionSnapshot.js';
+import type { RepairPolicy } from './anthropic-repair-source.js';
 import type { RowFormatSettings } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import { ProgressiveJsonBody } from '../utils/progressive-json-body.js';
@@ -33,6 +35,15 @@ import {
 } from './AnthropicSpooledRequest.js';
 import type { MediaStage } from './message-table/wire-builder.js';
 import { NativeAnthropicEstimateProjection } from './native-anthropic-estimate.js';
+
+import {
+  anthropicTailIndex,
+  planAnthropicTail,
+} from './anthropic-tail-plan.js';
+import {
+  supportsAnthropicPendingTail,
+  anthropicPendingPrefix,
+} from './anthropic-pending-tail.js';
 
 export class NativeAnthropicBody {
   private readonly body: ProgressiveJsonBody;
@@ -202,11 +213,49 @@ async function requestFromEngine(
   };
 }
 
+async function nativeEnginePlan(
+  snapshot: VersionSnapshot,
+  query: IndexedJournalRequestSnapshot,
+  settings: RowFormatSettings,
+  policy: RepairPolicy,
+  base: StoredAnthropicRequestPlan,
+  changed: boolean,
+): Promise<{
+  readonly engine: AnthropicStreamRepair;
+  readonly measured: StoredAnthropicRequestPlan;
+}> {
+  const engine = await AnthropicStreamRepair.create(
+    query,
+    settings,
+    policy,
+    changed ? await anthropicTailIndex(snapshot, query, settings) : undefined,
+  );
+  if (!changed) return { engine, measured: base };
+  const prefix = await anthropicPendingPrefix(
+    snapshot,
+    query,
+    settings,
+    policy,
+    engine,
+  );
+  const measured = await planAnthropicTail(
+    snapshot,
+    query,
+    settings,
+    policy,
+    base,
+    prefix,
+  );
+  return { engine, measured };
+}
+
 async function prepareNativeAnthropicRequest(
   params: AnthropicPlanParams,
   rows: ProviderRequestRows,
   estimate: boolean,
-): Promise<NativeAnthropicRequest> {
+  mediaStage: MediaStage | undefined,
+  options: SpooledRequestOptions,
+): Promise<PreparedAnthropicRequest> {
   const native = rows.native;
   if (native === undefined)
     throw new Error('Native Anthropic requires journal rows');
@@ -221,19 +270,37 @@ async function prepareNativeAnthropicRequest(
   return native.withFormat(
     anthropicLengthRegistration(settings),
     async (snapshot) => {
-      const query = await IndexedJournalRequestSnapshot.create(snapshot);
+      const changed = native.indexed.viewPlan.changedSources.length !== 0;
+      const query = changed
+        ? native.indexed.retain(snapshot)
+        : await IndexedJournalRequestSnapshot.create(snapshot);
       try {
-        const measured = await planStoredAnthropicRequest(
+        const base = await planStoredAnthropicRequest(
           snapshot,
           settings,
           policy,
           { ...small, model: settings.model },
           { cache: plan.wantCaching ? plan.requestSettings.ttl : undefined },
         );
-        const engine = await AnthropicStreamRepair.create(
+        if (
+          changed &&
+          !(await supportsAnthropicPendingTail(snapshot, query, settings))
+        ) {
+          await query.close();
+          return await prepareSpooledAnthropicRequest(
+            params,
+            rows,
+            mediaStage,
+            options,
+          );
+        }
+        const { engine, measured } = await nativeEnginePlan(
+          snapshot,
           query,
           settings,
           policy,
+          base,
+          changed,
         );
         return await requestFromEngine(
           params,
@@ -260,10 +327,7 @@ async function canUseNativeAnthropic(
   if (native === undefined) return false;
   if (wantsRequestDump(params.options.invocation.ephemerals.dumpcontext))
     return false;
-  return (
-    native.indexed.viewPlan.changedSources.length === 0 &&
-    !(await native.indexed.hasPersistedMedia())
-  );
+  return !(await native.indexed.hasPersistedMedia());
 }
 
 export async function prepareAnthropicRequestRows(
@@ -277,6 +341,8 @@ export async function prepareAnthropicRequestRows(
       params,
       rows,
       options.estimate === true,
+      mediaStage,
+      options,
     );
   return prepareSpooledAnthropicRequest(params, rows, mediaStage, options);
 }

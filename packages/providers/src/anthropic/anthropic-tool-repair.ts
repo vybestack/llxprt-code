@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalFormatError } from '@vybestack/llxprt-code-core/journal/errors.js';
 import type { AnthropicMessageBlock } from './AnthropicMessageNormalizer.js';
-import type { AnthropicRepairIndex } from './anthropic-repair-index.js';
+import type { AnthropicRequestRepairIndex } from './anthropic-repair-index.js';
 import type {
   AnthropicRepairSource,
   RepairMessage,
@@ -35,7 +35,7 @@ export class AnthropicToolRepair {
 
   constructor(
     readonly source: AnthropicRepairSource,
-    readonly index: AnthropicRepairIndex,
+    readonly index: AnthropicRequestRepairIndex,
   ) {}
   decision(
     message: RepairMessage,

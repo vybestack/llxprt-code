@@ -9,6 +9,85 @@ import { measuredRequestSnapshot } from './__tests__/support/measured-request-sn
 
 describe('normalized request query pin ownership', () => {
   const directory = useTempDir('tail-query-pins-');
+  it('holds the filled fact version separately from the request source version', async () => {
+    const session = await JournalSession.create(
+      `${directory()}/fact-pin.llxj`,
+      {
+        journal: testJournalSeams().dependencies,
+      },
+    );
+    try {
+      await session.append([
+        { speaker: 'human', blocks: [{ type: 'text', text: 'source' }] },
+      ]);
+      const source = await session.store.snapshot();
+      const query = await IndexedJournalRequestSnapshot.create(source, [
+        { speaker: 'human', blocks: [{ type: 'text', text: 'pending' }] },
+      ]);
+      await session.append([
+        { speaker: 'ai', blocks: [{ type: 'text', text: 'filled' }] },
+      ]);
+      const facts = await session.store.snapshot();
+      const retained = query.retain(facts);
+      await facts.close();
+      await source.close();
+      await query.close();
+      try {
+        expect((await facts.entryAt(1)).label).toBeGreaterThan(0n);
+        expect((await retained.readAt(1)).blocks).toStrictEqual([
+          { type: 'text', text: 'pending' },
+        ]);
+      } finally {
+        await retained.close();
+      }
+      await expect(facts.entryAt(1)).rejects.toThrow('pin was released');
+    } finally {
+      await session.close();
+    }
+  });
+
+  it('retains an independent request view after its opener and original query close', async () => {
+    const session = await JournalSession.create(
+      `${directory()}/retained.llxj`,
+      {
+        journal: testJournalSeams().dependencies,
+      },
+    );
+    try {
+      await session.append([
+        { speaker: 'human', blocks: [{ type: 'text', text: 'persisted' }] },
+      ]);
+      const snapshot = await session.store.snapshot();
+      const query = await IndexedJournalRequestSnapshot.create(snapshot, [
+        { speaker: 'human', blocks: [{ type: 'text', text: 'pending 雪' }] },
+      ]);
+      const retained = query.retain();
+      await query.close();
+      await snapshot.close();
+      await session.append([
+        { speaker: 'human', blocks: [{ type: 'text', text: 'later' }] },
+      ]);
+      try {
+        expect(retained.count).toBe(2);
+        expect(await retained.readAt(0)).toStrictEqual({
+          speaker: 'human',
+          metadata: {},
+          blocks: [{ type: 'text', text: 'persisted' }],
+        });
+        expect(await retained.readAt(1)).toStrictEqual({
+          speaker: 'human',
+          metadata: {},
+          blocks: [{ type: 'text', text: 'pending 雪' }],
+        });
+      } finally {
+        await retained.close();
+      }
+      await expect(retained.readAt(0)).rejects.toThrow('closed');
+    } finally {
+      await session.close();
+    }
+  });
+
   it('uses an older published root and its own tail after a newer append', async () => {
     const session = await JournalSession.create(`${directory()}/old.llxj`, {
       journal: testJournalSeams().dependencies,

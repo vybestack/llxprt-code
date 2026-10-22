@@ -128,3 +128,8 @@ export async function writeRepairMessage(
     ],
   );
 }
+
+export type AnthropicRequestRepairIndex = Pick<
+  AnthropicRepairIndex,
+  'lastThinking' | 'messages' | 'decision' | 'taken'
+>;
