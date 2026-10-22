@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -8,6 +8,8 @@ import type {
   MediaReferenceBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { IndexedJournalRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/indexed-journal-request-snapshot.js';
+import { JournalProviderRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/journal-provider-request.js';
+import type { PinnedMediaLease } from '@vybestack/llxprt-code-core/storage/history-media-release-gate.js';
 import { RequestMediaResolver } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import { historyOwnerIdFor } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
 import { parseReservationRecord } from '@vybestack/llxprt-code-core/storage/local-media-store-validation.js';
@@ -26,9 +28,10 @@ function sourceRow(index: number, image: MediaReferenceBlock): IContent {
   };
 }
 
-async function assertRequestLease(
+async function assertLeaseOwners(
   root: string,
   contentId: string,
+  owners: readonly string[],
 ): Promise<void> {
   const directory = join(
     root,
@@ -36,26 +39,34 @@ async function assertRequestLease(
     'sha256',
     contentId.slice('sha256:'.length),
   );
+  const expected = owners.map((ownerId) => ({
+    ownerId,
+    digest: createHash('sha256').update(ownerId).digest('hex'),
+  }));
   const files = await readdir(directory);
-  expect(files.length).toBe(1);
-  const historyDigest = createHash('sha256')
-    .update(historyOwnerIdFor(contentId))
-    .digest('hex');
-  expect(files[0]).not.toBe(historyDigest);
-  const value: unknown = JSON.parse(
-    await readFile(join(directory, files[0]), 'utf8'),
+  expect(files.sort()).toStrictEqual(
+    expected.map(({ digest }) => digest).sort(),
   );
-  const reservation = parseReservationRecord(value);
-  if (reservation === undefined)
-    throw new Error('Missing valid request reservation');
-  expect(reservation.ownerDigest).toBe(files[0]);
-  expect(reservation.relatedContentIds).toContain(contentId);
-  const leaseValue: unknown = JSON.parse(
-    await readFile(join(root, 'instances', reservation.instanceId), 'utf8'),
-  );
-  expect(parseInstanceLeaseRecord(leaseValue)?.instanceId).toBe(
-    reservation.instanceId,
-  );
+  for (const { ownerId, digest } of expected) {
+    const value: unknown = JSON.parse(
+      await readFile(join(directory, digest), 'utf8'),
+    );
+    const reservation = parseReservationRecord(value);
+    if (reservation === undefined)
+      throw new Error('Missing valid owner reservation');
+    expect(reservation.ownerDigest).toBe(digest);
+    expect(reservation.relatedContentIds).toStrictEqual([contentId]);
+    const leaseValue: unknown = JSON.parse(
+      await readFile(join(root, 'instances', reservation.instanceId), 'utf8'),
+    );
+    const lease = parseInstanceLeaseRecord(leaseValue);
+    expect(lease?.instanceId).toBe(reservation.instanceId);
+    expect(lease?.token.length).toBeGreaterThan(0);
+    process.stdout.write(
+      `PURGE_MEDIA_OWNER ${JSON.stringify({ directory, ownerId, reservation, instance: { instanceId: lease?.instanceId, createdAt: lease?.createdAt } })}
+`,
+    );
+  }
 }
 
 async function collectGarbage(): Promise<void> {
@@ -70,6 +81,7 @@ async function consumePinned(
   payloadRead: () => void,
   transportGate: Promise<void>,
   refs: Array<WeakRef<IContent>>,
+  lease?: PinnedMediaLease,
 ): Promise<string[]> {
   const payloads: string[] = [];
   for await (const row of query.openReader(signal)) {
@@ -80,6 +92,7 @@ async function consumePinned(
       turnId: 'native-turn',
       aggregateBudgetBytes: 1024,
       signal,
+      lease,
     });
     try {
       const payload = resolved.withContents((contents) =>
@@ -110,11 +123,13 @@ async function consumePinned(
 describe('native pending media consumer below provider preparation', () => {
   it.each(
     [3, 64, 65].flatMap((size) =>
-      [false, true].map((abort) => ({ size, abort })),
+      [false, true].flatMap((abort) =>
+        ['external', 'native'].map((source) => ({ size, abort, source })),
+      ),
     ),
   )(
-    'holds immutable reserved bytes through actual purge and janitor at $size, abort=$abort',
-    async ({ size, abort }) => {
+    'holds immutable reserved bytes through actual purge and janitor at $size, abort=$abort, source=$source',
+    async ({ size, abort, source }) => {
       await withNativePurgeFixture(
         async ({ history, store, session, owners }) => {
           const originalBytes = new Uint8Array([17, 29, 43, 255]);
@@ -130,7 +145,42 @@ describe('native pending media consumer below provider preparation', () => {
             })(),
           );
           const pin = await session.store.snapshot();
-          const query = await IndexedJournalRequestSnapshot.create(pin);
+          const request =
+            source === 'native'
+              ? await JournalProviderRequestSnapshot.create(
+                  pin,
+                  [],
+                  {},
+                  undefined,
+                  () => pin.close(),
+                  undefined,
+                  store,
+                )
+              : undefined;
+          const query =
+            request?.indexed ??
+            (await IndexedJournalRequestSnapshot.create(pin));
+          let sourceClose: Promise<void> | undefined;
+          const closeSource = (): Promise<void> => {
+            sourceClose ??=
+              request === undefined
+                ? (async () => {
+                    await query.close();
+                    await pin.close();
+                  })()
+                : request.close();
+            return sourceClose;
+          };
+          const requestOwners: string[] = [];
+          const reserveAndRead = store.reserveAndReadVerified.bind(store);
+          const trace = spyOn(
+            store,
+            'reserveAndReadVerified',
+          ).mockImplementation(async (reference, ownerId) => {
+            if (ownerId.startsWith('native-pending:'))
+              requestOwners.push(ownerId);
+            return reserveAndRead(reference, ownerId);
+          });
           const resolver = new RequestMediaResolver(store);
           const controller = new AbortController();
           const payloadRead = Promise.withResolvers<void>();
@@ -144,6 +194,7 @@ describe('native pending media consumer below provider preparation', () => {
             payloadRead.resolve,
             transport.promise,
             refs,
+            request?.native.mediaLease,
           );
           const outcome = pending.then(
             (value) => ({ value, error: undefined }),
@@ -151,7 +202,22 @@ describe('native pending media consumer below provider preparation', () => {
           );
           try {
             await payloadRead.promise;
-            expect(resolver.accounting().reservedContentCount).toBe(1);
+            expect(resolver.accounting().reservedContentCount).toBe(
+              source === 'external' ? 1 : 0,
+            );
+            const externalOwner = expect.stringMatching(/^native-pending:/);
+            expect(requestOwners).toStrictEqual(
+              source === 'external' ? [externalOwner] : [],
+            );
+            const expectedOwners = [
+              historyOwnerIdFor(image.contentId),
+              ...requestOwners,
+            ];
+            await assertLeaseOwners(
+              store.rootDirectory,
+              image.contentId,
+              expectedOwners,
+            );
             const purge = new SemanticMediaPurgeSession({
               history,
               mode: () => 'remove',
@@ -173,7 +239,11 @@ describe('native pending media consumer below provider preparation', () => {
             }
             await history.waitForOwnershipSettlement();
             expect(owners.snapshot().liveRows).toBe(0);
-            await assertRequestLease(store.rootDirectory, image.contentId);
+            await assertLeaseOwners(
+              store.rootDirectory,
+              image.contentId,
+              expectedOwners,
+            );
             expect(
               (
                 await store.reclaimUnreferenced(
@@ -212,6 +282,19 @@ describe('native pending media consumer below provider preparation', () => {
             expect(resolver.accounting().activeRequestCount).toBe(0);
             expect(resolver.accounting().reservedContentCount).toBe(0);
             expect(resolver.accounting().materializedNormalizedBytes).toBe(0);
+            await assertLeaseOwners(store.rootDirectory, image.contentId, [
+              historyOwnerIdFor(image.contentId),
+            ]);
+            expect(
+              (
+                await store.reclaimUnreferenced(
+                  new Set(),
+                  Number.MAX_SAFE_INTEGER,
+                )
+              ).objectsRemoved,
+            ).toBe(0);
+            await closeSource();
+            expect(session.store.mediaPins.oldestVersion).toBeUndefined();
             expect(await store.hasReservations(image.contentId)).toBe(false);
             expect(
               (
@@ -228,15 +311,15 @@ describe('native pending media consumer below provider preparation', () => {
             controller.abort(originalError);
             transport.resolve();
             await outcome;
-            await query.close();
-            await pin.close();
+            trace.mockRestore();
+            await closeSource();
           }
           await collectGarbage();
           expect(refs.filter((ref) => ref.deref() !== undefined).length).toBe(
             0,
           );
           process.stdout.write(
-            `PURGE_PENDING_MEDIA ${JSON.stringify({ size, abort, finalRows: 0, reservations: resolver.accounting().reservedContentCount })}\n`,
+            `PURGE_PENDING_MEDIA ${JSON.stringify({ size, abort, source, finalRows: 0, reservations: resolver.accounting().reservedContentCount })}\n`,
           );
         },
       );
