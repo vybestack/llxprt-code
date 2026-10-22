@@ -1,0 +1,1030 @@
+{
+  "date": "2026-10-22",
+  "baseline": "ed7be987d15122b7035ab72eedc417f29dd71e86",
+  "earlyCheckpoint": "9aca036c8",
+  "root": "tmp/p6/chat-mistral-multi-id-run-bo",
+  "status": "Normal multi-ID functional parity is verified in the executed domain. Arbitrary multiple historical displacement-chain replay complexity is NOT closed; no production implementation changed.",
+  "scope": {
+    "groups": [
+      2,
+      17,
+      129
+    ],
+    "reasoning": [
+      "none",
+      "all",
+      "allButLast"
+    ],
+    "oldOracle": "oldTailUnits + buildMessagesWithReasoning old Mistral mapper + oldMistralUnitTokens, not the native mapper on both sides",
+    "public": "43 complete current runtime cases including seven new Mistral multi-ID two-POST JSON/SSE cases and one representative summary purge; occupied formats use the existing normal registry path",
+    "pins": "Two collision-group first holders removed together. Old mappings retain salt 1; current mappings become salt 0; both complete bodies/lengths/tokens match independent old output.",
+    "notClaimed": "The multiple groups in these histories are not simultaneous changed historical raw IDs in request-only replay."
+  },
+  "sourceMechanism": [
+    {
+      "path": "packages/core/src/journal/normalizedRowOccurrences.ts",
+      "lines": "389-451",
+      "finding": "Observe all emitted nonempty calls, including human-row calls, in source claim order."
+    },
+    {
+      "path": "packages/core/src/services/history/journal-request-mistral.ts",
+      "lines": "53-162",
+      "finding": "Seeds depend on pending identities; repair frontiers and terminal IDs scale with pending changes. Empty conversion is lazy."
+    },
+    {
+      "path": "packages/core/src/services/history/journal-request-mistral.ts",
+      "lines": "203-260",
+      "finding": "Single changed ID streams ordinal holders. Multiple changed IDs still restart changedIds and nextSource per label. This algorithm was not replaced."
+    },
+    {
+      "path": "packages/core/src/services/history/journal-request-mistral.ts",
+      "lines": "17-33,262-333",
+      "finding": "Mapping cache is 65536 charged bytes. Tail seeds are not a constant-size claim for unbounded tails; no history-wide decoded-holder cache was added."
+    }
+  ],
+  "tests": [
+    {
+      "name": "native-mistral-multi-id-retention.test.ts",
+      "passed": 1,
+      "failed": 0,
+      "assertions": 8,
+      "receipt": {
+        "path": "tmp/p6/chat-mistral-multi-id-run-bo/native-mistral-multi-id-retention.test.ts.log",
+        "sha256": "6e4afd788d6d3e939f4342333f49a5a7a1f5995435e115823869aab4ddabf8d5"
+      }
+    },
+    {
+      "name": "native-chat-continuation-runtime.test.ts",
+      "passed": 43,
+      "failed": 0,
+      "assertions": 1282,
+      "receipt": {
+        "path": "tmp/p6/chat-mistral-multi-id-run-bo/native-chat-continuation-runtime.test.ts.log",
+        "sha256": "e67ac8d3521390c0e206eba692c49330e19f533889a2d85e0c16779e3b2ba486"
+      }
+    },
+    {
+      "name": "native-mistral-production-frozen.test.ts",
+      "passed": 3,
+      "failed": 0,
+      "assertions": 75006,
+      "receipt": {
+        "path": "tmp/p6/chat-mistral-multi-id-run-bo/native-mistral-production-frozen.test.ts.log",
+        "sha256": "4363458c90f80515488439eaa693d9a8e7180f668f31e25a8b3976546ad7fdb1"
+      }
+    },
+    {
+      "name": "native-mistral-occupied-lifecycle.test.ts",
+      "passed": 1,
+      "failed": 0,
+      "assertions": 218,
+      "receipt": {
+        "path": "tmp/p6/chat-mistral-multi-id-run-bo/native-mistral-occupied-lifecycle.test.ts.log",
+        "sha256": "ec3c40e1dbe6da1eead2f80855a4f6a8717c44798cb2c124348f14dbaa045515"
+      }
+    },
+    {
+      "name": "native-chat-mistral-send.test.ts",
+      "passed": 30,
+      "failed": 0,
+      "assertions": 150,
+      "receipt": {
+        "path": "tmp/p6/chat-mistral-multi-id-run-bo/native-chat-mistral-send.test.ts.log",
+        "sha256": "0a0667baa39aca31f7ed05bbb9f8980bcb6f7a2650a2bd2bf7805bbeec3f0ac4"
+      }
+    },
+    {
+      "name": "native-chat-continuation-http.test.ts",
+      "passed": 138,
+      "failed": 0,
+      "assertions": 1518,
+      "receipt": {
+        "path": "tmp/p6/chat-mistral-multi-id-run-bo/native-chat-continuation-http.test.ts.log",
+        "sha256": "6212a88c23cc8a0e3e7e9454c055744249ad91cdff02d02b3b5ab24ddf9782b1"
+      }
+    },
+    {
+      "name": "journal-chat-length.test.ts",
+      "passed": 6,
+      "failed": 0,
+      "assertions": 62,
+      "receipt": {
+        "path": "tmp/p6/chat-mistral-multi-id-run-bo/journal-chat-length.test.ts.log",
+        "sha256": "6a9f9cac8fc68022f72765c9ba9a5b2e3681e1017cd24875127acdd3fae3d594"
+      }
+    },
+    {
+      "name": "journal-chat-length-lifecycle.test.ts",
+      "passed": 8,
+      "failed": 0,
+      "assertions": 101,
+      "receipt": {
+        "path": "tmp/p6/chat-mistral-multi-id-run-bo/journal-chat-length-lifecycle.test.ts.log",
+        "sha256": "1454c3b8ca2cafd5909712f1895db9b24efa2b15acfeed41e419f48ef780338c"
+      }
+    },
+    {
+      "name": "journalStore.readerLifetime.test.ts",
+      "passed": 11,
+      "failed": 0,
+      "assertions": 29,
+      "receipt": {
+        "path": "tmp/p6/chat-mistral-multi-id-run-bo/journalStore.readerLifetime.test.ts.log",
+        "sha256": "fdd1474704517516bfb55c7adfb11544de2707f38f58c4691aee99d28eec523d"
+      }
+    },
+    {
+      "name": "journalStore.readerCleanup.test.ts",
+      "passed": 3,
+      "failed": 0,
+      "assertions": 20,
+      "receipt": {
+        "path": "tmp/p6/chat-mistral-multi-id-run-bo/journalStore.readerCleanup.test.ts.log",
+        "sha256": "20883b2b75e591c57b78ce1e69f004b18b572578b964fc506e7ede56993fdbad"
+      }
+    },
+    {
+      "name": "journal-mistral-tail.test.ts",
+      "passed": 6,
+      "failed": 0,
+      "assertions": 61,
+      "receipt": {
+        "path": "tmp/p6/chat-mistral-multi-id-run-bo/journal-mistral-tail.test.ts.log",
+        "sha256": "b990f29853eed4ef5ab7aa50cae9f3677a57291a91c332fb0ce5b6d8f835527b"
+      }
+    },
+    {
+      "name": "journal-mistral-tail-pins.test.ts",
+      "passed": 5,
+      "failed": 0,
+      "assertions": 16,
+      "receipt": {
+        "path": "tmp/p6/chat-mistral-multi-id-run-bo/journal-mistral-tail-pins.test.ts.log",
+        "sha256": "3bf9b1b3324a8475113d9929f104952ed6ddd6c4c8e22a9d56cf81115862dc0f"
+      }
+    },
+    {
+      "name": "journal-mistral-tail-lifecycle.test.ts",
+      "passed": 2,
+      "failed": 0,
+      "assertions": 72,
+      "receipt": {
+        "path": "tmp/p6/chat-mistral-multi-id-run-bo/journal-mistral-tail-lifecycle.test.ts.log",
+        "sha256": "4d9058b21bc83d5831f38875d4755bbec95fdf148ce140a41fadb3a9b6adaab9"
+      }
+    },
+    {
+      "name": "versionCopy.mistral.test.ts",
+      "passed": 2,
+      "failed": 0,
+      "assertions": 119,
+      "receipt": {
+        "path": "tmp/p6/chat-mistral-multi-id-run-bo/versionCopy.mistral.test.ts.log",
+        "sha256": "21c3808477c83a6157830d2d2283e5c5c7ce30bd325e3aa4fc9d929d113df53a"
+      }
+    },
+    {
+      "name": "wireBodyGolden.test.ts",
+      "passed": 315,
+      "failed": 0,
+      "assertions": 315,
+      "receipt": {
+        "path": "tmp/p6/chat-mistral-multi-id-run-bo/wireBodyGolden.test.ts.log",
+        "sha256": "24f6f0497a91a511f756b6f0936a76441aa7e5ccca3d017b8e95abd4df1795eb"
+      }
+    },
+    {
+      "name": "post-control-positive",
+      "passed": 11,
+      "failed": 0,
+      "assertions": 955,
+      "receipt": {
+        "path": "tmp/p6/chat-mistral-multi-id-run-bo/post-control-positive.log",
+        "sha256": "05dfe3825896d0d4bc26bb33d35fa5d4db8d9f83709ed7a3b4baa2b1944502dc"
+      }
+    },
+    {
+      "name": "corrected-cost",
+      "passed": 4,
+      "failed": 0,
+      "assertions": 40,
+      "receipt": {
+        "path": "tmp/p6/chat-mistral-multi-id-run-bo/corrected-cost.log",
+        "sha256": "073d4beff88f703994cb8cb97c0414d429a0d5acf4ad2c5df51b7dfe85b97c72"
+      }
+    },
+    {
+      "name": "native-chat-golden",
+      "passed": 44,
+      "failed": 0,
+      "assertions": 352,
+      "receipt": {
+        "path": "tmp/p6/chat-mistral-multi-id-run-bo/native-chat-golden.log",
+        "sha256": "6e1ba79b6ff0da9b6ae63f253abaa2b371b7e76f5d723cd3318d44df237f18e0"
+      }
+    },
+    {
+      "name": "corrected-pins-final",
+      "passed": 1,
+      "failed": 0,
+      "assertions": 15,
+      "receipt": {
+        "path": "tmp/p6/chat-mistral-multi-id-run-bo/corrected-pins-final.log",
+        "sha256": "b5ef52d0fd6b4654919d502b5a7595c65c9b5d07aa4f6aa0599061eade8af13f"
+      }
+    }
+  ],
+  "summary": {
+    "passed": 634,
+    "failed": 0,
+    "assertions": 80339,
+    "acceptedGates": 35
+  },
+  "gates": [
+    {
+      "name": "native-mistral-multi-id-retention.test.ts",
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/openai/__tests__/native-mistral-multi-id-retention.test.ts"
+      ],
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/native-mistral-multi-id-retention.test.ts.log",
+      "sha256": "6e4afd788d6d3e939f4342333f49a5a7a1f5995435e115823869aab4ddabf8d5",
+      "pid": 12984,
+      "started": "2026-10-22T15:20:23.828Z",
+      "ended": "2026-10-22T15:20:24.664Z"
+    },
+    {
+      "name": "native-chat-continuation-runtime.test.ts",
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/agents/src/core/__tests__/native-chat-continuation-runtime.test.ts"
+      ],
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/native-chat-continuation-runtime.test.ts.log",
+      "sha256": "e67ac8d3521390c0e206eba692c49330e19f533889a2d85e0c16779e3b2ba486",
+      "pid": 13011,
+      "started": "2026-10-22T15:20:24.665Z",
+      "ended": "2026-10-22T15:20:29.666Z"
+    },
+    {
+      "name": "native-mistral-production-frozen.test.ts",
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/openai/__tests__/native-mistral-production-frozen.test.ts"
+      ],
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/native-mistral-production-frozen.test.ts.log",
+      "sha256": "4363458c90f80515488439eaa693d9a8e7180f668f31e25a8b3976546ad7fdb1",
+      "pid": 13413,
+      "started": "2026-10-22T15:20:29.668Z",
+      "ended": "2026-10-22T15:22:07.324Z"
+    },
+    {
+      "name": "native-mistral-occupied-lifecycle.test.ts",
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/openai/__tests__/native-mistral-occupied-lifecycle.test.ts"
+      ],
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/native-mistral-occupied-lifecycle.test.ts.log",
+      "sha256": "ec3c40e1dbe6da1eead2f80855a4f6a8717c44798cb2c124348f14dbaa045515",
+      "pid": 20509,
+      "started": "2026-10-22T15:22:07.326Z",
+      "ended": "2026-10-22T15:22:07.805Z"
+    },
+    {
+      "name": "native-chat-mistral-send.test.ts",
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/__tests__/native-chat-mistral-send.test.ts"
+      ],
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/native-chat-mistral-send.test.ts.log",
+      "sha256": "0a0667baa39aca31f7ed05bbb9f8980bcb6f7a2650a2bd2bf7805bbeec3f0ac4",
+      "pid": 20514,
+      "started": "2026-10-22T15:22:07.806Z",
+      "ended": "2026-10-22T15:22:09.182Z"
+    },
+    {
+      "name": "native-chat-continuation-http.test.ts",
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/__tests__/native-chat-continuation-http.test.ts"
+      ],
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/native-chat-continuation-http.test.ts.log",
+      "sha256": "6212a88c23cc8a0e3e7e9454c055744249ad91cdff02d02b3b5ab24ddf9782b1",
+      "pid": 20531,
+      "started": "2026-10-22T15:22:09.183Z",
+      "ended": "2026-10-22T15:22:13.265Z"
+    },
+    {
+      "name": "journal-chat-length.test.ts",
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/openai/journal-chat-length.test.ts"
+      ],
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/journal-chat-length.test.ts.log",
+      "sha256": "6a9f9cac8fc68022f72765c9ba9a5b2e3681e1017cd24875127acdd3fae3d594",
+      "pid": 20599,
+      "started": "2026-10-22T15:22:13.267Z",
+      "ended": "2026-10-22T15:22:13.616Z"
+    },
+    {
+      "name": "journal-chat-length-lifecycle.test.ts",
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/openai/journal-chat-length-lifecycle.test.ts"
+      ],
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/journal-chat-length-lifecycle.test.ts.log",
+      "sha256": "1454c3b8ca2cafd5909712f1895db9b24efa2b15acfeed41e419f48ef780338c",
+      "pid": 20604,
+      "started": "2026-10-22T15:22:13.618Z",
+      "ended": "2026-10-22T15:22:13.904Z"
+    },
+    {
+      "name": "journalStore.readerLifetime.test.ts",
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/core/src/journal/journalStore.readerLifetime.test.ts"
+      ],
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/journalStore.readerLifetime.test.ts.log",
+      "sha256": "fdd1474704517516bfb55c7adfb11544de2707f38f58c4691aee99d28eec523d",
+      "pid": 20610,
+      "started": "2026-10-22T15:22:13.906Z",
+      "ended": "2026-10-22T15:22:14.100Z"
+    },
+    {
+      "name": "journalStore.readerCleanup.test.ts",
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/core/src/journal/journalStore.readerCleanup.test.ts"
+      ],
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/journalStore.readerCleanup.test.ts.log",
+      "sha256": "20883b2b75e591c57b78ce1e69f004b18b572578b964fc506e7ede56993fdbad",
+      "pid": 20615,
+      "started": "2026-10-22T15:22:14.102Z",
+      "ended": "2026-10-22T15:22:14.293Z"
+    },
+    {
+      "name": "journal-mistral-tail.test.ts",
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/core/src/services/history/journal-mistral-tail.test.ts"
+      ],
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/journal-mistral-tail.test.ts.log",
+      "sha256": "b990f29853eed4ef5ab7aa50cae9f3677a57291a91c332fb0ce5b6d8f835527b",
+      "pid": 20616,
+      "started": "2026-10-22T15:22:14.295Z",
+      "ended": "2026-10-22T15:22:14.561Z"
+    },
+    {
+      "name": "journal-mistral-tail-pins.test.ts",
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/core/src/services/history/journal-mistral-tail-pins.test.ts"
+      ],
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/journal-mistral-tail-pins.test.ts.log",
+      "sha256": "3bf9b1b3324a8475113d9929f104952ed6ddd6c4c8e22a9d56cf81115862dc0f",
+      "pid": 20618,
+      "started": "2026-10-22T15:22:14.562Z",
+      "ended": "2026-10-22T15:22:14.753Z"
+    },
+    {
+      "name": "journal-mistral-tail-lifecycle.test.ts",
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/core/src/services/history/journal-mistral-tail-lifecycle.test.ts"
+      ],
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/journal-mistral-tail-lifecycle.test.ts.log",
+      "sha256": "4d9058b21bc83d5831f38875d4755bbec95fdf148ce140a41fadb3a9b6adaab9",
+      "pid": 20622,
+      "started": "2026-10-22T15:22:14.754Z",
+      "ended": "2026-10-22T15:22:15.036Z"
+    },
+    {
+      "name": "versionCopy.mistral.test.ts",
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/core/src/journal/versionCopy.mistral.test.ts"
+      ],
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/versionCopy.mistral.test.ts.log",
+      "sha256": "21c3808477c83a6157830d2d2283e5c5c7ce30bd325e3aa4fc9d929d113df53a",
+      "pid": 20624,
+      "started": "2026-10-22T15:22:15.037Z",
+      "ended": "2026-10-22T15:22:15.224Z"
+    },
+    {
+      "name": "wireBodyGolden.test.ts",
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/__tests__/wireBodyGolden.test.ts"
+      ],
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/wireBodyGolden.test.ts.log",
+      "sha256": "24f6f0497a91a511f756b6f0936a76441aa7e5ccca3d017b8e95abd4df1795eb",
+      "pid": 20629,
+      "started": "2026-10-22T15:22:15.225Z",
+      "ended": "2026-10-22T15:22:16.478Z"
+    },
+    {
+      "name": "core-declarations",
+      "args": [
+        "bun",
+        "../../scripts/build_package.ts"
+      ],
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/core-declarations.log",
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127",
+      "pid": 20650,
+      "started": "2026-10-22T15:22:16.480Z",
+      "ended": "2026-10-22T15:22:20.903Z"
+    },
+    {
+      "name": "providers-declarations",
+      "args": [
+        "bun",
+        "../../scripts/build_package.ts"
+      ],
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/providers-declarations.log",
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127",
+      "pid": 20726,
+      "started": "2026-10-22T15:22:20.904Z",
+      "ended": "2026-10-22T15:22:23.304Z"
+    },
+    {
+      "name": "agents-declarations",
+      "args": [
+        "bun",
+        "../../scripts/build_package.ts"
+      ],
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/agents-declarations.log",
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127",
+      "pid": 20765,
+      "started": "2026-10-22T15:22:23.306Z",
+      "ended": "2026-10-22T15:22:25.524Z"
+    },
+    {
+      "name": "core-types",
+      "args": [
+        "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/core/tsconfig.noemit.json"
+      ],
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/core-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "pid": 20797,
+      "started": "2026-10-22T15:22:25.525Z",
+      "ended": "2026-10-22T15:22:33.196Z"
+    },
+    {
+      "name": "agents-types",
+      "args": [
+        "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/agents/tsconfig.noemit.json"
+      ],
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/agents-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "pid": 21058,
+      "started": "2026-10-22T15:22:42.836Z",
+      "ended": "2026-10-22T15:22:53.502Z"
+    },
+    {
+      "name": "providers-tsconfig.test-bun.json-bun",
+      "args": [
+        "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/providers/tsconfig.test-bun.json",
+        "--types",
+        "bun"
+      ],
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/providers-tsconfig.test-bun.json-bun.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "pid": 21255,
+      "started": "2026-10-22T15:22:53.503Z",
+      "ended": "2026-10-22T15:22:57.615Z"
+    },
+    {
+      "name": "agents-tsconfig.test-bun.json-bun",
+      "args": [
+        "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/agents/tsconfig.test-bun.json",
+        "--types",
+        "bun"
+      ],
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/agents-tsconfig.test-bun.json-bun.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "pid": 21464,
+      "started": "2026-10-22T15:23:07.982Z",
+      "ended": "2026-10-22T15:23:13.803Z"
+    },
+    {
+      "name": "agents-tsconfig.noemit.json-bun",
+      "args": [
+        "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/agents/tsconfig.noemit.json",
+        "--types",
+        "bun"
+      ],
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/agents-tsconfig.noemit.json-bun.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "pid": 21543,
+      "started": "2026-10-22T15:23:13.805Z",
+      "ended": "2026-10-22T15:23:15.940Z"
+    },
+    {
+      "name": "graph",
+      "args": [
+        "bun",
+        "scripts/check-affected-test-shards.ts"
+      ],
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/graph.log",
+      "sha256": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67",
+      "pid": 21752,
+      "started": "2026-10-22T15:23:27.600Z",
+      "ended": "2026-10-22T15:23:30.745Z"
+    },
+    {
+      "name": "audit",
+      "args": [
+        "bun",
+        "scripts/test-audit/scan.ts",
+        "tmp/p6/chat-mistral-multi-id-run-bo/audit"
+      ],
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/audit.log",
+      "sha256": "808d8cf2d82197ea1d02c5256534664d841ba77545b0526e462db8d0558d59f7",
+      "pid": 21814,
+      "started": "2026-10-22T15:23:30.746Z",
+      "ended": "2026-10-22T15:23:33.924Z"
+    },
+    {
+      "name": "post-control-positive",
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/openai/__tests__/native-mistral-multi-id.test.ts"
+      ],
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/post-control-positive.log",
+      "sha256": "05dfe3825896d0d4bc26bb33d35fa5d4db8d9f83709ed7a3b4baa2b1944502dc",
+      "pid": 22385,
+      "started": "2026-10-22T15:24:10.164Z",
+      "ended": "2026-10-22T15:24:30.971Z"
+    },
+    {
+      "name": "corrected-cost",
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/openai/__tests__/native-mistral-multi-id-cost.test.ts"
+      ],
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/corrected-cost.log",
+      "sha256": "073d4beff88f703994cb8cb97c0414d429a0d5acf4ad2c5df51b7dfe85b97c72",
+      "pid": 22668,
+      "started": "2026-10-22T15:24:30.972Z",
+      "ended": "2026-10-22T15:24:48.234Z"
+    },
+    {
+      "name": "core-bun-types",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/core/tsconfig.noemit.json",
+        "--types",
+        "bun"
+      ],
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/core-bun-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "pid": 23321,
+      "started": "2026-10-22T15:25:16.776Z",
+      "ended": "2026-10-22T15:25:24.514Z"
+    },
+    {
+      "name": "native-chat-golden",
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/__tests__/native-chat-golden.test.ts"
+      ],
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/native-chat-golden.log",
+      "sha256": "6e1ba79b6ff0da9b6ae63f253abaa2b371b7e76f5d723cd3318d44df237f18e0",
+      "pid": 23542,
+      "started": "2026-10-22T15:25:24.514Z",
+      "ended": "2026-10-22T15:25:27.170Z"
+    },
+    {
+      "name": "corrected-pins-final",
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "packages/providers/src/openai/__tests__/native-mistral-multi-id-pins.test.ts"
+      ],
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/corrected-pins-final.log",
+      "sha256": "b5ef52d0fd6b4654919d502b5a7595c65c9b5d07aa4f6aa0599061eade8af13f",
+      "started": "2026-10-22T15:26:53.114Z",
+      "ended": "2026-10-22T15:26:54.488Z"
+    },
+    {
+      "name": "corrected-providers-types",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/providers/tsconfig.noemit.json"
+      ],
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/corrected-providers-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "started": "2026-10-22T15:26:54.489Z",
+      "ended": "2026-10-22T15:27:04.992Z"
+    },
+    {
+      "name": "corrected-providers-bun-types",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/providers/tsconfig.noemit.json",
+        "--types",
+        "bun"
+      ],
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/corrected-providers-bun-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "started": "2026-10-22T15:27:04.992Z",
+      "ended": "2026-10-22T15:27:15.486Z"
+    },
+    {
+      "name": "corrected-providers-test-bun-types",
+      "args": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/providers/tsconfig.test-bun.json",
+        "--types",
+        "bun"
+      ],
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/corrected-providers-test-bun-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "started": "2026-10-22T15:27:15.486Z",
+      "ended": "2026-10-22T15:27:19.117Z"
+    },
+    {
+      "name": "corrected-lint",
+      "args": [
+        "node_modules/.bin/eslint",
+        "--max-warnings",
+        "0",
+        "packages/agents/src/core/__tests__/native-chat-continuation-runtime.test.ts",
+        "packages/providers/src/openai/__tests__/native-mistral-multi-id.test.ts",
+        "packages/providers/src/openai/__tests__/native-mistral-multi-id-cost.test.ts",
+        "packages/providers/src/openai/__tests__/native-mistral-multi-id-pins.test.ts",
+        "packages/providers/src/openai/__tests__/native-mistral-multi-id-retention.test.ts",
+        "packages/providers/src/openai/__tests__/support/mistral-multi-id-cases.ts"
+      ],
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/corrected-lint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "started": "2026-10-22T15:27:19.117Z",
+      "ended": "2026-10-22T15:27:26.677Z"
+    },
+    {
+      "name": "corrected-prettier",
+      "args": [
+        "node_modules/.bin/prettier",
+        "--check",
+        "packages/agents/src/core/__tests__/native-chat-continuation-runtime.test.ts",
+        "packages/providers/src/openai/__tests__/native-mistral-multi-id.test.ts",
+        "packages/providers/src/openai/__tests__/native-mistral-multi-id-cost.test.ts",
+        "packages/providers/src/openai/__tests__/native-mistral-multi-id-pins.test.ts",
+        "packages/providers/src/openai/__tests__/native-mistral-multi-id-retention.test.ts",
+        "packages/providers/src/openai/__tests__/support/mistral-multi-id-cases.ts"
+      ],
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/corrected-prettier.log",
+      "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+      "started": "2026-10-22T15:27:26.677Z",
+      "ended": "2026-10-22T15:27:26.867Z"
+    }
+  ],
+  "excludedInitialGates": [
+    {
+      "name": "native-mistral-multi-id.test.ts",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/native-mistral-multi-id.test.ts.log",
+      "sha256": "e3d2ce13df833bfcce0a019a31ad8ba186d6c4fdce59607a38e41138dcd42e28"
+    },
+    {
+      "name": "native-mistral-multi-id-cost.test.ts",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/native-mistral-multi-id-cost.test.ts.log",
+      "sha256": "bd4aa75857b7feaa142e137dd1fe7ae5d9be12095e4e3b2feea48fe8264e39b5"
+    },
+    {
+      "name": "native-mistral-multi-id-pins.test.ts",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/native-mistral-multi-id-pins.test.ts.log",
+      "sha256": "73edbe79afd07e5db4491b8132cc0fa3551aaad92e953e5916a544f7758f2fb2"
+    },
+    {
+      "name": "providers-types",
+      "exit": 2,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/providers-types.log",
+      "sha256": "e8e4fe2d66de59987811ec9781a50cc3ce6ba45ad7dc781cec8366aa1d490f6b"
+    },
+    {
+      "name": "providers-tsconfig.noemit.json-bun",
+      "exit": 2,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/providers-tsconfig.noemit.json-bun.log",
+      "sha256": "e8e4fe2d66de59987811ec9781a50cc3ce6ba45ad7dc781cec8366aa1d490f6b"
+    }
+  ],
+  "verificationCorrections": "Initial providers ordinary/Bun types found two new test errors: nonexistent RECORD_KIND.ROWLENS and optional string passed to Bun toBe. Corrected to the actual LENS tag and full typed mapping equality, then reran both tests and provider ordinary/Bun/test types without skips. Initial exit records remain. The supplemental runner reused providers-types.log, so the original ordinary-type log bytes were overwritten; its saved manifest SHA is not a current-log claim. A full typed mapping equality still needed an explicit missing-mapping error to narrow the expected value. Final corrected unique-path ordinary/Bun/test types pass. The supplemental receipt-binding step failed by treating an array manifest as an object; this binder reads the array correctly, without rerunning or concealing test failures.",
+  "controls": {
+    "wrongWinner": {
+      "path": "packages/core/src/services/history/journal-response-slots.ts",
+      "before": "c2bc03f39a018b57cde6f6cccc4e8870a55851e73b037ce6029647732547d760",
+      "after": "c2bc03f39a018b57cde6f6cccc4e8870a55851e73b037ce6029647732547d760",
+      "cmp": true,
+      "exit": 1,
+      "log": {
+        "path": "tmp/p6/chat-mistral-multi-id-run-bo/wrong-winner-red.log",
+        "sha256": "179419f48937f6337251b2227d1c432c5e7e86018931a5d49c7d44959801839e"
+      },
+      "finding": "Selecting firstResponse instead of best fails complete byte equality. Equal-score initial draft did not fail and is not accepted as a control."
+    },
+    "wrongDedup": {
+      "name": "wrong-dedup-red",
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "--test-name-pattern",
+        "independent old",
+        "./packages/providers/src/openai/__tests__/native-mistral-multi-id.test.ts"
+      ],
+      "pid": 22254,
+      "started": "2026-10-22T15:24:02.260Z",
+      "ended": "2026-10-22T15:24:10.162Z",
+      "exit": 1,
+      "log": "tmp/p6/chat-mistral-multi-id-run-bo/wrong-dedup-red.log",
+      "sha256": "bef28457c4d6478777000d5e0ea7f6b01d69a4a62ed59eb104112a6a8a03e161",
+      "restoration": {
+        "path": "packages/core/src/services/history/journal-response-slots.ts",
+        "cmp": true,
+        "sha256": "c2bc03f39a018b57cde6f6cccc4e8870a55851e73b037ce6029647732547d760"
+      },
+      "finding": "Dropping every response identity after the first fails independent complete-body assertions."
+    },
+    "decodedHolders": {
+      "log": {
+        "path": "tmp/p6/chat-mistral-multi-id-run-bo/retain-red.log",
+        "sha256": "e9388ea6fedaf48f504a15e3921c33601509e1e784f9f47f08af161d9e4215a5"
+      },
+      "finding": "Injected decoded-all-holder retention fails WeakRef <=9 with 68 live rows. Final normal retention test passes; this is not full retained heap acceptance."
+    }
+  },
+  "costs": [
+    {
+      "size": 40,
+      "dense": false,
+      "affected": 4,
+      "preads": 247,
+      "bytes": 845013,
+      "rowlens": 0,
+      "holders": 4,
+      "unaffected": 0,
+      "queries": 102,
+      "window": {
+        "retainedBytes": 16384,
+        "peakRetainedBytes": 16384,
+        "peakTransientBytes": 16384
+      },
+      "pid": 22668
+    },
+    {
+      "size": 40,
+      "dense": true,
+      "affected": 40,
+      "preads": 416,
+      "bytes": 984481,
+      "rowlens": 0,
+      "holders": 40,
+      "unaffected": 0,
+      "queries": 318,
+      "window": {
+        "retainedBytes": 32768,
+        "peakRetainedBytes": 32768,
+        "peakTransientBytes": 49152
+      },
+      "pid": 22668
+    },
+    {
+      "size": 4000,
+      "dense": false,
+      "affected": 4,
+      "preads": 456,
+      "bytes": 1978869,
+      "rowlens": 0,
+      "holders": 4,
+      "unaffected": 0,
+      "queries": 102,
+      "window": {
+        "retainedBytes": 32768,
+        "peakRetainedBytes": 32768,
+        "peakTransientBytes": 32768
+      },
+      "pid": 22668
+    },
+    {
+      "size": 4000,
+      "dense": true,
+      "affected": 4000,
+      "preads": 20642,
+      "bytes": 17226145,
+      "rowlens": 0,
+      "holders": 4000,
+      "unaffected": 0,
+      "queries": 24078,
+      "window": {
+        "retainedBytes": 32768,
+        "peakRetainedBytes": 32768,
+        "peakTransientBytes": 49152
+      },
+      "pid": 22668
+    }
+  ],
+  "bounds": {
+    "rowWindowRetained": 32768,
+    "rowWindowTransient": 49152,
+    "mappingCache": 65536,
+    "scope": "Warm request creation/planning/close after registration; physical preads count every dependency read. LENS headers are charged separately. holders counts kept conversions identified by reason markers, not both variants.",
+    "tailCapacity": "Seeds/frontiers/terminal state grows with current tail input; no arbitrary-tail constant-memory claim. Capacity stops at 4000 historical holders."
+  },
+  "productionBridge": {
+    "previous": {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/doc-closure-source-manifest.json",
+      "sha256": "c6a4e62575f0da22eade3ddc687fcbc00c49535cce5226da5b0b8f89e80c1c31"
+    },
+    "count": 9155,
+    "differences": [
+      {
+        "path": "packages/agents/src/core/__tests__/native-chat-continuation-runtime.test.ts",
+        "sha256": "875e559187eb430ae39fe38c349cbce29263d302169a8c60656b35506d2b6dd3",
+        "current": "0f1fc16b47bb82614ab1a629750f22a43a0b76c3b1e038aa6c4f5acb687da32a"
+      }
+    ],
+    "allProductionMatches": true,
+    "meaning": "Earlier source-bound provider/media/lifetime receipts remain for their own stated domains. This bridge does not relabel them as fresh executions."
+  },
+  "sourceManifest": [
+    {
+      "path": "packages/agents/src/core/__tests__/native-chat-continuation-runtime.test.ts",
+      "sha256": "0f1fc16b47bb82614ab1a629750f22a43a0b76c3b1e038aa6c4f5acb687da32a"
+    },
+    {
+      "path": "packages/providers/src/openai/__tests__/native-mistral-multi-id.test.ts",
+      "sha256": "68cea0faa30e00b00b112d8074cb76a1ed79f91dec1e1948bd48bfd071b983d3"
+    },
+    {
+      "path": "packages/providers/src/openai/__tests__/native-mistral-multi-id-cost.test.ts",
+      "sha256": "97440bd3e2a3cdf86189eb0f6893426f52276d97648d675e2bf85818b63ab218"
+    },
+    {
+      "path": "packages/providers/src/openai/__tests__/native-mistral-multi-id-pins.test.ts",
+      "sha256": "6f2d46b47ccbfc4fa9f7e849732f2c02942d45487c736c1e622abe5ac918e024"
+    },
+    {
+      "path": "packages/providers/src/openai/__tests__/native-mistral-multi-id-retention.test.ts",
+      "sha256": "a638603ddbab5ee9ea9f62b4f4851b28f8cf4b7a0f8a3eeb050be871db8d0f41"
+    },
+    {
+      "path": "packages/providers/src/openai/__tests__/support/mistral-multi-id-cases.ts",
+      "sha256": "92e7d19cca0b71627dec8b1fbf2335dda0b6ffd50700d4971d8774e34c144b69"
+    }
+  ],
+  "preservation": {
+    "files": 1204,
+    "declarations": 306,
+    "differences": []
+  },
+  "fixture": {
+    "path": "packages/core/src/services/history/__tests__/fixtures/normalization-units.jsonl",
+    "sha256": "4699c502e99b67ea231f47884bdc2109400c4138803a16a3e5ac7418e0fa8d9e"
+  },
+  "audit": {
+    "receipt": {
+      "path": "tmp/p6/chat-mistral-multi-id-run-bo/audit/findings.tsv",
+      "sha256": "6bed06c919135fd5cfe035de046647f581692aacb839950315d700f76fb12aaa"
+    },
+    "ownedFindings": []
+  },
+  "limits": [
+    "No new production bug or unsupported normal-history exception reproduced. This checkpoint closes only the executed functional domain.",
+    "A bounded sorted multi-displacement holder merge remains unimplemented. Before changing it, establish a legitimate multiple-changed-historical-ID fixture against the old oracle; do not imply the present multi-group inputs traverse that branch.",
+    "100000-call capacity, complete fresh retained-memory acceptance/traps and cold-fill fusion remain open.",
+    "Kimi/Responses/Anthropic migration, native log/dump and total live-byte accounting remain open. Existing #3917, old durable, blanket compaction/public fixture, tools170000 REDs and wider609 configuration errors were not retried or suppressed."
+  ],
+  "review": "review skipped per Andrew 2026-10-09",
+  "receipts": [
+    {
+      "path": "tmp/p6/chat-mistral-multi-id-run-bo/gates.json",
+      "sha256": "1d3d7945b2dcccec5d19f31b2a960fd007cc6bee53798f3c754bafb67c83d0f9"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-multi-id-run-bo/supplemental.json",
+      "sha256": "8d893bb00673b6a9e311a818c19dab6167a85d8b06f32e4e040a96ecc8c8acb6"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-multi-id-run-bo/final-public.jsonl",
+      "sha256": "4d43adc97741b2f75572e11e8a4a1ed4e3229b9f9fe861bf290e374d5979f47a"
+    }
+  ],
+  "restrictions": "No cleanup, .llxprt editing/staging, OCR, push, merge, default flip, skips, casts escape or enforcement weakening."
+}

@@ -1,3 +1,9 @@
+## Mistral multi-ID functional checkpoint, 2026-10-22
+
+[Multi-ID proof](PHASE6-SOURCE-BOUND-MISTRALMULTIID-PROOF.json) maps the new 2/17/129-group old-byte/length/per-unit-token tests, two-group first-holder removal with old pins, seven additional public two-POST continuation cases and 40/4,000-row physical cost cases. Current nonempty mappings match the old converter in the tested normal-history domain; the lazy-empty-ID correction remains covered. Wrong-winner and decoded-holder retention controls fail their intended assertions. This is coverage of existing production behavior, not a new mapping implementation. General multi-changed-ID replay complexity, complete retained memory, 100,000-call capacity, fused cold fill, other providers, log/dump and total live-byte accounting remain open. Phase 5/6/W26 and unrelated REDs are unchanged.
+
+---
+
 ## Dense Mistral read-cost checkpoint, 2026-10-22
 
 `ff2ae2078` fixes the measured dense single-changed-ID read amplification: 201,572 to 6,834 physical reads and 824,989,362 to 12,211,784 bytes at 4,000 affected input rows. The sparse 4,000-row case needs 35 reads rather than 157. [Dense-cost proof](PHASE6-SOURCE-BOUND-MISTRALDENSECOST-PROOF.json) binds cost/oracle tests, bounded ROW buffers and source-matching gates. Multi-changed-ID replay complexity, fused cold fill, full retained memory/traps, 100,000-call capacity, Kimi/Responses/Anthropic, log/dump and aggregate accounting remain open. Existing REDs are unchanged and unsuppressed; Phase 5 is not complete.

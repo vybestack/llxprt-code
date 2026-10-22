@@ -1,3 +1,9 @@
+## Mistral multi-ID functional checkpoint, 2026-10-22
+
+[Multi-ID proof](PHASE6-SOURCE-BOUND-MISTRALMULTIID-PROOF.json) records independent normal-history parity through 129 collision groups, two changed current mappings after first-holder removal with unchanged old pins, seven additional public two-POST cases, 4,000-holder physical costs and assertion-failing wrong-winner/decoded-holder controls. Production code is unchanged. The tests do not establish a bounded sorted merge for arbitrary multiple historical displacement chains; that existing branch still replays queries per label. W26 remains incomplete with full retained-memory/100,000-call capacity, cold-fill fusion, other providers, log/dump, accounting and existing separate REDs open. Review skipped per Andrew 2026-10-09.
+
+---
+
 ## Dense Mistral read-cost checkpoint, 2026-10-22
 
 `ff2ae2078` reduces the measured 4,000-row single-ID case from 201,572 reads / 824,989,362 bytes to 6,834 / 12,211,784. Sparse 4,000-row history uses 35 reads. [Dense-cost proof](PHASE6-SOURCE-BOUND-MISTRALDENSECOST-PROOF.json) records instrumentation, regression budgets, old-converter correctness and bounded ROW buffers. General multiple-displaced-ID replay, fused cold fill, full memory/traps, 100,000-call capacity, other provider migrations, log/dump and aggregate accounting remain open. W26 and Phase 5/6 are incomplete; existing memory/durable/compaction/public-fixture/type REDs remain unsuppressed.

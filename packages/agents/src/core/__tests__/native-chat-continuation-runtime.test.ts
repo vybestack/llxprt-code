@@ -24,6 +24,8 @@ import { createRuntimeTokenizerFactory } from '../../../../providers/src/composi
 import { operationFileCreates } from '../../compression/__tests__/support/operation-file-creates.js';
 import { loggingChatSession } from './support/chat-session-logging-fixture.js';
 import { occupyMistralFormats } from './support/occupied-mistral-formats.js';
+import { multiIdCase } from '../../../../providers/src/openai/__tests__/support/mistral-multi-id-cases.js';
+import { oldTailUnits } from '../../../../core/src/services/history/__tests__/support/tail-query-oracle.js';
 
 const calls: ContinuationToolCall[] = [
   {
@@ -61,8 +63,8 @@ function reply(second: boolean, streaming: boolean): Response {
 }
 describe('public native plain Chat automatic continuation HTTP', () => {
   const directory = useTempDir('native-chat-session-http-');
-  it.each(
-    ['gpt-4o', 'mistral-large-latest'].flatMap((model) =>
+  it.each([
+    ...['gpt-4o', 'mistral-large-latest'].flatMap((model) =>
       ['none', 'all', 'allButLast'].flatMap((strip) =>
         [false, true].flatMap((streaming) =>
           ['off', 'remove', 'summary'].map((purge) => ({
@@ -70,17 +72,34 @@ describe('public native plain Chat automatic continuation HTTP', () => {
             strip,
             streaming,
             purge,
+            multi: false,
           })),
         ),
       ),
     ),
-  )(
-    'continues $model/$strip/stream=$streaming/purge=$purge through public estimation, HTTP and durable commitment',
-    async ({ model, strip, streaming, purge }) => {
+    ...['none', 'all', 'allButLast'].flatMap((strip) =>
+      [false, true].map((streaming) => ({
+        model: 'mistral-large-latest',
+        strip,
+        streaming,
+        purge: 'off',
+        multi: true,
+      })),
+    ),
+    {
+      model: 'mistral-large-latest',
+      strip: 'allButLast',
+      streaming: true,
+      purge: 'summary',
+      multi: true,
+    },
+  ])(
+    'continues $model/$strip/stream=$streaming/purge=$purge/multi=$multi through public estimation, HTTP and durable commitment',
+    async ({ model, strip, streaming, purge, multi }) => {
       const toolFormat = model.includes('mistral') ? 'mistral' : 'openai';
       const requests: string[] = [];
       const contentLengths: number[] = [];
-      const prior = [
+      const basePrior = [
         {
           speaker: 'ai',
           blocks: [
@@ -116,6 +135,17 @@ describe('public native plain Chat automatic continuation HTTP', () => {
       ] satisfies Array<
         import('@vybestack/llxprt-code-core/services/history/IContent.js').IContent
       >;
+      const scenario = multiIdCase(8, true);
+      const prior = multi ? [...scenario.rows, ...basePrior] : basePrior;
+      const message = multi
+        ? {
+            speaker: 'tool' as const,
+            blocks: scenario.tail[0].blocks,
+          }
+        : {
+            speaker: 'human' as const,
+            blocks: [{ type: 'text' as const, text: 'new user 雪' }],
+          };
       const storedLengths: number[] = [];
       const requestOrdinals: bigint[][] = [];
       const estimates: number[] = [];
@@ -218,20 +248,19 @@ describe('public native plain Chat automatic continuation HTTP', () => {
         const reference = await prepareRequestBody(
           {
             contents: [],
-            requestRows: rowsSelection([
-              ...prior.map((row) => ({
-                ...row,
-                blocks: row.blocks.flatMap((block) => {
-                  if (block.type !== 'media') return [block];
-                  if (purge === 'remove') return [];
-                  return [{ type: 'text' as const, text: 'image summary' }];
-                }),
-              })),
-              {
-                speaker: 'human',
-                blocks: [{ type: 'text', text: 'new user 雪' }],
-              },
-            ]),
+            requestRows: rowsSelection(
+              await oldTailUnits(
+                prior.map((row) => ({
+                  ...row,
+                  blocks: row.blocks.flatMap((block) => {
+                    if (block.type !== 'media') return [block];
+                    if (purge === 'remove') return [];
+                    return [{ type: 'text' as const, text: 'image summary' }];
+                  }),
+                })),
+                [message],
+              ),
+            ),
             metadata: {},
             systemInstruction: 'system',
             invocation: createRuntimeInvocationContext({
@@ -256,12 +285,7 @@ describe('public native plain Chat automatic continuation HTTP', () => {
         let output = '';
         const receipt = await operationFileCreates(async () => {
           for await (const event of await chat.sendMessageStream(
-            {
-              message: {
-                speaker: 'human',
-                blocks: [{ type: 'text', text: 'new user 雪' }],
-              },
-            },
+            { message },
             'native-chat-session',
             {
               transcriptPath: () => recording.getFilePath() ?? undefined,
@@ -328,14 +352,15 @@ describe('public native plain Chat automatic continuation HTTP', () => {
           requests.map((body) => Buffer.byteLength(body)),
         );
         expect(requests[0].includes('old old old')).toBe(strip === 'none');
-        expect(JSON.parse(requests[0]).messages[3].reasoning_content).toBe(
-          strip === 'all'
-            ? undefined
-            : ['latest first', 'latest second'].join('\n'),
-        );
-        expect(storedLengths).toStrictEqual([3, 3]);
+        expect(
+          JSON.parse(requests[0]).messages.findLast(
+            (item: { reasoning_content?: string }) =>
+              item.reasoning_content === 'latest first\nlatest second',
+          )?.reasoning_content,
+        ).toBe(strip === 'all' ? undefined : 'latest first\nlatest second');
+        expect(storedLengths).toStrictEqual([prior.length, prior.length]);
         expect(requestOrdinals[1]).toStrictEqual(requestOrdinals[0]);
-        expect(requestOrdinals[0]).toHaveLength(3);
+        expect(requestOrdinals[0]).toHaveLength(prior.length);
         expect(JSON.parse(requests[0]).model).toBe(model);
         await history.waitForCommit();
         const committed = await history.openDumpSnapshot();
@@ -357,6 +382,9 @@ describe('public native plain Chat automatic continuation HTTP', () => {
             );
           }
           expect(committedCalls).toStrictEqual([
+            ...[...prior, message].flatMap((row) =>
+              row.blocks.filter((block) => block.type === 'tool_call'),
+            ),
             {
               type: 'tool_call',
               id: 'hist_tool_current',
@@ -364,14 +392,24 @@ describe('public native plain Chat automatic continuation HTTP', () => {
               parameters: { path: '雪', ratio: 1.25 },
             },
           ]);
-          expect(synthetic).toStrictEqual([]);
+          expect(synthetic).toStrictEqual(
+            [...prior, message].flatMap((row) =>
+              row.blocks.filter((block) => block.type === 'tool_response'),
+            ),
+          );
           const ordinals: bigint[] = [];
           for await (const row of (await recording.session()).rows())
             ordinals.push(row.entry.chronologySeq);
-          expect(ordinals).toHaveLength(5);
-          expect(ordinals.slice(0, 3)).toStrictEqual(requestOrdinals[0]);
-          expect(ordinals[3]).toBeGreaterThan(ordinals[2]);
-          expect(ordinals[4]).toBeGreaterThan(ordinals[3]);
+          expect(ordinals).toHaveLength(prior.length + 2);
+          expect(ordinals.slice(0, prior.length)).toStrictEqual(
+            requestOrdinals[0],
+          );
+          expect(ordinals[prior.length]).toBeGreaterThan(
+            ordinals[prior.length - 1],
+          );
+          expect(ordinals[prior.length + 1]).toBeGreaterThan(
+            ordinals[prior.length],
+          );
           if (process.env.CONTINUATION_PUBLIC_RECEIPT !== undefined)
             appendFileSync(
               process.env.CONTINUATION_PUBLIC_RECEIPT,
@@ -380,6 +418,7 @@ describe('public native plain Chat automatic continuation HTTP', () => {
                   strip,
                   streaming,
                   purge,
+                  multi,
                   estimates,
                   requestOrdinals,
                   ordinals,
@@ -394,10 +433,11 @@ describe('public native plain Chat automatic continuation HTTP', () => {
               ) + '\n',
             );
           expect(messages).toStrictEqual([
+            ...(multi ? scenario.rows.map((row) => `${row.speaker}:`) : []),
             'ai:older answer',
             purge === 'summary' ? 'human:priorimage summary' : 'human:prior',
             'ai:answer',
-            'human:new user 雪',
+            multi ? 'tool:' : 'human:new user 雪',
             'ai:terminal 雪',
           ]);
         } finally {
