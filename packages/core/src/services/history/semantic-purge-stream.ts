@@ -1,5 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { isDeepStrictEqual } from 'node:util';
+import {
+  nativePurgeProviderRequest,
+  type ProviderSnapshotOpener,
+} from './native-purge-provider-request.js';
 import { NativeSemanticPurgeBase } from './semantic-purge-native-base.js';
 import { HistoryReaderScope } from './historyReaderScope.js';
 import { historyMutationFailure } from './historyMutationEffects.js';
@@ -71,6 +75,24 @@ export class SemanticPurgeStreamTransaction {
       preImageBoundary === undefined
         ? undefined
         : new SemanticMediaPurgeBoundaryIdentity(preImageBoundary);
+  }
+
+  providerSnapshotOpener(
+    explicitCacheWrite: boolean,
+  ): ProviderSnapshotOpener | undefined {
+    this.assertOpen();
+    const open = nativePurgeProviderRequest(
+      this.native,
+      explicitCacheWrite,
+      this.preImageBoundary,
+      this.preImageBoundaryIdentity,
+    );
+    return open === undefined
+      ? undefined
+      : (tail, options) => {
+          this.assertOpen();
+          return open(tail, options);
+        };
   }
 
   requestRows(

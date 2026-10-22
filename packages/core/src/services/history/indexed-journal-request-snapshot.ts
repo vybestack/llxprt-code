@@ -8,6 +8,7 @@ import {
   type MistralUnitIds,
 } from './journal-mistral-ids.js';
 import { JournalFormatError } from '../../journal/errors.js';
+import type { JournalRequestProjection } from './journal-request-projection.js';
 import type { NormalizedFamily, OccurrenceKind } from '../../journal/idKeys.js';
 import {
   JournalRequestOccurrences,
@@ -64,10 +65,11 @@ export class IndexedJournalRequestSnapshot {
   static async create(
     snapshot: VersionSnapshot,
     tail: readonly IContent[] = [],
+    projection?: JournalRequestProjection,
   ): Promise<IndexedJournalRequestSnapshot> {
     const release = snapshot.hold();
     try {
-      const source = await JournalTailSource.create(snapshot, tail);
+      const source = await JournalTailSource.create(snapshot, tail, projection);
       const overlay = await indexedOverlay(snapshot, source);
       return new IndexedJournalRequestSnapshot(
         snapshot,

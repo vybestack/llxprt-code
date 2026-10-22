@@ -2,8 +2,10 @@
 import type { BlockPosition, IdFact } from '../../journal/idFactCodec.js';
 import type { RowEntry } from '../../journal/rowEntry.js';
 import type { RowIds, StoredRow } from '../../journal/rowReads.js';
+import type { IContent } from './IContent.js';
 
 export interface JournalResponseSource {
+  readonly header?: (row: IContent, entry: RowEntry) => IContent;
   readonly facts: { fact(rawId: string): Promise<IdFact | undefined> };
   entries(): AsyncGenerator<RowEntry>;
   entryByLabel(label: bigint): Promise<RowEntry | undefined>;

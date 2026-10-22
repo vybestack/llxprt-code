@@ -37,70 +37,93 @@ describe('native normalization through public chat', () => {
 
   useNativePrefixBackend();
   const directory = useTempDir('native-normalization-chat-');
-  it('commits the model response without normalization files', async () => {
-    const { agent, cleanup } = await buildAgent('multi-turn-text.jsonl', {
-      workingDir: directory(),
-    });
-    try {
-      await drain(agent.stream('initialize session'));
-      await agent.setHistory([
-        {
-          speaker: 'human',
-          blocks: [
-            { type: 'text', text: 'question' },
-            { type: 'tool_call', id: 'cross', name: 'read', parameters: {} },
-          ],
-        },
-        {
-          speaker: 'ai',
-          blocks: [
-            { type: 'tool_call', id: 'cross', name: 'read', parameters: {} },
-            { type: 'tool_call', id: 'orphan', name: 'read', parameters: {} },
-          ],
-        },
-        {
-          speaker: 'tool',
-          blocks: [
-            {
-              type: 'tool_response',
-              callId: 'cross',
-              toolName: 'read',
-              result: 'answer',
-              isComplete: true,
-            },
-          ],
-        },
-      ]);
-      const history = internalAgentClient(agent).getHistoryService();
-      if (history === null) throw new Error('Missing native public history');
-      const createDirectory = fs.mkdtempSync;
-      const denyNormalization = spyOn(fs, 'mkdtempSync').mockImplementation(
-        normalizationCreationGuard(createDirectory),
-      );
+  it.each([false, true])(
+    'commits the model response without normalization files with purge=%s',
+    async (purge) => {
+      const { agent, cleanup } = await buildAgent('multi-turn-text.jsonl', {
+        workingDir: directory(),
+      });
       try {
-        const receipt = await operationFileCreates(async () => {
-          await drain(agent.stream('continue'));
-          await history.waitForCommit();
-        });
-        expect(receipt.files).toStrictEqual([]);
+        await drain(agent.stream('initialize session'));
+        await agent.setHistory([
+          {
+            speaker: 'human',
+            blocks: [
+              { type: 'text', text: 'question' },
+              {
+                type: 'media',
+                mimeType: 'image/png',
+                encoding: 'base64',
+                data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl9sAAAAASUVORK5CYII=',
+              },
+              { type: 'tool_call', id: 'cross', name: 'read', parameters: {} },
+            ],
+          },
+          {
+            speaker: 'ai',
+            blocks: [
+              { type: 'tool_call', id: 'cross', name: 'read', parameters: {} },
+              { type: 'tool_call', id: 'orphan', name: 'read', parameters: {} },
+            ],
+          },
+          {
+            speaker: 'tool',
+            blocks: [
+              {
+                type: 'tool_response',
+                callId: 'cross',
+                toolName: 'read',
+                result: 'answer',
+                isComplete: true,
+              },
+            ],
+          },
+        ]);
+        if (purge) {
+          await agent.session.setRecording({ enabled: true });
+          agent.setEphemeralSetting('media.semantic-purge', 'remove');
+        }
+        const history = internalAgentClient(agent).getHistoryService();
+        if (history === null) throw new Error('Missing native public history');
+        const createDirectory = fs.mkdtempSync;
+        const denyNormalization = spyOn(fs, 'mkdtempSync').mockImplementation(
+          normalizationCreationGuard(createDirectory),
+        );
+        try {
+          const receipt = await operationFileCreates(async () => {
+            await drain(agent.stream('continue'));
+            await history.waitForCommit();
+          });
+          expect(
+            receipt.files.map((path) =>
+              /\/media-live\/[^/]+\/locks\/store\.lock$/.test(path),
+            ),
+          ).toStrictEqual(purge ? [true] : []);
+          expect(
+            receipt.directories.filter((path) =>
+              path.includes('provider-normalization-'),
+            ),
+          ).toStrictEqual([]);
+        } finally {
+          denyNormalization.mockRestore();
+        }
+        const rows = await collectAgentHistory(agent);
+        expect(rows[0].blocks.some((block) => block.type === 'media')).toBe(
+          !purge,
+        );
+        expect(rows[0].metadata?.semanticMediaPurgeFrontier !== undefined).toBe(
+          purge,
+        );
+        const last = rows[rows.length - 1];
+        expect(last.speaker).toBe('ai');
         expect(
-          receipt.directories.filter((path) =>
-            path.includes('provider-normalization-'),
+          last.blocks.some(
+            (block) => block.type === 'text' && block.text.length > 0,
           ),
-        ).toStrictEqual([]);
+        ).toBe(true);
       } finally {
-        denyNormalization.mockRestore();
+        await cleanup();
       }
-      const rows = await collectAgentHistory(agent);
-      const last = rows[rows.length - 1];
-      expect(last?.speaker).toBe('ai');
-      expect(
-        last?.blocks.some(
-          (block) => block.type === 'text' && block.text.length > 0,
-        ),
-      ).toBe(true);
-    } finally {
-      await cleanup();
-    }
-  });
+    },
+  );
 });

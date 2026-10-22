@@ -48,8 +48,6 @@
 
 import * as fs from 'node:fs';
 import { oldProviderRequest } from './old-provider-request.js';
-import type { HistoryPrepareCuratedRequest } from './historyStorePort.js';
-import type { ProviderRequestSnapshot } from './provider-request-snapshot.js';
 import { oldCompressionInput } from './oldCompressionInput.js';
 import {
   openHistoryDumpSnapshot,
@@ -104,7 +102,6 @@ import type {
   HistoryProfileReplacementRequest,
   HistoryPublicationScope,
   HistoryDensityRequest,
-  HistoryMergeRequest,
   HistoryRemoveTailRequest,
   HistoryRepair,
   HistoryRepairRequest,
@@ -193,11 +190,7 @@ import {
 const DIRECT_DELIVERY_LINE_LIMIT = 4;
 
 export class HistoryJournalStore implements HistoryStorePort {
-  prepareCurated(
-    request: HistoryPrepareCuratedRequest,
-  ): Promise<ProviderRequestSnapshot> {
-    return oldProviderRequest(this, request);
-  }
+  prepareCurated = oldProviderRequest.bind(undefined, this);
 
   private binding: JournalBinding;
   private readonly fanout = new HistoryRecorderFanout();
@@ -464,9 +457,7 @@ export class HistoryJournalStore implements HistoryStorePort {
     );
   }
 
-  mergeFrom(request: HistoryMergeRequest): Promise<void> {
-    return mergeOldStores(this, request);
-  }
+  mergeFrom = mergeOldStores.bind(undefined, this);
 
   optimizeDensity(request: HistoryDensityRequest): Promise<void> {
     return this.withMutationSnapshot(request.mutate);

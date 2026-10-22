@@ -128,6 +128,7 @@ async function openSemanticPurge(
   const snapshot = captured.snapshot;
   if (snapshot === undefined) return undefined;
   return {
+    requestSnapshot: snapshot.requestSnapshot,
     length: snapshot.length,
     streamRows: (signal) => snapshot.streamRows(signal),
     readRow: (index) => snapshot.readRow(index),

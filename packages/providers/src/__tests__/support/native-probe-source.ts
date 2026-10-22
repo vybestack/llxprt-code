@@ -89,8 +89,8 @@ export class NativeProbeSources {
       hold: () => held,
       selection: {
         count: selection.count,
-        readAt: (index, signal) => {
-          const row = selection.readAt(index, signal);
+        readAt: async (index, signal) => {
+          const row = await selection.readAt(index, signal);
           sampler?.trackRow(row);
           return row;
         },

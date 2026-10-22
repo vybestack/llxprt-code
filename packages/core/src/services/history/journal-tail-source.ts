@@ -20,6 +20,11 @@ import { encodeContentRow } from './journalRowCodec.js';
 import { planSourceRowOccurrences } from './source-fact-planner.js';
 import type { JournalResponseSource } from './journal-response-source.js';
 import { callTarget } from './journal-reconstruction.js';
+import {
+  JournalProjectedSource,
+  type JournalRequestBase,
+  type JournalRequestProjection,
+} from './journal-request-projection.js';
 
 interface TailRow {
   readonly entry: RowEntry;
@@ -40,11 +45,18 @@ function tailRow(
   });
   return {
     entry: entryForNewRow(encoded, 0),
-    stored: {
-      header: encoded.header,
-      rawIds: draft.ids.map((id) => id.rawId),
-      meta: draft.meta,
-      blocks: draft.blocks.map((block) => block.bytes),
+    get stored(): StoredRow {
+      const current = encodeContentRow(row, { owner: 0 });
+      const record = encodeRowDraft(label, {
+        ...current,
+        flags: current.flags | ROW_FLAG.curated,
+      });
+      return {
+        header: record.header,
+        rawIds: current.ids.map((id) => id.rawId),
+        meta: current.meta,
+        blocks: current.blocks.map((block) => block.bytes),
+      };
     },
     origins: row.blocks.map((block) => {
       let id = origins.get(block);
@@ -63,7 +75,7 @@ export class JournalTailSource implements JournalResponseSource {
   readonly facts = {
     fact: async (rawId: string): Promise<IdFact | undefined> => {
       this.snapshot.requireOpen();
-      return this.overlay.get(rawId) ?? this.snapshot.facts.fact(rawId);
+      return this.overlay.get(rawId) ?? this.base.facts.fact(rawId);
     },
   };
 
@@ -71,6 +83,8 @@ export class JournalTailSource implements JournalResponseSource {
     private readonly snapshot: VersionSnapshot,
     tail: readonly IContent[],
     private readonly firstLabel: bigint,
+    private readonly base: JournalRequestBase,
+    private readonly projection?: JournalRequestProjection,
   ) {
     const origins = new WeakMap<ContentBlock, number>();
     let next = 0;
@@ -82,12 +96,17 @@ export class JournalTailSource implements JournalResponseSource {
   static async create(
     snapshot: VersionSnapshot,
     tail: readonly IContent[],
+    projection?: JournalRequestProjection,
   ): Promise<JournalTailSource> {
     snapshot.requireOpen();
     const source = new JournalTailSource(
       snapshot,
       tail,
       snapshot.version?.nextLabel ?? 1n,
+      projection === undefined
+        ? snapshot
+        : await JournalProjectedSource.create(snapshot, projection),
+      projection,
     );
     for (const row of source.tailRows) {
       const { header, rawIds } = row.stored;
@@ -111,6 +130,8 @@ export class JournalTailSource implements JournalResponseSource {
   }
 
   readonly isTail = (label: bigint): boolean => label >= this.firstLabel;
+  readonly header = (row: IContent, entry: RowEntry): IContent =>
+    this.isTail(entry.label) ? row : (this.base.header?.(row, entry) ?? row);
 
   hasPendingId(rawId: string): boolean {
     this.snapshot.requireOpen();
@@ -119,6 +140,7 @@ export class JournalTailSource implements JournalResponseSource {
 
   affectedJournalLabels(): readonly bigint[] {
     const labels = new Set<bigint>();
+    if (this.projection?.label !== undefined) labels.add(this.projection.label);
     for (const [id, fact] of this.overlay) {
       if (id === '') continue;
       const target = callTarget(fact);
@@ -137,9 +159,7 @@ export class JournalTailSource implements JournalResponseSource {
   async nextCuratedAfter(label: bigint): Promise<RowEntry | undefined> {
     if (this.isTail(label))
       return this.tailRows[Number(label - this.firstLabel) + 1]?.entry;
-    return (
-      (await this.snapshot.nextCuratedAfter(label)) ?? this.tailRows[0]?.entry
-    );
+    return (await this.base.nextCuratedAfter(label)) ?? this.tailRows[0]?.entry;
   }
 
   private tailAt(label: bigint): TailRow {
@@ -151,18 +171,18 @@ export class JournalTailSource implements JournalResponseSource {
   }
 
   async *entries(): AsyncGenerator<RowEntry> {
-    yield* this.snapshot.entries();
+    yield* this.base.entries();
     for (const row of this.tailRows) yield row.entry;
   }
 
   entryByLabel(label: bigint): Promise<RowEntry | undefined> {
     return this.isTail(label)
       ? Promise.resolve(this.tailAt(label).entry)
-      : this.snapshot.entryByLabel(label);
+      : this.base.entryByLabel(label);
   }
 
   readIds(entry: RowEntry): Promise<RowIds> {
-    if (!this.isTail(entry.label)) return this.snapshot.readIds(entry);
+    if (!this.isTail(entry.label)) return this.base.readIds(entry);
     const { header, rawIds } = this.tailAt(entry.label).stored;
     return Promise.resolve({ header, rawIds });
   }
@@ -170,11 +190,11 @@ export class JournalTailSource implements JournalResponseSource {
   readRow(entry: RowEntry): Promise<StoredRow> {
     return this.isTail(entry.label)
       ? Promise.resolve(this.tailAt(entry.label).stored)
-      : this.snapshot.readRow(entry);
+      : this.base.readRow(entry);
   }
 
   async readBlock(entry: RowEntry, index: number): Promise<Uint8Array> {
-    if (!this.isTail(entry.label)) return this.snapshot.readBlock(entry, index);
+    if (!this.isTail(entry.label)) return this.base.readBlock(entry, index);
     const blocks = this.tailAt(entry.label).stored.blocks;
     if (!Number.isInteger(index) || index < 0 || index >= blocks.length)
       throw new JournalFormatError('Tail source block is absent');
@@ -182,7 +202,7 @@ export class JournalTailSource implements JournalResponseSource {
   }
 
   async readMetadata(entry: RowEntry): Promise<StoredRow> {
-    if (!this.isTail(entry.label)) return this.snapshot.readMetadata(entry);
+    if (!this.isTail(entry.label)) return this.base.readMetadata(entry);
     return { ...this.tailAt(entry.label).stored, blocks: [] };
   }
 

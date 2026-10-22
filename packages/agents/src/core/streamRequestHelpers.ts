@@ -63,6 +63,9 @@ export function streamSemanticPurgeRequest(
 ): AsyncIterable<IContent> | undefined {
   if (attempt === undefined) return undefined;
   return {
+    ...(attempt.prepareProviderSnapshot === undefined
+      ? {}
+      : { prepareProviderSnapshot: attempt.prepareProviderSnapshot }),
     async *[Symbol.asyncIterator](): AsyncGenerator<IContent, void, unknown> {
       signal?.throwIfAborted();
       for await (const row of attempt.requestHistory.streamRows(signal)) {

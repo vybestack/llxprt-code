@@ -59,9 +59,12 @@ export async function indexedOverlay(
       throw new JournalFormatError(
         'Tail target is absent from the pinned tree',
       );
+    const projected = await source.entryByLabel(label);
+    if (projected === undefined)
+      throw new JournalFormatError('Projected request row is absent');
     const row = await overlayRow(
       source,
-      entry,
+      projected,
       (await snapshot.unitsBelow(label)) + delta,
       unitCount(entry),
     );

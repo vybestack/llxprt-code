@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent } from './IContent.js';
+import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 import { HistoryReaderScope } from './historyReaderScope.js';
 import type { DetachedHistorySink } from './detachedHistoryMutation.js';
@@ -16,6 +17,7 @@ import {
 } from './semantic-media-purge.js';
 
 export interface SemanticPurgeSnapshot extends SemanticPurgeRowSource {
+  readonly requestSnapshot?: VersionSnapshot;
   readRow(index: number): Promise<IContent>;
   isCurrent(): boolean;
   restore(): Promise<void>;
@@ -127,6 +129,10 @@ export class NativeSemanticPurgeCandidate
     return this.removed && index >= this.location.contentIndex
       ? index + 1
       : index;
+  }
+
+  get removesBlock(): boolean {
+    return this.options.mode === 'remove';
   }
 
   private transformed(

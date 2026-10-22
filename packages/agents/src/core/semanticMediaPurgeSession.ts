@@ -17,6 +17,7 @@ import {
 } from '@vybestack/llxprt-code-core/services/history/semantic-purge-stream.js';
 import type { SemanticPurgeRowSource } from '@vybestack/llxprt-code-core/services/history/semantic-purge-disk-rows.js';
 import type { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
+import type { ProviderSnapshotOpener } from '@vybestack/llxprt-code-core/services/history/native-purge-provider-request.js';
 import { historyMutationFailure } from '@vybestack/llxprt-code-core/services/history/historyMutationEffects.js';
 
 export type SemanticMediaPurgeMode = 'off' | 'remove' | 'summary';
@@ -67,6 +68,7 @@ function matchesRequiredCacheWrite(
 }
 
 export class SemanticMediaPurgeAttempt {
+  readonly prepareProviderSnapshot: ProviderSnapshotOpener | undefined;
   readonly candidateHistory: SemanticPurgeRowSource;
   readonly requestHistory: SemanticPurgeRowSource;
   readonly preparedBoundary: PreparedSemanticMediaPurgeBoundary | undefined;
@@ -82,6 +84,9 @@ export class SemanticMediaPurgeAttempt {
     private readonly requiresExplicitCacheWrite: boolean,
     private readonly releaseAttempt: () => void,
   ) {
+    this.prepareProviderSnapshot = transaction.providerSnapshotOpener(
+      requiresExplicitCacheWrite,
+    );
     this.candidateHistory = transaction.candidate;
     this.requestHistory = requiresExplicitCacheWrite
       ? Object.freeze({

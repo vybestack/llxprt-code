@@ -111,7 +111,7 @@ async function verifyEdge(
   let rowsRead = 0;
   const selection = {
     count: fixture.selection.count,
-    close: (): void => fixture.selection.close(),
+    close: () => fixture.selection.close(),
     readAt: (index: number, signal?: AbortSignal) => {
       rowsRead += 1;
       return fixture.selection.readAt(index, signal);

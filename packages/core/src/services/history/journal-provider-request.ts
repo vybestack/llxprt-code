@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
+import type { JournalRequestProjection } from './journal-request-projection.js';
 import type { IContent } from './IContent.js';
 import { HistoryReaderScope } from './historyReaderScope.js';
 import { IndexedJournalRequestSnapshot } from './indexed-journal-request-snapshot.js';
@@ -18,7 +19,7 @@ export class JournalProviderRequestSnapshot implements ProviderRequestSnapshot {
   };
 
   private constructor(
-    private readonly snapshot: VersionSnapshot,
+    private readonly release: () => void | Promise<void>,
     readonly indexed: IndexedJournalRequestSnapshot,
     private readonly signal?: AbortSignal,
     private readonly ownership?: RowOwnership,
@@ -30,21 +31,27 @@ export class JournalProviderRequestSnapshot implements ProviderRequestSnapshot {
     snapshot: VersionSnapshot,
     tail: readonly IContent[],
     options: ProviderCuratedStreamOptions,
+    projection?: JournalRequestProjection,
+    release: () => void | Promise<void> = () => snapshot.close(),
   ): Promise<JournalProviderRequestSnapshot> {
     let indexed: IndexedJournalRequestSnapshot | undefined;
     try {
       options.signal?.throwIfAborted();
-      indexed = await IndexedJournalRequestSnapshot.create(snapshot, tail);
+      indexed = await IndexedJournalRequestSnapshot.create(
+        snapshot,
+        tail,
+        projection,
+      );
       options.signal?.throwIfAborted();
       return new JournalProviderRequestSnapshot(
-        snapshot,
+        release,
         indexed,
         options.signal,
         options.ownership,
       );
     } catch (error) {
       const failures: unknown[] = [];
-      for (const close of [() => indexed?.close(), () => snapshot.close()]) {
+      for (const close of [() => indexed?.close(), release]) {
         try {
           await close();
         } catch (failure) {
@@ -91,10 +98,19 @@ export class JournalProviderRequestSnapshot implements ProviderRequestSnapshot {
         await source.return();
       },
       next: async (value) => {
-        this.requireOpen(signal);
-        const result = await source.next(value);
-        this.requireOpen(signal);
-        return result;
+        try {
+          this.requireOpen(signal);
+          const result = await source.next(value);
+          this.requireOpen(signal);
+          return result;
+        } catch (error) {
+          try {
+            await source.return();
+          } catch (cleanup) {
+            throw historyMutationFailure(error, [cleanup]);
+          }
+          throw error;
+        }
       },
       return: (value) => source.return(value),
       throw: (error) => source.throw(error),
@@ -128,7 +144,7 @@ export class JournalProviderRequestSnapshot implements ProviderRequestSnapshot {
     for (const close of [
       () => this.readers.close(),
       () => this.indexed.close(),
-      () => this.snapshot.close(),
+      this.release,
     ]) {
       try {
         await close();

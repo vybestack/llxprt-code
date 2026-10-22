@@ -101,7 +101,8 @@ export async function responsePartMetadata(
         reason: 'extracted_tool_call_from_tool_message',
       },
     };
-  return decodeStoredRow(await snapshot.readMetadata(part.entry));
+  const row = decodeStoredRow(await snapshot.readMetadata(part.entry));
+  return snapshot.header?.(row, part.entry) ?? row;
 }
 
 export async function responseBlockAt(

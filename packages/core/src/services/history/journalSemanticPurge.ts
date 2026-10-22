@@ -20,6 +20,7 @@ export async function openJournalSemanticPurge(
   const mutation = store.mutationMark();
   let closed = false;
   return {
+    requestSnapshot: snapshot,
     length: dump.rawLength,
     readRow: async (index) => {
       const row = await dump.readRawRow(index);
