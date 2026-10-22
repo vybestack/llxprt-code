@@ -25,7 +25,10 @@ export interface RowFormatSettings {
   readonly mediaPdfEnabled: boolean;
   readonly unsupportedMedia: 'notice' | 'reject';
   readonly outputLimits: Readonly<OutputLimitConfig> | null;
-  readonly chat?: { readonly includeInContext: boolean };
+  readonly chat?: {
+    readonly includeInContext: boolean;
+    readonly toolFormat?: 'openai';
+  };
   readonly anthropic?: {
     readonly cache: 'off' | '5m' | '1h';
     readonly imageBudget: {

@@ -4,7 +4,6 @@ import type {
   IContent,
   MediaBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { RowFormatSettings } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
 import { JournalFormatError } from '@vybestack/llxprt-code-core/journal/errors.js';
 import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-tools';
@@ -38,7 +37,7 @@ function messagesOf(
       processAssistantMessage(
         row,
         settings.chat?.includeInContext ?? true,
-        undefined,
+        settings.chat?.toolFormat,
         (call) => normalizeToOpenAIToolId(call.id),
         normalizeToolCallArguments,
       ),
@@ -81,16 +80,15 @@ function nextCallIds(
 }
 
 export async function* nativeChatMessages(
-  rows: ProviderRequestRows,
+  rows: AsyncIterable<IContent>,
   settings: RowFormatSettings,
   strip: unknown,
   lastThinking: number,
-  signal?: AbortSignal,
 ): AsyncGenerator<Uint8Array> {
   let lastIds: readonly string[] = [];
   let pending: MediaBlock[] = [];
   let index = 0;
-  for await (const source of rows.openReader(signal)) {
+  for await (const source of rows) {
     if (pending.length !== 0) {
       if (source.speaker === 'tool')
         throw new JournalFormatError(

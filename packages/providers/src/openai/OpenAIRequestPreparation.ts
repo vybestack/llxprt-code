@@ -522,7 +522,13 @@ export async function prepareRequest(
   const nativeRows = options.requestRows;
   const body =
     nativeRows?.native !== undefined && !usesToolIdStore(detectedFormat)
-      ? await prepareNativePlainRequest(envelope, nativeRows, options, use)
+      ? await prepareNativePlainRequest(
+          envelope,
+          nativeRows,
+          options,
+          use,
+          rowInput,
+        )
       : await spoolChatBody(envelope, options, detectedFormat, rowInput, use);
   return {
     model,

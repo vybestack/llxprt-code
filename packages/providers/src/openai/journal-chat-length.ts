@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type OpenAI from 'openai';
+import { measurableChatRow } from './chat-measure-media.js';
 import { JournalFormatError } from '@vybestack/llxprt-code-core/journal/errors.js';
 import {
   rowFormatKey,
@@ -48,7 +49,10 @@ function factsOf(
   settings: RowFormatSettings,
   previous: readonly string[],
 ): { facts: ChatUnitLengthFacts; lastIds: readonly string[] } {
-  const unit = stripped ? removeThinkingFromContent(row) : row;
+  const measured = measurableChatRow(
+    stripped ? removeThinkingFromContent(row) : row,
+  );
+  const unit = measured.row;
   const pending: MediaBlock[] = [];
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
   if (unit.speaker === 'human') {
@@ -58,7 +62,7 @@ function factsOf(
     const message = processAssistantMessage(
       unit,
       settings.chat?.includeInContext ?? true,
-      undefined,
+      settings.chat?.toolFormat,
       (call) => normalizeToOpenAIToolId(call.id),
       normalizeToolCallArguments,
     );
@@ -84,7 +88,7 @@ function factsOf(
       else if (message.role !== 'assistant' && message.role !== 'tool')
         lastIds = [];
     }
-    return { bytes: jsonBytes(message), dropped };
+    return { bytes: jsonBytes(message) + measured.userBytes, dropped };
   });
   return {
     facts: {
@@ -93,7 +97,8 @@ function factsOf(
       media: pending.map((block) => {
         const part = convertBlockToPart(block);
         return {
-          bytes: part === null ? null : jsonBytes(part),
+          bytes:
+            part === null ? null : jsonBytes(part) + measured.mediaBytes(block),
           video: classifyMediaBlock(block) === 'video',
         };
       }),
@@ -134,14 +139,6 @@ async function measure(
   for await (const plan of journalEntryPlans(source, entry)) {
     const blocks: IContent['blocks'] = [];
     for await (const block of plan.openBlocks()) {
-      if (
-        block.type === 'media' &&
-        block.encoding !== 'base64' &&
-        block.encoding !== 'url'
-      )
-        throw new JournalFormatError(
-          'Stored-media reference length measurement requires media projection',
-        );
       if (block.type === 'tool_call' && plan.header.speaker !== 'ai')
         throw new JournalFormatError(
           'Non-AI tool-call length facts need indexed global call presence',

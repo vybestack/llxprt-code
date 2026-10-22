@@ -20,6 +20,8 @@ export class JournalProviderRequestSnapshot implements ProviderRequestSnapshot {
     'Provider request snapshot is closed',
   );
   private closing: Promise<void> | undefined;
+  private formatSnapshot: VersionSnapshot | undefined;
+  private formatQueue: Promise<void> = Promise.resolve();
   private readonly onAbort = (): void => {
     void this.close().catch(() => undefined);
   };
@@ -47,19 +49,37 @@ export class JournalProviderRequestSnapshot implements ProviderRequestSnapshot {
     consume: (snapshot: VersionSnapshot) => T | Promise<T>,
   ): Promise<T> {
     this.requireOpen();
-    if (hasNativeRequestFormat(this.snapshot, registration))
-      return this.indexed.withHeld(() => consume(this.snapshot), this.signal);
-    if (this.prepareFormat === undefined)
-      throw new Error(
-        'Native request format needs a persistent fill before this pin',
+    return this.readers.read(() => {
+      const run = this.formatQueue.then(() =>
+        this.consumeFormat(registration, consume),
       );
-    const measured = await this.prepareFormat(this.snapshot, registration);
-    try {
-      this.requireOpen();
-      return await this.indexed.withHeld(() => consume(measured), this.signal);
-    } finally {
-      await measured.close();
+      this.formatQueue = run.then(
+        () => undefined,
+        () => undefined,
+      );
+      return run;
+    });
+  }
+
+  private async consumeFormat<T>(
+    registration: RowFormatRegistration,
+    consume: (snapshot: VersionSnapshot) => T | Promise<T>,
+  ): Promise<T> {
+    this.requireOpen();
+    let snapshot = this.formatSnapshot ?? this.snapshot;
+    if (!hasNativeRequestFormat(snapshot, registration)) {
+      if (this.prepareFormat === undefined)
+        throw new Error(
+          'Native request format needs a persistent fill before this pin',
+        );
+      const measured = await this.prepareFormat(snapshot, registration);
+      const previous = this.formatSnapshot;
+      this.formatSnapshot = measured;
+      snapshot = measured;
+      await previous?.close();
     }
+    this.requireOpen();
+    return this.indexed.withHeld(() => consume(snapshot), this.signal);
   }
 
   static async create(
@@ -181,6 +201,7 @@ export class JournalProviderRequestSnapshot implements ProviderRequestSnapshot {
     const failures: unknown[] = [];
     for (const close of [
       () => this.readers.close(),
+      () => this.formatSnapshot?.close(),
       () => this.indexed.close(),
       this.release,
     ]) {

@@ -4,6 +4,7 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { operationFileCreates } from '../../../agents/src/compression/__tests__/support/operation-file-creates.js';
 import { journalSendFixture } from './support/journal-send-fixture.js';
+import { normalizedRows } from './support/frozenWire/normalizedRows.js';
 import { localWireHashSink } from './support/local-wire-hash-sink.js';
 import {
   buildHistoryCallOptions,
@@ -55,15 +56,37 @@ const toolRows: readonly IContent[] = [
 async function verify(
   rows: readonly IContent[],
   ephemerals: Record<string, unknown> = {},
+  expectedRows: readonly IContent[] = rows,
 ): Promise<number> {
-  const route = plainRoute();
+  const base = plainRoute();
+  const route =
+    ephemerals.streaming === 'enabled'
+      ? {
+          ...base,
+          respond: () =>
+            new Response(
+              `data: ${JSON.stringify({ id: 'chat', object: 'chat.completion.chunk', created: 0, model: 'gpt-4o', choices: [{ index: 0, delta: { role: 'assistant', content: 'ok' }, finish_reason: null }] })}
+
+data: [DONE]
+
+`,
+              { headers: { 'content-type': 'text/event-stream' } },
+            ),
+        }
+      : base;
   const shape = {
     id: 'plain-direct',
     description: 'native HTTP',
     rows,
     ephemerals,
   };
-  const expected = recordOf(await sendThroughRoute(route, shape, 'rows'));
+  const expected = recordOf(
+    await sendThroughRoute(
+      route,
+      { ...shape, rows: await normalizedRows(expectedRows) },
+      'rows',
+    ),
+  );
   const fixture = await journalSendFixture(rows);
   const sink = await localWireHashSink(route);
   try {
@@ -91,8 +114,41 @@ async function verify(
   }
 }
 describe('native plain Chat direct production send', () => {
+  it('streams a native request into a real streaming Chat response without files', async () => {
+    expect(await verify(textRows, { streaming: 'enabled' })).toBe(1);
+  });
   it('sends the old builder bytes and Content-Length without creating any file or directory', async () => {
     expect(await verify(textRows)).toBe(1);
+  });
+  it('keeps strict OpenAI tool-call reasoning policy in measurement and emission', async () => {
+    expect(
+      await verify(
+        [
+          {
+            ...toolRows[0],
+            blocks: [
+              { type: 'thinking', thought: 'private' },
+              ...toolRows[0].blocks,
+            ],
+          },
+          ...toolRows.slice(1),
+        ],
+        { 'reasoning.includeInContext': true },
+      ),
+    ).toBe(1);
+  });
+  it('filters empty assistant units before counting the native contribution', async () => {
+    expect(
+      await verify(
+        [
+          textRows[0],
+          { speaker: 'ai', blocks: [{ type: 'text', text: '' }] },
+          textRows[1],
+        ],
+        {},
+        textRows,
+      ),
+    ).toBe(1);
   });
   it('flushes one tool unit of media without a scratch index or spool', async () => {
     expect(await verify(toolRows)).toBe(1);

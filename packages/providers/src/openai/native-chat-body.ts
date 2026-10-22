@@ -17,7 +17,11 @@ import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
 import { nativeChatMessages, nativeChatValue } from './native-chat-messages.js';
 import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
-import type { RequestContext } from './OpenAIRequestPreparation.js';
+import { createChatContinuation } from './OpenAIChatContinuation.js';
+import type {
+  ChatRowInput,
+  RequestContext,
+} from './OpenAIRequestPreparation.js';
 
 export class NativeChatBody {
   private readonly body: ProgressiveJsonBody;
@@ -66,6 +70,7 @@ async function prepareNativeChatBody(
   rows: ProviderRequestRows,
   options: NormalizedGenerateChatOptions,
   settings: RowFormatSettings,
+  rowInput: ChatRowInput,
 ): Promise<{
   spool: NativeChatBody;
   messageCount: number;
@@ -105,7 +110,13 @@ async function prepareNativeChatBody(
       yield head;
       yield Buffer.from('[');
       yield* nativeChatValue({ role: 'system', content: system });
-      yield* nativeChatMessages(rows, settings, strip, -1, signal);
+      const source = rows.openReader(signal);
+      yield* nativeChatMessages(
+        rowInput.mediaStage?.(source) ?? source,
+        settings,
+        strip,
+        -1,
+      );
       yield Buffer.from(']');
       yield tail;
     },
@@ -119,6 +130,7 @@ export async function prepareNativePlainRequest(
   rows: ProviderRequestRows,
   options: NormalizedGenerateChatOptions,
   use: { readonly estimate: boolean; readonly dump: boolean },
+  rowInput: ChatRowInput,
 ): Promise<
   Pick<
     RequestContext,
@@ -129,36 +141,52 @@ export async function prepareNativePlainRequest(
     throw new Error(
       'Native plain Chat estimate and dump projections are not installed',
     );
-  const body = await prepareNativeChatBody(envelope, rows, options, {
-    formatId: 'openai-chat:plain',
-    formatRev: 1,
-    model: options.resolved.model,
-    endpoint: options.resolved.baseURL ?? '',
-    isOAuth: false,
-    toolNameTransform: 'none',
-    supportsUrlImages: true,
-    reasoningEnabled: false,
-    reasoningFieldName: 'reasoning_content',
-    mediaPdfEnabled: false,
-    unsupportedMedia: 'notice',
-    outputLimits: parseOutputLimits(options.invocation.ephemerals),
-    chat: {
-      includeInContext: Boolean(
-        readInvocationPolicyValue(
-          options.invocation.ephemerals,
-          'reasoning.includeInContext',
+  const body = await prepareNativeChatBody(
+    envelope,
+    rows,
+    options,
+    {
+      formatId: 'openai-chat:plain',
+      formatRev: 1,
+      model: options.resolved.model,
+      endpoint: options.resolved.baseURL ?? '',
+      isOAuth: false,
+      toolNameTransform: 'none',
+      supportsUrlImages: true,
+      reasoningEnabled: false,
+      reasoningFieldName: 'reasoning_content',
+      mediaPdfEnabled: false,
+      unsupportedMedia: 'notice',
+      outputLimits: parseOutputLimits(options.invocation.ephemerals),
+      chat: {
+        toolFormat: 'openai',
+        includeInContext: Boolean(
+          readInvocationPolicyValue(
+            options.invocation.ephemerals,
+            'reasoning.includeInContext',
+          ),
         ),
-      ),
+      },
     },
-  });
+    rowInput,
+  );
   return {
     ...body,
     estimate: undefined,
     dump: undefined,
-    continuation: {
-      async build() {
-        throw new Error('Native plain Chat continuation is not installed');
+    continuation: createChatContinuation({
+      envelope,
+      systemInstruction: options.systemInstruction,
+      signal: getRequestSignal(options),
+      source: { rows: () => rows.openReader(getRequestSignal(options)) },
+      body: {
+        reasoning: options,
+        toolFormat: 'openai',
+        config: parseOutputLimits(options.invocation.ephemerals),
+        ...(rowInput.mediaStage === undefined
+          ? {}
+          : { mediaStage: rowInput.mediaStage }),
       },
-    },
+    }),
   };
 }
