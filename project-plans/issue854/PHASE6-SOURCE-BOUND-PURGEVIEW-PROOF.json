@@ -1,0 +1,1397 @@
+{
+  "date": "2026-10-22",
+  "productCommit": "3f43569e97c8df827c2bf3b3b8c81bae4c5ee894",
+  "firstViewCommit": "2afcdf4a1d790db3d635c5a5f8b7f541cacfe96b",
+  "status": "bounded purge/view parity passes; full acceptance open",
+  "sourceManifest": {
+    "path": "tmp/p6/chat-purge-view-final-bf/proof-source-after.json",
+    "sha256": "b472fcfa15dbcdf512a2e189ebe46c45dd6166b180a2b7f5b027c99ad0ecea8f",
+    "entries": 5050,
+    "currentDifferences": []
+  },
+  "ownedSource": [
+    {
+      "path": "packages/agents/src/core/__tests__/native-chat-purge-http.test.ts",
+      "sha256": "1898b0ed21bacfe63596b6bfa460812bae8e8f985bdfaa3dedea0b3e30aad868"
+    },
+    {
+      "path": "packages/core/src/journal/formatFill.ts",
+      "sha256": "8d6b2cc7970a847d33465a7e2df2bab24a21021632732f4b56e400ea9ec01a29"
+    },
+    {
+      "path": "packages/core/src/journal/journalStore.ts",
+      "sha256": "8f65289c5aaf26324fe88bf353459e7801ba5a7e5107e5d6ddf264f709efdc59"
+    },
+    {
+      "path": "packages/core/src/journal/versionSnapshot.ts",
+      "sha256": "d3db450dc10966591c1e4441364027f0a5e8067732da7f0311b86c626990f796"
+    },
+    {
+      "path": "packages/core/src/services/history/detachedHistoryAPI.ts",
+      "sha256": "429dd2241773d33480be873ee43968b6078286769a73e290b48c9bc60cf83c12"
+    },
+    {
+      "path": "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+      "sha256": "e395e4e125f5c10145acebe34b1ea7fb234689821a363ca66061f57f94df8cf5"
+    },
+    {
+      "path": "packages/core/src/services/history/journal-indexed-overlay.ts",
+      "sha256": "c1ab18c8c2ac47bfebafb4032c651276048638d3c3d5fcbce2213f4720eb4ad5"
+    },
+    {
+      "path": "packages/core/src/services/history/journal-request-projection.ts",
+      "sha256": "8039662104c5652c766d7682df0c629f15d0c8f84429b3d260f90fb8c9bd2749"
+    },
+    {
+      "path": "packages/core/src/services/history/journal-tail-source.ts",
+      "sha256": "a91125dea32e94e066b61e5b24a8fcf73924de364ba55fbfdd204a52793d4d43"
+    },
+    {
+      "path": "packages/core/src/services/history/journalHistoryStore.ts",
+      "sha256": "ba4437ee3377ad1ea8dd27e46f1abeddd0eb5d9c16a9cb384406d6f5b1c8c8d2"
+    },
+    {
+      "path": "packages/core/src/services/history/journalSemanticPurge.ts",
+      "sha256": "aade7f77eb84b5c6f6db1f25c956f7c3e2d1b96e7e4a5fdc5c8d4991130fb1d3"
+    },
+    {
+      "path": "packages/core/src/services/history/native-purge-provider-request.ts",
+      "sha256": "6f51aadd1913fd03536cb2469e04be3477f8391f93f6668bcc400ec5b63dad70"
+    },
+    {
+      "path": "packages/core/src/services/history/semantic-purge-native.ts",
+      "sha256": "fd5753af3f07d3ae992676055437659a53f2539e38765faa43e9045c52cf0606"
+    },
+    {
+      "path": "packages/providers/src/openai-responses/responses-row-media.ts",
+      "sha256": "46c97c23d7a063f3b7e98f9189807ccdd120ee5f2de9375c649d34d67ab08e09"
+    },
+    {
+      "path": "packages/providers/src/openai/journal-chat-length-lifecycle.test.ts",
+      "sha256": "3277cdf492f6cde010d5bf815b4c72f3ddd513ded54b9e6853917b4449288839"
+    },
+    {
+      "path": "packages/providers/src/openai/journal-chat-length.ts",
+      "sha256": "1cf22c2a9b02d79af2d24df9d3df3c894fa5e641ab9ecbe69cba5d08b4ae91e9"
+    },
+    {
+      "path": "packages/core/src/journal/pinned-format-fill.ts",
+      "sha256": "5fcaf8e58728ec36c98dffca807947ff80d53ebe0cbbf437bce5b2069290d91a"
+    },
+    {
+      "path": "packages/core/src/services/history/pinned-request-formats.ts",
+      "sha256": "645f73dc5fbada0a85daa6c8abb7807061823bf10a3b65e233a7d5d286ea6749"
+    },
+    {
+      "path": "packages/agents/src/core/native-purge-view-http.test.ts",
+      "sha256": "85cc95b63c608d918b2f1e6d4bddd99a74b529a28703e8ef30adc04e8cb704b6"
+    },
+    {
+      "path": "packages/core/src/services/history/native-provider-format.ts",
+      "sha256": "fc1f2b1f6cdf5f42fa0a325113011ba5fccf906fc7d97a1a0e184f6ca25311d9"
+    },
+    {
+      "path": "packages/agents/src/core/native-purge-view-cost.test.ts",
+      "sha256": "5353f3587d3a3d52c955e3d0ea2b2305768a440e15e56a92c51992024b5b905a"
+    },
+    {
+      "path": "packages/providers/src/__tests__/native-chat-media-lifetime.test.ts",
+      "sha256": "f4978133b857444b1738921895c0df70fbec4a84fa96e0f8f3e437a07ab2e5b7"
+    }
+  ],
+  "bridges": [
+    {
+      "path": "tmp/p6/chat-purge-view-final-bf/source-before.json",
+      "sha256": "7a056fc14ca9798daae55dc46dfcdcc1f4a0652186274245c2e326fa8831f0e4",
+      "count": 5050,
+      "differences": [
+        {
+          "path": "packages/agents/src/core/native-purge-view-cost.test.ts",
+          "sha256": "9aa9708828a08fe1d2ee889a598328ddcc61d6bdae87cde3b920b491b82e8f05",
+          "currentSha256": "5353f3587d3a3d52c955e3d0ea2b2305768a440e15e56a92c51992024b5b905a"
+        },
+        {
+          "path": "packages/agents/src/core/native-purge-view-http.test.ts",
+          "sha256": "eebe45c52bd4920597a3dd9412915b569b24e83a565977b1cb80e2e94f339f07",
+          "currentSha256": "85cc95b63c608d918b2f1e6d4bddd99a74b529a28703e8ef30adc04e8cb704b6"
+        },
+        {
+          "path": "packages/providers/src/__tests__/native-chat-media-lifetime.test.ts",
+          "sha256": "9e19a24a431524147936590c7dea87c48c78e98a253798b318f1f7a7a3e2e433",
+          "currentSha256": "f4978133b857444b1738921895c0df70fbec4a84fa96e0f8f3e437a07ab2e5b7"
+        }
+      ]
+    },
+    {
+      "path": "tmp/p6/chat-purge-view-final-bf/checkpoint-source-after.json",
+      "sha256": "1a5b95bd248641d09c2b25d35c014352e7d34ea7fbf712e1d18fe15c4d39d0b3",
+      "count": 5050,
+      "differences": [
+        {
+          "path": "packages/agents/src/core/native-purge-view-cost.test.ts",
+          "sha256": "9aa9708828a08fe1d2ee889a598328ddcc61d6bdae87cde3b920b491b82e8f05",
+          "currentSha256": "5353f3587d3a3d52c955e3d0ea2b2305768a440e15e56a92c51992024b5b905a"
+        }
+      ]
+    },
+    {
+      "path": "tmp/p6/chat-purge-view-final-bf/proof-source-before.json",
+      "sha256": "b472fcfa15dbcdf512a2e189ebe46c45dd6166b180a2b7f5b027c99ad0ecea8f",
+      "count": 5050,
+      "differences": []
+    },
+    {
+      "path": "tmp/p6/chat-purge-view-final-bf/proof-source-after.json",
+      "sha256": "b472fcfa15dbcdf512a2e189ebe46c45dd6166b180a2b7f5b027c99ad0ecea8f",
+      "count": 5050,
+      "differences": []
+    },
+    {
+      "path": "tmp/p6/chat-purge-view-final-bf/remaining/source-before.json",
+      "sha256": "7a056fc14ca9798daae55dc46dfcdcc1f4a0652186274245c2e326fa8831f0e4",
+      "count": 5050,
+      "differences": [
+        {
+          "path": "packages/agents/src/core/native-purge-view-cost.test.ts",
+          "sha256": "9aa9708828a08fe1d2ee889a598328ddcc61d6bdae87cde3b920b491b82e8f05",
+          "currentSha256": "5353f3587d3a3d52c955e3d0ea2b2305768a440e15e56a92c51992024b5b905a"
+        },
+        {
+          "path": "packages/agents/src/core/native-purge-view-http.test.ts",
+          "sha256": "eebe45c52bd4920597a3dd9412915b569b24e83a565977b1cb80e2e94f339f07",
+          "currentSha256": "85cc95b63c608d918b2f1e6d4bddd99a74b529a28703e8ef30adc04e8cb704b6"
+        },
+        {
+          "path": "packages/providers/src/__tests__/native-chat-media-lifetime.test.ts",
+          "sha256": "9e19a24a431524147936590c7dea87c48c78e98a253798b318f1f7a7a3e2e433",
+          "currentSha256": "f4978133b857444b1738921895c0df70fbec4a84fa96e0f8f3e437a07ab2e5b7"
+        }
+      ]
+    },
+    {
+      "path": "tmp/p6/chat-purge-view-final-bf/remaining/source-after.json",
+      "sha256": "7a056fc14ca9798daae55dc46dfcdcc1f4a0652186274245c2e326fa8831f0e4",
+      "count": 5050,
+      "differences": [
+        {
+          "path": "packages/agents/src/core/native-purge-view-cost.test.ts",
+          "sha256": "9aa9708828a08fe1d2ee889a598328ddcc61d6bdae87cde3b920b491b82e8f05",
+          "currentSha256": "5353f3587d3a3d52c955e3d0ea2b2305768a440e15e56a92c51992024b5b905a"
+        },
+        {
+          "path": "packages/agents/src/core/native-purge-view-http.test.ts",
+          "sha256": "eebe45c52bd4920597a3dd9412915b569b24e83a565977b1cb80e2e94f339f07",
+          "currentSha256": "85cc95b63c608d918b2f1e6d4bddd99a74b529a28703e8ef30adc04e8cb704b6"
+        },
+        {
+          "path": "packages/providers/src/__tests__/native-chat-media-lifetime.test.ts",
+          "sha256": "9e19a24a431524147936590c7dea87c48c78e98a253798b318f1f7a7a3e2e433",
+          "currentSha256": "f4978133b857444b1738921895c0df70fbec4a84fa96e0f8f3e437a07ab2e5b7"
+        }
+      ]
+    },
+    {
+      "path": "tmp/p6/chat-purge-view-final-bf/supplement/source-before.json",
+      "sha256": "7a056fc14ca9798daae55dc46dfcdcc1f4a0652186274245c2e326fa8831f0e4",
+      "count": 5050,
+      "differences": [
+        {
+          "path": "packages/agents/src/core/native-purge-view-cost.test.ts",
+          "sha256": "9aa9708828a08fe1d2ee889a598328ddcc61d6bdae87cde3b920b491b82e8f05",
+          "currentSha256": "5353f3587d3a3d52c955e3d0ea2b2305768a440e15e56a92c51992024b5b905a"
+        },
+        {
+          "path": "packages/agents/src/core/native-purge-view-http.test.ts",
+          "sha256": "eebe45c52bd4920597a3dd9412915b569b24e83a565977b1cb80e2e94f339f07",
+          "currentSha256": "85cc95b63c608d918b2f1e6d4bddd99a74b529a28703e8ef30adc04e8cb704b6"
+        },
+        {
+          "path": "packages/providers/src/__tests__/native-chat-media-lifetime.test.ts",
+          "sha256": "9e19a24a431524147936590c7dea87c48c78e98a253798b318f1f7a7a3e2e433",
+          "currentSha256": "f4978133b857444b1738921895c0df70fbec4a84fa96e0f8f3e437a07ab2e5b7"
+        }
+      ]
+    }
+  ],
+  "publicHTTP": {
+    "domain": "Public ChatSession remove/summary x none/all/allButLast: six tests, six sends, 90 assertions; mandatory estimation, committed five-row history and no operation-created files. No explicit-cache pre-image public ChatSession cross-product.",
+    "wire": [
+      {
+        "purge": "remove",
+        "strip": "none",
+        "requests": 1,
+        "bytes": [
+          717
+        ],
+        "estimates": [
+          165
+        ],
+        "oracleTokens": 165,
+        "bodySha256": "9c7e3323f5c96639ff5fae64ea7b787585412d641f1a328ee63fa52d82c7e07c",
+        "referenceSha256": "9c7e3323f5c96639ff5fae64ea7b787585412d641f1a328ee63fa52d82c7e07c",
+        "files": {
+          "directories": [],
+          "files": []
+        }
+      },
+      {
+        "purge": "summary",
+        "strip": "none",
+        "requests": 1,
+        "bytes": [
+          738
+        ],
+        "estimates": [
+          169
+        ],
+        "oracleTokens": 169,
+        "bodySha256": "b55b26ca72e8e97f9b2e35dc5b42123ed0dd8f45ce6ee23d5615e469160a6a54",
+        "referenceSha256": "b55b26ca72e8e97f9b2e35dc5b42123ed0dd8f45ce6ee23d5615e469160a6a54",
+        "files": {
+          "directories": [],
+          "files": []
+        }
+      },
+      {
+        "purge": "remove",
+        "strip": "all",
+        "requests": 1,
+        "bytes": [
+          244
+        ],
+        "estimates": [
+          49
+        ],
+        "oracleTokens": 49,
+        "bodySha256": "933568208d8aa223689b8518e54301f1165876a5c53805db6292c5e7ef3dee89",
+        "referenceSha256": "933568208d8aa223689b8518e54301f1165876a5c53805db6292c5e7ef3dee89",
+        "files": {
+          "directories": [],
+          "files": []
+        }
+      },
+      {
+        "purge": "summary",
+        "strip": "all",
+        "requests": 1,
+        "bytes": [
+          265
+        ],
+        "estimates": [
+          53
+        ],
+        "oracleTokens": 53,
+        "bodySha256": "3bcfdbbc46be5496e1558c7ffe69a4d923a9eb6453f104e5e92c58335bca144f",
+        "referenceSha256": "3bcfdbbc46be5496e1558c7ffe69a4d923a9eb6453f104e5e92c58335bca144f",
+        "files": {
+          "directories": [],
+          "files": []
+        }
+      },
+      {
+        "purge": "remove",
+        "strip": "allButLast",
+        "requests": 1,
+        "bytes": [
+          294
+        ],
+        "estimates": [
+          59
+        ],
+        "oracleTokens": 59,
+        "bodySha256": "4803b6f58303dc0204fc11e8d723296721e9d69e5f44443fc93e8c09ddef7f28",
+        "referenceSha256": "4803b6f58303dc0204fc11e8d723296721e9d69e5f44443fc93e8c09ddef7f28",
+        "files": {
+          "directories": [],
+          "files": []
+        }
+      },
+      {
+        "purge": "summary",
+        "strip": "allButLast",
+        "requests": 1,
+        "bytes": [
+          315
+        ],
+        "estimates": [
+          63
+        ],
+        "oracleTokens": 63,
+        "bodySha256": "c938e82e68e0555b1a7cb124bce84a135f66e41aa4187d89ea8c3c25f80080d7",
+        "referenceSha256": "c938e82e68e0555b1a7cb124bce84a135f66e41aa4187d89ea8c3c25f80080d7",
+        "files": {
+          "directories": [],
+          "files": []
+        }
+      }
+    ],
+    "tokenTolerance": 16
+  },
+  "selectedViewHTTP": {
+    "tests": 96,
+    "sends": 288,
+    "assertions": 1896,
+    "domain": "Six row shapes x remove/summary x explicit cache-write false/true x published false/true x inline/reference media. Three strip sends within each test. Four concrete view states are uncommitted pruned, published pruned, uncommitted explicit pre-image, published explicit pre-image. This is the SemanticMediaPurgeSession/provider seam, not 288 public ChatSession sends."
+  },
+  "gates": [
+    {
+      "path": "tmp/p6/chat-purge-view-final-bf/checkpoint-gates.json",
+      "sha256": "2f16f963b598309774f354833ab6c77a659924b19387efbdaf0bf66dd1992785",
+      "results": [
+        {
+          "name": "pending-reference-http",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "test",
+            "src/core/native-purge-view-http.test.ts",
+            "--timeout",
+            "180000"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents",
+          "pid": 51328,
+          "exit": 0,
+          "sha256": "9256f4b48182d0f64aa5db501bcccc5d8ee6264d421427e27ec5c764858ddfdb",
+          "summary": "iew HTTP > pending response replaces best remove reference=false explicit=true published=true matches old bytes and estimates [81.82ms]\n(pass) native semantic purge selected-view HTTP > pending response replaces best remove reference=true explicit=true published=true matches old bytes and estimates [110.39ms]\n(pass) native semantic purge selected-view HTTP > pending response replaces best summary reference=false explicit=false published=false matches old bytes and estimates [72.32ms]\n(pass) native semantic purge selected-view HTTP > pending response replaces best summary reference=true explicit=false published=false matches old bytes and estimates [99.21ms]\n(pass) native semantic purge selected-view HTTP > pending response replaces best summary reference=false explicit=false published=true matches old bytes and estimates [89.21ms]\n(pass) native semantic purge selected-view HTTP > pending response replaces best summary reference=true explicit=false published=true matches old bytes and estimates [145.33ms]\n(pass) native semantic purge selected-view HTTP > pending response replaces best summary reference=false explicit=true published=false matches old bytes and estimates [82.50ms]\n(pass) native semantic purge selected-view HTTP > pending response replaces best summary reference=true explicit=true published=false matches old bytes and estimates [82.06ms]\n(pass) native semantic purge selected-view HTTP > pending response replaces best summary reference=false explicit=true published=true matches old bytes and estimates [86.11ms]\n(pass) native semantic purge selected-view HTTP > pending response replaces best summary reference=true explicit=true published=true matches old bytes and estimates [111.17ms]\n\n 96 pass\n 0 fail\n 1896 expect() calls\nRan 96 tests across 1 file. [9.15s]\n"
+        },
+        {
+          "name": "current-agents-types",
+          "args": [
+            "node_modules/.bin/tsc",
+            "--noEmit",
+            "-p",
+            "packages/agents/tsconfig.noemit.json"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+          "pid": 51464,
+          "exit": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "summary": ""
+        },
+        {
+          "name": "current-providers-types",
+          "args": [
+            "node_modules/.bin/tsc",
+            "--noEmit",
+            "-p",
+            "packages/providers/tsconfig.noemit.json"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+          "pid": 51490,
+          "exit": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "summary": ""
+        },
+        {
+          "name": "current-providers-bun-types",
+          "args": [
+            "node_modules/.bin/tsc",
+            "--noEmit",
+            "-p",
+            "packages/providers/tsconfig.test-bun.json",
+            "--types",
+            "bun"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+          "pid": 51523,
+          "exit": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "summary": ""
+        },
+        {
+          "name": "current-agents-bun-types",
+          "args": [
+            "node_modules/.bin/tsc",
+            "--noEmit",
+            "-p",
+            "packages/agents/tsconfig.test-bun.json",
+            "--types",
+            "bun"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+          "pid": 51571,
+          "exit": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "summary": ""
+        },
+        {
+          "name": "current-lint",
+          "args": [
+            "node_modules/.bin/eslint",
+            "--max-warnings",
+            "0",
+            "packages/agents/src/core/__tests__/native-chat-purge-http.test.ts",
+            "packages/core/src/journal/formatFill.ts",
+            "packages/core/src/journal/journalStore.ts",
+            "packages/core/src/journal/versionSnapshot.ts",
+            "packages/core/src/services/history/detachedHistoryAPI.ts",
+            "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+            "packages/core/src/services/history/journal-indexed-overlay.ts",
+            "packages/core/src/services/history/journal-request-projection.ts",
+            "packages/core/src/services/history/journal-tail-source.ts",
+            "packages/core/src/services/history/journalHistoryStore.ts",
+            "packages/core/src/services/history/journalSemanticPurge.ts",
+            "packages/core/src/services/history/native-purge-provider-request.ts",
+            "packages/core/src/services/history/semantic-purge-native.ts",
+            "packages/providers/src/openai-responses/responses-row-media.ts",
+            "packages/providers/src/openai/journal-chat-length-lifecycle.test.ts",
+            "packages/providers/src/openai/journal-chat-length.ts",
+            "packages/core/src/journal/pinned-format-fill.ts",
+            "packages/core/src/services/history/pinned-request-formats.ts",
+            "packages/agents/src/core/native-purge-view-http.test.ts",
+            "packages/core/src/services/history/native-provider-format.ts",
+            "packages/agents/src/core/native-purge-view-cost.test.ts",
+            "packages/providers/src/__tests__/native-chat-media-lifetime.test.ts"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+          "pid": 51631,
+          "exit": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "summary": ""
+        },
+        {
+          "name": "current-format",
+          "args": [
+            "node_modules/.bin/prettier",
+            "--check",
+            "packages/agents/src/core/__tests__/native-chat-purge-http.test.ts",
+            "packages/core/src/journal/formatFill.ts",
+            "packages/core/src/journal/journalStore.ts",
+            "packages/core/src/journal/versionSnapshot.ts",
+            "packages/core/src/services/history/detachedHistoryAPI.ts",
+            "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+            "packages/core/src/services/history/journal-indexed-overlay.ts",
+            "packages/core/src/services/history/journal-request-projection.ts",
+            "packages/core/src/services/history/journal-tail-source.ts",
+            "packages/core/src/services/history/journalHistoryStore.ts",
+            "packages/core/src/services/history/journalSemanticPurge.ts",
+            "packages/core/src/services/history/native-purge-provider-request.ts",
+            "packages/core/src/services/history/semantic-purge-native.ts",
+            "packages/providers/src/openai-responses/responses-row-media.ts",
+            "packages/providers/src/openai/journal-chat-length-lifecycle.test.ts",
+            "packages/providers/src/openai/journal-chat-length.ts",
+            "packages/core/src/journal/pinned-format-fill.ts",
+            "packages/core/src/services/history/pinned-request-formats.ts",
+            "packages/agents/src/core/native-purge-view-http.test.ts",
+            "packages/core/src/services/history/native-provider-format.ts",
+            "packages/agents/src/core/native-purge-view-cost.test.ts",
+            "packages/providers/src/__tests__/native-chat-media-lifetime.test.ts"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+          "pid": 51752,
+          "exit": 0,
+          "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+          "summary": "Checking formatting...\nAll matched files use Prettier code style!\n"
+        },
+        {
+          "name": "current-graph",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "scripts/check-affected-test-shards.ts"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+          "pid": 51762,
+          "exit": 0,
+          "sha256": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67",
+          "summary": "affected-test-shards drift guard: scanning /Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code against scripts/affected-test-shards.data.json\naffected-test-shards drift guard PASSED: checked-in graph matches real imports.\n"
+        },
+        {
+          "name": "current-audit",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "scripts/test-audit/scan.ts",
+            "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-purge-view-final-bf/current-audit"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+          "pid": 51799,
+          "exit": 0,
+          "sha256": "107fe9a6d38b6285c5cdbc1a199f52b821e717dbe652ad47ad8a9843b0e0c5c4",
+          "summary": "files scanned: 4670  errors: 0\ntests: 44662  assertions: 110435  (avg 2.47 asserts/test)\nfindings: 2622\n\n== by flag ==\n   855  DUP_ASSERT\n   497  MOCK_ONLY_ORACLE\n   483  SELF_CONFIRMING\n   242  WEAK_ONLY\n   187  STRUCTURE_ONLY\n   170  MOCK_MIRROR\n    98  NO_ASSERT\n    45  SNAPSHOT_ONLY\n    25  SWALLOWED_ASSERT\n    14  ALWAYS_TRUE\n     6  SELF_COMPARE\n\n== by area ==\n   823  cli\n   534  core\n   449  agents\n   378  providers\n   123  scripts\n    64  mcp\n    61  tools\n    43  auth\n    31  telemetry\n    24  integration-tests\n    21  zed-acp\n    20  lsp\n    18  policy\n     9  ide-integration\n     8  settings\n     7  vscode-ide-companion\n     4  storage\n     3  test-utils\n\nper-file stats for 4545 files written alongside findings.tsv\n"
+        },
+        {
+          "name": "current-preservation",
+          "args": [
+            "shasum",
+            "-a",
+            "256",
+            "-c",
+            "tmp/p6/chat-tail-run-au/preserved.sha256"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+          "pid": 51847,
+          "exit": 0,
+          "sha256": "0e4199bb6c410cc6f1e5bd39e3d87c8159795d9dc60279f003e975a7ea37b454",
+          "summary": "ivery/source-inventory.tsv: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/final-delivery/starting-inventory-files.txt: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/final-delivery/test-case-evidence.tsv: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/final-delivery/touched-audit.tsv: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/final-delivery/verified-tests.tsv: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/final-delivery/w17-remaining-files.txt: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/native-test-evidence.tsv: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/remaining-inventory-files.txt: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/source-inventory.tsv: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/starting-inventory-files.txt: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/test-case-evidence.tsv: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/verified-tests.tsv: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/w17-remaining-files.txt: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/w21/ROOT-CAUSE.md: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/w21/STATUS.md: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/w21/contract-map.md: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/w21/remaining-contracts.md: OK\nproject-plans/issue854/recovery-2026-10-19/validate-recovery.ts: OK\nproject-plans/issue854/recovery-2026-10-19/validation.json: OK\n"
+        }
+      ]
+    },
+    {
+      "path": "tmp/p6/chat-purge-view-final-bf/gates.json",
+      "sha256": "bdd0d226a1a81383487919099265fb09192eff2492d86aeeca9949caa8c5c6a6",
+      "results": [
+        {
+          "name": "agents-native-chat-purge-http.test.ts",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "test",
+            "src/core/__tests__/native-chat-purge-http.test.ts",
+            "--timeout",
+            "180000"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents",
+          "pid": 41249,
+          "exit": 0,
+          "sha256": "2f696098b3ee44dff838572e83122a45def885fe3300abc3910d2ebc9a5acf29",
+          "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/core/__tests__/native-chat-purge-http.test.ts:\n(pass) public native plain Chat semantic purge HTTP > sends remove/none through mandatory estimation and HTTP without operation files [246.18ms]\n(pass) public native plain Chat semantic purge HTTP > sends summary/none through mandatory estimation and HTTP without operation files [68.69ms]\n(pass) public native plain Chat semantic purge HTTP > sends remove/all through mandatory estimation and HTTP without operation files [72.61ms]\n(pass) public native plain Chat semantic purge HTTP > sends summary/all through mandatory estimation and HTTP without operation files [78.21ms]\n(pass) public native plain Chat semantic purge HTTP > sends remove/allButLast through mandatory estimation and HTTP without operation files [67.69ms]\n(pass) public native plain Chat semantic purge HTTP > sends summary/allButLast through mandatory estimation and HTTP without operation files [70.05ms]\n\n 6 pass\n 0 fail\n 90 expect() calls\nRan 6 tests across 1 file. [1336.00ms]\n"
+        },
+        {
+          "name": "agents-native-purge-view-http.test.ts",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "test",
+            "src/core/native-purge-view-http.test.ts",
+            "--timeout",
+            "180000"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents",
+          "pid": 41269,
+          "exit": 0,
+          "sha256": "548c48ab129251226d9fb2f7c22b347daf091ca1596c744c0a9cd1fa8d9f29b5",
+          "summary": "ew HTTP > pending response replaces best remove reference=false explicit=true published=true matches old bytes and estimates [83.55ms]\n(pass) native semantic purge selected-view HTTP > pending response replaces best remove reference=true explicit=true published=true matches old bytes and estimates [106.02ms]\n(pass) native semantic purge selected-view HTTP > pending response replaces best summary reference=false explicit=false published=false matches old bytes and estimates [85.40ms]\n(pass) native semantic purge selected-view HTTP > pending response replaces best summary reference=true explicit=false published=false matches old bytes and estimates [79.62ms]\n(pass) native semantic purge selected-view HTTP > pending response replaces best summary reference=false explicit=false published=true matches old bytes and estimates [99.92ms]\n(pass) native semantic purge selected-view HTTP > pending response replaces best summary reference=true explicit=false published=true matches old bytes and estimates [128.13ms]\n(pass) native semantic purge selected-view HTTP > pending response replaces best summary reference=false explicit=true published=false matches old bytes and estimates [67.38ms]\n(pass) native semantic purge selected-view HTTP > pending response replaces best summary reference=true explicit=true published=false matches old bytes and estimates [80.75ms]\n(pass) native semantic purge selected-view HTTP > pending response replaces best summary reference=false explicit=true published=true matches old bytes and estimates [115.02ms]\n(pass) native semantic purge selected-view HTTP > pending response replaces best summary reference=true explicit=true published=true matches old bytes and estimates [109.87ms]\n\n 96 pass\n 0 fail\n 1896 expect() calls\nRan 96 tests across 1 file. [9.27s]\n"
+        },
+        {
+          "name": "agents-native-purge-view-cost.test.ts",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "test",
+            "src/core/native-purge-view-cost.test.ts",
+            "--timeout",
+            "180000"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents",
+          "pid": 41413,
+          "exit": 0,
+          "sha256": "3f091a88b3f39c056dca70f07897d8a6cb5f7ae978635cb4342773c170245ac1",
+          "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/core/native-purge-view-cost.test.ts:\n(pass) native purge warm selected-view planning > only reads changed source payloads at 40 rows after cold format filling [264.85ms]\n(pass) native purge warm selected-view planning > only reads changed source payloads at 4000 rows after cold format filling [3740.93ms]\n\n 2 pass\n 0 fail\n 14 expect() calls\nRan 2 tests across 1 file. [4.43s]\n"
+        },
+        {
+          "name": "agents-native-purge-normalization.test.ts",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "test",
+            "src/core/native-purge-normalization.test.ts",
+            "--timeout",
+            "180000"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents",
+          "pid": 41466,
+          "exit": 0,
+          "sha256": "89a819ceff612805b98e4a5146757b81703a7f8108e031d8933175376c78bfa0",
+          "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/core/native-purge-normalization.test.ts:\n(pass) native purge request normalization > matches legacy units and pending membership for {\"mode\":\"remove\",\"explicit\":false} without scratch [98.50ms]\n(pass) native purge request normalization > matches legacy units and pending membership for {\"mode\":\"remove\",\"explicit\":true} without scratch [18.65ms]\n(pass) native purge request normalization > matches legacy units and pending membership for {\"mode\":\"summary\",\"explicit\":false} without scratch [18.12ms]\n(pass) native purge request normalization > matches legacy units and pending membership for {\"mode\":\"summary\",\"explicit\":true} without scratch [17.99ms]\n\n 4 pass\n 0 fail\n 52 expect() calls\nRan 4 tests across 1 file. [503.00ms]\n"
+        },
+        {
+          "name": "agents-semantic-purge-native-readers.test.ts",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "test",
+            "src/core/semantic-purge-native-readers.test.ts",
+            "--timeout",
+            "180000"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents",
+          "pid": 41473,
+          "exit": 0,
+          "sha256": "3bb12ee3c91079f87a9ce9b19636fd4ddab319d02ec4aeb3f0b232c34c99df14",
+          "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/core/semantic-purge-native-readers.test.ts:\n(pass) native semantic purge cleanup identity > preserves the primary cause and independent close error while releasing the next attempt [36.84ms]\n(pass) native semantic purge reader retirement > retires a suspended candidate reader before releasing its version [7.93ms]\n(pass) native semantic purge reader retirement > retires a suspended tagged pre-image reader before releasing its version [8.03ms]\n\n 3 pass\n 0 fail\n 12 expect() calls\nRan 3 tests across 1 file. [412.00ms]\n"
+        },
+        {
+          "name": "agents-semantic-purge-native-owners.test.ts",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "test",
+            "src/core/semantic-purge-native-owners.test.ts",
+            "--timeout",
+            "180000"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents",
+          "pid": 41479,
+          "exit": 0,
+          "sha256": "ee6ec34d98f34a6efced0ba73bc860699bfe21406fc712d0fbc263e348b99e51",
+          "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/core/semantic-purge-native-owners.test.ts:\n(pass) native semantic purge current source ownership > preserves current owned and unowned source rows after a removed row at 3 [118.20ms]\n(pass) native semantic purge current source ownership > preserves current owned and unowned source rows after a removed row at 64 [413.32ms]\n(pass) native semantic purge current source ownership > preserves current owned and unowned source rows after a removed row at 65 [415.02ms]\n(pass) native semantic purge current source ownership > preserves current owned and unowned source rows after a removed row at 5000 [32196.94ms]\n\n 4 pass\n 0 fail\n 28 expect() calls\nRan 4 tests across 1 file. [33.51s]\n"
+        },
+        {
+          "name": "agents-semantic-purge-native-scale-parity.test.ts",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "test",
+            "src/core/semantic-purge-native-scale-parity.test.ts",
+            "--timeout",
+            "180000"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents",
+          "pid": 41933,
+          "exit": 0,
+          "sha256": "93e89ec6973cd6604ba4039c1627f7d6d02618a746ebca353753dee4b874e44e",
+          "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/core/semantic-purge-native-scale-parity.test.ts:\nPURGE_INDEPENDENT_PARITY {\"size\":512,\"tokens\":511,\"expectedTokens\":511,\"durableMirrors\":2}\n(pass) actual native purge independent scale parity below provider preparation > matches old eager tokens, full values, owners, events and durable mirrors at 512 [1162.58ms]\nPURGE_INDEPENDENT_PARITY {\"size\":8192,\"tokens\":8191,\"expectedTokens\":8191,\"durableMirrors\":2}\n(pass) actual native purge independent scale parity below provider preparation > matches old eager tokens, full values, owners, events and durable mirrors at 8192 [20019.58ms]\n\n 2 pass\n 0 fail\n 24 expect() calls\nRan 2 tests across 1 file. [21.54s]\n"
+        },
+        {
+          "name": "agents-semantic-purge-native-media-lease.test.ts",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "test",
+            "src/core/semantic-purge-native-media-lease.test.ts",
+            "--timeout",
+            "180000"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents",
+          "pid": 42206,
+          "exit": 1,
+          "sha256": "cebab22689365a2718948f66118ff9d340934a14b49e5dde03e77ed5f53a7bd3",
+          "summary": "h-3/llxprt-code/packages/core/src/services/history/__tests__/support/native-purge-fixture.ts:94:11)\n      at /Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/core/semantic-purge-native-media-lease.test.ts:205:13\n      at processTicksAndRejections (unknown:7:39)\n(fail) native pending media consumer below provider preparation > holds immutable reserved bytes through actual purge and janitor at 65, abort=false [130.31ms]\n35 |     'references',\n36 |     'sha256',\n37 |     contentId.slice('sha256:'.length),\n38 |   );\n39 |   const files = await readdir(directory);\n40 |   expect(files.length).toBe(1);\n                            ^\nerror: expect(received).toBe(expected)\n\nExpected: 1\nReceived: 2\n\n      at assertRequestLease (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/core/semantic-purge-native-media-lease.test.ts:40:24)\n      at async <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/core/semantic-purge-native-media-lease.test.ts:176:19)\n      at async withNativePurgeFixture (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/__tests__/support/native-purge-fixture.ts:94:11)\n      at async <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/core/semantic-purge-native-media-lease.test.ts:118:13)\n(fail) native pending media consumer below provider preparation > holds immutable reserved bytes through actual purge and janitor at 65, abort=true [128.67ms]\n(pass) native pending media consumer below provider preparation > resolves 65 distinct media units without retaining prior rows or reservation IDs [1051.25ms]\n\n 1 pass\n 6 fail\n 365 expect() calls\nRan 7 tests across 1 file. [2.17s]\n"
+        }
+      ]
+    },
+    {
+      "path": "tmp/p6/chat-purge-view-final-bf/proof-runs.json",
+      "sha256": "23148cadaa4117191df612206cd5ddcac1608a2988d42a1821ea79c431eb4101",
+      "results": [
+        {
+          "name": "physical-current",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "test",
+            "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-purge-view-final-bf/physical.test.ts",
+            "--timeout",
+            "180000"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+          "pid": 53963,
+          "exit": 1,
+          "sha256": "ea89a75c0aaf273093ff6c07334b3d4225e046ba9b33d920db5707db6ed63db5",
+          "summary": "bun test v1.3.14 (0d9b296a)\n\ntmp/p6/chat-purge-view-final-bf/physical.test.ts:\n\n# Unhandled error between tests\n-------------------------------\nerror: Cannot find module '@vybestack/llxprt-code-core/journal/versionSnapshot.js' from '/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-purge-view-final-bf/physical.test.ts'\n-------------------------------\n\n\n 0 pass\n 1 fail\n 1 error\nRan 1 test across 1 file. [17.00ms]\n"
+        },
+        {
+          "name": "public-receipt",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "test",
+            "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-purge-view-final-bf/public-receipt.test.ts",
+            "--timeout",
+            "180000"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+          "pid": 53964,
+          "exit": 0,
+          "sha256": "195bbd35113cc35a5be070224300bcc0315423350f713783db6c3eeef9f52cf9",
+          "summary": ":\\\"assistant\\\",\\\"content\\\":\\\"older answer\\\"},{\\\"role\\\":\\\"user\\\",\\\"content\\\":\\\"prior\\\"},{\\\"role\\\":\\\"assistant\\\",\\\"content\\\":\\\"answer\\\",\\\"reasoning_content\\\":\\\"latest first\\\\nlatest second\\\"},{\\\"role\\\":\\\"user\\\",\\\"content\\\":\\\"new user 雪\\\"}],\\\"stream\\\":false}\",\"receipt\":{\"directories\":[],\"files\":[]}}\n(pass) public native plain Chat semantic purge HTTP > sends remove/allButLast through mandatory estimation and HTTP without operation files [69.60ms]\nPURGE_PUBLIC_RECEIPT {\"purge\":\"summary\",\"strip\":\"allButLast\",\"requests\":[\"{\\\"model\\\":\\\"gpt-4o\\\",\\\"messages\\\":[{\\\"role\\\":\\\"system\\\",\\\"content\\\":\\\"system\\\"},{\\\"role\\\":\\\"assistant\\\",\\\"content\\\":\\\"older answer\\\"},{\\\"role\\\":\\\"user\\\",\\\"content\\\":\\\"prior\\\\nprior image summary\\\"},{\\\"role\\\":\\\"assistant\\\",\\\"content\\\":\\\"answer\\\",\\\"reasoning_content\\\":\\\"latest first\\\\nlatest second\\\"},{\\\"role\\\":\\\"user\\\",\\\"content\\\":\\\"new user 雪\\\"}],\\\"stream\\\":false}\"],\"contentLengths\":[315],\"estimates\":[63],\"expectedTokens\":63,\"reference\":\"{\\\"model\\\":\\\"gpt-4o\\\",\\\"messages\\\":[{\\\"role\\\":\\\"system\\\",\\\"content\\\":\\\"system\\\"},{\\\"role\\\":\\\"assistant\\\",\\\"content\\\":\\\"older answer\\\"},{\\\"role\\\":\\\"user\\\",\\\"content\\\":\\\"prior\\\\nprior image summary\\\"},{\\\"role\\\":\\\"assistant\\\",\\\"content\\\":\\\"answer\\\",\\\"reasoning_content\\\":\\\"latest first\\\\nlatest second\\\"},{\\\"role\\\":\\\"user\\\",\\\"content\\\":\\\"new user 雪\\\"}],\\\"stream\\\":false}\",\"receipt\":{\"directories\":[],\"files\":[]}}\n(pass) public native plain Chat semantic purge HTTP > sends summary/allButLast through mandatory estimation and HTTP without operation files [60.86ms]\n\n 6 pass\n 0 fail\n 90 expect() calls\nRan 6 tests across 1 file. [994.00ms]\n"
+        },
+        {
+          "name": "purge-controls-driver",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-purge-view-final-bf/controls.ts"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+          "pid": 53979,
+          "exit": 0,
+          "sha256": "d216568339e4892779dd9a63ea363020a12c47419aaea7b3fac7f03eb38685ea",
+          "summary": "ackages/core/src/storage/local-media-store-persistence.ts:210:12)\n      at processTicksAndRejections (unknown:7:39)\n(fail) native semantic purge selected-view HTTP > mixed remove reference=true explicit=true published=true matches old bytes and estimates [260.01ms]\n\n 0 pass\n 95 filtered out\n 1 fail\n 3 expect() calls\nRan 1 test across 1 file. [954.00ms]\n\ndrop-tail-purge 1 ld old old old old old old old old old old old old old old old \"},{\"role\":\"user\",\"content\":\"prior\"},{\"role\":\"assistant\",\"content\":\"answer\",\"reasoning_content\":\"latest first\\nlatest second\"}],\"stream\":false}\"\n\n      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/core/__tests__/native-chat-purge-http.test.ts:223:29)\n(fail) public native plain Chat semantic purge HTTP > sends remove/none through mandatory estimation and HTTP without operation files [247.41ms]\n\n 0 pass\n 5 filtered out\n 1 fail\n 4 expect() calls\nRan 1 test across 1 file. [989.00ms]\n\nforced-old-normalizer 1 penAIRequestPreparation.ts:532:15)\n      at prepareOpenAIChatProjection (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/OpenAIPromptProjectionPreparation.ts:207:34)\n      at async prepareOpenAIPromptProjection (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/OpenAIPromptEnvelopeStore.ts:129:32)\n(fail) public native plain Chat semantic purge HTTP > sends remove/none through mandatory estimation and HTTP without operation files [181.88ms]\n\n 0 pass\n 5 filtered out\n 1 fail\nRan 1 test across 1 file. [982.00ms]\n\n"
+        },
+        {
+          "name": "lifetime-controls-driver",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-purge-view-final-bf/lifetime-controls.ts"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+          "pid": 54068,
+          "exit": 0,
+          "sha256": "87ecce40d336fe6bac915fb09471105dd964395637cafadf92c3bd9f8e578df5",
+          "summary": ",\n103 |     payloadBytes,\n104 |   );\n105 |   expect(live.rows).toBeLessThanOrEqual(2);\n                          ^\nerror: expect(received).toBeLessThanOrEqual(expected)\n\nExpected: <= 2\nReceived: 3\n\n      at assertLiveResolution (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/__tests__/native-chat-media-lifetime.test.ts:105:21)\n      at async observe (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/__tests__/native-chat-media-lifetime.test.ts:77:13)\n(fail) actual native historical reference-media row lifetime > releases 64 historical rows with 64 KiB text while resolving one payload at a time [237.91ms]\n\n 0 pass\n 3 filtered out\n 1 fail\n 13 expect() calls\nRan 1 test across 1 file. [935.00ms]\n\nlifetime-retained-map 1 er.census.peakPayloadBytes,\n103 |     payloadBytes,\n104 |   );\n105 |   expect(live.rows).toBeLessThanOrEqual(2);\n                          ^\nerror: expect(received).toBeLessThanOrEqual(expected)\n\nExpected: <= 2\nReceived: 3\n\n      at assertLiveResolution (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/__tests__/native-chat-media-lifetime.test.ts:105:21)\n      at async observe (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/__tests__/native-chat-media-lifetime.test.ts:77:13)\n(fail) actual native historical reference-media row lifetime > releases 64 historical rows with 64 KiB text while resolving one payload at a time [238.53ms]\n\n 0 pass\n 3 filtered out\n 1 fail\n 13 expect() calls\nRan 1 test across 1 file. [936.00ms]\n\n"
+        },
+        {
+          "name": "restored-public-http",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "test",
+            "src/core/__tests__/native-chat-purge-http.test.ts",
+            "--timeout",
+            "180000"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents",
+          "pid": 54098,
+          "exit": 0,
+          "sha256": "64ffd372ab28895b36e0461e607af55a94a2aac9c51d02d26eda3215f20caa1c",
+          "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/core/__tests__/native-chat-purge-http.test.ts:\n(pass) public native plain Chat semantic purge HTTP > sends remove/none through mandatory estimation and HTTP without operation files [295.86ms]\n(pass) public native plain Chat semantic purge HTTP > sends summary/none through mandatory estimation and HTTP without operation files [68.23ms]\n(pass) public native plain Chat semantic purge HTTP > sends remove/all through mandatory estimation and HTTP without operation files [65.27ms]\n(pass) public native plain Chat semantic purge HTTP > sends summary/all through mandatory estimation and HTTP without operation files [63.92ms]\n(pass) public native plain Chat semantic purge HTTP > sends remove/allButLast through mandatory estimation and HTTP without operation files [70.84ms]\n(pass) public native plain Chat semantic purge HTTP > sends summary/allButLast through mandatory estimation and HTTP without operation files [67.89ms]\n\n 6 pass\n 0 fail\n 90 expect() calls\nRan 6 tests across 1 file. [1415.00ms]\n"
+        },
+        {
+          "name": "restored-view-http",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "test",
+            "src/core/native-purge-view-http.test.ts",
+            "--timeout",
+            "180000"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents",
+          "pid": 54125,
+          "exit": 0,
+          "sha256": "45e6c5094bf49bfa3a379baf3cec0f713d8d2eccb152d041cd238885c5a6c99c",
+          "summary": "se replaces best remove reference=true explicit=true published=true matches old bytes and estimates [112.95ms]\n(pass) native semantic purge selected-view HTTP > pending response replaces best summary reference=false explicit=false published=false matches old bytes and estimates [74.17ms]\n(pass) native semantic purge selected-view HTTP > pending response replaces best summary reference=true explicit=false published=false matches old bytes and estimates [85.13ms]\n(pass) native semantic purge selected-view HTTP > pending response replaces best summary reference=false explicit=false published=true matches old bytes and estimates [91.59ms]\n(pass) native semantic purge selected-view HTTP > pending response replaces best summary reference=true explicit=false published=true matches old bytes and estimates [136.88ms]\n(pass) native semantic purge selected-view HTTP > pending response replaces best summary reference=false explicit=true published=false matches old bytes and estimates [71.51ms]\n(pass) native semantic purge selected-view HTTP > pending response replaces best summary reference=true explicit=true published=false matches old bytes and estimates [80.30ms]\n(pass) native semantic purge selected-view HTTP > pending response replaces best summary reference=false explicit=true published=true matches old bytes and estimates [84.76ms]\n(pass) native semantic purge selected-view HTTP > pending response replaces best summary reference=true explicit=true published=true matches old bytes and estimates [109.20ms]\n\n 96 pass\n 0 fail\n 1896 expect() calls\nRan 96 tests across 1 file. [9.40s]\n"
+        },
+        {
+          "name": "memory-text-driver",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-purge-view-final-bf/memory.ts",
+            "fresh-native-full-text"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+          "pid": 54275,
+          "exit": 0,
+          "sha256": "f08aea97ee1d7fc12f3f891a4cc815adafbb8249ffcd559874a4a1c8d84642ea",
+          "summary": "START fresh-native-full-text 54278 2026-10-22T09:46:28.052Z\nEND fresh-native-full-text 0 bun test v1.3.14 (0d9b296a)\n\nsrc/__tests__/send-peak.native-full-text.test.ts:\n(pass) native plain Chat original three-pair text protocol > measures cold large fill, three pairs and six retained sends [104598.20ms]\n\n 1 pass\n 0 fail\n 41 expect() calls\nRan 1 test across 1 file. [105.27s]\n\n"
+        },
+        {
+          "name": "memory-tools-driver",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-purge-view-final-bf/memory.ts",
+            "fresh-native-full-tools"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+          "pid": 55671,
+          "exit": 0,
+          "sha256": "f4f4c6645c847eddf34575df8948ab2b65b9e4042f066eae3e72b20f440f5a1c",
+          "summary": "START fresh-native-full-tools 55673 2026-10-22T09:48:13.468Z\nEND fresh-native-full-tools 1 bun test v1.3.14 (0d9b296a)\n\nsrc/__tests__/send-peak.native-full-tools.test.ts:\nkilled 1 dangling process\n(fail) native plain Chat original three-pair tool-heavy protocol > measures cold large fill, three pairs and six retained sends [170001.31ms]\n  ^ this test timed out after 170000ms.\n\n 0 pass\n 1 fail\nRan 1 test across 1 file. [170.68s]\n\n"
+        }
+      ]
+    },
+    {
+      "path": "tmp/p6/chat-purge-view-final-bf/remaining/gates.json",
+      "sha256": "1b124c3ae63b992a23ee29c9eee404bf826ff3085eafb4d14e221472b9c19ec8",
+      "results": [
+        {
+          "name": "providers-journal-wire-body-golden.test.ts",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "test",
+            "src/__tests__/journal-wire-body-golden.test.ts",
+            "--timeout",
+            "180000"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+          "pid": 45679,
+          "exit": 0,
+          "sha256": "20987cac7a991b515de8959a1c99a0381e61e81eb47adef39ce2d3874fe5f9fe",
+          "summary": "ve HistoryService frozen request bytes > route anthropic-cache-off > unicode-edges sends the frozen complete body and Content-Length from journal rows [21.79ms]\n(pass) native HistoryService frozen request bytes > route anthropic-cache-off > cache-tail-user sends the frozen complete body and Content-Length from journal rows [24.23ms]\n(pass) native HistoryService frozen request bytes > route anthropic-cache-off > cache-tail-tool-result sends the frozen complete body and Content-Length from journal rows [20.85ms]\n(pass) native HistoryService frozen request bytes > route anthropic-cache-off > cache-tail-assistant sends the frozen complete body and Content-Length from journal rows [18.36ms]\n(pass) native HistoryService frozen request bytes > route anthropic-cache-off > cache-anchor sends the frozen complete body and Content-Length from journal rows [21.89ms]\n(pass) native HistoryService frozen request bytes > route anthropic-cache-off > cache-tail-thinking sends the frozen complete body and Content-Length from journal rows [20.61ms]\n(pass) native HistoryService frozen request bytes > route anthropic-cache-off > cache-media-purge-boundary sends the frozen complete body and Content-Length from journal rows [24.08ms]\n(pass) native HistoryService frozen request bytes > route anthropic-cache-off > responses-stateful-parent sends the frozen complete body and Content-Length from journal rows [23.00ms]\n(pass) native HistoryService frozen request bytes > route anthropic-cache-off > blockless-row sends the frozen complete body and Content-Length from journal rows [30.85ms]\n(pass) native HistoryService frozen request bytes > rejects a changed committed row through the real native source and transport [21.62ms]\n\n 155 pass\n 0 fail\n 155 expect() calls\nRan 155 tests across 1 file. [4.52s]\n"
+        },
+        {
+          "name": "providers-journal-large-native-send.test.ts",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "test",
+            "src/__tests__/journal-large-native-send.test.ts",
+            "--timeout",
+            "180000"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+          "pid": 45745,
+          "exit": 0,
+          "sha256": "eb828dc9873a407483759902272aacf5ba1d714dcd3075ef8b4cf50e326c92c7",
+          "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/__tests__/journal-large-native-send.test.ts:\n(pass) native journal 40 MiB production sends > openai-chat-plain: sends 40 MiB text with exact oracle bytes and Content-Length over HTTP [824.41ms]\n(pass) native journal 40 MiB production sends > openai-chat-plain: sends 40 MiB text and a stored image reference with exact oracle bytes and Content-Length over HTTP [740.08ms]\n(pass) native journal 40 MiB production sends > openai-responses-via-openai: sends 40 MiB text with exact oracle bytes and Content-Length over HTTP [639.33ms]\n(pass) native journal 40 MiB production sends > openai-responses-via-openai: sends 40 MiB text and a stored image reference with exact oracle bytes and Content-Length over HTTP [721.41ms]\n(pass) native journal 40 MiB production sends > openai-responses: sends 40 MiB text with exact oracle bytes and Content-Length over HTTP [731.81ms]\n(pass) native journal 40 MiB production sends > openai-responses: sends 40 MiB text and a stored image reference with exact oracle bytes and Content-Length over HTTP [749.38ms]\n(pass) native journal 40 MiB production sends > anthropic-cache-off: sends 40 MiB text with exact oracle bytes and Content-Length over HTTP [977.73ms]\n(pass) native journal 40 MiB production sends > anthropic-cache-off: sends 40 MiB text and a stored image reference with exact oracle bytes and Content-Length over HTTP [780.38ms]\n\n 8 pass\n 0 fail\n 72 expect() calls\nRan 8 tests across 1 file. [6.86s]\n"
+        },
+        {
+          "name": "core-journalStore.readerLifetime.test.ts",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "test",
+            "src/journal/journalStore.readerLifetime.test.ts",
+            "--timeout",
+            "180000"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+          "pid": 45841,
+          "exit": 0,
+          "sha256": "aaf791e1f1a8e552a3e3ea355817308fefd994959410f31c07016a10e76cee47",
+          "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/journal/journalStore.readerLifetime.test.ts:\n(pass) journal reader ownership across writer retirement > retires writes without waiting for readers and closes the descriptor at the final held pin [13.83ms]\n(pass) journal reader ownership across writer retirement > reports retired batch descriptor release failure after closing the file [1.15ms]\n(pass) journal reader ownership across writer retirement > reports retired dump descriptor release failure after closing the file [1.14ms]\n(pass) journal reader ownership across writer retirement > reports a fanout-held reader close failure through flush after all mirrors settle [6.95ms]\n(pass) journal reader ownership across writer retirement > closes a reader-free journal before returning [2.04ms]\n(pass) journal reader ownership across writer retirement > keeps an abort reason before a deferred descriptor-close failure [1.08ms]\n(pass) journal reader ownership across writer retirement > joins an admitted checkpoint deletion before closing while rejecting later work [1.58ms]\n(pass) journal reader ownership across writer retirement > closes immediately with no readers and preserves the original close failure [0.69ms]\n(pass) journal reader ownership across writer retirement > reports deferred descriptor close failure to the final reader release [0.67ms]\n(pass) journal reader ownership across writer retirement > keeps callback and descriptor-close failures in their original order [0.80ms]\n(pass) journal reader ownership across writer retirement > preserves the abort reason when a retired snapshot releases its descriptor [0.85ms]\n\n 11 pass\n 0 fail\n 29 expect() calls\nRan 11 tests across 1 file. [349.00ms]\n"
+        },
+        {
+          "name": "core-journalStore.readerCleanup.test.ts",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "test",
+            "src/journal/journalStore.readerCleanup.test.ts",
+            "--timeout",
+            "180000"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+          "pid": 45848,
+          "exit": 0,
+          "sha256": "00853ae2484a9c638e30c97b3267506408189884a77c19859d3f16bdbd07eed9",
+          "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/journal/journalStore.readerCleanup.test.ts:\n(pass) retired reader cross-cleanup error identity > keeps the original consumer error before the original dump descriptor failure [12.68ms]\n(pass) retired reader cross-cleanup error identity > preserves readAt failure identity before final descriptor release failure [1.66ms]\n(pass) retired reader cross-cleanup error identity > still closes the descriptor when suspended dump reader cleanup fails independently [3.26ms]\n\n 3 pass\n 0 fail\n 20 expect() calls\nRan 3 tests across 1 file. [367.00ms]\n"
+        },
+        {
+          "name": "core-normalization-unit-oracle.test.ts",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "test",
+            "src/services/history/normalization-unit-oracle.test.ts",
+            "--timeout",
+            "180000"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+          "pid": 45852,
+          "exit": 0,
+          "sha256": "e6ac969903a88d249e3ec8c4ac70f1c7f3a57a57c1e43f8faf78d5737fdab0e3",
+          "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/services/history/normalization-unit-oracle.test.ts:\n(pass) immutable old-normalizer unit oracle > matches all 5000 frozen input, unit and pending hashes without regenerating them [4561.39ms]\n(pass) immutable old-normalizer unit oracle > matches the frozen subset admitted by the indexed orphan-only stream [1058.44ms]\n(pass) immutable old-normalizer unit oracle > matches all 5000 indexed outputs, counts and pending origins without refusals [8990.20ms]\n\n 3 pass\n 0 fail\n 60857 expect() calls\nRan 3 tests across 1 file. [14.91s]\n"
+        },
+        {
+          "name": "core-tail-query-oracle.test.ts",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "test",
+            "src/services/history/tail-query-oracle.test.ts",
+            "--timeout",
+            "180000"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+          "pid": 46050,
+          "exit": 0,
+          "sha256": "80e0f1599d8150d44b9daecbda30ecfa0073cd5c8b5f6108b26ee929c26fac88",
+          "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/services/history/tail-query-oracle.test.ts:\n(pass) normalized request-tail frozen differential > matches count, selection, last, successor and cursor ranges for all 5000 unchanged inputs [58967.94ms]\n\n 1 pass\n 0 fail\n 1470046 expect() calls\nRan 1 test across 1 file. [59.27s]\n"
+        },
+        {
+          "name": "core-native-provider-request.test.ts",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "test",
+            "src/services/history/native-provider-request.test.ts",
+            "--timeout",
+            "180000"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+          "pid": 46841,
+          "exit": 0,
+          "sha256": "af3a09ed3d62c71b6d8ddbaf1f0f09dec2c1c36102676e5420e2baa07a60cf28",
+          "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/services/history/native-provider-request.test.ts:\n(pass) native backend provider normalization > uses the indexed request and overlays pending results without publishing them [118.67ms]\n\n 1 pass\n 0 fail\n 14 expect() calls\nRan 1 test across 1 file. [465.00ms]\n"
+        },
+        {
+          "name": "core-native-provider-lifetime.test.ts",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "test",
+            "src/services/history/native-provider-lifetime.test.ts",
+            "--timeout",
+            "180000"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+          "pid": 46848,
+          "exit": 0,
+          "sha256": "12408e58738a05172d525f4c39130c5e5f84c67caebfcecbd429f261ad9cbee7",
+          "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/services/history/native-provider-lifetime.test.ts:\n(pass) native normalized request lifetime > releases the canceled reader without invalidating another reader or pin [53.02ms]\n\n 1 pass\n 0 fail\n 7 expect() calls\nRan 1 test across 1 file. [402.00ms]\n"
+        },
+        {
+          "name": "core-native-media-provenance.test.ts",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "test",
+            "src/storage/native-media-provenance.test.ts",
+            "--timeout",
+            "180000"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+          "pid": 46852,
+          "exit": 0,
+          "sha256": "98236205cf98481170297c5cc648541085b4863ed4ebde8d98721ae095841061",
+          "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/storage/native-media-provenance.test.ts:\n(pass) native media reference provenance > uses a live pending admission after prior history ownership=%s without a second reservation [82.24ms]\n(pass) native media reference provenance > uses a live pending admission after prior history ownership=%s without a second reservation [46.81ms]\n(pass) native media reference provenance > reserves an unowned reference even when its content ID and row metadata match history [22.28ms]\n(pass) native media reference provenance > does not trust a caller-supplied native-history lease stub [5.46ms]\n(pass) native media reference provenance > reserves when a genuine snapshot reference is presented to another runtime store [22.55ms]\n\n 5 pass\n 0 fail\n 15 expect() calls\nRan 5 tests across 1 file. [521.00ms]\n"
+        },
+        {
+          "name": "core-native-media-queue-reopen.test.ts",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "test",
+            "src/storage/native-media-queue-reopen.test.ts",
+            "--timeout",
+            "180000"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+          "pid": 46856,
+          "exit": 0,
+          "sha256": "0116e54cf5995280e38a847faf865dea9d4c12aee987938699dbab6f559a4d20",
+          "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/storage/native-media-queue-reopen.test.ts:\nqueue crash child pid=46857\n(pass) native media release queue across owner reopen > reclaims a queued blob after a killed request without expiring its instance lease [338.46ms]\n(pass) native media release queue across owner reopen > vetoes actual compaction while pinned and preserves current media after drain and swap [84.78ms]\n(pass) native media release queue across owner reopen > repeats an already completed external release when the durable head write was interrupted [42.35ms]\n(pass) native media release queue across owner reopen > protects checkpoint media through drain, compaction and reopen until checkpoint deletion [96.98ms]\n(pass) native media release queue across owner reopen > keeps a failed release durable and retries it idempotently on an independent owner open [42.78ms]\n\n 5 pass\n 0 fail\n 52 expect() calls\nRan 5 tests across 1 file. [912.00ms]\n"
+        },
+        {
+          "name": "core-declarations",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "../../scripts/build_package.ts"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+          "pid": 46862,
+          "exit": 0,
+          "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127",
+          "summary": "Successfully copied files.\n"
+        },
+        {
+          "name": "providers-declarations",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "../../scripts/build_package.ts"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+          "pid": 46909,
+          "exit": 0,
+          "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127",
+          "summary": "Successfully copied files.\n"
+        },
+        {
+          "name": "agents-declarations",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "../../scripts/build_package.ts"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents",
+          "pid": 46932,
+          "exit": 0,
+          "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127",
+          "summary": "Successfully copied files.\n"
+        },
+        {
+          "name": "core-types",
+          "args": [
+            "node_modules/.bin/tsc",
+            "--noEmit",
+            "-p",
+            "packages/core/tsconfig.noemit.json"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+          "pid": 46963,
+          "exit": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "summary": ""
+        },
+        {
+          "name": "providers-types",
+          "args": [
+            "node_modules/.bin/tsc",
+            "--noEmit",
+            "-p",
+            "packages/providers/tsconfig.noemit.json"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+          "pid": 47051,
+          "exit": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "summary": ""
+        },
+        {
+          "name": "agents-types",
+          "args": [
+            "node_modules/.bin/tsc",
+            "--noEmit",
+            "-p",
+            "packages/agents/tsconfig.noemit.json"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+          "pid": 47194,
+          "exit": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "summary": ""
+        },
+        {
+          "name": "providers-bun-types",
+          "args": [
+            "node_modules/.bin/tsc",
+            "--noEmit",
+            "-p",
+            "packages/providers/tsconfig.test-bun.json",
+            "--types",
+            "bun"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+          "pid": 47347,
+          "exit": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "summary": ""
+        },
+        {
+          "name": "agents-bun-types",
+          "args": [
+            "node_modules/.bin/tsc",
+            "--noEmit",
+            "-p",
+            "packages/agents/tsconfig.test-bun.json",
+            "--types",
+            "bun"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+          "pid": 47390,
+          "exit": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "summary": ""
+        },
+        {
+          "name": "lint",
+          "args": [
+            "node_modules/.bin/eslint",
+            "--max-warnings",
+            "0",
+            "packages/agents/src/core/__tests__/native-chat-purge-http.test.ts",
+            "packages/core/src/journal/formatFill.ts",
+            "packages/core/src/journal/journalStore.ts",
+            "packages/core/src/journal/versionSnapshot.ts",
+            "packages/core/src/services/history/detachedHistoryAPI.ts",
+            "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+            "packages/core/src/services/history/journal-indexed-overlay.ts",
+            "packages/core/src/services/history/journal-request-projection.ts",
+            "packages/core/src/services/history/journal-tail-source.ts",
+            "packages/core/src/services/history/journalHistoryStore.ts",
+            "packages/core/src/services/history/journalSemanticPurge.ts",
+            "packages/core/src/services/history/native-purge-provider-request.ts",
+            "packages/core/src/services/history/semantic-purge-native.ts",
+            "packages/providers/src/openai-responses/responses-row-media.ts",
+            "packages/providers/src/openai/journal-chat-length-lifecycle.test.ts",
+            "packages/providers/src/openai/journal-chat-length.ts",
+            "packages/core/src/journal/pinned-format-fill.ts",
+            "packages/core/src/services/history/pinned-request-formats.ts",
+            "packages/agents/src/core/native-purge-view-http.test.ts",
+            "packages/core/src/services/history/native-provider-format.ts",
+            "packages/agents/src/core/native-purge-view-cost.test.ts"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+          "pid": 47448,
+          "exit": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "summary": ""
+        },
+        {
+          "name": "format",
+          "args": [
+            "node_modules/.bin/prettier",
+            "--check",
+            "packages/agents/src/core/__tests__/native-chat-purge-http.test.ts",
+            "packages/core/src/journal/formatFill.ts",
+            "packages/core/src/journal/journalStore.ts",
+            "packages/core/src/journal/versionSnapshot.ts",
+            "packages/core/src/services/history/detachedHistoryAPI.ts",
+            "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+            "packages/core/src/services/history/journal-indexed-overlay.ts",
+            "packages/core/src/services/history/journal-request-projection.ts",
+            "packages/core/src/services/history/journal-tail-source.ts",
+            "packages/core/src/services/history/journalHistoryStore.ts",
+            "packages/core/src/services/history/journalSemanticPurge.ts",
+            "packages/core/src/services/history/native-purge-provider-request.ts",
+            "packages/core/src/services/history/semantic-purge-native.ts",
+            "packages/providers/src/openai-responses/responses-row-media.ts",
+            "packages/providers/src/openai/journal-chat-length-lifecycle.test.ts",
+            "packages/providers/src/openai/journal-chat-length.ts",
+            "packages/core/src/journal/pinned-format-fill.ts",
+            "packages/core/src/services/history/pinned-request-formats.ts",
+            "packages/agents/src/core/native-purge-view-http.test.ts",
+            "packages/core/src/services/history/native-provider-format.ts",
+            "packages/agents/src/core/native-purge-view-cost.test.ts"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+          "pid": 47565,
+          "exit": 0,
+          "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+          "summary": "Checking formatting...\nAll matched files use Prettier code style!\n"
+        },
+        {
+          "name": "graph",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "scripts/check-affected-test-shards.ts"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+          "pid": 47572,
+          "exit": 0,
+          "sha256": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67",
+          "summary": "affected-test-shards drift guard: scanning /Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code against scripts/affected-test-shards.data.json\naffected-test-shards drift guard PASSED: checked-in graph matches real imports.\n"
+        },
+        {
+          "name": "audit",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "scripts/test-audit/scan.ts",
+            "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-purge-view-final-bf/remaining/audit"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+          "pid": 47609,
+          "exit": 0,
+          "sha256": "107fe9a6d38b6285c5cdbc1a199f52b821e717dbe652ad47ad8a9843b0e0c5c4",
+          "summary": "files scanned: 4670  errors: 0\ntests: 44662  assertions: 110435  (avg 2.47 asserts/test)\nfindings: 2622\n\n== by flag ==\n   855  DUP_ASSERT\n   497  MOCK_ONLY_ORACLE\n   483  SELF_CONFIRMING\n   242  WEAK_ONLY\n   187  STRUCTURE_ONLY\n   170  MOCK_MIRROR\n    98  NO_ASSERT\n    45  SNAPSHOT_ONLY\n    25  SWALLOWED_ASSERT\n    14  ALWAYS_TRUE\n     6  SELF_COMPARE\n\n== by area ==\n   823  cli\n   534  core\n   449  agents\n   378  providers\n   123  scripts\n    64  mcp\n    61  tools\n    43  auth\n    31  telemetry\n    24  integration-tests\n    21  zed-acp\n    20  lsp\n    18  policy\n     9  ide-integration\n     8  settings\n     7  vscode-ide-companion\n     4  storage\n     3  test-utils\n\nper-file stats for 4545 files written alongside findings.tsv\n"
+        },
+        {
+          "name": "preservation",
+          "args": [
+            "shasum",
+            "-a",
+            "256",
+            "-c",
+            "tmp/p6/chat-tail-run-au/preserved.sha256"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+          "pid": 47655,
+          "exit": 0,
+          "sha256": "0e4199bb6c410cc6f1e5bd39e3d87c8159795d9dc60279f003e975a7ea37b454",
+          "summary": "ivery/source-inventory.tsv: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/final-delivery/starting-inventory-files.txt: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/final-delivery/test-case-evidence.tsv: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/final-delivery/touched-audit.tsv: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/final-delivery/verified-tests.tsv: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/final-delivery/w17-remaining-files.txt: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/native-test-evidence.tsv: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/remaining-inventory-files.txt: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/source-inventory.tsv: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/starting-inventory-files.txt: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/test-case-evidence.tsv: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/verified-tests.tsv: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/w17-remaining-files.txt: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/w21/ROOT-CAUSE.md: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/w21/STATUS.md: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/w21/contract-map.md: OK\nproject-plans/issue854/recovery-2026-10-19/recreated-notes-at-recovery/w21/remaining-contracts.md: OK\nproject-plans/issue854/recovery-2026-10-19/validate-recovery.ts: OK\nproject-plans/issue854/recovery-2026-10-19/validation.json: OK\n"
+        }
+      ]
+    },
+    {
+      "path": "tmp/p6/chat-purge-view-final-bf/supplement/gates.json",
+      "sha256": "ddee91d5e5088adcef1517a3ea57e624e964cb88453bf9a815258c0b002929c8",
+      "results": [
+        {
+          "name": "providers-journal-chat-length-lifecycle.test.ts",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "test",
+            "src/openai/journal-chat-length-lifecycle.test.ts",
+            "--timeout",
+            "180000"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+          "pid": 42771,
+          "exit": 0,
+          "sha256": "fdda61ef3f9f1741a60424d3207417dd641060a84bd53fedfe33802429539d18",
+          "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/openai/journal-chat-length-lifecycle.test.ts:\n(pass) native format registration lifecycle > fills an immutable older view without changing the published rows [22.62ms]\n(pass) native format registration lifecycle > reads explicitly on cold fill, zero bytes for warm plans and bounded paths for an append [47.36ms]\n(pass) native format registration lifecycle > restores lengths through pop, owner edits, rebuild, clone, compaction and reopen [33.26ms]\n(pass) native format registration lifecycle > captures settings before asynchronous registration and leaves a plan unchanged after a model change [2.86ms]\n(pass) native format registration lifecycle > does not assign mapping-only and length formats conflicting meanings in one slot [3.18ms]\n(pass) native format registration lifecycle > preserves the published version, old pin and original cause when a measurer fails [11.64ms]\n(pass) native format registration lifecycle > refuses stale generations and an unmeasured zero summary instead of declaring a length [1.92ms]\n\n 7 pass\n 0 fail\n 95 expect() calls\nRan 7 tests across 1 file. [434.00ms]\n"
+        },
+        {
+          "name": "providers-native-chat-estimate.test.ts",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "test",
+            "src/openai/native-chat-estimate.test.ts",
+            "--timeout",
+            "180000"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+          "pid": 42776,
+          "exit": 0,
+          "sha256": "2844bc6cbc6f60a4c3d33e4dcb5e430f8552b97847386e967007be20b7b63217",
+          "summary": "red native Chat estimates through production preparation > matches the old eager token oracle for cache-anchor with captured system/tools and inline media [7.02ms]\n(pass) stored native Chat estimates through production preparation > matches the old eager token oracle for cache-tail-thinking with captured system/tools and inline media [5.35ms]\n(pass) stored native Chat estimates through production preparation > matches the old eager token oracle for cache-media-purge-boundary with captured system/tools and inline media [10.47ms]\n(pass) stored native Chat estimates through production preparation > matches the old eager token oracle for responses-stateful-parent with captured system/tools and inline media [8.96ms]\n(pass) stored native Chat estimates through production preparation > matches the old eager token oracle for blockless-row with captured system/tools and inline media [6.47ms]\n(pass) stored native Chat estimates through production preparation > matches the old eager token oracle for many-images with captured system/tools and inline media [9.52ms]\n(pass) stored native Chat estimates through production preparation > matches the old eager token oracle for embedded-data-uri with captured system/tools and inline media [8.95ms]\n(pass) stored native Chat estimates through production preparation > preserves scoped estimate failure behavior for abort and permits a fresh pin [4.45ms]\n(pass) stored native Chat estimates through production preparation > preserves scoped estimate failure behavior for dispose and permits a fresh pin [7.47ms]\n(pass) stored native Chat estimates through production preparation > preserves scoped estimate failure behavior for tokenizer-failure and permits a fresh pin [3.90ms]\n\n 33 pass\n 0 fail\n 74 expect() calls\nRan 33 tests across 1 file. [3.48s]\n"
+        },
+        {
+          "name": "providers-native-chat-last-thinking.test.ts",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "test",
+            "src/openai/native-chat-last-thinking.test.ts",
+            "--timeout",
+            "180000"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+          "pid": 42826,
+          "exit": 0,
+          "sha256": "816a9665457f9997a5f4af04a41e8bd65e0915415c64d9b002153f457050970d",
+          "summary": "ip and inclusion setting [71.48ms]\n(pass) native stored last-thinking policy > tool thinking filtered by normalization matches the independent old converter for every strip and inclusion setting [86.41ms]\n(pass) native stored last-thinking policy > orphan call matches the independent old converter for every strip and inclusion setting [79.25ms]\n(pass) native stored last-thinking policy > repeated ID matches the independent old converter for every strip and inclusion setting [102.39ms]\n(pass) native stored last-thinking policy > pending user matches the independent old converter for every strip and inclusion setting [78.49ms]\n(pass) native stored last-thinking policy > pending AI overrides history matches the independent old converter for every strip and inclusion setting [77.76ms]\n(pass) native stored last-thinking policy > pending response changes holder matches the independent old converter for every strip and inclusion setting [97.73ms]\n(pass) native stored last-thinking policy > pending response before call matches the independent old converter for every strip and inclusion setting [108.52ms]\n(pass) native stored last-thinking policy > rejects invalid policy last before creating a transport body [20.34ms]\n(pass) native stored last-thinking policy > rejects invalid policy allbutlast before creating a transport body [17.79ms]\n(pass) native stored last-thinking policy > rejects invalid policy  before creating a transport body [16.08ms]\n(pass) native stored last-thinking policy > rejects invalid policy invalid before creating a transport body [17.88ms]\n(pass) native stored last-thinking policy > carries last-unit ranks through append, old pins, pop, rewrite, clone, compaction and reopen [89.36ms]\n\n 21 pass\n 0 fail\n 595 expect() calls\nRan 21 tests across 1 file. [2.39s]\n"
+        },
+        {
+          "name": "providers-native-chat-preparation.test.ts",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "test",
+            "src/openai/native-chat-preparation.test.ts",
+            "--timeout",
+            "180000"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+          "pid": 42859,
+          "exit": 0,
+          "sha256": "02427f61aa9ee7ebf0679559d490314005a8649a5a0508f754a0c2e0236724f9",
+          "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/openai/native-chat-preparation.test.ts:\n(pass) native Chat preparation ownership and planning > prepares a pending user over %s warm rows without historical reads or writes [57.80ms]\n(pass) native Chat preparation ownership and planning > prepares a pending user over %s warm rows without historical reads or writes [1044.13ms]\n(pass) native Chat preparation ownership and planning > captures pending bytes once and keeps retry streams immutable across caller mutation and history append [55.82ms]\n(pass) native Chat preparation ownership and planning > holds at most one source unit under backpressure and retires it on cancel [8.53ms]\n(pass) native Chat preparation ownership and planning > holds at most one source unit under backpressure and retires it on transport-error [10.65ms]\n(pass) native Chat preparation ownership and planning > cold fills %s rows, then prepares and cancels unsent warm bodies with zero physical reads or files [9.75ms]\n(pass) native Chat preparation ownership and planning > cold fills %s rows, then prepares and cancels unsent warm bodies with zero physical reads or files [978.46ms]\n(pass) native Chat preparation ownership and planning > keys repeated preparation by captured reasoning settings against the old converter [13.87ms]\n(pass) native Chat preparation ownership and planning > reuses a cold-filled pin for fresh byte-identical streams and repeated preparation [4.99ms]\n(pass) native Chat preparation ownership and planning > preserves the explicit old continuation route and the streamed test-helper contract [5.30ms]\n\n 10 pass\n 0 fail\n 71 expect() calls\nRan 10 tests across 1 file. [2.87s]\n"
+        },
+        {
+          "name": "providers-native-chat-direct-send.test.ts",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "test",
+            "src/__tests__/native-chat-direct-send.test.ts",
+            "--timeout",
+            "180000"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+          "pid": 42898,
+          "exit": 0,
+          "sha256": "86b047c80d29268cd90e2f0e8d7e343bb4452fe81d026cd85447f84001774750",
+          "summary": " plain Chat direct production send > selects a better pending duplicate and retains the first response media [30.47ms]\n(pass) native plain Chat direct production send > normalizes response-before-call with a pending duplicate call [30.05ms]\n(pass) native plain Chat direct production send > preserves empty IDs, normalized-ID collisions and repeated pending calls [29.46ms]\n(pass) native plain Chat direct production send > keeps pending thinking and inline user image bytes [28.80ms]\n(pass) native plain Chat direct production send > drops cross-speaker result messages when a real assistant call exists [36.13ms]\n(pass) native plain Chat direct production send > sends a pending user without files with streaming enabled [27.81ms]\n(pass) native plain Chat direct production send > sends a pending user without files with streaming disabled [26.61ms]\n(pass) native plain Chat direct production send > streams a native request into a real streaming Chat response without files [23.50ms]\n(pass) native plain Chat direct production send > sends the old builder bytes and Content-Length without creating any file or directory [23.17ms]\n(pass) native plain Chat direct production send > keeps strict OpenAI tool-call reasoning policy in measurement and emission [40.08ms]\n(pass) native plain Chat direct production send > filters empty assistant units before counting the native contribution [20.57ms]\n(pass) native plain Chat direct production send > flushes one tool unit of media without a scratch index or spool [24.93ms]\n(pass) native plain Chat direct production send > preserves reasoning.includeInContext=%s [20.82ms]\n(pass) native plain Chat direct production send > preserves reasoning.includeInContext=%s [25.42ms]\n\n 17 pass\n 0 fail\n 102 expect() calls\nRan 17 tests across 1 file. [1326.00ms]\n"
+        },
+        {
+          "name": "providers-native-chat-golden.test.ts",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "test",
+            "src/__tests__/native-chat-golden.test.ts",
+            "--timeout",
+            "180000"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+          "pid": 42921,
+          "exit": 0,
+          "sha256": "9b58c9b43f88c63b1d1b732c078002d8173964cb92af7b296d7ef673dcfa6383",
+          "summary": "nking-only-chain checks raw frozen bytes and native curated parity without request files [25.81ms]\n(pass) native plain Chat frozen HTTP bodies > media-inline-image checks raw frozen bytes and native curated parity without request files [28.20ms]\n(pass) native plain Chat frozen HTTP bodies > media-reference-image checks raw frozen bytes and native curated parity without request files [52.06ms]\n(pass) native plain Chat frozen HTTP bodies > unicode-edges checks raw frozen bytes and native curated parity without request files [26.28ms]\n(pass) native plain Chat frozen HTTP bodies > cache-tail-user checks raw frozen bytes and native curated parity without request files [24.17ms]\n(pass) native plain Chat frozen HTTP bodies > cache-tail-tool-result checks raw frozen bytes and native curated parity without request files [31.81ms]\n(pass) native plain Chat frozen HTTP bodies > cache-tail-assistant checks raw frozen bytes and native curated parity without request files [27.43ms]\n(pass) native plain Chat frozen HTTP bodies > cache-anchor checks raw frozen bytes and native curated parity without request files [27.52ms]\n(pass) native plain Chat frozen HTTP bodies > cache-tail-thinking checks raw frozen bytes and native curated parity without request files [22.56ms]\n(pass) native plain Chat frozen HTTP bodies > cache-media-purge-boundary checks raw frozen bytes and native curated parity without request files [24.25ms]\n(pass) native plain Chat frozen HTTP bodies > responses-stateful-parent checks raw frozen bytes and native curated parity without request files [27.29ms]\n(pass) native plain Chat frozen HTTP bodies > blockless-row checks raw frozen bytes and native curated parity without request files [33.27ms]\n\n 22 pass\n 0 fail\n 176 expect() calls\nRan 22 tests across 1 file. [1462.00ms]\n"
+        },
+        {
+          "name": "providers-native-chat-media-lease.test.ts",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "test",
+            "src/__tests__/native-chat-media-lease.test.ts",
+            "--timeout",
+            "180000"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+          "pid": 42940,
+          "exit": 0,
+          "sha256": "41de54681fce2827f6e29c3065aedb5002abcd4129ab6773b849f091e3057e75",
+          "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/__tests__/native-chat-media-lease.test.ts:\n(pass) native plain Chat history media lease > keeps a blob through concurrent clear while an actual HTTP body is paused before its read [166.75ms]\n(pass) native plain Chat history media lease > sends the 323-byte reference image twice without creating files, survives clear, and reclaims on close [64.02ms]\n\n 2 pass\n 0 fail\n 26 expect() calls\nRan 2 tests across 1 file. [906.00ms]\n"
+        },
+        {
+          "name": "providers-native-chat-media-lifetime.test.ts",
+          "args": [
+            "/opt/homebrew/Cellar/bun/1.3.14/bin/bun",
+            "test",
+            "src/__tests__/native-chat-media-lifetime.test.ts",
+            "--timeout",
+            "180000"
+          ],
+          "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+          "pid": 42950,
+          "exit": 1,
+          "sha256": "8fbbf41ab4edae1b9342e0318c25bf6d07baaeb6347ca7f0617daf53033a204c",
+          "summary": "bun test v1.3.14 (0d9b296a)\n\nsrc/__tests__/native-chat-media-lifetime.test.ts:\n(pass) actual native historical reference-media row lifetime > releases 64 historical rows with 64 KiB text while resolving one payload at a time [1082.06ms]\n(pass) actual native historical reference-media row lifetime > releases 64 distinct references with 64 KiB text rows [1209.91ms]\n(pass) actual native historical reference-media row lifetime > releases %s historical reference rows with 128-byte text [6264.24ms]\n216 |     const final = await resolver.census.sample();\n217 |     expect(streams).toBe(1);\n218 |     expect(resolver.census.acquired).toBe(count);\n219 |     expect(resolver.census.peakRows).toBeGreaterThan(0);\n220 |     expect(resolver.census.peakPayloadBytes).toBe(textBytes + 4);\n221 |     expect(final).toStrictEqual({ rows: 0, text: 0, textBytes: 0 });\n                        ^\nerror: expect(received).toStrictEqual(expected)\n\n  {\n-   \"rows\": 0,\n-   \"text\": 0,\n-   \"textBytes\": 0,\n+   \"rows\": 1,\n+   \"text\": 1,\n+   \"textBytes\": 128,\n  }\n\n- Expected  - 3\n+ Received  + 3\n\n      at verifyLifetime (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/__tests__/native-chat-media-lifetime.test.ts:221:19)\n(fail) actual native historical reference-media row lifetime > releases %s historical reference rows with 128-byte text [89027.63ms]\n\n 3 pass\n 1 fail\n 53039 expect() calls\nRan 4 tests across 1 file. [98.29s]\n"
+        }
+      ]
+    }
+  ],
+  "controls": [
+    {
+      "name": "wrong-base",
+      "path": "packages/providers/src/openai/journal-chat-length.ts",
+      "old": "if (indexed.viewPlan.changedSources.length === 0 && selected !== 2)",
+      "value": "if (selected !== 2)",
+      "test": "src/core/native-purge-view-http.test.ts",
+      "filter": "mixed remove reference=false explicit=false published=false",
+      "exit": 1,
+      "restored": true,
+      "sourceHash": "1cf22c2a9b02d79af2d24df9d3df3c894fa5e641ab9ecbe69cba5d08b4ae91e9",
+      "logHash": "0063bc0d2e10ef5e12b6432edbdcbcd6baaf883b4b713d97d46f86a838c99a80",
+      "assertionFailure": true,
+      "creationGuardFailure": false,
+      "tail": "bun test v1.3.14 (0d9b296a)\n\nsrc/core/native-purge-view-http.test.ts:\n78 |         projected,\n79 |         createRuntimeTokenizerFactory(),\n80 |       )\n81 |     ).estimatedPromptTokens;\n82 |     expect(tokens).toBeGreaterThan(0);\n83 |     expect(Math.abs(tokens - expectedTokens)).toBeLessThanOrEqual(16);\n                                                   ^\nerror: expect(received).toBeLessThanOrEqual(expected)\n\nExpected: <= 16\nReceived: 32\n\n      at assertPreparedSend (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/core/native-purge-view-http.test.ts:83:47)\n      at async <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/core/native-purge-view-http.test.ts:413:27)\n      at async operationFileCreates (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/compression/__tests__/support/operation-file-creates.ts:130:11)\n      at async <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/core/native-purge-view-http.test.ts:412:41)\n      at async withPendingMedia (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/core/native-purge-view-http.test.ts:33:11)\n      at async <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/core/native-purge-view-http.test.ts:367:17)\n      at async withNativePurgeFixture (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/__tests__/support/native-purge-fixture.ts:94:11)\n      at async <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/core/native-purge-view-http.test.ts:260:13)\n(fail) native semantic purge selected-view HTTP > mixed remove reference=false explicit=false published=false matches old bytes and estimates [227.87ms]\n\n 0 pass\n 95 filtered out\n 1 fail\n 2 expect() calls\nRan 1 test across 1 file. [918.00ms]\n",
+      "restoredMatchesSaved": true,
+      "restoredMatchesHEAD": true,
+      "currentSha256": "1cf22c2a9b02d79af2d24df9d3df3c894fa5e641ab9ecbe69cba5d08b4ae91e9",
+      "savedSha256": "1cf22c2a9b02d79af2d24df9d3df3c894fa5e641ab9ecbe69cba5d08b4ae91e9",
+      "headSha256": "1cf22c2a9b02d79af2d24df9d3df3c894fa5e641ab9ecbe69cba5d08b4ae91e9"
+    },
+    {
+      "name": "wrong-view-rank",
+      "path": "packages/providers/src/openai/journal-chat-length.ts",
+      "old": "const target = await indexed.unitEntryAt(lastThinking);",
+      "value": "const target = await indexed.unitEntryAt(0);",
+      "test": "src/core/native-purge-view-http.test.ts",
+      "filter": "mixed remove reference=false explicit=false published=false",
+      "exit": 1,
+      "restored": true,
+      "sourceHash": "1cf22c2a9b02d79af2d24df9d3df3c894fa5e641ab9ecbe69cba5d08b4ae91e9",
+      "logHash": "e07d6f2f5ad7de1044d63896a8901e2c31f1d8dcc2ded06ab9c2fe9e8d52aab4",
+      "assertionFailure": true,
+      "creationGuardFailure": false,
+      "tail": "bun test v1.3.14 (0d9b296a)\n\nsrc/core/native-purge-view-http.test.ts:\n79 |         createRuntimeTokenizerFactory(),\n80 |       )\n81 |     ).estimatedPromptTokens;\n82 |     expect(tokens).toBeGreaterThan(0);\n83 |     expect(Math.abs(tokens - expectedTokens)).toBeLessThanOrEqual(16);\n84 |     expect(prepared.spool.byteLength).toBe(\n     ^\nerror: expect(received).toBe(expected)\n\nExpected: 227\nReceived: 226\n\n      at toBe (unknown:1:1)\n      at assertPreparedSend (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/core/native-purge-view-http.test.ts:84:39)\n      at /Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/core/native-purge-view-http.test.ts:413:27\n      at operationFileCreates (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/compression/__tests__/support/operation-file-creates.ts:130:11)\n      at /Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/core/native-purge-view-http.test.ts:412:41\n      at withPendingMedia (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/core/native-purge-view-http.test.ts:49:1)\n      at /Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/core/native-purge-view-http.test.ts:367:17\n      at withNativePurgeFixture (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/services/history/__tests__/support/native-purge-fixture.ts:94:11)\n      at /Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/core/native-purge-view-http.test.ts:331:13\n      at processTicksAndRejections (unknown:7:39)\n(fail) native semantic purge selected-view HTTP > mixed remove reference=false explicit=false published=false matches old bytes and estimates [268.91ms]\n\n 0 pass\n 95 filtered out\n 1 fail\n 15 expect() calls\nRan 1 test across 1 file. [996.00ms]\n",
+      "restoredMatchesSaved": true,
+      "restoredMatchesHEAD": true,
+      "currentSha256": "1cf22c2a9b02d79af2d24df9d3df3c894fa5e641ab9ecbe69cba5d08b4ae91e9",
+      "savedSha256": "1cf22c2a9b02d79af2d24df9d3df3c894fa5e641ab9ecbe69cba5d08b4ae91e9",
+      "headSha256": "1cf22c2a9b02d79af2d24df9d3df3c894fa5e641ab9ecbe69cba5d08b4ae91e9"
+    },
+    {
+      "name": "lost-media-owner",
+      "path": "packages/core/src/services/history/native-purge-provider-request.ts",
+      "old": "candidate.snapshot.mediaStore,",
+      "value": "undefined,",
+      "test": "src/core/native-purge-view-http.test.ts",
+      "filter": "mixed remove reference=true explicit=true published=true",
+      "exit": 1,
+      "restored": true,
+      "sourceHash": "6f51aadd1913fd03536cb2469e04be3477f8391f93f6668bcc400ec5b63dad70",
+      "logHash": "fe2220c38dc61d08c53e2b9958cf9edcb200f0a96c1c3c74d572ca64441934f8",
+      "assertionFailure": false,
+      "creationGuardFailure": true,
+      "tail": "led for content sha256:6105d6cc76af400325e94d588ce511be5bfdbb73b437dc51eca43917d7a43e3d in turn chronology:2\n contentId: \"sha256:6105d6cc76af400325e94d588ce511be5bfdbb73b437dc51eca43917d7a43e3d\",\n    turnId: \"chronology:2\",\n\n      at materializeReferences (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/storage/request-media-resolver.ts:480:19)\n      at resolve (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/storage/request-media-resolver.ts:602:18)\n      at processTicksAndRejections (unknown:7:39)\n\n201 |   operation: string,\n202 |   contentId: string | undefined,\n203 |   error: unknown,\n204 | ): MediaStoreError {\n205 |   if (error instanceof MediaStoreError) return error;\n206 |   return new MediaStoreError(operation, contentId, error);\n                   ^\nMediaStoreError: Media store initialize directories failed [contentId=sha256:6105d6cc76af400325e94d588ce511be5bfdbb73b437dc51eca43917d7a43e3d]: Operation attempted to create a file or directory\n operation: \"initialize directories\",\n contentId: \"sha256:6105d6cc76af400325e94d588ce511be5bfdbb73b437dc51eca43917d7a43e3d\",\n\n      at wrapError (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/storage/local-media-store-validation.ts:206:14)\n      at ensureDirectory (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/storage/local-media-store-files.ts:207:9)\n      at ensureDirectories (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/storage/local-media-store-files.ts:150:18)\n      at executeExclusive (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/storage/local-media-store-persistence.ts:226:66)\n      at runExclusive (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/storage/local-media-store-persistence.ts:210:12)\n      at processTicksAndRejections (unknown:7:39)\n\n71 |     readonly promise: typeof promises.open;\n72 |     readonly callback: typeof fs.open;\n73 |   },\n74 | ): void {\n75 |   const denied = (): never => {\n76 |     throw new Error('Operation attempted to create a file or directory');\n                   ^\nerror: Operation attempted to create a file or directory\n      at denied (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/compression/__tests__/support/operation-file-creates.ts:76:15)\n      at unknown:1:1\n      at createDirectory (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/storage/local-media-store-files.ts:214:51)\n      at ensureDirectory (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/storage/local-media-store-files.ts:169:55)\n      at ensureDirectories (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/storage/local-media-store-files.ts:150:18)\n      at executeExclusive (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/storage/local-media-store-persistence.ts:226:66)\n      at runExclusive (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core/src/storage/local-media-store-persistence.ts:210:12)\n      at processTicksAndRejections (unknown:7:39)\n(fail) native semantic purge selected-view HTTP > mixed remove reference=true explicit=true published=true matches old bytes and estimates [260.01ms]\n\n 0 pass\n 95 filtered out\n 1 fail\n 3 expect() calls\nRan 1 test across 1 file. [954.00ms]\n",
+      "restoredMatchesSaved": true,
+      "restoredMatchesHEAD": true,
+      "currentSha256": "6f51aadd1913fd03536cb2469e04be3477f8391f93f6668bcc400ec5b63dad70",
+      "savedSha256": "6f51aadd1913fd03536cb2469e04be3477f8391f93f6668bcc400ec5b63dad70",
+      "headSha256": "6f51aadd1913fd03536cb2469e04be3477f8391f93f6668bcc400ec5b63dad70"
+    },
+    {
+      "name": "drop-tail-purge",
+      "path": "packages/core/src/services/history/native-purge-provider-request.ts",
+      "old": "      snapshot,\n      tail,\n",
+      "value": "      snapshot,\n      [],\n",
+      "test": "src/core/__tests__/native-chat-purge-http.test.ts",
+      "filter": "sends remove/none",
+      "exit": 1,
+      "restored": true,
+      "sourceHash": "6f51aadd1913fd03536cb2469e04be3477f8391f93f6668bcc400ec5b63dad70",
+      "logHash": "dcc1095dab7c04a47e0eb228f52df8df7d65965184835d11d05eb5fc8f12fadd",
+      "assertionFailure": true,
+      "creationGuardFailure": false,
+      "tail": "bun test v1.3.14 (0d9b296a)\n\nsrc/core/__tests__/native-chat-purge-http.test.ts:\n218 |             .join('');\n219 |         }, true);\n220 |         expect(output).toBe('ok');\n221 |         expect(receipt).toStrictEqual({ files: [], directories: [] });\n222 |         expect(requests).toHaveLength(1);\n223 |         expect(requests[0]).toBe(JSON.stringify(reference.requestBody));\n                                  ^\nerror: expect(received).toBe(expected)\n\nExpected: \"{\"model\":\"gpt-4o\",\"messages\":[{\"role\":\"system\",\"content\":\"system\"},{\"role\":\"assistant\",\"content\":\"older answer\",\"reasoning_content\":\"old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old \"},{\"role\":\"user\",\"content\":\"prior\"},{\"role\":\"assistant\",\"content\":\"answer\",\"reasoning_content\":\"latest first\\nlatest second\"},{\"role\":\"user\",\"content\":\"new user 雪\"}],\"stream\":false}\"\nReceived: \"{\"model\":\"gpt-4o\",\"messages\":[{\"role\":\"system\",\"content\":\"system\"},{\"role\":\"assistant\",\"content\":\"older answer\",\"reasoning_content\":\"old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old old \"},{\"role\":\"user\",\"content\":\"prior\"},{\"role\":\"assistant\",\"content\":\"answer\",\"reasoning_content\":\"latest first\\nlatest second\"}],\"stream\":false}\"\n\n      at <anonymous> (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/core/__tests__/native-chat-purge-http.test.ts:223:29)\n(fail) public native plain Chat semantic purge HTTP > sends remove/none through mandatory estimation and HTTP without operation files [247.41ms]\n\n 0 pass\n 5 filtered out\n 1 fail\n 4 expect() calls\nRan 1 test across 1 file. [989.00ms]\n",
+      "restoredMatchesSaved": true,
+      "restoredMatchesHEAD": true,
+      "currentSha256": "6f51aadd1913fd03536cb2469e04be3477f8391f93f6668bcc400ec5b63dad70",
+      "savedSha256": "6f51aadd1913fd03536cb2469e04be3477f8391f93f6668bcc400ec5b63dad70",
+      "headSha256": "6f51aadd1913fd03536cb2469e04be3477f8391f93f6668bcc400ec5b63dad70"
+    },
+    {
+      "name": "forced-old-normalizer",
+      "path": "packages/providers/src/openai/OpenAIRequestPreparation.ts",
+      "old": "const nativeRows = options.requestRows;",
+      "value": "const nativeRows = undefined;",
+      "test": "src/core/__tests__/native-chat-purge-http.test.ts",
+      "filter": "sends remove/none",
+      "exit": 1,
+      "restored": true,
+      "sourceHash": "dd900591f7870f9d9fa9c0f1afd07c4ff4b75bca6255231b5ea123ddd565ae42",
+      "logHash": "8512425fabdeefb567b459ad37cf160194860083f452837f6665f5da96c35c21",
+      "assertionFailure": false,
+      "creationGuardFailure": true,
+      "tail": "bun test v1.3.14 (0d9b296a)\n\nsrc/core/__tests__/native-chat-purge-http.test.ts:\n83 |   private async project(stage: ProviderSourceStage): Promise<number> {\n84 |     try {\n85 |       return await this.deps.estimate();\n86 |     } catch (error: unknown) {\n87 |       const message = error instanceof Error ? error.message : String(error);\n88 |       throw new Error(\n                     ^\nerror: Token projection failed at initial stage during provider-content hard-limit enforcement: Operation attempted to create a file or directory\n      at project (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/compression/provider-source-enforcement.ts:88:17)\n      at async assess (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/compression/provider-source-enforcement.ts:59:38)\n      at async runSourceStages (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/compression/source-stage-ladder.ts:176:34)\n      at async enforceProviderSource (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/compression/CompressionHandler.ts:546:13)\n      at async prepareSourcePromptEnvelopeAfterEnforcement (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/core/prompt-envelope-source-send.ts:229:32)\n      at async enforceAndStreamSourcePromptEnvelopeRetries (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/core/prompt-envelope-source-send.ts:513:11)\n\n71 |     readonly promise: typeof promises.open;\n72 |     readonly callback: typeof fs.open;\n73 |   },\n74 | ): void {\n75 |   const denied = (): never => {\n76 |     throw new Error('Operation attempted to create a file or directory');\n                   ^\nerror: Operation attempted to create a file or directory\n      at denied (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/compression/__tests__/support/operation-file-creates.ts:76:15)\n      at create (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/utils/wire-body-spool.ts:149:23)\n      at spoolChatBody (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/OpenAIRequestPreparation.ts:396:31)\n      at prepareRequest (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/OpenAIRequestPreparation.ts:532:15)\n      at prepareOpenAIChatProjection (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/OpenAIPromptProjectionPreparation.ts:207:34)\n      at async prepareOpenAIPromptProjection (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/OpenAIPromptEnvelopeStore.ts:129:32)\n(fail) public native plain Chat semantic purge HTTP > sends remove/none through mandatory estimation and HTTP without operation files [181.88ms]\n\n 0 pass\n 5 filtered out\n 1 fail\nRan 1 test across 1 file. [982.00ms]\n",
+      "restoredMatchesSaved": true,
+      "restoredMatchesHEAD": true,
+      "currentSha256": "dd900591f7870f9d9fa9c0f1afd07c4ff4b75bca6255231b5ea123ddd565ae42",
+      "savedSha256": "dd900591f7870f9d9fa9c0f1afd07c4ff4b75bca6255231b5ea123ddd565ae42",
+      "headSha256": "dd900591f7870f9d9fa9c0f1afd07c4ff4b75bca6255231b5ea123ddd565ae42"
+    }
+  ],
+  "physical": {
+    "status": "OPEN: prior instrumentation invalid, not product failure",
+    "path": "tmp/p6/chat-purge-view-final-bf/physical-result.json",
+    "sha256": "2feeef50594e33e82b29e7fc6000a91abab4e562a766d5822ecbcd9cdfa6b679",
+    "logicalCost": "40/4000 warm selected-view test passes 2/14; unchanged payload reads zero, changed row/block reads positive and <=30; no physical zero-I/O inference."
+  },
+  "provenance": "Historical decoded reference identity is weakly captured from trusted pinned source output, including converter-created blocks. Passing a native lease does not authorize unknown user clones: identical IDs alone still require verified external reservation. Pending tail admission captures live scoped ownership.",
+  "memory": "No rerun in this task. Prior tools 170000ms timeout remains RED. Changed production invalidates automatic reuse of original full-memory and sensitivity acceptance.",
+  "open": [
+    "automatic compression plus purge end-to-end",
+    "public ChatSession explicit-cache view modes",
+    "complete current/pending media and newly admitted owner combinations beyond executed selected-view case",
+    "other providers and Kimi/Mistral/old continuation native migration",
+    "native log/dump",
+    "global LENS/live-byte accounting",
+    "aggregate cache/pin/overlay/admission-owner capacity",
+    "fresh original native full text/tools memory and four trap controls"
+  ],
+  "separateRed": [
+    "#3917",
+    "two old durable cases",
+    "blanket compaction denial",
+    "public fixture",
+    "wider core test types: 609 diagnostics"
+  ],
+  "review": "review skipped per Andrew 2026-10-09"
+}
