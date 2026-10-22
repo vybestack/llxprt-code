@@ -23,7 +23,7 @@ Rules that stay: no compatibility shims, no eslint-disable, no type-escape casts
 |---|---|---|
 | 1 | Kimi native request route | Done in `01b957933`: Kimi requests and estimates stream from journal facts without body spooling; publication and one-row retention tests pass |
 | 2 | OpenAI Responses native request route | Done: stateless in `4dc55e707`, stateful in `be3ecbcda`. Journal-backed sends, estimates, parentless recovery and caller input overrides no longer use per-segment disk projection |
-| 3 | Anthropic native request route | Partial in `88e8ab2e6`: uncached, unchanged, media-free journal requests and estimates stream from stored facts. Spooling remains for caching, image recovery budgets, request dumps, changed-source views and persisted media; remove those uses of `AnthropicSpooledRequest.ts` and `message-table/tool-id-index.ts` |
+| 3 | Anthropic native request route | Partial: uncached in `88e8ab2e6`, 5m/1h prompt caching in `781dae82b`. Spooling remains for image recovery budgets, request dumps, changed-source views and persisted media; remove those uses of `AnthropicSpooledRequest.ts` and `message-table/tool-id-index.ts` |
 | 4 | Native request log/dump | Logging and dumps read the journal, no body copy |
 | 5 | Tool-heavy memory test | Passes inside its existing 170,000 ms budget |
 | 6 | Default flip and deletion | `journal` is the default; old JSONL backend, `historyBackendSelect.ts`, `WireBodySpool`, `KeyedRowIndex` and old-only scratch code deleted |
