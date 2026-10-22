@@ -7,6 +7,8 @@ import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/c
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { RequestMediaResolver } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import {
   operationFileCreates,
   type OperationFileCreates,
@@ -49,12 +51,14 @@ class ObservedAnthropicProvider extends AnthropicProvider {
   }
 }
 
-function publicChat(
+export function publicChat(
   provider: AnthropicProvider,
   settings: SettingsService,
   history: HistoryService,
   model: string,
   baseURL: string,
+  mediaResolver?: RequestMediaResolver,
+  mediaStore?: LocalMediaStore,
 ): {
   readonly chat: ReturnType<typeof loggingChatSession>;
   readonly owner: SessionSettingsOwner;
@@ -69,6 +73,8 @@ function publicChat(
   });
   const owner = new SessionSettingsOwner(settings);
   const runtime = createAgentRuntimeContext({
+    mediaResolver,
+    mediaStore,
     promptEstimator: createRuntimeTokenizerFactory(),
     readRuntimeSettings: () => owner.readRuntimePolicy(),
     prepareProviderInvocation: (name, parameters, signal) =>
@@ -88,7 +94,7 @@ function publicChat(
     },
     history,
     settings: { contextLimit: 1_000_000 },
-    providerRuntime: fixture.runtime,
+    providerRuntime: { ...fixture.runtime, mediaResolver },
     provider: { getActiveProvider: () => provider, setActiveProvider() {} },
     tools: { listToolNames: () => [], getToolMetadata: () => undefined },
     telemetry: {

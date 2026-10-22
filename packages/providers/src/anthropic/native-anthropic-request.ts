@@ -1,4 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { UnsupportedMediaEntry } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import { readAnthropicMediaLedger } from './anthropic-media-ledger.js';
 import type { IndexedJournalRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/indexed-journal-request-snapshot.js';
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { VersionSnapshot } from '@vybestack/llxprt-code-core/journal/versionSnapshot.js';
@@ -74,7 +76,7 @@ export interface NativeAnthropicRequest {
   readonly estimate:
     | {
         readonly projection: NativeAnthropicEstimateProjection;
-        readonly unsupportedMedia: readonly [];
+        readonly unsupportedMedia: readonly UnsupportedMediaEntry[];
         discard(): void;
       }
     | undefined;
@@ -160,6 +162,7 @@ async function requestFromEngine(
   measured: StoredAnthropicRequestPlan,
   estimate: boolean,
   mediaStage: MediaStage | undefined,
+  unsupportedMedia: readonly UnsupportedMediaEntry[],
 ): Promise<NativeAnthropicRequest> {
   const signal = getRequestSignal(params.options);
   const prefix = placeSystemInstruction({
@@ -208,7 +211,7 @@ async function requestFromEngine(
         ? undefined
         : {
             projection,
-            unsupportedMedia: [],
+            unsupportedMedia,
             discard: () => {
               void projection.dispose();
             },
@@ -319,6 +322,13 @@ async function prepareNativeAnthropicRequest(
           measured,
           estimate,
           mediaStage,
+          estimate
+            ? await readAnthropicMediaLedger(
+                query,
+                await snapshot.nativeFacts(anthropicRepairScope(settings)),
+                settings,
+              )
+            : [],
         );
       } catch (error) {
         await query.close();
@@ -339,7 +349,6 @@ async function canUseNativeAnthropic(
     return false;
   return (
     (options.recoveryBudget === undefined &&
-      options.estimate !== true &&
       planAnthropicRequest(params).imageBudget === undefined) ||
     !(await native.indexed.hasPersistedMedia())
   );

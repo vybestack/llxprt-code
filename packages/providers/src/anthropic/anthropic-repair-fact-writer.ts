@@ -17,6 +17,7 @@ import {
 } from './anthropic-repair-index.js';
 import { projectAnthropicUnit } from './anthropic-unit-facts.js';
 import { appendAnthropicFacts } from './anthropic-append-facts.js';
+import { writeAnthropicMediaLedger } from './anthropic-media-ledger.js';
 
 interface Consumed {
   readonly ordinal: number;
@@ -131,6 +132,7 @@ export function anthropicRepairFactIndex(
     async write(snapshot, writer, generation) {
       const query = await IndexedJournalRequestSnapshot.create(snapshot);
       try {
+        await writeAnthropicMediaLedger(query, writer, settings);
         const source = new AnthropicRepairSource(query, settings);
         let messages = 0;
         let last = -1;

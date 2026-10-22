@@ -23,6 +23,39 @@ import {
 import type { AnthropicStreamRepair } from './anthropic-stream-repair.js';
 import type { AnthropicMessage } from './AnthropicMessageNormalizer.js';
 import type { AnthropicCachePlan } from './anthropic-cache-facts.js';
+import { anthropicWireMedia } from './anthropic-measured-media.js';
+
+function canonicalMediaValue(
+  value: unknown,
+  key: string,
+  observe: (image: ProjectionImageEntry) => void,
+): unknown {
+  if (Array.isArray(value))
+    return value.map((item) => canonicalMediaValue(item, key, observe));
+  if (typeof value === 'object' && value !== null) {
+    const media = anthropicWireMedia(value);
+    if (media === undefined && !('type' in value && value.type === 'base64'))
+      return Object.fromEntries(
+        Object.entries(value).map(([childKey, child]) => [
+          childKey,
+          canonicalMediaValue(child, childKey, observe),
+        ]),
+      );
+    const images: ProjectionImageEntry[] = [];
+    const canonical = canonicalizePromptValue(value, key, images);
+    for (const image of images)
+      observe(
+        media?.encoding === 'reference'
+          ? { dimensions: media.dimensions }
+          : image,
+      );
+    return canonical;
+  }
+  const images: ProjectionImageEntry[] = [];
+  const canonical = canonicalizePromptValue(value, key, images);
+  for (const image of images) observe(image);
+  return canonical;
+}
 
 export class NativeAnthropicEstimateProjection {
   readonly protocol = 'anthropic-messages';
@@ -44,12 +77,8 @@ export class NativeAnthropicEstimateProjection {
       const value = this.envelope[key];
       if (value === undefined) continue;
       yield `${separator}${JSON.stringify(key)}:`;
-      const canonical = (item: unknown): unknown => {
-        const images: ProjectionImageEntry[] = [];
-        const value = canonicalizePromptValue(item, key, images);
-        for (const image of images) observeImage(image);
-        return value;
-      };
+      const canonical = (item: unknown): unknown =>
+        canonicalMediaValue(item, key, observeImage);
       if (key === 'messages')
         yield* this.engine.serialize(canonical, this.prefix, this.cache);
       else yield JSON.stringify(canonical(value));

@@ -14,10 +14,11 @@ import type {
 const references = new WeakMap<MediaBlock, MediaReferenceBlock>();
 const wireMedia = new WeakMap<object, MediaBlock>();
 
-export function anthropicWireMedia(
-  block: AnthropicMessageBlock,
-): MediaBlock | undefined {
-  return wireMedia.get('source' in block ? block.source : block);
+export function anthropicWireMedia(block: object): MediaBlock | undefined {
+  const source = 'source' in block ? block.source : block;
+  return typeof source === 'object' && source !== null
+    ? wireMedia.get(source)
+    : undefined;
 }
 
 export function copyAnthropicWireMedia(
