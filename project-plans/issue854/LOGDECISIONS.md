@@ -1,3 +1,15 @@
+# Separate actual native warm memory from cold heap acceptance, 2026-10-22
+
+Commit the green harness follow-up early as `6266852b44ad8875f8722d47d1c7ddf56d6e840b`. The real native capability object, source count, pending metadata and signal/receiver-bound reader methods must survive probe wrapping; a native environment flag is insufficient. Require one native body stream, one mandatory estimate and zero old spool/estimator-file operations. A dropped-capability control must fail the route assertion. Keep that control separate from memory sensitivity.
+
+Reuse completed native text/tool-heavy runs with their exact measured source manifest and explicit five-path bridge to the follow-up's sink-child metadata/tests. Keep chunk counts out of the shared local request record so unchanged strict-equality tests retain their contract. The isolated sink reports the same scalar through callback/IPC; no expected body buffer or all-row observer enters the measured provider process. Provider-probe sampling, native production and traps are unchanged. Do not repeat measurement for luck or relabel the earlier legacy green as native.
+
+Report the native warm profile separately: one measured pair, a costed cold send for both sizes, six retention sends and original 1 MiB predicates/settings/timeouts. The original small-only cold attempt remains timed out and unaccepted. Cold journal growth and CPU/elapsed costs stay visible; cold peak heap, aggregate cache/pin/overlay capacity and absolute retained heap are not accepted by a warm growth/trend result. Four native eager/retained controls fail memory assertions with correct bytes. No production leak fix is inferred or introduced.
+
+[The source-bound receipt](PHASE6-SOURCE-BOUND-NATIVEMEMORY-PROOF.json) records current scoped gates, unchanged original sink tests, restored production controls, exact-source #3919/155/two-5,000 oracle scopes, preservation and retired PIDs. Earlier authoring/gate failures remain recorded. Keep last-thinking/pruned views, broader provider/estimator families, native dump/log, media/accounting and aggregate capacity open. Do not rerun or suppress separate #3917/old-durable/blanket-compaction/public-fixture/reference-media REDs. No cleanup, .llxprt staging, default flip, OCR, push or merge. Review skipped per Andrew 2026-10-09.
+
+---
+
 # Native plain Chat estimation checkpoint, 2026-10-22
 
 The first ordinary ChatSession/OpenAI/local-HTTP success is committed as `81bb8e34c`, including the previously untracked public test. Mandatory hard-limit projection remains in the send path. Its estimator callable is separate from transport emission; neither projection nor estimation opens the whole transport stream or creates prompt-key files.

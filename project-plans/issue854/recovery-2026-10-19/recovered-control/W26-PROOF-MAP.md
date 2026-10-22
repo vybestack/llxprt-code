@@ -1,3 +1,9 @@
+# Native warm memory follow-up, 2026-10-22
+
+[The native-memory receipt](../../PHASE6-SOURCE-BOUND-NATIVEMEMORY-PROOF.json) binds `6266852b4`, completed plain Chat text/tool-heavy measurements and their source hashes. Actual native streams/estimates and zero old spools are required, with a dropped-capability route control. Array/fill/estimate/retain fail the memory predicates with unchanged bytes and bounds. This separate warm native profile does not accept cold heap or aggregate cache/pin/overlay capacity. Five sink-child metadata/test changes have an explicit measured-to-committed bridge. Current scoped gates and unchanged sink consumers pass; #3919/155 and two original 5,000-case oracles keep their stated exact-source scopes. [Phase 6 status](../../PHASE6-STATUS.md) records peaks, retention, cold costs, control PIDs and remaining views/providers/log/dump/media/accounting obligations. Prior REDs, defaults, raw preservation and W26's open status are unchanged.
+
+---
+
 # Pending Chat transfer-summary evidence, 2026-10-22
 
 [PHASE6-SOURCE-BOUND-CHATTAIL-PROOF.json](../../PHASE6-SOURCE-BOUND-CHATTAIL-PROOF.json) binds product commit `d9eab7404` and final production/test hashes. The complete direct HTTP file passes 17 tests/102 assertions using the independent old converter and strict file-creation denial, including cross-speaker call handling. Multi-page range composition changes two historical holders; request summaries are never persisted. Warm neutral-user physical reads at 40/4,000 are zero after selection capture, separately from cold base fills and actual HTTP emission. Immutable caller mutation/concurrent append/retry and one-unit lifetime remain distinct from retained heap.
