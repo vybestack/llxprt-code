@@ -1,3 +1,11 @@
+## Dense Mistral descriptor-read cost, 2026-10-22
+
+[Dense-cost proof](PHASE6-SOURCE-BOUND-MISTRALDENSECOST-PROOF.json), implementation `ff2ae2078`: descriptor-level RED at 40/400/4,000 dense holders; forward row-tree/occurrence traversal and validated ROW context reuse; 4,000-row improvement from 201,572 reads / 824,989,362 bytes to 6,834 / 12,211,784; sparse lookup remains indexed. Includes independent length/token oracles and bounded ROW-buffer observations. Does not establish arbitrary many-displaced-ID traversal, complete retained memory, fused fill or new capacity acceptance. Older proof entries retain their stated scope.
+
+Completed final lane: 38/39 gates pass, including core/providers/agents declarations and types, providers/agents Bun types, lint, Prettier, graph and audit execution. The remaining RED selected both the production liveness file (4 pass) and a preserved recovery copy (4 recorder-identity failures) because its Bun path lacked `./`. The original receipt is retained; exact-path liveness and remaining reader/media checks are pending. All 14 implementation/test hashes match `ff2ae2078`; both new controls fail their intended assertions and restore, and 1,204 preservation hashes match. The 4,000-row dense case still performs 8,000 logical holder conversions; these are not 8,000 distinct rows.
+
+---
+
 ## Mistral request-token holder overlay, 2026-10-22
 
 [Displacement proof](PHASE6-SOURCE-BOUND-NATIVEMISTRALDISPLACEMENT-PROOF.json), implementation `67cf0081a`: reproduced lazy-empty-ID RED 211 versus 205; old converter body parity; indexed source occurrence and normalized repair-target remeasurement; immutable old-pin estimates; 40/4,000 sparse/all-holder unit-measurement sweeps. This is a partial checkpoint, not proof of nonempty arbitrary earlier-tail displacement, occupied-slot public lifecycle, exact physical/query cost or full memory/capacity. Existing proof entries below retain their stated scope.

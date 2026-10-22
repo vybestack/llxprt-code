@@ -2,7 +2,7 @@
   "date": "2026-10-22",
   "baseline": "2d89234f4",
   "root": "tmp/p6/chat-mistral-dense-cost-run-bn",
-  "status": "Implementation checkpoint: the measured dense single-changed-ID amplification is fixed. General many-displaced-ID enumeration remains unaccepted.",
+  "status": "Dense single-changed-ID cost fix committed; 38 of 39 completed final gates green. One mixed production/recovery liveness invocation is RED and retained. Exact-path liveness and remaining reader/media checks are pending. Phase 5/6/W26 remain open.",
   "rootCause": [
     "Each emitted affected label restarted changed-ID repair replay, re-read its fact and binary-searched source occurrence ordinals.",
     "Each holder performed two row-tree descents for entry lookup, two for its curated successor, and range-summary traversals across numerically separated but adjacent labels.",
@@ -335,10 +335,10 @@
       "holders": 0,
       "unrelated": 0,
       "queries": 15,
-      "elapsedMs": 6.4340000000001965,
+      "elapsedMs": 5.538292000000013,
       "rowWindowPeak": 0,
       "rowWindowTransientPeak": 0,
-      "pid": 37628,
+      "pid": 48633,
       "preads": 5,
       "bytes": 3077,
       "kinds": {
@@ -361,10 +361,10 @@
       "holders": 6,
       "unrelated": 0,
       "queries": 22,
-      "elapsedMs": 4.840624999999818,
+      "elapsedMs": 5.990832999999952,
       "rowWindowPeak": 16384,
       "rowWindowTransientPeak": 16384,
-      "pid": 37628,
+      "pid": 48633,
       "preads": 19,
       "bytes": 78944,
       "kinds": {
@@ -391,10 +391,10 @@
       "holders": 0,
       "unrelated": 0,
       "queries": 8,
-      "elapsedMs": 3.151292000000012,
+      "elapsedMs": 1.7923749999999927,
       "rowWindowPeak": 0,
       "rowWindowTransientPeak": 0,
-      "pid": 37628,
+      "pid": 48633,
       "preads": 7,
       "bytes": 5125,
       "kinds": {
@@ -417,10 +417,10 @@
       "holders": 0,
       "unrelated": 0,
       "queries": 8,
-      "elapsedMs": 2.9882500000003347,
+      "elapsedMs": 2.4441249999999854,
       "rowWindowPeak": 16384,
       "rowWindowTransientPeak": 16384,
-      "pid": 37628,
+      "pid": 48633,
       "preads": 19,
       "bytes": 78944,
       "kinds": {
@@ -447,10 +447,10 @@
       "holders": 0,
       "unrelated": 0,
       "queries": 15,
-      "elapsedMs": 2.0020409999997355,
+      "elapsedMs": 1.8749579999999924,
       "rowWindowPeak": 0,
       "rowWindowTransientPeak": 0,
-      "pid": 37628,
+      "pid": 48633,
       "preads": 8,
       "bytes": 6149,
       "kinds": {
@@ -473,10 +473,10 @@
       "holders": 80,
       "unrelated": 0,
       "queries": 96,
-      "elapsedMs": 18.422292000000198,
+      "elapsedMs": 17.56012499999997,
       "rowWindowPeak": 16384,
       "rowWindowTransientPeak": 16384,
-      "pid": 37628,
+      "pid": 48633,
       "preads": 49,
       "bytes": 134464,
       "kinds": {
@@ -503,10 +503,10 @@
       "holders": 0,
       "unrelated": 0,
       "queries": 8,
-      "elapsedMs": 1.6020410000000993,
+      "elapsedMs": 2.7288339999998925,
       "rowWindowPeak": 0,
       "rowWindowTransientPeak": 0,
-      "pid": 37628,
+      "pid": 48633,
       "preads": 9,
       "bytes": 7173,
       "kinds": {
@@ -529,10 +529,10 @@
       "holders": 0,
       "unrelated": 0,
       "queries": 8,
-      "elapsedMs": 1.6172919999999067,
+      "elapsedMs": 1.7893750000000637,
       "rowWindowPeak": 16384,
       "rowWindowTransientPeak": 16384,
-      "pid": 37628,
+      "pid": 48633,
       "preads": 20,
       "bytes": 79968,
       "kinds": {
@@ -559,10 +559,10 @@
       "holders": 0,
       "unrelated": 0,
       "queries": 15,
-      "elapsedMs": 3.3384580000001733,
+      "elapsedMs": 3.577250000000049,
       "rowWindowPeak": 0,
       "rowWindowTransientPeak": 0,
-      "pid": 37628,
+      "pid": 48633,
       "preads": 5,
       "bytes": 3077,
       "kinds": {
@@ -585,10 +585,10 @@
       "holders": 6,
       "unrelated": 0,
       "queries": 22,
-      "elapsedMs": 5.417875000000095,
+      "elapsedMs": 4.7983749999999645,
       "rowWindowPeak": 16384,
       "rowWindowTransientPeak": 16384,
-      "pid": 37628,
+      "pid": 48633,
       "preads": 27,
       "bytes": 128368,
       "kinds": {
@@ -615,10 +615,10 @@
       "holders": 0,
       "unrelated": 0,
       "queries": 8,
-      "elapsedMs": 3.706709000000046,
+      "elapsedMs": 2.8557080000000497,
       "rowWindowPeak": 0,
       "rowWindowTransientPeak": 0,
-      "pid": 37628,
+      "pid": 48633,
       "preads": 7,
       "bytes": 5125,
       "kinds": {
@@ -641,10 +641,10 @@
       "holders": 0,
       "unrelated": 0,
       "queries": 8,
-      "elapsedMs": 3.814292000000023,
+      "elapsedMs": 4.0267089999999826,
       "rowWindowPeak": 16384,
       "rowWindowTransientPeak": 16384,
-      "pid": 37628,
+      "pid": 48633,
       "preads": 27,
       "bytes": 128368,
       "kinds": {
@@ -671,10 +671,10 @@
       "holders": 0,
       "unrelated": 0,
       "queries": 15,
-      "elapsedMs": 3.462999999999738,
+      "elapsedMs": 4.068499999999858,
       "rowWindowPeak": 0,
       "rowWindowTransientPeak": 0,
-      "pid": 37628,
+      "pid": 48633,
       "preads": 13,
       "bytes": 11269,
       "kinds": {
@@ -697,10 +697,10 @@
       "holders": 800,
       "unrelated": 0,
       "queries": 816,
-      "elapsedMs": 128.74512499999946,
+      "elapsedMs": 132.23841599999992,
       "rowWindowPeak": 32768,
       "rowWindowTransientPeak": 49152,
-      "pid": 37628,
+      "pid": 48633,
       "preads": 375,
       "bytes": 961112,
       "kinds": {
@@ -727,10 +727,10 @@
       "holders": 0,
       "unrelated": 0,
       "queries": 8,
-      "elapsedMs": 4.460291999999754,
+      "elapsedMs": 4.564583000000312,
       "rowWindowPeak": 0,
       "rowWindowTransientPeak": 0,
-      "pid": 37628,
+      "pid": 48633,
       "preads": 13,
       "bytes": 11269,
       "kinds": {
@@ -753,10 +753,10 @@
       "holders": 0,
       "unrelated": 0,
       "queries": 8,
-      "elapsedMs": 5.265625,
+      "elapsedMs": 5.37966600000027,
       "rowWindowPeak": 16384,
       "rowWindowTransientPeak": 16384,
-      "pid": 37628,
+      "pid": 48633,
       "preads": 30,
       "bytes": 131440,
       "kinds": {
@@ -783,10 +783,10 @@
       "holders": 0,
       "unrelated": 0,
       "queries": 15,
-      "elapsedMs": 6.078375000000051,
+      "elapsedMs": 5.881750000000011,
       "rowWindowPeak": 0,
       "rowWindowTransientPeak": 0,
-      "pid": 37628,
+      "pid": 48633,
       "preads": 5,
       "bytes": 3077,
       "kinds": {
@@ -809,10 +809,10 @@
       "holders": 6,
       "unrelated": 0,
       "queries": 22,
-      "elapsedMs": 6.539582999999766,
+      "elapsedMs": 7.271125000000211,
       "rowWindowPeak": 16384,
       "rowWindowTransientPeak": 16384,
-      "pid": 37628,
+      "pid": 48633,
       "preads": 35,
       "bytes": 172864,
       "kinds": {
@@ -839,10 +839,10 @@
       "holders": 0,
       "unrelated": 0,
       "queries": 8,
-      "elapsedMs": 4.986625000001368,
+      "elapsedMs": 9.836459000000104,
       "rowWindowPeak": 0,
       "rowWindowTransientPeak": 0,
-      "pid": 37628,
+      "pid": 48633,
       "preads": 7,
       "bytes": 5125,
       "kinds": {
@@ -865,10 +865,10 @@
       "holders": 0,
       "unrelated": 0,
       "queries": 8,
-      "elapsedMs": 5.434084000000439,
+      "elapsedMs": 8.377792000000227,
       "rowWindowPeak": 16384,
       "rowWindowTransientPeak": 16384,
-      "pid": 37628,
+      "pid": 48633,
       "preads": 35,
       "bytes": 172864,
       "kinds": {
@@ -895,10 +895,10 @@
       "holders": 0,
       "unrelated": 0,
       "queries": 15,
-      "elapsedMs": 16.73633300000074,
+      "elapsedMs": 10.727584000000206,
       "rowWindowPeak": 0,
       "rowWindowTransientPeak": 0,
-      "pid": 37628,
+      "pid": 48633,
       "preads": 20,
       "bytes": 18437,
       "kinds": {
@@ -921,10 +921,10 @@
       "holders": 8000,
       "unrelated": 0,
       "queries": 8016,
-      "elapsedMs": 1925.2262919999994,
+      "elapsedMs": 2012.8904590000002,
       "rowWindowPeak": 32768,
       "rowWindowTransientPeak": 49152,
-      "pid": 37628,
+      "pid": 48633,
       "preads": 6834,
       "bytes": 12211784,
       "kinds": {
@@ -951,10 +951,10 @@
       "holders": 0,
       "unrelated": 0,
       "queries": 8,
-      "elapsedMs": 9.672624999999243,
+      "elapsedMs": 12.479624999999942,
       "rowWindowPeak": 0,
       "rowWindowTransientPeak": 0,
-      "pid": 37628,
+      "pid": 48633,
       "preads": 18,
       "bytes": 16389,
       "kinds": {
@@ -977,10 +977,10 @@
       "holders": 0,
       "unrelated": 0,
       "queries": 8,
-      "elapsedMs": 16.681540999998106,
+      "elapsedMs": 11.175666999999521,
       "rowWindowPeak": 16384,
       "rowWindowTransientPeak": 16384,
-      "pid": 37628,
+      "pid": 48633,
       "preads": 40,
       "bytes": 177984,
       "kinds": {
@@ -1000,7 +1000,20 @@
       "repeatedReads": 24
     }
   ],
-  "correctness": "12 fixed-size cost cases pass independent old-converter body length and per-unit token totals. 15000 unchanged production byte/length/token comparisons passed before formatting and cleanup-return correction; a final source-matching gate run follows.",
+  "correctness": {
+    "passed": 844,
+    "failed": 4,
+    "files": 21,
+    "assertions": 133965,
+    "productionComparisons": 15000,
+    "policies": [
+      "none",
+      "all",
+      "allButLast"
+    ],
+    "fixturesUnchanged": true,
+    "scope": "Exact old-converter body bytes, stored lengths and independent per-unit tokens; actual HTTP/public occupied-slot and lifecycle suites retain their original assertions."
+  },
   "sourceManifest": [
     {
       "path": "packages/core/src/journal/journalStore.ts",
@@ -1103,6 +1116,34 @@
     {
       "path": "tmp/p6/chat-mistral-dense-cost-run-bn/preservation.json",
       "sha256": "4bfe75666547df38d61b4ee82e3de9ba94bc8d59785d953c7c2a136e87efe9fe"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/gates.json",
+      "sha256": "47957e3b40e01a5af569198acb68ff862b1d15610baff22a935e16f8ddfcedea"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/restored-source-hashes.json",
+      "sha256": "36953a9ee791628195e892047173085c9dd44b6697c095656a57ae364e49aeec"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/completed.json",
+      "sha256": "45bdfbbc111f93c840023f005686544975399bd1a6b3281df2e10d53c5566c70"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/preservation-verified.json",
+      "sha256": "bd49dae234dec90eea3bc2dd1d08fd1a36f7b61c734cefcb178ce23f26e3b139"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/final-reads.jsonl",
+      "sha256": "48df26ea04d385940ed9013888b06ddd22778cdba62421a1cb27b0fbbd88f093"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/control-old-reads.jsonl",
+      "sha256": "9db972a3cf5be8a743f5276f731fff700a45c3563048f458c3d40628d735987d"
+    },
+    {
+      "path": "tmp/p6/chat-mistral-dense-cost-run-bn/control-retain-reads.jsonl",
+      "sha256": "0d1973d785b18c2d57708161f0e4b2be3e69cd51cb13d0dace8774edf597005e"
     }
   ],
   "limits": [
@@ -1111,5 +1152,979 @@
     "No new complete retained-memory, 100000-call capacity or fused cold-fill acceptance. Original tools 170000ms memory RED remains open.",
     "Original #3917, two durable cases, blanket compaction/public fixture and wider 609 test-type REDs remain separate and unsuppressed. Kimi, Responses, Anthropic, log/dump and aggregate accounting remain open."
   ],
-  "review": "review skipped per Andrew 2026-10-09"
+  "review": "review skipped per Andrew 2026-10-09",
+  "implementation": "ff2ae2078",
+  "controlSummary": {
+    "oldTraversal": {
+      "exit": 1,
+      "preads": 165647,
+      "bytes": 775682984,
+      "queries": 103935,
+      "firstAssertion": "actual fact-query count exceeds bound; physical receipt also exceeds both fixed physical budgets",
+      "boundedWindowStillEnabled": true
+    },
+    "retainAllWindows": {
+      "exit": 1,
+      "retainedBytes": 131072,
+      "bound": 32768
+    },
+    "restored": true
+  },
+  "accountingScope": "ROW window metrics sum retained buffer byteLength, with at most two retained Window objects and one replacement-window allocation in the serial reader lane. Returned per-unit slices, decoded tree paths, mapping cache and ID-node cache are separate; this is not aggregate heap/capacity acceptance. Mapping/ID caches retain their existing 65536-byte caps, not newly measured whole-heap peaks.",
+  "preservation": {
+    "files": 1204,
+    "changed": []
+  },
+  "gates": [
+    {
+      "name": "final-native-mistral-holder-cost.test.ts",
+      "pid": 48633,
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/openai/__tests__/native-mistral-holder-cost.test.ts"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:44:01.398Z",
+      "ended": "2026-10-22T14:44:24.003Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-native-mistral-holder-cost.test.ts.log",
+      "sha256": "89f8bdf305b04bde35ae76e40c685634fdadb6fafb157d0a0831591e2b8f79df",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-native-mistral-occupied-lifecycle.test.ts",
+      "pid": 48952,
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/openai/__tests__/native-mistral-occupied-lifecycle.test.ts"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:44:24.004Z",
+      "ended": "2026-10-22T14:44:24.482Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-native-mistral-occupied-lifecycle.test.ts.log",
+      "sha256": "7deeff00d4feedf048871d81d9dd9ef314348b7008cf0f48a3948d406016d03c",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-native-chat-estimate.test.ts",
+      "pid": 48960,
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/openai/native-chat-estimate.test.ts"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:44:24.483Z",
+      "ended": "2026-10-22T14:44:43.373Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-native-chat-estimate.test.ts.log",
+      "sha256": "c71e19f17b4ba268e5fba0d29b6f2f46b54e760e26f32ad65f5a250c873637ca",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-native-mistral-production-frozen.test.ts",
+      "pid": 49183,
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/openai/__tests__/native-mistral-production-frozen.test.ts"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:44:43.375Z",
+      "ended": "2026-10-22T14:45:57.954Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-native-mistral-production-frozen.test.ts.log",
+      "sha256": "0374729cbac45f0a1599782dbc062fe1861c64187d9a05c5a1b58e2c94073c21",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-journal-chat-length.test.ts",
+      "pid": 50187,
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/openai/journal-chat-length.test.ts"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:45:57.956Z",
+      "ended": "2026-10-22T14:45:58.314Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-journal-chat-length.test.ts.log",
+      "sha256": "77512a2968e6bdd0ec37b63df396f9168c3155284346c5c7c81a0c4f24747aa6",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-journal-chat-length-lifecycle.test.ts",
+      "pid": 50191,
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/openai/journal-chat-length-lifecycle.test.ts"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:45:58.315Z",
+      "ended": "2026-10-22T14:45:58.602Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-journal-chat-length-lifecycle.test.ts.log",
+      "sha256": "080acc3bfc44c155c97fa9fc1049bae3cf39743bbf711fad6985df59f8aa42a2",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-native-chat-mistral-send.test.ts",
+      "pid": 50195,
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/__tests__/native-chat-mistral-send.test.ts"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:45:58.603Z",
+      "ended": "2026-10-22T14:45:59.971Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-native-chat-mistral-send.test.ts.log",
+      "sha256": "6c9ccd13295abeaedffdb8aafe6fe5e59c6d04788488984c3c4ee04d1f1961d2",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-native-chat-golden.test.ts",
+      "pid": 50214,
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/__tests__/native-chat-golden.test.ts"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:45:59.972Z",
+      "ended": "2026-10-22T14:46:01.561Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-native-chat-golden.test.ts.log",
+      "sha256": "f124425fe215b9fc738b6d827c7dc877c4dbd5715a5787e638b0ad03e4c4eb1b",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-native-chat-continuation-http.test.ts",
+      "pid": 50230,
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/__tests__/native-chat-continuation-http.test.ts"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:46:01.562Z",
+      "ended": "2026-10-22T14:46:05.356Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-native-chat-continuation-http.test.ts.log",
+      "sha256": "7b9639a7c3a0666754b17ab9677d1ddef56e0ea8e7b91d7586bea856a969c224",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-native-chat-continuation-runtime.test.ts",
+      "pid": 50282,
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/agents/src/core/__tests__/native-chat-continuation-runtime.test.ts"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:46:05.357Z",
+      "ended": "2026-10-22T14:46:08.568Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-native-chat-continuation-runtime.test.ts.log",
+      "sha256": "b39565160f3fa27b9c67076e017aa8a495e954221813515874ea19bb5cbfe449",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-journalStore.readerLifetime.test.ts",
+      "pid": 50329,
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/core/src/journal/journalStore.readerLifetime.test.ts"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:46:08.569Z",
+      "ended": "2026-10-22T14:46:08.762Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-journalStore.readerLifetime.test.ts.log",
+      "sha256": "02d91f466049be26575863599761659f15882511bd06ea08b2b3b74c00e4ead5",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-journalStore.readerCleanup.test.ts",
+      "pid": 50331,
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/core/src/journal/journalStore.readerCleanup.test.ts"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:46:08.763Z",
+      "ended": "2026-10-22T14:46:08.969Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-journalStore.readerCleanup.test.ts.log",
+      "sha256": "87dd36878ac55d728bfe35f989cd945f2794aaefd27886a4dee449c9e28790fa",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-journal-mistral-tail.test.ts",
+      "pid": 50337,
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/core/src/services/history/journal-mistral-tail.test.ts"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:46:08.970Z",
+      "ended": "2026-10-22T14:46:09.227Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-journal-mistral-tail.test.ts.log",
+      "sha256": "17829c9f435f022abd73c6e41444fcd88f7e7a984ec4ea0ef1ad46eb7edeb557",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-journal-mistral-tail-pins.test.ts",
+      "pid": 50342,
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/core/src/services/history/journal-mistral-tail-pins.test.ts"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:46:09.228Z",
+      "ended": "2026-10-22T14:46:09.412Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-journal-mistral-tail-pins.test.ts.log",
+      "sha256": "30f13851f530c882b73fd2f16082cc5ef82f3c7575c1128f4dda3c222926a5ba",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-journal-mistral-lifecycle.test.ts",
+      "pid": 50346,
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/core/src/services/history/journal-mistral-lifecycle.test.ts"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:46:09.414Z",
+      "ended": "2026-10-22T14:46:16.166Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-journal-mistral-lifecycle.test.ts.log",
+      "sha256": "0f2e5af311efff5b367b56996b474b101b82cca627d910f1a2e8a29d999ba356",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-journal-mistral-tail-lifecycle.test.ts",
+      "pid": 50436,
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/core/src/services/history/journal-mistral-tail-lifecycle.test.ts"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:46:16.168Z",
+      "ended": "2026-10-22T14:46:16.453Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-journal-mistral-tail-lifecycle.test.ts.log",
+      "sha256": "031fff3001ba6a5847625f2fb556f21fc63b393a7b49c16f3800f7801e3e091b",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-journal-mistral-tail-resources.test.ts",
+      "pid": 50440,
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/core/src/services/history/journal-mistral-tail-resources.test.ts"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:46:16.454Z",
+      "ended": "2026-10-22T14:46:33.337Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-journal-mistral-tail-resources.test.ts.log",
+      "sha256": "1fb945e3801b2e2e05bdcfbb51595b32f8e9138145154f7ad4b870b5cb6aefdd",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-versionCopy.mistral.test.ts",
+      "pid": 50677,
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/core/src/journal/versionCopy.mistral.test.ts"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:46:33.339Z",
+      "ended": "2026-10-22T14:46:33.516Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-versionCopy.mistral.test.ts.log",
+      "sha256": "2f5e71f3d72b0a09051527e07f8560d14bc1950707066e8c4c34e1a5b6c9bd3d",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-core-declarations",
+      "pid": 50678,
+      "args": [
+        "bun",
+        "../../scripts/build_package.ts"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/core",
+      "started": "2026-10-22T14:46:33.518Z",
+      "ended": "2026-10-22T14:46:37.710Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-core-declarations.log",
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-providers-declarations",
+      "pid": 50733,
+      "args": [
+        "bun",
+        "../../scripts/build_package.ts"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers",
+      "started": "2026-10-22T14:46:37.711Z",
+      "ended": "2026-10-22T14:46:40.052Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-providers-declarations.log",
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-agents-declarations",
+      "pid": 50759,
+      "args": [
+        "bun",
+        "../../scripts/build_package.ts"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents",
+      "started": "2026-10-22T14:46:40.053Z",
+      "ended": "2026-10-22T14:46:42.277Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-agents-declarations.log",
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-core-types",
+      "pid": 50789,
+      "args": [
+        "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/core/tsconfig.noemit.json"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:46:42.278Z",
+      "ended": "2026-10-22T14:46:49.511Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-core-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-providers-types",
+      "pid": 50876,
+      "args": [
+        "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/providers/tsconfig.noemit.json"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:46:49.513Z",
+      "ended": "2026-10-22T14:46:59.581Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-providers-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-agents-types",
+      "pid": 51013,
+      "args": [
+        "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/agents/tsconfig.noemit.json"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:46:59.582Z",
+      "ended": "2026-10-22T14:47:10.256Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-agents-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-providers-tsconfig.test-bun.json-bun",
+      "pid": 51171,
+      "args": [
+        "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/providers/tsconfig.test-bun.json",
+        "--types",
+        "bun"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:47:10.258Z",
+      "ended": "2026-10-22T14:47:13.852Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-providers-tsconfig.test-bun.json-bun.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-providers-tsconfig.noemit.json-bun",
+      "pid": 51220,
+      "args": [
+        "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/providers/tsconfig.noemit.json",
+        "--types",
+        "bun"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:47:13.853Z",
+      "ended": "2026-10-22T14:47:24.113Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-providers-tsconfig.noemit.json-bun.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-agents-tsconfig.test-bun.json-bun",
+      "pid": 51329,
+      "args": [
+        "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/agents/tsconfig.test-bun.json",
+        "--types",
+        "bun"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:47:24.116Z",
+      "ended": "2026-10-22T14:47:29.571Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-agents-tsconfig.test-bun.json-bun.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-agents-tsconfig.noemit.json-bun",
+      "pid": 51381,
+      "args": [
+        "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/agents/tsconfig.noemit.json",
+        "--types",
+        "bun"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:47:29.573Z",
+      "ended": "2026-10-22T14:47:31.602Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-agents-tsconfig.noemit.json-bun.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-format",
+      "pid": 51413,
+      "args": [
+        "node_modules/.bin/prettier",
+        "--check",
+        "packages/agents/src/core/__tests__/native-chat-continuation-runtime.test.ts",
+        "packages/agents/src/core/__tests__/support/occupied-mistral-formats.ts",
+        "packages/providers/src/openai/native-chat-estimate.test.ts",
+        "packages/providers/src/openai/__tests__/native-mistral-production-frozen.test.ts",
+        "packages/providers/src/openai/__tests__/native-mistral-holder-cost.test.ts",
+        "packages/providers/src/openai/__tests__/native-mistral-occupied-lifecycle.test.ts",
+        "packages/providers/src/openai/__tests__/support/mistral-unit-token-oracle.ts",
+        "packages/providers/src/openai/__tests__/support/mistral-acceptance-cases.ts",
+        "packages/providers/src/openai/__tests__/support/mistral-domain-projection.ts"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:47:31.604Z",
+      "ended": "2026-10-22T14:47:31.823Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-format.log",
+      "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-preservation1204",
+      "pid": 51418,
+      "args": [
+        "shasum",
+        "-a",
+        "256",
+        "-c",
+        "tmp/p6/chat-tail-run-au/preserved.sha256"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:47:31.825Z",
+      "ended": "2026-10-22T14:47:32.201Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-preservation1204.log",
+      "sha256": "0e4199bb6c410cc6f1e5bd39e3d87c8159795d9dc60279f003e975a7ea37b454",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-preservation-current",
+      "pid": 51426,
+      "args": [
+        "shasum",
+        "-a",
+        "256",
+        "-c",
+        "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-displacement-run-bl/preexisting-untracked.sha256"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:47:32.202Z",
+      "ended": "2026-10-22T14:47:32.251Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-preservation-current.log",
+      "sha256": "0e4199bb6c410cc6f1e5bd39e3d87c8159795d9dc60279f003e975a7ea37b454",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-preservation-modified",
+      "pid": 51427,
+      "args": [
+        "shasum",
+        "-a",
+        "256",
+        "-c",
+        "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/tmp/p6/chat-mistral-displacement-run-bl/preexisting-modified.sha256"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:47:32.253Z",
+      "ended": "2026-10-22T14:47:32.263Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-preservation-modified.log",
+      "sha256": "56eb995f0e0c565dd39674787f330c38a95ccf7b3333a97d53e2872609314324",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-wireBodyGolden.test.ts",
+      "pid": 51428,
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/__tests__/wireBodyGolden.test.ts"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:47:32.265Z",
+      "ended": "2026-10-22T14:47:33.495Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-wireBodyGolden.test.ts.log",
+      "sha256": "12abb40b173d43277f3c3e79da9c34d5907afe65cf8558f6d075aeb2e6128d2a",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-native-chat-media-lifetime.test.ts",
+      "pid": 51451,
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "packages/providers/src/__tests__/native-chat-media-lifetime.test.ts"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:47:33.496Z",
+      "ended": "2026-10-22T14:49:06.409Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-native-chat-media-lifetime.test.ts.log",
+      "sha256": "20678251513bae371a19e63b25288020e4a7ab540f941dfbfa5170e0ad6bca88",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-journal-native-row-liveness.test.ts",
+      "pid": 52646,
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "packages/providers/src/__tests__/journal-native-row-liveness.test.ts"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:49:06.410Z",
+      "ended": "2026-10-22T14:49:13.753Z",
+      "exit": 1,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-journal-native-row-liveness.test.ts.log",
+      "sha256": "088db3f0583a71ec8edfc7aae516f4013ffadc2bc664f3a37c2360b9d8b2743e",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-lint",
+      "pid": 52751,
+      "args": [
+        "node_modules/.bin/eslint",
+        "--max-warnings",
+        "0",
+        "packages/core/src/journal/journalStore.ts",
+        "packages/core/src/journal/pinLease.ts",
+        "packages/core/src/journal/recordAccess.ts",
+        "packages/core/src/journal/row-read-window.ts",
+        "packages/core/src/journal/rowRangeReads.ts",
+        "packages/core/src/journal/rowReads.ts",
+        "packages/core/src/journal/versionSnapshot.ts",
+        "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+        "packages/core/src/services/history/journal-request-mistral.ts",
+        "packages/core/src/services/history/journal-request-projection.ts",
+        "packages/core/src/services/history/journal-response-parts.ts",
+        "packages/core/src/services/history/journal-response-source.ts",
+        "packages/core/src/services/history/journal-tail-source.ts",
+        "packages/providers/src/openai/__tests__/native-mistral-holder-cost.test.ts"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:49:13.754Z",
+      "ended": "2026-10-22T14:49:21.222Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-lint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-prettier",
+      "pid": 52858,
+      "args": [
+        "node_modules/.bin/prettier",
+        "--check",
+        "packages/core/src/journal/journalStore.ts",
+        "packages/core/src/journal/pinLease.ts",
+        "packages/core/src/journal/recordAccess.ts",
+        "packages/core/src/journal/row-read-window.ts",
+        "packages/core/src/journal/rowRangeReads.ts",
+        "packages/core/src/journal/rowReads.ts",
+        "packages/core/src/journal/versionSnapshot.ts",
+        "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+        "packages/core/src/services/history/journal-request-mistral.ts",
+        "packages/core/src/services/history/journal-request-projection.ts",
+        "packages/core/src/services/history/journal-response-parts.ts",
+        "packages/core/src/services/history/journal-response-source.ts",
+        "packages/core/src/services/history/journal-tail-source.ts",
+        "packages/providers/src/openai/__tests__/native-mistral-holder-cost.test.ts"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:49:21.223Z",
+      "ended": "2026-10-22T14:49:21.496Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-prettier.log",
+      "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-graph",
+      "pid": 52864,
+      "args": [
+        "bun",
+        "scripts/check-affected-test-shards.ts"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:49:21.498Z",
+      "ended": "2026-10-22T14:49:24.545Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-graph.log",
+      "sha256": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    },
+    {
+      "name": "final-audit",
+      "pid": 52900,
+      "args": [
+        "bun",
+        "scripts/test-audit/scan.ts",
+        "tmp/p6/chat-mistral-dense-cost-run-bn/audit"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:49:24.546Z",
+      "ended": "2026-10-22T14:49:27.699Z",
+      "exit": 0,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/final-audit.log",
+      "sha256": "e7eab1fa7f0521aeafe1b78dcfbfd3b7767010dc5c12d238bab41743cfe9102c",
+      "sourceBeforeMatches": true,
+      "sourceAfterMatches": true
+    }
+  ],
+  "controls": [
+    {
+      "name": "control-old-amplification",
+      "pid": 48181,
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "--test-name-pattern",
+        "4000 rows all=true id=$",
+        "packages/providers/src/openai/__tests__/native-mistral-holder-cost.test.ts"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:43:27.448Z",
+      "ended": "2026-10-22T14:43:59.629Z",
+      "exit": 1,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/control-old-amplification.log",
+      "sha256": "d7684c54b6dcbcc105deb824b6aa6822d219ab0d6ba7ab4db8748eb4e025bc8a"
+    },
+    {
+      "name": "control-retain-all-windows",
+      "pid": 48611,
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "--test-name-pattern",
+        "400 rows all=true id=$",
+        "packages/providers/src/openai/__tests__/native-mistral-holder-cost.test.ts"
+      ],
+      "dir": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "started": "2026-10-22T14:43:59.631Z",
+      "ended": "2026-10-22T14:44:01.396Z",
+      "exit": 1,
+      "log": "tmp/p6/chat-mistral-dense-cost-run-bn/control-retain-all-windows.log",
+      "sha256": "edc2baf8f1c4b67773c4b8d29bd1d704c32f2326bccbffbdcefe923cec08cfd3"
+    }
+  ],
+  "oldAmplificationControl": {
+    "costs": [
+      {
+        "size": 4000,
+        "all": true,
+        "historicalId": "",
+        "collision": false,
+        "holders": 0,
+        "unrelated": 0,
+        "queries": 17,
+        "elapsedMs": 15.731665999999677,
+        "rowWindowPeak": 0,
+        "rowWindowTransientPeak": 0,
+        "pid": 48181,
+        "preads": 20,
+        "bytes": 18437,
+        "kinds": {
+          "ITNODE": {
+            "reads": 17,
+            "bytes": 17408
+          },
+          "VALUE": {
+            "reads": 3,
+            "bytes": 1029
+          }
+        },
+        "repeatedReads": 0
+      },
+      {
+        "size": 4000,
+        "all": true,
+        "historicalId": "",
+        "collision": true,
+        "holders": 8000,
+        "unrelated": 0,
+        "queries": 103935,
+        "elapsedMs": 23454.192875,
+        "rowWindowPeak": 32768,
+        "rowWindowTransientPeak": 49152,
+        "pid": 48181,
+        "preads": 165647,
+        "bytes": 775682984,
+        "kinds": {
+          "ITNODE": {
+            "reads": 25585,
+            "bytes": 203159040
+          },
+          "RTNODE": {
+            "reads": 119990,
+            "bytes": 374679752
+          },
+          "ROW": {
+            "reads": 20072,
+            "bytes": 197844192
+          }
+        },
+        "repeatedReads": 161568
+      }
+    ],
+    "firstFailure": "Real fact-query bound; recorded physical preads and bytes also independently exceed their fixed budgets.",
+    "window": "New bounded window remains enabled while old traversal/context code is restored, so this control does not merely remove the buffer optimization."
+  },
+  "retainedWindowControl": {
+    "costs": [
+      {
+        "size": 400,
+        "all": true,
+        "historicalId": "",
+        "collision": false,
+        "holders": 0,
+        "unrelated": 0,
+        "queries": 15,
+        "elapsedMs": 8.448624999999993,
+        "rowWindowPeak": 0,
+        "rowWindowTransientPeak": 0,
+        "pid": 48611,
+        "preads": 13,
+        "bytes": 11269,
+        "kinds": {
+          "ITNODE": {
+            "reads": 10,
+            "bytes": 10240
+          },
+          "VALUE": {
+            "reads": 3,
+            "bytes": 1029
+          }
+        },
+        "repeatedReads": 0
+      },
+      {
+        "size": 400,
+        "all": true,
+        "historicalId": "",
+        "collision": true,
+        "holders": 800,
+        "unrelated": 0,
+        "queries": 816,
+        "elapsedMs": 148.92666699999995,
+        "rowWindowPeak": 131072,
+        "rowWindowTransientPeak": 131072,
+        "pid": 48611,
+        "preads": 375,
+        "bytes": 961112,
+        "kinds": {
+          "ITNODE": {
+            "reads": 235,
+            "bytes": 240640
+          },
+          "RTNODE": {
+            "reads": 123,
+            "bytes": 507944
+          },
+          "ROW": {
+            "reads": 17,
+            "bytes": 212528
+          }
+        },
+        "repeatedReads": 16
+      }
+    ],
+    "failure": "Observed peak retained window bytes 131072 exceeds 32768; the control retains actual read buffers, not a function-call counter."
+  },
+  "restoration": {
+    "sourceMatchesCommit": true,
+    "preservation": {
+      "files": 1204,
+      "changed": []
+    }
+  },
+  "processClosure": "Completed serial driver and its children exited. Final audit PID in running.json is stale; completed.json records completion. No active BN job observed. Supplemental reader checks pending.",
+  "gateDiagnosis": {
+    "name": "final-journal-native-row-liveness.test.ts",
+    "exit": 1,
+    "production": {
+      "passed": 4,
+      "failed": 0
+    },
+    "recoveryCopy": {
+      "passed": 0,
+      "failed": 4,
+      "path": "tmp/p5/w26-cli-run-am/declaration-recovery-source/packages/providers/src/__tests__/journal-native-row-liveness.test.ts",
+      "error": "Recorder/backend mismatch: the journal history store takes only a journal recorder"
+    },
+    "cause": "A bare packages/... argument was treated as a Bun filename filter and selected the preserved recovery copy as well. Exact ./packages/... invocation is pending; original RED remains recorded."
+  },
+  "costInterval": "Snapshot already has registered format facts. Each measuredCollision interval includes IndexedJournalRequestSnapshot.create, planRequestChatMessages and request.close; excludes append, format registration, old-converter oracle preparation, snapshot creation and emission. Neutral then collision share a pin, so caches are not independent cold runs. Window peaks are pin-lifetime high-water marks, not interval deltas. elapsedMs includes instrumented read stacks and creation audit; no end-to-end cold-fill timing claim.",
+  "logicalWork": "size=4000 means 4000 physical input rows/affected holders, not 8000 distinct rows. The measure callback still receives 8000 holder-containing conversions (two per affected holder); unrelated conversions remain zero. Sparse collision measures only three affected holders (six callbacks); neutral measures zero holders but still does metadata I/O.",
+  "pendingSupplemental": [
+    "Exact-path production row liveness",
+    "Reference-media lease and queue/reopen",
+    "Bounded-window and torn/CRC regressions"
+  ]
 }

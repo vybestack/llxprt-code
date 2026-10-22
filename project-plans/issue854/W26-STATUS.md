@@ -1,3 +1,11 @@
+## Dense Mistral read-cost checkpoint, 2026-10-22
+
+`ff2ae2078` reduces the measured 4,000-row single-ID case from 201,572 reads / 824,989,362 bytes to 6,834 / 12,211,784. Sparse 4,000-row history uses 35 reads. [Dense-cost proof](PHASE6-SOURCE-BOUND-MISTRALDENSECOST-PROOF.json) records instrumentation, regression budgets, old-converter correctness and bounded ROW buffers. General multiple-displaced-ID replay, fused cold fill, full memory/traps, 100,000-call capacity, other provider migrations, log/dump and aggregate accounting remain open. W26 and Phase 5/6 are incomplete; existing memory/durable/compaction/public-fixture/type REDs remain unsuppressed.
+
+Completed final lane: 38/39 gates pass, including core/providers/agents declarations and types, providers/agents Bun types, lint, Prettier, graph and audit execution. The remaining RED selected both the production liveness file (4 pass) and a preserved recovery copy (4 recorder-identity failures) because its Bun path lacked `./`. The original receipt is retained; exact-path liveness and remaining reader/media checks are pending. All 14 implementation/test hashes match `ff2ae2078`; both new controls fail their intended assertions and restore, and 1,204 preservation hashes match. The 4,000-row dense case still performs 8,000 logical holder conversions; these are not 8,000 distinct rows.
+
+---
+
 ## Mistral occupied-slot and token-domain acceptance, 2026-10-22
 
 Test checkpoint `8c207ecfa` and the completed serial lane pass 828 tests across 19 files, with 80,697 assertions and 36 accepted gates. Three declaration invocations failed before compilation because workspace tsc was absent from PATH; corrected declaration-only commands pass, and both receipts remain recorded. All 1,204 preservation hashes match after the builds, and all owned gate/control PIDs have exited. Public checkpoint `a7bc62341` proves actual ChatSession Mistral JSON/SSE continuation with concrete occupied plain Chat, Anthropic and Responses slots. The first prepared Mistral view selects slot 0 generation 2, preserves the old pin and other-format plans, sends two independently checked body hashes/lengths, and creates no operation files. The separate collision lifecycle covers normal LRU eviction, new endpoint reentry, first-holder removal, pop, rewrite, clone, compaction and persistent reopen with source-label checks.
