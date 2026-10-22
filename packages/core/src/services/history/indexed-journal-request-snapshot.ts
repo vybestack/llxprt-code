@@ -1,5 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { NativeFactIndexReader } from '../../journal/nativeFactIndex.js';
+import { ROW_FLAG } from '../../journal/rowRecord.js';
+import { unitCount } from '../../journal/unitContributions.js';
 import type { SlotSummary } from '../../journal/slotSummary.js';
 import { composeSlotSummaries } from '../../journal/summaryComposition.js';
 import type { JournalStore } from '../../journal/journalStore.js';
@@ -208,6 +210,15 @@ export class IndexedJournalRequestSnapshot {
     this.requireOpen();
     assertRowIndex(index, this.count);
     return this.locate(index);
+  }
+
+  hasPersistedMedia(): Promise<boolean> {
+    return this.query(async () => {
+      for await (const entry of this.snapshot.entries())
+        if ((entry.flags & ROW_FLAG.hasMedia) !== 0 && unitCount(entry) > 0)
+          return true;
+      return false;
+    });
   }
 
   nativeFacts(scope: string): Promise<NativeFactIndexReader> {

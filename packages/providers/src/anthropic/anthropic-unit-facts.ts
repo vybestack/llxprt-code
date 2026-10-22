@@ -11,6 +11,7 @@ import {
 import type { AnthropicMessageConversionOptions } from './AnthropicMessageConversionOptions.js';
 import { stripCrossModelThinking } from './crossModelThinkingStrip.js';
 import { sanitizeRowImages } from './AnthropicImageSanitizer.js';
+import { unprefixAnthropicToolName } from './schemaConverter.js';
 import {
   readAnchorBlockTag,
   readAnchorStringTag,
@@ -102,8 +103,7 @@ export function projectAnthropicUnit(
     [
       settings.formatId !== 'anthropic',
       settings.formatRev !== 1,
-      settings.isOAuth,
-      settings.toolNameTransform !== 'none',
+      settings.toolNameTransform !== (settings.isOAuth ? 'oauth' : 'none'),
       settings.unsupportedMedia !== 'notice',
     ].includes(true)
   )
@@ -154,7 +154,7 @@ export function anthropicUnitFacts(
     reasoningEnabled: settings.reasoningEnabled,
     supportsUrlImages: settings.supportsUrlImages,
     config: settings.outputLimits ?? undefined,
-    unprefixToolName: (name) => name,
+    unprefixToolName: unprefixAnthropicToolName,
     logger,
   };
   const atoms = (redact: boolean): readonly AnthropicAtom[] =>

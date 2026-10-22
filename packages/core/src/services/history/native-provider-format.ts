@@ -81,6 +81,11 @@ function nativeRequestFormatPreparation(
         throw new Error(
           'History changed before the native request format fill',
         );
+      const nativeFacts = registration.nativeFacts;
+      if (nativeFacts !== undefined)
+        await host.commit(() =>
+          Promise.resolve([{ kind: 'factIndex', registration: nativeFacts }]),
+        );
       await host.commit(() =>
         Promise.resolve([{ kind: 'format', registration }]),
       );

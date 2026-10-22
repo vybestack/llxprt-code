@@ -15,7 +15,7 @@ import {
   type AnthropicApiCall,
 } from './AnthropicApiExecution.js';
 import type { AnthropicRequestFacts } from './AnthropicRequestPreparation.js';
-import type { SpooledAnthropicRequest } from './AnthropicSpooledRequest.js';
+import type { PreparedAnthropicRequest } from './native-anthropic-request.js';
 
 /**
  * A request ready to send: the facts the transport and the response path
@@ -40,7 +40,7 @@ export interface AnthropicSendRequest {
 
 /** A request whose body is a sealed spool, posted without being read whole. */
 export function sendRequestFromSpool(
-  request: SpooledAnthropicRequest,
+  request: PreparedAnthropicRequest,
 ): AnthropicSendRequest {
   const { spool, envelope, facts } = request;
   return {

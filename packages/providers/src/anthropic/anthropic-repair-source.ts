@@ -15,6 +15,7 @@ import {
   type AnthropicMessage,
 } from './AnthropicMessageNormalizer.js';
 import type { AnthropicMessageConversionOptions } from './AnthropicMessageConversionOptions.js';
+import { unprefixAnthropicToolName } from './schemaConverter.js';
 
 export interface RepairMessage {
   readonly start: number;
@@ -71,7 +72,7 @@ export class AnthropicRepairSource {
       reasoningEnabled: settings.reasoningEnabled,
       supportsUrlImages: settings.supportsUrlImages,
       config: settings.outputLimits ?? undefined,
-      unprefixToolName: (name: string): string => name,
+      unprefixToolName: unprefixAnthropicToolName,
       logger,
     };
   }

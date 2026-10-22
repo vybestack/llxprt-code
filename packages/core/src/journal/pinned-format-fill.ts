@@ -9,6 +9,19 @@ import { prepareBuild } from './preparedGroup.js';
 import { fillRowFormats, snapshotOf } from './formatFill.js';
 import { LineageChain } from './lineageChain.js';
 import { JournalFormatError } from './errors.js';
+import type { VersionEdit } from './groupEdits.js';
+import { fillNativeFacts } from './nativeFactFill.js';
+
+async function requestMappingEdits(
+  snapshot: VersionSnapshot,
+  registration: RowFormatRegistration,
+): Promise<VersionEdit[]> {
+  if (registration.nativeFacts !== undefined)
+    return [{ kind: 'factIndex', registration: registration.nativeFacts }];
+  const slot = registration.mistralSlot;
+  if (slot === undefined || (await snapshot.hasMistralSlot(slot))) return [];
+  return [{ kind: 'mistral', slot }];
+}
 
 async function prepareMapping(
   writer: JournalGroupWriter,
@@ -18,13 +31,12 @@ async function prepareMapping(
   registration: RowFormatRegistration,
   appender: RecordAppender,
 ): Promise<VersionSnapshot> {
-  const slot = registration.mistralSlot;
-  if (slot === undefined || (await snapshot.hasMistralSlot(slot)))
-    return snapshot;
+  const edits = await requestMappingEdits(snapshot, registration);
+  if (edits.length === 0) return snapshot;
   const mapping = await prepareBuild(
     ctx,
     plan,
-    [{ kind: 'mistral', slot }],
+    edits,
     appender,
     appender,
     async () => undefined,
@@ -32,9 +44,17 @@ async function prepareMapping(
   if (mapping.built === undefined)
     throw new JournalFormatError('Pinned Mistral fill has no built version');
   await appender.drain();
-  return snapshotOf(
+  const indexed = await fillNativeFacts(
     ctx,
     mapping.built,
+    appender,
+    registration.nativeFacts,
+    edits,
+  );
+  await appender.drain();
+  return snapshotOf(
+    ctx,
+    indexed.built,
     appender,
     () => undefined,
     writer.reader,

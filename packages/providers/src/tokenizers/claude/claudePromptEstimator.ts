@@ -12,6 +12,7 @@ import type { RuntimeTokenizer } from '@vybestack/llxprt-code-core/runtime/contr
 import type { PromptEnvelopeProtocol } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { estimateImageTokens } from '@vybestack/llxprt-code-tools/utils/imageTokenEstimation.js';
 import { rm } from 'node:fs/promises';
+import { NativeAnthropicEstimateProjection } from '../../anthropic/native-anthropic-estimate.js';
 import type { ProviderFinalizedPromptProjection } from '../../runtime/promptEnvelopeProjections.js';
 import { ModelPromptEstimatorError } from '../ModelPromptEstimatorError.js';
 import type { ModelPromptEstimatorRegistration } from '../ModelPromptEstimatorRegistry.js';
@@ -77,8 +78,16 @@ function isFinalizedPromptProjection(
 function readProjection(
   request: RuntimePromptEstimateRequest,
   family: string,
-): ProviderFinalizedPromptProjection | SourceFamilyInput {
+):
+  | ProviderFinalizedPromptProjection
+  | SourceFamilyInput
+  | NativeAnthropicEstimateProjection {
   const source = request.finalizedProjection;
+  if (
+    source instanceof NativeAnthropicEstimateProjection &&
+    source.protocol === request.protocol
+  )
+    return source;
   if (
     source instanceof SourceFamilyInput &&
     source.projection.protocol === request.protocol
@@ -227,10 +236,23 @@ export async function estimateClaude5Prompt(
   }
 
   try {
-    const measured =
-      projection instanceof SourceFamilyInput
-        ? await measureSource(projection, request, encoder, extractFeatures)
-        : measureProjection(projection, request, encoder, extractFeatures);
+    let measured: MeasuredPrompt;
+    if (projection instanceof NativeAnthropicEstimateProjection)
+      measured = await projection.measure(request, encoder, extractFeatures);
+    else if (projection instanceof SourceFamilyInput)
+      measured = await measureSource(
+        projection,
+        request,
+        encoder,
+        extractFeatures,
+      );
+    else
+      measured = measureProjection(
+        projection,
+        request,
+        encoder,
+        extractFeatures,
+      );
     let count = applyClaudeCalibration(
       measured.baseTokens,
       measured.features,

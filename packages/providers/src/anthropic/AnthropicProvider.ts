@@ -17,7 +17,7 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { type IModel } from '../IModel.js';
 import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
-import { TOOL_PREFIX } from './schemaConverter.js';
+import { unprefixAnthropicToolName } from './schemaConverter.js';
 import { type IProviderConfig } from '../types/IProviderConfig.js';
 import {
   BaseProvider,
@@ -78,10 +78,10 @@ import {
   type AnthropicSendRequest,
 } from './AnthropicSendRequest.js';
 import {
-  prepareSpooledAnthropicRequest,
-  registerSpooledRequestCleanup,
-  type SpooledAnthropicRequest,
-} from './AnthropicSpooledRequest.js';
+  prepareAnthropicRequestRows,
+  registerAnthropicRequestCleanup,
+  type PreparedAnthropicRequest,
+} from './native-anthropic-request.js';
 import {
   createAnthropicMissingCredentialError,
   resolveAnthropicCredential,
@@ -603,18 +603,7 @@ export class AnthropicProvider extends BaseProvider {
   }
 
   private unprefixToolName(name: string, isOAuth: boolean): string {
-    // Only unprefix for OAuth requests
-    if (!isOAuth) {
-      return name;
-    }
-
-    // Remove the prefix if it's present
-    if (name.startsWith(TOOL_PREFIX)) {
-      return name.substring(TOOL_PREFIX.length);
-    }
-
-    // Return as-is if no prefix
-    return name;
+    return unprefixAnthropicToolName(name, isOAuth);
   }
 
   private findToolSchema(
@@ -739,16 +728,16 @@ export class AnthropicProvider extends BaseProvider {
     authToken: string,
     mediaRequest: ResolvedMediaRequest,
     recoveryBudget: ImageDimensionBudget | undefined,
-  ): Promise<SpooledAnthropicRequest> {
+  ): Promise<PreparedAnthropicRequest> {
     const media = this.captureMedia(options);
     const signal = getRequestSignal(options);
-    const spooled = await prepareSpooledAnthropicRequest(
+    const spooled = await prepareAnthropicRequestRows(
       this.planParams(options, isOAuth, authToken),
       await providerRowsOf(options),
       (rows) => resolveRowsMedia(rows, media, mediaRequest, signal),
       { recoveryBudget },
     );
-    registerSpooledRequestCleanup(mediaRequest, spooled);
+    await registerAnthropicRequestCleanup(mediaRequest, spooled);
     return spooled;
   }
 
@@ -876,13 +865,13 @@ export class AnthropicProvider extends BaseProvider {
     try {
       const authToken = await this.resolveProjectionAuthToken(normalized);
       const isOAuth = this.classifyOAuthToken(authToken);
-      const spooled = await prepareSpooledAnthropicRequest(
+      const spooled = await prepareAnthropicRequestRows(
         this.planParams(normalized, isOAuth, authToken),
         await providerRowsOf(normalized),
         (rows) => resolveRowsMedia(rows, media, mediaRequest, signal),
         { estimate: true },
       );
-      registerSpooledRequestCleanup(mediaRequest, spooled);
+      await registerAnthropicRequestCleanup(mediaRequest, spooled);
       const { estimate } = spooled;
       if (estimate === undefined) {
         throw new Error('A projected request carries its estimator files');

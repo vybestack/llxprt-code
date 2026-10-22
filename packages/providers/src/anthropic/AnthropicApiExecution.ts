@@ -23,6 +23,7 @@ import {
   withSpooledJsonHttpBody,
   type WireBodySpool,
 } from '../utils/wire-body-spool.js';
+import type { NativeAnthropicBody } from './native-anthropic-request.js';
 import {
   shouldDumpSDKContext,
   dumpSDKRequestContext,
@@ -149,7 +150,7 @@ export type AnthropicApiCall = () => Promise<{
 /** Posts one attempt of the Messages body with an exact Content-Length. */
 function postMessages(
   client: Anthropic,
-  body: BoundedJsonHttpBody,
+  body: Pick<BoundedJsonHttpBody, 'stream' | 'byteLength'>,
   streaming: boolean,
   customHeaders: Record<string, string>,
   signal: AbortSignal | undefined,
@@ -200,15 +201,33 @@ export function createAnthropicApiCall(
  */
 export function createSpooledAnthropicApiCall(
   client: Anthropic,
-  spool: WireBodySpool,
+  spool: WireBodySpool | NativeAnthropicBody,
   streaming: boolean,
   customHeaders: Record<string, string>,
   signal?: AbortSignal,
 ): AnthropicApiCall {
-  return async () =>
-    withSpooledJsonHttpBody(spool, (body) =>
-      postMessages(client, body, streaming, customHeaders, signal),
-    );
+  if ('accounting' in spool)
+    return async () =>
+      withSpooledJsonHttpBody(spool, (body) =>
+        postMessages(client, body, streaming, customHeaders, signal),
+      );
+  return async () => {
+    const handle = spool.openStream();
+    try {
+      return await postMessages(
+        client,
+        {
+          stream: handle.stream,
+          byteLength: spool.byteLength,
+        },
+        streaming,
+        customHeaders,
+        signal,
+      );
+    } finally {
+      await handle.dispose();
+    }
+  };
 }
 
 /**

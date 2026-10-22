@@ -5,6 +5,7 @@ import type { RowEntry } from './rowEntry.js';
 import type { VersionSnapshot } from './versionSnapshot.js';
 import type { Version } from './version.js';
 import type { SlotSummary } from './slotSummary.js';
+import type { NativeFactIndexRegistration } from './nativeFactIndex.js';
 
 export interface RowFormatSettings {
   readonly formatId:
@@ -74,6 +75,7 @@ export interface RowFormatRegistration {
   readonly settings: RowFormatSettings;
   readonly incremental?: 'unsupported' | 'append';
   readonly nativeFactScope?: string;
+  readonly nativeFacts?: NativeFactIndexRegistration;
   readonly mistralSlot?: number;
   readonly mistral?: boolean;
   readonly prepareAppend?: (
@@ -118,6 +120,7 @@ export function captureRowFormat(
     prepareAppend: registration.prepareAppend,
     incremental: registration.incremental,
     nativeFactScope: registration.nativeFactScope,
+    nativeFacts: registration.nativeFacts,
     mistralSlot: registration.mistralSlot,
     mistral: registration.mistral,
   };

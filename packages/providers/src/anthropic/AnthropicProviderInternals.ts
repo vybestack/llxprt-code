@@ -11,7 +11,7 @@ import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/r
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderToolset } from '../IProvider.js';
 import type { AnthropicRequestFacts } from './AnthropicRequestPreparation.js';
-import type { SpooledAnthropicRequest } from './AnthropicSpooledRequest.js';
+import type { PreparedAnthropicRequest } from './native-anthropic-request.js';
 
 /**
  * Shapes and pure helpers used by AnthropicProvider, kept beside it so the
@@ -27,7 +27,7 @@ export function hasHeaderName(
 
 export interface PreparedAnthropicPromptEnvelope {
   /** The one prepared body: the projection estimates it, the send posts it. */
-  readonly spooled: SpooledAnthropicRequest;
+  readonly spooled: PreparedAnthropicRequest;
   readonly isOAuth: boolean;
   readonly authToken: string;
   readonly mediaRequest: ResolvedMediaRequest;

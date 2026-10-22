@@ -12,6 +12,7 @@ import type {
 import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { Gpt56SourceProjection } from '../tokenizers/gpt56-source-projection.js';
 import type { NativeChatEstimateProjection } from '../openai/native-chat-estimate.js';
+import type { NativeAnthropicEstimateProjection } from '../anthropic/native-anthropic-estimate.js';
 import {
   parseImageDimensionsFromBase64,
   type ImageDimensions,
@@ -354,7 +355,10 @@ const sourceEstimatorOnly = (): Promise<number> =>
  */
 function projectFromSource(
   identity: ProjectionIdentity,
-  source: Gpt56SourceProjection | NativeChatEstimateProjection,
+  source:
+    | Gpt56SourceProjection
+    | NativeChatEstimateProjection
+    | NativeAnthropicEstimateProjection,
   options: SourceProjectionOptions,
 ): PromptEnvelopeProjection {
   return Object.freeze({
@@ -371,7 +375,7 @@ function projectFromSource(
 }
 
 export function projectAnthropicPromptEnvelopeFromSource(
-  source: Gpt56SourceProjection,
+  source: Gpt56SourceProjection | NativeAnthropicEstimateProjection,
   options: SourceProjectionOptions,
 ): PromptEnvelopeProjection {
   return projectFromSource(anthropicIdentity(), source, options);

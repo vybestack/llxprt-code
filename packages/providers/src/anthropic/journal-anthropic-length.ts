@@ -16,6 +16,7 @@ import { prepareAnthropicStoredFill } from './anthropic-stored-fill.js';
 import { prepareAnthropicStoredAppend } from './anthropic-stored-append.js';
 import { anthropicRepairScope } from './anthropic-repair-index.js';
 import { jsonValueByteLength } from '../utils/progressive-json-body.js';
+import { anthropicRepairFactIndex } from './anthropic-repair-fact-writer.js';
 
 export function anthropicLengthRegistration(
   input: RowFormatSettings,
@@ -26,6 +27,7 @@ export function anthropicLengthRegistration(
     settings,
     incremental: 'append',
     nativeFactScope: anthropicRepairScope(settings),
+    nativeFacts: anthropicRepairFactIndex(settings),
     prepare: prepareAnthropicStoredFill,
     prepareAppend: prepareAnthropicStoredAppend,
     async measure() {

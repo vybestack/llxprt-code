@@ -13,7 +13,7 @@ import {
   sendRequestFromSpool,
   type AnthropicSendRequest,
 } from './AnthropicSendRequest.js';
-import type { SpooledAnthropicRequest } from './AnthropicSpooledRequest.js';
+import type { PreparedAnthropicRequest } from './native-anthropic-request.js';
 import {
   isAnthropicImageDimensionLimitError,
   parseAnthropicImageDimensionLimit,
@@ -47,7 +47,7 @@ export interface ImageRecoveryDeps {
    */
   readonly rebuild: (
     budget: ImageDimensionBudget,
-  ) => Promise<SpooledAnthropicRequest>;
+  ) => Promise<PreparedAnthropicRequest>;
 }
 
 function isAborted(options: NormalizedGenerateChatOptions): boolean {
@@ -105,13 +105,13 @@ export async function executeImageDimensionRecovery(
   if (isAborted(options)) return undefined;
   const retry = await deps.rebuild(recoveryBudget);
   if (retry.recoveredImages === 0) {
-    retry.release();
+    await retry.release();
     return undefined;
   }
   // H2: the retry is a physical transport call; account it in the shared
   // budget. When no slot remains, the original error is final.
   if (isAborted(options) || !tryConsumeTransportAttempt(options)) {
-    retry.release();
+    await retry.release();
     return undefined;
   }
   state.recoveryUsed = true;

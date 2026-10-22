@@ -25,7 +25,10 @@ import {
 import { getEmptyMessagePlaceholder } from './AnthropicMessageValidator.js';
 import { projectAnthropicUnit } from './anthropic-unit-facts.js';
 import { modelSupportsPrefill } from './AnthropicModelData.js';
-import type { AnthropicMessageBlock } from './AnthropicMessageNormalizer.js';
+import type {
+  AnthropicMessageBlock,
+  AnthropicMessage,
+} from './AnthropicMessageNormalizer.js';
 
 export interface LazyRepairAtom {
   readonly key: number;
@@ -244,29 +247,36 @@ export class AnthropicStreamRepair {
       }
     }
   }
-  private async *content(run: Run): AsyncGenerator<string> {
+  private async *content(
+    run: Run,
+    transform: (value: unknown) => unknown,
+  ): AsyncGenerator<string> {
     const shape = await this.shape(run);
     if (shape.blocks === 0) {
-      yield JSON.stringify(getEmptyMessagePlaceholder(run.role));
+      yield JSON.stringify(transform(getEmptyMessagePlaceholder(run.role)));
       return;
     }
     if (shape.string) {
       for await (const piece of this.runPieces(run))
-        if (typeof piece === 'string') yield JSON.stringify(piece);
+        if (typeof piece === 'string') yield JSON.stringify(transform(piece));
       return;
     }
     yield '[';
     let comma = '';
     for (let pass = 0; pass < (run.merged ? 2 : 1); pass++) {
       for await (const block of this.runBlocks(run, pass)) {
-        yield comma + JSON.stringify(block);
+        yield comma + JSON.stringify(transform(block));
         comma = ',';
       }
     }
     yield ']';
   }
-  async *serialize(): AsyncGenerator<string> {
+  async *serialize(
+    transform: (value: unknown) => unknown = (value) => value,
+    prefix?: AnthropicMessage,
+  ): AsyncGenerator<string> {
     yield '[';
+    if (prefix !== undefined) yield JSON.stringify(transform(prefix)) + ',';
     let count = 0;
     let last: Run['role'] | undefined;
     for await (const run of this.runs()) {
@@ -281,7 +291,7 @@ export class AnthropicStreamRepair {
         '{"role":' +
         JSON.stringify(run.role) +
         ',"content":';
-      yield* this.content(run);
+      yield* this.content(run, transform);
       yield '}';
       last = run.role;
     }

@@ -6,6 +6,7 @@ import { estimateSourceThroughFamilyRegistry } from './source-family-estimator.j
 import { estimateGpt56PromptFromSources } from './gpt56-source-prompt-estimator.js';
 import { NativeChatEstimateProjection } from '../openai/native-chat-estimate.js';
 import { NativeResponsesEstimateProjection } from '../openai-responses/native-responses-estimate.js';
+import { NativeAnthropicEstimateProjection } from '../anthropic/native-anthropic-estimate.js';
 
 export function withGpt56DiskSources(
   factory: RuntimeTokenizerFactory,
@@ -15,6 +16,10 @@ export function withGpt56DiskSources(
   return {
     ...factory,
     estimatePrompt: (request) => {
+      if (
+        request.finalizedProjection instanceof NativeAnthropicEstimateProjection
+      )
+        return request.finalizedProjection.estimate(request, factory);
       if (
         request.finalizedProjection instanceof NativeResponsesEstimateProjection
       )

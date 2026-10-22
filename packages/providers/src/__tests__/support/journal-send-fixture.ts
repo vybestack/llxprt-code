@@ -49,6 +49,7 @@ export async function journalSendFixture(
       for (const row of rows) await graph.service.addBatch([row]);
       await graph.service.waitForCommit();
     } else await graph.seed(rows);
+    await graph.recording.setSessionName('Journal send fixture');
     if (options.mediaStore !== undefined)
       await graph.service.registerMediaOwner(
         new HistoryMediaOwnership(options.mediaStore),
