@@ -297,6 +297,7 @@ export async function runTestFile(
   file: string,
   env: NodeJS.ProcessEnv = { ...process.env },
   onTimeout?: () => void,
+  onTimedOutAttempt?: (attempt: TestResult) => void,
 ): Promise<TestResult> {
   assertRunnerActive();
   // Resolve the budget before spawning so an invalid override fails fast
@@ -349,7 +350,7 @@ export async function runTestFile(
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      resolve({
+      const result: TestResult = {
         file,
         passed: classifyAttempt({
           runner: 'cli',
@@ -359,7 +360,11 @@ export async function runTestFile(
         exitCode: killedByTimeout ? null : code,
         timedOut: killedByTimeout,
         output,
-      });
+      };
+      // Reported here, before the retry replaces this result, so a recovered
+      // timeout still leaves its output behind.
+      if (result.timedOut) onTimedOutAttempt?.(result);
+      resolve(result);
     });
 
     child.on('error', (error: Error) => {
@@ -495,6 +500,16 @@ export function createJUnitCheckpoint(
  */
 const TESTS_FINISHED_PATTERN = /^Ran \d+ tests? across \d+ files?\./m;
 
+/**
+ * Names how a timed-out attempt ended: after its summary line (the tests ran,
+ * the process then failed to exit) or before it (a test or the process hung).
+ */
+function timeoutSuffix(output: string): string {
+  return TESTS_FINISHED_PATTERN.test(stripAnsi(output))
+    ? ' [timeout: tests finished, process did not exit]'
+    : ' [timeout]';
+}
+
 /** One-line progress record: verdict, position, file and wall-clock time. */
 export function formatFileProgress(
   result: Pick<TestResult, 'file' | 'passed' | 'timedOut' | 'output'>,
@@ -503,15 +518,25 @@ export function formatFileProgress(
   durationMs: number,
 ): string {
   const verdict = result.passed ? 'PASS' : 'FAIL';
-  let suffix = '';
-  if (result.timedOut) {
-    suffix = TESTS_FINISHED_PATTERN.test(stripAnsi(result.output))
-      ? ' [timeout: tests finished, process did not exit]'
-      : ' [timeout]';
-  }
+  const suffix = result.timedOut ? timeoutSuffix(result.output) : '';
   return `${verdict} (${position}/${total}) ${result.file} ${(
     durationMs / 1000
   ).toFixed(2)}s${suffix}`;
+}
+
+/**
+ * Record of an attempt that timed out and is about to be retried. The retry's
+ * result replaces this one, so without this record a recovered timeout leaves
+ * no evidence of whether its tests finished.
+ */
+export function formatTimedOutAttempt(
+  result: Pick<TestResult, 'file' | 'output'>,
+  attemptNumber: number,
+): string {
+  return [
+    `TIMED OUT (attempt ${attemptNumber}) ${result.file}${timeoutSuffix(result.output)}`,
+    failureExcerpt(stripAnsi(result.output), 6000),
+  ].join('\n');
 }
 
 export function exitCodeForRun(
@@ -575,11 +600,23 @@ async function main(): Promise<void> {
         if (index >= selectedFiles.length) return;
         const file = selectedFiles[index];
         const startedAt = performance.now();
+        // A retry only follows a timeout, so counting timed-out attempts
+        // numbers each attempt correctly.
+        let timedOutAttempts = 0;
         const result = await isolation.runFile(file, () =>
           runTestFileWithTimeoutRetry(file, () =>
-            runTestFile(file, isolation.sessionEnv, () => {
-              failFast = true;
-            }),
+            runTestFile(
+              file,
+              isolation.sessionEnv,
+              () => {
+                failFast = true;
+              },
+              (attempt) => {
+                console.error(
+                  formatTimedOutAttempt(attempt, ++timedOutAttempts),
+                );
+              },
+            ),
           ),
         );
         const durationMs = performance.now() - startedAt;

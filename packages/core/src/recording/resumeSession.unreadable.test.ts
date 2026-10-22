@@ -54,6 +54,25 @@ async function createHealthySession(
 const execFileAsync = promisify(execFile);
 
 /**
+ * The SID of the account running this process. Naming the deny entry by SID
+ * avoids resolving a display name that can differ between the account that
+ * `os.userInfo()` reports and the one in the process token.
+ */
+async function currentUserSid(): Promise<string> {
+  const { stdout } = await execFileAsync('whoami', [
+    '/user',
+    '/fo',
+    'csv',
+    '/nh',
+  ]);
+  const sid = /"(S-1-[\d-]+)"/.exec(stdout)?.[1];
+  if (sid === undefined) {
+    throw new Error(`whoami did not report a SID: ${stdout}`);
+  }
+  return sid;
+}
+
+/**
  * Makes `directory` refuse new entries for the current user and returns the
  * function that restores access. chmod(0500) does nothing on Windows, where
  * access is decided by the ACL, so Windows gets a real deny entry instead.
@@ -63,19 +82,28 @@ async function denyNewEntries(directory: string): Promise<() => Promise<void>> {
     await fs.chmod(directory, 0o500);
     return () => fs.chmod(directory, 0o700);
   }
-  const account = os.userInfo().username;
-  // WD/AD are "add file" / "add subdirectory" on a directory; no inheritance
-  // flags, so only this directory is affected. FILE_ADD_FILE on the directory
-  // is the right the lock path needs for both of its creating operations: a
-  // CREATE_NEW open of the temp file (MS-FSA 2.1.5.1.1, "Creation of a New
-  // File") and the hard link that publishes it (MS-FSA FileLinkInformation,
-  // which opens the destination directory with FILE_ADD_FILE). Both checks
-  // are skipped for an open that holds restore access, so the test verifies
-  // the denial with those same operations instead of assuming it.
-  await execFileAsync('icacls', [directory, '/deny', `${account}:(WD,AD)`]);
-  return async () => {
-    await execFileAsync('icacls', [directory, '/remove:d', account]);
+  const principal = `*${await currentUserSid()}`;
+  // WD/AD are "add file" / "add subdirectory" on a directory, applied to this
+  // directory only so the existing recording stays readable. FILE_ADD_FILE on
+  // the directory is the right the lock path needs for both of its creating
+  // operations: a CREATE_NEW open of the temp file (MS-FSA 2.1.5.1.1,
+  // "Creation of a New File") and the hard link that publishes it (MS-FSA
+  // FileLinkInformation, which opens the destination directory with
+  // FILE_ADD_FILE). An open that holds backup/restore access skips both
+  // checks, so the callers verify the denial with those same operations
+  // instead of assuming it.
+  await execFileAsync('icacls', [directory, '/deny', `${principal}:(WD,AD)`]);
+  const restore = async (): Promise<void> => {
+    await execFileAsync('icacls', [directory, '/remove:d', principal]);
   };
+  try {
+    const { stdout: dacl } = await execFileAsync('icacls', [directory]);
+    expect(dacl).toContain('(DENY)');
+  } catch (error: unknown) {
+    await restore();
+    throw error;
+  }
+  return restore;
 }
 
 // libuv reports ERROR_ACCESS_DENIED as EPERM, POSIX reports EACCES.

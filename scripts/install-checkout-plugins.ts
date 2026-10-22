@@ -16,6 +16,10 @@ import {
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { FIRST_PARTY_RUNTIME_PLUGIN_RELEASES } from './utils/release-packages.ts';
+import {
+  superviseChild,
+  type SupervisedChild,
+} from './utils/supervised-child.ts';
 
 const repoRoot = resolve(import.meta.dirname, '..');
 const temporaryRoot = join(repoRoot, 'tmp');
@@ -139,7 +143,7 @@ try {
     );
   }
 } finally {
-  cleanupInstaller();
+  await cleanupInstaller();
 }
 
 interface NativeProcessCandidate {
@@ -171,7 +175,7 @@ interface NativeProcessProbe {
  * request file and answers with one process snapshot, so cleanup only
  * writes a file and reads the reply.
  */
-interface ProcessObserver {
+interface ProcessObserver extends SupervisedChild {
   readonly child: ChildProcess;
   readonly requestPath: string;
   readonly responsePath: string;
@@ -224,11 +228,8 @@ function startProcessObserver(): ProcessObserver {
     ],
     { cwd: repoRoot, stdio: 'ignore', windowsHide: true },
   );
-  // A late spawn failure must not become an unhandled error; the probe
-  // reports the missing pid instead.
-  child.on('error', () => {});
-  child.unref();
-  return { child, requestPath, responsePath };
+  // A failed spawn leaves the pid undefined, which the probe reports.
+  return { child, requestPath, responsePath, ...superviseChild(child) };
 }
 
 function sleepSync(milliseconds: number): void {
@@ -310,11 +311,13 @@ function privateImageContext(deadline: number): object {
   };
 }
 
-function cleanupInstaller(): void {
+async function cleanupInstaller(): Promise<void> {
   const deadline = performance.now() + 2000;
+  let removal: { readonly error: unknown } | undefined;
   try {
     rmSync(toolRoot, { recursive: true, force: true });
   } catch (error) {
+    removal = { error };
     try {
       let privateImage: object;
       try {
@@ -338,10 +341,20 @@ function cleanupInstaller(): void {
 `,
       );
     } catch {
-      throw error;
+      // The diagnostic is best effort; the removal error is rethrown below.
     }
-    throw error;
-  } finally {
-    processObserver?.child.kill();
+  }
+  const shutdown = await stopProcessObserver();
+  if (removal !== undefined) throw removal.error;
+  if (shutdown !== undefined) throw shutdown.error;
+}
+
+/** Observer shutdown never throws, so it cannot replace the removal error. */
+async function stopProcessObserver(): Promise<{ error: unknown } | undefined> {
+  try {
+    await processObserver?.stop();
+    return undefined;
+  } catch (error) {
+    return { error };
   }
 }

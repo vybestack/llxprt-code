@@ -213,6 +213,15 @@ function shouldRecurseIntoEntry(
 }
 
 /**
+ * Suggestion labels are '/'-separated whatever the host separator is. Splits on
+ * the host separator only, so a backslash that is part of a POSIX file name is
+ * kept.
+ */
+function toPosixLabel(relativePath: string): string {
+  return relativePath.split(path.sep).join('/');
+}
+
+/**
  * Finds files using glob pattern.
  */
 export async function findFilesWithGlob(
@@ -243,7 +252,7 @@ export async function findFilesWithGlob(
     )
     .map((file: string) => {
       const absolutePath = path.resolve(searchDir, file);
-      const label = path.relative(cwd, absolutePath);
+      const label = toPosixLabel(path.relative(cwd, absolutePath));
       return {
         label,
         value: escapePath(label),
@@ -281,7 +290,8 @@ export function mapEntriesToSuggestions(
 ): Suggestion[] {
   return entries.map((entry) => {
     const absolutePath = path.resolve(baseDirAbsolute, entry.name);
-    const label = cwd === dir ? entry.name : path.relative(cwd, absolutePath);
+    const label =
+      cwd === dir ? entry.name : toPosixLabel(path.relative(cwd, absolutePath));
     const suggestionLabel = entry.isDirectory() === true ? label + '/' : label;
     return {
       label: suggestionLabel,

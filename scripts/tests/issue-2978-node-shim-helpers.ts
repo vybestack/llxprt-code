@@ -220,7 +220,10 @@ export function runShim(
     'node',
     ['-e', captureChildOutput, stdoutPath, stderrPath, layout.shim, ...args],
     {
-      cwd: layout.root,
+      // The fixture root must not be any launched process's working
+      // directory: Windows keeps a directory handle open for a process cwd
+      // and refuses to remove the directory while the process is tearing down.
+      cwd: path.dirname(layout.root),
       timeout: LAUNCH_TIMEOUT_MS,
       env: { ...process.env, ...extraEnv },
       stdio: 'ignore',

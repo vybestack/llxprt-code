@@ -5,6 +5,7 @@
  */
 
 import { afterEach, describe, expect, it } from 'bun:test';
+import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { restoreEnv, setEnv } from './env-test-helpers.js';
@@ -14,7 +15,9 @@ import {
   buildExtraArgs,
   getCommandAndArgs,
   getProfileName,
+  toInlineProfileArg,
 } from './cli-args.js';
+import { spawnRun } from './process-run.js';
 
 describe('cli-args helpers', () => {
   afterEach(() => {
@@ -170,5 +173,69 @@ describe('cli-args helpers', () => {
       command: 'bun',
       initialArgs: ['/packages/cli/index.ts', '--flag'],
     });
+  });
+
+  it('renders a pretty-printed profile as one line with identical content', () => {
+    const profile = {
+      version: 1,
+      provider: 'openai',
+      model: 'qwen3.5:2b',
+      modelParams: { reasoning_effort: 'none' },
+      ephemeralSettings: { 'base-url': 'http://127.0.0.1:1/v1' },
+    };
+
+    const arg = toInlineProfileArg(JSON.stringify(profile, null, 2));
+
+    expect(arg).not.toMatch(/[\r\n]/);
+    expect(JSON.parse(arg)).toStrictEqual(profile);
+  });
+
+  it('rejects a profile that is not valid JSON', () => {
+    expect(() => toInlineProfileArg('{ not json')).toThrow(SyntaxError);
+  });
+
+  it('delivers JSON, quotes and spaces to the spawned CLI argv exactly', async () => {
+    delete process.env.INTEGRATION_TEST_USE_INSTALLED_LLXPRT;
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-args-argv-'));
+    try {
+      const echoEntry = path.join(dir, 'echo-argv.ts');
+      fs.writeFileSync(
+        echoEntry,
+        'process.stdout.write(JSON.stringify(process.argv.slice(2)));\n',
+      );
+      const profileArg = toInlineProfileArg(
+        JSON.stringify(
+          {
+            provider: 'openai',
+            modelParams: { reasoning_effort: 'none' },
+            ephemeralSettings: { 'base-url': 'http://127.0.0.1:1/v1' },
+          },
+          null,
+          2,
+        ),
+      );
+      const userArgs = [
+        '--yolo',
+        '--profile',
+        profileArg,
+        '--ide-mode',
+        'disable',
+        '--prompt',
+        'Respond with OK',
+        'say "hi" to the world',
+      ];
+      const { command, initialArgs } = getCommandAndArgs(echoEntry, userArgs);
+
+      const stdout = await spawnRun(
+        { command, commandArgs: initialArgs, testDir: dir },
+        {},
+        false,
+        (output) => output,
+      );
+
+      expect(JSON.parse(stdout)).toStrictEqual(userArgs);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

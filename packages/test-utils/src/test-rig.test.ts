@@ -12,12 +12,28 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { createServer } from 'node:http';
+import { createServer, type Server } from 'node:http';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { restoreEnv, setEnv } from './env-test-helpers.js';
 import { TestRig } from './test-rig.js';
 import { readLedger } from './model-request-ledger.js';
+
+/** Resolves with the bound port only once the server is accepting connections. */
+async function listenOnLoopback(server: Server): Promise<number> {
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', reject);
+      resolve();
+    });
+  });
+  const address = server.address();
+  if (address === null || typeof address === 'string') {
+    throw new Error('Local test server has no TCP port');
+  }
+  return address.port;
+}
 
 function requireTestDir(testDir: string | null): string {
   if (testDir === null) {
@@ -152,13 +168,9 @@ describe('TestRig setup and cleanup behavior', () => {
         response.end(`data: ${chunk}\n\ndata: [DONE]\n\n`);
       });
     });
-    server.listen(0, '127.0.0.1');
+    const port = await listenOnLoopback(server);
     try {
-      const address = server.address();
-      if (address === null || typeof address === 'string') {
-        throw new Error('Local test server has no TCP port');
-      }
-      setEnv('OPENAI_BASE_URL', `http://127.0.0.1:${address.port}/v1`);
+      setEnv('OPENAI_BASE_URL', `http://127.0.0.1:${port}/v1`);
       const rig = new TestRig();
       rig.setup('real CLI local model E2E profile');
 
@@ -205,13 +217,9 @@ describe('TestRig setup and cleanup behavior', () => {
         );
       }, 1_500);
     });
-    server.listen(0, '127.0.0.1');
+    const port = await listenOnLoopback(server);
     try {
-      const address = server.address();
-      if (address === null || typeof address === 'string') {
-        throw new Error('Local test server has no TCP port');
-      }
-      setEnv('OPENAI_BASE_URL', `http://127.0.0.1:${address.port}/v1`);
+      setEnv('OPENAI_BASE_URL', `http://127.0.0.1:${port}/v1`);
       const rig = new TestRig();
       rig.setup('local profile headers deadline');
       const profilePath = join(
@@ -255,13 +263,9 @@ describe('TestRig setup and cleanup behavior', () => {
         );
       }, 1_500);
     });
-    server.listen(0, '127.0.0.1');
+    const port = await listenOnLoopback(server);
     try {
-      const address = server.address();
-      if (address === null || typeof address === 'string') {
-        throw new Error('Local test server has no TCP port');
-      }
-      setEnv('OPENAI_BASE_URL', `http://127.0.0.1:${address.port}/v1`);
+      setEnv('OPENAI_BASE_URL', `http://127.0.0.1:${port}/v1`);
       const rig = new TestRig();
       rig.setup('local profile SDK deadline');
       const profilePath = join(
@@ -300,13 +304,9 @@ describe('TestRig setup and cleanup behavior', () => {
     const server = createServer((_request, _response) => {
       // Keep the first response pending so only the CLI watchdog can end it.
     });
-    server.listen(0, '127.0.0.1');
+    const port = await listenOnLoopback(server);
     try {
-      const address = server.address();
-      if (address === null || typeof address === 'string') {
-        throw new Error('Local test server has no TCP port');
-      }
-      setEnv('OPENAI_BASE_URL', `http://127.0.0.1:${address.port}/v1`);
+      setEnv('OPENAI_BASE_URL', `http://127.0.0.1:${port}/v1`);
       const rig = new TestRig();
       rig.setup('local profile watchdog');
       const profilePath = join(

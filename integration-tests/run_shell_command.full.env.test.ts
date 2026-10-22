@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { focusedToolSettings } from './helpers/focusedToolSettings.js';
 import { TestRig, printDebugInfo, validateModelOutput } from './test-helper.js';
+import { getEnvVarEchoCommand } from './helpers/shellCommandTestSupport.js';
 
 // Real-model scenario split out of run_shell_command.test.ts so each file's
 // serial model rounds fit the per-file process budget. The PR E2E workflow
@@ -30,7 +31,11 @@ describe('run_shell_command environment', () => {
     process.env[varName] = varValue;
 
     try {
-      const prompt = `Use the run_shell_command tool with echo to read the environment variable named ${varName}, then tell me its value.`;
+      // The shell tool runs PowerShell on Windows and bash elsewhere; each
+      // expands variables with its own syntax, so the prompt names the exact
+      // command for the shell the tool will actually use.
+      const { command, shellLabel } = getEnvVarEchoCommand(varName);
+      const prompt = `Call the run_shell_command tool now with exactly this command: ${command}\nThe tool runs ${shellLabel}, which expands the variable itself, so do not change the syntax. After the tool returns, reply with the exact text it printed.`;
       const result = await rig.run({ args: prompt });
 
       const foundToolCall = await rig.waitForToolCall('run_shell_command');

@@ -39,6 +39,7 @@ import {
   exitCodeForRun,
   failureExcerpt,
   formatFileProgress,
+  formatTimedOutAttempt,
   isTestFile,
   fileTimeoutForFile,
   parseCaseCounts,
@@ -274,6 +275,23 @@ describe('formatFileProgress', () => {
         1200,
       ),
     ).toBe('FAIL (6/10) src/d.test.ts 1.20s');
+  });
+});
+
+describe('formatTimedOutAttempt', () => {
+  it('keeps the summary of a timed-out attempt that finished its tests', () => {
+    const output =
+      '(pass) c > ok\n\n 1 pass\n 0 fail\nRan 1 test across 1 file. [1.88s]\n';
+    expect(formatTimedOutAttempt({ file: 'src/c.test.ts', output }, 1)).toBe(
+      `TIMED OUT (attempt 1) src/c.test.ts [timeout: tests finished, process did not exit]\n${output}`,
+    );
+  });
+
+  it('labels an attempt that never reached the summary as a plain timeout', () => {
+    const output = '(pass) b > starts\n';
+    expect(formatTimedOutAttempt({ file: 'src/b.test.ts', output }, 2)).toBe(
+      `TIMED OUT (attempt 2) src/b.test.ts [timeout]\n${output}`,
+    );
   });
 });
 
@@ -1284,6 +1302,29 @@ it('reaps a timed-out child even when timeout notification throws', async () => 
       expect(() => process.kill(pid, 0)).toThrow();
   } finally {
     log.mockRestore();
+    rmSync(dir, { recursive: true, force: true });
+  }
+}, 15_000);
+
+it('hands a timed-out attempt to the reporter and not a passing one', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cli-timeout-report-'));
+  try {
+    const file = writeFlakyThenPassTest(dir);
+    const reported: Array<{ file: string; timedOut: boolean }> = [];
+    const first = await withShortPerFileTimeout(() =>
+      runTestFile(file, undefined, undefined, (attempt) =>
+        reported.push({ file: attempt.file, timedOut: attempt.timedOut }),
+      ),
+    );
+    expect(first.timedOut).toBe(true);
+    expect(reported).toEqual([{ file, timedOut: true }]);
+
+    const second = await runTestFile(file, undefined, undefined, (attempt) =>
+      reported.push({ file: attempt.file, timedOut: attempt.timedOut }),
+    );
+    expect(second.passed).toBe(true);
+    expect(reported).toHaveLength(1);
+  } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 }, 15_000);

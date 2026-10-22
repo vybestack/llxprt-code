@@ -60,6 +60,11 @@ import {
   installRunnerSignalHandlers,
   trackRunnerChild,
 } from '../../scripts/lib/bespoke-runner-isolation.js';
+import {
+  describeTaskkillProbe,
+  describeTimedOutChild,
+  type ChildExitObservation,
+} from './runner-timeout-diagnostics.js';
 
 process.env.LLXPRT_RUNNING_TESTS = 'true';
 
@@ -251,8 +256,34 @@ export function runTestFile(
     // concurrency cap exactly when the machine is already struggling.
     let killedByTimeout = false;
 
+    // `exit` is recorded separately from `close`. On Windows `close` waits for
+    // every process holding the child's inherited stdio, so a file whose
+    // assertions all passed can still time out; knowing whether `exit` fired
+    // tells a hung child apart from a surviving descendant.
+    let exitObservation: ChildExitObservation | null = null;
+    child.on('exit', (code, signal) => {
+      exitObservation = { code, signal };
+    });
+
+    const reportTimeoutBeforeKill = (): void => {
+      if (process.platform !== 'win32' || child.pid === undefined) return;
+      console.error(
+        describeTimedOutChild({
+          file,
+          rootPid: child.pid,
+          exit: exitObservation,
+        }),
+      );
+    };
+
+    const reportTimeoutAfterKill = (): void => {
+      if (process.platform !== 'win32' || child.pid === undefined) return;
+      console.error(describeTaskkillProbe(child.pid));
+    };
+
     const timer = setTimeout(() => {
       killedByTimeout = true;
+      reportTimeoutBeforeKill();
       try {
         killTimedOutChild({ runner: 'agents', child });
       } catch (error) {
@@ -260,10 +291,12 @@ export function runTestFile(
           `Failed to kill timed-out test child ${child.pid}: ${String(error)}`,
         );
       }
+      reportTimeoutAfterKill();
     }, timeoutMs);
 
-    // `close` rather than `exit`: it fires once the child's stdio has been
-    // released, so a slot is not reused while the process is still tearing down.
+    // `close` rather than `exit` settles the result: it fires once the child's
+    // stdio has been released, so a slot is not reused while the process is
+    // still tearing down.
     child.on('close', (code, signal) => {
       settleOnce({
         file,

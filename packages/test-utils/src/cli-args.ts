@@ -107,6 +107,17 @@ export function getCommandAndArgs(
 }
 
 /**
+ * Render a profile file as the single-line value of `--profile`. The profile
+ * is pretty-printed on disk, but whitespace carries no meaning in JSON. On the
+ * Windows runner the prompt that followed a multi-line `--profile` value never
+ * reached the CLI, while single-line profiles arrived intact. Invalid JSON
+ * throws here instead of reaching the CLI.
+ */
+export function toInlineProfileArg(profileJson: string): string {
+  return JSON.stringify(JSON.parse(profileJson));
+}
+
+/**
  * Build the child-process environment, filtering IDE-detection vars and
  * injecting test harness defaults.
  */

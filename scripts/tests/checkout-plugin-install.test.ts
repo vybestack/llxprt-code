@@ -45,10 +45,12 @@ function fixture(checkout: boolean): string {
   if (existsSync(installer)) {
     cpSync(installer, join(root, 'scripts', 'install-checkout-plugins.ts'));
   }
-  cpSync(
-    join(repoRoot, 'scripts', 'utils', 'release-packages.ts'),
-    join(root, 'scripts', 'utils', 'release-packages.ts'),
-  );
+  for (const helper of ['release-packages.ts', 'supervised-child.ts']) {
+    cpSync(
+      join(repoRoot, 'scripts', 'utils', helper),
+      join(root, 'scripts', 'utils', helper),
+    );
+  }
   cpSync(join(repoRoot, 'package.json'), join(root, 'package.json'));
   cpSync(join(repoRoot, 'package-lock.json'), join(root, 'package-lock.json'));
   if (checkout) mkdirSync(join(root, '.git'));

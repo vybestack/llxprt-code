@@ -21,3 +21,23 @@ export function getLineCountCommand(): { command: string; tool: string } {
       return { command: `wc -l`, tool: 'wc' };
   }
 }
+
+/**
+ * How the platform's shell, as the shell tool itself selects it, expands the
+ * environment variable `name`, with a human-readable shell label for prompts.
+ */
+export function getEnvVarEchoCommand(name: string): {
+  command: string;
+  shellLabel: string;
+} {
+  const { shell } = getShellConfiguration();
+  switch (shell) {
+    case 'powershell':
+      return { command: `echo $env:${name}`, shellLabel: 'PowerShell' };
+    case 'cmd':
+      return { command: `echo %${name}%`, shellLabel: 'cmd.exe' };
+    case 'bash':
+    default:
+      return { command: `echo $${name}`, shellLabel: 'bash' };
+  }
+}
