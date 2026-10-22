@@ -12,6 +12,7 @@ import type { AnthropicMessageConversionOptions } from './AnthropicMessageConver
 import { stripCrossModelThinking } from './crossModelThinkingStrip.js';
 import { sanitizeRowImages } from './AnthropicImageSanitizer.js';
 import { unprefixAnthropicToolName } from './schemaConverter.js';
+import { selectLastCacheableBlockIndex } from './AnthropicRequestBuilder.js';
 import {
   readAnchorBlockTag,
   readAnchorStringTag,
@@ -23,6 +24,7 @@ export interface AnthropicBlockLength {
   readonly blank: boolean;
   readonly id?: string;
   readonly anchored: boolean;
+  readonly cacheable?: boolean;
 }
 
 export type AnthropicAtom =
@@ -61,6 +63,7 @@ function blockLength(block: AnthropicMessageBlock): AnthropicBlockLength {
     blank: block.type === 'text' && block.text.trim() === '',
     id: blockId(block),
     anchored: readAnchorBlockTag(block),
+    cacheable: selectLastCacheableBlockIndex([block]) === 0,
   };
 }
 

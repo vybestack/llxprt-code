@@ -34,6 +34,7 @@ export interface RowFormatSettings {
   };
   readonly anthropic?: {
     readonly cache: 'off' | '5m' | '1h';
+    readonly cacheFacts?: boolean;
     readonly imageBudget: {
       readonly maxDimension?: number;
       readonly maxPixels?: number;

@@ -22,6 +22,7 @@ import {
 } from '../tokenizers/claude/claudeContentFeatures.js';
 import type { AnthropicStreamRepair } from './anthropic-stream-repair.js';
 import type { AnthropicMessage } from './AnthropicMessageNormalizer.js';
+import type { AnthropicCachePlan } from './anthropic-cache-facts.js';
 
 export class NativeAnthropicEstimateProjection {
   readonly protocol = 'anthropic-messages';
@@ -31,6 +32,7 @@ export class NativeAnthropicEstimateProjection {
     private readonly envelope: Readonly<Record<string, unknown>>,
     readonly signal?: AbortSignal,
     private readonly prefix?: AnthropicMessage,
+    private readonly cache?: AnthropicCachePlan,
   ) {}
 
   private async *pieces(
@@ -49,7 +51,7 @@ export class NativeAnthropicEstimateProjection {
         return value;
       };
       if (key === 'messages')
-        yield* this.engine.serialize(canonical, this.prefix);
+        yield* this.engine.serialize(canonical, this.prefix, this.cache);
       else yield JSON.stringify(canonical(value));
       separator = ',';
     }

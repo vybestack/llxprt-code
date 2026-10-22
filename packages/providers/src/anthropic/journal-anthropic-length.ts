@@ -17,6 +17,11 @@ import { prepareAnthropicStoredAppend } from './anthropic-stored-append.js';
 import { anthropicRepairScope } from './anthropic-repair-index.js';
 import { jsonValueByteLength } from '../utils/progressive-json-body.js';
 import { anthropicRepairFactIndex } from './anthropic-repair-fact-writer.js';
+import {
+  anthropicCachePlan,
+  readAnthropicCacheFacts,
+  type AnthropicCachePlan,
+} from './anthropic-cache-facts.js';
 
 export function anthropicLengthRegistration(
   input: RowFormatSettings,
@@ -39,6 +44,7 @@ export function anthropicLengthRegistration(
 }
 export interface StoredAnthropicRequestPlan {
   readonly contentLength: number;
+  readonly cache?: AnthropicCachePlan;
   readonly messagesBytes: number;
   readonly messages: number;
   readonly key: bigint;
@@ -46,6 +52,7 @@ export interface StoredAnthropicRequestPlan {
   readonly settings: RowFormatSettings;
 }
 interface Selection {
+  readonly cache?: '5m' | '1h';
   readonly from?: number;
   readonly to?: number;
   readonly pendingInputCount?: number;
@@ -100,16 +107,24 @@ export async function planStoredAnthropicRequest(
   }
 }
 
-async function planPinned(
-  snapshot: VersionSnapshot,
+function planCache(
+  metadata: Uint8Array,
   settings: RowFormatSettings,
   policy: RepairPolicy,
+  ttl: Selection['cache'],
+): AnthropicCachePlan | undefined {
+  if (ttl === undefined) return undefined;
+  const facts = readAnthropicCacheFacts(metadata).current;
+  if (policy.includeInContext === false || policy.strip === 'all')
+    return anthropicCachePlan(facts.stripped, settings, ttl);
+  const selected = policy.strip === 'allButLast' ? facts.corrected : facts.kept;
+  return anthropicCachePlan(selected, settings, ttl);
+}
+function assertSelection(
+  settings: RowFormatSettings,
   request: RequestEnvelope,
   selection: Selection,
-  envelopeBytes: number,
-): Promise<StoredAnthropicRequestPlan> {
-  snapshot.requireOpen();
-  projectAnthropicUnit({ speaker: 'human', blocks: [] }, settings);
+): void {
   if ((selection.from ?? 0) !== 0 || selection.to !== undefined)
     throw new JournalFormatError(
       'Anthropic selected-range planning is not implemented',
@@ -126,6 +141,18 @@ async function planPinned(
     throw new JournalFormatError(
       'Anthropic message overrides cannot use stored lengths',
     );
+}
+async function planPinned(
+  snapshot: VersionSnapshot,
+  settings: RowFormatSettings,
+  policy: RepairPolicy,
+  request: RequestEnvelope,
+  selection: Selection,
+  envelopeBytes: number,
+): Promise<StoredAnthropicRequestPlan> {
+  snapshot.requireOpen();
+  projectAnthropicUnit({ speaker: 'human', blocks: [] }, settings);
+  assertSelection(settings, request, selection);
   const key = rowFormatKey(settings);
   const version = snapshot.version;
   const slot =
@@ -166,9 +193,11 @@ async function planPinned(
     summary.variants[stripped ? 1 : 0],
     settings,
   );
+  const cache = planCache(metadata, settings, policy, selection.cache);
   return Object.freeze({
-    contentLength: measured.bytes + envelopeBytes,
-    messagesBytes: measured.bytes,
+    cache,
+    contentLength: measured.bytes + (cache?.bytes ?? 0) + envelopeBytes,
+    messagesBytes: measured.bytes + (cache?.bytes ?? 0),
     messages: measured.messages,
     key,
     generation: format.gen,

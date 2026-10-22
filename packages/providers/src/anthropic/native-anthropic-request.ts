@@ -23,6 +23,7 @@ import {
 import {
   anthropicLengthRegistration,
   planStoredAnthropicRequest,
+  type StoredAnthropicRequestPlan,
 } from './journal-anthropic-length.js';
 import { AnthropicStreamRepair } from './anthropic-stream-repair.js';
 import {
@@ -87,7 +88,11 @@ function nativeSettings(
     mediaPdfEnabled: true,
     unsupportedMedia: 'notice',
     outputLimits: plan.conversion.config ?? null,
-    anthropic: { cache: 'off', imageBudget: plan.imageBudget ?? null },
+    anthropic: {
+      cache: 'off',
+      cacheFacts: true,
+      imageBudget: plan.imageBudget ?? null,
+    },
   };
 }
 
@@ -137,35 +142,45 @@ async function requestFromEngine(
   envelope: Readonly<Record<string, unknown>>,
   query: IndexedJournalRequestSnapshot,
   engine: AnthropicStreamRepair,
-  contentLength: number,
+  measured: StoredAnthropicRequestPlan,
   estimate: boolean,
 ): Promise<NativeAnthropicRequest> {
   const signal = getRequestSignal(params.options);
   const prefix = placeSystemInstruction({
     placement: params.placement,
     anthropicMessages: [],
-    wantCaching: false,
+    wantCaching: plan.wantCaching,
     ttl: plan.requestSettings.ttl,
     cacheLogger: params.cacheLogger,
     systemInstruction: params.options.systemInstruction,
   }).find((_message, index) => index === 0);
   const prefixBytes =
     prefix === undefined ? 0 : Buffer.byteLength(JSON.stringify(prefix)) + 1;
-  const length = contentLength + prefixBytes;
+  const length = measured.contentLength + prefixBytes;
   if (length > DEFAULT_HTTP_JSON_ENVELOPE_BYTES)
     throw envelopeTooLargeError(DEFAULT_HTTP_JSON_ENVELOPE_BYTES, length);
   const parts = await envelopeParts(envelope);
   const body = new NativeAnthropicBody(async function* () {
     signal?.throwIfAborted();
     yield parts.head;
-    for await (const piece of engine.serialize(undefined, prefix)) {
+    for await (const piece of engine.serialize(
+      undefined,
+      prefix,
+      measured.cache,
+    )) {
       signal?.throwIfAborted();
       yield Buffer.from(piece);
     }
     yield parts.tail;
   }, length);
   const projection = estimate
-    ? new NativeAnthropicEstimateProjection(engine, envelope, signal, prefix)
+    ? new NativeAnthropicEstimateProjection(
+        engine,
+        envelope,
+        signal,
+        prefix,
+        measured.cache,
+      )
     : undefined;
   return {
     facts: requestFactsOf(plan, params.cacheLogger, undefined),
@@ -213,6 +228,7 @@ async function prepareNativeAnthropicRequest(
           settings,
           policy,
           { ...small, model: settings.model },
+          { cache: plan.wantCaching ? plan.requestSettings.ttl : undefined },
         );
         const engine = await AnthropicStreamRepair.create(
           query,
@@ -225,7 +241,7 @@ async function prepareNativeAnthropicRequest(
           envelope,
           query,
           engine,
-          measured.contentLength,
+          measured,
           estimate,
         );
       } catch (error) {
@@ -242,8 +258,7 @@ async function canUseNativeAnthropic(
   options: SpooledRequestOptions,
 ): Promise<boolean> {
   const native = rows.native;
-  if (native === undefined || planAnthropicRequest(params).wantCaching)
-    return false;
+  if (native === undefined) return false;
   if (
     options.recoveryBudget !== undefined ||
     wantsRequestDump(params.options.invocation.ephemerals.dumpcontext)

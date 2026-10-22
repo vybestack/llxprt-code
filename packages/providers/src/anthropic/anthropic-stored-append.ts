@@ -26,6 +26,15 @@ import {
   type AnthropicUnitFacts,
 } from './anthropic-unit-facts.js';
 import { anthropicUnitTransfer } from './anthropic-unit-transfer.js';
+import {
+  beginAnthropicCacheAtom,
+  addAnthropicCachePiece,
+  finishAnthropicCacheAtom,
+  readAnthropicCacheFacts,
+  type AnthropicCacheFacts,
+  type AnthropicCacheState,
+} from './anthropic-cache-facts.js';
+import { anthropicAuxiliary } from './anthropic-stored-fill.js';
 
 function anthropic(
   summary: ReturnType<typeof identitySlotSummary>,
@@ -65,6 +74,62 @@ interface AppendState {
   chain: boolean;
   units: number;
   lastLabel: bigint;
+  cache: AnthropicCacheFacts;
+  cachePrefix: AnthropicCacheFacts;
+}
+function appendCachePieces(
+  state: AnthropicCacheState,
+  pieces: AnthropicUnitFacts['atoms'][0],
+  chain: boolean,
+  anchored: boolean,
+): AnthropicCacheState {
+  let next = state;
+  for (const [index, piece] of pieces.entries()) {
+    const before = next.run?.role === piece.role ? next.run.blocks : 0;
+    next = addAnthropicCachePiece(
+      beginAnthropicCacheAtom(next, piece.role, chain),
+      piece,
+    );
+    next = finishAnthropicCacheAtom(
+      next,
+      anchored && index === pieces.length - 1,
+      before,
+    );
+  }
+  return next;
+}
+function appendCache(
+  state: AppendState,
+  unit: AnthropicUnitFacts,
+  continuation: boolean,
+  startsThinking: boolean,
+  anchored: boolean,
+): void {
+  const kept = atoms(unit, continuation, 0);
+  const stripped = atoms(unit, continuation, 1);
+  const corrected = startsThinking
+    ? state.cache.stripped
+    : state.cache.corrected;
+  state.cache = {
+    kept: appendCachePieces(
+      state.cache.kept,
+      kept,
+      continuation || unit.chainStart,
+      anchored,
+    ),
+    stripped: appendCachePieces(
+      state.cache.stripped,
+      stripped,
+      continuation || unit.chainStart,
+      anchored,
+    ),
+    corrected: appendCachePieces(
+      corrected,
+      startsThinking || continuation ? kept : stripped,
+      continuation || unit.chainStart,
+      anchored,
+    ),
+  };
 }
 async function measureAppend(
   state: AppendState,
@@ -76,15 +141,14 @@ async function measureAppend(
       'Append measurements must follow native row order',
     );
   state.prefix = state.corrected;
+  state.cachePrefix = state.cache;
   let kept = state.identity;
   let removed = state.identity;
   let localCorrection = state.identity;
   const end = state.units + unitCount(entry);
   for (; state.units < end; state.units++) {
-    const unit = anthropicUnitFacts(
-      await state.query.readAt(state.units),
-      state.settings,
-    );
+    const row = await state.query.readAt(state.units);
+    const unit = anthropicUnitFacts(row, state.settings);
     if (unit === undefined) continue;
     const continuation = state.chain && unit.speaker === 'ai';
     const transfer = anthropicUnitTransfer(
@@ -100,6 +164,13 @@ async function measureAppend(
     const withoutThinking = selected(transfer, 1);
     const startsThinking =
       !continuation && unit.speaker === 'ai' && unit.hasThinking;
+    appendCache(
+      state,
+      unit,
+      continuation,
+      startsThinking,
+      row.metadata?.cacheAnchor === true,
+    );
     const chosen =
       startsThinking || continuation ? withThinking : withoutThinking;
     if (startsThinking) state.corrected = state.stripped;
@@ -120,6 +191,17 @@ async function measureAppend(
   lens.set(encodeSlotSummary(summary));
   lens.set(encodeSlotSummary(localCorrection), 296);
   return { summary, lens };
+}
+async function finishAppend(state: AppendState): Promise<Uint8Array> {
+  if (state.units !== state.query.count)
+    throw new JournalFormatError('Append did not consume the new native units');
+  return anthropicAuxiliary(
+    state.corrected,
+    state.prefix,
+    state.settings.anthropic?.cacheFacts === true
+      ? { current: state.cache, prefix: state.cachePrefix }
+      : undefined,
+  );
 }
 export async function prepareAnthropicStoredAppend(
   snapshot: VersionSnapshot,
@@ -152,7 +234,7 @@ export async function prepareAnthropicStoredAppend(
   if (tail === undefined || tail.length !== 2)
     throw new JournalFormatError('Append requires native boundary facts');
   const rewind = (await facts.get(['append-rewind']))?.[0] ?? 0;
-  if (rewind !== 0 && auxiliary?.length !== 592)
+  if (rewind !== 0 && (auxiliary === undefined || auxiliary.length < 592))
     throw new JournalFormatError('Tool append requires measured holder prefix');
   const prefixOffset = rewind === 0 ? 0 : 296;
   const corrected =
@@ -164,6 +246,11 @@ export async function prepareAnthropicStoredAppend(
             format,
           ),
         );
+  const cacheSource = rewind === 0 ? 'current' : 'prefix';
+  const cache =
+    settings.anthropic?.cacheFacts === true && auxiliary !== undefined
+      ? readAnthropicCacheFacts(auxiliary)[cacheSource]
+      : { kept: {}, stripped: {}, corrected: {} };
   const query = await IndexedJournalRequestSnapshot.create(snapshot);
   const state: AppendState = {
     snapshot,
@@ -176,19 +263,12 @@ export async function prepareAnthropicStoredAppend(
     chain: tail[0] !== 0,
     units: rewind === 0 ? previous.aggregate.units : rewind - 1,
     lastLabel: 0n,
+    cache,
+    cachePrefix: cache,
   };
   return {
     measure: (current, entry) => measureAppend(state, current, entry),
-    async finish() {
-      if (state.units !== query.count)
-        throw new JournalFormatError(
-          'Append did not consume the new native units',
-        );
-      const auxiliary = new Uint8Array(592);
-      auxiliary.set(encodeSlotSummary(state.corrected));
-      auxiliary.set(encodeSlotSummary(state.prefix), 296);
-      return auxiliary;
-    },
+    finish: () => finishAppend(state),
     close: () => query.close(),
   };
 }

@@ -25,6 +25,15 @@ import {
 import { getEmptyMessagePlaceholder } from './AnthropicMessageValidator.js';
 import { projectAnthropicUnit } from './anthropic-unit-facts.js';
 import { modelSupportsPrefill } from './AnthropicModelData.js';
+import { readAnchorBlockTag } from './AnthropicAnchorCache.js';
+import {
+  selectLastCacheableBlockIndex,
+  sanitizeBlockForCacheControl,
+} from './AnthropicRequestBuilder.js';
+import {
+  hasAnthropicCacheTarget,
+  type AnthropicCachePlan,
+} from './anthropic-cache-facts.js';
 import type {
   AnthropicMessageBlock,
   AnthropicMessage,
@@ -32,6 +41,8 @@ import type {
 
 export interface LazyRepairAtom {
   readonly key: number;
+  readonly end?: number;
+  readonly chain?: boolean;
   readonly role: 'assistant' | 'user';
   readonly repair: boolean;
   openPieces(redact?: boolean): AsyncGenerator<RepairPiece>;
@@ -52,6 +63,7 @@ const leading = (block: AnthropicMessageBlock, role: Run['role']): boolean =>
 export function numericRepairPiece(
   piece: RepairPiece,
   role: Run['role'],
+  anchoredString = false,
 ): AnthropicAtom {
   return typeof piece === 'string'
     ? {
@@ -59,7 +71,7 @@ export function numericRepairPiece(
         form: 'string',
         bytes: jsonBytes(piece),
         blank: piece.trim() === '',
-        anchored: false,
+        anchored: anchoredString,
       }
     : {
         role,
@@ -68,7 +80,8 @@ export function numericRepairPiece(
           kind: block.type,
           bytes: jsonBytes(block),
           blank: block.type === 'text' && block.text.trim() === '',
-          anchored: false,
+          anchored: readAnchorBlockTag(block),
+          cacheable: selectLastCacheableBlockIndex([block]) === 0,
         })),
       };
 }
@@ -120,6 +133,8 @@ export class AnthropicStreamRepair {
       if (exists && key >= from)
         yield {
           key,
+          end: message.end,
+          chain: message.slot === 'chain',
           role: message.role,
           repair: false,
           openPieces: (redact = this.redact(message)) =>
@@ -247,25 +262,49 @@ export class AnthropicStreamRepair {
       }
     }
   }
+  private cachedText(
+    text: string,
+    run: number,
+    cache?: AnthropicCachePlan,
+  ): unknown {
+    return cache !== undefined && hasAnthropicCacheTarget(cache, run, 0)
+      ? [sanitizeBlockForCacheControl({ type: 'text', text }, cache.ttl)]
+      : text;
+  }
   private async *content(
     run: Run,
     transform: (value: unknown) => unknown,
+    ordinal: number,
+    cache?: AnthropicCachePlan,
   ): AsyncGenerator<string> {
     const shape = await this.shape(run);
     if (shape.blocks === 0) {
-      yield JSON.stringify(transform(getEmptyMessagePlaceholder(run.role)));
+      yield JSON.stringify(
+        transform(
+          this.cachedText(getEmptyMessagePlaceholder(run.role), ordinal, cache),
+        ),
+      );
       return;
     }
     if (shape.string) {
       for await (const piece of this.runPieces(run))
-        if (typeof piece === 'string') yield JSON.stringify(transform(piece));
+        if (typeof piece === 'string')
+          yield JSON.stringify(
+            transform(this.cachedText(piece, ordinal, cache)),
+          );
       return;
     }
     yield '[';
     let comma = '';
+    let blockOrdinal = 0;
     for (let pass = 0; pass < (run.merged ? 2 : 1); pass++) {
       for await (const block of this.runBlocks(run, pass)) {
-        yield comma + JSON.stringify(transform(block));
+        const value =
+          cache !== undefined &&
+          hasAnthropicCacheTarget(cache, ordinal, blockOrdinal++)
+            ? sanitizeBlockForCacheControl(block, cache.ttl)
+            : block;
+        yield comma + JSON.stringify(transform(value));
         comma = ',';
       }
     }
@@ -274,10 +313,12 @@ export class AnthropicStreamRepair {
   async *serialize(
     transform: (value: unknown) => unknown = (value) => value,
     prefix?: AnthropicMessage,
+    cache?: AnthropicCachePlan,
   ): AsyncGenerator<string> {
     yield '[';
     if (prefix !== undefined) yield JSON.stringify(transform(prefix)) + ',';
     let count = 0;
+    let ordinal = 0;
     let last: Run['role'] | undefined;
     for await (const run of this.runs()) {
       if (count === 0 && run.role !== 'user') {
@@ -291,18 +332,29 @@ export class AnthropicStreamRepair {
         '{"role":' +
         JSON.stringify(run.role) +
         ',"content":';
-      yield* this.content(run, transform);
+      yield* this.content(run, transform, ordinal++, cache);
       yield '}';
       last = run.role;
     }
-    if (count === 0) yield JSON.stringify({ role: 'user', content: 'Hello' });
+    if (count === 0)
+      yield JSON.stringify(
+        transform({
+          role: 'user',
+          content: this.cachedText('Hello', -1, cache),
+        }),
+      );
     if (
       last === 'assistant' &&
       (this.source.settings.reasoningEnabled ||
         !modelSupportsPrefill(this.source.settings.model))
     )
       yield ',' +
-        JSON.stringify({ role: 'user', content: 'Continue the conversation' });
+        JSON.stringify(
+          transform({
+            role: 'user',
+            content: this.cachedText('Continue the conversation', -1, cache),
+          }),
+        );
     yield ']';
   }
 }
