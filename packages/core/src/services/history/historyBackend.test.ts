@@ -61,6 +61,7 @@ const PORT_METHODS = [
   'openSemanticPurgeSnapshot',
   'openCompressionInput',
   'openToolResponseRanking',
+  'prepareCurated',
   'dispose',
 ] as const satisfies ReadonlyArray<keyof HistoryStorePort>;
 

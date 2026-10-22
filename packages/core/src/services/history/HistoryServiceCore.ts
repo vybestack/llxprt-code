@@ -24,11 +24,7 @@ import { historyOriginId } from './historyOriginId.js';
 import { CompressionOperationQueue } from './historyCompressionQueue.js';
 import { HistoryTokenTickets } from './history-token-tickets.js';
 import { type IContent } from './IContent.js';
-import { streamCuratedProviderHistory } from './historyCuration.js';
-import {
-  prepareProviderContentSnapshot,
-  type ProviderCuratedStreamOptions,
-} from './provider-curated-stream.js';
+import type { ProviderCuratedStreamOptions } from './provider-curated-stream.js';
 import type { ProviderRequestSnapshot } from './provider-request-snapshot.js';
 import { EventEmitter } from 'events';
 // @plan:PLAN-20260603-ISSUE1584.P05 RuntimeTokenizerFactory used for injection path
@@ -271,17 +267,13 @@ export abstract class HistoryServiceCore
     historyOverride?: Iterable<IContent> | AsyncIterable<IContent>,
   ): Promise<ProviderRequestSnapshot> {
     await this.waitForCommit();
-    return prepareProviderContentSnapshot(
-      streamCuratedProviderHistory(
-        this.logger,
-        historyOverride ?? this.journal.streamRows(undefined, options.signal),
-        this.isCompressing,
-        options.signal,
-      ),
-      tailContents,
-      this.logger,
+    return this.journal.prepareCurated({
+      tail: tailContents,
       options,
-    );
+      logger: this.logger,
+      isCompressing: this.isCompressing,
+      historyOverride,
+    });
   }
 
   /** Attach the journal store after construction (foreground wiring order). */

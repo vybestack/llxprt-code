@@ -82,6 +82,6 @@ export async function sourceBeforeModelHook(
           }),
     );
   } finally {
-    if (!snapshotKept) input.snapshot.close();
+    if (!snapshotKept) await input.snapshot.close();
   }
 }

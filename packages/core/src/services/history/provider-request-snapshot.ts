@@ -72,14 +72,12 @@ export function providerRequestRows(
 }
 
 export interface ProviderRequestSnapshot extends ProviderRequestSelection {
-  readonly readAt: (index: number, signal?: AbortSignal) => IContent;
   /** Pending output may be reordered, so firstOutputIndex is not a suffix boundary. */
   readonly pending: {
     readonly inputCount: number;
     readonly firstOutputIndex: number | undefined;
   };
   isPending(index: number): boolean;
-  close(): void;
 }
 
 export async function* streamProviderContentSnapshot(
@@ -88,7 +86,7 @@ export async function* streamProviderContentSnapshot(
   try {
     yield* snapshot.openReader();
   } finally {
-    snapshot.close();
+    await snapshot.close();
   }
 }
 

@@ -112,11 +112,11 @@ export async function withRequestContentsSnapshot<T>(
       }),
     );
   } finally {
-    owner.close();
+    await owner.close();
   }
 }
 
-/** The caller closes this disk selection after the final response or failed attempt. */
+/** The caller closes this request selection after the final response or failed attempt. */
 export function openRequestContentsSnapshot(
   userContents: IContent | IContent[],
   historyService: HistoryService,

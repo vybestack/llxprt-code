@@ -35,7 +35,10 @@ export function sourcePendingMembership(
           if (snapshot.isPending(index++)) yield row;
         }
       },
-      readAt(index: number, signal?: AbortSignal): IContent {
+      readAt(
+        index: number,
+        signal?: AbortSignal,
+      ): IContent | Promise<IContent> {
         assertRowIndex(index, count);
         return snapshot.readAt(positions[index], signal);
       },

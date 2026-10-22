@@ -15,6 +15,18 @@
  */
 
 import type { NativeDensityPolicy } from './nativeDensityPolicy.js';
+import type { DebugLogger } from '../../debug/index.js';
+import type { ProviderCuratedStreamOptions } from './provider-curated-stream.js';
+import type { ProviderRequestSnapshot } from './provider-request-snapshot.js';
+
+export interface HistoryPrepareCuratedRequest {
+  readonly tail: readonly IContent[];
+  readonly options: ProviderCuratedStreamOptions;
+  readonly logger: DebugLogger;
+  readonly isCompressing: boolean;
+  readonly historyOverride?: Iterable<IContent> | AsyncIterable<IContent>;
+}
+
 import type { SemanticPurgeSnapshot } from './semantic-purge-native.js';
 import type {
   ToolRankingPolicy,
@@ -244,6 +256,9 @@ export interface HistoryCompensationMark {
  * the only implementation until the journal-backed store lands (#854 phase 4).
  */
 export interface HistoryStorePort {
+  prepareCurated(
+    request: HistoryPrepareCuratedRequest,
+  ): Promise<ProviderRequestSnapshot>;
   /**
    * True when `clear` finishes after it returns, so the service must keep its
    * mutation queue held until the promise settles. Absent for the old store,

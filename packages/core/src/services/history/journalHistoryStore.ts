@@ -1,5 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { openJournalSemanticPurge } from './journalSemanticPurge.js';
+import { JournalProviderRequestSnapshot } from './journal-provider-request.js';
+import { oldProviderRequest } from './old-provider-request.js';
+import type { HistoryPrepareCuratedRequest } from './historyStorePort.js';
+import type { ProviderRequestSnapshot } from './provider-request-snapshot.js';
 import type { SemanticPurgeSnapshot } from './semantic-purge-native.js';
 import type { GroupPreparation } from '../../journal/preparedGroup.js';
 import type { EntryFill, VersionEdit } from '../../journal/groupEdits.js';
@@ -151,6 +155,20 @@ interface OpenJournal {
  * and a failure to open is the failure of the queue (decision D-W7-1).
  */
 export class JournalHistoryStore implements HistoryStorePort {
+  async prepareCurated(
+    request: HistoryPrepareCuratedRequest,
+  ): Promise<ProviderRequestSnapshot> {
+    this.assertUsable();
+    await this.waitForCommit();
+    if (request.historyOverride !== undefined)
+      return oldProviderRequest(this, request);
+    return JournalProviderRequestSnapshot.create(
+      await this.session.store.snapshot(),
+      request.tail,
+      request.options,
+    );
+  }
+
   private tentativeRows = 0;
   private queue: Promise<void>;
   private failure: { readonly error: unknown; reported?: boolean } | undefined;
