@@ -6,7 +6,10 @@
 import type { ToolResult } from '@vybestack/llxprt-code-tools';
 import { AsyncTaskAutoTrigger } from '@vybestack/llxprt-code-core/services/asyncTaskAutoTrigger.js';
 import { AsyncTaskReminderService } from '@vybestack/llxprt-code-core/services/asyncTaskReminderService.js';
-import type { AsyncNoticeUnsubscribe } from '@vybestack/llxprt-code-core/services/async-notice-subscription.js';
+import type {
+  AsyncNoticeUnsubscribe,
+  AsyncNoticeDeliveryOutcome,
+} from '@vybestack/llxprt-code-core/services/async-notice-subscription.js';
 import { ShellNotificationAdapter } from '@vybestack/llxprt-code-core/services/shellNotificationAdapter.js';
 import { ShellJobManager } from '@vybestack/llxprt-code-core/services/shellJobManager.js';
 import type { ShellNotificationSource } from '@vybestack/llxprt-code-core/services/shellNotificationSource.js';
@@ -45,14 +48,16 @@ export class TaskLaunchOwner {
 
   subscribeNotifications(
     isBusy: () => boolean,
-    deliver: (message: string) => Promise<void>,
+    deliver: (message: string) => Promise<AsyncNoticeDeliveryOutcome>,
     shellManager?: ShellJobManager | ShellNotificationSource,
   ): AsyncNoticeUnsubscribe {
     if (this.closed) throw new Error('Agent task admission is closed');
-    const deliverOwnedNotice = async (message: string): Promise<void> => {
+    const deliverOwnedNotice = async (
+      message: string,
+    ): Promise<AsyncNoticeDeliveryOutcome> => {
       this.noticeDeliveries++;
       try {
-        await deliver(message);
+        return await deliver(message);
       } finally {
         this.noticeDeliveries--;
       }
@@ -90,6 +95,7 @@ export class TaskLaunchOwner {
       );
     };
     retire.drain = (): Promise<void> => draining ?? subscription.drain();
+    retire.schedule = (): void => subscription.schedule();
     this.notices.add(retire);
     return retire;
   }

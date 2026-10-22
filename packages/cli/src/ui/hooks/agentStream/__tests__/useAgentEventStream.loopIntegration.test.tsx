@@ -401,13 +401,7 @@ function createClientBase(): AgentClientContract {
 
 interface HookHarness {
   result: {
-    current: {
-      runStream: (
-        msg: AgentRequestInput,
-        sig: AbortSignal,
-        pid: string,
-      ) => Promise<void>;
-    };
+    current: ReturnType<typeof useAgentEventStream>;
   };
   routedEvents: AgentEvent[];
   addItem: ReturnType<typeof vi.fn>;

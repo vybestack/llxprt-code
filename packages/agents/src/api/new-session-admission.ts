@@ -19,17 +19,33 @@ export function createNewSessionAdmission(
   return async (operation) => {
     assertProfileIdle();
     await coordinator.withIdleBoundary(async () => {
-      const pending = [
-        tasks.hasPendingWork(),
-        tasks.getRunningTasks().length > 0,
-        tasks.getPendingNotifications().length > 0,
-        shell.getRunningJobs().length > 0,
-        shell.getPendingNotifications().length > 0,
-        tools.hasPendingClientWork(),
-      ];
-      if (pending.some(Boolean)) {
+      const blockers: string[] = [];
+      if (tasks.getRunningTasks().length > 0)
+        blockers.push(
+          'running background tasks (let them finish or cancel them)',
+        );
+      if (shell.getRunningJobs().length > 0)
+        blockers.push('running shell jobs (let them finish or cancel them)');
+      if (tasks.hasPendingWork())
+        blockers.push(
+          'task cleanup or completion delivery (wait for it to settle)',
+        );
+      if (shell.hasLostOwnership())
+        blockers.push('shell cleanup failed (restart the CLI)');
+      else if (shell.hasPendingWork())
+        blockers.push('shell cleanup (wait for owned process groups to drain)');
+      if (
+        tasks.getPendingNotifications().length > 0 ||
+        shell.getPendingNotifications().length > 0
+      )
+        blockers.push(
+          'completion notices (wait for delivery; if delivery failed, resume the session or restart the CLI)',
+        );
+      if (tools.hasPendingClientWork())
+        blockers.push('client tools (finish or cancel pending client work)');
+      if (blockers.length > 0) {
         throw new AgentBusyError(
-          'Cannot clear while background tasks, shell jobs, client tools or completion notices are pending. Let them finish or cancel them first.',
+          `Cannot clear while background work is pending: ${blockers.join('; ')}.`,
         );
       }
       await operation();

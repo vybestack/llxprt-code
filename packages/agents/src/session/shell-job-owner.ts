@@ -78,6 +78,14 @@ export class ShellJobOwner implements ShellNotificationSource {
     return this.manager?.getPendingNotifications() ?? [];
   }
 
+  hasPendingWork(): boolean {
+    return this.manager?.hasPendingWork() ?? false;
+  }
+
+  hasLostOwnership(): boolean {
+    return this.manager?.hasLostOwnership() ?? false;
+  }
+
   getRunningJobs(): readonly ShellJob[] {
     return this.manager?.getRunningJobs() ?? [];
   }

@@ -24,6 +24,7 @@ import type {
   OperationStatus,
 } from './operationLifecycle.js';
 import type { UseSubmitQueryDeps } from './useSubmitQuery.js';
+import type { SubmissionOutcome } from './types.js';
 
 export interface TurnInit {
   userMessageTimestamp: number;
@@ -287,7 +288,7 @@ async function executeStream(
   handleLoopDetectedEvent: () => void,
   queryToSend: AgentRequestInput,
   turn: TurnInit,
-): Promise<void> {
+): Promise<SubmissionOutcome> {
   const runStream = deps.runStreamRef.current;
   if (!runStream) {
     throw new Error('Agent event-stream runner is not initialized.');
@@ -299,14 +300,16 @@ async function executeStream(
 
   // The Agent owns the entire multi-turn flow: send → stream → schedule →
   // execute → feed-back → repeat.
-  await runStream(queryToSend, turn.abortSignal, turn.promptId);
+  const result = await runStream(queryToSend, turn.abortSignal, turn.promptId);
+  const outcome: SubmissionOutcome =
+    typeof result === 'object' ? result : { status: 'completed' };
 
   // A newer turn may have started while runStream was settling (e.g. the user
   // cancelled this turn and submitted a new prompt). If the current
   // AbortController no longer belongs to this turn, skip post-stream cleanup
   // so it does not clobber the newer turn's state (issue #2259).
   if (!isCurrentTurn(deps, turn.abortSignal)) {
-    return;
+    return outcome;
   }
 
   if (deps.pendingHistoryItemRef.current) {
@@ -317,6 +320,7 @@ async function executeStream(
     deps.loopDetectedRef.current = false;
     handleLoopDetectedEvent();
   }
+  return outcome;
 }
 
 async function flushTurnRecording(cbd: SubmitQueryCallbackDeps): Promise<void> {
@@ -331,6 +335,22 @@ async function flushTurnRecording(cbd: SubmitQueryCallbackDeps): Promise<void> {
   }
 }
 
+async function finaliseStreamOutcome(
+  operationLifecycle: SubmitQueryCallbackDeps['operationLifecycle'],
+  turn: TurnInit,
+  outcome: SubmissionOutcome,
+): Promise<SubmissionOutcome> {
+  let status: OperationStatus = 'completed';
+  if (outcome.status === 'failed') status = 'error';
+  if (outcome.status === 'discarded') status = 'cancelled_before_send';
+  if (outcome.status === 'cancelled')
+    status =
+      operationLifecycle?.classifyCancellation(turn.abortSignal) ??
+      'cancelled_during_api';
+  await finaliseOperation(operationLifecycle, turn.abortSignal, status);
+  return outcome;
+}
+
 /**
  * Runs the stream and finalises with the correct terminal status. On
  * cancellation, classifies granularly from live/terminal phase evidence.
@@ -339,26 +359,28 @@ async function streamAndFinalise(
   cbd: SubmitQueryCallbackDeps,
   queryToSend: AgentRequestInput,
   turn: TurnInit,
-): Promise<void> {
+): Promise<SubmissionOutcome> {
   cbd.operationLifecycle?.enterApiPhase(turn.abortSignal);
 
   try {
     let streamError: unknown = null;
+    let outcome: SubmissionOutcome = { status: 'completed' };
     try {
-      await executeStream(cbd, cbd.handleLoopDetectedEvent, queryToSend, turn);
+      outcome = await executeStream(
+        cbd,
+        cbd.handleLoopDetectedEvent,
+        queryToSend,
+        turn,
+      );
+      turn.abortSignal.throwIfAborted();
     } catch (error) {
       streamError = error;
     }
 
     if (streamError === null) {
-      // Successful completion: the instrumentation finalise propagates
-      // fail-fast (D8) — this is intentionally NOT swallowed.
-      await finaliseOperation(
-        cbd.operationLifecycle,
-        turn.abortSignal,
-        'completed',
-      );
-    } else if (isCancellation(streamError, turn.abortSignal)) {
+      return await finaliseStreamOutcome(cbd.operationLifecycle, turn, outcome);
+    }
+    if (isCancellation(streamError, turn.abortSignal)) {
       const status =
         cbd.operationLifecycle?.classifyCancellation(turn.abortSignal) ??
         'cancelled_during_api';
@@ -374,9 +396,10 @@ async function streamAndFinalise(
           'Query stream cancelled (with instrumentation error)',
         );
       }
-    } else {
-      await finaliseStreamError(cbd, turn, streamError);
+      return { status: 'cancelled' };
     }
+    await finaliseStreamError(cbd, turn, streamError);
+    return { status: 'failed', error: streamError };
   } finally {
     if (isCurrentTurn(cbd, turn.abortSignal)) {
       cbd.setIsResponding(false);
@@ -391,9 +414,9 @@ export async function runSubmitQueryCore(
   cbd: SubmitQueryCallbackDeps,
   query: AgentRequestInput,
   turn: TurnInit,
-): Promise<void> {
+): Promise<SubmissionOutcome> {
   const queryToSend = await prepareAndCheckProceed(cbd, query, turn);
-  if (queryToSend === null) return;
+  if (queryToSend === null) return { status: 'discarded' };
 
   try {
     cbd.setIsResponding(true);
@@ -404,7 +427,7 @@ export async function runSubmitQueryCore(
     await finaliseTurnStartFailure(cbd, turn, error);
   }
 
-  await streamAndFinalise(cbd, queryToSend, turn);
+  return streamAndFinalise(cbd, queryToSend, turn);
 }
 
 /**

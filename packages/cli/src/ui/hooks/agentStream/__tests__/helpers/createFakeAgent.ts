@@ -122,7 +122,7 @@ function createBaseFakeAgent(gen: () => AsyncIterable<AgentEvent>): Agent {
       cancel: async () => false,
       cancelAllRunning: async () => 0,
       subscribeNotifications: () =>
-        Object.assign(() => {}, { drain: async () => {} }),
+        Object.assign(() => {}, { drain: async () => {}, schedule: () => {} }),
     },
     memory: {} as unknown as Agent['memory'],
     skills: {} as unknown as Agent['skills'],
