@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { operationFileCreates } from '../../../../agents/src/compression/__tests__/support/operation-file-creates.js';
 import { appendFileSync } from 'node:fs';
 import { generateDeterministicMistralId } from '@vybestack/llxprt-code-tools/ToolIdStrategy.js';
 import { JournalSession } from '../../../../core/src/services/history/journalSession.js';
@@ -57,8 +58,9 @@ describe('Mistral simultaneous historical mapping changes', () => {
       const tail: readonly IContent[] = [
         { speaker: 'ai', blocks: blockers.map((id) => call(id)) },
       ];
+      const readCounter = { reads: 0 };
       const session = await JournalSession.create(`${directory()}/case.llxj`, {
-        journal: testJournalSeams({}, 1, false).dependencies,
+        journal: testJournalSeams({ readCounter }, 1, false).dependencies,
       });
       try {
         await session.append(rows);
@@ -75,10 +77,26 @@ describe('Mistral simultaneous historical mapping changes', () => {
         try {
           const resolver = await request.mistralForSnapshot(pin, 0);
           const before = pin.facts.lookups;
+          const original = pin.facts.occurrence.bind(pin.facts);
+          let occurrenceReads = 0;
+          pin.facts.occurrence = async (id, kind, ordinal) => {
+            occurrenceReads++;
+            return original(id, kind, ordinal);
+          };
+          const readsBefore = readCounter.reads;
           const labels: bigint[] = [];
-          for await (const label of resolver.affectedSources())
-            labels.push(label);
+          const created = await operationFileCreates(async () => {
+            for await (const label of resolver.affectedSources())
+              labels.push(label);
+          }, true);
           const queries = pin.facts.lookups - before;
+          const physicalReads = readCounter.reads - readsBefore;
+          pin.facts.occurrence = original;
+          expect(created).toStrictEqual({ files: [], directories: [] });
+          expect(occurrenceReads).toBe(size * 2 + groups);
+          expect(physicalReads).toBeLessThanOrEqual(
+            size * 20 + groups * 500 + 1000,
+          );
           expect(labels).toStrictEqual(
             entries.slice(1).map((entry) => entry.label),
           );
@@ -134,8 +152,14 @@ describe('Mistral simultaneous historical mapping changes', () => {
           if (process.env.MISTRAL_MERGE_RECEIPT !== undefined)
             appendFileSync(
               process.env.MISTRAL_MERGE_RECEIPT,
-              JSON.stringify({ size, groups, queries, pid: process.pid }) +
-                '\n',
+              JSON.stringify({
+                size,
+                groups,
+                queries,
+                occurrenceReads,
+                physicalReads,
+                pid: process.pid,
+              }) + '\n',
             );
           expect(queries).toBeLessThanOrEqual(size * 3 + groups * 40 + 100);
         } finally {

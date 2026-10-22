@@ -69,6 +69,7 @@ async function alteredSnapshot(
       occurrenceSpace: 'normalized',
     },
     new BoundedIdNodeCache(),
+    session.store.sortedLabels,
   );
 }
 const think = (thought: string): IContent => ({

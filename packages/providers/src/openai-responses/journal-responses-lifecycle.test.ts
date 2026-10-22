@@ -113,6 +113,7 @@ async function assertInvalid(
       },
     },
     new BoundedIdNodeCache(),
+    session.store.sortedLabels,
   );
   try {
     expect(() =>

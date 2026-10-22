@@ -90,6 +90,7 @@ async function assertPoisonedPin(
       },
     },
     new BoundedIdNodeCache(),
+    session.store.sortedLabels,
   );
   try {
     expect(() => planStoredChatMessages(snapshot, SETTINGS, 0, '')).toThrow(
