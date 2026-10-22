@@ -18,6 +18,9 @@ import {
 } from '@vybestack/llxprt-code-core/journal/summaryComposition.js';
 import { journalEntryPlans } from '@vybestack/llxprt-code-core/services/history/journal-entry-plans.js';
 import { JournalTailSource } from '@vybestack/llxprt-code-core/services/history/journal-tail-source.js';
+import type { JournalResponsePlan } from '@vybestack/llxprt-code-core/services/history/journal-response-plan.js';
+import type { IndexedJournalRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/indexed-journal-request-snapshot.js';
+import type { SlotSummary } from '@vybestack/llxprt-code-core/journal/slotSummary.js';
 import type {
   IContent,
   MediaBlock,
@@ -132,17 +135,20 @@ async function measure(
 ): Promise<RowLengthFacts> {
   supported(settings);
   const source = await JournalTailSource.create(snapshot, []);
+  return measurePlans(journalEntryPlans(source, entry), settings);
+}
+
+async function measurePlans(
+  plans: AsyncIterable<JournalResponsePlan>,
+  settings: RowFormatSettings,
+): Promise<RowLengthFacts> {
   let summary = identitySlotSummary('chat');
   const lens: Array<readonly [ChatUnitLengthFacts, ChatUnitLengthFacts]> = [];
   let keptIds: readonly string[] = [];
   let removedIds: readonly string[] = [];
-  for await (const plan of journalEntryPlans(source, entry)) {
+  for await (const plan of plans) {
     const blocks: IContent['blocks'] = [];
     for await (const block of plan.openBlocks()) {
-      if (block.type === 'tool_call' && plan.header.speaker !== 'ai')
-        throw new JournalFormatError(
-          'Non-AI tool-call length facts need indexed global call presence',
-        );
       blocks.push(block);
     }
     const row = { ...plan.header, blocks };
@@ -184,6 +190,7 @@ export function planStoredChatMessages(
   settings: RowFormatSettings,
   selected: 0 | 1,
   systemInstruction: string,
+  requestSummary?: SlotSummary,
 ): StoredChatMessagePlan {
   snapshot.requireOpen();
   supported(settings);
@@ -207,9 +214,10 @@ export function planStoredChatMessages(
       'Request format length facts are unmeasured or stale',
     );
   const summary =
-    version.rows === 0
+    requestSummary ??
+    (version.rows === 0
       ? identitySlotSummary('chat')
-      : decodeSlotSummary(version.aggregate.summaries[slot], format);
+      : decodeSlotSummary(version.aggregate.summaries[slot], format));
   if (summary.kind !== 'chat')
     throw new JournalFormatError('Request format has no chat summary');
   const root = summary.variants[selected];
@@ -230,4 +238,38 @@ export function planStoredChatMessages(
     generation: format.gen,
     settings: captureRowFormatSettings(settings),
   });
+}
+
+export async function planRequestChatMessages(
+  snapshot: VersionSnapshot,
+  indexed: IndexedJournalRequestSnapshot,
+  settings: RowFormatSettings,
+  selected: 0 | 1,
+  systemInstruction: string,
+): Promise<StoredChatMessagePlan> {
+  const base = planStoredChatMessages(
+    snapshot,
+    settings,
+    selected,
+    systemInstruction,
+  );
+  if (indexed.pending.inputCount === 0) return base;
+  const slot = snapshot.version?.slots.formatSlots.findIndex(
+    (format) =>
+      format.summaryKind === 'chat' && format.formatKeyHash === base.key,
+  );
+  if (slot === undefined || slot < 0)
+    throw new JournalFormatError('Request format is not registered');
+  const summary = await indexed.formatSummary(
+    snapshot,
+    slot,
+    async (plans) => (await measurePlans(plans, settings)).summary,
+  );
+  return planStoredChatMessages(
+    snapshot,
+    settings,
+    selected,
+    systemInstruction,
+    summary,
+  );
 }

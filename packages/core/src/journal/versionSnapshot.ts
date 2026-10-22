@@ -8,6 +8,9 @@ import {
 import { RecencyFacts, RECENCY_INDEX_READY } from './recencyFacts.js';
 import { ACTIVE_FACT_INDEX, NativeFactIndexReader } from './nativeFactIndex.js';
 import { rowFormatAuxKey } from './rowFormat.js';
+import { rowSummaryRange } from './row-summary-range.js';
+import { decodeSlotSummary, type SlotSummary } from './slotSummary.js';
+import { identitySlotSummary } from './summaryComposition.js';
 import { JournalFormatError } from './errors.js';
 import { decodeDecimal } from './metaFacts.js';
 import { KimiOrdinalQueries } from './kimiOrdinals.js';
@@ -132,6 +135,37 @@ export class VersionSnapshot {
     if (active === undefined || new TextDecoder().decode(active) !== scope)
       throw new JournalFormatError('Native fact index settings require a fill');
     return new NativeFactIndexReader(this.facts, scope);
+  }
+
+  async formatSummaryRange(
+    slot: number,
+    from: bigint,
+    to: bigint,
+  ): Promise<SlotSummary> {
+    this.requireOpen();
+    const version = this.version;
+    if (version === undefined)
+      throw new JournalFormatError('Range format is not registered');
+    const format = version.slots.formatSlots[slot];
+    if (format.summaryKind === null)
+      throw new JournalFormatError('Range format is not registered');
+    if (version.rows === 0 || from >= to)
+      return identitySlotSummary(format.summaryKind);
+    if (
+      version.aggregate.stamp[slot].gen !== format.gen ||
+      version.aggregate.missingBase[slot] !== 0
+    )
+      throw new JournalFormatError('Range format is unmeasured or stale');
+    if (from <= 1n && to >= version.nextLabel)
+      return decodeSlotSummary(version.aggregate.summaries[slot], format);
+    return rowSummaryRange(
+      this.read.access,
+      version.roots.rowRoot,
+      slot,
+      format,
+      from,
+      to,
+    );
   }
 
   async formatAuxiliary(slot: number): Promise<Uint8Array | undefined> {

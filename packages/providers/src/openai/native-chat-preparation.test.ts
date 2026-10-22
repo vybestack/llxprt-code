@@ -42,6 +42,19 @@ function options(
   };
 }
 
+async function readRemainder(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  first: Uint8Array | undefined,
+): Promise<Buffer> {
+  const chunks: Uint8Array[] = first === undefined ? [] : [first];
+  for (;;) {
+    const next = await reader.read();
+    if (next.done) break;
+    chunks.push(next.value);
+  }
+  return Buffer.concat(chunks);
+}
+
 async function pauseOwnedUnit(
   stream: ReadableStream<Uint8Array>,
   ownership: RowOwnership,
@@ -107,6 +120,123 @@ describe('native Chat preparation ownership and planning', () => {
       await recording.dispose();
     }
   }
+
+  it.each([40, 4000])(
+    'prepares a pending user over %s warm rows without historical reads or writes',
+    async (size) => {
+      await withHistory(size, async (history, counter) => {
+        const cold = await history.prepareCuratedForProviderSnapshot([], {});
+        const first = await prepareRequest(
+          options(cold),
+          'gpt-4o',
+          undefined,
+          logger,
+          'openai',
+        );
+        await first.release();
+        await cold.close();
+        counter.reads = 0;
+        const receipt = await operationFileCreates(async () => {
+          const rows = await history.prepareCuratedForProviderSnapshot(
+            [
+              {
+                speaker: 'human',
+                blocks: [{ type: 'text', text: 'pending user 雪' }],
+              },
+            ],
+            {},
+          );
+          try {
+            const prepared = await prepareRequest(
+              options(rows),
+              'gpt-4o',
+              undefined,
+              logger,
+              'openai',
+            );
+            expect(prepared.spool.byteLength).toBeGreaterThan(
+              first.spool.byteLength,
+            );
+            expect(history.length()).toBe(size);
+            expect(counter.reads).toBe(0);
+            await prepared.release();
+          } finally {
+            await rows.close();
+          }
+        }, true);
+        expect(receipt).toStrictEqual({ files: [], directories: [] });
+      });
+    },
+  );
+
+  it('captures pending bytes once and keeps retry streams immutable across caller mutation and history append', async () => {
+    await withHistory(2, async (history) => {
+      const block = {
+        type: 'text',
+        text: 'pending original 雪',
+      } satisfies import('@vybestack/llxprt-code-core/services/history/IContent.js').TextBlock;
+      const tail = {
+        speaker: 'human',
+        blocks: [block],
+      } satisfies import('@vybestack/llxprt-code-core/services/history/IContent.js').IContent;
+      const rows = await history.prepareCuratedForProviderSnapshot([tail], {});
+      const expected = await prepareRequestBody(
+        {
+          ...options(rows),
+          requestRows: rowsSelection([
+            { speaker: 'human', blocks: [{ type: 'text', text: 'row-0 雪' }] },
+            { speaker: 'human', blocks: [{ type: 'text', text: 'row-1 雪' }] },
+            structuredClone(tail),
+          ]),
+        },
+        'gpt-4o',
+        undefined,
+        logger,
+        'openai',
+      );
+      try {
+        const prepared = await prepareRequest(
+          options(rows),
+          'gpt-4o',
+          undefined,
+          logger,
+          'openai',
+        );
+        try {
+          const handle = prepared.spool.openStream();
+          const reader = handle.stream.getReader();
+          const initial = await reader.read();
+          expect(initial.done).toBe(false);
+          block.text = 'mutated pending that must never appear';
+          history.add({
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'later committed' }],
+          });
+          await history.waitForCommit();
+          const bytes = await readRemainder(reader, initial.value);
+          reader.releaseLock();
+          await handle.dispose();
+          expect(JSON.parse(bytes.toString())).toStrictEqual(
+            expected.requestBody,
+          );
+          expect(bytes.length).toBe(prepared.spool.byteLength);
+          const retry = prepared.spool.openStream();
+          try {
+            expect(
+              Buffer.from(await new Response(retry.stream).arrayBuffer()),
+            ).toStrictEqual(Buffer.from(bytes));
+          } finally {
+            await retry.dispose();
+          }
+          expect(history.length()).toBe(3);
+        } finally {
+          await prepared.release();
+        }
+      } finally {
+        await rows.close();
+      }
+    });
+  });
 
   it.each(['cancel', 'transport-error'])(
     'holds at most one source unit under backpressure and retires it on %s',

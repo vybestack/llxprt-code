@@ -57,6 +57,7 @@ export function pendingAwareRequestSelection(
   pendingSelection: SourcePendingSelection | undefined,
 ): PendingAwareRequestSelection {
   return Object.freeze({
+    ...(rows.native === undefined ? {} : { native: rows.native }),
     count: rows.count,
     openReader: (signal?: AbortSignal) => rows.openReader(signal),
     readAt: (index: number, signal?: AbortSignal) => rows.readAt(index, signal),

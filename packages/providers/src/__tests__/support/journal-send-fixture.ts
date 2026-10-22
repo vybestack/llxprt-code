@@ -14,6 +14,7 @@ export interface JournalSendFixture {
 
 export async function journalSendFixture(
   rows: Iterable<IContent>,
+  pending: readonly IContent[] = [],
 ): Promise<JournalSendFixture> {
   const parent = join(
     import.meta.dir,
@@ -37,7 +38,7 @@ export async function journalSendFixture(
   try {
     await graph.seed(rows);
     const selection = await graph.service.prepareCuratedForProviderSnapshot(
-      [],
+      pending,
       {
         ownership: graph.ownership,
       },
@@ -45,7 +46,7 @@ export async function journalSendFixture(
     return {
       selection,
       async close(): Promise<void> {
-        selection.close();
+        await selection.close();
         await graph.service.dispose();
         await graph.recording.dispose();
       },

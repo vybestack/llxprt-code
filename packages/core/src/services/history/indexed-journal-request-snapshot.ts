@@ -1,5 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { NativeFactIndexReader } from '../../journal/nativeFactIndex.js';
+import type { SlotSummary } from '../../journal/slotSummary.js';
+import { composeSlotSummaries } from '../../journal/summaryComposition.js';
 import type { JournalStore } from '../../journal/journalStore.js';
 import { JournalMistralSelection } from './journal-mistral-selection.js';
 import {
@@ -92,6 +94,37 @@ export class IndexedJournalRequestSnapshot {
     if (this.closed)
       throw new Error('Indexed journal request snapshot is closed');
     this.snapshot.requireOpen();
+  }
+
+  async formatSummary(
+    snapshot: VersionSnapshot,
+    slot: number,
+    measure: (
+      plans: AsyncIterable<JournalResponsePlan>,
+    ) => Promise<SlotSummary>,
+  ): Promise<SlotSummary> {
+    this.requireOpen();
+    let from = 1n;
+    const end = snapshot.version?.nextLabel ?? 1n;
+    let summary = await snapshot.formatSummaryRange(slot, 0n, 0n);
+    for (const row of this.rows) {
+      if (row.entry.label > from)
+        summary = composeSlotSummaries(
+          summary,
+          await snapshot.formatSummaryRange(slot, from, row.entry.label),
+        );
+      summary = composeSlotSummaries(
+        summary,
+        await measure(journalEntryPlans(this.source, row.entry)),
+      );
+      from = row.entry.label + 1n;
+    }
+    if (from < end)
+      summary = composeSlotSummaries(
+        summary,
+        await snapshot.formatSummaryRange(slot, from, end),
+      );
+    return summary;
   }
 
   nativeFacts(scope: string): Promise<NativeFactIndexReader> {

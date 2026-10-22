@@ -5,7 +5,7 @@ import { readInvocationPolicyValue } from '@vybestack/llxprt-code-core/runtime/R
 import { JournalFormatError } from '@vybestack/llxprt-code-core/journal/errors.js';
 import {
   plainChatLengthRegistration,
-  planStoredChatMessages,
+  planRequestChatMessages,
 } from './journal-chat-length.js';
 import { ProgressiveJsonBody } from '../utils/progressive-json-body.js';
 import {
@@ -88,16 +88,13 @@ async function prepareNativeChatBody(
     throw new JournalFormatError(
       'Native plain Chat last-thinking planning is not installed',
     );
-  if (native.indexed.pending.inputCount !== 0)
-    throw new JournalFormatError(
-      'Native plain Chat tail length planning is not installed',
-    );
   const system = options.systemInstruction ?? '';
   const plan = await native.withFormat(
     plainChatLengthRegistration(settings),
     (snapshot) =>
-      planStoredChatMessages(
+      planRequestChatMessages(
         snapshot,
+        native.indexed,
         settings,
         strip === 'all' ? 1 : 0,
         system,
