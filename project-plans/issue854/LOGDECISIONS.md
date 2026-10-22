@@ -1,3 +1,15 @@
+## 2026-10-22: compose pending Chat lengths from unchanged ranges and indexed changes
+
+Use the existing tail-aware normalization plans for changed historical entries and tail entries. Compose persistent subtree summaries for unchanged label intervals; never persist pending rows or rebuild the entire Chat format for each tail. Base cold filling stays serialized and owned by the request snapshot. Preserve existing settings capture, media measurement, envelope ordering and streamed-length validation.
+
+A new public ChatSession test found a wrapper that erased native capability. Forward it through `pendingAwareRequestSelection`; keep the native estimator refusal visible rather than falling back to a spool. The same enabled test now stops at mandatory native prompt estimation before HTTP. No projection bypass, stub estimator, changed hard-limit policy or weakened file detector is accepted as a solution.
+
+Keep the provisional call-bearing-tree scan removed. The existing normalized response plans already determine global response placement, so the extra non-AI-call measurement refusal was unnecessary. Remove that refusal and use the same speaker-specific conversion for measurement and emission. The full direct HTTP file now passes 17 tests/102 assertions, including the cross-speaker case against the independent old oracle. Commit the passing product/tests early as `d9eab7404`, using explicit paths and excluding the enabled, untracked public ChatSession RED. The public estimate refusal is preserved, not bypassed. This checkpoint does not complete ordinary ChatSession acceptance.
+
+Keep neutral pending-user warm read evidence separate from tool-holder costs, cold filling, emission, cache capacity and heap. Final-source 1/8 MiB acceptance and original thresholds remain unchanged. [The pending-tail receipt](PHASE6-SOURCE-BOUND-CHATTAIL-PROOF.json) records passing files, mixed REDs, controls, gates and preservation separately. No fixture regeneration, cleanup, default flip, enforcement change, OCR, push or merge. Review skipped per Andrew 2026-10-09.
+
+---
+
 ## 2026-10-21: native initial plain Chat direct-body checkpoint
 
 Commit the passing WIP before assembling proof: `f801b2dcf56a59dcf2e85c6c2b8a7ee044baccf5` follows `e912dba1d`. Keep initial native plain Chat separate from legacy ChatContinuation, Kimi/Mistral key/body paths, Responses/Anthropic and tokenizer/log/dump work. Native tails and last-thinking remain explicit refusals. No direct-body length proof is accepted for pruned purge views.

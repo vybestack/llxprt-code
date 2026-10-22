@@ -1,3 +1,11 @@
+# Pending Chat transfer-summary evidence, 2026-10-22
+
+[PHASE6-SOURCE-BOUND-CHATTAIL-PROOF.json](../../PHASE6-SOURCE-BOUND-CHATTAIL-PROOF.json) binds product commit `d9eab7404` and final production/test hashes. The complete direct HTTP file passes 17 tests/102 assertions using the independent old converter and strict file-creation denial, including cross-speaker call handling. Multi-page range composition changes two historical holders; request summaries are never persisted. Warm neutral-user physical reads at 40/4,000 are zero after selection capture, separately from cold base fills and actual HTTP emission. Immutable caller mutation/concurrent append/retry and one-unit lifetime remain distinct from retained heap.
+
+The enabled, untracked real public ChatSession test remains RED at mandatory native estimate projection after correcting lost capability forwarding; there is no public HTTP pass. Existing response plans resolve call presence; no call-bearing-tree scan was added. The five final-source mutation traps must fail and restore exact captured originals. Broader affected-holder discovery/cost, tokenizer/log/dump, last-thinking/pruned views, other provider formats, media reservations, all eight general zero-decode obligations, heap/cache/pin and live-byte accounting remain open. Existing overlay-entry storage is not a capacity proof. Earlier proof sections below retain their own source boundaries.
+
+---
+
 # Native production normalization proof, 2026-10-21
 
 [W26-SOURCE-BOUND-PRODUCTIONNORMALIZATION-PROOF.json](W26-SOURCE-BOUND-PRODUCTIONNORMALIZATION-PROOF.json) binds `c5c720fc177c0c68c1b1a7bd46dea017b7ba1359`, **229 passing tests, zero failures/skips and 69,747 assertions in 21 complete serial files, plus 13 passing scoped gates**, five restored assertion controls and source `42321909264727104b076c7425ba6d142af1730314bf2bcef2dfb4a69d614a0a`. All final2/post commands match the final content inventory; the commit changes HEAD only.

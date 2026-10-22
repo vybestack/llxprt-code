@@ -1,0 +1,790 @@
+{
+  "date": "2026-10-22",
+  "baseCommit": "838f6d5b039d90c7bb03f4f2b36619a5831a5dfe",
+  "implementationCommit": "d9eab74043dc9c4901d01a8275a9165a2553c01e",
+  "status": "GREEN scoped provider transport checkpoint; ordinary ChatSession acceptance remains RED before HTTP. Phase 5/6/W26 are not complete.",
+  "sourceDigest": "c5b0eac418055dc0f947e7e2add314de8d5afbd90ead5139612d93e617e09aba",
+  "sources": [
+    {
+      "path": "packages/agents/src/core/__tests__/native-chat-session-http.test.ts",
+      "sha256": "527318c25f5d503d95d664eac1e82f36599c778087e21ed738bc4bbc5725b8bd"
+    },
+    {
+      "path": "packages/agents/src/core/prompt-envelope-source-send.ts",
+      "sha256": "4bdef67c1ebb9ab1bb11e6881593a458c4e7d57291db862c40497ceeced55f59"
+    },
+    {
+      "path": "packages/agents/src/core/promptEnvelopeSendSeam.ts",
+      "sha256": "9335e43ef700e072456174c707eb536cf7b386089cf154db60216d163cca2717"
+    },
+    {
+      "path": "packages/agents/src/core/source-hook-pending-selection.test.ts",
+      "sha256": "dc7eb9da02de2672ff61be68a376fe1bd908ce206c76cbbdd2ecbc65d9492b1b"
+    },
+    {
+      "path": "packages/agents/src/core/source-pending-selection.test.ts",
+      "sha256": "712ebb1cb08826d1cc3a242a0150a7d7627f7b3cf7a979cbc0d6ab30c89c399c"
+    },
+    {
+      "path": "packages/agents/src/core/source-pending-selection.ts",
+      "sha256": "06bb65ef41a1e660ab8fe073e6e5660b96ecafcd5b9a0229c2e3630540354141"
+    },
+    {
+      "path": "packages/core/src/journal/journalStore.readerCleanup.test.ts",
+      "sha256": "caa8ad4cf7442eb2df8f22d6a02ef3743e8eeda1ae1698f989732c9a1d6d3cb0"
+    },
+    {
+      "path": "packages/core/src/journal/journalStore.readerLifetime.test.ts",
+      "sha256": "9744ca9d7829bddc3b2010e895ff9450cb64f89e5856d8903de6e6ae11f96b3b"
+    },
+    {
+      "path": "packages/core/src/journal/row-summary-range.ts",
+      "sha256": "a5c2eed991d1cf2424a74b63ae8974b7c155deee3c74039f98e99930d8a2c2a3"
+    },
+    {
+      "path": "packages/core/src/journal/rowFormat.ts",
+      "sha256": "46271db32578944969521702a61c8c08ed1a2867e5e93b84eabc334fd0ebdceb"
+    },
+    {
+      "path": "packages/core/src/journal/versionSnapshot.ts",
+      "sha256": "58e0e2ca71d79327e7d8a3b958ecdff9c27d35ad3e408c6807fcf02c35742b65"
+    },
+    {
+      "path": "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+      "sha256": "09d066926edcb4ea66c78e90b9a836c7f16e38d9a1afee14f0462048e09fb127"
+    },
+    {
+      "path": "packages/core/src/services/history/journal-entry-plans.ts",
+      "sha256": "27ba1831828db708eb552d3da6c213a12dd88d3bfda0862448ca95dd24f2093c"
+    },
+    {
+      "path": "packages/core/src/services/history/journal-history-store-types.ts",
+      "sha256": "6c4546ce0193fc498489c6c9f4ab949a1659ae155fc577a18f8273912413b1d2"
+    },
+    {
+      "path": "packages/core/src/services/history/journal-indexed-overlay.ts",
+      "sha256": "ecff7e0eada866e525fe7d8048cedc98a4513f3a5583c52841c701b2e33c7595"
+    },
+    {
+      "path": "packages/core/src/services/history/journal-provider-request.ts",
+      "sha256": "6498ceec76518acd9f460b2302cacf0033f372be4aace095f04af1439c8c9c07"
+    },
+    {
+      "path": "packages/core/src/services/history/journal-response-plan.ts",
+      "sha256": "30284ba092e8f867313f0b972d67ace8c924a53d90716a990d332d3e5a0c2983"
+    },
+    {
+      "path": "packages/core/src/services/history/journal-tail-source.ts",
+      "sha256": "7620a179979bd869a032ac8b9cedd0eb4b34bbe34d86c3311b7379a9d6516fe3"
+    },
+    {
+      "path": "packages/core/src/services/history/journalHistoryStore.ts",
+      "sha256": "c6934dbec1ce3097114604d0d069ff4bcf63c10cae48d102881e151bd7f8949b"
+    },
+    {
+      "path": "packages/core/src/services/history/native-provider-format.ts",
+      "sha256": "0f0b7814e761ac3c1b2a548611b23d81ec6bb779c5a82d4b9c0a6f7fea485548"
+    },
+    {
+      "path": "packages/core/src/services/history/native-purge-provider-request.ts",
+      "sha256": "439a4d9897cbed3feddfabbe99b72d36a682562cd38c0a6c48b8b50b61ae51b5"
+    },
+    {
+      "path": "packages/core/src/services/history/normalization-unit-oracle.test.ts",
+      "sha256": "4571ccc45aabb6f3d32fd1ed6ae426744fef7c2dfc06e90b9d1d730cb0f00544"
+    },
+    {
+      "path": "packages/core/src/services/history/provider-request-snapshot.ts",
+      "sha256": "92fc1da5da6fa360636ec1c82288fc2c59c2948abfd469bdee9acb06cbd4168c"
+    },
+    {
+      "path": "packages/core/src/services/history/tail-query-oracle.test.ts",
+      "sha256": "53610d817022a670dfb36fffde841f742cb7057d007288851d24c3c7c10da8da"
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/wire-bodies/anthropic-cache-1h.json",
+      "sha256": "99b01112ca2f7830d06bfb25bb82ca0b09e7a7454b7edd6b3fea342b4c6c0b68"
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/wire-bodies/anthropic-cache-off.json",
+      "sha256": "7cda7370720faa06f56296ec165d3a15bfad5514119390d63a5145f3f6eed2f1"
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/wire-bodies/manifest.json",
+      "sha256": "a99bee172395334748380e09d3bd752d80f241e220622cb9ed3d1c04c655944d"
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/wire-bodies/openai-chat-kimi.json",
+      "sha256": "be18c57678116411f75360a3c41c1824ffaa976f00c2209069c2657de5937d2d"
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/wire-bodies/openai-chat-mistral.json",
+      "sha256": "d84f0a8fd2a2200532f2604a2a271d8a04bb6aa55351296cbdfa4517d5a2b535"
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/wire-bodies/openai-chat-plain.json",
+      "sha256": "30177379705713bb461fef5d389a587c90a762ad2ca3857f6f196af5b3090764"
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/wire-bodies/openai-responses-via-openai.json",
+      "sha256": "421c17fe7fdc20acf73e667f8a84aefea1273564be0f18d39ba517a918f08b46"
+    },
+    {
+      "path": "packages/providers/src/__tests__/fixtures/wire-bodies/openai-responses.json",
+      "sha256": "0b9d625e8be45652cd1ddde29ba421d80e98c759a5ebdf42e712cb18dea6a93b"
+    },
+    {
+      "path": "packages/providers/src/__tests__/journal-wire-body-golden.test.ts",
+      "sha256": "d1046f1e32a4dafd98f3ac1df4f739de93754f56bf0c6a4100e21790fb439f02"
+    },
+    {
+      "path": "packages/providers/src/__tests__/native-chat-direct-send.test.ts",
+      "sha256": "05d9927d9e938e67b900113bbdd1a777f333541bc2791bb59345ce578655333b"
+    },
+    {
+      "path": "packages/providers/src/__tests__/native-chat-golden.test.ts",
+      "sha256": "f3a3ed55e54261e2fcfdd24332576666026e89f7aa7fb55348906984fe8f5442"
+    },
+    {
+      "path": "packages/providers/src/__tests__/support/journal-send-fixture.ts",
+      "sha256": "5e5d26fb4edc7dfd758d1e3f07c9e19cb9fc43c4db65b0cba179b10154693c0f"
+    },
+    {
+      "path": "packages/providers/src/__tests__/support/wireBodyCapture.ts",
+      "sha256": "3487947dfc814733f077aab8002fa2ff6037cfeb2f09ae5b42b3d1c1230933f6"
+    },
+    {
+      "path": "packages/providers/src/__tests__/support/wireBodyCorpus.ts",
+      "sha256": "5536eed7bb5231bcd743556679dc1d2dcafdb305ff085bb0d92a939230ff3212"
+    },
+    {
+      "path": "packages/providers/src/openai/OpenAIApiExecution.ts",
+      "sha256": "244d5a2a47bf200228eb52b204a4583aebcd6623e17114cf7e11bc09a3db6a62"
+    },
+    {
+      "path": "packages/providers/src/openai/OpenAIChatContinuation.ts",
+      "sha256": "bb50a355bfd2dced4e0e63f515afb4777de691617f7ec25c9f7755f4f59db2ed"
+    },
+    {
+      "path": "packages/providers/src/openai/OpenAIPromptProjectionPreparation.ts",
+      "sha256": "6e1da06aba9d81f1f7a0d9f8c13d5f19705d8e689ec73be35987deac1b289f7c"
+    },
+    {
+      "path": "packages/providers/src/openai/OpenAIRequestBuilder.ts",
+      "sha256": "55da151f27b8e58e1199c8687be4f208ca0cc952db338f051b851483378cefb0"
+    },
+    {
+      "path": "packages/providers/src/openai/OpenAIRequestPreparation.spool.test.ts",
+      "sha256": "6e9f099e0f997e6742d531c0a09279e8a01b94278ed4a91d8f508701a7ea15e0"
+    },
+    {
+      "path": "packages/providers/src/openai/OpenAIRequestPreparation.ts",
+      "sha256": "dd900591f7870f9d9fa9c0f1afd07c4ff4b75bca6255231b5ea123ddd565ae42"
+    },
+    {
+      "path": "packages/providers/src/openai/__tests__/support/prepareRequestBody.ts",
+      "sha256": "2cba767dfb1ca4f428e7a1baef04277dbacb3dfa86a57824293e9a317485b83f"
+    },
+    {
+      "path": "packages/providers/src/openai/chat-length-facts.ts",
+      "sha256": "d384cbc8686bf84f3661179cfcbfb3357ccee7baa210aa22b39f2c8a707b7129"
+    },
+    {
+      "path": "packages/providers/src/openai/chat-measure-media.ts",
+      "sha256": "bfd5f4620e605104411dd038ab344ea383693d95de2dba985d1a1b342640abef"
+    },
+    {
+      "path": "packages/providers/src/openai/journal-chat-length-lifecycle.test.ts",
+      "sha256": "8816e44c6f5c5a4dad9a74ee53dfcb2066f51c98434f82923e39296e3c72cfd3"
+    },
+    {
+      "path": "packages/providers/src/openai/journal-chat-length.test.ts",
+      "sha256": "090e2e165973eba34bb7b40408c44ccc197af33f0a2a841f6e5657746ab903a3"
+    },
+    {
+      "path": "packages/providers/src/openai/journal-chat-length.ts",
+      "sha256": "b23cbf246b26f07aede60a70b54a6f2f87543f003d0cc79c75d2a817413e7e8c"
+    },
+    {
+      "path": "packages/providers/src/openai/native-chat-body.ts",
+      "sha256": "a6c1f846a6d8d33a8427206eaefef2d9fd40450c095d156ac1ba2d4659d1761d"
+    },
+    {
+      "path": "packages/providers/src/openai/native-chat-messages.ts",
+      "sha256": "98f599f02b012e713bdde69b10d8151cea22f313d8b1143cfef242505957d7f1"
+    },
+    {
+      "path": "packages/providers/src/openai/native-chat-preparation.test.ts",
+      "sha256": "e6b3b9ce8d5d14f0d5761104bc4d38c26b53df56e74abab2196fcae8db53a191"
+    },
+    {
+      "path": "packages/providers/src/utils/chat-http-body.ts",
+      "sha256": "27608ebf5d461b27bca3118a077e1c32d6028c46423aae76fb3c10a09da942b3"
+    },
+    {
+      "path": "packages/providers/src/utils/progressive-json-body.ts",
+      "sha256": "5a7f46551b4bf89f197a91892751abd81c0adfb2b2a928aba9aeff7b122b309d"
+    },
+    {
+      "path": "packages/providers/src/utils/providerRows.ts",
+      "sha256": "5ab5574e185741128c4b686110b9b419ead76f7d8943609c7a2d31a64c539305"
+    }
+  ],
+  "passingTotals": {
+    "completeFiles": 12,
+    "passes": 225,
+    "failures": 0,
+    "assertions": 1531457,
+    "skips": 0,
+    "excluded": "Both mixed/RED files are excluded in full, including their passing cases"
+  },
+  "tests": [
+    {
+      "workspace": "providers",
+      "file": "src/__tests__/native-chat-direct-send.test.ts",
+      "exit": 0,
+      "path": "tmp/p6/chat-tail-run-au/direct-finish.log",
+      "sha256": "5e2139e5374dc00f706c4a2874b3fb1d301a011fb0ab87dd381af6450f832ab9"
+    },
+    {
+      "workspace": "providers",
+      "file": "src/openai/native-chat-preparation.test.ts",
+      "exit": 0,
+      "path": "tmp/p6/chat-tail-run-au/preparation-finish.log",
+      "sha256": "69eec4df2e46d6a23260eb325b69dd1f10ed62267ec87757357ee3b89b25ca30"
+    },
+    {
+      "workspace": "agents",
+      "file": "src/core/source-pending-selection.test.ts",
+      "exit": 0,
+      "path": "tmp/p6/chat-tail-run-au/pending-selection-finish.log",
+      "sha256": "6a97d7c37d29167038cbd885e8d4ef7477107ebc71b64fb3aaa84c623b615716"
+    },
+    {
+      "workspace": "providers",
+      "file": "src/openai/journal-chat-length.test.ts",
+      "pid": 37201,
+      "exit": 0,
+      "sourceSha256": "090e2e165973eba34bb7b40408c44ccc197af33f0a2a841f6e5657746ab903a3",
+      "log": "tmp/p6/chat-tail-run-au/finish-journal-chat-length.test.ts.log",
+      "logSha256": "907101ce7dfb0f67fc7da85174fbed4a901731b4980a1d8e0af04dc348b5d3b4",
+      "summary": "\nsrc/openai/journal-chat-length.test.ts:\n(pass) stored plain chat tools > measures tool pairs, escaped names, relocated image media and updated best responses [99.81ms]\n(pass) stored plain chat lengths > matches old conversion for both thinking variants and inline media URI bytes [19.27ms]\n(pass) stored plain chat lengths > fills real normalized contributions and plans from the pinned aggregate without decoding again [14.83ms]\n(pass) stored plain chat lengths > keeps an old pin and its captured settings valid across append, eviction and clone [54.17ms]\n(pass) stored plain chat lengths > rejects settings without implemented plain-chat conversion at registration and planning [39.53ms]\n(pass) stored plain chat lengths > includes every declared setting and nested output option in the deterministic key [0.31ms]\n\n 6 pass\n 0 fail\n 62 expect() calls\nRan 6 tests across 1 file. [547.00ms]\n"
+    },
+    {
+      "workspace": "providers",
+      "file": "src/openai/journal-chat-length-lifecycle.test.ts",
+      "pid": 37211,
+      "exit": 0,
+      "sourceSha256": "8816e44c6f5c5a4dad9a74ee53dfcb2066f51c98434f82923e39296e3c72cfd3",
+      "log": "tmp/p6/chat-tail-run-au/finish-journal-chat-length-lifecycle.test.ts.log",
+      "logSha256": "222b849d376242f86797760303105ba8fa29918f42f3c8f8dc73a36f39e3a077",
+      "summary": "\nsrc/openai/journal-chat-length-lifecycle.test.ts:\n(pass) native format registration lifecycle > reads explicitly on cold fill, zero bytes for warm plans and bounded paths for an append [164.18ms]\n(pass) native format registration lifecycle > restores lengths through pop, owner edits, rebuild, clone, compaction and reopen [31.45ms]\n(pass) native format registration lifecycle > captures settings before asynchronous registration and leaves a plan unchanged after a model change [2.61ms]\n(pass) native format registration lifecycle > does not assign mapping-only and length formats conflicting meanings in one slot [2.38ms]\n(pass) native format registration lifecycle > preserves the published version, old pin and original cause when a measurer fails [10.52ms]\n(pass) native format registration lifecycle > refuses stale generations and an unmeasured zero summary instead of declaring a length [1.92ms]\n\n 6 pass\n 0 fail\n 63 expect() calls\nRan 6 tests across 1 file. [526.00ms]\n"
+    },
+    {
+      "workspace": "providers",
+      "file": "src/openai/OpenAIRequestPreparation.spool.test.ts",
+      "pid": 37222,
+      "exit": 0,
+      "sourceSha256": "6e9f099e0f997e6742d531c0a09279e8a01b94278ed4a91d8f508701a7ea15e0",
+      "log": "tmp/p6/chat-tail-run-au/finish-OpenAIRequestPreparation.spool.test.ts.log",
+      "logSha256": "d41ef0f1b6e9b33fef668747cc452040c623ea119eb343a669349cf8e4b9a8ad",
+      "summary": "\nsrc/openai/OpenAIRequestPreparation.spool.test.ts:\n(pass) prepareRequest spools the chat body > writes exactly the bytes of the array route and counts the system message [49.07ms]\n(pass) prepareRequest spools the chat body > keeps Kimi tool ids in a scratch index that lives until release [1.81ms]\n(pass) prepareRequest spools the chat body > rejects a messages override before writing anything [0.21ms]\n(pass) prepareRequest spools the chat body > disposes the spool and the tool id index when a row fails mid-body [1.23ms]\n(pass) prepareRequest spools the chat body > writes the dump form beside the body only when dumpcontext asks for it [8.13ms]\n(pass) prepareRequest spools the chat body > streams a large dump form in bounded chunks [57.64ms]\n(pass) prepareRequest spools the chat body > removes the dump files with the request when a row fails mid-body [1.27ms]\n(pass) prepareRequest spools the chat body > fails without rows instead of sending an empty history [0.29ms]\n\n 8 pass\n 0 fail\n 39 expect() calls\nRan 8 tests across 1 file. [815.00ms]\n"
+    },
+    {
+      "workspace": "providers",
+      "file": "src/__tests__/journal-wire-body-golden.test.ts",
+      "pid": 37229,
+      "exit": 0,
+      "sourceSha256": "d1046f1e32a4dafd98f3ac1df4f739de93754f56bf0c6a4100e21790fb439f02",
+      "log": "tmp/p6/chat-tail-run-au/finish-journal-wire-body-golden.test.ts.log",
+      "logSha256": "970404e0138470b67b170063b2f48629466c267cfb05f17998dcbe3923f7da8e",
+      "summary": "uest bytes > route anthropic-cache-off > cache-tail-user sends the frozen complete body and Content-Length from journal rows [22.71ms]\n(pass) native HistoryService frozen request bytes > route anthropic-cache-off > cache-tail-tool-result sends the frozen complete body and Content-Length from journal rows [23.47ms]\n(pass) native HistoryService frozen request bytes > route anthropic-cache-off > cache-tail-assistant sends the frozen complete body and Content-Length from journal rows [19.58ms]\n(pass) native HistoryService frozen request bytes > route anthropic-cache-off > cache-anchor sends the frozen complete body and Content-Length from journal rows [37.28ms]\n(pass) native HistoryService frozen request bytes > route anthropic-cache-off > cache-tail-thinking sends the frozen complete body and Content-Length from journal rows [19.52ms]\n(pass) native HistoryService frozen request bytes > route anthropic-cache-off > cache-media-purge-boundary sends the frozen complete body and Content-Length from journal rows [21.64ms]\n(pass) native HistoryService frozen request bytes > route anthropic-cache-off > responses-stateful-parent sends the frozen complete body and Content-Length from journal rows [21.96ms]\n(pass) native HistoryService frozen request bytes > route anthropic-cache-off > blockless-row sends the frozen complete body and Content-Length from journal rows [31.70ms]\n(pass) native HistoryService frozen request bytes > rejects a changed committed row through the real native source and transport [21.14ms]\n\n 155 pass\n 0 fail\n 155 expect() calls\nRan 155 tests across 1 file. [4.53s]\n"
+    },
+    {
+      "workspace": "core",
+      "file": "src/journal/journalStore.readerLifetime.test.ts",
+      "pid": 37304,
+      "exit": 0,
+      "sourceSha256": "9744ca9d7829bddc3b2010e895ff9450cb64f89e5856d8903de6e6ae11f96b3b",
+      "log": "tmp/p6/chat-tail-run-au/finish-journalStore.readerLifetime.test.ts.log",
+      "logSha256": "5f3330850bf53b54142e68e3abdc7ab4448d2c3fc6318bbfa13f36fe36883159",
+      "summary": "ownership across writer retirement > retires writes without waiting for readers and closes the descriptor at the final held pin [14.90ms]\n(pass) journal reader ownership across writer retirement > reports retired batch descriptor release failure after closing the file [1.35ms]\n(pass) journal reader ownership across writer retirement > reports retired dump descriptor release failure after closing the file [1.16ms]\n(pass) journal reader ownership across writer retirement > reports a fanout-held reader close failure through flush after all mirrors settle [9.16ms]\n(pass) journal reader ownership across writer retirement > closes a reader-free journal before returning [0.99ms]\n(pass) journal reader ownership across writer retirement > keeps an abort reason before a deferred descriptor-close failure [1.22ms]\n(pass) journal reader ownership across writer retirement > joins an admitted checkpoint deletion before closing while rejecting later work [1.54ms]\n(pass) journal reader ownership across writer retirement > closes immediately with no readers and preserves the original close failure [0.78ms]\n(pass) journal reader ownership across writer retirement > reports deferred descriptor close failure to the final reader release [0.92ms]\n(pass) journal reader ownership across writer retirement > keeps callback and descriptor-close failures in their original order [0.82ms]\n(pass) journal reader ownership across writer retirement > preserves the abort reason when a retired snapshot releases its descriptor [0.78ms]\n\n 11 pass\n 0 fail\n 29 expect() calls\nRan 11 tests across 1 file. [355.00ms]\n"
+    },
+    {
+      "workspace": "core",
+      "file": "src/journal/journalStore.readerCleanup.test.ts",
+      "pid": 37321,
+      "exit": 0,
+      "sourceSha256": "caa8ad4cf7442eb2df8f22d6a02ef3743e8eeda1ae1698f989732c9a1d6d3cb0",
+      "log": "tmp/p6/chat-tail-run-au/finish-journalStore.readerCleanup.test.ts.log",
+      "logSha256": "44c425400a0b09a463de870edecd1062577283c50527979420c62e36bb69451e",
+      "summary": "\nsrc/journal/journalStore.readerCleanup.test.ts:\n(pass) retired reader cross-cleanup error identity > keeps the original consumer error before the original dump descriptor failure [12.50ms]\n(pass) retired reader cross-cleanup error identity > preserves readAt failure identity before final descriptor release failure [1.65ms]\n(pass) retired reader cross-cleanup error identity > still closes the descriptor when suspended dump reader cleanup fails independently [3.46ms]\n\n 3 pass\n 0 fail\n 20 expect() calls\nRan 3 tests across 1 file. [376.00ms]\n"
+    },
+    {
+      "workspace": "core",
+      "file": "src/services/history/normalization-unit-oracle.test.ts",
+      "pid": 37327,
+      "exit": 0,
+      "sourceSha256": "4571ccc45aabb6f3d32fd1ed6ae426744fef7c2dfc06e90b9d1d730cb0f00544",
+      "log": "tmp/p6/chat-tail-run-au/finish-normalization-unit-oracle.test.ts.log",
+      "logSha256": "c8aa71ea76c4386cf36dcf102b43b06fe523e818660fa6ed1f6b8fc909cced59",
+      "summary": "\nsrc/services/history/normalization-unit-oracle.test.ts:\n(pass) immutable old-normalizer unit oracle > matches all 5000 frozen input, unit and pending hashes without regenerating them [4750.61ms]\n(pass) immutable old-normalizer unit oracle > matches the frozen subset admitted by the indexed orphan-only stream [1111.07ms]\n(pass) immutable old-normalizer unit oracle > matches all 5000 indexed outputs, counts and pending origins without refusals [9304.32ms]\n\n 3 pass\n 0 fail\n 60857 expect() calls\nRan 3 tests across 1 file. [15.46s]\n"
+    },
+    {
+      "workspace": "core",
+      "file": "src/services/history/tail-query-oracle.test.ts",
+      "pid": 37497,
+      "exit": 0,
+      "sourceSha256": "53610d817022a670dfb36fffde841f742cb7057d007288851d24c3c7c10da8da",
+      "log": "tmp/p6/chat-tail-run-au/finish-tail-query-oracle.test.ts.log",
+      "logSha256": "eda53e0181e9bfc4edd2daf8ea7f58cd46cca5c2a3d878d74520cfa007c9d11e",
+      "summary": "\nsrc/services/history/tail-query-oracle.test.ts:\n(pass) normalized request-tail frozen differential > matches count, selection, last, successor and cursor ranges for all 5000 unchanged inputs [44970.89ms]\n\n 1 pass\n 0 fail\n 1470046 expect() calls\nRan 1 test across 1 file. [45.27s]\n"
+    },
+    {
+      "workspace": "agents",
+      "file": "src/core/source-hook-pending-selection.test.ts",
+      "pid": 38078,
+      "exit": 0,
+      "sourceSha256": "dc7eb9da02de2672ff61be68a376fe1bd908ce206c76cbbdd2ecbc65d9492b1b",
+      "log": "tmp/p6/chat-tail-run-au/finish-source-hook-pending-selection.test.ts.log",
+      "logSha256": "9c18b449f52c825f0c5c5087394abdb04bd488b7247248e9ba357f4dbed45e99",
+      "summary": "\nsrc/core/source-hook-pending-selection.test.ts:\n(pass) source hook pending ownership > keeps recovered hook input separate from normalized provider membership [615.48ms]\n\n 1 pass\n 0 fail\n 6 expect() calls\nRan 1 test across 1 file. [963.00ms]\n"
+    },
+    {
+      "workspace": "agents",
+      "file": "src/core/__tests__/native-chat-session-http.test.ts",
+      "pid": 38097,
+      "exit": 1,
+      "sourceSha256": "527318c25f5d503d95d664eac1e82f36599c778087e21ed738bc4bbc5725b8bd",
+      "log": "tmp/p6/chat-tail-run-au/finish-native-chat-session-http.test.ts.log",
+      "logSha256": "17ce9684e41281299d989ae2c64828622847a5d52a67c21c83a2f927865de0b3",
+      "summary": "code/packages/agents/src/compression/CompressionHandler.ts:546:13)\n      at async prepareSourcePromptEnvelopeAfterEnforcement (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/core/prompt-envelope-source-send.ts:229:32)\n      at async enforceAndStreamSourcePromptEnvelopeRetries (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/agents/src/core/prompt-envelope-source-send.ts:513:11)\n\n133 |     RequestContext,\n134 |     'spool' | 'messageCount' | 'release' | 'estimate' | 'dump' | 'continuation'\n135 |   >\n136 | > {\n137 |   if (use.estimate || use.dump)\n138 |     throw new Error(\n                    ^\nerror: Native plain Chat estimate and dump projections are not installed\n      at prepareNativePlainRequest (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/native-chat-body.ts:138:15)\n      at prepareRequest (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/OpenAIRequestPreparation.ts:525:15)\n      at prepareOpenAIChatProjection (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/OpenAIPromptProjectionPreparation.ts:207:34)\n      at async prepareOpenAIPromptProjection (/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code/packages/providers/src/openai/OpenAIPromptEnvelopeStore.ts:129:32)\n(fail) public native plain Chat pending user HTTP > sends the new user from a journal selection without premature persistence or operation files [58.39ms]\n\n 0 pass\n 1 fail\nRan 1 test across 1 file. [828.00ms]\n"
+    },
+    {
+      "workspace": "providers",
+      "file": "src/__tests__/native-chat-golden.test.ts",
+      "pid": 38112,
+      "exit": 1,
+      "sourceSha256": "f3a3ed55e54261e2fcfdd24332576666026e89f7aa7fb55348906984fe8f5442",
+      "log": "tmp/p6/chat-tail-run-au/finish-native-chat-golden.test.ts.log",
+      "logSha256": "ee5b3c7f57aba0c5cceafa102bd7c1c8012b77b6cab17421cd7074ff389e2c10",
+      "summary": "hout request files [39.30ms]\n(pass) native plain Chat frozen HTTP bodies > unicode-edges checks raw frozen bytes and native curated parity without request files [28.13ms]\n(pass) native plain Chat frozen HTTP bodies > cache-tail-user checks raw frozen bytes and native curated parity without request files [28.67ms]\n(pass) native plain Chat frozen HTTP bodies > cache-tail-tool-result checks raw frozen bytes and native curated parity without request files [32.14ms]\n(pass) native plain Chat frozen HTTP bodies > cache-tail-assistant checks raw frozen bytes and native curated parity without request files [28.40ms]\n(pass) native plain Chat frozen HTTP bodies > cache-anchor checks raw frozen bytes and native curated parity without request files [28.74ms]\n(pass) native plain Chat frozen HTTP bodies > cache-tail-thinking checks raw frozen bytes and native curated parity without request files [27.60ms]\n(pass) native plain Chat frozen HTTP bodies > cache-media-purge-boundary checks raw frozen bytes and native curated parity without request files [25.79ms]\n(pass) native plain Chat frozen HTTP bodies > responses-stateful-parent checks raw frozen bytes and native curated parity without request files [24.62ms]\n(pass) native plain Chat frozen HTTP bodies > blockless-row checks raw frozen bytes and native curated parity without request files [35.86ms]\n\n1 tests failed:\n(fail) native plain Chat frozen HTTP bodies > media-reference-image checks raw frozen bytes and native curated parity without request files [39.30ms]\n\n 21 pass\n 1 fail\n 170 expect() calls\nRan 22 tests across 1 file. [1483.00ms]\n"
+    }
+  ],
+  "gates": [
+    {
+      "name": "core-declarations",
+      "command": [
+        "bun",
+        "../../scripts/build_package.ts"
+      ],
+      "cwd": "/packages/core",
+      "pid": 35423,
+      "exit": 0,
+      "log": "tmp/p6/chat-tail-run-au/core-declarations.log",
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127"
+    },
+    {
+      "name": "providers-declarations",
+      "command": [
+        "bun",
+        "../../scripts/build_package.ts"
+      ],
+      "cwd": "/packages/providers",
+      "pid": 35466,
+      "exit": 0,
+      "log": "tmp/p6/chat-tail-run-au/providers-declarations.log",
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127"
+    },
+    {
+      "name": "agents-declarations",
+      "command": [
+        "bun",
+        "../../scripts/build_package.ts"
+      ],
+      "cwd": "/packages/agents",
+      "pid": 35507,
+      "exit": 0,
+      "log": "tmp/p6/chat-tail-run-au/agents-declarations.log",
+      "sha256": "a10e1523ef53464be5c2b9c989be94a563c3f8dd73b41939b55faf329139d127"
+    },
+    {
+      "name": "core-types",
+      "command": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/core/tsconfig.noemit.json"
+      ],
+      "cwd": ".",
+      "pid": 35547,
+      "exit": 0,
+      "log": "tmp/p6/chat-tail-run-au/core-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "providers-types",
+      "command": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/providers/tsconfig.noemit.json"
+      ],
+      "cwd": ".",
+      "pid": 35643,
+      "exit": 0,
+      "log": "tmp/p6/chat-tail-run-au/providers-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "agents-types",
+      "command": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/agents/tsconfig.noemit.json"
+      ],
+      "cwd": ".",
+      "pid": 35790,
+      "exit": 0,
+      "log": "tmp/p6/chat-tail-run-au/agents-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "provider-bun-types",
+      "command": [
+        "node_modules/.bin/tsc",
+        "--noEmit",
+        "-p",
+        "packages/providers/tsconfig.test-bun.json",
+        "--types",
+        "bun"
+      ],
+      "cwd": ".",
+      "pid": 35895,
+      "exit": 0,
+      "log": "tmp/p6/chat-tail-run-au/provider-bun-types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "scoped-lint",
+      "command": [
+        "node_modules/.bin/eslint",
+        "--max-warnings",
+        "0",
+        "packages/core/src/journal/row-summary-range.ts",
+        "packages/core/src/journal/versionSnapshot.ts",
+        "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+        "packages/providers/src/openai/journal-chat-length.ts",
+        "packages/providers/src/openai/native-chat-body.ts",
+        "packages/providers/src/openai/native-chat-preparation.test.ts",
+        "packages/providers/src/__tests__/native-chat-direct-send.test.ts",
+        "packages/providers/src/__tests__/support/journal-send-fixture.ts",
+        "packages/agents/src/core/__tests__/native-chat-session-http.test.ts",
+        "packages/agents/src/core/source-pending-selection.ts"
+      ],
+      "cwd": ".",
+      "pid": 35938,
+      "exit": 0,
+      "log": "tmp/p6/chat-tail-run-au/scoped-lint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "scoped-prettier",
+      "command": [
+        "node_modules/.bin/prettier",
+        "--check",
+        "packages/core/src/journal/row-summary-range.ts",
+        "packages/core/src/journal/versionSnapshot.ts",
+        "packages/core/src/services/history/indexed-journal-request-snapshot.ts",
+        "packages/providers/src/openai/journal-chat-length.ts",
+        "packages/providers/src/openai/native-chat-body.ts",
+        "packages/providers/src/openai/native-chat-preparation.test.ts",
+        "packages/providers/src/__tests__/native-chat-direct-send.test.ts",
+        "packages/providers/src/__tests__/support/journal-send-fixture.ts",
+        "packages/agents/src/core/__tests__/native-chat-session-http.test.ts",
+        "packages/agents/src/core/source-pending-selection.ts"
+      ],
+      "cwd": ".",
+      "pid": 36059,
+      "exit": 0,
+      "log": "tmp/p6/chat-tail-run-au/scoped-prettier.log",
+      "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+    },
+    {
+      "name": "affected-graph",
+      "command": [
+        "bun",
+        "scripts/check-affected-test-shards.ts"
+      ],
+      "cwd": ".",
+      "pid": 36062,
+      "exit": 0,
+      "log": "tmp/p6/chat-tail-run-au/affected-graph.log",
+      "sha256": "5469d5534e7c67b7e30831139282853609a4ee2e87cead627d6db6a487696d67"
+    },
+    {
+      "name": "test-audit",
+      "command": [
+        "bun",
+        "scripts/test-audit/scan.ts",
+        "tmp/p6/chat-tail-run-au/audit"
+      ],
+      "cwd": ".",
+      "pid": 36089,
+      "exit": 0,
+      "log": "tmp/p6/chat-tail-run-au/test-audit.log",
+      "sha256": "bc412a26caa0df3102417d59dceea0db0d49927a4b7668c22a3fcc08c112354a"
+    }
+  ],
+  "controls": [
+    {
+      "name": "ignore-tail-length",
+      "path": "packages/providers/src/openai/journal-chat-length.ts",
+      "pid": 36946,
+      "exit": 1,
+      "requiredFailure": "but declared",
+      "observed": true,
+      "originalSha256": "b23cbf246b26f07aede60a70b54a6f2f87543f003d0cc79c75d2a817413e7e8c",
+      "mutantSha256": "f2f1ee9e6691378e854418c9ad887932e3739c9491818786dc223905bd4439d2",
+      "logSha256": "3615b53c59083e733d42281495ef83f1b1e97f736d3c9bbdc2bcc3b1d157ae47",
+      "restoredEqual": true
+    },
+    {
+      "name": "wrong-orphan-replacement",
+      "path": "packages/core/src/services/history/journal-tail-source.ts",
+      "pid": 36962,
+      "exit": 1,
+      "requiredFailure": "expect(received).toBe(expected)",
+      "observed": true,
+      "originalSha256": "7620a179979bd869a032ac8b9cedd0eb4b34bbe34d86c3311b7379a9d6516fe3",
+      "mutantSha256": "01110d4c27f6570f3289fdbe81d1d8ea59bd196546161b65a68fed20cbe93114",
+      "logSha256": "cda9bf7d5cfa1d96c70c9e86761056540f329a9680e76e34bc01074c4ae82fa7",
+      "restoredEqual": true
+    },
+    {
+      "name": "stale-reasoning-key",
+      "path": "packages/core/src/journal/rowFormat.ts",
+      "pid": 36978,
+      "exit": 1,
+      "requiredFailure": "but declared",
+      "observed": true,
+      "originalSha256": "46271db32578944969521702a61c8c08ed1a2867e5e93b84eabc334fd0ebdceb",
+      "mutantSha256": "2666ecf5967aa2b652d4206da7cceec94afeb4e637eac866d0880ab4226e6c56",
+      "logSha256": "262dd539d477961255503c40a6ec9f787d7970062a0f8a699ca358a13eb43215",
+      "restoredEqual": true
+    },
+    {
+      "name": "force-old-spool",
+      "path": "packages/providers/src/openai/OpenAIRequestPreparation.ts",
+      "pid": 37074,
+      "exit": 1,
+      "requiredFailure": "Operation attempted to create a file or directory",
+      "observed": true,
+      "originalSha256": "dd900591f7870f9d9fa9c0f1afd07c4ff4b75bca6255231b5ea123ddd565ae42",
+      "mutantSha256": "91416faa2aa2f2db6f64a6516db12fa0eb53d5e8ef8629a40ffc5626880d4bbd",
+      "logSha256": "6dedd4fb432c9cf5a87dd9b76a5e995f2c65b4c6befe8cc9a0efa5072ccfdc13",
+      "restoredEqual": true
+    },
+    {
+      "name": "retain-all-prefix",
+      "path": "packages/providers/src/openai/native-chat-messages.ts",
+      "pid": 37094,
+      "exit": 1,
+      "requiredFailure": "Expected: 1\nReceived: 40",
+      "observed": true,
+      "originalSha256": "98f599f02b012e713bdde69b10d8151cea22f313d8b1143cfef242505957d7f1",
+      "mutantSha256": "2b350714cdabeca8ffc5594927c1efad273ada7cdbcc815d757a01ca6e62c274",
+      "logSha256": "691097703e77bf55ffacbd5d5d6a4a1d26611ef69906aa50c9e2de80577eed74",
+      "restoredEqual": true
+    }
+  ],
+  "verificationDrivers": [
+    {
+      "path": "tmp/p6/chat-tail-run-au/gates.ts",
+      "sha256": "5f69fb67e5fa69d767d993c60d7a72ae27dc268fa685dd572fe671cf241ed06d"
+    },
+    {
+      "path": "tmp/p6/chat-tail-run-au/controls.ts",
+      "sha256": "962dbb7381dd9b16b75b416a20f0cb517efeb828f6b2e05789b079f477ab6075"
+    },
+    {
+      "path": "tmp/p6/chat-tail-run-au/finish-regressions.ts",
+      "sha256": "b5c294d976d6433433ecbe01a54620701f05dac30135825238c4f1b5de715e8e"
+    },
+    {
+      "path": "tmp/p6/chat-tail-run-au/physical-range-receipt.ts",
+      "sha256": "2cb496bf3a4c39981d3690886b81921f350dcc3df9507900be0d4afd239e7a9a"
+    }
+  ],
+  "rootCause": {
+    "directPendingTailRed": {
+      "path": "tmp/p6/chat-tail-run-au/direct-red.log",
+      "sha256": "841c7076a7258c24926d11e9602ad57a7bc84960d2fb1aa0af0521e5f631503f"
+    },
+    "directCrossSpeakerRed": {
+      "path": "tmp/p6/chat-tail-run-au/direct-final.log",
+      "sha256": "b24cf9d6e2f0d424fe3a45d476c957b6684d521130d9487c120e4a73f5bd952d"
+    },
+    "directGreen": {
+      "path": "tmp/p6/chat-tail-run-au/direct-finish.log",
+      "sha256": "5e2139e5374dc00f706c4a2874b3fb1d301a011fb0ab87dd381af6450f832ab9"
+    },
+    "mechanism": "Compose stored generation-qualified subtree summaries around existing normalized affected-entry plans; include captured pending units only in request-local summary. Existing response plans resolve global call presence, so non-AI blocks need no extra measurement refusal.",
+    "publicLostCapabilityRed": {
+      "path": "tmp/p6/chat-tail-run-au/public-root-red.log",
+      "sha256": "0e2614674dfbcd03c3b024f241767a96307eb586ec356ca4569bf8e393ec3805"
+    },
+    "publicRemainingRed": {
+      "path": "tmp/p6/chat-tail-run-au/finish-native-chat-session-http.test.ts.log",
+      "sha256": "17ce9684e41281299d989ae2c64828622847a5d52a67c21c83a2f927865de0b3"
+    },
+    "publicMechanism": "Mandatory hard-limit estimation invokes projectPromptEnvelope; native preparation explicitly refuses estimate/dump before an HTTP request exists. Capability forwarding is fixed; estimation is not bypassed and no spool fallback is installed."
+  },
+  "acceptedDomain": {
+    "route": "Actual OpenAIProvider/local HTTP native plain Chat, initial unlogged strict OpenAI format, strip none/all",
+    "cases": [
+      "new human input with streaming enabled/disabled",
+      "R3/R4 historical synthetic orphan replacement",
+      "better pending duplicate with original media ownership",
+      "response-before-call",
+      "empty IDs and raw-ID/normalized-ID collisions",
+      "repeated pending calls",
+      "cross-speaker call/result shadowing",
+      "thinking and inline media",
+      "multiple historical holders separated by unchanged multi-page ranges"
+    ],
+    "normalForm": "Existing indexed tail normalization and response-plan source ordinals, not a new normalizer. Pending input is captured once, caller-owned values remain unchanged, no pending rows are appended before send.",
+    "http": "Each direct case compares actual complete HTTP byte count, SHA-256 and Content-Length against independent old normalization/conversion. Ignore-tail mutation trips ProgressiveJsonBody served-byte validation during HTTP consumption.",
+    "lifetime": "Caller mutation after first chunk and concurrent append cannot change pinned/retry bytes. Paused acquisition peaks at one unit, retirement returns to zero, unsent release and transport error identity retain original assertions."
+  },
+  "costs": {
+    "physicalReceipt": {
+      "path": "tmp/p6/chat-tail-run-au/physical-range-receipt.json",
+      "sha256": "6b407bc8da52eee8c85a8051fbeca840587b7c2e4945d1d54c09b52a3f8beee5"
+    },
+    "physical": {
+      "pid": 39691,
+      "results": [
+        {
+          "size": 40,
+          "coldReads": 732,
+          "coldRequestedBytes": 3863728,
+          "warmReads": 0,
+          "warmRequestedBytes": 0,
+          "warmPhysicalRanges": [],
+          "historicalRowOverlap": 0,
+          "historicalLensOverlap": 0,
+          "reasonForZeroOverlap": "No read reached any wrapped journal file descriptor during this interval",
+          "interval": "After pending request selection capture, provider prepareRequest through unsent release (not ChatSession); excludes selection capture, discovery, cold fill and HTTP send",
+          "contentLength": 1676,
+          "warmLength": 1716,
+          "creates": {
+            "directories": [],
+            "files": []
+          },
+          "rawPath": "physical-ranges-40.json",
+          "rawSha256": "ca79924ba5b16a5a407e55f21d7fb3dbd6ea22cab60b36225b9798f2e77bfcad"
+        },
+        {
+          "size": 4000,
+          "coldReads": 104574,
+          "coldRequestedBytes": 705670180,
+          "warmReads": 0,
+          "warmRequestedBytes": 0,
+          "warmPhysicalRanges": [],
+          "historicalRowOverlap": 0,
+          "historicalLensOverlap": 0,
+          "reasonForZeroOverlap": "No read reached any wrapped journal file descriptor during this interval",
+          "interval": "After pending request selection capture, provider prepareRequest through unsent release (not ChatSession); excludes selection capture, discovery, cold fill and HTTP send",
+          "contentLength": 163016,
+          "warmLength": 163056,
+          "creates": {
+            "directories": [],
+            "files": []
+          },
+          "rawPath": "physical-ranges-4000.json",
+          "rawSha256": "950316bf790c8039cedbdc4e60cbee39dc67e78d48a2ac5cfab0cfc2ae6b9646"
+        }
+      ]
+    },
+    "captureIncludedTest": "native-chat-preparation.test.ts separately brackets pending selection capture, provider preparation and unsent release with positional-read instrumentation and blanket creation denial at 40/4000 rows.",
+    "scope": "Zero reads applies to neutral-user warm cases in the named intervals. No claim of zero overall work, zero HTTP emission reads, or measured affected-holder read bounds.",
+    "warmAlgorithm": "One pass over existing affected-entry metadata, unchanged interval summary queries using subtree aggregates, conversion of affected plans and pending units only. No full-prefix conversion or full-history count pass.",
+    "cold": "Cold base format registration still reads base history and persists format facts in the existing journal. Request-local tail summaries are not persisted.",
+    "capacity": "Preexisting affected-entry overlay metadata, pending capacity, pins and cache overlays remain separate unclosed capacity obligations. No arbitrary memory bound is asserted."
+  },
+  "audit": {
+    "path": "tmp/p6/chat-tail-run-au/audit/findings.tsv",
+    "sha256": "303bf8ad14a21d5ff734d1879346a674b7d5ad15b586aa40ee21590a1d5f265d",
+    "touchedFindings": [
+      "packages/providers/src/openai/native-chat-preparation.test.ts\t282\tnative Chat preparation ownership and planning > cold fills %s rows, then prepares and cancels unsent warm bodies with zero physical reads or files\tDUP_ASSERT\t2x identical assertion: expect(counter.reads).toBe(0)\tproviders"
+    ],
+    "classification": "The existing DUP_ASSERT brackets preparation and unsent release, distinct read intervals. No new MOCK_MIRROR, ALWAYS_TRUE, SELF_CONFIRMING or NO_ASSERT finding in changed tests."
+  },
+  "preservation": {
+    "checked": 1204,
+    "unrelatedDeclarations": 306,
+    "receipt": {
+      "path": "tmp/p6/chat-tail-run-au/preservation-finish.log",
+      "sha256": "0e4199bb6c410cc6f1e5bd39e3d87c8159795d9dc60279f003e975a7ea37b454"
+    },
+    "inventory": {
+      "path": "tmp/p6/chat-tail-run-au/preserved.sha256",
+      "sha256": "c63d9ab91f37b9d82f63f420a22f436ce6f3cca9604c5ecdf02a0d466bb0ae90"
+    },
+    "memory": {
+      "path": "tmp/p6/chat-tail-run-au/memory.sha256",
+      "sha256": "26b806c2c2f26ce5ac3d85cb302f30e7263e4edb35f9d1d4b62195f51731e651"
+    },
+    "result": "All preserved hashes and inherited dirty memory match. No unrelated files staged, removed or restored."
+  },
+  "processes": {
+    "checkedPids": [
+      35423,
+      35466,
+      35507,
+      35547,
+      35643,
+      35790,
+      35895,
+      35938,
+      36059,
+      36062,
+      36089,
+      36946,
+      36962,
+      36978,
+      37074,
+      37094,
+      37201,
+      37211,
+      37222,
+      37229,
+      37304,
+      37321,
+      37327,
+      37497,
+      38078,
+      38097,
+      38112,
+      39691
+    ],
+    "alive": [],
+    "managedVerificationJobs": "Completed; no verification/control child remains"
+  },
+  "remaining": [
+    "Ordinary public ChatSession native prompt estimation and model commit",
+    "Broader streamed affected-holder discovery and cost coverage",
+    "Last-thinking and pruned views remain explicit refusals",
+    "Kimi/Mistral and old ChatContinuation",
+    "Responses/Anthropic native body paths",
+    "Media reservations/reference-image blanket creation-denial RED, Phase 8",
+    "Tokenizer/log/dump projections",
+    "Final-source 1/8 MiB retained heap, aggregate cache/pin/overlay/pending capacity",
+    "LENS/live-byte accounting, W23/W25/cutover/defaults"
+  ],
+  "separateReds": "Reference-image corpus rerun unchanged at 21 pass/1 fail. #3917, two old durable replay failures, original 8192 blanket compaction denial and older public fixture-exhaustion/todos failures are neither retried nor suppressed.",
+  "policy": "Review skipped per Andrew 2026-10-09. No OCR, push, merge, default flip, fixture regeneration, assertion/threshold/timeout/enforcement weakening, cleanup or .llxprt edits/staging.",
+  "handoff": "Enabled untracked packages/agents/src/core/__tests__/native-chat-session-http.test.ts is preserved and remains RED. The scoped passing product commit does not include that test or claim ordinary ChatSession acceptance."
+}

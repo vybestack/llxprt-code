@@ -1,3 +1,11 @@
+# Pending Chat transport is partial; public native estimation remains blocking, 2026-10-22
+
+Product/tests are committed as `d9eab7404` on `838f6d5b0`. [Phase 6 status](../../PHASE6-STATUS.md) and [the pending-tail receipt](../../PHASE6-SOURCE-BOUND-CHATTAIL-PROOF.json) cover request-local stored-range summaries, pending-user/tool-result HTTP sends, immutable captured tail/retry bytes and neutral-user warm physical reads. The final direct-provider file passes 17 tests/102 assertions, including cross-speaker call handling. The enabled, untracked real ChatSession/OpenAI/local-HTTP test remains RED before HTTP at the native estimate-projection refusal, after fixing the wrapper that lost native capability. Only complete passing files contribute to passing-file totals.
+
+Native prompt estimation and broader streamed affected-holder discovery/cost remain next. Last-thinking/pruned views, Kimi/Mistral, old ChatContinuation, Responses/Anthropic, log/dump, media reservations, LENS/live bytes, final 1/8 MiB heap and cache/pin capacity, the eight general zero-decode requirements, W23/W25/cutover and defaults remain open. The reference-image blanket file-creation test and earlier #3917/old-durable/blanket-compaction/fixture-exhaustion REDs are not suppressed or reclassified. No cleanup, OCR, push, merge or enforcement change. Unrelated declarations, memory and raw recovery remain unstaged. Review skipped per Andrew 2026-10-09.
+
+---
+
 # Native initial plain Chat streams directly; W26 remains open, 2026-10-21
 
 Implementation `e912dba1d` and follow-up `f801b2dcf56a59dcf2e85c6c2b8a7ee044baccf5` are bound by [Phase 6 status](../../PHASE6-STATUS.md) and [the source proof](../../PHASE6-SOURCE-BOUND-NATIVECHATPLAIN-PROOF.json). The passing subset has **203 tests/450 assertions in eight files**, eleven scoped gates and five restored controls. Actual native preparation/send uses stored summary lengths and one indexed unit at a time for initial unlogged plain Chat. After selection capture, warm public preparation reads zero journal bytes at 40/4,000 rows; cold fills perform 732/104,574 reads. A retained-40 mutation fails the paused acquisition bound of one. No heap claim.

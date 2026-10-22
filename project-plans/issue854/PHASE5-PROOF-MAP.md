@@ -1,5 +1,13 @@
 # Phase 5 proof map
 
+## Captured pending-tail Chat provider checkpoint, 2026-10-22
+
+[The pending-tail receipt](PHASE6-SOURCE-BOUND-CHATTAIL-PROOF.json) binds product commit `d9eab7404`, source hashes, final serial tests, scoped gates and five restored mutation controls. The direct HTTP file passes 17 tests/102 assertions against the independent old converter under blanket creation denial. Stored range composition measures existing changed-holder plans and the captured pending overlay, without persisting pending input or converting the entire prefix. Warm 40/4,000 neutral-user preparation, immutable retry bytes and one-unit ownership have separate receipts and do not establish affected-holder discovery, aggregate capacity or retained heap.
+
+The enabled public ChatSession test remains RED at mandatory native estimate projection before HTTP. Tokenizer/log/dump, last-thinking/pruned views, Kimi/Mistral/old continuation, Responses/Anthropic, Phase 8 media reservations and whole-heap/accounting work remain open. The unchanged 155 golden and 5000 normalization domains are run in full. This checkpoint does not close Phase 5/W26 or change defaults.
+
+---
+
 ## Native initial plain Chat direct HTTP checkpoint, 2026-10-21
 
 [Phase 6 status](PHASE6-STATUS.md) and [PHASE6-SOURCE-BOUND-NATIVECHATPLAIN-PROOF.json](PHASE6-SOURCE-BOUND-NATIVECHATPLAIN-PROOF.json) bind implementation `f801b2dcf56a59dcf2e85c6c2b8a7ee044baccf5`: **203 passes, 450 assertions, eight complete passing files, eleven scoped gates and five restored controls**. The native no-file corpus remains 21/1, excluded from passing totals. Original frozen fixtures and #3919 reader contracts are unchanged. Real HTTP bytes/length match the old converter; reference-media reservation writes remain RED under blanket denial. Public warm preparation has zero descriptor reads at 40/4,000 rows after selection capture; cold fills and HTTP emission are separate. One-unit paused ownership/error identity is not whole-heap proof.
