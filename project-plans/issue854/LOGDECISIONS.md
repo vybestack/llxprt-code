@@ -1,3 +1,13 @@
+## 2026-10-22: Fuse payload measurements after Mistral claim preparation
+
+Checkpoint `7ab5f929a` keeps the existing header/ID-piece mapping pass because future claims determine salted IDs. It moves default runtime token identity capture before wire preparation so the first fill can compute both token policies and lengths together. Mandatory token estimation reuses that settings key; continuation lengths derive from an explicit additive omitted-reasoning byte contribution measured with the real includeInContext:false converter, rather than substituting strip-all output or removing a behavior field from the key.
+
+The 296-byte summary width remains unchanged. Chat rank revision 2 assigns an explicit uint64 at bytes 284..291; journal format 10 refuses format 9. Atomic publication and pin ownership continue through the existing group transaction. The shorter journal layout exposed speculative VALUE head reads crossing LENS boundaries, so metadata heads are now read exactly before their bodies. Sparse zero-overlap assertions remain unchanged and pass.
+
+[Cold-fill proof](PHASE6-SOURCE-BOUND-MISTRALCOLDFILL-PROOF.json) records the three-pass RED and one-pass intermediate text matrix, current small scenario checks and remaining acceptance limits. Extended verification is serialized under supervisor PID 94733 in `tmp/p6/chat-mistral-cold-fill-run-br/remaining.ts`; its completion, restore hashes and current-source results must be checked before accepting that lane. Fresh memory/capacity/global accounting and other provider migrations remain open. Review skipped per Andrew 2026-10-09.
+
+---
+
 ## Extract production responsibilities to satisfy existing lint, 2026-10-22
 
 Commit `f02b791ce` extracts the store format-fill pipeline rather than shaving comments, changing guard formatting or weakening the 800-line rule. Typed BuildContext, RecordAppender and policy inputs keep store internals private. The commit queue keeps publication fixed through the fill; one context observes the same version and caches as the prior repeated construction. JournalStore public methods, sorter wiring and the existing persistent spill implementation stay unchanged.

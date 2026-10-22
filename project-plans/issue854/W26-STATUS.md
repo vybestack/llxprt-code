@@ -1,3 +1,11 @@
+## Mistral cold-fill implementation checkpoint, 2026-10-22
+
+`7ab5f929a` removes separate cold wire, continuation and token registrations from Mistral preparation. A required header/ID mapping pass remains; payload measurement is fused. Current small three-scenario cost tests and all sparse continuation zero-overlap checks pass. The [receipt](PHASE6-SOURCE-BOUND-MISTRALCOLDFILL-PROOF.json) distinguishes intermediate full-size proof from current-source checks and records file version 10 refusal of version 9.
+
+W26 remains incomplete. Serial extended verification is running from `tmp/p6/chat-mistral-cold-fill-run-br/remaining.ts`, supervisor PID 94733, with explicit running/completed receipts. Full current matrix, per-kind accounting, failure controls, fresh memory/traps, capacity, other providers, native log/dump and global accounting are not accepted by this checkpoint. No memory budget, timeout, assertion or enforcement was weakened; separate known REDs remain open.
+
+---
+
 ## Mistral production lint passes after scoped extraction, 2026-10-22
 
 Early production commit `f02b791ce` fixes both remaining lint failure classes without changing enforcement. JournalStore delegates its format-fill pipeline through typed group inputs; named cursor operations separate admission, spill iteration and heap advancement. Counted file lines are 757/800 for the store, 86/800 for the helper and 109/800 for the merge. The longest affected functions are 79, 40 and 27 lines under the unchanged 80-line cap. Nesting enforcement remains level 3, and production ESLint passes with zero warnings.

@@ -1,3 +1,13 @@
+## Mistral cold payload measurements are fused, 2026-10-22
+
+Production checkpoint `7ab5f929a` registers Mistral wire lengths, kept/stripped token facts and continuation omission contributions together. Mapping still makes its required header/ID-piece pass before normalized payload conversion. The cold text RED read every payload three times at 40/400/4,000 rows; the intermediate fused run reads each once. At 4,000 rows, physical returned bytes fall from 660,116,168 to 220,035,872 and write bytes from 18,333,596 to 6,111,074. These figures precede the final exact metadata-head correction; they are not exact final-source totals. Current-source 40-row text/tools/collision tests and all four sparse continuation-read tests pass, including zero ROW/LENS overlap. No assertion or enforcement was weakened.
+
+The additive omission contribution uses the real includeInContext:false converter on the original unit. Chat rank revision 2 stores an explicit uint64 field without widening the 296-byte summary; journal version 10 refuses old version 9 files. Continuation capture derives from the selected summary without another registration or pending-holder measurement. The shorter fill exposed a 1,024-byte metadata VALUE head prefetch crossing neighboring LENS records; exact head reads remove that speculative overlap. No new history-sized cache or operation file was added.
+
+The [cold-fill receipt](PHASE6-SOURCE-BOUND-MISTRALCOLDFILL-PROOF.json) separates final and intermediate evidence. Intermediate 15,000 frozen comparisons pass. Scoped declaration/type, lint, formatting, graph/audit and 1,204 preservation checks pass; final source rebinding and extended tests run serially under `tmp/p6/chat-mistral-cold-fill-run-br/remaining.ts`, supervisor PID 94733. Read `remaining-running.json`, `remaining-gates.json` and `remaining-completed.json` rather than assuming completion. The full cold size/scenario matrix, detailed per-kind/decode/init accounting, partial-failed-fill control and fresh combined memory/traps remain open. Prior memory REDs and Phase 5/6/W26 incompleteness are unchanged. Review skipped per Andrew 2026-10-09. No push or merge.
+
+---
+
 ## Mistral production lint passes after scoped extraction, 2026-10-22
 
 Early production commit `f02b791ce` fixes both remaining lint failure classes without changing enforcement. JournalStore delegates its format-fill pipeline through typed group inputs; named cursor operations separate admission, spill iteration and heap advancement. Counted file lines are 757/800 for the store, 86/800 for the helper and 109/800 for the merge. The longest affected functions are 79, 40 and 27 lines under the unchanged 80-line cap. Nesting enforcement remains level 3, and production ESLint passes with zero warnings.

@@ -1,0 +1,262 @@
+{
+  "date": "2026-10-22",
+  "base": "f39b1de01159b505fe6220c6a51250250b31e109",
+  "status": "Cold payload fusion implemented; extended measurement and final current-source acceptance remain open.",
+  "directory": "tmp/p6/chat-mistral-cold-fill-run-br",
+  "mechanism": {
+    "before": "Initial wire lengths, includeInContext:false continuation lengths and estimator-keyed token facts occupied separate registrations and traversed normalized payloads separately.",
+    "mapping": "The existing fillMistralFormat uses readRowIds and plannedFromIds. It scans header/id pieces before normalized conversion so future claims and collisions are resolved before provider mapping. It does not require full ROW payload conversion. This dependency remains in place.",
+    "after": "Mistral preparation captures the default runtime estimator identity before registration. One registration computes wire length, both kept/stripped token contributions and a typed additive continuation byte contribution while each normalized unit is available. Subsequent mandatory estimation registers the identical settings/estimator key. Continuation planning derives from the already selected summary rather than registering another format or remeasuring pending holders.",
+    "converter": "The omitted contribution invokes factsOf with includeInContext:false on the original unit, not removeThinkingFromContent. Thinking-only messages, reasoning value fields and strict tool-format behavior therefore retain their converter semantics. allButLast selection composes the contribution only for kept units.",
+    "schema": "The 296-byte summary width is unchanged. Chat summary rank revision 2 assigns bytes 284..291 to an explicit uint64 omittedReasoningBytes contribution; bytes 292..295 remain zero. Journal file version advances from 9 to 10 and rejects CRC-valid version 9 files. Existing token and transfer-table slots are not repurposed.",
+    "atomicity": "Mapping, LENS and summary facts still publish through the existing single commit-group fill transaction. No new core provider import, publication path, request spool, operation file, all-unit array or history-sized cache was introduced. Dedicated new concurrent-fill/partial-failure mutation controls are not yet executed.",
+    "warmReadCorrection": "Fewer records placed short metadata VALUE records next to LENS records. The existing 1024-byte VALUE head prefetch crossed those record boundaries, producing four warm ROW/LENS overlaps. KeyedMapReader now reads the exact frame head and kind header before streaming its value body, rather than speculatively reading neighboring records. Assertions and read bounds are unchanged."
+  },
+  "performanceRed": {
+    "log": "tmp/p6/chat-mistral-cold-fill-run-br/red.log",
+    "receipt": "tmp/p6/chat-mistral-cold-fill-run-br/red.jsonl",
+    "meaning": "Actual prepareRequest, mandatory estimate and captured continuation pass independent legacy body/token oracles, then fail the physical payload-end read bound: 120/1200/12000 versus 40/400/4000 allowed.",
+    "text": [
+      {
+        "rows": 40,
+        "reads": 512,
+        "readBytes": 6612766,
+        "payloadEnds": 120,
+        "writes": 12,
+        "writeBytes": 183248
+      },
+      {
+        "rows": 400,
+        "reads": 4688,
+        "readBytes": 66028395,
+        "payloadEnds": 1200,
+        "writes": 24,
+        "writeBytes": 1835366
+      },
+      {
+        "rows": 4000,
+        "reads": 46340,
+        "readBytes": 660116168,
+        "payloadEnds": 12000,
+        "writes": 144,
+        "writeBytes": 18333596
+      }
+    ]
+  },
+  "intermediateGreen": {
+    "receipt": "tmp/p6/chat-mistral-cold-fill-run-br/green.jsonl",
+    "scope": "Before the final metadata-prefetch and sparse-plan corrections. These figures are not exact current-source I/O claims.",
+    "text": [
+      {
+        "rows": 40,
+        "reads": 166,
+        "readBytes": 2201406,
+        "payloadEnds": 40,
+        "writes": 4,
+        "writeBytes": 60958
+      },
+      {
+        "rows": 400,
+        "reads": 1558,
+        "readBytes": 22006615,
+        "payloadEnds": 400,
+        "writes": 8,
+        "writeBytes": 611664
+      },
+      {
+        "rows": 4000,
+        "reads": 15442,
+        "readBytes": 220035872,
+        "payloadEnds": 4000,
+        "writes": 48,
+        "writeBytes": 6111074
+      }
+    ],
+    "frozen": "All 15000 immutable production byte/length/per-unit-token comparisons passed before the final sparse-plan extraction. Final-source rerun remains required."
+  },
+  "measurementLimits": [
+    "The bounded physical-read observer retains scalar counters, not read buffers or history objects. A payload-end marker outside the header prefetch detects repeated physical payload traversal; total returned bytes and writev bytes are recorded as well.",
+    "Full per-kind descriptor ranges, decoded ROW counts, generator/measurer invocation totals, tokenizer initialization counts, exact header-pass bytes and reachable/unreachable write accounting are not complete in this receipt.",
+    "The 40/400/4000 by text/tools/collisions matrix exists; current-source completion of the full matrix remains required. Raw ROW conversion counts must not be inferred from marker counts alone.",
+    "An early verification driver was cancelled during its full cold matrix after production corrections. Its completed logs remain, including failed type/lint/read checks; no cancelled run is counted as complete.",
+    "No new retained-heap bound or aggregate memory acceptance is inferred. Existing 64 KiB caches, 32 KiB ROW window, 49 KiB transient allowance and the earlier 9120-byte merge overflow require final combined accounting."
+  ],
+  "remaining": [
+    "Final-source full 15000 parity rerun and complete cold three-scenario size matrix",
+    "Fresh original memory/trap acceptance, 100000-call capacity and complete live/unreachable journal accounting",
+    "Kimi, Responses, Anthropic and native log/dump migration",
+    "Partial-failed-fill readiness mutation control remains unexecuted; successful old-split and stale-omission negative controls are recorded separately."
+  ],
+  "knownSeparateReds": "Original tools 170000 memory RED, #3917, old durable, blanket-compaction/public-fixture and wider 609 test-type failures remain unsuppressed. No timeout, budget, assertion domain or enforcement is changed.",
+  "review": "review skipped per Andrew 2026-10-09",
+  "operations": "No cleanup, stash, .llxprt edit/staging, OCR, push, merge or provider default flip. Existing untracked/recovery material is preserved.",
+  "implementation": "7ab5f929a",
+  "sourceHashes": [
+    {
+      "path": "packages/core/src/journal/chat-omission-summary.test.ts",
+      "sha256": "56d306beff6dc23ca5f9dcb326e3aeaa41cf851db5d645c266b4b2dac81f4514",
+      "matchesCommit": true
+    },
+    {
+      "path": "packages/core/src/journal/fileHeader.test.ts",
+      "sha256": "d5cb0373891b9ce3955fc9d0aea190a969369ca87c10b92af8b8f174a50caa9f",
+      "matchesCommit": true
+    },
+    {
+      "path": "packages/core/src/journal/fileHeader.ts",
+      "sha256": "66e159053c891e27dc543478deb503482c32decc9e4beec3fa6913480ebebae2",
+      "matchesCommit": true
+    },
+    {
+      "path": "packages/core/src/journal/keyedMap.ts",
+      "sha256": "a1fc7fc4484b0e998b313efcfc4ae0f20bd31a3bb60b23bc859d8a8b61c24193",
+      "matchesCommit": true
+    },
+    {
+      "path": "packages/core/src/journal/slotSummary.ts",
+      "sha256": "993e315a201a66cf6f514e223bd003703fad3a71a6b6767337621357528f1ec7",
+      "matchesCommit": true
+    },
+    {
+      "path": "packages/core/src/journal/summaryComposition.ts",
+      "sha256": "89f0e857a59cfac16a76dbf397e55032709793265fedbaeffdf83ca729e94154",
+      "matchesCommit": true
+    },
+    {
+      "path": "packages/providers/src/openai/OpenAIRequestPreparation.ts",
+      "sha256": "d34551f4bc21700f118b7e46d26ceeb7be91ce3f5c5b14ac180ff7c0cd45f292",
+      "matchesCommit": true
+    },
+    {
+      "path": "packages/providers/src/openai/journal-chat-length.ts",
+      "sha256": "e6bd48098ddd39e5c5d36296706d63f7e194ff6eaa7ea6171bb179948e8cf376",
+      "matchesCommit": true
+    },
+    {
+      "path": "packages/providers/src/openai/native-chat-body.ts",
+      "sha256": "f30eb6ba4714f29cf4f6d5896f1fb1bffb2ee95e3cd5474949c5888be04c68d9",
+      "matchesCommit": true
+    },
+    {
+      "path": "packages/providers/src/openai/native-chat-estimate.ts",
+      "sha256": "eb454ccdfd9a99e14d36fd16b0f876639bb33c11380bb25475893b283705fe67",
+      "matchesCommit": true
+    },
+    {
+      "path": "packages/providers/src/openai/native-mistral-cold-fill.test.ts",
+      "sha256": "4831a0cb755bcaae31580b0b3e6ab533210cefc848c124da100dc4ca2cb152e5",
+      "matchesCommit": true
+    }
+  ],
+  "currentCold40": [
+    {
+      "size": 40,
+      "scenario": "text",
+      "reads": 168,
+      "bytes": 2200168,
+      "payloadEnds": 40,
+      "writes": 4,
+      "writeBytes": 60958
+    },
+    {
+      "size": 40,
+      "scenario": "tools",
+      "reads": 757,
+      "bytes": 3509840,
+      "payloadEnds": 40,
+      "writes": 24,
+      "writeBytes": 73901
+    },
+    {
+      "size": 40,
+      "scenario": "collisions",
+      "reads": 375,
+      "bytes": 1789884,
+      "payloadEnds": 22,
+      "writes": 6,
+      "writeBytes": 59654
+    }
+  ],
+  "currentChecks": {
+    "final-map-cold.log": {
+      "path": "tmp/p6/chat-mistral-cold-fill-run-br/final-map-cold.log",
+      "sha256": "717c0d0f1f10c2b68b3b3048a12937ab40e0a0d40130aa565ee86b5c22f88db3"
+    },
+    "final-map-sparse.log": {
+      "path": "tmp/p6/chat-mistral-cold-fill-run-br/final-map-sparse.log",
+      "sha256": "4da0d899a2adc444f0fc9e97f46c4f40a760cc8d85df8ef4afa9ab5c915f054b"
+    },
+    "final-map-tests.log": {
+      "path": "tmp/p6/chat-mistral-cold-fill-run-br/final-map-tests.log",
+      "sha256": "00f3b5cded6e1317584dd4d5738f045d2fbf63d9c53956026f9b40109fd763ee"
+    },
+    "lint-final2.log": {
+      "path": "tmp/p6/chat-mistral-cold-fill-run-br/lint-final2.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "map-lint.log": {
+      "path": "tmp/p6/chat-mistral-cold-fill-run-br/map-lint.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "preservation-current.log": {
+      "path": "tmp/p6/chat-mistral-cold-fill-run-br/preservation-current.log",
+      "sha256": "0e4199bb6c410cc6f1e5bd39e3d87c8159795d9dc60279f003e975a7ea37b454"
+    },
+    "final-final-gates.json": {
+      "path": "tmp/p6/chat-mistral-cold-fill-run-br/final-final-gates.json",
+      "sha256": "c38d838278cf0d381f72539e18b77b01fa48cc213f649b1579a4fe20d1afb79c"
+    },
+    "early-gates.json": {
+      "path": "tmp/p6/chat-mistral-cold-fill-run-br/early-gates.json",
+      "sha256": "c662815f9c7237f09515bcee32b5439240b5c92301365a6b167e9046648e9468"
+    }
+  },
+  "controls": [
+    {
+      "name": "control-old-split",
+      "log": "tmp/p6/chat-mistral-cold-fill-run-br/control-old-split.log",
+      "sha256": "1d4d8e4a8805269f5fa3f22b9ae0d8f1814819aa9138ea7c8bb5147b6c126656",
+      "restore": {
+        "path": "packages/providers/src/openai/native-chat-body.ts",
+        "before": "f30eb6ba4714f29cf4f6d5896f1fb1bffb2ee95e3cd5474949c5888be04c68d9",
+        "after": "f30eb6ba4714f29cf4f6d5896f1fb1bffb2ee95e3cd5474949c5888be04c68d9",
+        "cmp": true
+      },
+      "expectedAssertionFailure": true
+    },
+    {
+      "name": "control-stale-omission",
+      "log": "tmp/p6/chat-mistral-cold-fill-run-br/control-stale-omission.log",
+      "sha256": "797af7cc92ec11d6ec502dd5d6b22057bcfa1b220ec8787ad0cc878ec5a450fc",
+      "restore": {
+        "path": "packages/providers/src/openai/journal-chat-length.ts",
+        "before": "e6bd48098ddd39e5c5d36296706d63f7e194ff6eaa7ea6171bb179948e8cf376",
+        "after": "e6bd48098ddd39e5c5d36296706d63f7e194ff6eaa7ea6171bb179948e8cf376",
+        "cmp": true
+      },
+      "expectedAssertionFailure": true
+    }
+  ],
+  "handoff": {
+    "supervisorPid": 94733,
+    "script": "tmp/p6/chat-mistral-cold-fill-run-br/remaining.ts",
+    "scriptSha256": "e7d916199da60b761486b353dc72f59bec6e96d51591d750681334a0d5ebf469",
+    "runningReceipt": "tmp/p6/chat-mistral-cold-fill-run-br/remaining-running.json",
+    "gates": "tmp/p6/chat-mistral-cold-fill-run-br/remaining-gates.json",
+    "completed": "tmp/p6/chat-mistral-cold-fill-run-br/remaining-completed.json",
+    "stateAtReceipt": {
+      "name": "remaining-native-mistral-production-frozen.test.ts",
+      "args": [
+        "bun",
+        "test",
+        "--timeout",
+        "180000",
+        "./packages/providers/src/openai/__tests__/native-mistral-production-frozen.test.ts"
+      ],
+      "cwd": "/Volumes/XS1000/acoliver/projects/llxprt/branch-3/llxprt-code",
+      "supervisorPid": 94733,
+      "started": "2026-10-22T16:59:33.949Z"
+    }
+  },
+  "auditInspection": "No findings on the two new test files in the completed audit/findings.tsv. Global scanner findings remain in that file and are not suppressed."
+}
