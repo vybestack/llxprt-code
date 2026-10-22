@@ -9,7 +9,10 @@ import {
 } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
 import type { RowEntry } from '@vybestack/llxprt-code-core/journal/rowEntry.js';
 import type { VersionSnapshot } from '@vybestack/llxprt-code-core/journal/versionSnapshot.js';
-import { decodeSlotSummary } from '@vybestack/llxprt-code-core/journal/slotSummary.js';
+import {
+  decodeSlotSummary,
+  type SlotSummary,
+} from '@vybestack/llxprt-code-core/journal/slotSummary.js';
 import {
   composeSlotSummaries,
   identitySlotSummary,
@@ -110,6 +113,8 @@ export interface StoredResponsesRequestPlan {
 interface ResponsesSelection {
   readonly cursor?: number;
   readonly pendingInputCount?: number;
+  readonly summary?: SlotSummary;
+  readonly pdfBytes?: number;
 }
 
 function supportedRequest(
@@ -180,9 +185,10 @@ export function planStoredResponsesRequest(
       'Request format length facts are unmeasured or stale',
     );
   const summary =
-    version.rows === 0
+    selection.summary ??
+    (version.rows === 0
       ? identitySlotSummary('responses')
-      : decodeSlotSummary(version.aggregate.summaries[slot], format);
+      : decodeSlotSummary(version.aggregate.summaries[slot], format));
   if (summary.kind !== 'responses')
     throw new JournalFormatError('Request format has no Responses summary');
   const root = summary.variants[selected];
@@ -191,7 +197,7 @@ export function planStoredResponsesRequest(
     root.bytes[0] +
     root.r * Buffer.byteLength(`,"id":"rs_${reasoningIdTime}_"`) +
     reasoningDigitBytes(root.r);
-  const pdfBytes = version.aggregate.pdfBytes[slot];
+  const pdfBytes = selection.pdfBytes ?? version.aggregate.pdfBytes[slot];
   if (pdfBytes > PDF_AGGREGATE_MAX_BYTES)
     throw new Error(
       `Native PDF input payload (${pdfBytes} bytes) exceeds the allowed ${PDF_AGGREGATE_MAX_BYTES} bytes (50 MB). Reduce the number or size of PDF files.`,

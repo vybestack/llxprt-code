@@ -6,7 +6,7 @@
 import { mkdtemp, open, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { countPiece } from './o200k-disk-bpe.js';
-import { countPieceInMemory } from './o200k-heap-bpe.js';
+import { countPieceInMemory, MAX_HEAP_PIECE_BYTES } from './o200k-heap-bpe.js';
 import { checkpoint } from './o200k-disk-io.js';
 import {
   countO200kBaseTokens,
@@ -83,6 +83,7 @@ class ChunkedCounter {
     private readonly encoder: O200kBaseEncoder,
     private readonly options: O200kDiskCountOptions,
     private readonly tuning: ChunkedCountTuning,
+    private readonly diskAllowed = true,
   ) {}
 
   /**
@@ -154,8 +155,11 @@ class ChunkedCounter {
 
   async #countLargePiece(piece: string): Promise<void> {
     const bytes = Buffer.from(piece);
-    if (bytes.length <= this.tuning.heapPieceBytes) {
-      this.count += countPieceInMemory(bytes);
+    if (!this.diskAllowed || bytes.length <= this.tuning.heapPieceBytes) {
+      this.count +=
+        bytes.length <= MAX_HEAP_PIECE_BYTES
+          ? countPieceInMemory(bytes)
+          : countO200kBaseTokens(this.encoder, piece);
       await checkpoint(this.options.signal);
       return;
     }
@@ -238,5 +242,33 @@ export async function countO200kBaseTokensChunked(
     if (error instanceof PendingOverflow)
       return countO200kBaseTokensFromDiskSource(source, options);
     throw error;
+  }
+}
+
+export async function countO200kBaseTokensFromChunks(
+  chunks: AsyncIterable<string>,
+  encoder: O200kBaseEncoder,
+  signal?: AbortSignal,
+): Promise<number> {
+  const counter = new ChunkedCounter(
+    encoder,
+    { workspaceDirectory: '', signal },
+    DEFAULT_CHUNKED_TUNING,
+    false,
+  );
+  let pending = '';
+  try {
+    for await (const chunk of chunks) {
+      signal?.throwIfAborted();
+      pending += chunk;
+      pending = pending.slice(await counter.consume(pending, false));
+    }
+    await counter.consume(pending, true);
+    const count = await counter.finish();
+    if (!Number.isSafeInteger(count))
+      throw new RangeError('Token count exceeds JavaScript integer precision');
+    return count;
+  } finally {
+    await counter.dispose();
   }
 }

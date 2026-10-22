@@ -1,5 +1,4 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { JournalFormatError } from '@vybestack/llxprt-code-core/journal/errors.js';
 import type { RowFormatSettings } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
 import type { ResponsesVariant } from '@vybestack/llxprt-code-core/journal/slotSummary.js';
 import type { IndexedJournalRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/indexed-journal-request-snapshot.js';
@@ -10,7 +9,10 @@ import {
   buildOpenAIResponsesUnit,
   type ResponsesToolPairs,
 } from './OpenAIResponsesInputBuilder.js';
-import { inlineBase64ByteLength } from '../utils/mediaUtils.js';
+import {
+  inlineBase64ByteLength,
+  classifyMediaBlock,
+} from '../utils/mediaUtils.js';
 import type { ResponsesInputItem } from './OpenAIResponsesTypes.js';
 
 export interface ResponsesUnitLength {
@@ -57,17 +59,9 @@ export function responsesUnitLength(
   includeReasoning: boolean,
   pairs: ResponsesToolPairs,
 ): ResponsesUnitLength {
-  for (const block of unit.blocks)
-    if (
-      block.type === 'media' &&
-      block.encoding !== 'base64' &&
-      block.encoding !== 'url'
-    )
-      throw new JournalFormatError(
-        'Responses stored-media references require native media projection',
-      );
+  const measured = measurableResponsesUnit(unit, settings.mediaPdfEnabled);
   const items = buildOpenAIResponsesUnit(
-    unit,
+    measured.unit,
     {
       includeReasoningInContext: includeReasoning,
       outputLimits: settings.outputLimits ?? parseOutputLimits({}),
@@ -89,7 +83,43 @@ export function responsesUnitLength(
     } else bytes += Buffer.byteLength(JSON.stringify(item));
     pdfBytes += emittedPdfBytes(item);
   }
-  return { bytes, count: items.length, generatedIds, pdfBytes };
+  const emittedMedia = items.some(
+    (item) =>
+      'role' in item && item.role === 'user' && Array.isArray(item.content),
+  );
+  return {
+    bytes: bytes + (emittedMedia ? measured.bytes : 0),
+    count: items.length,
+    generatedIds,
+    pdfBytes: pdfBytes + (emittedMedia ? measured.pdfBytes : 0),
+  };
+}
+
+function measurableResponsesUnit(
+  unit: IContent,
+  pdfEnabled: boolean,
+): {
+  readonly unit: IContent;
+  readonly bytes: number;
+  readonly pdfBytes: number;
+} {
+  let bytes = 0;
+  let pdfBytes = 0;
+  const blocks = unit.blocks.map<IContent['blocks'][number]>((block) => {
+    if (block.type !== 'media' || block.encoding !== 'reference') return block;
+    const category = classifyMediaBlock(block);
+    if (category === 'image' || (category === 'pdf' && pdfEnabled))
+      bytes += block.normalizedBase64Length;
+    if (category === 'pdf' && pdfEnabled) pdfBytes += block.byteLength;
+    return {
+      type: block.type,
+      mimeType: block.mimeType,
+      encoding: 'base64',
+      data: '',
+      ...(block.filename === undefined ? {} : { filename: block.filename }),
+    };
+  });
+  return { unit: { ...unit, blocks }, bytes, pdfBytes };
 }
 
 export function responsesUnitSummary(

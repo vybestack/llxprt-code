@@ -66,6 +66,7 @@ import type { StreamResponsesParams } from './openAIResponsesHttpStream.js';
 import { streamResponses } from './openAIResponsesStreaming.js';
 import type { resolveMediaCapabilities } from './openAIResponsesRequestState.js';
 import type { ResponsesSourcePrompt } from '../runtime/responses-source-serializer.js';
+import { NativeResponsesPrompt } from './native-responses-body.js';
 import {
   diskResponsesBodyBytes,
   diskResponsesBodyLength,
@@ -151,7 +152,7 @@ export interface PreparedResponsesRequestContext {
   readonly request: OpenAIResponsesRequest;
   readonly mediaRequest: ResolvedMediaRequest;
   /** The prompt keys on scratch disk; `request` holds empty placeholders. */
-  readonly sourcePrompt: ResponsesSourcePrompt;
+  readonly sourcePrompt: ResponsesSourcePrompt | NativeResponsesPrompt;
   /** Whether the stateful plan was enabled when prepared. */
   readonly statefulEnabled: boolean;
   /**
@@ -468,11 +469,45 @@ function buildStreamParams(
   options: ResponsesRequest,
   dumpResult: Awaited<ReturnType<typeof dumpFinalizedRequest>>,
 ): StreamResponsesParams {
-  const source = requestContext.sourcePrompt.toEstimatorProjection();
-  // Both transports ask for the length; the segment files are measured once.
-  let bodyLength: Promise<number> | undefined;
   return {
     ...requestContext,
+    ...responseBodyStreams(requestContext, abortSignal),
+    abortSignal,
+    maxStreamingAttempts: streamingAttemptBudget(
+      invocationEphemerals['retries'],
+    ),
+    streamRetryInitialDelayMs:
+      typeof invocationEphemerals['retrywait'] === 'number'
+        ? invocationEphemerals['retrywait']
+        : 4000,
+    normalizedOptions: options,
+    dumpBaseId: dumpResult.baseId,
+    dumpMode: dumpResult.dumpMode,
+  };
+}
+
+function responseBodyStreams(
+  requestContext: RequestContext,
+  abortSignal?: AbortSignal,
+): Pick<
+  StreamResponsesParams,
+  | 'streamRequestBody'
+  | 'streamRequestBodyLength'
+  | 'streamWebSocketFrame'
+  | 'streamDumpBody'
+> {
+  const prompt = requestContext.sourcePrompt;
+  if (prompt instanceof NativeResponsesPrompt)
+    return {
+      streamRequestBody: () => prompt.body(requestContext.request),
+      streamRequestBodyLength: () => Promise.resolve(prompt.byteLength),
+      streamWebSocketFrame: () =>
+        prompt.body(createFrameRequest(requestContext.request)),
+      streamDumpBody: () => prompt.body(requestContext.request, 'dump'),
+    };
+  const source = prompt.toEstimatorProjection();
+  let bodyLength: Promise<number> | undefined;
+  return {
     streamRequestBody: () =>
       diskResponsesBodyBytes(requestContext.request, source, abortSignal),
     streamRequestBodyLength: () =>
@@ -494,15 +529,6 @@ function buildStreamParams(
         abortSignal,
         'dump',
       ),
-    abortSignal,
-    maxStreamingAttempts: streamingAttemptBudget(
-      invocationEphemerals['retries'],
-    ),
-    streamRetryInitialDelayMs:
-      (invocationEphemerals['retrywait'] as number | undefined) ?? 4000,
-    normalizedOptions: options,
-    dumpBaseId: dumpResult.baseId,
-    dumpMode: dumpResult.dumpMode,
   };
 }
 

@@ -1,5 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { NativeResponsesPrompt } from './native-responses-body.js';
+import type { PreparedResponsesRequestContext } from './openAIResponsesExecutor.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { DEFAULT_HTTP_JSON_ENVELOPE_BYTES } from '../utils/boundedJsonBody.js';
@@ -21,6 +23,15 @@ import {
   SocketHarness,
   completingScript,
 } from './__tests__/openAIResponsesWebSocketTransport.test-helpers.js';
+
+function bodyLengthOf(
+  prepared: PreparedResponsesRequestContext,
+): Promise<number> {
+  const prompt = prepared.sourcePrompt;
+  return prompt instanceof NativeResponsesPrompt
+    ? Promise.resolve(prompt.byteLength)
+    : diskResponsesBodyLength(prepared.request, prompt.toEstimatorProjection());
+}
 
 function rows(textBytes: number): Iterable<IContent> {
   return (function* (): Generator<IContent> {
@@ -67,11 +78,7 @@ describe('Responses WebSocket native envelope planning', () => {
         deps,
       );
       const small = await buildDiskTextResponsesContext(smallRequest, deps);
-      const overhead =
-        (await diskResponsesBodyLength(
-          small.request,
-          small.sourcePrompt.toEstimatorProjection(),
-        )) - 1;
+      const overhead = (await bodyLengthOf(small)) - 1;
       await small.mediaRequest.release();
       await smallFixture.close();
       const fixture = await journalSendFixture(rows(bodyLength - overhead));
@@ -95,12 +102,7 @@ describe('Responses WebSocket native envelope planning', () => {
         { preconnect: originalFetch.preconnect },
       );
       try {
-        expect(
-          await diskResponsesBodyLength(
-            prepared.request,
-            prepared.sourcePrompt.toEstimatorProjection(),
-          ),
-        ).toBe(bodyLength);
+        expect(await bodyLengthOf(prepared)).toBe(bodyLength);
         error = await providerStreamError(
           executeOpenAIResponsesRequest(request, deps, prepared),
         );

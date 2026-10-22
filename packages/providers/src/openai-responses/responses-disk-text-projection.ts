@@ -1,5 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { readFileSync } from 'node:fs';
+import {
+  NativeResponsesPrompt,
+  prepareNativeResponsesPrompt,
+} from './native-responses-body.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type {
@@ -190,6 +194,15 @@ function requireDiskTextRows(
   return rows;
 }
 
+function rebuildResponses(
+  request: ResponsesRequest,
+  deps: ResponsesExecutorDeps,
+  reasoningIdTime: number,
+): PreparedResponsesRequestContext['rebuildFromRows'] {
+  return (mode) =>
+    buildDiskTextResponsesContext(request, deps, { ...mode, reasoningIdTime });
+}
+
 export async function buildDiskTextResponsesContext(
   request: ResponsesRequest,
   deps: ResponsesExecutorDeps,
@@ -211,46 +224,56 @@ export async function buildDiskTextResponsesContext(
   );
   const prepared = await buildResponsesRequestShell(request, deps, stateful);
   try {
-    const prompt = await serializeResponsesPromptEnvelope({
-      model: prepared.request.model,
-      instructions: prepared.request.instructions,
-      tools: prepared.request.tools,
-      contents: resolveRowsMedia(
-        countedRows(rows, signal, skipRows),
-        {
-          requestId: request.mediaRequestId,
-          aggregateBudgetBytes: request.mediaBudgetBytes,
-          resolver: request.mediaResolver,
-        },
-        prepared.mediaRequest,
-        signal,
-      ),
-      ...(historyDangling === undefined ? {} : { historyDangling }),
-      ...('input' in overrides
-        ? { inputOverride: { value: overrides['input'] } }
-        : {}),
-      ...statefulAccounting(rows, stateful, signal, skipRows),
-      context: responsesInputContext(
-        request,
-        deps,
-        stateful.parentId !== undefined,
-        reasoningIdTime,
-      ),
-      signal,
-    });
+    const native =
+      rows.native !== undefined &&
+      !stateful.enabled &&
+      !('input' in overrides) &&
+      !('previous_response_id' in overrides);
+    const prompt = native
+      ? await prepareNativeResponsesPrompt(
+          request,
+          deps,
+          prepared,
+          reasoningIdTime,
+        )
+      : await serializeResponsesPromptEnvelope({
+          model: prepared.request.model,
+          instructions: prepared.request.instructions,
+          tools: prepared.request.tools,
+          contents: resolveRowsMedia(
+            countedRows(rows, signal, skipRows),
+            {
+              requestId: request.mediaRequestId,
+              aggregateBudgetBytes: request.mediaBudgetBytes,
+              resolver: request.mediaResolver,
+            },
+            prepared.mediaRequest,
+            signal,
+          ),
+          ...(historyDangling === undefined ? {} : { historyDangling }),
+          ...('input' in overrides
+            ? { inputOverride: { value: overrides['input'] } }
+            : {}),
+          ...statefulAccounting(rows, stateful, signal, skipRows),
+          context: responsesInputContext(
+            request,
+            deps,
+            stateful.parentId !== undefined,
+            reasoningIdTime,
+          ),
+          signal,
+        });
     prepared.mediaRequest.registerCleanup(() => prompt.dispose());
-    if (prepared.request.instructions !== undefined)
-      prepared.request.instructions = '';
-    if (prepared.request.tools !== undefined) prepared.request.tools = [];
+    if (!native) {
+      if (prepared.request.instructions !== undefined)
+        prepared.request.instructions = '';
+      if (prepared.request.tools !== undefined) prepared.request.tools = [];
+    }
     return {
       ...prepared,
       sourcePrompt: prompt,
       statefulEnabled: stateful.enabled,
-      rebuildFromRows: (rebuild) =>
-        buildDiskTextResponsesContext(request, deps, {
-          ...rebuild,
-          reasoningIdTime,
-        }),
+      rebuildFromRows: rebuildResponses(request, deps, reasoningIdTime),
     };
   } catch (error) {
     return finishMediaRequest(prepared.mediaRequest, {
@@ -311,6 +334,18 @@ export function diskTextProjection(
   releaseIfUnsent: () => Promise<void>,
 ): PromptEnvelopeProjection {
   const prompt = prepared.sourcePrompt;
+  if (prompt instanceof NativeResponsesPrompt)
+    return {
+      model: prompt.model,
+      protocol: prompt.protocol,
+      method: prompt.method,
+      projectionRevision: prompt.projectionRevision,
+      unsupportedMedia: [],
+      transportToken: token,
+      finalizedProjection: prompt.toEstimatorProjection(),
+      legacyEstimate: pinnedSourceEstimatorOnly,
+      releaseIfUnsent,
+    };
   return {
     model: prompt.model,
     protocol: prompt.protocol,

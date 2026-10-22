@@ -30,6 +30,7 @@ import type {
 } from './openAIResponsesExecutor.js';
 import type { StreamResponsesParams } from './openAIResponsesHttpStream.js';
 import { diskResponsesBodyBytes } from './responses-disk-body.js';
+import { NativeResponsesPrompt } from './native-responses-body.js';
 import { CODEX_WEBSOCKET_BETA_HEADER } from './openAIResponsesWebSocketTransport.js';
 
 /**
@@ -144,12 +145,14 @@ function dumpRequest(
   return dumpSDKRequestContextBodyBytes(
     deps.providerName,
     '/responses',
-    diskResponsesBodyBytes(
-      requestContext.request,
-      source.toEstimatorProjection(),
-      signal,
-      'dump',
-    ),
+    source instanceof NativeResponsesPrompt
+      ? source.body(requestContext.request, 'dump')
+      : diskResponsesBodyBytes(
+          requestContext.request,
+          source.toEstimatorProjection(),
+          signal,
+          'dump',
+        ),
     baseURL,
     metadata,
     signal,

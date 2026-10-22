@@ -223,7 +223,7 @@ function serializePromptSegments(
     ),
   );
 }
-function canonicalizePromptValue(
+export function canonicalizePromptValue(
   value: unknown,
   key: string,
   imageEntries: ProjectionImageEntry[],
