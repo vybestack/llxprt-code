@@ -21,8 +21,14 @@ import { describe, it, expect } from 'bun:test';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import TOML from '@iarna/toml';
+import yaml from 'js-yaml';
 import semver from 'semver';
-import { asRecord, asString } from './typed-test-helpers.ts';
+import {
+  asArray,
+  asOptionalRecord,
+  asRecord,
+  asString,
+} from './typed-test-helpers.ts';
 
 const repoRoot = resolve(__dirname, '..', '..');
 
@@ -212,16 +218,189 @@ describe('workflows do not float on an unpinned runtime', () => {
   });
 });
 
+const EXPLICITLY_PRIVILEGED_WORKFLOWS = [
+  'release.yml',
+  'build-sandbox.yml',
+  'luther.yml',
+  'e2e.yml',
+];
+
+interface WorkflowJob {
+  readonly file: string;
+  readonly name: string;
+  readonly privileged: boolean;
+  readonly runScripts: readonly string[];
+}
+
+const PRIVILEGE_MARKERS = [
+  /id-token:\s*write/,
+  /docker\/login-action@/,
+  /registry-url\s*:/,
+  /\bNODE_AUTH_TOKEN\b/,
+  /\bNPM_TOKEN\b/,
+  /\bnpm\s+(?:publish|login|adduser)\b/,
+];
+
+/**
+ * A job is privileged when it can mint an OIDC token, logs in to a registry,
+ * or handles publish credentials. Detection looks at the serialized job plus
+ * the workflow-level permissions, so a new job gains the protection without
+ * being listed here.
+ */
+function isPrivilegedJob(
+  workflowPermissions: unknown,
+  job: Record<string, unknown>,
+): boolean {
+  const serialized = yaml.dump({ workflowPermissions, job });
+  return PRIVILEGE_MARKERS.some((marker) => marker.test(serialized));
+}
+
+function loadWorkflowJobs(file: string): WorkflowJob[] {
+  const workflow = asRecord(yaml.load(readText('.github', 'workflows', file)));
+  const jobs = asOptionalRecord(workflow['jobs']) ?? {};
+  return Object.entries(jobs).map(([name, value]) => {
+    const job = asRecord(value);
+    const steps = asArray(job['steps'] ?? []).map((step) => asRecord(step));
+    return {
+      file,
+      name,
+      privileged:
+        EXPLICITLY_PRIVILEGED_WORKFLOWS.includes(file) ||
+        isPrivilegedJob(workflow['permissions'], job),
+      runScripts: steps
+        .map((step) => step['run'])
+        .filter((run): run is string => typeof run === 'string'),
+    };
+  });
+}
+
+/** Joins shell line continuations and drops comment lines. */
+function shellCommandLines(script: string): string[] {
+  return script
+    .replace(/\\\r?\n/g, ' ')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '' && !line.startsWith('#'));
+}
+
+/**
+ * Commands that execute dependency lifecycle scripts (third-party code that
+ * bypasses the lockfile's integrity guarantees once it falls back to the
+ * network) when run in a privileged job.
+ */
+function findLifecycleScriptViolations(script: string): string[] {
+  const violations: string[] = [];
+  for (const line of shellCommandLines(script)) {
+    if (/\bnpm\s+rebuild\b/.test(line)) {
+      violations.push(line);
+      continue;
+    }
+    const installs = /\bnpm\s+(?:ci|install|i|add)\b[^;&|]*/g;
+    for (const match of line.matchAll(installs)) {
+      if (!match[0].includes('--ignore-scripts')) {
+        violations.push(line);
+      }
+    }
+  }
+  return violations;
+}
+
+describe('findLifecycleScriptViolations', () => {
+  it('rejects npm rebuild', () => {
+    expect(findLifecycleScriptViolations('npm rebuild bun')).toHaveLength(1);
+  });
+
+  it('rejects npm ci and npm install without --ignore-scripts', () => {
+    expect(findLifecycleScriptViolations('npm ci')).toHaveLength(1);
+    expect(findLifecycleScriptViolations('npm install -g foo@1')).toHaveLength(
+      1,
+    );
+  });
+
+  it('accepts installs that skip lifecycle scripts, even across continuations', () => {
+    expect(findLifecycleScriptViolations('npm ci --ignore-scripts')).toEqual(
+      [],
+    );
+    expect(
+      findLifecycleScriptViolations(
+        'npm install -g \\\n  --prefix p \\\n  --ignore-scripts \\\n  foo@1',
+      ),
+    ).toEqual([]);
+  });
+
+  it('ignores commented-out commands', () => {
+    expect(findLifecycleScriptViolations('# npm rebuild bun')).toEqual([]);
+  });
+});
+
+describe('isPrivilegedJob', () => {
+  it('flags OIDC, registry login and publish-credential jobs', () => {
+    expect(
+      isPrivilegedJob(undefined, { permissions: { 'id-token': 'write' } }),
+    ).toBe(true);
+    expect(
+      isPrivilegedJob({ 'id-token': 'write' }, { steps: [{ run: 'true' }] }),
+    ).toBe(true);
+    expect(
+      isPrivilegedJob(undefined, {
+        steps: [{ uses: 'docker/login-action@abc' }],
+      }),
+    ).toBe(true);
+    expect(
+      isPrivilegedJob(undefined, {
+        steps: [{ env: { NODE_AUTH_TOKEN: '${{ secrets.NPM_TOKEN }}' } }],
+      }),
+    ).toBe(true);
+  });
+
+  it('leaves read-only jobs alone', () => {
+    expect(
+      isPrivilegedJob(
+        { contents: 'read' },
+        { steps: [{ run: 'npm ci --ignore-scripts' }] },
+      ),
+    ).toBe(false);
+  });
+});
+
 describe('privileged workflows do not run third-party install scripts', () => {
-  const privileged = [
-    'release.yml',
-    'build-sandbox.yml',
-    'luther.yml',
-    'e2e.yml',
-  ];
+  const workflowsDir = join(repoRoot, '.github', 'workflows');
+  const jobs = readdirSync(workflowsDir)
+    .filter((file) => file.endsWith('.yml'))
+    .flatMap((file) => loadWorkflowJobs(file));
+  const privilegedJobs = jobs.filter((job) => job.privileged);
+
+  it('detects the release, sandbox, Luther and E2E jobs as privileged', () => {
+    const files = new Set(privilegedJobs.map((job) => job.file));
+    for (const file of EXPLICITLY_PRIVILEGED_WORKFLOWS) {
+      expect(files.has(file), `${file} has a privileged job`).toBe(true);
+    }
+  });
+
+  it('privileged jobs never rebuild or install with lifecycle scripts enabled', () => {
+    for (const job of privilegedJobs) {
+      for (const script of job.runScripts) {
+        expect(
+          findLifecycleScriptViolations(script),
+          `${job.file} job ${job.name}`,
+        ).toEqual([]);
+      }
+    }
+  });
+
+  it('privileged dependency installs run the repository Bun linker', () => {
+    for (const file of EXPLICITLY_PRIVILEGED_WORKFLOWS) {
+      const text = readText('.github', 'workflows', file);
+      expect(/npm ci\b/.test(text), `${file} installs with npm ci`).toBe(true);
+      expect(
+        text.includes('node scripts/link-bun-runtime.ts'),
+        `${file} links the lockfile-installed Bun`,
+      ).toBe(true);
+    }
+  });
 
   it('npm ci always skips lifecycle scripts', () => {
-    for (const file of privileged) {
+    for (const file of EXPLICITLY_PRIVILEGED_WORKFLOWS) {
       const text = readText('.github', 'workflows', file);
       const installs = text.match(/npm ci\b[^\n]*/g) ?? [];
       expect(installs.length, `${file} installs with npm ci`).toBeGreaterThan(

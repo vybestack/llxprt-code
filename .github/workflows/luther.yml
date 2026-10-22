@@ -362,10 +362,10 @@ jobs:
         if: steps.claim_issue.outputs.should_continue == 'true'
         run: npm ci --ignore-scripts
 
-      - name: 'Run first-party postinstall (bun runtime, dependency patches)'
+      - name: 'Link lockfile-installed Bun and apply dependency patches'
         if: steps.claim_issue.outputs.should_continue == 'true'
         run: |-
-          npm rebuild bun
+          node scripts/link-bun-runtime.ts
           node scripts/postinstall.cjs
 
       - name: Fix rollup platform dependency
@@ -377,9 +377,22 @@ jobs:
             npm install @rollup/rollup-win32-x64-msvc@4.59.0 --no-save --ignore-scripts || true
           fi
 
-      - name: Install LLxprt CLI nightly
+      # Luther rewrites the checkout (including packages/cli) across attempts, so
+      # the agent must come from a separate, unmodified install. That install
+      # runs in a job holding write tokens and model API keys, so no dependency
+      # lifecycle script may run (--ignore-scripts; the launcher resolves Bun
+      # from the installed @oven/bun-* package without one). A global install
+      # ignores the project .npmrc, so the repository .npmrc is passed as the
+      # user config to apply the same dependency cooldown.
+      - name: Install LLxprt CLI nightly without lifecycle scripts
         if: steps.claim_issue.outputs.should_continue == 'true'
-        run: npm install -g @vybestack/llxprt-code@nightly
+        run: |-
+          npm install -g \
+            --prefix "${RUNNER_TEMP}/llxprt-nightly" \
+            --ignore-scripts \
+            --userconfig "${GITHUB_WORKSPACE}/.npmrc" \
+            @vybestack/llxprt-code@nightly
+          echo "${RUNNER_TEMP}/llxprt-nightly/bin" >> "${GITHUB_PATH}"
 
       - name: Run Luther attempts
         id: run_attempts

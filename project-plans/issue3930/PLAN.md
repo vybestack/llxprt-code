@@ -93,7 +93,65 @@ copy of the tree.
 
 ### Audit
 
-See the audit section at the bottom (filled in after the final run).
+Final state (`bun audit` and `npm audit --package-lock-only --omit=dev`): one
+finding, reported by npm as three entries because they are one dependency chain
+(`fast-glob` > `micromatch` > `braces`). `source-map-js` is 1.2.2 in both
+lockfiles and no longer reported. npm's suggested fix is a major downgrade of
+`fast-glob`; it is not applied (it does not remove `braces`).
+
+#### Accepted exception: braces 3.0.3 (GHSA-vfj7-8cjw-p6xm, CVE-2026-93687, high)
+
+- **Advisory.** Recursive AST walkers in `braces` (`lib/parse.js`, `lib/compile.js`,
+  `lib/expand.js`) have no depth guard. A deeply nested brace pattern that stays
+  under the library's 10,000-character input limit can exhaust the call stack and
+  throw `RangeError`. Affected range `<=3.0.3`; no patched version is published
+  (3.0.3 is the latest).
+- **Affected production paths.** Only `fast-glob@3.3.3` > `micromatch@4.0.8` >
+  `braces@3.0.3`. The root `micromatch` dependency is declared but never
+  imported (grep of the repository, excluding `node_modules`). `glob@12`
+  uses `minimatch` and `brace-expansion` (patched here), and `picomatch@4.0.4`
+  has its own brace parser, so neither reaches `braces`.
+- **Runtime call sites** (every `fast-glob` import under `packages/*/src`):
+  - `packages/tools/src/tools/ast-grep.ts` (`FastGlob.stream`, ~line 582): include
+    patterns and `!`-excluded ignore patterns come from the `globs` tool
+    parameter. **Model-controlled.** The parameter schema has no length or count
+    bound; `braces` itself rejects patterns over 10,000 characters with a
+    `SyntaxError`.
+  - `packages/tools/src/tools/structural-analysis/helpers.ts` (`getFiles`,
+    `iterateFiles`): patterns are `**/*.<ext>` built from the `LANGUAGE_MAP`
+    constant. Not user or model input.
+  - `packages/tools/src/tools/ast-edit/cross-file-analyzer.ts` (`getWorkspaceFiles`,
+    `searchAllLanguages`): fixed `**/*.ts|js|py` and `LANGUAGE_MAP` extension
+    patterns. Not user or model input.
+  - Ignore files (`.gitignore`, `.llxprtignore`) go through the `ignore` package
+    and `picomatch`, never `fast-glob`.
+- **Exposure.** The CLI runs on the user's own machine, so the worst case is the
+  CLI process dying or the tool call failing. It requires a model (or prompt
+  injection steering a model) to send a pathological `globs` value to
+  `ast_grep`. Measured with the shipped versions: on Bun 1.4.4 (the runtime the
+  CLI uses) nested patterns of up to 9,983 characters do not overflow the stack
+  (they fail as `ENAMETOOLONG` or match nothing); on Node 26.12.1 a 9,983
+  character `{{{...a,b...}}}` pattern throws `RangeError: Maximum call stack
+  size exceeded` from `FastGlob.stream(...)`. In `ast-grep.ts` that call runs
+  inside `execute()`, whose `try/catch` returns a tool error (`Error searching:
+  ...`), so the process survives. Nothing was reproduced that terminates the
+  process; the advisory's uncaught case needs a caller that does not catch the
+  synchronous throw.
+- **Existing bounds.** `braces` rejects input over 10,000 characters. Nothing in
+  the repository bounds nesting depth.
+- **Why it stays.** Replacing `fast-glob` is not small or behavior-preserving.
+  The two fixed-pattern sites could move to `fdir` + `picomatch` (both already
+  dependencies), but `ast-grep.ts` relies on `fast-glob` semantics for
+  user-supplied globs (absolute patterns, parent traversal, negation through
+  `ignore`, per-entry realpath validation afterwards), and `picomatch`/`fdir` do
+  not provide those. A partial swap leaves `braces` in the tree and adds a second
+  glob engine. Pinning `braces` lower or following `npm audit fix --force` would
+  downgrade `fast-glob` to a major with different behavior, and no `braces`
+  version outside the affected range exists.
+- **Mitigation and follow-up.** The tool-level `try/catch` is the mitigation.
+  Revisit when `braces` publishes a fix (bump through an override) or when
+  `ast_grep` globs move to a bounded matcher; at that point also drop the unused
+  root `micromatch` dependency.
 
 ## 5. Release job lifecycle scripts
 
@@ -106,21 +164,83 @@ Investigation (done on a copy of the tree with `npm ci --ignore-scripts`):
   and importing tree-sitter-bash). esbuild and msw scripts are optimizations.
 - `bun` is the exception: without its postinstall `node_modules/.bin/bun` is a
   stub that exits with "Bun's postinstall script was not run", and `npm run build`
-  (which calls `bun scripts/build.ts` through npm's PATH) fails. So the release
-  path runs exactly one rebuild: `npm rebuild bun` (it only copies the binary from
-  the already-installed `@oven/bun-*` package).
+  (which calls `bun scripts/build.ts` through npm's PATH) fails.
+- `npm rebuild bun` is NOT an acceptable fix. It runs `bun`'s third-party
+  `postinstall` (`node install.js`), which executes the selected binary and, when
+  that fails, falls back to `npm install @oven/bun-<variant>@1.4.4` or a direct
+  tarball download from the registry. Both fallbacks bypass the lockfile's
+  integrity hashes, in jobs that hold OIDC, registry-login or write credentials.
+  An earlier revision of this plan described it as a copy of the installed binary
+  and labeled the step first-party. That was wrong.
+- Replacement: `scripts/link-bun-runtime.ts` (repository-owned, run with
+  `node scripts/link-bun-runtime.ts`; Node 24 strips the types). It performs the
+  copy `install.js` ends with, using only files `npm ci --ignore-scripts` already
+  extracted and verified: it selects the host's `@oven/bun-<variant>` with
+  `selectOvenVariants`/`detectHostPlatform` from
+  `packages/cli/src/launcher/oven-bun-variants.ts` (the same table the launcher
+  uses), checks that the variant and `node_modules/bun` both match the pinned
+  version, copies `bin/bun[.exe]` to `node_modules/bun/bin/bun.exe` and hard-links
+  `bunx.exe` to it. npm already created `node_modules/.bin/bun` and `bunx`
+  pointing at those two paths. It never executes a binary, never uses the network,
+  and fails with the list of variants it looked for when none is installed.
 - The root `postinstall` (`scripts/postinstall.cjs`) is first-party: it applies
-  `patches/` (ink, react-devtools-core), strips npm peer flags, links workspaces,
-  and installs Windows launchers. It is run explicitly with `node`.
-- After `npm ci --ignore-scripts`, `npm rebuild bun`, `node scripts/postinstall.cjs`
-  the full `npm run build` succeeded in the copy, and the shell parser and
-  launcher test suites passed.
+  `patches/` (ink, react-devtools-core) through the lockfile-pinned `patch-package`,
+  strips npm peer flags, links workspaces, and installs Windows launchers. It is
+  run explicitly with `node`.
+- After `npm ci --ignore-scripts`, `node scripts/link-bun-runtime.ts`,
+  `node scripts/postinstall.cjs` the full `npm run build` succeeded in a scratch
+  copy (`npm ci --ignore-scripts --cache <empty dir>`), and
+  `node_modules/.bin/bun --version` printed 1.4.4. Before the link step it printed
+  "Bun's postinstall script was not run". The linker was also run with a real
+  Node 24.22.1 binary (the version in `.nvmrc`) to confirm type stripping works
+  there.
 
-Changes: `npm ci --ignore-scripts` followed by a "Run first-party postinstall
-(bun runtime, dependency patches)" step (`npm rebuild bun` + `node
+Changes: `npm ci --ignore-scripts` followed by a "Link lockfile-installed Bun and
+apply dependency patches" step (`node scripts/link-bun-runtime.ts` + `node
 scripts/postinstall.cjs`) in `release.yml`, `build-sandbox.yml`, `luther.yml`,
 `e2e.yml` and in the three nightly jobs that run tests or E2E (`windows_ci`,
 macOS shards, `e2e_full`).
+
+`scripts/tests/supply-chain-pins.test.ts` now fails when a privileged job (one
+with `id-token: write`, a registry login, `NODE_AUTH_TOKEN`/`NPM_TOKEN`, or an
+`npm publish`/`login`, plus the four workflows named above) runs `npm rebuild`,
+or `npm ci`/`install`/`i`/`add` without `--ignore-scripts`. The matcher and the
+job classifier have their own unit tests, and a mutation check (reintroducing
+`npm rebuild bun` in `release.yml`) made the suite fail.
+
+### Luther: nightly CLI install
+
+`luther.yml` ran `npm install -g @vybestack/llxprt-code@nightly` with lifecycle
+scripts enabled, in a job with `contents: write`, `pull-requests: write`,
+`issues: write` and job-wide model API credentials. A global install also ignores
+the project `.npmrc`, so the cooldown did not apply.
+
+Decision: keep installing the published nightly, but harden the install. Using
+the CLI built from the checkout was rejected because Luther is not equivalent
+with it: the agent edits the checkout, including `packages/cli`, on every
+attempt and then runs QA, and the next attempt would run the agent from the tree
+the previous attempt just changed (possibly broken, or an issue branch that
+touches the CLI itself). The agent needs a fixed install that the work cannot
+alter. The step is now:
+
+```
+npm install -g --prefix "${RUNNER_TEMP}/llxprt-nightly" --ignore-scripts \
+  --userconfig "${GITHUB_WORKSPACE}/.npmrc" @vybestack/llxprt-code@nightly
+echo "${RUNNER_TEMP}/llxprt-nightly/bin" >> "${GITHUB_PATH}"
+```
+
+- `--ignore-scripts`: no dependency lifecycle script runs in the privileged job.
+- `--userconfig` with the repository `.npmrc`: applies `min-release-age=3` and the
+  exclusions for `@vybestack/*`, `bun`, `@oven/bun-*`. Checked with
+  `npm config get min-release-age --global`: `null` without the flag, `3` with it,
+  and the exclude list resolves.
+- Bun needs no linking step here. The published CLI launcher resolves Bun from the
+  installed `@oven/bun-<variant>` package when `bun/bin/bun.exe` is still the
+  placeholder (issue #2978). Verified by installing the current nightly with
+  these flags into a scratch prefix and running `llxprt --version`
+  (0.12.0-nightly.261020.f17692ebd).
+- The prefix keeps the install out of the checkout's tree and the system Node
+  prefix.
 
 Left unchanged on purpose: nightly `windows_bun_native_smoke` and
 `cli_bundle_launch` (their purpose is to observe install-time native behavior and
