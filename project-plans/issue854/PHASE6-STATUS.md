@@ -1,3 +1,23 @@
+# The six pending-media lease failures are resolved
+
+2026-10-22. Early checkpoint `6c7673e4c` commits the complete green regression file before the broader gates. Security checkpoint `0c6bcd002` strengthens pending-admission lifetime assertions. [The source-bound receipt](PHASE6-SOURCE-BOUND-PENDINGMEDIAREGRESSION-PROOF.json) records the unchanged baseline at **1 pass / 6 fail / 365 assertions** and the expanded final file at **13 pass / 0 fail / 1,337 assertions**. All six original size 3/64/65 completion/abort cases now reach byte equality, immutable old-source reads, new-source media removal, zero resolver accounting, final pin retirement, reclamation and zero live-row assertions. Six added native-source cases reach the same terminal checks with zero request reservations.
+
+The extra reservation was the existing history owner, retained because the fixture still held its old snapshot. Its raw indexed reader supplied neither a native lease nor admission provenance, so its external resolver correctly reserved once under a distinct request owner. The history gate, resolver, admission provenance, media ownership and pin-lease files are byte-identical at pre-view `4fe997`, product `3f43569e9` and starting HEAD `e84ba7ced`. The evidence supports correcting the stale ownership/lifetime predicate. Production remains unchanged. Exact on-disk owner digests now replace the count-only predicate: external request release leaves only the history owner; the final old pin closes before the history claim drains and reclamation removes the blob. No count was simply increased from one to two.
+
+Pending admission now passes **5/0 and 37 assertions**, including actual admission filenames before and after codec resolution, an external clone while admission is live, and release while the source stays open and an independent owner retains the blob. Released admission authority cannot read under that independent claim: resolution must reserve externally, then fails contextual verification after the last owner releases and janitor reclaims. Trusted transformations continue to use exact source capabilities or weak membership in the same-store history lease. There is no content-ID authorization set or retained history-row map.
+
+All **36 primary invocations pass**, plus four supplemental files and the explicit current-source agent Bun type check. The 24 passing test files execute 376 tests. Fresh proof includes public purge HTTP **6/90**, selected-view HTTP **96/1,896** with 288 seam sends, unchanged no-file corpus **22/176**, actual HTTP lifetime **4/53,048** at 64 rows with 64 KiB text and 512/8192 small-text rows, historical HTTP leases **2/26**, and unchanged #3919 readers **14/49**. Core/providers/agents declarations and types, Bun types, zero-warning lint, Prettier, graph, audit execution and preservation pass. Both changed tests are confirmed in the relevant current-source type inputs. The 155-wire and both unchanged 5,000-input oracle files also pass without fixture regeneration.
+
+Four restored source controls fail actual assertions: duplicate external owner, wrong reference authority, dead admission authority despite another live owner, and early history drain. Both mutated production files match saved bytes and HEAD afterward. Cancellation, producer/query/abort failures, callback compensation, continued writer use, nested old pins, readoption and queue crash/reopen have separate complete-file records. Ordinary historical sends retain the existing history owner without request files; new ingest still requires its one admission lease. Audit reports 2,625 findings and zero scan errors; the four owned findings are repeated owner/reclamation assertions at distinct lifecycle transitions, with none of the prohibited new classes.
+
+An additional unchanged `semantic-purge.journal.test.ts` invocation is separately **0 pass / 4 fail / 58 assertions**, recorded in [#3929](https://github.com/vybestack/llxprt-code/issues/3929). Unawaited transaction close races history disposal. An ignored diagnostic copy awaiting close exposes three stale immediate-release assertions while the base remains pinned: **1 pass / 3 fail / 60 assertions**. The tracked file is unchanged, and this RED is not counted as a passing gate.
+
+All 1,204 preservation hashes, including 306 inherited declarations and raw recovery, verify. Recorded verification PIDs are absent. Original full-memory tools RED and the 170,000 ms budget remain unchanged; no native full-memory protocol was retried. Automatic public compression plus purge, public explicit-cache combinations, other providers/continuations, native log/dump, global LENS/live-byte accounting and aggregate capacity remain open, alongside #3917, two old durable cases, blanket compaction, public fixture, wider 609-diagnostic core test types and #3929. Phase 5/6/W26 remain open. Review skipped per Andrew 2026-10-09. No production change, cleanup, .llxprt edit/staging, enforcement change, OCR, push, merge or default flip.
+
+Earlier sections below are historical checkpoints, including their then-current pending-media RED.
+
+---
+
 # Native Chat purge/view parity passes within the executed domain
 
 2026-10-22. Product `3f43569e9` follows first-view checkpoint `2afcdf4a1`. [The purge/view receipt](PHASE6-SOURCE-BOUND-PURGEVIEW-PROOF.json) binds 5,050 current source hashes, concrete HTTP observations, earlier REDs and restored controls. Public ChatSession executes six remove/summary × none/all/allButLast sends with mandatory estimates, exact old-converter bytes, Content-Length, five committed history rows and no operation-created files. Bytes/tokens are remove none 717/165, all 244/49, allButLast 294/59; summary none 738/169, all 265/53, allButLast 315/63. Observed estimates equal these references; the unchanged test allowance is 16 tokens.
@@ -86,10 +106,10 @@ Five restored production mutations reject in seven focused commands: skipping ro
 
 All six saved memory manifests were checked against current files, 5032 paths each. All production and protocol helpers match. The only differences are the earlier equivalent large-ROW indexing test and these two cold-contract tests. The new observer helper is imported only by the two tests and is absent from the memory harness. Original three-pair/1024-versus-8192/small-only-warmup/six-retention results and all four memory controls are reused explicitly, not rerun. The 1,048,576-byte limits and signed median/Theil-Sen calculations remain unchanged.
 
-| Saved positive lane | Three small heap peaks | Three large heap peaks | Heap growth | ArrayBuffer growth | Retained trend growth |
-| --- | --- | --- | --- | --- | --- |
-| Text | 375491, 775695, 845735 | 2036835, 961085, 975395 | 199700 | 0 | 380661.667 |
-| Tools | 419397, 1431099, 1280134 | 932410, 294137, 321949 | -958185 | 200 | 163226.25 |
+| Saved positive lane | Three small heap peaks   | Three large heap peaks  | Heap growth | ArrayBuffer growth | Retained trend growth |
+| ------------------- | ------------------------ | ----------------------- | ----------- | ------------------ | --------------------- |
+| Text                | 375491, 775695, 845735   | 2036835, 961085, 975395 | 199700      | 0                  | 380661.667            |
+| Tools               | 419397, 1431099, 1280134 | 932410, 294137, 321949  | -958185     | 200                | 163226.25             |
 
 Values are bytes. The first cold text peak exceeds 1 MiB; the unchanged contract judges median large-minus-small growth, not each absolute peak. The supplement retains all six absolute retained heap/ArrayBuffer readings, each send's peaks/RSS and independent wire hashes. Text retained endpoint growth is 567658 bytes; tools is zero. Saved array/fill/estimate controls reject with heap growth 14280950/29335854/14605607; retain rejects with retained growth 84675090. Every lane completes six peak and six retention sends with matching bytes, one native stream and estimate, and zero legacy spools/estimator files.
 
@@ -106,16 +126,16 @@ All 1204 inherited hashes, including 306 declarations and raw recovery, verify. 
 `9cfb35bde` removes repeated successor-tree point searches and reuses the current response-part entry/IDs. `f0657a4ae` batches small ROW ranges in a fill-owned positional reader. Existing bulk tree construction, one-unit conversion, format keys/generations, kept/stripped token semantics and large reads remain unchanged. The measured cause was repeated indexed reads, not serialization of an ever-growing history prefix.
 
 | Rows | Cold prepare calls, before → final | Requested/returned bytes, before → final | Prepare ms, before → final |
-| --- | --- | --- | --- |
-| 40 | 722 → 42 | 3,839,672 → 594,188 | 32.468 → 17.270 |
-| 400 | 8,852 → 499 | 55,073,992 → 7,407,648 | 216.995 → 41.375 |
-| 4000 | 104,564 → 2296 | 709,459,144 → 30,180,032 | 2276.578 → 276.826 |
+| ---- | ---------------------------------- | ---------------------------------------- | -------------------------- |
+| 40   | 722 → 42                           | 3,839,672 → 594,188                      | 32.468 → 17.270            |
+| 400  | 8,852 → 499                        | 55,073,992 → 7,407,648                   | 216.995 → 41.375           |
+| 4000 | 104,564 → 2296                     | 709,459,144 → 30,180,032                 | 2276.578 → 276.826         |
 
 | Rows | Cold estimate calls, before → final | Requested/returned bytes, before → final | Estimate ms, before → final |
-| --- | --- | --- | --- |
-| 40 | 726 → 46 | 3,591,486 → 593,586 | 130.725 → 121.543 |
-| 400 | 8856 → 503 | 55,076,047 → 7,409,703 | 519.055 → 333.348 |
-| 4000 | 104,568 → 2300 | 709,461,200 → 30,182,088 | 5094.664 → 2921.714 |
+| ---- | ----------------------------------- | ---------------------------------------- | --------------------------- |
+| 40   | 726 → 46                            | 3,591,486 → 593,586                      | 130.725 → 121.543           |
+| 400  | 8856 → 503                          | 55,076,047 → 7,409,703                   | 519.055 → 333.348           |
+| 4000 | 104,568 → 2300                      | 709,461,200 → 30,182,088                 | 5094.664 → 2921.714         |
 
 These are same-instrumentation fixed-payload, one-row-commit diagnostics without the memory sampler. Each estimate still uses 4N+2 tokenizer encodes/registry estimates; encoder initialization occurs once at 40 rows and zero times at 400/4000. ROW/block decoding remains once per unit per format pass. Estimated tokens stay 8015/80015/800015; request lengths stay 39686/395726/3956126 and body hashes match. Replay and actual HTTP are recorded separately. No general quadratic-cost claim follows from these samples.
 
@@ -127,14 +147,14 @@ The window is created only for the fill snapshot. `fillSlot` closes the prepared
 
 Both final-source text and tool-heavy actual-HTTP runs complete the original three small/large pairs and six retention sends. All four original array/fill/estimate/retain controls also complete all 12 measured sends and reject on their intended memory predicates, with matching wire bytes. Inputs remain 1024/8192, small-only warmup, 170000/180000 ms test/command budgets, unchanged GC/engine/sampling and signed median/Theil-Sen arithmetic, and 1 MiB bounds. No retry, large prefill or altered threshold was used. This supersedes the earlier native-protocol RED only for the final production bytes.
 
-| Final lane | Peak heap growth, bytes | ArrayBuffer growth, bytes | Retained growth, bytes | Verdict |
-| --- | --- | --- | --- | --- |
-| Text | 199700 | 0 | 380661.667 | PASS |
-| Tools | -958185 | 200 | 163226.25 | PASS |
-| Array trap | 14280950 | 193 | 0 | Memory rejected |
-| Fill trap | 29335854 | 193 | 0 | Memory rejected |
-| Estimate trap | 14605607 | 193 | 18871 | Memory rejected |
-| Retain trap | 230304 | 193 | 84675090 | Memory rejected |
+| Final lane    | Peak heap growth, bytes | ArrayBuffer growth, bytes | Retained growth, bytes | Verdict         |
+| ------------- | ----------------------- | ------------------------- | ---------------------- | --------------- |
+| Text          | 199700                  | 0                         | 380661.667             | PASS            |
+| Tools         | -958185                 | 200                       | 163226.25              | PASS            |
+| Array trap    | 14280950                | 193                       | 0                      | Memory rejected |
+| Fill trap     | 29335854                | 193                       | 0                      | Memory rejected |
+| Estimate trap | 14605607                | 193                       | 18871                  | Memory rejected |
+| Retain trap   | 230304                  | 193                       | 84675090               | Memory rejected |
 
 Every lane has six peak sends and six retention sends. Fixed legacy-converter SHA256/Content-Length, nonzero native estimates, one native stream, zero legacy spools and zero estimator files are enforced.
 
@@ -160,14 +180,14 @@ The observed bottleneck is cold large native fact preparation/estimation inside 
 
 Saved warm one-pair results and their five-path source bridge remain diagnostic evidence only; they were not freshly rerun or promoted to acceptance. Scoped native-route/sink/corpus/trend and type/lint/format/graph/audit results are in the new receipt. No production source changed. Last-thinking/pruned views, Kimi/Mistral/old continuation, Responses/Anthropic native migration, broader/exact estimators, native log/dump, automatic compression, media reservations, LENS/live-byte accounting and aggregate cache/pin/overlay capacity remain open. #3917, reference-media all-creation and the other recorded legacy REDs remain separate, enabled and unsuppressed. No Phase 5/6/W26 completion or default flip. The 1,204-file inherited manifest, 306 declarations, raw recovery and dirty memory remain preserved. No cleanup, .llxprt edits/staging, OCR, push or merge. Review skipped per Andrew 2026-10-09.
 
-| Final-source lane | Completed peak sends | Retention sends | Last phase and input | Probe PID |
-| --- | --- | --- | --- | --- |
-| native-full-trap-array | 3/6 | 0/6 | measured-send-start; last sample http; input 8192 rows | 21925 |
-| native-full-trap-fill | 3/6 | 0/6 | measured-send-start; last sample http; input 8192 rows | 24154 |
-| native-full-trap-estimate | 1/6 | 0/6 | measured-send-complete; last sample http; input 8192 rows | 26366 |
-| native-full-trap-retain | 5/6 | 0/6 | measured-send-start; last sample http; input 8192 rows | 28583 |
-| final-native-full-text | 5/6 | 0/6 | measured-send-start; last sample estimate; input 8192 rows | 30855 |
-| final-native-full-tools | 1/6 | 0/6 | measured-send-start; last sample estimate; input 8192 rows | 33107 |
+| Final-source lane         | Completed peak sends | Retention sends | Last phase and input                                       | Probe PID |
+| ------------------------- | -------------------- | --------------- | ---------------------------------------------------------- | --------- |
+| native-full-trap-array    | 3/6                  | 0/6             | measured-send-start; last sample http; input 8192 rows     | 21925     |
+| native-full-trap-fill     | 3/6                  | 0/6             | measured-send-start; last sample http; input 8192 rows     | 24154     |
+| native-full-trap-estimate | 1/6                  | 0/6             | measured-send-complete; last sample http; input 8192 rows  | 26366     |
+| native-full-trap-retain   | 5/6                  | 0/6             | measured-send-start; last sample http; input 8192 rows     | 28583     |
+| final-native-full-text    | 5/6                  | 0/6             | measured-send-start; last sample estimate; input 8192 rows | 30855     |
+| final-native-full-tools   | 1/6                  | 0/6             | measured-send-start; last sample estimate; input 8192 rows | 33107     |
 
 Only complete original series can be judged: median large peak minus median small peak for heap and ArrayBuffers, then the maximum six-reading Theil-Sen growth. All partial measurement values and each signed pair difference are in the receipt. None is substituted for the missing original verdict.
 
@@ -179,10 +199,10 @@ Only complete original series can be judged: median large peak minus median smal
 
 All values below are bytes. Peak heap and ArrayBuffer values are in-flight increases above each send's settled baseline, not absolute heap sizes. RSS belongs to the provider probe process; sink-child and oracle-parent memory are outside that process.
 
-| Plain Chat shape | Body small / large | Peak heap small / large | Heap growth | ArrayBuffer growth | Six-send retained trend | Retained endpoint growth | Probe PID |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Text-only | 1,073,412 / 8,596,228 | 795,931 / 393,490 | -402,441 | 0 | 90,252.5 | 0 | 90758 |
-| Tool-heavy | 1,470,492 / 11,774,659 | 1,504,416 / 382,157 | -1,122,259 | 239 | 220,915 | 182,609 | 91898 |
+| Plain Chat shape | Body small / large     | Peak heap small / large | Heap growth | ArrayBuffer growth | Six-send retained trend | Retained endpoint growth | Probe PID |
+| ---------------- | ---------------------- | ----------------------- | ----------- | ------------------ | ----------------------- | ------------------------ | --------- |
+| Text-only        | 1,073,412 / 8,596,228  | 795,931 / 393,490       | -402,441    | 0                  | 90,252.5                | 0                        | 90758     |
+| Tool-heavy       | 1,470,492 / 11,774,659 | 1,504,416 / 382,157     | -1,122,259  | 239                | 220,915                 | 182,609                  | 91898     |
 
 Both shapes match independent old-converter hashes and Content-Length at both sizes. Probe RSS peaks are 510,410,752/510,410,752 bytes for text and 564,117,504/564,445,184 for tools. Absolute retained readings remain in the receipt, including roughly 106–109 MB heap and 30.7 MB ArrayBuffers. No baseline offset or alleged noise allowance is subtracted from the reported measurements.
 

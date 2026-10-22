@@ -1,3 +1,13 @@
+# Pending-media regressions pass; Phase 5 remains open
+
+2026-10-22. Early commit `6c7673e4c` and security commit `0c6bcd002` resolve the six pending-media failures through exact owner identity and correct pin-release ordering, without production changes. The unchanged baseline was 1 pass/6 fail; the complete expanded file is 13/0 with 1,337 assertions and all twelve terminal case receipts. The extra reservation was the pinned history claim alongside a legitimate external-reader claim, not a redundant native request reservation. Added native-source cases require zero request reservations. Pending-admission coverage is 5/0 with 37 assertions, including rejection of dead admission authority while another owner holds the blob.
+
+[The pending-media receipt](PHASE6-SOURCE-BOUND-PENDINGMEDIAREGRESSION-PROOF.json) and [Phase 6 status](PHASE6-STATUS.md) bind 36 passing primary invocations, four passing supplemental files, the explicit agent current-source Bun type check, four assertion-failing restored controls, source hashes and preserved artifacts. The unchanged 22-case no-file corpus, four actual-HTTP lifetime cases, six public purge-policy HTTP cases, 96 selected-view cases, 155-wire and both 5,000-input oracles pass. #3919 remains 14 tests/49 assertions. Audit execution passes with 2,625 findings; owned findings are four lifecycle duplicates, with no prohibited new classes.
+
+The additional unchanged native journal file remains 0/4; #3929 records its unawaited close and stale pinned-owner assertions. Do not count it as green. Automatic public compression plus purge, public explicit-cache combinations, other providers, native log/dump, accounting/capacity and full-memory refresh remain open. The original tools 170,000 ms RED and other known separate REDs are preserved. All 1,204 preservation hashes, including 306 inherited declarations, verify; recorded owned PIDs are absent. Review skipped per Andrew 2026-10-09. No cleanup, .llxprt edits/staging, OCR, push, merge, enforcement change or default flip. Earlier sections below are historical checkpoints.
+
+---
+
 # Native Chat purge/view parity passes within the executed domain
 
 2026-10-22. Product `3f43569e9` follows first-view checkpoint `2afcdf4a1`. [The purge/view receipt](PHASE6-SOURCE-BOUND-PURGEVIEW-PROOF.json) binds 5,050 current source hashes, concrete HTTP observations, earlier REDs and restored controls. Public ChatSession executes six remove/summary × none/all/allButLast sends with mandatory estimates, exact old-converter bytes, Content-Length, five committed history rows and no operation-created files. Bytes/tokens are remove none 717/165, all 244/49, allButLast 294/59; summary none 738/169, all 265/53, allButLast 315/63. Observed estimates equal these references; the unchanged test allowance is 16 tokens.
@@ -309,6 +319,7 @@ Phase 5/W26 remain open for append-only density collection, summary compression-
 The overall 24-file plan has 186 passes, one failure and 257,825 assertions. The complete planned reader-lifetime regression is RED: 10 passes, one failure and 28 assertions. JournalDumpSnapshot.retire wraps even one descriptor-close failure in AggregateError, violating the existing original-error identity assertion. Neither that implementation nor its test changed in the three span commits; main was not tested. [#3919](https://github.com/vybestack/llxprt-code/issues/3919) records the failure and source/log evidence. The receipt retains this failed lane separately; the overall plan is not green. No retry, suppression, assertion change or source fix was made in this documentation-only finalization.
 
 ---
+
 # Native continuous recency no longer stages input, replacements or decisions, 2026-10-21
 
 Production `063faf7a553b05aaebc1ba2bc10ba4cbfe1347bf` and green follow-up `3ed2a978788671427736fc66d34398f195bd3441` replace native continuous recency's input/replacement rows/index and decision files with versioned namespace-12 response counts and source-label/block ordinals. The actual CompressionHandler and ChatSession continuous trigger use this path. Policy retention is captured before asynchronous work, eligibility has a checked revision, ordinary append converts only its added responses, and publication streams one output at a time. The empty-history WIP was a legitimate readiness fix, now committed with lifecycle, owner and fact tests.
