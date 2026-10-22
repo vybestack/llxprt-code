@@ -129,6 +129,8 @@ async function openSemanticPurge(
   if (snapshot === undefined) return undefined;
   return {
     requestSnapshot: snapshot.requestSnapshot,
+    prepareRequestFormat: snapshot.prepareRequestFormat,
+    mediaStore: snapshot.mediaStore,
     length: snapshot.length,
     streamRows: (signal) => snapshot.streamRows(signal),
     readRow: (index) => snapshot.readRow(index),

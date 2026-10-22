@@ -353,7 +353,7 @@ export async function planRequestChatMessages(
     variant,
     systemInstruction,
   );
-  if (indexed.pending.inputCount === 0 && selected !== 2) return base;
+  if (!indexed.hasCorrections && selected !== 2) return base;
   const slot = snapshot.version?.slots.formatSlots.findIndex(
     (format) =>
       format.summaryKind === 'chat' && format.formatKeyHash === base.key,

@@ -98,6 +98,10 @@ export class IndexedJournalRequestSnapshot {
     }
   }
 
+  get hasCorrections(): boolean {
+    return this.rows.length !== 0;
+  }
+
   private requireOpen(): void {
     if (this.closed)
       throw new Error('Indexed journal request snapshot is closed');

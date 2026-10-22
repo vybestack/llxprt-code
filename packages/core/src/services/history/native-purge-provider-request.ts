@@ -136,6 +136,8 @@ export function nativePurgeProviderRequest(
       options,
       projection,
       release,
+      candidate.snapshot.prepareRequestFormat,
+      candidate.snapshot.mediaStore,
     );
   };
 }

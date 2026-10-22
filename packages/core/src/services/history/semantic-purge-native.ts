@@ -1,5 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent } from './IContent.js';
+import type { PrepareNativeRequestFormat } from './native-provider-format.js';
+import type { LocalMediaStore } from '../../storage/local-media-store.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 import { HistoryReaderScope } from './historyReaderScope.js';
@@ -18,6 +20,8 @@ import {
 
 export interface SemanticPurgeSnapshot extends SemanticPurgeRowSource {
   readonly requestSnapshot?: VersionSnapshot;
+  readonly prepareRequestFormat?: PrepareNativeRequestFormat;
+  readonly mediaStore?: LocalMediaStore;
   readRow(index: number): Promise<IContent>;
   isCurrent(): boolean;
   restore(): Promise<void>;

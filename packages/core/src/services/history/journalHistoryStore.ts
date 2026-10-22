@@ -137,6 +137,12 @@ export class JournalHistoryStore implements HistoryStorePort {
     () => this.session.store.mediaPins.mediaStore,
   );
 
+  pinnedMediaStore():
+    | import('../../storage/local-media-store.js').LocalMediaStore
+    | undefined {
+    return this.session.store.mediaPins.mediaStore;
+  }
+
   prepareRequestFormat = nativeRequestFormatPreparation({
     exclusive: (run) => this.exclusive(run),
     current: () => this.session.store.published,

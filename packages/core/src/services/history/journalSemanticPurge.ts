@@ -21,6 +21,8 @@ export async function openJournalSemanticPurge(
   let closed = false;
   return {
     requestSnapshot: snapshot,
+    prepareRequestFormat: store.prepareRequestFormat,
+    mediaStore: store.pinnedMediaStore(),
     length: dump.rawLength,
     readRow: async (index) => {
       const row = await dump.readRawRow(index);
