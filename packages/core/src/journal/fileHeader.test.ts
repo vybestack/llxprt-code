@@ -35,8 +35,8 @@ describe('journal file header', () => {
     expect(Array.from(JOURNAL_MAGIC)).toStrictEqual(
       Array.from(bytes.subarray(0, 8)),
     );
-    expect(view.getUint32(8, true)).toBe(10);
-    expect(JOURNAL_FORMAT_VERSION).toBe(10);
+    expect(view.getUint32(8, true)).toBe(11);
+    expect(JOURNAL_FORMAT_VERSION).toBe(11);
     expect(view.getUint32(12, true)).toBe(0);
     expect(Array.from(bytes.subarray(16, 32))).toStrictEqual(
       Array.from(header.fileId),
@@ -49,6 +49,13 @@ describe('journal file header', () => {
       new Array(12).fill(0),
     );
     expect(view.getUint32(60, true)).toBe(crc32(bytes.subarray(0, 60)));
+  });
+  it('refuses a CRC-valid version 10 journal without persisted media contribution counts', () => {
+    const bytes = encodeJournalHeader(sampleHeader(26));
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    view.setUint32(8, 10, true);
+    view.setUint32(60, crc32(bytes.subarray(0, 60)), true);
+    expect(() => decodeJournalHeader(bytes)).toThrow('format version mismatch');
   });
 
   it('refuses a CRC-valid version 9 journal without continuation omission contributions', () => {
