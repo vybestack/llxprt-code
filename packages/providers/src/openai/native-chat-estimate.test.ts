@@ -26,6 +26,9 @@ import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import { ProviderSourceEnforcer } from '../../../agents/src/compression/provider-source-enforcement.js';
 import { projectOpenAIChatPromptEnvelope } from '../runtime/promptEnvelopeProjections.js';
+import type { MistralStrip } from './__tests__/support/mistral-unit-token-oracle.js';
+import { assertMistralDomain } from './__tests__/support/mistral-domain-projection.js';
+import { mistralAcceptanceCases } from './__tests__/support/mistral-acceptance-cases.js';
 
 const logger = new DebugLogger('native-chat-estimate-test');
 const textRow = (text: string): IContent => ({
@@ -139,6 +142,22 @@ describe('stored native Chat estimates through production preparation', () => {
       await recording.dispose();
     }
   }
+
+  it.each(
+    mistralAcceptanceCases().flatMap((input) =>
+      (['none', 'all', 'allButLast'] satisfies MistralStrip[]).map((strip) => ({
+        input,
+        strip,
+      })),
+    ),
+  )(
+    'matches independent old per-unit tokens and body for $input.id/$strip',
+    async ({ input, strip }) => {
+      await expect(
+        assertMistralDomain(input, strip, { withHistory, estimate, options }),
+      ).resolves.toBeUndefined();
+    },
+  );
 
   it.each(['none', 'all', 'allButLast'])(
     'remeasures historical lazy Mistral holders displaced by a pending reconstructed call under %s',

@@ -23,6 +23,11 @@ import {
 } from '../journal-chat-length.js';
 import { nativeChatMessages } from '../native-chat-messages.js';
 import { buildMessagesWithReasoning } from '../OpenAIRequestBuilder.js';
+import {
+  legacyUnitTokens,
+  oldMistralUnitTokens,
+  type MistralStrip,
+} from './support/mistral-unit-token-oracle.js';
 
 const frozenRecord = z.object({
   inputHash: z.string(),
@@ -48,6 +53,7 @@ async function emittedMessages(
   request: IndexedJournalRequestSnapshot,
   pin: VersionSnapshot,
   lastThinking: number,
+  strip: MistralStrip,
 ): Promise<Buffer> {
   const resolver = await request.mistralForSnapshot(
     pin,
@@ -57,7 +63,7 @@ async function emittedMessages(
   for await (const chunk of nativeChatMessages(
     request.openReader(),
     settings,
-    'none',
+    strip,
     lastThinking,
     resolver,
   ))
@@ -68,75 +74,110 @@ async function emittedMessages(
 
 describe('Mistral production stored planner and native emitter', () => {
   const directory = useTempDir('native-mistral-production-');
-  it('matches old message bytes for all 5000 immutable normalization inputs', async () => {
-    const lines = (
-      await readFile(
-        new URL(
-          '../../../../core/src/services/history/__tests__/fixtures/normalization-units.jsonl',
-          import.meta.url,
-        ),
-        'utf8',
+  it.each(['none', 'all', 'allButLast'] satisfies MistralStrip[])(
+    'matches old bytes, lengths and per-unit tokens for all 5000 immutable inputs under %s',
+    async (strip) => {
+      const selected = (
+        { none: 0, all: 1, allButLast: 2 } satisfies Record<
+          MistralStrip,
+          0 | 1 | 2
+        >
+      )[strip];
+      const lines = (
+        await readFile(
+          new URL(
+            '../../../../core/src/services/history/__tests__/fixtures/normalization-units.jsonl',
+            import.meta.url,
+          ),
+          'utf8',
+        )
       )
-    )
-      .trimEnd()
-      .split('\n');
-    expect(lines.length).toBe(UNIT_CASE_COUNT);
-    const session = await JournalSession.create(`${directory()}/all.llxj`, {
-      journal: testJournalSeams({}, 1, false).dependencies,
-    });
-    let accepted = 0;
-    try {
-      await session.store.commit([
-        { kind: 'format', registration: plainChatLengthRegistration(settings) },
-      ]);
-      for (let seed = 0; seed < UNIT_CASE_COUNT; seed++) {
-        const input = unitCase(seed);
-        const frozen = frozenRecord.parse(JSON.parse(lines[seed]));
-        expect(digest(input)).toBe(frozen.inputHash);
-        const units = await oldTailUnits(input.rows, input.tail);
-        expect(digest(units)).toBe(frozen.outputHash);
+        .trimEnd()
+        .split('\n');
+      expect(lines.length).toBe(UNIT_CASE_COUNT);
+      const session = await JournalSession.create(`${directory()}/all.llxj`, {
+        journal: testJournalSeams({}, 1, false).dependencies,
+      });
+      let accepted = 0;
+      try {
         await session.store.commit([
           {
-            kind: 'replace',
-            rows: input.rows.map((row) => encodeContentRow(row, { owner: 0 })),
+            kind: 'format',
+            registration: plainChatLengthRegistration(
+              settings,
+              async (messages) => legacyUnitTokens(messages),
+            ),
           },
         ]);
-        const pin = await session.store.snapshot();
-        const request = await IndexedJournalRequestSnapshot.create(
-          pin,
-          input.tail,
-        );
-        try {
-          const plan = await planRequestChatMessages(
-            pin,
-            request,
-            settings,
-            0,
-            '',
-          );
-          const actual = await emittedMessages(request, pin, plan.lastThinking);
-          const expected = Buffer.from(
-            JSON.stringify([
-              { role: 'system', content: '' },
-              ...buildMessagesWithReasoning(
-                [...units],
-                { invocation: { ephemerals: {} } },
-                'mistral',
-                undefined,
+        for (let seed = 0; seed < UNIT_CASE_COUNT; seed++) {
+          const input = unitCase(seed);
+          const frozen = frozenRecord.parse(JSON.parse(lines[seed]));
+          expect(digest(input)).toBe(frozen.inputHash);
+          const units = await oldTailUnits(input.rows, input.tail);
+          expect(digest(units)).toBe(frozen.outputHash);
+          await session.store.commit([
+            {
+              kind: 'replace',
+              rows: input.rows.map((row) =>
+                encodeContentRow(row, { owner: 0 }),
               ),
-            ]),
+            },
+          ]);
+          const pin = await session.store.snapshot();
+          const request = await IndexedJournalRequestSnapshot.create(
+            pin,
+            input.tail,
           );
-          expect(actual.length).toBe(plan.bytes);
-          expect(actual).toStrictEqual(expected);
-          accepted++;
-        } finally {
-          await request.close();
-          await pin.close();
+          try {
+            const plan = await planRequestChatMessages(
+              pin,
+              request,
+              settings,
+              selected,
+              '',
+              async (messages) => legacyUnitTokens(messages),
+            );
+            const actual = await emittedMessages(
+              request,
+              pin,
+              plan.lastThinking,
+              strip,
+            );
+            const expected = Buffer.from(
+              JSON.stringify([
+                { role: 'system', content: '' },
+                ...buildMessagesWithReasoning(
+                  [...units],
+                  {
+                    invocation: {
+                      ephemerals: {
+                        'reasoning.includeInContext': true,
+                        'reasoning.stripFromContext': strip,
+                      },
+                    },
+                  },
+                  'mistral',
+                  undefined,
+                ),
+              ]),
+            );
+            expect(actual.length).toBe(plan.bytes);
+            expect(actual).toStrictEqual(expected);
+            expect({ seed, tokens: plan.tokens }).toStrictEqual({
+              seed,
+              tokens: await oldMistralUnitTokens(units, strip),
+            });
+            accepted++;
+          } finally {
+            await request.close();
+            await pin.close();
+          }
         }
+      } finally {
+        await session.close();
       }
-    } finally {
-      await session.close();
-    }
-    expect(accepted).toBe(5000);
-  }, 120000);
+      expect(accepted).toBe(5000);
+    },
+    120000,
+  );
 });
