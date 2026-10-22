@@ -12,6 +12,7 @@ const messageSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('body'),
     bytes: z.number(),
+    chunks: z.number(),
     sha256: z.string(),
     contentLength: z.string().optional(),
     entries: z.number(),
@@ -20,7 +21,9 @@ const messageSchema = z.discriminatedUnion('kind', [
 
 export interface IsolatedWireHashSink {
   readonly route: WireRoute;
-  body(): Promise<HashedWireBody & { readonly entries: number }>;
+  body(): Promise<
+    HashedWireBody & { readonly entries: number; readonly chunks: number }
+  >;
   close(): Promise<void>;
 }
 
@@ -35,15 +38,20 @@ export async function isolatedWireHashSink(
     failedReady = reject;
   });
   let delivered:
-    | ((body: HashedWireBody & { readonly entries: number }) => void)
+    | ((
+        body: HashedWireBody & {
+          readonly entries: number;
+          readonly chunks: number;
+        },
+      ) => void)
     | undefined;
   let failedBody: ((error: Error) => void) | undefined;
-  const received = new Promise<HashedWireBody & { readonly entries: number }>(
-    (resolve, reject) => {
-      delivered = resolve;
-      failedBody = reject;
-    },
-  );
+  const received = new Promise<
+    HashedWireBody & { readonly entries: number; readonly chunks: number }
+  >((resolve, reject) => {
+    delivered = resolve;
+    failedBody = reject;
+  });
   const child = spawn(
     process.execPath,
     [join(import.meta.dir, 'wire-hash-sink-worker.ts'), route.id],

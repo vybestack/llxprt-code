@@ -120,6 +120,23 @@ export function buildSendPeakRows(
   return rows;
 }
 
+export function* streamSendPeakRows(
+  shape: SendPeakShape,
+  size: SendPeakSize,
+): Generator<IContent> {
+  const count = ROW_COUNT[size];
+  if (shape === 'text-only') {
+    for (let index = 0; index < count - 1; index++)
+      yield textRow(index % 2 === 0 ? 'human' : 'ai', filler(index, 850));
+  } else {
+    for (let group = 0; group < count / 4; group++) {
+      const rows = toolHeavyGroup(group);
+      yield* group === count / 4 - 1 ? rows.slice(0, 3) : rows;
+    }
+  }
+  yield textRow('human', filler(count, 600));
+}
+
 export function sendPeakHistory(
   shape: SendPeakShape,
   size: SendPeakSize,

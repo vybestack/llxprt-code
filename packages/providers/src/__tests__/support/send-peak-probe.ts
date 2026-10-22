@@ -57,6 +57,9 @@ import {
   type WireRoute,
 } from './wireBodyCapture.js';
 import { SEND_PEAK_REQUEST_SHAPE } from './sendPeakShapes.js';
+import { nativeProbeCost } from './native-probe-cost.js';
+import type { NativeRouteCounts } from './native-route-observer.js';
+import { observeNativeRoute } from './native-route-observer.js';
 import { prepareNativeProbeSources } from './native-probe-source.js';
 import { isolatedWireHashSink } from './isolated-wire-hash-sink.js';
 import {
@@ -224,6 +227,7 @@ class MemorySampler {
 }
 
 interface BodyEvidence {
+  nativeRoute?: NativeRouteCounts;
   bytes: number;
   sha256: string;
   contentLength: string | null;
@@ -484,6 +488,8 @@ async function send(
     local === undefined
       ? installHashingTransport(wireRoute, sampler, evidence)
       : redirectToLocalHttp(local.route.baseURL);
+  const observed =
+    nativeSources === undefined ? undefined : observeNativeRoute();
   try {
     const provider = wireRoute.createProvider();
     const contents: AsyncIterable<IContent> = {
@@ -514,14 +520,18 @@ async function send(
     })) {
       void chunk;
     }
+    observed?.requireSend(plan.estimate);
+    if (observed !== undefined) evidence.nativeRoute = observed.counts();
     if (local !== undefined) {
       const seen = await local.body();
       evidence.bytes = seen.bytes;
       evidence.sha256 = seen.sha256;
       evidence.contentLength = seen.contentLength ?? null;
+      evidence.chunks = seen.chunks;
       evidence.modelRequests = seen.entries;
     }
   } finally {
+    observed?.restore();
     restore();
     await local?.close();
   }
@@ -571,7 +581,10 @@ async function measure(
 ): Promise<Measured> {
   const sampler = new MemorySampler(baseline);
   const handle = fileSelection(job, sampler, peakTrap);
+  const cost =
+    nativeSources === undefined ? undefined : nativeProbeCost(job.directory);
   const evidence = await send(wireRoute, handle, sampler);
+  const nativeCost = cost?.();
   handle.hold()?.release();
   const after = await awaitQuiescentReading();
   return {
@@ -580,6 +593,7 @@ async function measure(
       routeId: wireRoute.id,
       trap: envTrap ?? null,
       ...evidence,
+      ...(nativeCost === undefined ? {} : { nativeCost }),
       ...sampler.summary(),
     },
   };
@@ -614,6 +628,11 @@ async function accumulate(
       fileSelection(job, undefined, accumulationTrap),
       undefined,
     );
+    if (nativeSources !== undefined && process.env.SEND_PEAK_LOG !== undefined)
+      appendFileSync(
+        `${process.env.SEND_PEAK_LOG}.accumulation.jsonl`,
+        `${JSON.stringify({ sent, ...evidence })}\n`,
+      );
     sha256 ??= evidence.sha256;
     if (evidence.sha256 !== sha256) {
       throw new Error('accumulation sends put different bytes on the wire');
@@ -636,11 +655,28 @@ async function measureShape(
     small: jobFor(shape, 'small', counts.small),
     large: jobFor(shape, 'large', counts.large),
   };
-  await send(
-    wireRoute,
-    fileSelection(jobs.small, undefined, undefined),
-    undefined,
-  );
+  if (nativeSources === undefined) {
+    await send(
+      wireRoute,
+      fileSelection(jobs.small, undefined, undefined),
+      undefined,
+    );
+  } else {
+    for (const size of ['small', 'large'] as const) {
+      const cost = nativeProbeCost(jobs[size].directory);
+      const evidence = await send(
+        wireRoute,
+        fileSelection(jobs[size], undefined, undefined),
+        undefined,
+      );
+      const measuredCost = cost();
+      if (process.env.SEND_PEAK_LOG !== undefined)
+        appendFileSync(
+          `${process.env.SEND_PEAK_LOG}.cold.jsonl`,
+          `${JSON.stringify({ phase: 'cold-format-estimate-send', shape, size, ...measuredCost, ...evidence })}\n`,
+        );
+    }
+  }
   let baseline = await awaitQuiescentReading();
   const series: { small: SendPeakMeasurement[]; large: SendPeakMeasurement[] } =
     { small: [], large: [] };

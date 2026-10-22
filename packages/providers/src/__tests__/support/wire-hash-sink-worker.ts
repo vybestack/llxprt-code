@@ -6,7 +6,9 @@ const route = WIRE_ROUTES.find((candidate) => candidate.id === process.argv[2]);
 if (route === undefined || process.send === undefined)
   throw new Error('Hash sink worker requires a route and IPC');
 let continueSample: (() => void) | undefined;
-const sink = await localWireHashSink(route, async () => {
+let chunks = 0;
+const sink = await localWireHashSink(route, async (_bytes, receivedChunks) => {
+  chunks = receivedChunks;
   const continued = new Promise<void>((resolve) => {
     continueSample = resolve;
   });
@@ -20,6 +22,7 @@ const timer = setInterval(() => {
     process.send?.({
       kind: 'body',
       ...sink.requests[0],
+      chunks,
       entries: sink.entries(),
     });
   }

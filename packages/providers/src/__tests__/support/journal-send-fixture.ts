@@ -15,11 +15,17 @@ export interface JournalSendFixture {
 export async function journalSendFixture(
   rows: Iterable<IContent>,
   pending: readonly IContent[] = [],
+  options: {
+    readonly directory?: string;
+    readonly oneRowAtATime?: boolean;
+  } = {},
 ): Promise<JournalSendFixture> {
-  const parent = join(
-    import.meta.dir,
-    '../../../../../tmp/854-notes/p4/w23/limits-memory-run-c/fixtures',
-  );
+  const parent =
+    options.directory ??
+    join(
+      import.meta.dir,
+      '../../../../../tmp/854-notes/p4/w23/limits-memory-run-c/fixtures',
+    );
   mkdirSync(parent, { recursive: true });
   const root = mkdtempSync(join(parent, 'native-send-'));
   const graph = createCoreSuffixFixtureGraph(
@@ -36,7 +42,10 @@ export async function journalSendFixture(
     'journal',
   );
   try {
-    await graph.seed(rows);
+    if (options.oneRowAtATime === true) {
+      for (const row of rows) await graph.service.addBatch([row]);
+      await graph.service.waitForCommit();
+    } else await graph.seed(rows);
     const selection = await graph.service.prepareCuratedForProviderSnapshot(
       pending,
       {

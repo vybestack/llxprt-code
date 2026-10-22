@@ -18,7 +18,7 @@ export interface LocalWireHashSink {
 
 export async function localWireHashSink(
   route: WireRoute,
-  onBytes?: (bytes: number) => Promise<void>,
+  onBytes?: (bytes: number, chunks: number) => Promise<void>,
 ): Promise<LocalWireHashSink> {
   const requests: HashedWireBody[] = [];
   let entries = 0;
@@ -30,17 +30,19 @@ export async function localWireHashSink(
       }
       const hash = createHash('sha256');
       let bytes = 0;
+      let chunks = 0;
       let sampledAt = -1024 * 1024;
       for await (const chunk of request) {
         if (!Buffer.isBuffer(chunk)) throw new Error('Expected socket bytes');
+        chunks++;
         hash.update(chunk);
         bytes += chunk.byteLength;
         if (bytes - sampledAt >= 1024 * 1024) {
           sampledAt = bytes;
-          await onBytes?.(bytes);
+          await onBytes?.(bytes, chunks);
         }
       }
-      await onBytes?.(bytes);
+      await onBytes?.(bytes, chunks);
       requests.push({
         bytes,
         sha256: hash.digest('hex'),

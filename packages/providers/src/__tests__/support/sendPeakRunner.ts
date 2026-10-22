@@ -72,14 +72,19 @@ async function oracleBody(
   return { bytes: record.length, sha256: record.sha256 };
 }
 
-async function runChild(
+export async function runSendPeakChild(
   routeId: string,
   root: string,
   trap: SendTrap | undefined,
-): Promise<Record<string, SendPeakSeries>> {
+  native = process.env.ISSUE854_SEND_NATIVE === '1',
+): Promise<Partial<Record<string, SendPeakSeries>>> {
   const child = Bun.spawn([process.execPath, PROBE_PATH, routeId, root], {
     cwd: PROVIDERS_PACKAGE_DIRECTORY,
-    env: { ...process.env, [SEND_TRAP_ENV]: trap ?? '' },
+    env: {
+      ...process.env,
+      [SEND_TRAP_ENV]: trap ?? '',
+      ISSUE854_SEND_NATIVE: native ? '1' : '',
+    },
     stdout: 'pipe',
     stderr: 'pipe',
   });
@@ -106,7 +111,7 @@ async function runChild(
   if (measurementLog !== undefined && measurementLog !== '') {
     appendFileSync(
       `${measurementLog}.raw.jsonl`,
-      `${JSON.stringify({ routeId, native: process.env.ISSUE854_SEND_NATIVE === '1', trap: trap ?? null, result })}
+      `${JSON.stringify({ routeId, native, trap: trap ?? null, result })}
 `,
     );
   }
@@ -232,7 +237,7 @@ export async function runSendPeak(
       options.rounds ?? 3,
       options.estimate ?? false,
     );
-    const measured = await runChild(routeId, root, trap);
+    const measured = await runSendPeakChild(routeId, root, trap);
     const runs: Partial<Record<SendPeakShape, SendPeakRun>> = {};
     const seconds = (performance.now() - started) / 1000;
     for (const shape of shapes) {

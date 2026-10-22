@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { deserialize } from 'node:v8';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import type { ProviderRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import {
   journalSendFixture,
   type JournalSendFixture,
@@ -22,7 +22,7 @@ interface ProbeSampler {
 }
 
 interface NativeSelectionHandle {
-  readonly selection: ProviderRequestSelection;
+  readonly selection: ProviderRequestSnapshot;
   rows(): AsyncIterable<IContent>;
   hold(): TrapHold | undefined;
 }
@@ -48,6 +48,8 @@ export async function prepareNativeProbeSources(
         directory,
         await journalSendFixture(
           sourceRows({ directory, count: counts[size] }),
+          [],
+          { directory: join(directory, 'journal'), oneRowAtATime: true },
         ),
       );
     }
@@ -89,9 +91,17 @@ export class NativeProbeSources {
       hold: () => held,
       selection: {
         get native() {
-          return selection.native;
+          return process.env.ISSUE854_DROP_NATIVE_CAPABILITY === '1'
+            ? undefined
+            : selection.native;
         },
-        count: selection.count,
+        get count() {
+          return selection.count;
+        },
+        get pending() {
+          return selection.pending;
+        },
+        isPending: (index) => selection.isPending(index),
         readAt: async (index, signal) => {
           const row = await selection.readAt(index, signal);
           sampler?.trackRow(row);

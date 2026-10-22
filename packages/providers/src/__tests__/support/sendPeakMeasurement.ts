@@ -10,6 +10,8 @@
  * each sent for several rounds).
  */
 
+import type { NativeRouteCounts } from './native-route-observer.js';
+import type { nativeProbeCost } from './native-probe-cost.js';
 import { median } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 
 /** The growth and retention allowance, the same 1 MiB the other gates use. */
@@ -29,6 +31,8 @@ export interface AccumulationReading {
 }
 
 export interface SendPeakMeasurement {
+  readonly nativeRoute?: NativeRouteCounts;
+  readonly nativeCost?: ReturnType<ReturnType<typeof nativeProbeCost>>;
   readonly routeId: string;
   readonly trap: string | null;
   /** Body bytes the transport saw, and their sha-256. */
