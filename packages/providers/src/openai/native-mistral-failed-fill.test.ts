@@ -104,7 +104,7 @@ describe('failed native Mistral fused fill', () => {
             canonicalModel: settings.model,
             protocol: 'openai-chat',
             wireMethod: 'chat/completions/v1',
-            projectionRevision: 'test-failed-fill',
+            projectionRevision: 1,
           },
           {
             ...factory,
@@ -151,7 +151,7 @@ describe('failed native Mistral fused fill', () => {
             canonicalModel: settings.model,
             protocol: 'openai-chat',
             wireMethod: 'chat/completions/v1',
-            projectionRevision: 'test-failed-fill',
+            projectionRevision: 1,
           },
           {
             ...factory,

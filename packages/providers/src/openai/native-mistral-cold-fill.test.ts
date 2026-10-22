@@ -18,18 +18,19 @@ import { oldMistralUnitTokens } from './__tests__/support/mistral-unit-token-ora
 import { projectOpenAIChatPromptEnvelope } from '../runtime/promptEnvelopeProjections.js';
 import { oldTailUnits } from '../../../core/src/services/history/__tests__/support/tail-query-oracle.js';
 import { observeRowFormat } from './__tests__/support/observeRowFormat.js';
-import type { ProviderRequestRows } from '../../../core/src/services/history/provider-request-snapshot.js';
+import type { ProviderRequestSelection } from '../../../core/src/services/history/provider-request-snapshot.js';
 
 function observedRows(
-  rows: ProviderRequestRows,
+  rows: ProviderRequestSelection,
   counts: { entries: number; units: number; formats: number },
-): ProviderRequestRows {
+): ProviderRequestSelection {
   const native = rows.native;
   if (native === undefined) throw new Error('Missing native cost input');
   return {
     count: rows.count,
     openReader: (signal) => rows.openReader(signal),
     readAt: (index, signal) => rows.readAt(index, signal),
+    close: () => rows.close(),
     native: {
       ...native,
       withFormat: (registration, consume) => {
