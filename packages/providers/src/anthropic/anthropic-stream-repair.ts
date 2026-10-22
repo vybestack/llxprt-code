@@ -25,6 +25,15 @@ import {
 } from './anthropic-unit-transfer.js';
 import { getEmptyMessagePlaceholder } from './AnthropicMessageValidator.js';
 import { projectAnthropicUnit } from './anthropic-unit-facts.js';
+import {
+  anthropicBlockByteLength,
+  copyAnthropicWireMedia,
+} from './anthropic-measured-media.js';
+import type { MediaStage } from './message-table/wire-builder.js';
+import {
+  resolveAnthropicWireMedia,
+  type AnthropicWirePiece,
+} from './anthropic-wire-media.js';
 import { modelSupportsPrefill } from './AnthropicModelData.js';
 import { readAnchorBlockTag } from './AnthropicAnchorCache.js';
 import {
@@ -79,7 +88,7 @@ export function numericRepairPiece(
         form: 'array',
         blocks: piece.map((block) => ({
           kind: block.type,
-          bytes: jsonBytes(block),
+          bytes: anthropicBlockByteLength(block),
           blank: block.type === 'text' && block.text.trim() === '',
           anchored: readAnchorBlockTag(block),
           cacheable: selectLastCacheableBlockIndex([block]) === 0,
@@ -281,7 +290,7 @@ export class AnthropicStreamRepair {
     transform: (value: unknown) => unknown,
     ordinal: number,
     cache?: AnthropicCachePlan,
-  ): AsyncGenerator<string> {
+  ): AsyncGenerator<AnthropicWirePiece> {
     const shape = await this.shape(run);
     if (shape.blocks === 0) {
       yield JSON.stringify(
@@ -309,7 +318,9 @@ export class AnthropicStreamRepair {
           hasAnthropicCacheTarget(cache, ordinal, blockOrdinal++)
             ? sanitizeBlockForCacheControl(block, cache.ttl)
             : block;
-        yield comma + JSON.stringify(transform(value));
+        copyAnthropicWireMedia(block, value);
+        yield comma;
+        yield value;
         comma = ',';
       }
     }
@@ -319,7 +330,21 @@ export class AnthropicStreamRepair {
     transform: (value: unknown) => unknown = (value) => value,
     prefix?: AnthropicMessage,
     cache?: AnthropicCachePlan,
+    mediaStage?: MediaStage,
   ): AsyncGenerator<string> {
+    for await (const piece of resolveAnthropicWireMedia(
+      this.serializePieces(transform, prefix, cache),
+      mediaStage,
+    ))
+      yield typeof piece === 'string'
+        ? piece
+        : JSON.stringify(transform(piece));
+  }
+  private async *serializePieces(
+    transform: (value: unknown) => unknown,
+    prefix?: AnthropicMessage,
+    cache?: AnthropicCachePlan,
+  ): AsyncGenerator<AnthropicWirePiece> {
     yield '[';
     if (prefix !== undefined) yield JSON.stringify(transform(prefix)) + ',';
     let count = 0;

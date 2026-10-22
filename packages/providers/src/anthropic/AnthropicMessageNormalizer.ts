@@ -24,6 +24,7 @@ import {
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { normalizeToAnthropicToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
 import { buildToolResponsePayload } from '../utils/toolResponsePayload.js';
+import { measuredAnthropicMedia } from './anthropic-measured-media.js';
 import {
   classifyMediaBlock,
   buildUnsupportedMediaPlaceholder,
@@ -339,10 +340,10 @@ export function buildAnthropicToolResultContent(
       if (category === 'pdf') {
         return mediaBlockToAnthropicDocument(mb);
       }
-      return {
-        type: 'text' as const,
+      return measuredAnthropicMedia(mb, {
+        type: 'text',
         text: buildUnsupportedMediaPlaceholder(mb, 'Anthropic'),
-      };
+      });
     }),
   ];
 }

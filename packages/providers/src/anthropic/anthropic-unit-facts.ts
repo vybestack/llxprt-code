@@ -11,6 +11,10 @@ import {
 import type { AnthropicMessageConversionOptions } from './AnthropicMessageConversionOptions.js';
 import { stripCrossModelThinking } from './crossModelThinkingStrip.js';
 import { sanitizeRowImages } from './AnthropicImageSanitizer.js';
+import {
+  measurableAnthropicRow,
+  anthropicBlockByteLength,
+} from './anthropic-measured-media.js';
 import { unprefixAnthropicToolName } from './schemaConverter.js';
 import { selectLastCacheableBlockIndex } from './AnthropicRequestBuilder.js';
 import {
@@ -59,7 +63,7 @@ function blockId(block: AnthropicMessageBlock): string | undefined {
 function blockLength(block: AnthropicMessageBlock): AnthropicBlockLength {
   return {
     kind: block.type,
-    bytes: Buffer.byteLength(JSON.stringify(block)),
+    bytes: anthropicBlockByteLength(block),
     blank: block.type === 'text' && block.text.trim() === '',
     id: blockId(block),
     anchored: readAnchorBlockTag(block),
@@ -124,19 +128,9 @@ export function projectAnthropicUnit(
     throw new JournalFormatError(
       'Anthropic unit facts require normalized AI units without tool responses',
     );
-  for (const block of row.blocks)
-    if (
-      block.type === 'media' &&
-      block.encoding !== 'base64' &&
-      block.encoding !== 'url'
-    )
-      throw new JournalFormatError(
-        'Anthropic stored-media references require native media projection',
-      );
-  const sized = sanitizeRowImages(
-    row,
-    settings.anthropic.imageBudget ?? undefined,
-  ).row;
+  const sized = measurableAnthropicRow(
+    sanitizeRowImages(row, settings.anthropic.imageBudget ?? undefined).row,
+  );
   const kept = stripCrossModelThinking(
     [sized],
     settings.model,

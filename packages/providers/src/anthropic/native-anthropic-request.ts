@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { IndexedJournalRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/indexed-journal-request-snapshot.js';
+import type { IndexedJournalRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/indexed-journal-request-snapshot.js';
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { VersionSnapshot } from '@vybestack/llxprt-code-core/journal/versionSnapshot.js';
 import type { RepairPolicy } from './anthropic-repair-source.js';
@@ -28,6 +28,10 @@ import {
   type StoredAnthropicRequestPlan,
 } from './journal-anthropic-length.js';
 import { AnthropicStreamRepair } from './anthropic-stream-repair.js';
+import {
+  AnthropicRepairIndex,
+  anthropicRepairScope,
+} from './anthropic-repair-index.js';
 import {
   prepareSpooledAnthropicRequest,
   type SpooledAnthropicRequest,
@@ -155,6 +159,7 @@ async function requestFromEngine(
   engine: AnthropicStreamRepair,
   measured: StoredAnthropicRequestPlan,
   estimate: boolean,
+  mediaStage: MediaStage | undefined,
 ): Promise<NativeAnthropicRequest> {
   const signal = getRequestSignal(params.options);
   const prefix = placeSystemInstruction({
@@ -178,6 +183,7 @@ async function requestFromEngine(
       undefined,
       prefix,
       measured.cache,
+      mediaStage,
     )) {
       signal?.throwIfAborted();
       yield Buffer.from(piece);
@@ -228,7 +234,11 @@ async function nativeEnginePlan(
     query,
     settings,
     policy,
-    changed ? await anthropicTailIndex(snapshot, query, settings) : undefined,
+    changed
+      ? await anthropicTailIndex(snapshot, query, settings)
+      : await AnthropicRepairIndex.read(
+          await snapshot.nativeFacts(anthropicRepairScope(settings)),
+        ),
   );
   if (!changed) return { engine, measured: base };
   const prefix = await anthropicPendingPrefix(
@@ -271,9 +281,7 @@ async function prepareNativeAnthropicRequest(
     anthropicLengthRegistration(settings),
     async (snapshot) => {
       const changed = native.indexed.viewPlan.changedSources.length !== 0;
-      const query = changed
-        ? native.indexed.retain(snapshot)
-        : await IndexedJournalRequestSnapshot.create(snapshot);
+      const query = native.indexed.retain(snapshot);
       try {
         const base = await planStoredAnthropicRequest(
           snapshot,
@@ -310,6 +318,7 @@ async function prepareNativeAnthropicRequest(
           engine,
           measured,
           estimate,
+          mediaStage,
         );
       } catch (error) {
         await query.close();
@@ -322,12 +331,18 @@ async function prepareNativeAnthropicRequest(
 async function canUseNativeAnthropic(
   params: AnthropicPlanParams,
   rows: ProviderRequestRows,
+  options: SpooledRequestOptions,
 ): Promise<boolean> {
   const native = rows.native;
   if (native === undefined) return false;
   if (wantsRequestDump(params.options.invocation.ephemerals.dumpcontext))
     return false;
-  return !(await native.indexed.hasPersistedMedia());
+  return (
+    (options.recoveryBudget === undefined &&
+      options.estimate !== true &&
+      planAnthropicRequest(params).imageBudget === undefined) ||
+    !(await native.indexed.hasPersistedMedia())
+  );
 }
 
 export async function prepareAnthropicRequestRows(
@@ -336,7 +351,7 @@ export async function prepareAnthropicRequestRows(
   mediaStage: MediaStage | undefined,
   options: SpooledRequestOptions = {},
 ): Promise<PreparedAnthropicRequest> {
-  if (await canUseNativeAnthropic(params, rows))
+  if (await canUseNativeAnthropic(params, rows, options))
     return prepareNativeAnthropicRequest(
       params,
       rows,

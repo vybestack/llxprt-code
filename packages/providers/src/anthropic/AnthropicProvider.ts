@@ -731,10 +731,12 @@ export class AnthropicProvider extends BaseProvider {
   ): Promise<PreparedAnthropicRequest> {
     const media = this.captureMedia(options);
     const signal = getRequestSignal(options);
+    const requestRows = await providerRowsOf(options);
     const spooled = await prepareAnthropicRequestRows(
       this.planParams(options, isOAuth, authToken),
-      await providerRowsOf(options),
-      (rows) => resolveRowsMedia(rows, media, mediaRequest, signal),
+      requestRows,
+      (rows) =>
+        resolveRowsMedia(rows, media, mediaRequest, signal, requestRows.native),
       { recoveryBudget },
     );
     await registerAnthropicRequestCleanup(mediaRequest, spooled);
@@ -865,10 +867,18 @@ export class AnthropicProvider extends BaseProvider {
     try {
       const authToken = await this.resolveProjectionAuthToken(normalized);
       const isOAuth = this.classifyOAuthToken(authToken);
+      const requestRows = await providerRowsOf(normalized);
       const spooled = await prepareAnthropicRequestRows(
         this.planParams(normalized, isOAuth, authToken),
-        await providerRowsOf(normalized),
-        (rows) => resolveRowsMedia(rows, media, mediaRequest, signal),
+        requestRows,
+        (rows) =>
+          resolveRowsMedia(
+            rows,
+            media,
+            mediaRequest,
+            signal,
+            requestRows.native,
+          ),
         { estimate: true },
       );
       await registerAnthropicRequestCleanup(mediaRequest, spooled);
