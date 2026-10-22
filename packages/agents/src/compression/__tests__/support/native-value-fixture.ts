@@ -7,6 +7,7 @@ import { exactTokenizer } from '@vybestack/llxprt-code-core/services/history/chr
 import { nativeFileRows } from './native-file-rows.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
+import type { SessionRecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
 import { compressionValueDigest } from '../compression-value-fixture.js';
 
 export interface ValueFixture {
@@ -16,6 +17,7 @@ export interface ValueFixture {
 
 export interface NativeValueFixture extends ValueFixture {
   readonly owners: RowOwnership;
+  readonly recording: SessionRecordingPort;
 }
 
 export async function withNativeValueFixture(
@@ -32,6 +34,7 @@ export async function withNativeValueFixture(
     await action({
       history,
       owners,
+      recording,
       durable: async () => {
         await history.waitForCommit();
         const path = recording.getFilePath();
