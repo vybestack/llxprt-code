@@ -8,6 +8,7 @@ import type { NativeProviderFormat } from '@vybestack/llxprt-code-core/services/
 import type { RowFormatSettings } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
 import { captureRowFormatSettings } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
 import { projectOpenAIChatPromptEnvelope } from '../runtime/promptEnvelopeProjections.js';
+import { O200K_BASE_ASSET_REVISION } from '../tokenizers/o200kBaseCounter.js';
 import {
   plainChatLengthRegistration,
   planRequestChatMessages,
@@ -46,12 +47,12 @@ function unitEstimator(
 
 function unitCounter(
   estimate: ReturnType<typeof unitEstimator>,
-  baseline: number,
 ): ChatUnitTokenMeasurer {
   return async (messages) => {
     if (messages.length === 0) return 0;
-    const result = await estimate(messages);
-    const tokens = result.count - baseline;
+    const single = await estimate(messages);
+    const repeated = await estimate([...messages, ...messages]);
+    const tokens = repeated.count - single.count;
     if (!Number.isSafeInteger(tokens) || tokens < 0)
       throw new Error(
         'Native Chat unit estimate must be a nonnegative integer',
@@ -102,7 +103,8 @@ export class NativeChatEstimateProjection {
         includeInContext: this.settings.chat?.includeInContext ?? true,
         toolFormat: 'openai',
         estimatorKey: JSON.stringify({
-          contract: 'chat-unit-delta-v1',
+          contract: 'chat-unit-repeat-delta-v2',
+          legacyEncoding: O200K_BASE_ASSET_REVISION,
           ...identity,
           family: empty.family,
           revision: empty.estimatorVersion,
@@ -110,7 +112,7 @@ export class NativeChatEstimateProjection {
         }),
       },
     };
-    const count = unitCounter(estimate, empty.count);
+    const count = unitCounter(estimate);
     const envelope = await estimate(
       [{ role: 'system', content: this.system }],
       this.tools,

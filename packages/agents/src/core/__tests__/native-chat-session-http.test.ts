@@ -176,6 +176,27 @@ describe('public native plain Chat pending user HTTP', () => {
         { role: 'user', content: 'new user 雪' },
       ]);
       expect(storedLengths).toStrictEqual([2]);
+      expect(JSON.parse(requests[0]).model).toBe('gpt-4o');
+      await history.waitForCommit();
+      const committed = await history.openDumpSnapshot();
+      try {
+        const messages: string[] = [];
+        for await (const row of committed.rows()) {
+          messages.push(
+            `${row.speaker}:${row.blocks
+              .flatMap((block) => (block.type === 'text' ? [block.text] : []))
+              .join('')}`,
+          );
+        }
+        expect(messages).toStrictEqual([
+          'human:prior',
+          'ai:answer',
+          'human:new user 雪',
+          'ai:ok',
+        ]);
+      } finally {
+        await committed.close();
+      }
     } finally {
       await server.stop(true);
       await history.dispose();
