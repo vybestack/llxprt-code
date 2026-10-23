@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'bun:test';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { HistoryDumpSnapshot } from '@vybestack/llxprt-code-core/services/history/historyDumpSnapshot.js';
+import type { CompressionInputSnapshot } from '@vybestack/llxprt-code-core/services/history/compressionInput.js';
 import { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { buildCompressionMetadata } from '../compressionContextBuilder.js';
@@ -20,28 +20,16 @@ class RetainingHistory extends OneshotDiskHistory {
   readonly copied: IContent[] = [];
   readonly borrowedOwners = new RowOwnership();
   readonly copyOwners = new RowOwnership();
-  override async openDumpSnapshot(): Promise<HistoryDumpSnapshot> {
-    const snapshot = await super.openDumpSnapshot();
-    let first = true;
-    const { retained, copied, borrowedOwners, copyOwners } = this;
-    return {
-      close: () => snapshot.close(),
-      chronology: () => snapshot.chronology(),
-      async *rows() {
-        const retain = first;
-        first = false;
-        for await (const row of snapshot.rows()) {
-          if (retain) {
-            const copy = { ...row, blocks: [...row.blocks] };
-            retained.push(row);
-            copied.push(copy);
-            borrowedOwners.retain(row);
-            copyOwners.retain(copy);
-          }
-          yield row;
-        }
-      },
-    };
+  override async openCompressionInput(): Promise<CompressionInputSnapshot> {
+    const snapshot = await super.openCompressionInput();
+    for await (const row of snapshot.previous.rows()) {
+      const copy = { ...row, blocks: [...row.blocks] };
+      this.retained.push(row);
+      this.copied.push(copy);
+      this.borrowedOwners.retain(row);
+      this.copyOwners.retain(copy);
+    }
+    return snapshot;
   }
   release(): void {
     for (const row of this.retained) this.borrowedOwners.release(row);
