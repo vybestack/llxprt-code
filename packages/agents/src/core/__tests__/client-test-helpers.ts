@@ -49,9 +49,22 @@ import { TodoReminderService } from '@vybestack/llxprt-code-core/services/todo-r
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { uiTelemetryService } from '@vybestack/llxprt-code-core/telemetry/uiTelemetry.js';
 import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+export function createClientHistoryFixture(): Pick<
+  ChatSession,
+  'getHistoryService' | 'clearHistoryForDisposal'
+> {
+  const history = new HistoryService();
+  return {
+    getHistoryService: () => history,
+    clearHistoryForDisposal: async (): Promise<void> => {
+      await history.dispose();
+    },
+  };
+}
 
 /**
  * Array.fromAsync ponyfill, which will be available in es 2024.
@@ -292,16 +305,17 @@ async function createAndInitClient(
     yield* await stubbedHistory();
   });
 
+  const historyService = new HistoryService();
   const mockChat = {
     addHistory: vi.fn(),
     getHistory: vi.fn().mockReturnValue([]),
-    getHistoryService: vi.fn().mockReturnValue({
-      clear: vi.fn(),
-      findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
-      getCurated: vi.fn().mockReturnValue([]),
-      getTotalTokens: vi.fn().mockReturnValue(0),
+    getHistoryService: vi.fn().mockReturnValue(historyService),
+    clearHistory: vi.fn(async () => {
+      await historyService.clear();
     }),
-    clearHistory: vi.fn(),
+    clearHistoryForDisposal: async (): Promise<void> => {
+      await historyService.dispose();
+    },
     sendMessageStream: vi.fn(),
     getLastPromptTokenCount: vi.fn().mockReturnValue(0),
     getProjectedPromptBaseline: vi.fn().mockReturnValue(0),

@@ -28,6 +28,7 @@ import { AgentEventType } from './turn.js';
 import {
   fromAsync,
   setupAgentClient,
+  createClientHistoryFixture,
   type MockResponseShape,
 } from './__tests__/client-test-helpers.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -228,6 +229,7 @@ void vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
 
 function makeChatMock(): Partial<ChatSession> {
   return {
+    ...createClientHistoryFixture(),
     addHistory: vi.fn(),
     getHistory: vi.fn().mockReturnValue([]),
     getLastPromptTokenCount: vi.fn().mockReturnValue(0),

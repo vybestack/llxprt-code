@@ -37,6 +37,7 @@ import {
 } from './clientToolGovernance.js';
 import {
   setupAgentClient,
+  createClientHistoryFixture,
   type MockResponseShape,
 } from './__tests__/client-test-helpers.js';
 
@@ -240,15 +241,15 @@ function prepareInstructionChat(tokenCount: number): {
   setBaseTokenOffset: ReturnType<typeof vi.fn>;
 } {
   const setSystemInstruction = vi.fn();
-  const estimateTokensForText = vi.fn().mockResolvedValue(tokenCount);
-  const setBaseTokenOffset = vi.fn();
-  const getHistoryService = vi.fn().mockReturnValue({
-    estimateTokensForText,
-    setBaseTokenOffset,
-  });
+  const historyFixture = createClientHistoryFixture();
+  const history = historyFixture.getHistoryService();
+  const estimateTokensForText = vi
+    .spyOn(history, 'estimateTokensForText')
+    .mockResolvedValue(tokenCount);
+  const setBaseTokenOffset = vi.spyOn(history, 'setBaseTokenOffset');
   client['chat'] = {
+    ...historyFixture,
     setSystemInstruction,
-    getHistoryService,
   } as unknown as ChatSession;
   client['contentGenerator'] = {
     countTokens: vi.fn(),
@@ -536,6 +537,7 @@ function registerAddHistoryTests(): void {
     it('admits the provided content into the active chat', async () => {
       let admittedHistory: IContent[] = [];
       const mockChat: Partial<ChatSession> = {
+        ...createClientHistoryFixture(),
         admitAndAddHistory: async (content) => {
           admittedHistory = [...admittedHistory, content];
         },

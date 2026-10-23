@@ -21,6 +21,7 @@ import { AgentEventType, Turn } from './turn.js';
 import {
   fromAsync,
   setupAgentClient,
+  createClientHistoryFixture,
 } from './__tests__/client-test-helpers.js';
 
 const mockChatCreateFn = vi.fn();
@@ -77,6 +78,7 @@ describe('AgentClient (client.ts) - sendMessageStream - InvalidStream continuati
       .mockReturnValueOnce(mockStream2);
 
     const mockChat: Partial<ChatSession> = {
+      ...createClientHistoryFixture(),
       addHistory: vi.fn(),
       getHistory: vi.fn().mockReturnValue([]),
       getLastPromptTokenCount: vi.fn().mockReturnValue(0),
@@ -153,6 +155,7 @@ describe('AgentClient (client.ts) - InvalidStream after content', () => {
     })();
     mockTurnRunFn.mockReturnValueOnce(mockStream);
     client['chat'] = {
+      ...createClientHistoryFixture(),
       addHistory: vi.fn(),
       getHistory: vi.fn().mockReturnValue([]),
       getLastPromptTokenCount: vi.fn().mockReturnValue(0),
@@ -192,6 +195,7 @@ describe('AgentClient (client.ts) - InvalidStream with retry disabled', () => {
     mockTurnRunFn.mockReturnValueOnce(mockStream1);
 
     const mockChat: Partial<ChatSession> = {
+      ...createClientHistoryFixture(),
       addHistory: vi.fn(),
       getHistory: vi.fn().mockReturnValue([]),
       getLastPromptTokenCount: vi.fn().mockReturnValue(0),
@@ -289,6 +293,7 @@ const observeNotTriggerThinkingOnlyContinuationAfterInvalidStreamWhenFlagIsFalse
     vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
 
     const mockChat: Partial<ChatSession> = {
+      ...createClientHistoryFixture(),
       addHistory: vi.fn(),
       getHistory: vi.fn().mockReturnValue([]),
       getLastPromptTokenCount: vi.fn().mockReturnValue(0),
@@ -340,6 +345,7 @@ describe('AgentClient (client.ts) - repeated InvalidStream', () => {
     );
 
     const mockChat: Partial<ChatSession> = {
+      ...createClientHistoryFixture(),
       addHistory: vi.fn(),
       getHistory: vi.fn().mockReturnValue([]),
       getLastPromptTokenCount: vi.fn().mockReturnValue(0),

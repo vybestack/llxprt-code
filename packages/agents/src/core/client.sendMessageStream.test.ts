@@ -37,6 +37,7 @@ import { TodoReminderService } from '@vybestack/llxprt-code-core/services/todo-r
 import {
   fromAsync,
   setupAgentClient,
+  createClientHistoryFixture,
   type MockResponseShape,
 } from './__tests__/client-test-helpers.js';
 
@@ -234,6 +235,7 @@ async function setupSendMessageStreamClient(): Promise<void> {
 
 function useZeroTokenChat(): void {
   const mockChat: Partial<ChatSession> = {
+    ...createClientHistoryFixture(),
     addHistory: vi.fn(),
     getHistory: vi.fn().mockReturnValue([]),
     getLastPromptTokenCount: vi.fn().mockReturnValue(0),
@@ -546,6 +548,7 @@ describe('Agent Client (client.ts): IDE context', () => {
       mockTurnRunFn.mockReturnValue(mockStream);
 
       const mockChat: Partial<ChatSession> = {
+        ...createClientHistoryFixture(),
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
@@ -610,6 +613,7 @@ describe('Agent Client (client.ts): stream return', () => {
       mockTurnRunFn.mockReturnValue(mockStream);
 
       const mockChat: Partial<ChatSession> = {
+        ...createClientHistoryFixture(),
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),
@@ -686,6 +690,7 @@ describe('Agent Client (client.ts): session limit', () => {
       mockTurnRunFn.mockReturnValue(mockStream);
 
       const mockChat: Partial<ChatSession> = {
+        ...createClientHistoryFixture(),
         addHistory: vi.fn(),
         getHistory: vi.fn().mockReturnValue([]),
         getLastPromptTokenCount: vi.fn().mockReturnValue(0),

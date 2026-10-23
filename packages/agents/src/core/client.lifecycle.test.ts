@@ -550,16 +550,13 @@ async function registerLifecycleCase5(): Promise<void> {
 
 async function registerLifecycleCase6(): Promise<void> {
   const setSystemInstruction = vi.fn();
-  const estimateTokensForText = vi.fn().mockResolvedValue(100);
-  const setBaseTokenOffset = vi.fn();
-  const getHistoryService = vi.fn().mockReturnValue({
-    estimateTokensForText,
-    setBaseTokenOffset,
-  });
-
+  const fixtureHistory = new HistoryService();
   const mockChat = {
     setSystemInstruction,
-    getHistoryService,
+    getHistoryService: () => fixtureHistory,
+    clearHistoryForDisposal: async (): Promise<void> => {
+      await fixtureHistory.dispose();
+    },
   };
 
   client['chat'] = mockChat as unknown as ChatSession;
@@ -567,14 +564,7 @@ async function registerLifecycleCase6(): Promise<void> {
     countTokens: vi.fn(),
   } as unknown as ContentGenerator;
 
-  const config = client['config'] as unknown as {
-    getUserMemory: () => string;
-    getCoreMemory: () => string;
-    isInteractive: () => boolean;
-  };
-  vi.spyOn(config, 'getUserMemory').mockReturnValue('');
-  vi.spyOn(config, 'getCoreMemory').mockReturnValue('');
-  vi.spyOn(config, 'isInteractive').mockReturnValue(true);
+  vi.spyOn(client['config'], 'isInteractive').mockReturnValue(true);
 
   (
     getEnabledToolNamesForPrompt as Mock<typeof getEnabledToolNamesForPrompt>
@@ -600,16 +590,13 @@ async function registerLifecycleCase6(): Promise<void> {
 
 async function registerLifecycleCase7(): Promise<void> {
   const setSystemInstruction = vi.fn();
-  const estimateTokensForText = vi.fn().mockResolvedValue(100);
-  const setBaseTokenOffset = vi.fn();
-  const getHistoryService = vi.fn().mockReturnValue({
-    estimateTokensForText,
-    setBaseTokenOffset,
-  });
-
+  const fixtureHistory = new HistoryService();
   const mockChat = {
     setSystemInstruction,
-    getHistoryService,
+    getHistoryService: () => fixtureHistory,
+    clearHistoryForDisposal: async (): Promise<void> => {
+      await fixtureHistory.dispose();
+    },
   };
 
   client['chat'] = mockChat as unknown as ChatSession;
@@ -617,14 +604,7 @@ async function registerLifecycleCase7(): Promise<void> {
     countTokens: vi.fn(),
   } as unknown as ContentGenerator;
 
-  const config = client['config'] as unknown as {
-    getUserMemory: () => string;
-    getCoreMemory: () => string;
-    isInteractive: () => boolean;
-  };
-  vi.spyOn(config, 'getUserMemory').mockReturnValue('');
-  vi.spyOn(config, 'getCoreMemory').mockReturnValue('');
-  vi.spyOn(config, 'isInteractive').mockReturnValue(false);
+  vi.spyOn(client['config'], 'isInteractive').mockReturnValue(false);
 
   (
     getEnabledToolNamesForPrompt as Mock<typeof getEnabledToolNamesForPrompt>

@@ -29,6 +29,7 @@ import { AgentEventType } from './turn.js';
 import {
   fromAsync,
   setupAgentClient,
+  createClientHistoryFixture,
   type MockResponseShape,
 } from './__tests__/client-test-helpers.js';
 
@@ -235,6 +236,7 @@ async function observeAutoContinueWhenModelGeneratesThinkingOnlyOutput() {
   vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
 
   const mockChat: Partial<ChatSession> = {
+    ...createClientHistoryFixture(),
     addHistory: vi.fn(),
     getHistory: vi.fn().mockReturnValue([]),
     getLastPromptTokenCount: vi.fn().mockReturnValue(0),
@@ -320,6 +322,7 @@ async function verifyThinking2(): Promise<void> {
   vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
 
   const mockChat: Partial<ChatSession> = {
+    ...createClientHistoryFixture(),
     addHistory: vi.fn(),
     getHistory: vi.fn().mockReturnValue([]),
     getLastPromptTokenCount: vi.fn().mockReturnValue(0),
@@ -368,6 +371,7 @@ async function verifyThinking3(): Promise<void> {
   vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
 
   const mockChat: Partial<ChatSession> = {
+    ...createClientHistoryFixture(),
     addHistory: vi.fn(),
     getHistory: vi.fn().mockReturnValue([]),
     getLastPromptTokenCount: vi.fn().mockReturnValue(0),
@@ -409,6 +413,7 @@ async function verifyThinking4(): Promise<void> {
   vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
 
   const mockChat: Partial<ChatSession> = {
+    ...createClientHistoryFixture(),
     addHistory: vi.fn(),
     getHistory: vi.fn().mockReturnValue([]),
     getLastPromptTokenCount: vi.fn().mockReturnValue(0),

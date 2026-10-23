@@ -288,12 +288,7 @@ function verifyProfileInvalidation(): {
   historyService: unknown;
   contentGenerator: ContentGenerator;
 } {
-  const historyService = {
-    clear: vi.fn(),
-    findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
-    getCurated: vi.fn().mockReturnValue([]),
-    getTotalTokens: vi.fn().mockReturnValue(0),
-  };
+  const historyService = new HistoryService();
 
   const mockChat: Partial<ChatSession> = {
     getHistoryService: vi.fn().mockReturnValue(historyService),
@@ -328,12 +323,7 @@ async function verifyDeferredInvalidation(): Promise<{
   executeSpy: unknown;
   historyService: unknown;
 }> {
-  const historyService = {
-    clear: vi.fn(),
-    findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
-    getCurated: vi.fn().mockReturnValue([]),
-    getTotalTokens: vi.fn().mockReturnValue(0),
-  };
+  const historyService = new HistoryService();
 
   const mockChat: Partial<ChatSession> = {
     getHistoryService: vi.fn().mockReturnValue(historyService),
@@ -636,6 +626,7 @@ async function verifyContinuationStableProvider(): Promise<{
 }
 
 function setupContinuationChat(): void {
+  const historyService = new HistoryService();
   routedModel = 'test-model';
   vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(
     true,
@@ -652,12 +643,10 @@ function setupContinuationChat(): void {
     }),
     addHistory: vi.fn(),
     getHistory: vi.fn().mockReturnValue([]),
-    getHistoryService: vi.fn().mockReturnValue({
-      clear: vi.fn(),
-      findUnmatchedToolCalls: vi.fn().mockReturnValue([]),
-      getCurated: vi.fn().mockReturnValue([]),
-      getTotalTokens: vi.fn().mockReturnValue(0),
-    }),
+    getHistoryService: () => historyService,
+    clearHistoryForDisposal: async (): Promise<void> => {
+      await historyService.dispose();
+    },
     getLastPromptTokenCount: vi.fn().mockReturnValue(0),
     getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
     getContextLimit: vi.fn().mockReturnValue(1000000),

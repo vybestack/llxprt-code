@@ -9,11 +9,13 @@ import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentG
 import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 import type { ChatSession } from '../../chatSession.js';
 import type { AgentClient } from '../../client.js';
+import { createClientHistoryFixture } from '../client-test-helpers.js';
 
 export function make413Chat(
   overrides: Partial<ChatSession> = {},
 ): Partial<ChatSession> {
   return {
+    ...createClientHistoryFixture(),
     addHistory: vi.fn(),
     getHistory: vi.fn().mockReturnValue([]),
     getLastPromptTokenCount: vi.fn().mockReturnValue(0),
@@ -42,6 +44,7 @@ export function installOverflowMockChat(
   extras: Partial<ChatSession> = {},
 ): Partial<ChatSession> {
   const chat: Partial<ChatSession> = {
+    ...createClientHistoryFixture(),
     addHistory: vi.fn(),
     getHistory: vi.fn().mockReturnValue([]),
     getLastPromptTokenCount: vi.fn().mockReturnValue(tokenCount),
