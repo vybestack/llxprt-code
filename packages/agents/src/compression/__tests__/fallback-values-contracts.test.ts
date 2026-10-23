@@ -1,26 +1,26 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
-import {
-  fallbackHarness,
-  enforceFallback,
-  fallbackCandidate,
-} from './provider-fallback-disk-helpers.js';
-import { withValueTransformFixture } from '@vybestack/llxprt-code-core/services/history/transform-value-test-helpers.js';
+import { batchGate } from '@vybestack/llxprt-code-core/services/history/__tests__/support/addbatch-stream-test-helpers.js';
 import { transformFixtureRows } from '@vybestack/llxprt-code-core/services/history/__tests__/support/transform-value-fixtures-test-helpers.js';
-import { DetachedHistoryJournal } from '@vybestack/llxprt-code-core/services/history/detachedHistoryJournal.js';
+import { rejectedValue } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-test-helpers.js';
 import {
   detachedDigest,
   detachedDurableDigest,
 } from '@vybestack/llxprt-code-core/services/history/detached-rollback-test-helpers.js';
+import { DetachedHistoryJournal } from '@vybestack/llxprt-code-core/services/history/detachedHistoryJournal.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { withValueTransformFixture } from '@vybestack/llxprt-code-core/services/history/transform-value-test-helpers.js';
+import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+import { describe, expect, it } from 'bun:test';
 import {
   applyPendingWindowFallback,
   type PendingFallbackDeps,
 } from '../pendingWindowFallback.js';
-import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
-import { batchGate } from '@vybestack/llxprt-code-core/services/history/__tests__/support/addbatch-stream-test-helpers.js';
-import { rejectedValue } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-test-helpers.js';
 import type { ProviderFallbackCandidate } from '../providerFallbackCandidate.js';
+import {
+  enforceFallback,
+  fallbackCandidate,
+  fallbackHarness,
+} from './provider-fallback-disk-helpers.js';
 
 const failures = [
   'reject',
@@ -37,54 +37,61 @@ async function enforceRollback(
   size: number,
   failure: Failure,
 ): Promise<number> {
-  return withValueTransformFixture(async ({ history, recorder, owners }) => {
-    await history.detachedValues.replace(transformFixtureRows(size));
-    const before = await detachedDigest(transformFixtureRows(size));
-    history.setBaseTokenOffset(37);
-    history.setCacheAnchorSeq(1);
-    const rows = new DetachedHistoryJournal(owners);
-    try {
-      rows.append(fallbackCandidate());
-      const harness = fallbackHarness(
-        history,
-        async (_prompt, install) => {
-          if (failure === 'missing') return true;
-          if (failure === 'partial') recorder.failAdmissionAfter(1);
-          await install({ rows, start: 0, hasPendingRows: true });
-          if (failure === 'duplicate')
+  return withValueTransformFixture(
+    async ({ history, recorder, owners, io }) => {
+      await history.detachedValues.replace(transformFixtureRows(size));
+      const before = await detachedDigest(transformFixtureRows(size));
+      history.setBaseTokenOffset(37);
+      history.setCacheAnchorSeq(1);
+      const rows = new DetachedHistoryJournal(owners);
+      try {
+        rows.append(fallbackCandidate());
+        const harness = fallbackHarness(
+          history,
+          async (_prompt, install) => {
+            if (failure === 'missing') return true;
+            if (failure === 'partial')
+              io.rejectNextWrite(
+                new Error('fallback candidate publication failure'),
+                'trailer',
+              );
             await install({ rows, start: 0, hasPendingRows: true });
-          if (failure === 'reject') throw new Error('fallback rejected');
-          if (failure === 'cancel')
-            throw new DOMException(
-              'cancelled after installation',
-              'AbortError',
-            );
-          return failure !== 'false';
-        },
-        { resetFails: failure === 'baseline' },
-      );
-      let message = 'post-truncation stage';
-      if (failure === 'missing')
-        message = 'without providing candidate history';
-      if (failure === 'duplicate') message = 'only be installed once';
-      await expect(enforceFallback(harness)).rejects.toThrow(message);
-      expect(await detachedDurableDigest(recorder)).toStrictEqual(before);
-      expect(await detachedDigest(history.streamRawHistory())).toStrictEqual(
-        before,
-      );
-      expect(history.getTotalTokens()).toBe(size * 3 + 37);
-      expect(history.getBaseTokenOffset()).toBe(37);
-      expect(history.getCacheAnchorSeq()).toBe(1);
-      expect(harness.baseline()).toBe(123);
-      expect(owners.snapshot().liveRows).toBe(0);
-      expect(
-        owners.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 }),
-      ).toBe(true);
-      return before.count;
-    } finally {
-      rows.close();
-    }
-  });
+            if (failure === 'duplicate')
+              await install({ rows, start: 0, hasPendingRows: true });
+            if (failure === 'reject') throw new Error('fallback rejected');
+            if (failure === 'cancel')
+              throw new DOMException(
+                'cancelled after installation',
+                'AbortError',
+              );
+            return failure !== 'false';
+          },
+          { resetFails: failure === 'baseline' },
+        );
+        let message = 'post-truncation stage';
+        if (failure === 'missing')
+          message = 'without providing candidate history';
+        if (failure === 'duplicate') message = 'only be installed once';
+        await expect(enforceFallback(harness)).rejects.toThrow(message);
+        await history.waitForCommit();
+        expect(await detachedDurableDigest(recorder)).toStrictEqual(before);
+        expect(await detachedDigest(history.streamRawHistory())).toStrictEqual(
+          before,
+        );
+        expect(history.getTotalTokens()).toBe(size * 3 + 37);
+        expect(history.getBaseTokenOffset()).toBe(37);
+        expect(history.getCacheAnchorSeq()).toBe(1);
+        expect(harness.baseline()).toBe(123);
+        expect(owners.snapshot().liveRows).toBe(0);
+        expect(
+          owners.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 }),
+        ).toBe(true);
+        return before.count;
+      } finally {
+        rows.close();
+      }
+    },
+  );
 }
 
 function deps(
@@ -144,7 +151,8 @@ async function pendingQueued(size: number): Promise<number> {
     );
     try {
       await fixture.writerPaused;
-      expect(owners.snapshot().liveRows).toBeGreaterThan(0);
+      expect(owners.snapshot().liveRows).toBe(0);
+      expect(owners.snapshot().liveSerializedBytes).toBe(0);
       expect(
         owners.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 }),
       ).toBe(true);
