@@ -8,7 +8,7 @@ import {
   assertRemovalRows,
 } from './history-removals-test-helpers.js';
 
-describe('queued synchronous clear failure', () => {
+describe('queued journal clear failure', () => {
   it('does not release restored media when a queued clear observer rejects', async () => {
     await withRemovalFixture(async ({ history }, store) => {
       const [reference] = await removalReferences(store);
@@ -23,15 +23,20 @@ describe('queued synchronous clear failure', () => {
         },
       });
       await entered.promise;
+      const failure = new Error('queued clear observer failed');
       const rejectClear = (): void => {
-        throw new Error('queued clear observer failed');
+        throw failure;
       };
       history.on('tokensUpdated', rejectClear);
       try {
-        await history.clear();
-        expect(history.length()).toBe(1);
+        const cleared = history.clear().then(
+          () => undefined,
+          (error: unknown) => error,
+        );
         release.resolve();
-        await expect(replacing).rejects.toThrow('queued clear observer failed');
+        await replacing;
+        expect(await cleared).toBe(failure);
+        expect(history.length()).toBe(1);
       } finally {
         release.resolve();
         history.off('tokensUpdated', rejectClear);
@@ -43,7 +48,7 @@ describe('queued synchronous clear failure', () => {
   });
 });
 describe('queued clear and append', () => {
-  it('keeps media from an append queued after a synchronous clear', async () => {
+  it('keeps media from an append queued after a journal clear', async () => {
     await withRemovalFixture(async ({ history }, store) => {
       const [previous, incoming] = await removalReferences(store);
       const input = [removalRow(0, previous)];
@@ -59,10 +64,12 @@ describe('queued clear and append', () => {
       });
       await entered.promise;
       try {
-        await history.clear();
+        const cleared = history.clear();
         history.add(next);
         release.resolve();
         await replacing;
+        await cleared;
+        await history.waitForCommit();
         await history.waitForOwnershipSettlement();
         await assertRemovalRows(history.streamRawHistory(), [next]);
         expect(await store.hasReservations(previous.contentId)).toBe(false);

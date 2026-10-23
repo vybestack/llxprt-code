@@ -1,6 +1,6 @@
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
-import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
-import { observeHistorySynchronouslyForTest } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
+import { curatedHistoryAfterCommit } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 /**
  * Test that compression locking prevents race conditions
  */
@@ -11,6 +11,11 @@ import {
 } from './compression-locking-test-helpers.js';
 import { CompressionOperationQueue } from './historyCompressionQueue.js';
 import { HistoryService } from './HistoryService.js';
+
+async function committedRows() {
+  await legacySuite0_historyService.waitForCommit();
+  return collectRawHistory(legacySuite0_historyService);
+}
 
 /**
  * Render helpers for block assertions. Hoisted so the text/non-text choice
@@ -52,9 +57,7 @@ async function legacyTest0() {
     ],
   });
   // Should still only have initial message (add is queued)
-  const allHistory = observeHistorySynchronouslyForTest(
-    legacySuite0_historyService,
-  );
+  const allHistory = await committedRows();
   expect(allHistory.length).toBe(1); // Only initial message
   // End compression
   legacySuite0_historyService.endCompression();
@@ -70,7 +73,7 @@ async function legacyTest0() {
     },
   );
 }
-function legacyTest1() {
+async function legacyTest1(): Promise<void> {
   // Issue #2852: an earlier attempt threw from add() and discarded the queue
   // once it passed a bound. add() is on the streaming path, so that lost
   // conversation content and could break a turn.
@@ -82,11 +85,9 @@ function legacyTest1() {
       blocks: [{ type: 'text', text: `queued-${index}` }],
     });
   }
-  expect(
-    observeHistorySynchronouslyForTest(legacySuite0_historyService),
-  ).toHaveLength(0);
+  expect(await committedRows()).toHaveLength(0);
   legacySuite0_historyService.endCompression();
-  const all = observeHistorySynchronouslyForTest(legacySuite0_historyService);
+  const all = await committedRows();
   expect({
     count: all.length,
     first: all[0].blocks[0],
@@ -97,7 +98,7 @@ function legacyTest1() {
     last: { type: 'text', text: `queued-${queued - 1}` },
   });
 }
-function legacyTest2() {
+async function legacyTest2(): Promise<void> {
   // The queue's bound is the duration of the lock, so the lock must always be
   // released. This mirrors CompressionHandler.performCompression's finally.
   legacySuite0_historyService.startCompression();
@@ -110,9 +111,7 @@ function legacyTest2() {
     speaker: 'human',
     blocks: [{ type: 'text', text: 'applied immediately' }],
   });
-  expect(
-    observeHistorySynchronouslyForTest(legacySuite0_historyService),
-  ).toHaveLength(1);
+  expect(await committedRows()).toHaveLength(1);
 }
 async function legacyTest3() {
   // Add content with tool calls
@@ -199,7 +198,7 @@ async function legacyTest4() {
   // Start compression
   legacySuite0_historyService.startCompression();
   // getCurated should still work but log that compression is in progress
-  const curated = curatedHistoryForTest(legacySuite0_historyService);
+  const curated = await curatedHistoryAfterCommit(legacySuite0_historyService);
   expect(curated.length).toBe(2);
   // End compression
   legacySuite0_historyService.endCompression();
@@ -296,7 +295,7 @@ async function legacyTest12(): Promise<void> {
     speaker: 'human',
     blocks: [{ type: 'text', text: 'original question' }],
   });
-  const retained = curatedHistoryForTest(legacySuite0_historyService);
+  const retained = await curatedHistoryAfterCommit(legacySuite0_historyService);
   legacySuite0_historyService.startCompression();
   legacySuite0_historyService.add({
     speaker: 'ai',
@@ -311,9 +310,7 @@ async function legacyTest12(): Promise<void> {
     { speaker: 'human', blocks: [{ type: 'text', text: 'summary' }] },
     1,
   );
-  const texts = observeHistorySynchronouslyForTest(
-    legacySuite0_historyService,
-  ).map((entry) => {
+  const texts = (await committedRows()).map((entry) => {
     const block = entry.blocks[0];
     return describeBlock(block);
   });
@@ -325,7 +322,7 @@ async function legacyTest13(): Promise<void> {
     speaker: 'human',
     blocks: [{ type: 'text', text: 'original question' }],
   });
-  const retained = curatedHistoryForTest(legacySuite0_historyService);
+  const retained = await curatedHistoryAfterCommit(legacySuite0_historyService);
   const observed: string[] = [];
   legacySuite0_historyService.on('contentAdded', (content) => {
     const block = content.blocks[0];
@@ -351,6 +348,7 @@ async function legacyTest13(): Promise<void> {
     { speaker: 'human', blocks: [{ type: 'text', text: 'summary' }] },
     1,
   );
+  await legacySuite0_historyService.waitForCommit();
   expect(observed).toStrictEqual([
     // Rebuild entries stay inside the recording suppression window: their
     // contentAdded fires before the lock is released (#3263, #3132).
@@ -368,7 +366,7 @@ async function legacyTest14(): Promise<void> {
     speaker: 'human',
     blocks: [{ type: 'text', text: 'original question' }],
   });
-  const retained = curatedHistoryForTest(legacySuite0_historyService);
+  const retained = await curatedHistoryAfterCommit(legacySuite0_historyService);
   legacySuite0_historyService.startCompression();
   legacySuite0_historyService.add({
     speaker: 'tool',
@@ -394,7 +392,7 @@ async function legacyTest14(): Promise<void> {
     { speaker: 'human', blocks: [{ type: 'text', text: 'summary' }] },
     1,
   );
-  const all = observeHistorySynchronouslyForTest(legacySuite0_historyService);
+  const all = await committedRows();
   expect(all).toHaveLength(3);
   expect(all[0].blocks[0]).toStrictEqual({
     type: 'text',
@@ -417,7 +415,7 @@ async function legacyTest15(): Promise<void> {
     speaker: 'human',
     blocks: [{ type: 'text', text: 'original question' }],
   });
-  const retained = curatedHistoryForTest(legacySuite0_historyService);
+  const retained = await curatedHistoryAfterCommit(legacySuite0_historyService);
   const observed: string[] = [];
   legacySuite0_historyService.on('contentAdded', (content) => {
     const block = content.blocks[0];
@@ -443,15 +441,14 @@ async function legacyTest15(): Promise<void> {
     { speaker: 'human', blocks: [{ type: 'text', text: 'summary' }] },
     1,
   );
+  await legacySuite0_historyService.waitForCommit();
   expect(observed).toStrictEqual([
     'contentAdded:original question',
     'compressionLockReleased',
     'compressionEnded',
     'contentAdded:late streaming content',
   ]);
-  const texts = observeHistorySynchronouslyForTest(
-    legacySuite0_historyService,
-  ).map((entry) => {
+  const texts = (await committedRows()).map((entry) => {
     const block = entry.blocks[0];
     return describeBlock(block);
   });
@@ -463,7 +460,7 @@ async function legacyTest16(): Promise<void> {
     speaker: 'human',
     blocks: [{ type: 'text', text: 'original question' }],
   });
-  const retained = curatedHistoryForTest(legacySuite0_historyService);
+  const retained = await curatedHistoryAfterCommit(legacySuite0_historyService);
   const observed: string[] = [];
   legacySuite0_historyService.on('contentAdded', (content) => {
     const block = content.blocks[0];
@@ -496,15 +493,14 @@ async function legacyTest16(): Promise<void> {
   );
   // The work queued before the throw is real rebuild work: it flushes
   // inside the suppression window, then the events, then the late add.
+  await legacySuite0_historyService.waitForCommit();
   expect(observed).toStrictEqual([
     'contentAdded:original question',
     'compressionLockReleased',
     'compressionEnded',
     'contentAdded:late streaming content',
   ]);
-  const texts = observeHistorySynchronouslyForTest(
-    legacySuite0_historyService,
-  ).map((entry) => {
+  const texts = (await committedRows()).map((entry) => {
     const block = entry.blocks[0];
     return describeBlock(block);
   });
@@ -521,7 +517,7 @@ async function legacyTest18() {
     speaker: 'human',
     blocks: [{ type: 'text', text: 'original question' }],
   });
-  const retained = curatedHistoryForTest(legacySuite0_historyService);
+  const retained = await curatedHistoryAfterCommit(legacySuite0_historyService);
   const observed: string[] = [];
   legacySuite0_historyService.on('contentAdded', (content) => {
     const block = content.blocks[0];
@@ -556,6 +552,7 @@ async function legacyTest18() {
   );
   blocked.release();
   await replacing;
+  await legacySuite0_historyService.waitForCommit();
   expect(observed).toStrictEqual([
     // Rebuild content stays inside the suppression window: it must fire
     // before the lock-release events, then streaming content after them.
@@ -582,7 +579,7 @@ async function legacyTest20(): Promise<void> {
     speaker: 'human',
     blocks: [{ type: 'text', text: 'original question' }],
   });
-  const retained = curatedHistoryForTest(legacySuite0_historyService);
+  const retained = await curatedHistoryAfterCommit(legacySuite0_historyService);
   legacySuite0_historyService.on('compressionLockReleased', () => {
     throw new Error('listener failure');
   });
@@ -596,29 +593,28 @@ async function legacyTest20(): Promise<void> {
       legacySuite0_historyService.add(content);
     }
   });
-  expect(() =>
-    legacySuite0_historyService.endCompression(
-      { speaker: 'human', blocks: [{ type: 'text', text: 'summary' }] },
-      1,
-    ),
-  ).toThrow('listener failure');
+  legacySuite0_historyService.endCompression(
+    { speaker: 'human', blocks: [{ type: 'text', text: 'summary' }] },
+    1,
+  );
+  await expect(cleared).rejects.toThrow('listener failure');
+  await expect(
+    legacySuite0_historyService.waitForPendingOperations(),
+  ).rejects.toThrow('listener failure');
   // The streaming slice is applied even though the release event threw: the
   // queue must never drop operations the pre-change code preserved.
-  const texts = observeHistorySynchronouslyForTest(
-    legacySuite0_historyService,
-  ).map((entry) => {
+  const texts = (await committedRows()).map((entry) => {
     const block = entry.blocks[0];
     return describeBlock(block);
   });
   expect(texts).toStrictEqual(['original question', 'mid-stream content']);
-  await cleared;
 }
 async function legacyTest21(): Promise<void> {
   legacySuite0_historyService.add({
     speaker: 'human',
     blocks: [{ type: 'text', text: 'original question' }],
   });
-  const retained = curatedHistoryForTest(legacySuite0_historyService);
+  const retained = await curatedHistoryAfterCommit(legacySuite0_historyService);
   let tokensUpdatedCalls = 0;
   let compressionLockReleasedObserved = false;
   legacySuite0_historyService.on('tokensUpdated', () => {
@@ -644,19 +640,18 @@ async function legacyTest21(): Promise<void> {
       legacySuite0_historyService.add(content);
     }
   });
-  expect(() =>
-    legacySuite0_historyService.endCompression(
-      { speaker: 'human', blocks: [{ type: 'text', text: 'summary' }] },
-      1,
-    ),
-  ).toThrow('rebuild listener failure');
+  legacySuite0_historyService.endCompression(
+    { speaker: 'human', blocks: [{ type: 'text', text: 'summary' }] },
+    1,
+  );
   await expect(cleared).rejects.toThrow('rebuild listener failure');
+  await expect(
+    legacySuite0_historyService.waitForPendingOperations(),
+  ).rejects.toThrow('rebuild listener failure');
   // A failing rebuild op must not prevent the release events from firing or the
   // streaming slice from being applied: both are still attempted (#3264).
   expect(compressionLockReleasedObserved).toBe(true);
-  const texts = observeHistorySynchronouslyForTest(
-    legacySuite0_historyService,
-  ).map((entry) => {
+  const texts = (await committedRows()).map((entry) => {
     const block = entry.blocks[0];
     return describeBlock(block);
   });
@@ -667,7 +662,7 @@ async function legacyTest22(): Promise<void> {
     speaker: 'human',
     blocks: [{ type: 'text', text: 'original question' }],
   });
-  const retained = curatedHistoryForTest(legacySuite0_historyService);
+  const retained = await curatedHistoryAfterCommit(legacySuite0_historyService);
   legacySuite0_historyService.on('compressionLockReleased', () => {
     // `throw undefined` is a legal JS throw; a sentinel keyed on `undefined`
     // cannot distinguish it from "no throw", so it must be rethrown truthfully.
@@ -684,28 +679,21 @@ async function legacyTest22(): Promise<void> {
       legacySuite0_historyService.add(content);
     }
   });
-  // The thrown value is `undefined`, so this is asserted via a capture
-  // rather than toThrow(), which cannot match a non-Error thrown value.
-  let caught = false;
-  try {
-    legacySuite0_historyService.endCompression(
-      { speaker: 'human', blocks: [{ type: 'text', text: 'summary' }] },
-      1,
-    );
-  } catch {
-    caught = true;
-  }
-  expect(caught).toBe(true);
+  legacySuite0_historyService.endCompression(
+    { speaker: 'human', blocks: [{ type: 'text', text: 'summary' }] },
+    1,
+  );
+  await expect(cleared).rejects.toBeUndefined();
+  await expect(
+    legacySuite0_historyService.waitForPendingOperations(),
+  ).rejects.toBeUndefined();
   // The streaming slice is still applied despite the throwing release listener, and
   // the undefined throw is truthfully rethrown rather than swallowed.
-  const texts = observeHistorySynchronouslyForTest(
-    legacySuite0_historyService,
-  ).map((entry) => {
+  const texts = (await committedRows()).map((entry) => {
     const block = entry.blocks[0];
     return describeBlock(block);
   });
   expect(texts).toStrictEqual(['original question', 'mid-stream content']);
-  await cleared;
 }
 let legacySuite0_historyService: HistoryService;
 function legacyTest25() {
@@ -743,7 +731,7 @@ const legacyHook1 = () => {
     legacySuite1_observed.push('compressionEnded');
   });
 };
-describe('old synchronous compression contracts', () => {
+describe('journal compression contracts', () => {
   afterEach(disposeHistory);
   describe('Old same-turn compression locking / should queue adds during compression', () => {
     beforeEach(legacyHook0);
@@ -753,14 +741,14 @@ describe('old synchronous compression contracts', () => {
   });
   describe('Old same-turn compression locking / never drops or rejects additions queued during a long compression', () => {
     beforeEach(legacyHook0);
-    it('never drops or rejects additions queued during a long compression', () => {
-      expect(legacyTest1).not.toThrow();
+    it('never drops or rejects additions queued during a long compression', async () => {
+      await expect(legacyTest1()).resolves.toBeUndefined();
     });
   });
   describe('Old same-turn compression locking / releases the compression lock even when the compression body throws', () => {
     beforeEach(legacyHook0);
-    it('releases the compression lock even when the compression body throws', () => {
-      expect(legacyTest2).not.toThrow();
+    it('releases the compression lock even when the compression body throws', async () => {
+      await expect(legacyTest2()).resolves.toBeUndefined();
     });
   });
   describe('Old same-turn compression locking / should prevent duplicate IDs during compression rebuild', () => {
