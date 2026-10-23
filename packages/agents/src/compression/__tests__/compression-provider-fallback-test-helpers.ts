@@ -6,7 +6,7 @@ import type { CompressionHandler } from '../CompressionHandler.js';
 import * as compressionFactory from '../compressionStrategyFactory.js';
 import { OneShotStrategy } from '../OneShotStrategy.js';
 import { TopDownTruncationStrategy } from '../TopDownTruncationStrategy.js';
-import { DetachedHistoryJournal } from '@vybestack/llxprt-code-core/services/history/detachedHistoryJournal.js';
+import { installPinnedCandidateValues } from './support/pinned-candidate-fixture.js';
 import { EmptySummaryError } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { ArrayStrategyDouble } from './support/array-strategy-double.js';
 
@@ -62,17 +62,8 @@ function installFallbackStrategies(
   ) {
     if (!control.active) return compressDisk.call(this, context);
     if (!fallbackFixtureOutcome(control, candidateHistory.length)) return noop;
-    if (!(context.history instanceof DetachedHistoryJournal))
-      throw new Error('Expected disk fixture rows');
-    const rows = context.history;
-    const start = rows.length;
-    for (const row of candidateHistory) rows.append(row);
-    const readRow = rows.readRow.bind(rows);
-    vi.spyOn(rows, 'readRow').mockImplementation((index) => {
-      const value = readRow(index);
-      return index >= start ? candidateHistory[index - start] : value;
-    });
-    return { kind: 'applied', start, metadata };
+    installPinnedCandidateValues(context.history, candidateHistory);
+    return { kind: 'applied', start: 0, metadata };
   });
 }
 
