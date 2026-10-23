@@ -22,9 +22,10 @@
 
 import { afterEach, describe, expect, it } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { appendFile, mkdir, mkdtemp, rm, utimes } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
+import { JournalRecordingService } from './journalRecordingService.js';
 import { SessionDiscovery } from './SessionDiscovery.js';
 import { getAllJsonlSessionFiles } from './sessionCleanupUtils.js';
 import type { ContinueTarget, SessionSummary } from './types.js';
@@ -36,49 +37,6 @@ const PROJECT_HASH = 'p05c-discovery-hash';
 
 let fixtureDir: string | null = null;
 
-interface StartFields {
-  sessionId: string;
-  startTime: string;
-  kind?: 'main' | 'subagent';
-  parentSessionId?: string;
-}
-
-function startLine(seq: number, fields: StartFields): string {
-  const payload: Record<string, unknown> = {
-    sessionId: fields.sessionId,
-    projectHash: PROJECT_HASH,
-    workspaceDirs: ['/w'],
-    provider: 'anthropic',
-    model: 'claude-4',
-    startTime: fields.startTime,
-    ...(fields.kind === undefined ? {} : { kind: fields.kind }),
-    ...(fields.parentSessionId === undefined
-      ? {}
-      : { parentSessionId: fields.parentSessionId }),
-  };
-  return JSON.stringify({
-    v: 1,
-    seq,
-    ts: fields.startTime,
-    type: 'session_start',
-    payload,
-  });
-}
-
-function checkpointLine(
-  seq: number,
-  checkpointId: string,
-  name: string,
-): string {
-  return JSON.stringify({
-    v: 1,
-    seq,
-    ts: '2026-02-11T16:00:01.000Z',
-    type: 'checkpoint_created',
-    payload: { checkpointId, name },
-  });
-}
-
 function targetTargetId(target: ContinueTarget): string {
   return target.kind === 'session'
     ? target.session.sessionId
@@ -88,11 +46,34 @@ function targetTargetId(target: ContinueTarget): string {
 async function writeJournal(
   chatsDir: string,
   sessionId: string,
-  lines: readonly string[],
   modifiedAt: Date,
+  parentSessionId?: string,
 ): Promise<void> {
-  const filePath = path.join(chatsDir, `session-${sessionId}.jsonl`);
-  await appendFile(filePath, `${lines.join('\n')}\n`, 'utf8');
+  const recorder = JournalRecordingService.create({
+    sessionId,
+    chatsDir,
+    projectHash: PROJECT_HASH,
+    workspaceDirs: ['/w'],
+    provider: 'anthropic',
+    model: 'claude-4',
+    kind: parentSessionId === undefined ? 'main' : 'subagent',
+    ...(parentSessionId === undefined ? {} : { parentSessionId }),
+  });
+  let filePath: string;
+  try {
+    const session = await recorder.session();
+    if (parentSessionId !== undefined) {
+      await session.append([
+        { speaker: 'human', blocks: [{ type: 'text', text: 'child row' }] },
+      ]);
+      await recorder.createCheckpoint('child-cp');
+    }
+    const materialized = recorder.getFilePath();
+    if (materialized === null) throw new Error('Missing fixture journal');
+    filePath = materialized;
+  } finally {
+    await recorder.dispose();
+  }
   await utimes(filePath, modifiedAt, modifiedAt);
 }
 
@@ -108,28 +89,8 @@ async function makeFixture(): Promise<{
   const childId = randomUUID();
   const old = new Date('2026-02-11T15:00:00.000Z');
   const fresh = new Date('2026-02-11T16:00:00.000Z');
-  await writeJournal(
-    chatsDir,
-    parentId,
-    [startLine(1, { sessionId: parentId, startTime: old.toISOString() })],
-    old,
-  );
-  // The child is deliberately the NEWEST recording: without a filter it is
-  // the `--continue` latest target.
-  await writeJournal(
-    chatsDir,
-    childId,
-    [
-      startLine(1, {
-        sessionId: childId,
-        startTime: fresh.toISOString(),
-        kind: 'subagent',
-        parentSessionId: parentId,
-      }),
-      checkpointLine(2, 'cp-child-p05c', 'child-cp'),
-    ],
-    fresh,
-  );
+  await writeJournal(chatsDir, parentId, old);
+  await writeJournal(chatsDir, childId, fresh, parentId);
   return { chatsDir, parentId, childId };
 }
 
@@ -208,7 +169,7 @@ describe('P05c discovery filters child journals @plan:PLAN-20260917-ISSUE854.P05
     const entries = await getAllJsonlSessionFiles(chatsDir);
     expect(entries).toHaveLength(2);
     for (const entry of entries) {
-      expect(entry.fileName).toMatch(/^session-.*\.jsonl$/);
+      expect(entry.fileName).toMatch(/^session-.*\.llxj$/);
     }
   });
 });

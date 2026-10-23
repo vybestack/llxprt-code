@@ -22,11 +22,16 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import type { IContent } from '../../services/history/IContent.js';
 import { SessionDiscovery } from '../SessionDiscovery.js';
-import type {
-  ContentPayload,
-  SessionRecordLine,
-  SessionStartPayload,
-} from '../types.js';
+import type { SessionStartPayload } from '../types.js';
+import { JournalRecordingService } from '../journalRecordingService.js';
+import { previewOfContent } from '../sessionMetaKeys.js';
+
+type SessionFixture =
+  | { readonly type: 'session_start'; readonly payload: SessionStartPayload }
+  | {
+      readonly type: 'content';
+      readonly payload: { readonly content: IContent };
+    };
 
 const bunIt = it;
 
@@ -47,11 +52,11 @@ describe('SessionDiscovery extensions', () => {
    * Helper to create a session_start event line
    */
   function createSessionStartLine(
-    seq: number,
+    _seq: number,
     sessionId: string,
     projectHash: string,
     options?: { provider?: string; model?: string },
-  ): SessionRecordLine {
+  ): SessionFixture {
     const payload: SessionStartPayload = {
       sessionId,
       projectHash,
@@ -61,9 +66,6 @@ describe('SessionDiscovery extensions', () => {
       startTime: new Date().toISOString(),
     };
     return {
-      v: 1,
-      seq,
-      ts: new Date().toISOString(),
       type: 'session_start',
       payload,
     };
@@ -73,19 +75,16 @@ describe('SessionDiscovery extensions', () => {
    * Helper to create a content event line
    */
   function createContentLine(
-    seq: number,
+    _seq: number,
     speaker: 'human' | 'ai' | 'tool',
     text: string,
-  ): SessionRecordLine {
+  ): SessionFixture {
     const content: IContent = {
       speaker,
       blocks: [{ type: 'text', text }],
     };
-    const payload: ContentPayload = { content };
+    const payload = { content };
     return {
-      v: 1,
-      seq,
-      ts: new Date().toISOString(),
       type: 'content',
       payload,
     };
@@ -95,13 +94,13 @@ describe('SessionDiscovery extensions', () => {
    * Helper to create a content event with mixed parts
    */
   function createContentLineWithMixedParts(
-    seq: number,
+    _seq: number,
     speaker: 'human' | 'ai' | 'tool',
     textParts: string[],
     includeMedia: boolean = false,
-  ): SessionRecordLine {
+  ): SessionFixture {
     const blocks: IContent['blocks'] = textParts.map((text) => ({
-      type: 'text' as const,
+      type: 'text',
       text,
     }));
     if (includeMedia) {
@@ -113,11 +112,8 @@ describe('SessionDiscovery extensions', () => {
       });
     }
     const content: IContent = { speaker, blocks };
-    const payload: ContentPayload = { content };
+    const payload = { content };
     return {
-      v: 1,
-      seq,
-      ts: new Date().toISOString(),
       type: 'content',
       payload,
     };
@@ -127,10 +123,10 @@ describe('SessionDiscovery extensions', () => {
    * Helper to create a tool call content line
    */
   function createToolCallLine(
-    seq: number,
+    _seq: number,
     toolName: string,
     callId: string,
-  ): SessionRecordLine {
+  ): SessionFixture {
     const content: IContent = {
       speaker: 'ai',
       blocks: [
@@ -142,11 +138,8 @@ describe('SessionDiscovery extensions', () => {
         },
       ],
     };
-    const payload: ContentPayload = { content };
+    const payload = { content };
     return {
-      v: 1,
-      seq,
-      ts: new Date().toISOString(),
       type: 'content',
       payload,
     };
@@ -157,11 +150,33 @@ describe('SessionDiscovery extensions', () => {
    */
   async function writeSession(
     filename: string,
-    lines: SessionRecordLine[],
+    lines: SessionFixture[],
   ): Promise<string> {
+    const header = lines[0];
+    if (header.type !== 'session_start')
+      throw new Error('Missing fixture header');
+    const recorder = JournalRecordingService.create({
+      ...header.payload,
+      chatsDir: tempDir,
+    });
+    let recordedPath: string;
+    try {
+      const session = await recorder.session();
+      for (const line of lines) {
+        if (line.type !== 'content') continue;
+        await session.append([line.payload.content]);
+        const preview = previewOfContent(line.payload.content);
+        if (preview !== undefined) recorder.recordFirstUserPreview(preview);
+      }
+      await recorder.flush();
+      const materialized = recorder.getFilePath();
+      if (materialized === null) throw new Error('Missing fixture journal');
+      recordedPath = materialized;
+    } finally {
+      await recorder.dispose();
+    }
     const filePath = path.join(tempDir, filename);
-    const content = lines.map((line) => JSON.stringify(line)).join('\n') + '\n';
-    await fs.writeFile(filePath, content);
+    await fs.rename(recordedPath, filePath);
     return filePath;
   }
 
@@ -204,7 +219,7 @@ describe('SessionDiscovery extensions', () => {
    * Append a content line exactly when the include flag selects it.
    */
   function pushContentWhenSelected(
-    lines: SessionRecordLine[],
+    lines: SessionFixture[],
     includeContent: boolean,
     messageText: string,
   ): void {
@@ -221,16 +236,16 @@ describe('SessionDiscovery extensions', () => {
   async function writeProbeFile(fileType: ProbeFileType): Promise<string> {
     switch (fileType) {
       case 'valid':
-        return writeSession(`prop-valid-${Date.now()}.jsonl`, [
+        return writeSession(`prop-valid-${Date.now()}.llxj`, [
           createSessionStartLine(1, 'sess', 'hash'),
           createContentLine(2, 'human', 'Message'),
         ]);
       case 'empty':
-        return writeRawFile(`prop-empty-${Date.now()}.jsonl`, '');
+        return writeRawFile(`prop-empty-${Date.now()}.llxj`, '');
       case 'invalid-json':
-        return writeRawFile(`prop-invalid-${Date.now()}.jsonl`, 'not json');
+        return writeRawFile(`prop-invalid-${Date.now()}.llxj`, 'not json');
       case 'non-existent':
-        return path.join(tempDir, `non-existent-${Date.now()}.jsonl`);
+        return path.join(tempDir, `non-existent-${Date.now()}.llxj`);
       default:
         throw new Error('Unknown probe file type');
     }
@@ -242,7 +257,7 @@ describe('SessionDiscovery extensions', () => {
 
   describe('hasContentEvents', () => {
     it('returns false for session with only session_start', async () => {
-      const filePath = await writeSession('empty-session.jsonl', [
+      const filePath = await writeSession('empty-session.llxj', [
         createSessionStartLine(1, 'sess-001', 'hash-abc'),
       ]);
       const result = await SessionDiscovery.hasContentEvents(filePath);
@@ -250,7 +265,7 @@ describe('SessionDiscovery extensions', () => {
     });
 
     it('returns true for session with content event', async () => {
-      const filePath = await writeSession('with-content.jsonl', [
+      const filePath = await writeSession('with-content.llxj', [
         createSessionStartLine(1, 'sess-002', 'hash-abc'),
         createContentLine(2, 'human', 'Hello, world!'),
       ]);
@@ -259,7 +274,7 @@ describe('SessionDiscovery extensions', () => {
     });
 
     it('returns true for session with multiple events including content', async () => {
-      const filePath = await writeSession('multi-content.jsonl', [
+      const filePath = await writeSession('multi-content.llxj', [
         createSessionStartLine(1, 'sess-003', 'hash-abc'),
         createContentLine(2, 'human', 'First message'),
         createContentLine(3, 'ai', 'Response'),
@@ -270,21 +285,13 @@ describe('SessionDiscovery extensions', () => {
     });
 
     it('returns false for non-existent file', async () => {
-      const nonExistentPath = path.join(tempDir, 'does-not-exist.jsonl');
+      const nonExistentPath = path.join(tempDir, 'does-not-exist.llxj');
       const result = await SessionDiscovery.hasContentEvents(nonExistentPath);
       expect(result).toBe(false);
     });
 
     it('returns false for empty file (no lines)', async () => {
-      const filePath = await writeRawFile('empty-file.jsonl', '');
-      const result = await SessionDiscovery.hasContentEvents(filePath);
-      expect(result).toBe(false);
-    });
-
-    it('returns false for file with only whitespace after header', async () => {
-      const sessionStart = createSessionStartLine(1, 'sess-whitespace', 'hash');
-      const content = JSON.stringify(sessionStart) + '\n   \n\t\n  \n';
-      const filePath = await writeRawFile('whitespace-only.jsonl', content);
+      const filePath = await writeRawFile('empty-file.llxj', '');
       const result = await SessionDiscovery.hasContentEvents(filePath);
       expect(result).toBe(false);
     });
@@ -296,11 +303,11 @@ describe('SessionDiscovery extensions', () => {
 
   describe('listSessionsDetailed', () => {
     it('returns all valid sessions with skippedCount: 0', async () => {
-      await writeSession('session-001.jsonl', [
+      await writeSession('session-001.llxj', [
         createSessionStartLine(1, 'sess-001', 'project-hash'),
         createContentLine(2, 'human', 'Hello'),
       ]);
-      await writeSession('session-002.jsonl', [
+      await writeSession('session-002.llxj', [
         createSessionStartLine(1, 'sess-002', 'project-hash'),
         createContentLine(2, 'human', 'World'),
       ]);
@@ -318,14 +325,14 @@ describe('SessionDiscovery extensions', () => {
 
     it('returns only valid sessions with skippedCount for corrupted files', async () => {
       // Valid session
-      await writeSession('session-valid.jsonl', [
+      await writeSession('session-valid.llxj', [
         createSessionStartLine(1, 'sess-valid', 'project-hash'),
         createContentLine(2, 'human', 'Valid'),
       ]);
       // Corrupted session - invalid JSON
-      await writeRawFile('session-corrupted1.jsonl', '{ not valid json');
+      await writeRawFile('session-corrupted1.llxj', '{ not valid json');
       // Corrupted session - missing required fields
-      await writeRawFile('session-corrupted2.jsonl', '{"v":1}\n');
+      await writeRawFile('session-corrupted2.llxj', '{"v":1}\n');
 
       const result = await SessionDiscovery.listSessionsDetailed(
         tempDir,
@@ -338,9 +345,9 @@ describe('SessionDiscovery extensions', () => {
     });
 
     it('returns empty sessions array with skippedCount for all corrupted', async () => {
-      await writeRawFile('session-bad1.jsonl', 'invalid json line');
-      await writeRawFile('session-bad2.jsonl', '{"incomplete":');
-      await writeRawFile('session-bad3.jsonl', '{}');
+      await writeRawFile('session-bad1.llxj', 'invalid json line');
+      await writeRawFile('session-bad2.llxj', '{"incomplete":');
+      await writeRawFile('session-bad3.llxj', '{}');
 
       const result = await SessionDiscovery.listSessionsDetailed(
         tempDir,
@@ -366,13 +373,13 @@ describe('SessionDiscovery extensions', () => {
 
     it('returns sessions sorted newest-first by modification time', async () => {
       // Create sessions, then set explicit mtimes to avoid filesystem precision races.
-      const path1 = await writeSession('session-oldest.jsonl', [
+      const path1 = await writeSession('session-oldest.llxj', [
         createSessionStartLine(1, 'sess-oldest', 'project-hash'),
       ]);
-      const path2 = await writeSession('session-middle.jsonl', [
+      const path2 = await writeSession('session-middle.llxj', [
         createSessionStartLine(1, 'sess-middle', 'project-hash'),
       ]);
-      const path3 = await writeSession('session-newest.jsonl', [
+      const path3 = await writeSession('session-newest.llxj', [
         createSessionStartLine(1, 'sess-newest', 'project-hash'),
       ]);
 
@@ -400,7 +407,7 @@ describe('SessionDiscovery extensions', () => {
 
   describe('readFirstUserMessage', () => {
     it('returns text from single user message', async () => {
-      const filePath = await writeSession('single-user.jsonl', [
+      const filePath = await writeSession('single-user.llxj', [
         createSessionStartLine(1, 'sess-001', 'hash'),
         createContentLine(2, 'human', 'Hello, this is my first message'),
       ]);
@@ -409,7 +416,7 @@ describe('SessionDiscovery extensions', () => {
     });
 
     it('returns FIRST user message when multiple exist', async () => {
-      const filePath = await writeSession('multi-user.jsonl', [
+      const filePath = await writeSession('multi-user.llxj', [
         createSessionStartLine(1, 'sess-001', 'hash'),
         createContentLine(2, 'human', 'First user message'),
         createContentLine(3, 'ai', 'AI response'),
@@ -420,7 +427,7 @@ describe('SessionDiscovery extensions', () => {
     });
 
     it('returns null when no user messages exist (system only)', async () => {
-      const filePath = await writeSession('system-only.jsonl', [
+      const filePath = await writeSession('system-only.llxj', [
         createSessionStartLine(1, 'sess-001', 'hash'),
         createContentLine(2, 'ai', 'AI greeting'),
       ]);
@@ -429,7 +436,7 @@ describe('SessionDiscovery extensions', () => {
     });
 
     it('extracts text correctly from message with TextPart only', async () => {
-      const filePath = await writeSession('text-part.jsonl', [
+      const filePath = await writeSession('text-part.llxj', [
         createSessionStartLine(1, 'sess-001', 'hash'),
         createContentLine(2, 'human', 'Simple text content'),
       ]);
@@ -438,7 +445,7 @@ describe('SessionDiscovery extensions', () => {
     });
 
     it('concatenates text from mixed parts (Text + Media)', async () => {
-      const filePath = await writeSession('mixed-parts.jsonl', [
+      const filePath = await writeSession('mixed-parts.llxj', [
         createSessionStartLine(1, 'sess-001', 'hash'),
         createContentLineWithMixedParts(
           2,
@@ -456,7 +463,7 @@ describe('SessionDiscovery extensions', () => {
         'This is a very long message that exceeds one hundred and twenty characters in length and should be truncated appropriately';
       expect(longMessage.length).toBeGreaterThan(120);
 
-      const filePath = await writeSession('long-message.jsonl', [
+      const filePath = await writeSession('long-message.llxj', [
         createSessionStartLine(1, 'sess-001', 'hash'),
         createContentLine(2, 'human', longMessage),
       ]);
@@ -469,7 +476,7 @@ describe('SessionDiscovery extensions', () => {
       const exactMessage = 'A'.repeat(120);
       expect(exactMessage.length).toBe(120);
 
-      const filePath = await writeSession('exact-120.jsonl', [
+      const filePath = await writeSession('exact-120.llxj', [
         createSessionStartLine(1, 'sess-001', 'hash'),
         createContentLine(2, 'human', exactMessage),
       ]);
@@ -482,7 +489,7 @@ describe('SessionDiscovery extensions', () => {
       const shortMessage = 'B'.repeat(119);
       expect(shortMessage.length).toBe(119);
 
-      const filePath = await writeSession('under-120.jsonl', [
+      const filePath = await writeSession('under-120.llxj', [
         createSessionStartLine(1, 'sess-001', 'hash'),
         createContentLine(2, 'human', shortMessage),
       ]);
@@ -492,7 +499,7 @@ describe('SessionDiscovery extensions', () => {
     });
 
     it('returns empty string or null for empty text in TextPart', async () => {
-      const filePath = await writeSession('empty-text.jsonl', [
+      const filePath = await writeSession('empty-text.llxj', [
         createSessionStartLine(1, 'sess-001', 'hash'),
         createContentLine(2, 'human', ''),
       ]);
@@ -502,26 +509,6 @@ describe('SessionDiscovery extensions', () => {
       void result;
     });
 
-    it('returns null for valid JSON with unexpected schema', async () => {
-      // Valid JSON but not matching expected structure
-      const weirdLine = JSON.stringify({
-        v: 1,
-        seq: 2,
-        ts: new Date().toISOString(),
-        type: 'content',
-        payload: { unexpected: 'schema', no_content: true },
-      });
-      const content =
-        JSON.stringify(createSessionStartLine(1, 'sess-001', 'hash')) +
-        '\n' +
-        weirdLine +
-        '\n';
-      const filePath = await writeRawFile('weird-schema.jsonl', content);
-
-      const result = await SessionDiscovery.readFirstUserMessage(filePath);
-      expect(result).toBeNull();
-    });
-
     const isRootUser =
       typeof process.getuid === 'function' && process.getuid() === 0;
 
@@ -529,7 +516,7 @@ describe('SessionDiscovery extensions', () => {
       const it =
         process.platform === 'win32' || isRootUser ? bunIt.skip : bunIt;
       it('returns null for file I/O error (unreadable file)', async () => {
-        const filePath = path.join(tempDir, 'unreadable.jsonl');
+        const filePath = path.join(tempDir, 'unreadable.llxj');
         await fs.writeFile(filePath, 'content');
         try {
           await fs.chmod(filePath, 0o000);
@@ -543,7 +530,7 @@ describe('SessionDiscovery extensions', () => {
     }
 
     it('returns null for non-existent file', async () => {
-      const nonExistentPath = path.join(tempDir, 'ghost.jsonl');
+      const nonExistentPath = path.join(tempDir, 'ghost.llxj');
       const result =
         await SessionDiscovery.readFirstUserMessage(nonExistentPath);
       expect(result).toBeNull();
@@ -555,25 +542,9 @@ describe('SessionDiscovery extensions', () => {
   // =========================================================================
 
   describe('edge cases', () => {
-    it('handles JSONL with trailing newline correctly', async () => {
-      const lines = [
-        createSessionStartLine(1, 'sess-001', 'hash'),
-        createContentLine(2, 'human', 'Message'),
-      ];
-      const content =
-        lines.map((line) => JSON.stringify(line)).join('\n') + '\n\n\n';
-      const filePath = await writeRawFile('trailing-newlines.jsonl', content);
-
-      const hasContent = await SessionDiscovery.hasContentEvents(filePath);
-      expect(hasContent).toBe(true);
-
-      const firstMsg = await SessionDiscovery.readFirstUserMessage(filePath);
-      expect(firstMsg).toBe('Message');
-    });
-
     it('reads efficiently until first user found (large file)', async () => {
       // Create a file with many AI messages before the first user message
-      const lines: SessionRecordLine[] = [
+      const lines: SessionFixture[] = [
         createSessionStartLine(1, 'sess-001', 'hash'),
       ];
       // Add 100 AI messages
@@ -587,14 +558,14 @@ describe('SessionDiscovery extensions', () => {
         lines.push(createContentLine(i, 'human', `User message ${i}`));
       }
 
-      const filePath = await writeSession('large-file.jsonl', lines);
+      const filePath = await writeSession('large-file.llxj', lines);
 
       const result = await SessionDiscovery.readFirstUserMessage(filePath);
       expect(result).toBe('First user after many AI');
     });
 
     it('skips tool-call events before user message', async () => {
-      const filePath = await writeSession('tool-calls-first.jsonl', [
+      const filePath = await writeSession('tool-calls-first.llxj', [
         createSessionStartLine(1, 'sess-001', 'hash'),
         createToolCallLine(2, 'read_file', 'call-001'),
         createToolCallLine(3, 'write_file', 'call-002'),
@@ -606,7 +577,7 @@ describe('SessionDiscovery extensions', () => {
     });
 
     it('skips model response before user message', async () => {
-      const filePath = await writeSession('ai-first.jsonl', [
+      const filePath = await writeSession('ai-first.llxj', [
         createSessionStartLine(1, 'sess-001', 'hash'),
         createContentLine(2, 'ai', 'AI greeting'),
         createContentLine(3, 'ai', 'More AI text'),
@@ -629,12 +600,12 @@ describe('SessionDiscovery extensions', () => {
           fc.boolean(),
           fc.string({ minLength: 1, maxLength: 50 }),
           async (includeContent, messageText) => {
-            const lines: SessionRecordLine[] = [
+            const lines: SessionFixture[] = [
               createSessionStartLine(1, 'sess-prop', 'hash'),
             ];
             pushContentWhenSelected(lines, includeContent, messageText);
             const filePath = await writeSession(
-              `idempotent-${Date.now()}-${Math.random()}.jsonl`,
+              `idempotent-${Date.now()}-${Math.random()}.llxj`,
               lines,
             );
 
@@ -677,7 +648,7 @@ describe('SessionDiscovery extensions', () => {
           fc.string({ minLength: 0, maxLength: 500 }),
           async (messageText) => {
             const filePath = await writeSession(
-              `prop-length-${Date.now()}-${Math.random()}.jsonl`,
+              `prop-length-${Date.now()}-${Math.random()}.llxj`,
               [
                 createSessionStartLine(1, 'sess', 'hash'),
                 createContentLine(2, 'human', messageText),
@@ -711,14 +682,12 @@ describe('SessionDiscovery extensions', () => {
 
             // Create valid sessions
             for (let i = 0; i < validCount; i++) {
-              await writeRawFile(
+              await writeSession(
                 path.relative(
                   tempDir,
-                  path.join(testDir, `session-valid-${i}.jsonl`),
+                  path.join(testDir, `session-valid-${i}.llxj`),
                 ),
-                JSON.stringify(
-                  createSessionStartLine(1, `sess-${i}`, 'prop-hash'),
-                ) + '\n',
+                [createSessionStartLine(1, `sess-${i}`, 'prop-hash')],
               );
             }
 
@@ -727,7 +696,7 @@ describe('SessionDiscovery extensions', () => {
               await writeRawFile(
                 path.relative(
                   tempDir,
-                  path.join(testDir, `session-invalid-${i}.jsonl`),
+                  path.join(testDir, `session-invalid-${i}.llxj`),
                 ),
                 'not valid json\n',
               );
@@ -756,7 +725,7 @@ describe('SessionDiscovery extensions', () => {
             .filter((s) => !s.includes('\n')),
           async (messageText) => {
             const filePath = await writeSession(
-              `prop-arb-${Date.now()}-${Math.random()}.jsonl`,
+              `prop-arb-${Date.now()}-${Math.random()}.llxj`,
               [
                 createSessionStartLine(1, 'sess', 'hash'),
                 createContentLine(2, 'human', messageText),
