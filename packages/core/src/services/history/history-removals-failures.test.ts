@@ -1,13 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { batchRow } from './__tests__/support/addbatch-stream-test-helpers.js';
+import { expectedRange, rowsOf } from './chronology-rollback-test-helpers.js';
 import {
-  withRemovalFixture,
+  assertRemovalRows,
   removalReferences,
   removalRow,
-  assertRemovalRows,
+  withRemovalFixture,
 } from './history-removals-test-helpers.js';
-import { batchRow } from './__tests__/support/addbatch-stream-test-helpers.js';
-import { expectedRange } from './chronology-rollback-test-helpers.js';
 
 function registerRemovalFailure(
   operation: 'pop' | 'remove' | 'clear',
@@ -17,7 +17,7 @@ function registerRemovalFailure(
     it(`restores pending membership, markers, tokens and media after ${operation} ${failure} rejection`, async () => {
       await withRemovalFixture(
         async (
-          { history, recorder, pauseWriter, waitForPausedWrite, releaseWriter },
+          { history, io, pauseWriter, waitForPausedWrite, releaseWriter },
           store,
         ) => {
           const [shared, removed] = await removalReferences(store);
@@ -25,26 +25,29 @@ function registerRemovalFailure(
           pauseWriter();
           history.addAll(input);
           await waitForPausedWrite;
+          releaseWriter();
           await history.waitForTokenUpdates();
           await history.settleMediaOwnership();
           const tokens = input.length * 4;
           const range = expectedRange(input.length);
-          if (failure === 'journal') recorder.failAdmissionAfter(0);
+          const stored = await rowsOf(history);
+          const primary = new Error(
+            failure === 'journal'
+              ? 'removal journal write failed'
+              : 'removal observer failed',
+          );
+          if (failure === 'journal') io.rejectNextWrite(primary, 'trailer');
           const listener = (): void => {
-            throw new Error('removal observer failed');
+            throw primary;
           };
           if (failure === 'observer') history.on('tokensUpdated', listener);
           const execute = async (): Promise<void> => {
             if (operation === 'clear') await history.clear();
             else if (operation === 'pop') await history.pop();
-            else await history.removeLastIfMatches(input[1]);
+            else await history.removeLastIfMatches(stored[1]);
           };
           try {
-            await expect(execute()).rejects.toThrow(
-              failure === 'journal'
-                ? 'injected journal admission failure'
-                : 'removal observer failed',
-            );
+            await expect(execute()).rejects.toBe(primary);
           } finally {
             history.off('tokensUpdated', listener);
           }
@@ -71,20 +74,22 @@ describe('history removal rollback', () => {
   ];
   for (const operation of operations)
     for (const failure of failures) registerRemovalFailure(operation, failure);
-  registerRemovalFailure('remove', 'journal');
+  for (const failure of failures) registerRemovalFailure('remove', failure);
 
-  it('keeps the original cut-sequence behavior for repeated row and marker identities', async () => {
+  it('removes only the final occurrence of a repeated row and marker identity', async () => {
     await withRemovalFixture(
-      async ({ history, pauseWriter, waitForPausedWrite }) => {
+      async ({ history, pauseWriter, waitForPausedWrite, releaseWriter }) => {
         const repeated = batchRow(0);
         pauseWriter();
         history.add(repeated);
         history.add(batchRow(1));
         history.add(repeated);
         await waitForPausedWrite;
+        releaseWriter();
         await history.waitForTokenUpdates();
         expect(await history.pop()).toStrictEqual(repeated);
-        expect(history.length()).toBe(0);
+        expect(history.length()).toBe(2);
+        expect(await rowsOf(history)).toStrictEqual([repeated, batchRow(1)]);
       },
     );
   });
