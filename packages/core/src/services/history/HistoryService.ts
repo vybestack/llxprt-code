@@ -508,6 +508,12 @@ export class HistoryService extends HistoryServiceReads {
         owner: this.mediaOwner,
         ownership: this.mutationOwnership,
         match: content,
+        recalculate: () =>
+          this.recalculateTokensInternal(
+            this.activeTokenizationModel,
+            undefined,
+            true,
+          ),
       })) !== undefined
     );
   }
