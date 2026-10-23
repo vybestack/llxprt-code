@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
-import type { HistoryDumpSnapshot } from '@vybestack/llxprt-code-core/services/history/historyDumpSnapshot.js';
+import { describe, expect, it, spyOn } from 'bun:test';
+import type { CompressionInputSnapshot } from '@vybestack/llxprt-code-core/services/history/compressionInput.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import {
   oneshotSetup,
@@ -13,21 +13,19 @@ import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.
 class FailingSourceHistory extends OneshotDiskHistory {
   failure: Error | undefined;
   closedSnapshots = 0;
-  override async openDumpSnapshot(): Promise<HistoryDumpSnapshot> {
-    const snapshot = await super.openDumpSnapshot();
+  override async openCompressionInput(): Promise<CompressionInputSnapshot> {
+    const snapshot = await super.openCompressionInput();
     const failure = this.failure;
+    const readRow = snapshot.rows.readRow.bind(snapshot.rows);
+    spyOn(snapshot.rows, 'readRow').mockImplementation((index) => {
+      if (failure !== undefined) throw failure;
+      return readRow(index);
+    });
     const closed = (): void => {
       this.closedSnapshots++;
     };
     return {
       ...snapshot,
-      async *rows() {
-        let index = 0;
-        for await (const row of snapshot.rows()) {
-          if (++index === 31 && failure !== undefined) throw failure;
-          yield row;
-        }
-      },
       async close() {
         try {
           await snapshot.close();
