@@ -90,6 +90,38 @@ async function seeded(size: number): Promise<HistoryService> {
 }
 
 describe('annotated append final metadata follows the native mirror FIFO', () => {
+  it('keeps two unfiltered recorders attached through an annotated append', async () => {
+    const history = await seeded(4);
+    const mirrors = [0, 1].map((index) =>
+      createSessionRecorder({
+        sessionId: `unfiltered-${index}`,
+        projectHash: 'annotated-fifo',
+        chatsDir: directory(),
+        workspaceDirs: [directory()],
+        provider: 'test',
+        model: 'test',
+      }),
+    );
+    try {
+      for (const mirror of mirrors) await history.attachJournal(mirror, true);
+      await append(history, 4);
+      await history.waitForCommit();
+      const expected = await values(history);
+      expect(expected).toHaveLength(8);
+      const metadata = encodeJournalSpanWindow(
+        history.getContextRange().removedInterior,
+      );
+      for (const mirror of mirrors) {
+        const path = mirror.getFilePath();
+        if (path === null) throw new Error('Mirror has no durable file');
+        await assertDurableMirror(path, expected, metadata);
+      }
+    } finally {
+      await history.dispose();
+      for (const mirror of mirrors) await mirror.dispose();
+    }
+  });
+
   const directory = useTempDir('annotated-append-mirrors-');
 
   it.each([512, 8192])(
