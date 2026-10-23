@@ -27,8 +27,8 @@ describe('run_shell_command --yolo', () => {
     });
 
     const testFile = rig.createFile('test.txt', 'Lorem\nIpsum\nDolor\n');
-    const { command } = getLineCountCommand();
-    const prompt = `use ${command} to tell me how many lines there are in ${testFile}`;
+    const { command } = getLineCountCommand(testFile);
+    const prompt = `Run this command with the run_shell_command tool: ${command}\nThen tell me how many lines ${testFile} has.`;
 
     const result = await rig.run({
       args: prompt,

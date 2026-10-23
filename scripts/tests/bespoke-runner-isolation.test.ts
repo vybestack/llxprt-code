@@ -24,8 +24,10 @@ import {
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
+  describePendingRunnerChildren,
   stopRunnerChildren,
   throwWorkerFailures,
+  trackRunnerChild,
   type BespokeRunnerIsolation,
 } from '../lib/bespoke-runner-isolation.js';
 import {
@@ -346,6 +348,25 @@ describe('runner child shutdown', () => {
     },
   );
 });
+describe('pending runner children', () => {
+  it('names each tracked child until its close is observed', () => {
+    const child = new ChildProcess();
+    Object.defineProperty(child, 'pid', { value: 7112 });
+    child.spawnargs = [
+      'bun',
+      'test',
+      'src\\utils\\powershell-ast-security.test.ts',
+    ];
+    expect(describePendingRunnerChildren()).toEqual([]);
+    trackRunnerChild(child);
+    expect(describePendingRunnerChildren()).toEqual([
+      'pid 7112 (src\\utils\\powershell-ast-security.test.ts)',
+    ]);
+    child.emit('close', 0, null);
+    expect(describePendingRunnerChildren()).toEqual([]);
+  });
+});
+
 it('returns fulfilled worker values in order, including an empty batch', () => {
   expect(
     throwWorkerFailures([

@@ -16,6 +16,7 @@ import {
   exportedTestEnvironment,
   required,
   requiredText,
+  setupActionText,
   setupStep,
   step,
   steps,
@@ -302,13 +303,64 @@ describe('ordinary local-model E2E', () => {
       OLLAMA_CONTEXT_LENGTH: '32768',
       OLLAMA_NUM_PARALLEL: '1',
       OLLAMA_MODELS: '${{ runner.temp }}\\ollama-models',
+      MODEL_CACHE_HIT: '${{ steps.model-cache.outputs.cache-hit }}',
     });
     const script = asString(windows.run);
     expect(script).toContain("'0.31.1'");
     expect(script).toContain('pull gemma4:e2b-it-qat');
+    expect(script).toContain("$env:MODEL_CACHE_HIT -eq 'true'");
     expect(script).toContain(
       '07ea59a474013479c8b6b802bef095c40e964a1d776ba02f264c0e30e1aede0c',
     );
+  });
+
+  it('caches the complete digest-keyed model store with SHA-pinned cache actions, saving only after verification', () => {
+    const digest =
+      '07ea59a474013479c8b6b802bef095c40e964a1d776ba02f264c0e30e1aede0c';
+    const restore = actionStep('Restore local Gemma 4 E2B model cache');
+    const save = actionStep('Save local Gemma 4 E2B model cache');
+    expect(restore.id).toBe('model-cache');
+    expect(restore.uses).toMatch(/^actions\/cache\/restore@[0-9a-f]{40}$/);
+    expect(save.uses).toMatch(/^actions\/cache\/save@[0-9a-f]{40}$/);
+    expect(setupActionText).toContain('# ratchet:actions/cache/restore@v6');
+    expect(setupActionText).toContain('# ratchet:actions/cache/save@v6');
+    const key = `ollama-models-\${{ runner.os }}-gemma4-e2b-it-qat-${digest}`;
+    for (const cacheStep of [restore, save]) {
+      expect(asOptionalRecord(cacheStep.with)?.key).toBe(key);
+      expect(asOptionalRecord(cacheStep.with)?.path).toBe(
+        '${{ runner.temp }}/ollama-models',
+      );
+    }
+    expect(save.if).toBe("steps.model-cache.outputs.cache-hit != 'true'");
+
+    const names = setupActionSteps.map((candidate) => candidate.name);
+    const index = (name: string): number => names.indexOf(name);
+    expect(index(restore.name ?? '')).toBeLessThan(
+      index('Start local Gemma 4 E2B model'),
+    );
+    expect(index(restore.name ?? '')).toBeLessThan(
+      index('Start local Gemma 4 E2B model (Windows)'),
+    );
+    for (const verified of [
+      'Start local Gemma 4 E2B model',
+      'Start local Gemma 4 E2B model (Windows)',
+      'Verify CPU-only model inference',
+      'Verify model inference (macOS and Windows)',
+    ]) {
+      expect(index(save.name ?? '')).toBeGreaterThan(index(verified));
+    }
+    expect(index(save.name ?? '')).toBeLessThan(
+      index('Export local model test environment'),
+    );
+
+    for (const name of [
+      'Start local Gemma 4 E2B model',
+      'Start local Gemma 4 E2B model (Windows)',
+    ]) {
+      expect(asOptionalRecord(actionStep(name).env)?.MODEL_CACHE_HIT).toBe(
+        '${{ steps.model-cache.outputs.cache-hit }}',
+      );
+    }
   });
 
   it('keeps the macOS model and vision projector on the CPU for warm-up and every later request', () => {

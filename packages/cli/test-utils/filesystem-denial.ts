@@ -30,14 +30,31 @@ import path from 'node:path';
 
 const IS_WINDOWS = process.platform === 'win32';
 
+/**
+ * Absolute path of a Windows system tool. A bare name resolves through PATH,
+ * where Git-for-Windows' GNU coreutils `whoami` precedes System32 and rejects
+ * the Windows switches.
+ */
+function system32Tool(name: string): string {
+  const windowsDirectory = process.env.SystemRoot ?? process.env.windir;
+  if (windowsDirectory === undefined) {
+    throw new Error(
+      `Windows filesystem denial requires SystemRoot or windir to locate System32\\${name}.`,
+    );
+  }
+  return path.join(windowsDirectory, 'System32', name);
+}
+
 let cachedSid: string | undefined;
 
 /** SID of the user running the tests, as `whoami /user` reports it. */
 function currentUserSid(): string {
   if (cachedSid !== undefined) return cachedSid;
-  const output = execFileSync('whoami', ['/user', '/fo', 'csv', '/nh'], {
-    encoding: 'utf8',
-  });
+  const output = execFileSync(
+    system32Tool('whoami.exe'),
+    ['/user', '/fo', 'csv', '/nh'],
+    { encoding: 'utf8' },
+  );
   const match = /S-1-\d+(?:-\d+)+/.exec(output);
   if (match === null) {
     throw new Error(`whoami /user returned no SID: ${output}`);
@@ -48,7 +65,7 @@ function currentUserSid(): string {
 
 function icaclsDeny(target: string, rights: string): void {
   execFileSync(
-    'icacls',
+    system32Tool('icacls.exe'),
     [target, '/deny', `*${currentUserSid()}:(${rights})`],
     {
       stdio: 'pipe',
@@ -57,9 +74,11 @@ function icaclsDeny(target: string, rights: string): void {
 }
 
 function icaclsRemoveDeny(target: string): void {
-  execFileSync('icacls', [target, '/remove:d', `*${currentUserSid()}`], {
-    stdio: 'pipe',
-  });
+  execFileSync(
+    system32Tool('icacls.exe'),
+    [target, '/remove:d', `*${currentUserSid()}`],
+    { stdio: 'pipe' },
+  );
 }
 
 /**

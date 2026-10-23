@@ -9,16 +9,23 @@ import path from 'node:path';
 import { Linter } from 'eslint';
 import rule, { BOUNDARY_EXCEPTIONS } from './no-alias-probes.js';
 
-// cwd is set to the filesystem root so the absolute test filenames below
-// (e.g. '/x/packages/...') resolve inside the flat-config basePath instead of
-// being classified as external paths, which would skip linting entirely.
-const linter = new Linter({ cwd: path.sep });
+// cwd is set to the native filesystem root (e.g. '/' or 'C:\') so the absolute
+// test filenames below resolve inside the flat-config basePath instead of being
+// classified as external paths, which would skip linting entirely. A bare
+// path.sep is not an absolute path on Windows.
+const FILESYSTEM_ROOT = path.parse(process.cwd()).root;
+const linter = new Linter({ cwd: FILESYSTEM_ROOT });
 
 /**
  * Filename used when a test does not care about location. It is a .ts file
  * outside any allowlisted path so existing detection tests are unaffected.
  */
-const NON_ALLOWLISTED_FILENAME = '/x/src/file.ts';
+const NON_ALLOWLISTED_FILENAME = path.join(
+  FILESYSTEM_ROOT,
+  'x',
+  'src',
+  'file.ts',
+);
 
 function verify(code: string, filename: string = NON_ALLOWLISTED_FILENAME) {
   return linter.verify(
@@ -142,14 +149,30 @@ describe('no-alias-probes', () => {
     it('does not report the probe snippet in an allowlisted file', () => {
       expectClean(
         'const v = process.env.NO_PROXY ?? process.env.no_proxy;',
-        '/x/packages/cli/src/utils/sandbox-seatbelt.ts',
+        path.join(
+          FILESYSTEM_ROOT,
+          'x',
+          'packages',
+          'cli',
+          'src',
+          'utils',
+          'sandbox-seatbelt.ts',
+        ),
       );
     });
 
     it('still reports the probe snippet in a non-allowlisted file', () => {
       expectFlagged(
         'const v = process.env.NO_PROXY ?? process.env.no_proxy;',
-        '/x/packages/cli/src/utils/some-other-file.ts',
+        path.join(
+          FILESYSTEM_ROOT,
+          'x',
+          'packages',
+          'cli',
+          'src',
+          'utils',
+          'some-other-file.ts',
+        ),
       );
     });
   });

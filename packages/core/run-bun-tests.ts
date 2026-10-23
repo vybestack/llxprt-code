@@ -49,6 +49,7 @@ import {
   throwWorkerFailures,
   installRunnerSignalHandlers,
   trackRunnerChild,
+  describePendingRunnerChildren,
 } from '../../scripts/lib/bespoke-runner-isolation.js';
 
 process.env.LLXPRT_RUNNING_TESTS = 'true';
@@ -361,6 +362,22 @@ export function generateJUnit(results: TestResult[]): string {
   });
 }
 
+/**
+ * A child whose close was never observed (a failed reap) keeps this process
+ * alive on its handle after every file has finished. Name those children and
+ * exit with a failure instead of waiting for the CI job to be cancelled.
+ */
+function exitWithPendingChildren(): void {
+  const pending = describePendingRunnerChildren();
+  if (pending.length === 0) return;
+  console.error(
+    `FATAL: ${pending.length} test child process(es) never closed, so the ` +
+      'runner would keep waiting on them; exiting with failure:',
+  );
+  for (const description of pending) console.error(`  ${description}`);
+  process.exit(1);
+}
+
 async function main(): Promise<void> {
   const testFiles = discoverTestFiles(WORKSPACE_ROOT).map((file) =>
     relative(WORKSPACE_ROOT, file),
@@ -400,13 +417,11 @@ async function main(): Promise<void> {
       const batchResults = throwWorkerFailures(settled);
       results.push(...batchResults);
 
-      // Fail fast: only an unrecovered reap or attempt-cleanup failure aborts
-      // the run. A failure on the first attempt that the retry outlived
-      // (reapFailed=false on the returned result) means the suspect tree is
-      // gone and the file is already marked failed; subsequent files are safe
-      // to run. A failure on the final attempt means the old process tree may
-      // still be alive and holding resources (log handles, ports) that would
-      // corrupt subsequent results.
+      // Fail fast on any reap or attempt-cleanup failure, including one from
+      // a first attempt that the retry outlived: a retry reaping cleanly says
+      // nothing about whether the first attempt's process tree is gone, and a
+      // tree that may still be alive holds resources (log handles, ports)
+      // that would corrupt subsequent results.
       if (batchResults.some((r) => r.reapFailed)) {
         for (const result of batchResults) {
           if (result.reapFailed && result.reapError !== null) {
@@ -430,11 +445,7 @@ async function main(): Promise<void> {
       if (result.timedOut) {
         console.error(
           `TIMEOUT: ${result.file} (exceeded ${timeoutExceededLabel(result)})` +
-            (result.reapFailed
-              ? ' [REAP FAILED]'
-              : result.reapError
-                ? ' [REAP FAILED (recovered on retry)]'
-                : ''),
+            (result.reapFailed ? ' [REAP FAILED]' : ''),
         );
       } else {
         console.error(
@@ -448,10 +459,15 @@ async function main(): Promise<void> {
         (failed.length > 0 ? ` (${failed.length} failed)` : ''),
     );
 
+    console.log(`Writing JUnit report to ${JUNIT_PATH}`);
     writeFileSync(JUNIT_PATH, generateJUnit(results));
 
     exitCode = failFast || failed.length > 0 ? 1 : 0;
+  } catch (error) {
+    console.error(`Test runner failed: ${String(error)}`);
+    throw error;
   } finally {
+    console.log('Tearing down the test session root');
     try {
       if (isolation.finalize() > 0 && exitCode === 0) exitCode = 1;
     } catch (error) {
@@ -461,6 +477,7 @@ async function main(): Promise<void> {
       removeSignalHandlers();
     }
     process.exitCode = exitCode;
+    exitWithPendingChildren();
   }
   if (failFast) process.exit(exitCode);
 }

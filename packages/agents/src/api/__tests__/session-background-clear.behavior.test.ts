@@ -4,6 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, expect, it } from 'bun:test';
+import { spawnSync } from 'node:child_process';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { setImmediate, setTimeout as delay } from 'node:timers/promises';
 import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import { AgentBusyError } from '../loop/agentBusyError.js';
@@ -20,6 +30,35 @@ async function awaitShellCleanup(shell: ShellJobOwner): Promise<void> {
       while (shell.hasPendingWork()) await delay(10);
     })(),
     'shell resource release',
+  );
+}
+
+/**
+ * Windows liveness is a process-table query by PID. POSIX process groups
+ * (`process.kill(-pgid, 0)`) do not exist there: a Windows shell job reports
+ * the outer PowerShell PID, and its command runs in an inner process.
+ */
+function windowsProcessIsAlive(pid: number): boolean {
+  const query = spawnSync(
+    'tasklist',
+    ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'],
+    { encoding: 'utf8', windowsHide: true },
+  );
+  if (query.status !== 0)
+    throw new Error(`tasklist failed for PID ${pid}: ${query.stderr}`);
+  return query.stdout.includes(`"${pid}"`);
+}
+
+async function awaitPidFile(path: string, boundary: string): Promise<number> {
+  return deadline(
+    (async () => {
+      for (;;) {
+        const text = existsSync(path) ? readFileSync(path, 'utf8').trim() : '';
+        if (/^\d+$/.test(text)) return Number(text);
+        await delay(10);
+      }
+    })(),
+    boundary,
   );
 }
 
@@ -131,36 +170,95 @@ describe('new sessions exclude background work', () => {
     }
   });
 
-  it('blocks on acknowledged terminal shell groups until OS resources are released', async () => {
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-    const { shell } = owners(agent);
-    const terminal = deferred<void>();
-    const off = shell.onJobCompleted(() => terminal.resolve());
-    try {
-      const job = shell.launch({
-        command: 'printf draining-shell',
-        cwd: process.cwd(),
-      });
-      await deadline(terminal.promise, 'terminal shell record');
-      if (job.pid === undefined)
-        throw new Error('Expected owned shell group pid');
-      shell.markNotified([job.id]);
-      expect(shell.getRunningJobs()).toHaveLength(0);
-      expect(shell.getPendingNotifications()).toHaveLength(0);
-      const pgid = job.pid;
-      expect(() => process.kill(-pgid, 0)).not.toThrow();
-      await expect(agent.session.startNewSession()).rejects.toThrow(
-        'shell cleanup',
-      );
-      await awaitShellCleanup(shell);
-      expect(() => process.kill(-pgid, 0)).toThrow('ESRCH');
-      await agent.session.startNewSession();
-      expect(await agent.getHistory()).toStrictEqual([]);
-    } finally {
-      off();
-      await cleanup();
-    }
-  });
+  it.skipIf(process.platform === 'win32')(
+    'blocks on acknowledged terminal shell groups until OS resources are released',
+    async () => {
+      const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+      const { shell } = owners(agent);
+      const terminal = deferred<void>();
+      const off = shell.onJobCompleted(() => terminal.resolve());
+      try {
+        const job = shell.launch({
+          command: 'printf draining-shell',
+          cwd: process.cwd(),
+        });
+        await deadline(terminal.promise, 'terminal shell record');
+        if (job.pid === undefined)
+          throw new Error('Expected owned shell group pid');
+        shell.markNotified([job.id]);
+        expect(shell.getRunningJobs()).toHaveLength(0);
+        expect(shell.getPendingNotifications()).toHaveLength(0);
+        const pgid = job.pid;
+        expect(() => process.kill(-pgid, 0)).not.toThrow();
+        await expect(agent.session.startNewSession()).rejects.toThrow(
+          'shell cleanup',
+        );
+        await awaitShellCleanup(shell);
+        expect(() => process.kill(-pgid, 0)).toThrow('ESRCH');
+        await agent.session.startNewSession();
+        expect(await agent.getHistory()).toStrictEqual([]);
+      } finally {
+        off();
+        await cleanup();
+      }
+    },
+  );
+
+  // Windows has no process groups. The job's PID is the outer PowerShell,
+  // which waits for the inner PowerShell that runs the command, so the job is
+  // terminal only after both are gone and there is no post-terminal drain
+  // window to observe. The session gate is therefore proven while the held
+  // inner process is alive, and the release is proven by a process-table query
+  // of both PIDs the job owns.
+  it.skipIf(process.platform !== 'win32')(
+    'blocks on a running shell job until its Windows processes are released',
+    async () => {
+      const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+      const { shell } = owners(agent);
+      const terminal = deferred<void>();
+      const off = shell.onJobCompleted(() => terminal.resolve());
+      const dir = mkdtempSync(join(tmpdir(), 'shell-held-'));
+      const pidFile = join(dir, 'inner.pid');
+      const releaseFile = join(dir, 'release');
+      const quoted = (value: string): string =>
+        `'${value.replaceAll("'", "''")}'`;
+      try {
+        const job = shell.launch({
+          command:
+            `Set-Content -LiteralPath ${quoted(pidFile)} -Value $PID; ` +
+            `while (-not (Test-Path -LiteralPath ${quoted(releaseFile)})) ` +
+            '{ Start-Sleep -Milliseconds 20 }',
+          cwd: process.cwd(),
+        });
+        if (job.pid === undefined)
+          throw new Error('Expected owned shell outer pid');
+        const outerPid = job.pid;
+        const innerPid = await awaitPidFile(
+          pidFile,
+          'inner shell process started',
+        );
+        expect(windowsProcessIsAlive(outerPid)).toBe(true);
+        expect(windowsProcessIsAlive(innerPid)).toBe(true);
+        await expect(agent.session.startNewSession()).rejects.toThrow(
+          'running shell jobs',
+        );
+        writeFileSync(releaseFile, 'release');
+        await deadline(terminal.promise, 'terminal shell record');
+        shell.markNotified([job.id]);
+        expect(shell.getRunningJobs()).toHaveLength(0);
+        expect(shell.getPendingNotifications()).toHaveLength(0);
+        expect(windowsProcessIsAlive(innerPid)).toBe(false);
+        expect(windowsProcessIsAlive(outerPid)).toBe(false);
+        await awaitShellCleanup(shell);
+        await agent.session.startNewSession();
+        expect(await agent.getHistory()).toStrictEqual([]);
+      } finally {
+        off();
+        await cleanup();
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
 
   it.skipIf(process.platform === 'win32')(
     'requires restart after the OS cannot confirm a shell group drained',

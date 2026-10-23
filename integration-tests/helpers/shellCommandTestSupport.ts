@@ -7,18 +7,27 @@
 import { getShellConfiguration } from '../../packages/core/src/utils/shell-utils.js';
 
 /**
- * The line-counting command the platform's shell provides, and the executable
- * a `run_shell_command(<tool>)` allowlist entry must name for it.
+ * The complete command that counts the lines of `file` in the platform's
+ * shell, and the executable a `run_shell_command(<tool>)` allowlist entry must
+ * name for it. PowerShell has no `wc`, and its `find` resolves to the native
+ * string-search executable, so it counts with `Measure-Object`.
  */
-export function getLineCountCommand(): { command: string; tool: string } {
+export function getLineCountCommand(file: string): {
+  command: string;
+  tool: string;
+} {
   const { shell } = getShellConfiguration();
   switch (shell) {
     case 'powershell':
+      return {
+        command: `(Get-Content -LiteralPath '${file.replaceAll("'", "''")}' | Measure-Object -Line).Lines`,
+        tool: 'Get-Content',
+      };
     case 'cmd':
-      return { command: `find /c /v`, tool: 'find' };
+      return { command: `find /c /v "" "${file}"`, tool: 'find' };
     case 'bash':
     default:
-      return { command: `wc -l`, tool: 'wc' };
+      return { command: `wc -l "${file}"`, tool: 'wc' };
   }
 }
 

@@ -54,12 +54,27 @@ async function createHealthySession(
 const execFileAsync = promisify(execFile);
 
 /**
+ * Absolute path of a Windows system tool. A bare name resolves through PATH,
+ * where Git-for-Windows' GNU coreutils `whoami` precedes System32 and rejects
+ * the Windows switches.
+ */
+function system32Tool(name: string): string {
+  const windowsDirectory = process.env.SystemRoot ?? process.env.windir;
+  if (windowsDirectory === undefined) {
+    throw new Error(
+      `Windows test requires SystemRoot or windir to locate System32\\${name}.`,
+    );
+  }
+  return path.join(windowsDirectory, 'System32', name);
+}
+
+/**
  * The SID of the account running this process. Naming the deny entry by SID
  * avoids resolving a display name that can differ between the account that
  * `os.userInfo()` reports and the one in the process token.
  */
 async function currentUserSid(): Promise<string> {
-  const { stdout } = await execFileAsync('whoami', [
+  const { stdout } = await execFileAsync(system32Tool('whoami.exe'), [
     '/user',
     '/fo',
     'csv',
@@ -92,12 +107,13 @@ async function denyNewEntries(directory: string): Promise<() => Promise<void>> {
   // FILE_ADD_FILE). An open that holds backup/restore access skips both
   // checks, so the callers verify the denial with those same operations
   // instead of assuming it.
-  await execFileAsync('icacls', [directory, '/deny', `${principal}:(WD,AD)`]);
+  const icacls = system32Tool('icacls.exe');
+  await execFileAsync(icacls, [directory, '/deny', `${principal}:(WD,AD)`]);
   const restore = async (): Promise<void> => {
-    await execFileAsync('icacls', [directory, '/remove:d', principal]);
+    await execFileAsync(icacls, [directory, '/remove:d', principal]);
   };
   try {
-    const { stdout: dacl } = await execFileAsync('icacls', [directory]);
+    const { stdout: dacl } = await execFileAsync(icacls, [directory]);
     expect(dacl).toContain('(DENY)');
   } catch (error: unknown) {
     await restore();

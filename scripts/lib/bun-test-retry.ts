@@ -174,15 +174,22 @@ export async function runCoreTimeoutRetry<T extends CoreRetryOutcome>(
     `RETRY (2/2): ${file} after ${first.timeoutMs === null ? 'per-test' : 'per-file'} timeout`,
   );
   const second = await runAttempt();
-  if (first.reapFailed && !second.reapFailed)
-    return {
-      ...second,
-      passed: false,
-      timedOut: true,
-      reapFailed: false,
-      reapError: first.reapError ?? null,
-    };
-  return second;
+  // A later attempt reaping cleanly says nothing about the first attempt's
+  // process tree, so its reap failure stays on the result. Only that tree
+  // being confirmed closed could clear it, and nothing here observes that.
+  if (!first.reapFailed) return second;
+  const firstError =
+    first.reapError ?? 'first attempt process tree was not confirmed closed';
+  const secondError =
+    second.reapFailed && second.reapError ? second.reapError : null;
+  return {
+    ...second,
+    passed: false,
+    timedOut: true,
+    reapFailed: true,
+    reapError:
+      secondError === null ? firstError : `${firstError}; ${secondError}`,
+  };
 }
 export interface EntryRetryOutcome {
   readonly passed: boolean;

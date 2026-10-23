@@ -1,8 +1,9 @@
 name: 'Set up local Gemma 4 E2B model'
 description: >-
   Installs the pinned Ollama 0.31.1 runtime for the current runner OS, starts it
-  on 127.0.0.1:12644, pulls the digest-pinned gemma4:e2b-it-qat model, proves
-  that a real inference succeeds, and exports the provider environment the
+  on 127.0.0.1:12644, obtains the digest-pinned gemma4:e2b-it-qat model (from
+  a cache of the verified model store when one exists, otherwise from the
+  Ollama registry), proves that a real inference succeeds, and exports the provider environment the
   integration tests and evals use. Shared by e2e.yml, nightly.yml and
   _evals-run.yml so the model, version and digests are defined once. macOS
   runs the model and its vision projector on the CPU because the hosted VM's
@@ -100,7 +101,17 @@ runs:
         & $exe --version
         if ($LASTEXITCODE -ne 0) { throw "ollama --version failed with exit code $LASTEXITCODE" }
 
-    # ---- Start the server and pull the pinned model ----------------------
+    # ---- Restore the verified model store, start the server, pull on miss -
+    # The store (blobs plus manifest) is cached under a key that names the OS
+    # and the pinned model digest, so a hit is exactly the store that was
+    # digest-verified when it was saved. A hit never contacts the registry.
+    - name: 'Restore local Gemma 4 E2B model cache'
+      id: 'model-cache'
+      uses: 'actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9' # ratchet:actions/cache/restore@v6
+      with:
+        path: '${{ runner.temp }}/ollama-models'
+        key: 'ollama-models-${{ runner.os }}-gemma4-e2b-it-qat-07ea59a474013479c8b6b802bef095c40e964a1d776ba02f264c0e30e1aede0c'
+
     - name: 'Start local Gemma 4 E2B model'
       if: runner.os != 'Windows'
       shell: 'bash'
@@ -109,6 +120,7 @@ runs:
         OLLAMA_CONTEXT_LENGTH: '32768'
         OLLAMA_NUM_PARALLEL: '1'
         OLLAMA_MODELS: '${{ runner.temp }}/ollama-models'
+        MODEL_CACHE_HIT: '${{ steps.model-cache.outputs.cache-hit }}'
       run: |
         set -euo pipefail
         mkdir -p "$OLLAMA_MODELS"
@@ -130,7 +142,11 @@ runs:
           sleep 2
         done
         curl --fail --silent "http://$OLLAMA_HOST/api/version" | jq -e '.version == "0.31.1"'
-        ollama pull gemma4:e2b-it-qat
+        if [[ "$MODEL_CACHE_HIT" == true ]]; then
+          echo 'Complete model store restored from cache; skipping ollama pull'
+        else
+          ollama pull gemma4:e2b-it-qat
+        fi
         curl --fail --silent "http://$OLLAMA_HOST/api/tags" |
           jq -e '.models[] | select(.name == "gemma4:e2b-it-qat" and .digest == "07ea59a474013479c8b6b802bef095c40e964a1d776ba02f264c0e30e1aede0c")'
         df -h "$RUNNER_TEMP"
@@ -143,6 +159,7 @@ runs:
         OLLAMA_CONTEXT_LENGTH: '32768'
         OLLAMA_NUM_PARALLEL: '1'
         OLLAMA_MODELS: '${{ runner.temp }}\ollama-models'
+        MODEL_CACHE_HIT: '${{ steps.model-cache.outputs.cache-hit }}'
       run: |
         $ErrorActionPreference = 'Stop'
         $exe = Join-Path $env:RUNNER_TEMP 'ollama\ollama.exe'
@@ -190,8 +207,12 @@ runs:
         "OLLAMA_SERVER_PID=$serverPid" | Add-Content -Path $env:GITHUB_ENV
         Write-Output "Ollama server PID: $serverPid"
 
-        & $exe pull gemma4:e2b-it-qat
-        if ($LASTEXITCODE -ne 0) { throw "ollama pull failed with exit code $LASTEXITCODE" }
+        if ($env:MODEL_CACHE_HIT -eq 'true') {
+          Write-Output 'Complete model store restored from cache; skipping ollama pull'
+        } else {
+          & $exe pull gemma4:e2b-it-qat
+          if ($LASTEXITCODE -ne 0) { throw "ollama pull failed with exit code $LASTEXITCODE" }
+        }
         $tags = Invoke-RestMethod -Uri "http://$env:OLLAMA_HOST/api/tags"
         $model = @($tags.models | Where-Object {
           $_.name -eq 'gemma4:e2b-it-qat' -and
@@ -335,6 +356,15 @@ runs:
           echo 'llama-server placed model or projector buffers on the Metal device' >&2
           exit 1
         fi
+
+    # Reached only after the pull and the digest check above succeeded and the
+    # model generated; a failed or partial pull is never cached.
+    - name: 'Save local Gemma 4 E2B model cache'
+      if: steps.model-cache.outputs.cache-hit != 'true'
+      uses: 'actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9' # ratchet:actions/cache/save@v6
+      with:
+        path: '${{ runner.temp }}/ollama-models'
+        key: 'ollama-models-${{ runner.os }}-gemma4-e2b-it-qat-07ea59a474013479c8b6b802bef095c40e964a1d776ba02f264c0e30e1aede0c'
 
     # ---- Provider environment for the tests that follow ------------------
     - name: 'Export local model test environment'

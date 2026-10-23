@@ -303,3 +303,73 @@ fi`,
     expect(paths).toContain('${{ runner.temp }}/ollama-inference.json');
   });
 });
+
+describe('workflow model cache behavior', () => {
+  const pinnedDigest =
+    '07ea59a474013479c8b6b802bef095c40e964a1d776ba02f264c0e30e1aede0c';
+
+  function runStart(cacheHit: string): {
+    result: BackendVerifierResult;
+    ollamaCalls: string[];
+  } {
+    const fixture = resolve(root, `tmp/verify3764/cache-${nextFixtureId()}`);
+    const bin = resolve(fixture, 'bin');
+    mkdirSync(bin, { recursive: true });
+    writeExecutable(
+      bin,
+      'ollama',
+      `printf '%s\\n' "$*" >>"$RUNNER_TEMP/ollama-calls"
+if [[ "$1" == pull ]]; then exit 0; fi
+exit 0`,
+    );
+    writeExecutable(bin, 'curl', `printf '%s\\n' '{"version":"0.31.1"}'`);
+    writeExecutable(bin, 'jq', 'cat >/dev/null; exit 0');
+    writeExecutable(bin, 'df', 'exit 0');
+    const script = asString(step('Start local Gemma 4 E2B model').run);
+    const executed = spawnSync('bash', ['-c', script], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        PATH: `${bin}:${process.env.PATH ?? ''}`,
+        RUNNER_TEMP: fixture,
+        RUNNER_OS: 'Linux',
+        OLLAMA_HOST: '127.0.0.1:12644',
+        OLLAMA_MODELS: resolve(fixture, 'ollama-models'),
+        MODEL_CACHE_HIT: cacheHit,
+      },
+    });
+    let recorded = '';
+    try {
+      recorded = readFileSync(resolve(fixture, 'ollama-calls'), 'utf8');
+    } catch {
+      recorded = '';
+    }
+    rmSync(fixture, { recursive: true, force: true });
+    return {
+      result: {
+        status: executed.status ?? 1,
+        stdout: executed.stdout,
+        stderr: executed.stderr,
+      },
+      ollamaCalls: recorded.split('\n').filter(Boolean),
+    };
+  }
+
+  it('does not contact the registry on a complete cache hit and still checks the pinned digest', () => {
+    const { result, ollamaCalls } = runStart('true');
+    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+    expect(ollamaCalls).toEqual(['serve']);
+    expect(result.stdout).toContain('skipping ollama pull');
+    expect(asString(step('Start local Gemma 4 E2B model').run)).toContain(
+      pinnedDigest,
+    );
+  });
+
+  it('pulls the pinned model on a cache miss', () => {
+    for (const cacheHit of ['', 'false']) {
+      const { result, ollamaCalls } = runStart(cacheHit);
+      expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+      expect(ollamaCalls).toEqual(['serve', 'pull gemma4:e2b-it-qat']);
+    }
+  });
+});

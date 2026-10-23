@@ -62,7 +62,7 @@ describe('shared runner retry and timeout policy', () => {
     expect(result).toEqual(outcomes[1]);
     expect(logs).toEqual(['RETRY (2/2): spec.ts after per-file timeout']);
   });
-  it('reduces a recovered core reap failure without losing its cause', async () => {
+  it('keeps the first attempt reap failure when the retry reaps cleanly', async () => {
     const outcomes = [
       {
         passed: false,
@@ -85,7 +85,7 @@ describe('shared runner retry and timeout policy', () => {
       ...outcomes[1],
       passed: false,
       timedOut: true,
-      reapFailed: false,
+      reapFailed: true,
       reapError: 'first reap',
     });
     expect(logs).toEqual(['RETRY (2/2): core.ts after per-file timeout']);
@@ -289,7 +289,7 @@ describe('retry boundaries', () => {
     ).rejects.toBe(error);
     expect(count).toBe(1);
   });
-  it('core retains retry budget and exit code on first-reap recovery', async () => {
+  it('core retains retry budget and exit code while keeping the first reap failure', async () => {
     let count = 0;
     const logs: string[] = [];
     const result = await runCoreTimeoutRetry(
@@ -318,7 +318,7 @@ describe('retry boundaries', () => {
       passed: false,
       timedOut: true,
       timeoutMs: 456,
-      reapFailed: false,
+      reapFailed: true,
       reapError: 'first',
       exitCode: 0,
     });

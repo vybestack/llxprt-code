@@ -127,7 +127,7 @@ describe('run_shell_command', () => {
         settings: focusedToolSettings(['run_shell_command']),
       });
 
-      const prompt = `Use the run_shell_command tool to execute exactly "echo hello-world". Show me the output.`;
+      const prompt = `Call the run_shell_command tool now with exactly this command: echo hello-world\nDo not describe the call or print it as JSON; actually invoke the tool. After the tool returns, show me the exact output it printed.`;
 
       const result = await rig.run({
         args: ['--allowed-tools=run_shell_command(echo)'],
