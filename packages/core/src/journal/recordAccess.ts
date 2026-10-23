@@ -101,6 +101,19 @@ export function groupReadAccess(
     );
 }
 
+function readWindowedBody(
+  reader: PositionalReader,
+  window: PositionalReader | undefined,
+  head: FrameHead,
+  chunkBytes: number | undefined,
+): AsyncGenerator<Uint8Array> {
+  return readFrameBody(
+    head.kind === RECORD_KIND.ROW ? (window ?? reader) : reader,
+    head,
+    chunkBytes,
+  );
+}
+
 export function createRecordAccess(
   path: string,
   reader: PositionalReader,
@@ -167,7 +180,7 @@ export function createRecordAccess(
     },
     async *readRecordBody(head, chunkBytes, what = DEFAULT_WHAT) {
       try {
-        yield* readFrameBody(reader, head, chunkBytes);
+        yield* readWindowedBody(reader, window, head, chunkBytes);
       } catch (error) {
         if (
           error instanceof JournalFrameError ||
