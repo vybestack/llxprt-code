@@ -18,6 +18,7 @@ import {
 import { projectAnthropicUnit } from './anthropic-unit-facts.js';
 import { appendAnthropicFacts } from './anthropic-append-facts.js';
 import { anthropicMediaLedgerWriter } from './anthropic-media-ledger.js';
+import { writeAnthropicRecoveryFacts } from './anthropic-recovery-facts.js';
 
 interface Consumed {
   readonly ordinal: number;
@@ -169,6 +170,13 @@ export function anthropicRepairFactIndex(
           for await (const call of source.calls(message))
             await decide(source, writer, index, message, next, call.id);
         }
+        await writeAnthropicRecoveryFacts(
+          query,
+          writer,
+          settings,
+          index,
+          ledger.hasMedia(),
+        );
       } finally {
         await query.close();
       }

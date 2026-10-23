@@ -10,6 +10,18 @@ import {
 } from './AnthropicHumanMessageConverter.js';
 import { anthropicWireMedia } from './anthropic-measured-media.js';
 import type { MediaStage } from './message-table/wire-builder.js';
+import type { ImageDimensionBudget } from '@vybestack/llxprt-code-tools/utils/imageDimensionBudget.js';
+import { sanitizeWireBlockImages } from './AnthropicImageSanitizer.js';
+
+async function* recoveredPieces(
+  pieces: AsyncIterable<AnthropicWirePiece>,
+  budget: ImageDimensionBudget | undefined,
+): AsyncGenerator<AnthropicWirePiece> {
+  for await (const piece of pieces)
+    yield typeof piece === 'string' || budget === undefined
+      ? piece
+      : sanitizeWireBlockImages(piece, budget).block;
+}
 
 export type AnthropicWirePiece = string | AnthropicMessageBlock;
 
@@ -51,14 +63,16 @@ function resolveBlock(
 export async function* resolveAnthropicWireMedia(
   pieces: AsyncIterable<AnthropicWirePiece>,
   stage: MediaStage | undefined,
+  budget?: ImageDimensionBudget,
 ): AsyncGenerator<AnthropicWirePiece> {
+  const recovered = recoveredPieces(pieces, budget);
   if (stage === undefined) {
-    yield* pieces;
+    yield* recovered;
     return;
   }
   let pending: AnthropicWirePiece | undefined;
   const rows = async function* (): AsyncGenerator<IContent> {
-    for await (const piece of pieces) {
+    for await (const piece of recovered) {
       pending = piece;
       yield {
         speaker: 'human',

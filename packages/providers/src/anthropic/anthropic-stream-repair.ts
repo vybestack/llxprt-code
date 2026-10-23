@@ -30,6 +30,7 @@ import {
   copyAnthropicWireMedia,
 } from './anthropic-measured-media.js';
 import type { MediaStage } from './message-table/wire-builder.js';
+import type { ImageDimensionBudget } from '@vybestack/llxprt-code-tools/utils/imageDimensionBudget.js';
 import {
   resolveAnthropicWireMedia,
   type AnthropicWirePiece,
@@ -331,10 +332,12 @@ export class AnthropicStreamRepair {
     prefix?: AnthropicMessage,
     cache?: AnthropicCachePlan,
     mediaStage?: MediaStage,
+    recoveryBudget?: ImageDimensionBudget,
   ): AsyncGenerator<string> {
     for await (const piece of resolveAnthropicWireMedia(
       this.serializePieces(transform, prefix, cache),
       mediaStage,
+      recoveryBudget,
     ))
       yield typeof piece === 'string'
         ? piece

@@ -27,17 +27,21 @@ export function anthropicMediaLedgerWriter(
 ): {
   observe(row: IContent, at: number): Promise<void>;
   finish(): Promise<void>;
+  hasMedia(): boolean;
 } {
   let count = 0;
+  let media = false;
   let through = -1;
   return {
     async observe(row, at) {
       if (at <= through) return;
       through = at;
+      media ||= row.blocks.some((block) => block.type === 'media');
       if (unsupported(row, settings).length !== 0)
         await writer.set(['unsupported-row', count++], [at]);
     },
     finish: () => writer.set(['unsupported-rows'], [count]),
+    hasMedia: () => media,
   };
 }
 

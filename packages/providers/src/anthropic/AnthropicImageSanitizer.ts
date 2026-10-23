@@ -14,6 +14,7 @@ import type {
   AnthropicMessageBlock,
 } from './AnthropicMessageNormalizer.js';
 import type { MetadataBearingOptions } from '../IProvider.js';
+import { anthropicMediaReference } from './anthropic-measured-media.js';
 import { RETRY_REQUEST_CONTEXT_KEY } from '../transportAttemptBudget.js';
 import {
   checkImageDimensionBudget,
@@ -371,10 +372,27 @@ function exceedsBudget(
   budget: ImageDimensionBudget,
 ): boolean {
   if (block.source.type !== 'base64') return false;
-  return checkImageDimensionBudget(block.source.data, budget) !== undefined;
+  const reference = anthropicMediaReference(block);
+  return reference === undefined
+    ? checkImageDimensionBudget(block.source.data, budget) !== undefined
+    : exceedsAnthropicImageDimensions(reference.dimensions, budget);
 }
 
-function droppedImageBlock(): { type: 'text'; text: string } {
+export function exceedsAnthropicImageDimensions(
+  dimensions: { readonly width: number; readonly height: number } | undefined,
+  budget: ImageDimensionBudget,
+): boolean {
+  if (dimensions === undefined) return false;
+  return (
+    (budget.maxDimension !== undefined &&
+      Math.max(dimensions.width, dimensions.height) > budget.maxDimension) ||
+    (budget.maxPixels !== undefined &&
+      BigInt(dimensions.width) * BigInt(dimensions.height) >
+        BigInt(budget.maxPixels))
+  );
+}
+
+export function droppedImageBlock(): { type: 'text'; text: string } {
   return { type: 'text', text: DROPPED_IMAGE_PLACEHOLDER };
 }
 

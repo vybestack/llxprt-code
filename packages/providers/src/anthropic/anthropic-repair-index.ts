@@ -12,7 +12,7 @@ import type { RepairMessage } from './anthropic-repair-source.js';
 import type { ToolRepairOverlay } from './anthropic-tool-repair.js';
 
 export const anthropicRepairScope = (settings: RowFormatSettings): string =>
-  `anthropic-repair:3:${rowFormatKey(settings)}`;
+  `anthropic-repair:4:${rowFormatKey(settings)}`;
 export interface ScalarFacts {
   get(
     key: ReadonlyArray<string | number>,

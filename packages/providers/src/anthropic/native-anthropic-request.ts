@@ -8,6 +8,8 @@ import type { RepairPolicy } from './anthropic-repair-source.js';
 import type { RowFormatSettings } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import { ProgressiveJsonBody } from '../utils/progressive-json-body.js';
+import type { ImageDimensionBudget } from '@vybestack/llxprt-code-tools/utils/imageDimensionBudget.js';
+import { planAnthropicImageRecovery } from './native-anthropic-recovery.js';
 import {
   DEFAULT_HTTP_JSON_ENVELOPE_BYTES,
   envelopeTooLargeError,
@@ -173,6 +175,8 @@ async function requestFromEngine(
   estimate: boolean,
   mediaStage: MediaStage | undefined,
   unsupportedMedia: readonly UnsupportedMediaEntry[],
+  recoveryBudget: ImageDimensionBudget | undefined,
+  recoveredImages: number,
 ): Promise<NativeAnthropicRequest> {
   const signal = getRequestSignal(params.options);
   const prefix = placeSystemInstruction({
@@ -197,6 +201,7 @@ async function requestFromEngine(
       prefix,
       measured.cache,
       mediaStage,
+      recoveryBudget,
     )) {
       signal?.throwIfAborted();
       yield Buffer.from(piece);
@@ -227,7 +232,7 @@ async function requestFromEngine(
             },
           },
     dump: undefined,
-    recoveredImages: 0,
+    recoveredImages,
     release: () => releaseNativeRequest(body, projection, query),
   };
 }
@@ -270,6 +275,51 @@ async function nativeEnginePlan(
     prefix,
   );
   return { engine, measured };
+}
+
+async function requestFromStored(
+  params: AnthropicPlanParams,
+  plan: AnthropicRequestPlan,
+  envelope: Readonly<Record<string, unknown>>,
+  snapshot: VersionSnapshot,
+  engine: AnthropicStreamRepair,
+  measured: StoredAnthropicRequestPlan,
+  options: SpooledRequestOptions,
+  mediaStage: MediaStage | undefined,
+): Promise<NativeAnthropicRequest> {
+  const query = engine.source.query;
+  const settings = measured.settings;
+  const recovery = await planAnthropicImageRecovery(
+    snapshot,
+    engine,
+    measured,
+    options.recoveryBudget,
+  );
+  const unsupportedMedia =
+    options.estimate === true
+      ? await readAnthropicMediaLedger(
+          query,
+          await snapshot.nativeFacts(anthropicRepairScope(settings)),
+          settings,
+        )
+      : [];
+  return requestFromEngine(
+    params,
+    plan,
+    envelope,
+    query,
+    engine,
+    {
+      ...measured,
+      contentLength: measured.contentLength + recovery.bytes,
+      messagesBytes: measured.messagesBytes + recovery.bytes,
+    },
+    options.estimate === true,
+    mediaStage,
+    unsupportedMedia,
+    options.recoveryBudget,
+    recovery.replaced,
+  );
 }
 
 async function prepareNativeAnthropicRequest(
@@ -323,22 +373,15 @@ async function prepareNativeAnthropicRequest(
           base,
           changed,
         );
-        return await requestFromEngine(
+        return await requestFromStored(
           params,
           plan,
           envelope,
-          query,
+          snapshot,
           engine,
           measured,
-          estimate,
+          { ...options, estimate },
           mediaStage,
-          estimate
-            ? await readAnthropicMediaLedger(
-                query,
-                await snapshot.nativeFacts(anthropicRepairScope(settings)),
-                settings,
-              )
-            : [],
         );
       } catch (error) {
         await query.close();
@@ -348,28 +391,14 @@ async function prepareNativeAnthropicRequest(
   );
 }
 
-async function canUseNativeAnthropic(
+function canUseNativeAnthropic(
   params: AnthropicPlanParams,
   rows: ProviderRequestRows,
-  options: SpooledRequestOptions,
-): Promise<boolean> {
-  const native = rows.native;
-  if (native === undefined) return false;
-  if (wantsRequestDump(params.options.invocation.ephemerals.dumpcontext))
-    return false;
-  if (options.recoveryBudget === undefined) return true;
-  if (await native.indexed.hasPersistedMedia()) return false;
-  for (const source of native.indexed.viewPlan.changedSources) {
-    for (let at = source.start; at < source.start + source.count; at++) {
-      if (
-        (await native.indexed.readAt(at)).blocks.some(
-          (block) => block.type === 'media',
-        )
-      )
-        return false;
-    }
-  }
-  return true;
+): boolean {
+  return (
+    rows.native !== undefined &&
+    !wantsRequestDump(params.options.invocation.ephemerals.dumpcontext)
+  );
 }
 
 export async function prepareAnthropicRequestRows(
@@ -378,7 +407,7 @@ export async function prepareAnthropicRequestRows(
   mediaStage: MediaStage | undefined,
   options: SpooledRequestOptions = {},
 ): Promise<PreparedAnthropicRequest> {
-  if (await canUseNativeAnthropic(params, rows, options))
+  if (canUseNativeAnthropic(params, rows))
     return prepareNativeAnthropicRequest(
       params,
       rows,
