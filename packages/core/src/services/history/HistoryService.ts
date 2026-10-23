@@ -340,10 +340,10 @@ export class HistoryService extends HistoryServiceReads {
     this.invalidatePendingSyncs();
     this.removeAllListeners();
 
+    await this.tokenTickets.close();
     const journalDisposal = this.journal.dispose(() =>
       this.waitForOwnershipSettlement(),
     );
-    await this.tokenTickets.close();
     this.totalTokens = 0;
     this.baseTokenOffset = 0;
     this.isCompressing = false;

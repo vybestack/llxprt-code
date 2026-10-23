@@ -18,6 +18,7 @@ interface PendingTokenTicket {
 
 export class HistoryTokenTickets {
   private readonly pending = new Set<PendingTokenTicket>();
+  private reading: Promise<void> = Promise.resolve();
   private closed = false;
   constructor(
     private readonly schedule: (execute: () => Promise<void>) => void,
@@ -42,8 +43,12 @@ export class HistoryTokenTickets {
       if (!this.pending.delete(ticket)) return;
       try {
         if (!this.closed) {
-          const content = await ticket.source.read();
-          await ticket.source.close();
+          const read = this.read(ticket.source);
+          this.reading = read.then(
+            () => undefined,
+            () => undefined,
+          );
+          const content = await read;
           await this.process({
             content,
             modelName: ticket.modelName,
@@ -57,10 +62,20 @@ export class HistoryTokenTickets {
       }
     });
   }
+  private async read(source: TokenRowSource): Promise<IContent> {
+    try {
+      return await source.read();
+    } finally {
+      await source.close();
+    }
+  }
   async close(): Promise<void> {
     this.closed = true;
     const tickets = [...this.pending];
     this.pending.clear();
-    await Promise.all(tickets.map((ticket) => ticket.source.close()));
+    await Promise.all([
+      this.reading,
+      ...tickets.map((ticket) => ticket.source.close()),
+    ]);
   }
 }
