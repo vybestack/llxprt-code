@@ -2,6 +2,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import { collectMediaReferences } from '../../storage/media-reference-lifecycle.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
+import { releaseRead } from '../../journal/pinLease.js';
 import type { JournalStore } from '../../journal/journalStore.js';
 
 export type NativeMediaOwner = Pick<
@@ -156,6 +157,14 @@ export async function reconcileMediaOnJournal(
 async function* currentReferences(
   store: JournalHistoryStore,
 ): AsyncGenerator<MediaReferenceBlock, void, unknown> {
-  for await (const row of store.streamRows())
-    yield* collectMediaReferences([row]);
+  const snapshot = await store.settledSnapshot(() => Promise.resolve());
+  let failure: { readonly error: unknown } | undefined;
+  try {
+    yield* snapshotReferences(snapshot);
+  } catch (error) {
+    failure = { error };
+    throw error;
+  } finally {
+    await releaseRead(snapshot, failure);
+  }
 }

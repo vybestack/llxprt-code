@@ -21,11 +21,12 @@ export async function* snapshotReferences(
   for await (const entry of snapshot.entries()) {
     if (read++ >= rowLimit) return;
     if ((entry.flags & ROW_FLAG.hasMedia) === 0) continue;
-    const { header } = await snapshot.readIds(entry);
+    const ids = await snapshot.readIds(entry);
+    const { header } = ids;
     for (let index = 0; index < header.blocks.length; index++) {
       if (header.blocks[index].type !== ROW_BLOCK_TYPE.media) continue;
       const block = decodeStoredBlock(
-        await snapshot.readBlock(entry, index),
+        await snapshot.readBlock(entry, index, ids),
         ROW_BLOCK_TYPE.media,
       );
       if (isMediaReferenceBlock(block)) yield block;
