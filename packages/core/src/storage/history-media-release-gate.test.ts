@@ -21,6 +21,42 @@ import { RequestMediaResolver } from './request-media-resolver.js';
 const directory = tempDirectory('native-media-gate-');
 
 describe('media release while the gate is draining', () => {
+  it('drains a newly queued release when its old pin closes before the queue commit returns', async () => {
+    const session = await JournalSession.create(
+      join(directory(), 'enqueuing-release.llxj'),
+    );
+    const media = new LocalMediaStore({
+      rootDirectory: join(directory(), 'enqueuing-media'),
+      quotaBytes: 1024,
+    });
+    const reference = await media.admit({
+      bytes: new Uint8Array([2, 3, 9]),
+      mimeType: 'image/png',
+      semanticMetadata: {},
+    });
+    await media.reserve(reference, historyOwnerIdFor(reference.contentId));
+    const gate = new HistoryMediaReleaseGate(session.store, media, () => false);
+    await gate.open();
+    const pins = session.store.mediaPins;
+    const release = pins.retain(0);
+    const commit = session.store.commit.bind(session.store);
+    const committing = spyOn(session.store, 'commit').mockImplementationOnce(
+      async (edits) => {
+        const ack = await commit(edits);
+        await pins.afterReaderRelease(release);
+        return ack;
+      },
+    );
+    try {
+      await gate.release(reference.contentId);
+      expect(await gate.pendingCount()).toBe(0);
+      expect(await media.hasReservations(reference.contentId)).toBe(false);
+    } finally {
+      committing.mockRestore();
+      await session.close();
+      await media.close();
+    }
+  });
   it('finishes a release when the last old pin closes during the busy drain', async () => {
     const session = await JournalSession.create(
       join(directory(), 'busy-release.llxj'),

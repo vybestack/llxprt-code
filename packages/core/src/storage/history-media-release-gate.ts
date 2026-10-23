@@ -78,12 +78,12 @@ export class HistoryMediaReleaseGate {
       throw new Error('Invalid deferred history media queue bounds');
     this.journal.mediaPins.bind(
       () => {
-        if (this.head === this.tail) return undefined;
         if (this.busy) {
           if (this.journal.mediaPins.oldestVersion !== this.observedOldest)
             this.drainRequested = true;
           return undefined;
         }
+        if (this.head === this.tail) return undefined;
         return this.run(() => this.drain());
       },
       () => this.busy || this.head !== this.tail,
