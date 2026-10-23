@@ -34,6 +34,7 @@ import {
   type AnthropicCacheState,
 } from './anthropic-cache-facts.js';
 import type { StoredAnthropicRequestPlan } from './journal-anthropic-length.js';
+import { AnthropicViewCoordinates } from './anthropic-view-coordinates.js';
 
 export async function anthropicTailIndex(
   snapshot: VersionSnapshot,
@@ -44,20 +45,75 @@ export async function anthropicTailIndex(
     await snapshot.nativeFacts(anthropicRepairScope(settings)),
   );
   const source = new AnthropicRepairSource(query, settings);
-  const tail: RepairMessage[] = [];
-  for await (const message of source.messages(snapshot.units))
-    tail.push(message);
+  const coordinates = new AnthropicViewCoordinates(query, snapshot.units);
+  const replacements: RepairMessage[] = [];
+  for (const { row } of coordinates.changes) {
+    if (row.count === row.oldCount) continue;
+    for await (const message of source.messages(
+      row.start,
+      row.start + row.count,
+    ))
+      replacements.push(message);
+  }
+  for await (const message of source.messages(coordinates.prefixEnd))
+    replacements.push(message);
   return {
-    lastThinking: base.lastThinking,
+    lastThinking:
+      base.lastThinking < 0 ? -1 : coordinates.forward(base.lastThinking),
     async *messages(from) {
-      yield* base.messages(from);
-      for (const message of tail) if (message.end >= from) yield message;
+      let next = 0;
+      for await (const message of base.messages(coordinates.backward(from))) {
+        const mapped = coordinates.message(message);
+        while (
+          next < replacements.length &&
+          replacements[next].start < mapped.start
+        ) {
+          const replacement = replacements[next++];
+          if (replacement.end >= from) yield replacement;
+        }
+        const replaced = coordinates.changes.some(
+          ({ row, oldStart }) =>
+            row.count !== row.oldCount &&
+            message.start >= oldStart &&
+            message.start < oldStart + row.oldCount,
+        );
+        if (!replaced && mapped.end >= from) yield mapped;
+      }
+      for (; next < replacements.length; next++)
+        if (replacements[next].end >= from) yield replacements[next];
     },
-    decision: (message, id) =>
-      message.start >= snapshot.units
-        ? Promise.resolve(undefined)
-        : base.decision(message, id),
-    taken: (id, ordinal, before) => base.taken(id, ordinal, before),
+    async decision(message, id) {
+      if (message.start >= coordinates.prefixEnd) return undefined;
+      if (
+        coordinates.changes.some(
+          ({ row }) =>
+            row.count !== row.oldCount &&
+            message.start >= row.start &&
+            message.start < row.start + row.count,
+        )
+      )
+        return undefined;
+      const decision = await base.decision(
+        {
+          ...message,
+          start: coordinates.backward(message.start),
+          end: coordinates.backward(message.end),
+        },
+        id,
+      );
+      return decision === undefined
+        ? undefined
+        : {
+            ...decision,
+            callMessage: message.start,
+            target:
+              decision.target === undefined
+                ? undefined
+                : coordinates.forward(decision.target),
+          };
+    },
+    taken: (id, ordinal, before) =>
+      base.taken(id, ordinal, coordinates.backward(before)),
   };
 }
 
@@ -101,7 +157,21 @@ export async function planAnthropicTail(
   let cache = storedCache?.kept;
   if (stripped) cache = storedCache?.stripped;
   else if (corrected) cache = storedCache?.corrected;
-  for (let at = snapshot.units; at < query.count; at++) {
+  const coordinates = new AnthropicViewCoordinates(query, snapshot.units);
+  if (
+    coordinates.resized &&
+    cache?.run !== undefined &&
+    prefix.kind === 'anthropic'
+  ) {
+    const index = await AnthropicRepairIndex.read(
+      await snapshot.nativeFacts(anthropicRepairScope(settings)),
+    );
+    const first = index.count === 0 ? undefined : await index.message(1);
+    const count =
+      prefix.variants[0].count[0] - Number(first?.role === 'assistant');
+    cache = { ...cache, run: { ...cache.run, ordinal: count - 1 } };
+  }
+  for (let at = coordinates.prefixEnd; at < query.count; at++) {
     const row = await query.readAt(at);
     const unit = anthropicUnitFacts(row, settings);
     if (unit === undefined) continue;

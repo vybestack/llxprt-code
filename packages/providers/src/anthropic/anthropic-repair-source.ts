@@ -126,7 +126,10 @@ export class AnthropicRepairSource {
     }
     return end;
   }
-  async *messages(from = 0): AsyncGenerator<RepairMessage> {
+  async *messages(
+    from = 0,
+    to = this.query.count,
+  ): AsyncGenerator<RepairMessage> {
     this.work.messageWalks++;
     if (this.index !== undefined) {
       yield* this.index.messages(from);
@@ -135,7 +138,7 @@ export class AnthropicRepairSource {
     let pending = -1;
     let pendingEnd = -1;
     let leading = from === 0;
-    for (let at = from; at < this.query.count; at++) {
+    for (let at = from; at < to; at++) {
       const unit = await this.describe(at);
       if (unit === undefined || (leading && unit.speaker === 'tool')) continue;
       leading = false;

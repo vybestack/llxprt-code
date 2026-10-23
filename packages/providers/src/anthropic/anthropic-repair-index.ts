@@ -73,6 +73,16 @@ export class AnthropicRepairIndex {
       role: values[4] % 2 === 0 ? 'user' : 'assistant',
     };
   }
+  async before(start: number): Promise<RepairMessage | undefined> {
+    let low = 1;
+    let high = this.count + 1;
+    while (low < high) {
+      const mid = Math.floor((low + high) / 2);
+      if ((await this.message(mid)).start < start) low = mid + 1;
+      else high = mid;
+    }
+    return low === 1 ? undefined : this.message(low - 1);
+  }
   async *messages(from: number): AsyncGenerator<RepairMessage> {
     let low = 1;
     let high = this.count + 1;

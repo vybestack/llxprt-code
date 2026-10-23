@@ -368,7 +368,13 @@ async function prepareNativeAnthropicRequest(
         );
         if (
           changed &&
-          !(await supportsAnthropicPendingTail(snapshot, query, settings))
+          !(await supportsAnthropicPendingTail(
+            snapshot,
+            query,
+            settings,
+            base,
+            options.recoveryBudget !== undefined,
+          ))
         ) {
           await query.close();
           return await prepareSpooledAnthropicRequest(
