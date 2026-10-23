@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { retainNamedWriter } from './named-writer-ownership.js';
 import { journalLabelSorter } from './ordered-labels.js';
 import { finishStoreFormats } from './store-format-fill.js';
 import {
@@ -202,6 +203,7 @@ export class JournalStore {
     private readonly deps: JournalStoreDependencies,
     /** The file has no name: `path` is a label, and a compaction swaps descriptors instead of renaming. */
     private readonly unlinked = false,
+    private readonly releaseNamedWriter?: () => void,
   ) {
     this.fileOperations =
       deps.fileOperations ?? realFileOperations(deps.journal.open);
@@ -215,11 +217,19 @@ export class JournalStore {
     path: string,
     deps: JournalStoreDependencies,
   ): Promise<JournalStore> {
-    return new JournalStore(
-      path,
-      await createJournal(path, deps.journal),
-      deps,
-    );
+    const release = await retainNamedWriter(path, true);
+    try {
+      return new JournalStore(
+        path,
+        await createJournal(path, deps.journal),
+        deps,
+        false,
+        release,
+      );
+    } catch (error) {
+      release();
+      throw error;
+    }
   }
 
   /**
@@ -286,11 +296,17 @@ export class JournalStore {
     path: string,
     deps: JournalStoreDependencies,
   ): Promise<JournalStore> {
-    await removeStaleCompaction(path);
-    const { writer } = await openJournalForOwner(path, deps.journal);
-    const store = new JournalStore(path, writer, deps);
-    store.tail = store.compactWhenIdle();
-    return store;
+    const release = await retainNamedWriter(path, false);
+    try {
+      await removeStaleCompaction(path);
+      const { writer } = await openJournalForOwner(path, deps.journal);
+      const store = new JournalStore(path, writer, deps, false, release);
+      store.tail = store.compactWhenIdle();
+      return store;
+    } catch (error) {
+      release();
+      throw error;
+    }
   }
 
   /** The last version whose trailer was acked, or undefined before the first group. */
@@ -414,6 +430,7 @@ export class JournalStore {
     this.closing = true;
     await this.tail;
     await this.writer.close();
+    this.releaseNamedWriter?.();
   }
 
   contextSpans(): ContextSpan[] {

@@ -10,6 +10,7 @@ import { realFileOperations, type FileOperations } from './compactionSwap.js';
 import { JournalWriterPoisonedError } from './errors.js';
 import { decodeJournalHeader } from './fileHeader.js';
 import { JournalStore } from './journalStore.js';
+import { openJournalReadOnly } from './journalReader.js';
 import { compactionCopy } from './versionCopy.js';
 import {
   copyDeps,
@@ -153,14 +154,15 @@ describe('compaction of a live store (design 4.11)', () => {
 
     await appendEach(store, [draftRow({ text: 'after the swap' })]);
     const rows = (await labelsOf(store)).length;
+    const expected = withoutOffsets(await snapshotStore(store, IDS));
+    await store.close();
     const reopened = await openStore(target);
 
     expect((await labelsOf(reopened)).length).toBe(rows);
     expect(withoutOffsets(await snapshotStore(reopened, IDS))).toStrictEqual(
-      withoutOffsets(await snapshotStore(store, IDS)),
+      expected,
     );
     await reopened.close();
-    await store.close();
   });
 
   it('compacts by itself after an acked group when the policy says so, once, behind a queue of commits', async () => {
@@ -187,7 +189,7 @@ describe('compaction of a live store (design 4.11)', () => {
     expect(calls).not.toContain('rename');
     await expect(store.compact()).rejects.toThrow('live pin');
 
-    release();
+    await release();
     await store.idle();
     expect(calls.filter((call) => call === 'rename')).toHaveLength(1);
     await store.close();
@@ -257,8 +259,8 @@ describe('compaction of a live store (design 4.11)', () => {
       await appendEach(store, [
         draftRow({ text: 'written after the refusal' }),
       ]);
-      const reopened = await openStore(target);
-      expect((await labelsOf(reopened)).length).toBe(rowsBefore + 1);
+      const reopened = await openJournalReadOnly(target);
+      expect(reopened.trailer?.rootAggregate.rows).toBe(rowsBefore + 1);
       await reopened.close();
 
       armed = true;

@@ -8,7 +8,13 @@ import {
   type SessionRecordingPort,
 } from '@vybestack/llxprt-code-core';
 import { isJsonlRecorder } from '@vybestack/llxprt-code-core/services/history/recorderBackend.js';
-import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+import { openJournalReadOnly } from '@vybestack/llxprt-code-core/journal/journalReader.js';
+import {
+  iterateRowEntries,
+  rowTreeRootOf,
+} from '@vybestack/llxprt-code-core/journal/rowTreeReader.js';
+import { readStoredRow } from '@vybestack/llxprt-code-core/journal/rowReads.js';
+import { decodeStoredRow } from '@vybestack/llxprt-code-core/services/history/journalRowCodec.js';
 import { foldDurableRows } from '@vybestack/llxprt-code-core/recording/durableRowFold.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
@@ -25,6 +31,14 @@ export interface ChatMutationFixture {
   readonly reader: RowOwnership;
 }
 
+async function* readRecordedRows(
+  session: Awaited<ReturnType<typeof openJournalReadOnly>>,
+  root: NonNullable<ReturnType<typeof rowTreeRootOf>>,
+): AsyncGenerator<IContent> {
+  for await (const entry of iterateRowEntries(session, root))
+    yield decodeStoredRow(await readStoredRow(session, entry));
+}
+
 export async function* recordedChatRows(
   recording: SessionRecordingPort,
   history: HistoryService,
@@ -34,9 +48,11 @@ export async function* recordedChatRows(
   const file = recording.getFilePath();
   if (file === null) throw new Error('Missing recording path');
   if (!isJsonlRecorder(recording)) {
-    const session = await JournalSession.open(file);
+    const session = await openJournalReadOnly(file);
     try {
-      for await (const row of session.rows()) yield row.content;
+      const root = rowTreeRootOf(session.trailer);
+      if (root === undefined) return;
+      yield* readRecordedRows(session, root);
     } finally {
       await session.close();
     }
