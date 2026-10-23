@@ -128,7 +128,7 @@ describe('RecordingIntegration journal lifecycle', () => {
     it(`joins the admitted batch through its held ${mirror ? 'mirror' : 'primary'} trailer before disposal`, async () => {
       await integration.dispose();
       await recording.dispose();
-      const failures: Failures = {};
+      const failures: Failures = { recordKinds: true };
       const seams = testJournalSeams(failures);
       recording = JournalRecordingService.create({
         ...recordingConfig(join(directory(), 'chats')),

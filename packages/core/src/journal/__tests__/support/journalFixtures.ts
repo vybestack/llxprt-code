@@ -38,6 +38,8 @@ export interface Failures {
   gateWriteAt?: number;
   gateTrailerAt?: number;
   failTrailerAt?: number;
+  /** Includes record-kind metadata in the otherwise positional write log. */
+  recordKinds?: boolean;
   /** Counts the positional reads that reach the file. */
   readCounter?: { reads: number };
   /** Holds every positional read until `promise` settles; `hits` counts the reads that arrived. */
@@ -78,7 +80,7 @@ function wrapHandle(
       type: 'write',
       position,
       length,
-      ...(kind === undefined ? {} : { kind }),
+      ...(failures.recordKinds === true && kind !== undefined ? { kind } : {}),
     });
     if (kind === RECORD_KIND.TRAILER) {
       const trailer = trailers++;

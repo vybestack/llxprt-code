@@ -64,7 +64,7 @@ export function useNativeIntegration(): () => NativeIntegrationFixture {
   const directory = useTempDir('native-recording-integration-');
   let fixture: NativeIntegrationFixture;
   beforeEach(() => {
-    const failures: Failures = {};
+    const failures: Failures = { recordKinds: true };
     const seams = testJournalSeams(failures);
     const recording = JournalRecordingService.create({
       sessionId: 'native-integration',

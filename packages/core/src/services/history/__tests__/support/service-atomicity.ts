@@ -69,7 +69,7 @@ export async function atomicRecorder(
   directory: string,
   name: string,
 ): Promise<AtomicRecorder> {
-  const failures: Failures = {};
+  const failures: Failures = { recordKinds: true };
   const seams = testJournalSeams(failures);
   const flush = await loadFlushRecords();
   const config: JournalRecordingConfig = {
