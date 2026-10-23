@@ -1,183 +1,596 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import React, { act, useState, useSyncExternalStore } from 'react';
+import { Text } from 'ink';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { KeyringTokenStore, oauthUIBridge } from '@vybestack/llxprt-code-auth';
+import {
+  InteractiveAuthError,
+  OAuthManager,
+} from '@vybestack/llxprt-code-providers/auth.js';
+import { assembleSessionAuthentication } from '@vybestack/llxprt-code-agents';
+import { AnthropicOAuthProvider } from '../../../providers/src/auth/anthropic-oauth-provider.js';
+import * as browser from '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js';
+import * as callbackModule from '../../../providers/src/auth/local-oauth-callback.js';
+import { ClipboardService } from '../../../providers/src/auth/ClipboardService.js';
+import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
+import { renderWithProviders, waitFor } from '../__tests__/render.js';
+import { useUpdateAndOAuthBridges } from './containers/AppContainer/hooks/useUpdateAndOAuthBridges.js';
+import { useOAuthOrchestration } from './hooks/useOAuthOrchestration.js';
+import { OAuthCodeDialog } from './components/OAuthCodeDialog.js';
+import {
+  createDialogStore,
+  selectDialogOpen,
+} from './stores/dialog/dialogStore.js';
+import { createDialogOpeners } from './stores/dialog/dialogOpeners.js';
+import { getOAuthGlobalState } from './oauthGlobalState.js';
+import type { HistoryItemWithoutId } from './types.js';
+import { Colors } from './colors.js';
 
-type GlobalOAuthState = Record<string, unknown> & {
-  __oauth_browser_auth_complete?: unknown;
-  __oauth_needs_code?: unknown;
-};
-
-interface DismissAction {
-  type: string;
-  payload: string;
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (error: Error) => void;
+} {
+  let resolveValue: (value: T) => void = () => {};
+  let rejectValue: (error: Error) => void = () => {};
+  const promise = new Promise<T>((resolve, reject) => {
+    resolveValue = resolve;
+    rejectValue = reject;
+  });
+  return { promise, resolve: resolveValue, reject: rejectValue };
 }
 
-type DismissDispatch = (action: DismissAction) => void;
-
-const oauthGlobal = global as GlobalOAuthState;
-
-/**
- * Mirror of the AppContainer auto-dismiss guard: the OAuth code dialog should
- * only auto-dismiss when it is open AND the browser auth completion flag is
- * strictly true.
- */
-function computeShouldAutoDismiss(isOAuthCodeDialogOpen: boolean): boolean {
-  return (
-    isOAuthCodeDialogOpen && oauthGlobal.__oauth_browser_auth_complete === true
+const fixtureRoot = resolve(
+  import.meta.dir,
+  '../../../../tmp/issue3931-lazy-auth',
+);
+const directories: string[] = [];
+const managers: OAuthManager[] = [];
+function harness(): {
+  manager: OAuthManager;
+  store: KeyringTokenStore;
+  callback: ReturnType<typeof deferred<{ code: string; state: string }>>;
+  ready: Promise<void>;
+  saveStarted: Promise<void>;
+  save: ReturnType<typeof deferred<void>>;
+  ui: ReturnType<typeof renderWithProviders>;
+  actions: string[];
+} {
+  mkdirSync(fixtureRoot, { recursive: true });
+  const lockDir = mkdtempSync(resolve(fixtureRoot, 'locks-'));
+  directories.push(lockDir);
+  const values = new Map<string, string>();
+  const saveStarted = deferred<void>();
+  const save = deferred<void>();
+  const store = new KeyringTokenStore({
+    lockDir,
+    secureStore: {
+      async get(key): Promise<string | null> {
+        return values.get(key) ?? null;
+      },
+      async set(key, value): Promise<void> {
+        saveStarted.resolve();
+        await save.promise;
+        values.set(key, value);
+      },
+      async delete(key): Promise<boolean> {
+        return values.delete(key);
+      },
+      async list(): Promise<string[]> {
+        return [...values.keys()];
+      },
+      async has(key): Promise<boolean> {
+        return values.has(key);
+      },
+    },
+  });
+  const provider = new AnthropicOAuthProvider(
+    (input, init) => globalThis.fetch(input, init),
+    store,
   );
-}
-
-/**
- * Mirror of the AppContainer useEffect body: when the auto-dismiss condition is
- * met, reset the completion flag and dispatch CLOSE_DIALOG for the code dialog.
- */
-function runOAuthAutoDismissEffect(
-  isOAuthCodeDialogOpen: boolean,
-  dispatch: DismissDispatch,
-): void {
-  if (!computeShouldAutoDismiss(isOAuthCodeDialogOpen)) {
-    return;
+  const manager = new OAuthManager(store);
+  managers.push(manager);
+  const control = assembleSessionAuthentication(manager, () => undefined);
+  manager.registerProvider(provider);
+  const callback = deferred<{ code: string; state: string }>();
+  const ready = deferred<void>();
+  vi.spyOn(callbackModule, 'startLocalOAuthCallback').mockResolvedValue({
+    redirectUri: 'http://localhost:8766/callback',
+    waitForCallback: () => callback.promise,
+    async shutdown(): Promise<void> {
+      callback.reject(new Error('Callback closed'));
+    },
+  });
+  vi.spyOn(browser, 'shouldLaunchBrowser').mockReturnValue(true);
+  vi.spyOn(browser, 'openBrowserSecurely').mockImplementation(async () => {
+    ready.resolve();
+  });
+  vi.spyOn(ClipboardService, 'copyToClipboard').mockResolvedValue();
+  vi.spyOn(globalThis, 'fetch').mockImplementation(
+    async () =>
+      new Response(
+        JSON.stringify({
+          access_token: 'synthetic-lazy-token',
+          expires_in: 3600,
+        }),
+        { headers: { 'Content-Type': 'application/json' } },
+      ),
+  );
+  const storeUI = createDialogStore();
+  const dialogs = createDialogOpeners(storeUI);
+  const actions: string[] = [];
+  function Host(): React.JSX.Element {
+    const [history, setHistory] = useState<string[]>([]);
+    const [authError, setAuthError] = useState<string | null>(null);
+    const open = useSyncExternalStore(storeUI.store.subscribe, () =>
+      selectDialogOpen(storeUI.store.getState(), 'oauthCode'),
+    );
+    const addItem = React.useCallback(
+      (item: Omit<HistoryItemWithoutId, 'id'>): number => {
+        if ('text' in item && typeof item.text === 'string') {
+          const text = item.text;
+          setHistory((old) => [...old, text]);
+        }
+        return 1;
+      },
+      [],
+    );
+    useUpdateAndOAuthBridges({
+      addItem,
+      setUpdateInfo: () => {},
+      oauthControl: control,
+    });
+    useOAuthOrchestration({
+      appDispatch: (action) => {
+        actions.push(action.type);
+      },
+      dialogs,
+      isOAuthCodeDialogOpen: open,
+      getActiveProviderName: () => 'claudecode',
+      setAuthError,
+    });
+    return React.createElement(
+      React.Fragment,
+      null,
+      open
+        ? React.createElement(OAuthCodeDialog, {
+            provider: 'claudecode',
+            onClose: () => dialogs.oauthCode.close(),
+            onSubmit: (code: string) => provider.submitAuthCode(code),
+          })
+        : React.createElement(
+            Text,
+            { color: Colors.Foreground },
+            'Code dialog closed',
+          ),
+      React.createElement(
+        Text,
+        { color: Colors.Foreground },
+        [
+          ...history,
+          authError ? `Hidden AuthDialog error: ${authError}` : '',
+        ].join('\n'),
+      ),
+    );
   }
-  oauthGlobal.__oauth_browser_auth_complete = false;
-  dispatch({ type: 'CLOSE_DIALOG', payload: 'oauthCode' });
+  return {
+    manager,
+    store,
+    callback,
+    ready: ready.promise,
+    saveStarted: saveStarted.promise,
+    save,
+    ui: renderWithProviders(React.createElement(Host)),
+    actions,
+  };
 }
 
-describe('OAuthCodeDialog auto-dismiss behavior', () => {
+async function tick(): Promise<void> {
+  await act(async () => {
+    await advanceTimersByTimeAsync(200);
+  });
+}
+async function request(manager: OAuthManager): Promise<{ kind: string }> {
+  try {
+    await manager.requestInteractiveAuth({
+      provider: 'claudecode',
+      bucket: 'default',
+      requester: { runtimeKind: 'cli-interactive' },
+      reason: 'authentication-required',
+    });
+    return { kind: 'succeeded' };
+  } catch (error) {
+    if (error instanceof InteractiveAuthError)
+      return { kind: error.outcomeKind };
+    throw error;
+  }
+}
+
+describe('prompt-triggered lazy authentication dialog', () => {
   beforeEach(() => {
-    // Reset global OAuth state
-    delete oauthGlobal.__oauth_needs_code;
-    delete oauthGlobal.__oauth_browser_auth_complete;
+    oauthUIBridge.clearPending();
+    vi.useFakeTimers();
   });
-
-  afterEach(() => {
+  afterEach(async () => {
+    for (const manager of managers.splice(0)) await manager.dispose();
+    oauthUIBridge.clearCallback();
+    oauthUIBridge.clearPending();
+    const attempt = oauthUIBridge.getDialog();
+    if (attempt) oauthUIBridge.dismissDialog(attempt.id);
     vi.restoreAllMocks();
-    delete oauthGlobal.__oauth_needs_code;
-    delete oauthGlobal.__oauth_browser_auth_complete;
+    vi.useRealTimers();
+    Object.assign(getOAuthGlobalState(), {
+      __oauth_needs_code: undefined,
+      __oauth_provider: undefined,
+      __oauth_auth_complete: undefined,
+      __oauth_auth_error: undefined,
+      __oauth_browser_auth_complete: undefined,
+    });
+    for (const dir of directories.splice(0))
+      rmSync(dir, { recursive: true, force: true });
   });
 
-  describe('Auto-dismiss condition logic', () => {
-    it('should auto-dismiss when dialog is open and __oauth_browser_auth_complete is true', () => {
-      // Arrange: Dialog is open, browser auth just completed
-      oauthGlobal.__oauth_browser_auth_complete = true;
-
-      // Act & Assert: The condition should be true
-      expect(computeShouldAutoDismiss(true)).toBe(true);
-    });
-
-    it('should NOT auto-dismiss when dialog is open but __oauth_browser_auth_complete is false', () => {
-      // Arrange: Dialog is open, browser auth not completed
-      oauthGlobal.__oauth_browser_auth_complete = false;
-
-      // Act & Assert: The condition should be false
-      expect(computeShouldAutoDismiss(true)).toBe(false);
-    });
-
-    it('should NOT auto-dismiss when dialog is open but __oauth_browser_auth_complete is undefined', () => {
-      // Arrange: Dialog is open, flag is undefined (initial state after delete)
-
-      // Act & Assert: The condition should be false (strict equality check)
-      expect(computeShouldAutoDismiss(true)).toBe(false);
-    });
-
-    it('should NOT auto-dismiss when dialog is closed even if __oauth_browser_auth_complete is true', () => {
-      // Arrange: Dialog is closed, browser auth completed
-      oauthGlobal.__oauth_browser_auth_complete = true;
-
-      // Act & Assert: The condition should be false
-      expect(computeShouldAutoDismiss(false)).toBe(false);
-    });
+  it('keeps fixture storage inside the assigned project root', () => {
+    expect(resolve(fixtureRoot, '../..')).toBe(
+      resolve(import.meta.dir, '../../../..'),
+    );
   });
 
-  describe('CLOSE_DIALOG dispatch', () => {
-    it('should dispatch CLOSE_DIALOG with oauthCode payload when auto-dismiss condition is met', () => {
-      // Arrange
-      const mockDispatch = vi.fn();
-      oauthGlobal.__oauth_browser_auth_complete = true;
-
-      // Act: Simulate the useEffect logic
-      runOAuthAutoDismissEffect(true, mockDispatch);
-
-      // Assert
-      expect(mockDispatch).toHaveBeenCalledTimes(1);
-      expect(mockDispatch).toHaveBeenCalledWith({
-        type: 'CLOSE_DIALOG',
-        payload: 'oauthCode',
+  it('accepts a new attempt after manual failure without unmounting the host dialog', async () => {
+    const h = harness();
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('Rejected', { status: 400 }),
+    );
+    const first = request(h.manager);
+    const nextCallback = deferred<{ code: string; state: string }>();
+    let second: ReturnType<typeof request> | undefined;
+    try {
+      await h.ready;
+      await tick();
+      await act(async () => {
+        h.ui.stdin.write('\x1b[200~first-code\x1b[201~');
       });
-      // Verify flag was reset
-      expect(oauthGlobal.__oauth_browser_auth_complete).toBe(false);
-    });
-
-    it('should NOT dispatch CLOSE_DIALOG when auto-dismiss condition is NOT met', () => {
-      // Arrange
-      const mockDispatch = vi.fn();
-      oauthGlobal.__oauth_browser_auth_complete = false;
-
-      // Act: Simulate the useEffect logic
-      runOAuthAutoDismissEffect(true, mockDispatch);
-
-      // Assert
-      expect(mockDispatch).not.toHaveBeenCalled();
-    });
+      await waitFor(() => expect(h.ui.lastFrame()).toContain('first-code'));
+      await act(async () => {
+        h.ui.stdin.write('\r');
+      });
+      expect((await first).kind).toBe('failed');
+      await tick();
+      expect(h.ui.lastFrame()).toContain('authentication failed:');
+      const nextReady = deferred<void>();
+      vi.spyOn(callbackModule, 'startLocalOAuthCallback').mockResolvedValue({
+        redirectUri: 'http://localhost:8766/callback',
+        waitForCallback: () => nextCallback.promise,
+        async shutdown(): Promise<void> {
+          nextCallback.reject(new Error('Retry callback closed'));
+        },
+      });
+      vi.spyOn(browser, 'openBrowserSecurely').mockImplementation(async () => {
+        nextReady.resolve();
+      });
+      vi.spyOn(globalThis, 'fetch').mockImplementation(
+        async () =>
+          new Response(
+            JSON.stringify({ access_token: 'retry-token', expires_in: 3600 }),
+            { headers: { 'Content-Type': 'application/json' } },
+          ),
+      );
+      second = request(h.manager);
+      await nextReady.promise;
+      await tick();
+      expect(h.ui.lastFrame()).not.toContain(
+        'Waiting for authentication to finish',
+      );
+      await act(async () => {
+        h.ui.stdin.write('\x1b[200~retry-code\x1b[201~');
+      });
+      await waitFor(() => expect(h.ui.lastFrame()).toContain('retry-code'));
+      await act(async () => {
+        h.ui.stdin.write('\r');
+      });
+      await h.saveStarted;
+      await tick();
+      expect(h.ui.lastFrame()).toContain(
+        'Waiting for authentication to finish',
+      );
+      h.save.resolve();
+      expect((await second).kind).toBe('succeeded');
+      await tick();
+      expect(h.ui.lastFrame()).toContain('Code dialog closed');
+      expect(await h.store.getToken('claudecode')).not.toBeNull();
+    } finally {
+      nextCallback.resolve({ code: 'cleanup-code', state: 'cleanup-state' });
+      h.save.resolve();
+      h.ui.unmount();
+      await first;
+      await second;
+    }
   });
 
-  describe('Race condition scenarios', () => {
-    it('should handle rapid auth attempts correctly', () => {
-      const mockDispatch = vi.fn();
+  it('closes the actual host-challenge dialog only after callback credentials persist, without command completion', async () => {
+    const h = harness();
+    const outcome = request(h.manager);
+    try {
+      await h.ready;
+      await tick();
+      expect(h.ui.lastFrame()).toContain('Claudecode OAuth');
+      h.callback.resolve({ code: 'callback-code', state: 'callback-state' });
+      await h.saveStarted;
+      await tick();
+      expect(h.ui.lastFrame()).toContain('Claudecode OAuth');
+      expect(await h.store.getToken('claudecode')).toBeNull();
+      h.save.resolve();
+      expect((await outcome).kind).toBe('succeeded');
+      await tick();
+      await waitFor(() =>
+        expect(h.ui.lastFrame()).toContain('Code dialog closed'),
+      );
+      expect(await h.store.getToken('claudecode')).not.toBeNull();
+      expect(h.actions).not.toContain('SET_NEEDS_RELOGIN');
+    } finally {
+      h.save.resolve();
+      h.ui.unmount();
+      await outcome;
+    }
+  });
 
-      // First auth attempt starts
-      let isOAuthCodeDialogOpen = false;
-      oauthGlobal.__oauth_needs_code = true;
+  it.each(['exchange', 'save'])(
+    'ends manual waiting and renders the terminal %s error in history',
+    async (failure) => {
+      const h = harness();
+      if (failure === 'exchange')
+        vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+          new Response('Rejected', { status: 400 }),
+        );
+      const outcome = request(h.manager);
+      try {
+        await h.ready;
+        await tick();
+        await act(async () => {
+          h.ui.stdin.write('\x1b[200~manual-code\x1b[201~');
+        });
+        await waitFor(() => expect(h.ui.lastFrame()).toContain('manual-code'));
+        await act(async () => {
+          h.ui.stdin.write('\r');
+        });
+        let pendingFrame = '';
+        if (failure === 'save') {
+          await h.saveStarted;
+          await tick();
+          pendingFrame = h.ui.lastFrame() ?? '';
+          h.save.reject(new Error('Synthetic keyring write failure'));
+        }
+        expect(
+          pendingFrame.includes('Waiting for authentication to finish'),
+        ).toBe(failure === 'save');
+        expect((await outcome).kind).toBe('failed');
+        await tick();
+        await waitFor(() => {
+          expect(h.ui.lastFrame()).toContain('Claudecode OAuth');
+          expect(h.ui.lastFrame()).not.toContain(
+            'Waiting for authentication to finish',
+          );
+          expect(h.ui.lastFrame()).not.toContain('Hidden AuthDialog error:');
+          expect(h.ui.lastFrame()).toMatch(
+            failure === 'save'
+              ? /keyring write failure/
+              : /[Ee]xchange|400|[Aa]uthorization/,
+          );
+        });
+        expect(await h.store.getToken('claudecode')).toBeNull();
+      } finally {
+        h.save.resolve();
+        h.ui.unmount();
+        await outcome;
+      }
+    },
+  );
 
-      // Polling effect opens dialog and clears __oauth_needs_code
-      isOAuthCodeDialogOpen = true;
-      oauthGlobal.__oauth_needs_code = false;
-      // Browser auth completes
-      oauthGlobal.__oauth_browser_auth_complete = true;
+  it('keeps the active lazy dialog open when an unrelated command flight fails', async () => {
+    const h = harness();
+    const outcome = request(h.manager);
+    try {
+      await h.ready;
+      await tick();
+      await h.manager
+        .authenticate('unknown-provider', undefined, {
+          signalAuthCompletion: true,
+        })
+        .catch(() => undefined);
+      await tick();
+      expect(h.ui.lastFrame()).toContain('Claudecode OAuth');
+      h.callback.resolve({ code: 'callback-code', state: 'callback-state' });
+      h.save.resolve();
+      expect((await outcome).kind).toBe('succeeded');
+    } finally {
+      h.save.resolve();
+      h.ui.unmount();
+      await outcome;
+    }
+  });
+  it.each(['exchange', 'save'])(
+    'renders callback %s failure without stale AuthDialog errors',
+    async (failure) => {
+      const h = harness();
+      if (failure === 'exchange')
+        vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+          new Response('Rejected', { status: 400 }),
+        );
+      const outcome = request(h.manager);
+      try {
+        await h.ready;
+        await tick();
+        h.callback.resolve({ code: 'bad-callback', state: 'state' });
+        if (failure === 'save') {
+          await h.saveStarted;
+          h.save.reject(new Error('Synthetic callback keyring failure'));
+        }
+        expect((await outcome).kind).toBe('failed');
+        await tick();
+        expect(h.ui.lastFrame()).toContain('Claudecode OAuth');
+        expect(h.ui.lastFrame()).toContain('authentication failed:');
+        expect(h.ui.lastFrame()).not.toContain('Hidden AuthDialog error:');
+        expect(await h.store.getToken('claudecode')).toBeNull();
+      } finally {
+        h.save.resolve();
+        h.ui.unmount();
+        await outcome;
+      }
+    },
+  );
 
-      // Auto-dismiss should trigger (using distinct flag, not __oauth_needs_code)
-      runOAuthAutoDismissEffect(isOAuthCodeDialogOpen, mockDispatch);
+  it.each(['success', 'failure'])(
+    'keeps a manual participant live after the prompt participant detaches until shared %s',
+    async (result) => {
+      const h = harness();
+      if (result === 'failure')
+        vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+          new Response('Rejected', { status: 400 }),
+        );
+      const controller = new AbortController();
+      const background = h.manager
+        .authenticate('claudecode', undefined, { signal: controller.signal })
+        .catch((error: unknown) => error);
+      await h.ready;
+      const outcome = request(h.manager);
+      try {
+        await tick();
+        const departed = new Error('Prompt participant detached');
+        controller.abort(departed);
+        expect(await background).toBe(departed);
+        await tick();
+        expect(h.ui.lastFrame()).toContain('Claudecode OAuth');
+        expect(h.ui.lastFrame()).not.toContain('authentication failed:');
+        await act(async () => {
+          h.ui.stdin.write('\x1b[200~joined-code\x1b[201~');
+        });
+        await waitFor(() => expect(h.ui.lastFrame()).toContain('joined-code'));
+        await act(async () => {
+          h.ui.stdin.write('\r');
+        });
+        h.save.resolve();
+        expect((await outcome).kind).toBe(
+          result === 'success' ? 'succeeded' : 'failed',
+        );
+        await tick();
+        expect(h.ui.lastFrame()).not.toContain(
+          'Waiting for authentication to finish',
+        );
+        expect(h.ui.lastFrame()).not.toContain('Prompt participant detached');
+        expect((await h.store.getToken('claudecode')) !== null).toBe(
+          result === 'success',
+        );
+      } finally {
+        h.save.resolve();
+        h.ui.unmount();
+        await outcome;
+      }
+    },
+  );
 
-      expect(mockDispatch).toHaveBeenCalledTimes(1);
-      mockDispatch.mockClear();
-
-      // Second auth attempt starts immediately
-      oauthGlobal.__oauth_needs_code = true;
-      isOAuthCodeDialogOpen = true;
-      // Browser auth NOT complete yet
-      oauthGlobal.__oauth_browser_auth_complete = false;
-
-      // Dialog should NOT auto-dismiss (flag is false)
-      runOAuthAutoDismissEffect(isOAuthCodeDialogOpen, mockDispatch);
-
-      expect(mockDispatch).not.toHaveBeenCalled();
-
-      // Browser auth completes
-      oauthGlobal.__oauth_browser_auth_complete = true;
-
-      // Now dialog should auto-dismiss
-      runOAuthAutoDismissEffect(isOAuthCodeDialogOpen, mockDispatch);
-
-      expect(mockDispatch).toHaveBeenCalledTimes(1);
-    });
-
-    it('should not auto-dismiss when dialog opens via polling (no browser auth)', () => {
-      // This tests the CodeRabbit fix - dialog should stay open for manual entry
-      const mockDispatch = vi.fn();
-
-      // Auth starts, polling opens dialog
-      const isOAuthCodeDialogOpen = true;
-      oauthGlobal.__oauth_needs_code = false; // Cleared by polling
-      // Browser auth did NOT complete (no callback)
-      oauthGlobal.__oauth_browser_auth_complete = undefined;
-
-      // Dialog should NOT auto-dismiss - user can still paste code manually
-      runOAuthAutoDismissEffect(isOAuthCodeDialogOpen, mockDispatch);
-
-      expect(mockDispatch).not.toHaveBeenCalled();
-    });
+  it('ignores successful command completion from another bucket without a dialog', async () => {
+    const h = harness();
+    h.save.resolve();
+    await h.store.saveToken(
+      'claudecode',
+      {
+        access_token: 'existing-other-bucket',
+        token_type: 'Bearer',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+      },
+      'other',
+    );
+    const outcome = request(h.manager);
+    try {
+      await h.ready;
+      await tick();
+      await h.manager.authenticate('claudecode', 'other', {
+        signalAuthCompletion: true,
+      });
+      await tick();
+      expect(h.ui.lastFrame()).toContain('Claudecode OAuth');
+      expect(h.ui.lastFrame()).not.toContain('authentication failed:');
+      h.callback.resolve({ code: 'active-callback', state: 'state' });
+      expect((await outcome).kind).toBe('succeeded');
+      await tick();
+      expect(h.ui.lastFrame()).toContain('Code dialog closed');
+    } finally {
+      h.ui.unmount();
+      await outcome;
+    }
+  });
+  it('keeps the newer bucket dialog open when an older persistence flight settles', async () => {
+    const h = harness();
+    const first = request(h.manager);
+    let second: Promise<void> = Promise.resolve();
+    try {
+      await h.ready;
+      await tick();
+      h.callback.resolve({ code: 'first-callback', state: 'first-state' });
+      await h.saveStarted;
+      const secondCallback = deferred<{ code: string; state: string }>();
+      const secondReady = deferred<void>();
+      vi.spyOn(callbackModule, 'startLocalOAuthCallback').mockResolvedValue({
+        redirectUri: 'http://localhost:8766/callback',
+        waitForCallback: () => secondCallback.promise,
+        async shutdown(): Promise<void> {
+          secondCallback.reject(new Error('Second callback closed'));
+        },
+      });
+      vi.spyOn(browser, 'openBrowserSecurely').mockImplementation(async () => {
+        secondReady.resolve();
+      });
+      second = h.manager.authenticate('claudecode', 'second');
+      await secondReady.promise;
+      await tick();
+      h.save.resolve();
+      expect((await first).kind).toBe('succeeded');
+      await tick();
+      expect(h.ui.lastFrame()).toContain('Claudecode OAuth');
+      expect(await h.store.getToken('claudecode', 'second')).toBeNull();
+      secondCallback.resolve({
+        code: 'second-callback',
+        state: 'second-state',
+      });
+      await second;
+      await tick();
+      expect(h.ui.lastFrame()).toContain('Code dialog closed');
+      expect(await h.store.getToken('claudecode', 'second')).not.toBeNull();
+    } finally {
+      h.save.resolve();
+      h.ui.unmount();
+      await first;
+      await second;
+    }
+  });
+  it('lets Escape dismiss the pending view without reopening it when the existing flight finishes', async () => {
+    const h = harness();
+    const outcome = request(h.manager);
+    try {
+      await h.ready;
+      await tick();
+      await act(async () => {
+        h.ui.stdin.write('\x1b');
+      });
+      await tick();
+      expect(h.ui.lastFrame()).toContain('Code dialog closed');
+      h.callback.resolve({ code: 'after-dismissal', state: 'state' });
+      h.save.resolve();
+      expect((await outcome).kind).toBe('succeeded');
+      await tick();
+      expect(h.ui.lastFrame()).not.toContain('Claudecode OAuth');
+      expect(await h.store.getToken('claudecode')).not.toBeNull();
+    } finally {
+      h.save.resolve();
+      h.ui.unmount();
+      await outcome;
+    }
   });
 });

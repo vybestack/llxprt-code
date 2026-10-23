@@ -11,8 +11,9 @@
  */
 
 import type React from 'react';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useSyncExternalStore } from 'react';
 import { Box, Text } from 'ink';
+import { oauthUIBridge } from '@vybestack/llxprt-code-auth';
 import { Colors } from '../colors.js';
 import type { Key } from '../hooks/useKeypress.js';
 import { useKeypress } from '../hooks/useKeypress.js';
@@ -22,6 +23,20 @@ interface OAuthCodeDialogProps {
   provider: string;
   onClose: () => void;
   onSubmit: (code: string) => void;
+}
+
+function getInstructions(provider: string): string[] {
+  if (provider === 'gemini') {
+    return [
+      'The OAuth URL has been copied to your clipboard.',
+      'Please paste it into your browser to authenticate with Google.',
+      'After authenticating, paste the verification code you receive below:',
+    ];
+  }
+  return [
+    'Please check your browser and authorize the application.',
+    'After authorizing, paste the authorization code below:',
+  ];
 }
 
 /**
@@ -35,25 +50,14 @@ export const OAuthCodeDialog: React.FC<OAuthCodeDialogProps> = ({
   onSubmit,
 }) => {
   const [code, setCode] = useState('');
+  const [submittedAttemptId, setSubmittedAttemptId] = useState<string>();
 
-  /**
-   * @plan PLAN-20250822-GEMINIFALLBACK.P09
-   * @requirement REQ-002.1, REQ-006.2
-   * @pseudocode lines 38-45
-   */
-  const getInstructions = useCallback((): string[] => {
-    if (provider === 'gemini') {
-      return [
-        'The OAuth URL has been copied to your clipboard.',
-        'Please paste it into your browser to authenticate with Google.',
-        'After authenticating, paste the verification code you receive below:',
-      ];
-    }
-    return [
-      'Please check your browser and authorize the application.',
-      'After authorizing, paste the authorization code below:',
-    ];
-  }, [provider]);
+  const attempt = useSyncExternalStore(oauthUIBridge.subscribeDialog, () =>
+    oauthUIBridge.getDialog(),
+  );
+  const attemptId = attempt?.provider === provider ? attempt.id : '';
+  const submitted = submittedAttemptId === attemptId;
+  const error = attempt?.provider === provider ? attempt.error : undefined;
 
   /**
    * @plan PLAN-20250822-GEMINIFALLBACK.P09
@@ -64,15 +68,20 @@ export const OAuthCodeDialog: React.FC<OAuthCodeDialogProps> = ({
     (key: Key) => {
       // Handle escape to close
       if (key.name === 'escape') {
+        if (attempt?.provider === provider)
+          oauthUIBridge.dismissDialog(attempt.id);
         onClose();
         return;
       }
+
+      if (submitted) return;
 
       // Handle enter to submit
       if (key.name === 'return') {
         if (code.trim()) {
           onSubmit(code.trim());
-          onClose();
+          if (provider === 'claudecode') setSubmittedAttemptId(attemptId);
+          else onClose();
         }
         return;
       }
@@ -93,7 +102,6 @@ export const OAuthCodeDialog: React.FC<OAuthCodeDialogProps> = ({
           // Replace the entire code with the pasted content (don't append)
           setCode(cleanInput);
         }
-        return;
       }
 
       // Explicitly ignore ALL other input including:
@@ -102,7 +110,7 @@ export const OAuthCodeDialog: React.FC<OAuthCodeDialogProps> = ({
       // - Backspace (users must paste the entire correct code)
       // This prevents accidental control codes like I, IO, etc. from being added
     },
-    [code, onClose, onSubmit],
+    [attempt, attemptId, code, onClose, onSubmit, provider, submitted],
   );
 
   useKeypress(handleInput, { isActive: true });
@@ -121,15 +129,18 @@ export const OAuthCodeDialog: React.FC<OAuthCodeDialogProps> = ({
         {provider.charAt(0).toUpperCase() + provider.slice(1)} OAuth
         Authentication
       </Text>
-      {getInstructions().map((instruction, index) => (
+      {getInstructions(provider).map((instruction, index) => (
         <Text key={index} color={Colors.Foreground}>
           {instruction}
         </Text>
       ))}
+      {error && <Text color={Colors.AccentRed}>{error}</Text>}
       <Box marginTop={1}>
         <Text color={Colors.AccentCyan}>Code: </Text>
         <Text color={Colors.Foreground}>
-          {code || '(paste only - typing disabled)'}
+          {submitted && !error
+            ? 'Waiting for authentication to finish...'
+            : code || '(paste only - typing disabled)'}
         </Text>
       </Box>
       <Box marginTop={1}>

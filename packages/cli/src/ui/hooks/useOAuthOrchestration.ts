@@ -17,6 +17,7 @@
  */
 
 import { useEffect } from 'react';
+import { oauthUIBridge } from '@vybestack/llxprt-code-auth';
 import type { AppAction } from '../reducers/appReducer.js';
 import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
 import {
@@ -51,6 +52,14 @@ function oauthProviderMatchesActive(
   return pendingProvider === activeProviderName;
 }
 
+function hasMatchingDialogAttempt(): boolean {
+  const attempt = oauthUIBridge.getDialog();
+  return (
+    attempt !== undefined &&
+    (getPendingOAuthProvider() ?? attempt.provider) === attempt.provider
+  );
+}
+
 export function useOAuthOrchestration({
   appDispatch,
   dialogs,
@@ -73,31 +82,37 @@ export function useOAuthOrchestration({
     return () => clearInterval(checkOAuthFlag);
   }, [dialogs, getActiveProviderName]);
 
-  // Auto-dismiss OAuth dialog when auth completes via browser callback
-  // Issue #1404: Dialog should automatically hide after auth completes
   useEffect(() => {
-    if (!isOAuthCodeDialogOpen) return undefined;
-    // Poll for the browser-auth-success signal (global flag, not React state)
-    // This polling approach is necessary because the global flag is set outside React
     const interval = setInterval(() => {
-      const oauthState = getOAuthGlobalState();
-      if (oauthState.__oauth_browser_auth_complete === true) {
-        oauthState.__oauth_browser_auth_complete = false;
+      const attempt = oauthUIBridge.getDialog();
+      if (
+        isOAuthCodeDialogOpen &&
+        attempt?.status === 'succeeded' &&
+        hasMatchingDialogAttempt()
+      ) {
         dialogs.oauthCode.close();
+        oauthUIBridge.dismissDialog(attempt.id);
       }
     }, 100);
     return () => clearInterval(interval);
-  }, [isOAuthCodeDialogOpen, dialogs]);
+  }, [dialogs, isOAuthCodeDialogOpen]);
 
   useEffect(() => {
     const interval = setInterval(() => {
       const oauthState = getOAuthGlobalState();
+      if (oauthState.__oauth_auth_error !== undefined) {
+        if (!hasMatchingDialogAttempt()) {
+          setAuthError(oauthState.__oauth_auth_error);
+          dialogs.oauthCode.close();
+        }
+        oauthState.__oauth_auth_error = undefined;
+      }
       if (oauthState.__oauth_auth_complete === true) {
         oauthState.__oauth_auth_complete = false;
         setAuthError(null);
         appDispatch({ type: 'SET_NEEDS_RELOGIN', payload: false });
         dialogs.auth.close();
-        dialogs.oauthCode.close();
+        if (!hasMatchingDialogAttempt()) dialogs.oauthCode.close();
       }
     }, 100);
     return () => clearInterval(interval);

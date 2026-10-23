@@ -236,6 +236,7 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
         prompt: this.readSessionAuthPolicy().bucketPrompt,
         delay: this.readSessionAuthPolicy().bucketDelay,
       }),
+      (event, timestamp) => this.interactiveAuthUI.emit(event, timestamp),
     );
     // Assign AFTER authFlowOrchestrator exists so the setter can propagate the
     // bus to the orchestrator. Idempotent with the constructor argument above,
@@ -638,7 +639,12 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
       this.readSessionAuthPolicy().profileName,
       this.profileReads,
     );
-    if (context?.providerMatches === true && !context.hasExplicitBucketPolicy) {
+    if (context === undefined) {
+      this.bucketManager.setSessionBucket(provider, bucket);
+    } else if (
+      context.providerMatches === true &&
+      !context.hasExplicitBucketPolicy
+    ) {
       this.bucketManager.setSessionBucket(provider, bucket, context.metadata);
     }
   }

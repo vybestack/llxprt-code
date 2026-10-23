@@ -89,6 +89,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
   private currentAuthAttemptId?: string;
   private addItem?: OAuthUICallback;
   private currentAuthBucket?: string;
+  private dialogAttemptId?: string;
 
   /**
    * @plan PLAN-20250823-AUTHFIXES.P06
@@ -131,8 +132,9 @@ export class AnthropicOAuthProvider implements OAuthProvider {
    * Set the authentication context so the provider knows which bucket
    * it is authenticating for. Used to look up browser profile associations.
    */
-  setAuthContext(ctx: { bucket?: string }): void {
+  setAuthContext(ctx: { bucket?: string; attemptId?: string }): void {
     this.currentAuthBucket = ctx.bucket;
+    this.dialogAttemptId = ctx.attemptId;
   }
 
   /**
@@ -170,21 +172,30 @@ export class AnthropicOAuthProvider implements OAuthProvider {
         }
         this.currentAuthAttemptId = attemptId;
 
-        await this.ensureInitialized();
-        const { localCallback } = await this.setupDeviceFlowAndDisplay();
+        try {
+          await this.ensureInitialized();
+          const { localCallback } =
+            await this.setupDeviceFlowAndDisplay(attemptId);
 
-        this.armPendingAuthDialog();
+          if (localCallback) {
+            return await this.raceCallbackVsManualEntry(
+              attemptId,
+              localCallback,
+            );
+          }
 
-        if (localCallback) {
-          return this.raceCallbackVsManualEntry(attemptId, localCallback);
+          const authCode = await this.pendingAuthPromise!;
+          if (this.currentAuthAttemptId !== attemptId) {
+            throw new AuthAttemptCancelledError();
+          }
+          return await this.completeAuth(authCode);
+        } finally {
+          if (this.currentAuthAttemptId === attemptId) {
+            this.dialog.cancelAuth(this.name);
+            this.pendingAuthPromise = undefined;
+            this.currentAuthAttemptId = undefined;
+          }
         }
-
-        // Non-interactive: wait for manual code entry via paste box
-        const authCode = await this.pendingAuthPromise!;
-        if (this.currentAuthAttemptId === attemptId) {
-          return this.completeAuth(authCode);
-        }
-        throw new AuthAttemptCancelledError();
       },
       this.name,
       'initiateAuth',
@@ -196,7 +207,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
    * display the auth URL to the user, copy to clipboard, and open browser.
    * Returns the URLs and callback handle needed by the calling flow.
    */
-  private async setupDeviceFlowAndDisplay(): Promise<{
+  private async setupDeviceFlowAndDisplay(attemptId: string): Promise<{
     localCallback: LocalOAuthCallbackServer | null;
   }> {
     const deviceCodeResponse = await this.deviceFlow.initiateDeviceFlow();
@@ -229,6 +240,12 @@ export class AnthropicOAuthProvider implements OAuthProvider {
       ? this.deviceFlow.buildAuthorizationUrl(localCallback.redirectUri)
       : null;
 
+    if (this.currentAuthAttemptId !== attemptId) {
+      await localCallback?.shutdown();
+      throw new AuthAttemptCancelledError();
+    }
+    this.armPendingAuthDialog();
+
     const historyItem: OAuthUIEvent = {
       type: 'oauth_url',
       text: `Please visit the following URL to authorize with Claude Code:\n${deviceCodeUrl}`,
@@ -255,7 +272,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
 
     if (interactive) {
       debugLogger.log('Opening browser for authentication...');
-      await this.openAuthBrowser(callbackUrl ?? deviceCodeUrl);
+      void this.openAuthBrowser(callbackUrl ?? deviceCodeUrl, attemptId);
     }
 
     return { localCallback };
@@ -266,7 +283,10 @@ export class AnthropicOAuthProvider implements OAuthProvider {
    * profile when one is configured. Falls back to the default browser when no
    * association exists or the lookup fails.
    */
-  private async openAuthBrowser(browserUrl: string): Promise<void> {
+  private async openAuthBrowser(
+    browserUrl: string,
+    attemptId: string,
+  ): Promise<void> {
     let browserOpts: BrowserLaunchOptions | undefined;
     try {
       const assoc = this.getBrowserProfileAssociation(
@@ -291,6 +311,16 @@ export class AnthropicOAuthProvider implements OAuthProvider {
       await openBrowserSecurely(browserUrl, browserOpts);
     } catch (error) {
       this.logger.debug(() => `Browser launch error: ${error}`);
+      if (this.currentAuthAttemptId !== attemptId) return;
+      const warning: OAuthUIEvent = {
+        type: 'warning',
+        text: `Could not open a browser for Claude Code authentication. Open the authorization URL above manually and paste the code here.`,
+      };
+      if (this.addItem) {
+        this.addItem(warning);
+      } else {
+        oauthUIBridge.emit(warning);
+      }
     }
   }
 
@@ -299,6 +329,9 @@ export class AnthropicOAuthProvider implements OAuthProvider {
    * Assigns this.pendingAuthPromise and this.dialog, and marks global auth state.
    */
   private armPendingAuthDialog(): void {
+    if (this.dialogAttemptId) {
+      oauthUIBridge.beginDialog(this.dialogAttemptId, this.name);
+    }
     (global as unknown as { __oauth_provider: string }).__oauth_provider =
       'claudecode';
 
@@ -331,6 +364,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
       );
     });
 
+    void this.pendingAuthPromise.catch(() => undefined);
     (global as unknown as { __oauth_needs_code: boolean }).__oauth_needs_code =
       true;
   }
@@ -347,13 +381,20 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     const dialog = this.dialog;
     const callbackPromise = localCallback
       .waitForCallback()
-      .then(({ code, state }) => `${code}#${state}`);
+      .then(({ code, state }) => ({
+        authCode: `${code}#${state}`,
+        redirectUri: localCallback.redirectUri,
+      }));
+    const manualCodePromise = manualEntryPromise.then((authCode) => ({
+      authCode,
+      redirectUri: undefined,
+    }));
 
     let committedToComplete = false;
     try {
-      const authCode = await Promise.race([
+      const { authCode, redirectUri } = await Promise.race([
         callbackPromise,
-        manualEntryPromise,
+        manualCodePromise,
       ]);
 
       manualEntryPromise.catch(() => {});
@@ -361,14 +402,9 @@ export class AnthropicOAuthProvider implements OAuthProvider {
 
       await localCallback.shutdown().catch(() => undefined);
       if (this.currentAuthAttemptId === attemptId) {
-        (
-          global as unknown as { __oauth_needs_code: boolean }
-        ).__oauth_needs_code = false;
-        (
-          global as unknown as { __oauth_browser_auth_complete: boolean }
-        ).__oauth_browser_auth_complete = true;
         committedToComplete = true;
-        return await this.completeAuth(authCode);
+        dialog.cancelAuth(this.name);
+        return await this.completeAuth(authCode, redirectUri);
       }
 
       throw new AuthAttemptCancelledError();
@@ -402,7 +438,10 @@ export class AnthropicOAuthProvider implements OAuthProvider {
    * Complete authentication with the authorization code
    * Returns the token for OAuthManager to persist with correct bucket
    */
-  async completeAuth(authCode: string): Promise<OAuthToken> {
+  async completeAuth(
+    authCode: string,
+    redirectUri?: string,
+  ): Promise<OAuthToken> {
     if (!authCode) {
       throw OAuthErrorFactory.fromUnknown(
         this.name,
@@ -414,7 +453,10 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     return this.errorHandler.wrapMethod(
       async () => {
         // Exchange the authorization code for tokens
-        const token = await this.deviceFlow.exchangeCodeForToken(authCode);
+        const token = await this.deviceFlow.exchangeCodeForToken(
+          authCode,
+          redirectUri,
+        );
 
         // Clear the dialog flag on successful auth
         (

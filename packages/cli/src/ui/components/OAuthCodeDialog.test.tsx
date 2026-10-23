@@ -7,8 +7,11 @@
 import { describe, it, expect, vi, afterEach } from 'bun:test';
 import { runAllTimersAsync } from '@vybestack/llxprt-code-test-utils';
 import { renderWithProviders, waitFor } from '../../__tests__/render.js';
-import { act } from 'react';
+import { Text } from 'ink';
+import { Colors } from '../colors.js';
+import { act, useState } from 'react';
 import { OAuthCodeDialog } from './OAuthCodeDialog.js';
+import { oauthUIBridge } from '@vybestack/llxprt-code-auth';
 
 const PLACEHOLDER = '(paste only - typing disabled)';
 
@@ -22,8 +25,54 @@ const paste = (
 
 describe('OAuthCodeDialog', () => {
   afterEach(() => {
+    const attempt = oauthUIBridge.getDialog();
+    if (attempt) oauthUIBridge.dismissDialog(attempt.id);
+    oauthUIBridge.clearPending();
     vi.useRealTimers();
   });
+
+  it.each(['managed', 'legacy'])(
+    'blocks duplicate submissions while the same %s attempt is waiting',
+    async (mode) => {
+      if (mode === 'managed')
+        oauthUIBridge.beginDialog('duplicate', 'claudecode');
+      function Host(): React.JSX.Element {
+        const [codes, setCodes] = useState<string[]>([]);
+        return (
+          <>
+            <OAuthCodeDialog
+              provider="claudecode"
+              onClose={() => {}}
+              onSubmit={(code) => setCodes((old) => [...old, code])}
+            />
+            <Text color={Colors.Foreground}>Delivered: {codes.length}</Text>
+          </>
+        );
+      }
+      const ui = renderWithProviders(<Host />);
+      try {
+        await paste(ui.stdin, 'first-code');
+        await waitFor(() => expect(ui.lastFrame()).toContain('first-code'));
+        await act(async () => {
+          ui.stdin.write('\r');
+        });
+        await waitFor(() => expect(ui.lastFrame()).toContain('Delivered: 1'));
+        await paste(ui.stdin, 'duplicate-code');
+        await act(async () => {
+          ui.stdin.write('\r');
+        });
+        await waitFor(() => {
+          expect(ui.lastFrame()).toContain(
+            'Waiting for authentication to finish',
+          );
+          expect(ui.lastFrame()).toContain('Delivered: 1');
+          expect(ui.lastFrame()).not.toContain('duplicate-code');
+        });
+      } finally {
+        ui.unmount();
+      }
+    },
+  );
 
   it('ignores typed characters, keeping the paste-only placeholder and no code', async () => {
     const onClose = vi.fn();
@@ -144,6 +193,44 @@ describe('OAuthCodeDialog', () => {
       await waitFor(() => {
         expect(onSubmit).toHaveBeenCalledWith('4/Abcde');
         expect(onClose).toHaveBeenCalledTimes(1);
+      });
+    } finally {
+      unmount();
+    }
+  });
+
+  it('keeps Claude Code authentication visibly pending after submission', async () => {
+    function PendingDialog(): React.JSX.Element {
+      const [closed, setClosed] = useState(false);
+      const [submitted, setSubmitted] = useState('');
+      return closed ? (
+        <Text color={Colors.Foreground}>Dialog closed</Text>
+      ) : (
+        <>
+          <OAuthCodeDialog
+            provider="claudecode"
+            onClose={() => setClosed(true)}
+            onSubmit={setSubmitted}
+          />
+          <Text color={Colors.Foreground}>
+            {submitted.length > 0 ? 'Code delivered' : 'No submission'}
+          </Text>
+        </>
+      );
+    }
+    const { stdin, stdout, unmount } = renderWithProviders(<PendingDialog />);
+    try {
+      await paste(stdin, 'pending-code');
+      await waitFor(() => expect(stdout.lastFrame()).toContain('pending-code'));
+      await act(async () => {
+        stdin.write('\r');
+      });
+      await waitFor(() => {
+        expect(stdout.lastFrame()).toContain('Code delivered');
+        expect(stdout.lastFrame()).toContain(
+          'Waiting for authentication to finish',
+        );
+        expect(stdout.lastFrame()).not.toContain('Dialog closed');
       });
     } finally {
       unmount();

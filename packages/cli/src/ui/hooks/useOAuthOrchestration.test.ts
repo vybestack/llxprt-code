@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { oauthUIBridge } from '@vybestack/llxprt-code-auth';
+import { getOAuthGlobalState } from '../oauthGlobalState.js';
 import { hasDialogRequest } from '../../__tests__/dialogStore.js';
 
 import { act } from 'react';
@@ -24,7 +26,10 @@ describe('useOAuthOrchestration', () => {
   });
 
   afterEach(() => {
+    const attempt = oauthUIBridge.getDialog();
+    if (attempt) oauthUIBridge.dismissDialog(attempt.id);
     vi.useRealTimers();
+    delete getOAuthGlobalState().__oauth_auth_error;
     delete (global as { __oauth_needs_code?: boolean }).__oauth_needs_code;
     delete (global as { __oauth_browser_auth_complete?: boolean })
       .__oauth_browser_auth_complete;
@@ -95,12 +100,13 @@ describe('useOAuthOrchestration', () => {
     ).toBe(false);
   });
 
-  it('does not clear relogin state for browser callback completion alone', () => {
+  it('closes the code dialog for dialog completion without changing relogin state', () => {
     const appDispatch = vi.fn();
     const setAuthError = vi.fn();
     const store = createDialogStore();
     const dialogs = createDialogOpeners(store);
     dialogs.oauthCode.open({});
+    oauthUIBridge.beginDialog('persisted-attempt', 'claudecode');
 
     renderHook(() =>
       useOAuthOrchestration({
@@ -111,9 +117,7 @@ describe('useOAuthOrchestration', () => {
       }),
     );
 
-    (
-      global as { __oauth_browser_auth_complete?: boolean }
-    ).__oauth_browser_auth_complete = true;
+    oauthUIBridge.settleDialog('persisted-attempt');
 
     act(() => {
       vi.advanceTimersByTime(100);
@@ -125,5 +129,36 @@ describe('useOAuthOrchestration', () => {
       type: 'SET_NEEDS_RELOGIN',
       payload: false,
     });
+  });
+  it('keeps terminal dialog failure separate from AuthDialog errors', () => {
+    const store = createDialogStore();
+    const dialogs = createDialogOpeners(store);
+    dialogs.oauthCode.open({});
+    const authErrors: Array<string | null> = [];
+    const { unmount } = renderHook(() =>
+      useOAuthOrchestration({
+        appDispatch: () => {},
+        dialogs,
+        isOAuthCodeDialogOpen: true,
+        setAuthError: (error) => {
+          authErrors.push(error);
+        },
+      }),
+    );
+    try {
+      oauthUIBridge.beginDialog('failed-attempt', 'claudecode');
+      oauthUIBridge.settleDialog(
+        'failed-attempt',
+        new Error('Synthetic persistence failure'),
+      );
+      act(() => {
+        vi.advanceTimersByTime(100);
+      });
+      expect(hasDialogRequest(store, 'oauthCode')).toBe(true);
+      expect(authErrors).toHaveLength(0);
+      expect(oauthUIBridge.getDialog()?.status).toBe('failed');
+    } finally {
+      unmount();
+    }
   });
 });

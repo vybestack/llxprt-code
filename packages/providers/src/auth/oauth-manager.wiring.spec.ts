@@ -246,6 +246,7 @@ describe('OAuthManager wiring', () => {
       messageBus,
       expect.any(Function),
       expect.any(Function),
+      expect.any(Function),
     );
 
     expect(wiring.AuthStatusService).toHaveBeenCalledWith(

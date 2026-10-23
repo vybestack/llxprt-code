@@ -89,47 +89,50 @@ describe('named OAuth login runtime bucket activation', () => {
     ).toBeUndefined();
   });
 
-  it('preserves explicit auth bucket policy and its first-bucket precedence', async () => {
-    const settingsService = new SettingsService();
-    const config = acquireIssueConfig({
-      sessionId: 'issue1468',
-      targetDir: process.cwd(),
-      cwd: process.cwd(),
-      debugMode: false,
-      model: 'gpt-5',
-    });
-    acquireIssueSettings(config, settingsService);
-    const tokenStore = new MockTokenStore();
-    const manager = new OAuthManager(tokenStore, createFakeOAuthSettings(), {
-      config,
-      readSessionAuthPolicy: readFixtureSessionAuthPolicy(settingsService),
-    });
-    resetIssue1468Mocks();
-    registerProvider(manager);
-    settingsService.setCurrentProfileName('explicit-profile');
-    mockLoadProfile.mockResolvedValue({
-      provider: 'codex',
-      auth: { type: 'oauth', buckets: ['configured', 'fallback'] },
-    });
-    await tokenStore.saveToken(
-      'codex',
-      validToken('configured-token'),
-      'configured',
-    );
-    await tokenStore.saveToken('codex', validToken('named-token'), 'named');
+  it.each(['named', 'default'])(
+    'preserves explicit auth bucket policy when activating %s',
+    async (bucket) => {
+      const settingsService = new SettingsService();
+      const config = acquireIssueConfig({
+        sessionId: 'issue1468',
+        targetDir: process.cwd(),
+        cwd: process.cwd(),
+        debugMode: false,
+        model: 'gpt-5',
+      });
+      acquireIssueSettings(config, settingsService);
+      const tokenStore = new MockTokenStore();
+      const manager = new OAuthManager(tokenStore, createFakeOAuthSettings(), {
+        config,
+        readSessionAuthPolicy: readFixtureSessionAuthPolicy(settingsService),
+      });
+      resetIssue1468Mocks();
+      registerProvider(manager);
+      settingsService.setCurrentProfileName('explicit-profile');
+      mockLoadProfile.mockResolvedValue({
+        provider: 'codex',
+        auth: { type: 'oauth', buckets: ['configured', 'fallback'] },
+      });
+      await tokenStore.saveToken(
+        'codex',
+        validToken('configured-token'),
+        'configured',
+      );
+      await tokenStore.saveToken('codex', validToken('named-token'), 'named');
 
-    await manager.activateNamedLoginBucket('codex', 'named');
+      await manager.activateNamedLoginBucket('codex', bucket);
 
-    expect((await manager.getOAuthToken('codex'))?.access_token).toBe(
-      'configured-token',
-    );
-    expect(
-      manager.getSessionBucket('codex', {
-        providerId: 'codex',
-        profileId: 'explicit-profile',
-      }),
-    ).toBe('configured');
-  });
+      expect((await manager.getOAuthToken('codex'))?.access_token).toBe(
+        'configured-token',
+      );
+      expect(
+        manager.getSessionBucket('codex', {
+          providerId: 'codex',
+          profileId: 'explicit-profile',
+        }),
+      ).toBe('configured');
+    },
+  );
 
   it('does not activate a bucket when the active profile uses another provider', async () => {
     const settingsService = new SettingsService();
@@ -241,4 +244,32 @@ describe('named OAuth login runtime bucket activation', () => {
       expect(await tokenStore.getToken('codex')).toBeNull();
     },
   );
+
+  it('activates the authenticated named bucket when no profile is selected', async () => {
+    const settingsService = new SettingsService();
+    const config = acquireIssueConfig({
+      sessionId: 'issue1468',
+      targetDir: process.cwd(),
+      cwd: process.cwd(),
+      debugMode: false,
+      model: 'gpt-5',
+    });
+    acquireIssueSettings(config, settingsService);
+    const tokenStore = new MockTokenStore();
+    const manager = new OAuthManager(tokenStore, createFakeOAuthSettings(), {
+      config,
+      readSessionAuthPolicy: readFixtureSessionAuthPolicy(settingsService),
+    });
+    resetIssue1468Mocks();
+    registerProvider(manager);
+    settingsService.setCurrentProfileName(undefined);
+    await tokenStore.saveToken('codex', validToken('default-token'));
+    await tokenStore.saveToken('codex', validToken('named-token'), 'named');
+
+    await manager.activateNamedLoginBucket('codex', 'named');
+
+    expect((await manager.getOAuthToken('codex'))?.access_token).toBe(
+      'named-token',
+    );
+  });
 });

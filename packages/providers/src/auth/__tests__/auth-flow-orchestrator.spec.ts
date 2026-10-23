@@ -430,7 +430,7 @@ describe('AuthFlowOrchestrator', () => {
 
       expect(
         (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete,
-      ).toBeUndefined();
+      ).toBe(false);
     });
 
     it('does not mark global auth complete by default', async () => {
@@ -526,7 +526,7 @@ describe('AuthFlowOrchestrator', () => {
       ]);
       expect(
         (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete,
-      ).toBeUndefined();
+      ).toBe(false);
     });
 
     it('signals completion once when both joined callers request it', async () => {
@@ -543,8 +543,8 @@ describe('AuthFlowOrchestrator', () => {
       Object.defineProperty(global, '__oauth_auth_complete', {
         configurable: true,
         get: () => signalCount > 0,
-        set: () => {
-          signalCount += 1;
+        set: (complete: boolean) => {
+          if (complete) signalCount += 1;
         },
       });
 

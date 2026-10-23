@@ -25,8 +25,8 @@ export interface LocalOAuthCallbackServer {
 }
 
 const SUCCESS_HTML = buildResponseHtml({
-  title: 'Authentication Complete',
-  heading: 'Authorization finished. Return to llxprt.',
+  title: 'Authorization code received',
+  heading: 'Return to llxprt to finish authentication.',
   imageType: 'claude',
 });
 

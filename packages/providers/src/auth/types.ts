@@ -125,7 +125,7 @@ export interface OAuthProvider {
    * which bucket they are authenticating for, so they can look up the
    * correct browser profile association for the OAuth browser launch.
    */
-  setAuthContext?(ctx: { bucket?: string }): void;
+  setAuthContext?(ctx: { bucket?: string; attemptId?: string }): void;
 }
 
 /**

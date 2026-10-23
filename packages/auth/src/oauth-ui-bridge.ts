@@ -29,6 +29,13 @@ interface PendingEvent {
   readonly timestamp?: number;
 }
 
+export interface OAuthDialogAttempt {
+  readonly id: string;
+  readonly provider: string;
+  readonly status: 'pending' | 'succeeded' | 'failed';
+  readonly error?: string;
+}
+
 /**
  * UI-agnostic buffer for OAuth UI events.
  *
@@ -49,6 +56,57 @@ interface PendingEvent {
 class OAuthUIBridge {
   private callback: OAuthUICallback | null = null;
   private pending: PendingEvent[] = [];
+  private dialogAttempt: OAuthDialogAttempt | undefined;
+
+  private readonly dialogListeners = new Set<() => void>();
+
+  subscribeDialog = (listener: () => void): (() => void) => {
+    this.dialogListeners.add(listener);
+    return () => {
+      this.dialogListeners.delete(listener);
+    };
+  };
+
+  private notifyDialog(): void {
+    for (const listener of this.dialogListeners) listener();
+  }
+
+  beginDialog(id: string, provider: string): void {
+    this.dialogAttempt = { id, provider, status: 'pending' };
+    this.notifyDialog();
+  }
+
+  getDialog(): OAuthDialogAttempt | undefined {
+    return this.dialogAttempt;
+  }
+
+  dismissDialog(id: string): void {
+    if (this.dialogAttempt?.id === id) {
+      this.dialogAttempt = undefined;
+      this.notifyDialog();
+    }
+  }
+
+  /**
+   * Settle the pending dialog attempt. Returns the failure event for the
+   * caller to deliver through its own message owner; this process-wide bridge
+   * has no host callback of its own for a session's messages.
+   */
+  settleDialog(id: string, error?: unknown): OAuthUIEvent | undefined {
+    const attempt = this.dialogAttempt;
+    if (attempt?.id !== id || attempt.status !== 'pending') return undefined;
+    const message = error instanceof Error ? error.message : String(error);
+    this.dialogAttempt =
+      error === undefined
+        ? { ...attempt, status: 'succeeded' }
+        : { ...attempt, status: 'failed', error: message };
+    this.notifyDialog();
+    if (error === undefined) return undefined;
+    return {
+      type: 'error',
+      text: `${attempt.provider} authentication failed: ${message}`,
+    };
+  }
 
   /**
    * Attach the UI callback. Flushes any buffered events in FIFO order.
