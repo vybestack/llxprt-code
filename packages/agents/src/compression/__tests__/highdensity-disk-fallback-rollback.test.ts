@@ -85,21 +85,23 @@ async function failedOrNoop(size: number): Promise<number> {
     size,
     async (history) => {
       if (created === undefined) throw new Error('Missing fault participant');
-      const { handler } = highdensitySetup(history, undefined, undefined, {
-        contextLimit: 1,
-      });
+      const { handler, runtime } = highdensitySetup(history);
+      const tokens = history.getTotalTokens();
+      runtime.ephemerals.contextLimit = () =>
+        Math.ceil(tokens / (runtime.ephemerals.compressionThreshold() * 0.6)) +
+        1;
       created.estimateFault = () =>
         new CompressionExecutionError(
           'high-density',
           '503 primary exhaustion',
           { isTransient: true },
         );
-      // A fresh attached journal has no token baseline until explicit recomputation.
       expect(await handler.performCompression('fallback-noop')).toBe(
         PerformCompressionResult.NOOP,
       );
       created.estimateFault = undefined;
       await history.recalculateTotalTokens();
+      runtime.ephemerals.contextLimit = () => 1;
       created.estimateFault = () =>
         new CompressionExecutionError(
           'high-density',
