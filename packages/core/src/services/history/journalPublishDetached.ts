@@ -409,6 +409,7 @@ async function finishPublication(
   options.signal?.throwIfAborted();
   await finalizeMutationEffects(effects);
   completion.finalized = true;
+  options.signal?.throwIfAborted();
 }
 
 interface CompensationInput {
