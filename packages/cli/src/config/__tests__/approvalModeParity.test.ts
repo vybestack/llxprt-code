@@ -178,7 +178,7 @@ describe('approvalModeParity: approval mode resolution', () => {
   const originalArgv = process.argv;
 
   beforeEach(() => {
-    vi.resetAllMocks();
+    vi.clearAllMocks();
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );

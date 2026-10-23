@@ -237,6 +237,12 @@ describe('AgentClient (client.ts)', () => {
     instructionData = ctx.instructionData;
     instructionReads = ctx.instructionReads;
 
+    // setupAgentClient resets every mock, which clears the implementation the
+    // module factory gave retryWithBackoff (Bun 1.4 resets implementations).
+    (retryWithBackoff as Mock<typeof retryWithBackoff>).mockImplementation(
+      (apiCall) => apiCall(),
+    );
+
     mockTodoStoreConstructor.mockImplementation(() => ({
       readTodos: todoStoreReadMock,
       readPausedState: todoStoreReadPausedMock,

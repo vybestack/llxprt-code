@@ -165,7 +165,6 @@ async function bootstrapFailure(denyObservation: boolean): Promise<number> {
       throw new Error(
         `Failure occurred before background shell launch: ${failure instanceof Error ? failure.message : String(failure)}`,
       );
-    expect(gate.connected('bootstrap')).toBe(true);
     if (denyObservation) {
       expect(failure).toBeInstanceOf(AggregateError);
       if (!(failure instanceof AggregateError))

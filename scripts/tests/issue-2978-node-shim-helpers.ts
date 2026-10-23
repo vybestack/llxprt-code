@@ -49,7 +49,14 @@ export interface Layout {
   readonly shim: string;
 }
 
-export function makeLayout(root: string): Layout {
+/**
+ * Bun >= 1.4 reports process.execPath as the long Windows path, while
+ * os.tmpdir() yields the 8.3 short form (RUNNER~1) for the same directory.
+ * Building the layout from the canonical root makes the runtime path the
+ * launcher execs and the one the entry reports spell the same file alike.
+ */
+export function makeLayout(tempRoot: string): Layout {
+  const root = realpathSync.native(tempRoot);
   const nodeModules = path.join(root, 'node_modules');
   const pkgRoot = path.join(nodeModules, '@vybestack', 'llxprt-code');
   const binDir = path.join(pkgRoot, 'bin');

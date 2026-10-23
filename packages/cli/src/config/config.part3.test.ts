@@ -151,7 +151,7 @@ describe('loadCliConfig interactive', () => {
 
   beforeEach(() => {
     resetRuntimeSettingsState();
-    vi.resetAllMocks();
+    vi.clearAllMocks();
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue('/mock/home/user');
     setEnv('GEMINI_API_KEY', 'test-api-key');
     process.stdin.isTTY = true;
@@ -471,7 +471,7 @@ describe('loadCliConfig fileFiltering', () => {
 
   beforeEach(() => {
     resetRuntimeSettingsState();
-    vi.resetAllMocks();
+    vi.clearAllMocks();
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue('/mock/home/user');
     setEnv('GEMINI_API_KEY', 'test-api-key');
     process.argv = ['node', 'script.js']; // Reset argv for each test

@@ -229,7 +229,10 @@ describe('createAgent self-contained assembly', () => {
       () => true,
     );
     try {
-      await expect(
+      // Await the outcome first: Bun 1.4 evaluates expect(...).rejects on a
+      // pending promise in a nested event loop that starves the LSP child's
+      // pipe I/O, so the real MCP request times out.
+      const [outcome] = await Promise.allSettled([
         buildAgent('plain-text.jsonl', {
           credentialAuthority: credentials().authority,
           sessionId: 'issue3222-lsp-owner',
@@ -238,7 +241,11 @@ describe('createAgent self-contained assembly', () => {
           lspOwner: lspRoot,
           lspOwnership: 'agent',
         }),
-      ).rejects.toThrow('createAgent activation failed');
+      ]);
+      expect(outcome.status).toBe('rejected');
+      expect(() => {
+        throw (outcome as PromiseRejectedResult).reason;
+      }).toThrow('createAgent activation failed');
       expect(credentials().snapshot()).toStrictEqual([1]);
       await expect(lspRoot.inspection.read()).rejects.toThrow('stopped');
     } finally {

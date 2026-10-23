@@ -164,17 +164,18 @@ function processMemoryMetrics(): MediaProcessMemoryMetrics {
   };
 }
 
-export function maxRssToBytes(
-  maxRSS: number,
-  platform: NodeJS.Platform,
-): number | null {
+/**
+ * `process.resourceUsage().maxRSS` is reported in KiB on every platform by
+ * Node and by Bun 1.4 and later. Bun 1.3 returned raw bytes on Darwin, so this
+ * conversion assumes the runtime pinned in `.bun-version`.
+ */
+export function maxRssToBytes(maxRSS: number): number | null {
   if (!Number.isFinite(maxRSS) || maxRSS <= 0) return null;
-  const bytes = platform === 'darwin' ? maxRSS : maxRSS * 1024;
-  return requireByteCount('osPeakFootprintBytes', Math.round(bytes));
+  return requireByteCount('osPeakFootprintBytes', Math.round(maxRSS * 1024));
 }
 
 function osPeakFootprintBytes(): number | null {
-  return maxRssToBytes(process.resourceUsage().maxRSS, process.platform);
+  return maxRssToBytes(process.resourceUsage().maxRSS);
 }
 
 /**

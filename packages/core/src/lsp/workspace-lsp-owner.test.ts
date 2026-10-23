@@ -309,7 +309,14 @@ describe('WorkspaceLspOwner real process lifetime', () => {
       async () => {},
       () => {},
     );
-    await expect(root.initialize(publication, approval)).rejects.toBe(primary);
+    // Bun 1.4 evaluates expect(...).rejects on a pending promise in a nested
+    // event loop that starves the LSP child's pipe I/O, so the real request
+    // times out. Await the outcome first, then assert it.
+    const [outcome] = await Promise.allSettled([
+      root.initialize(publication, approval),
+    ]);
+    expect(outcome.status).toBe('rejected');
+    expect((outcome as PromiseRejectedResult).reason).toBe(primary);
     expect(service.isAlive()).toBe(false);
     expect(
       catalog.selection

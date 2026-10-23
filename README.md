@@ -117,7 +117,7 @@ LLxprt Code is powered by the [Bun](https://bun.sh) runtime. When you run `llxpr
 
 On macOS, a Bun already on `PATH` that meets the pinned version floor is preferred over all of the above (issue #2962), to avoid the credential-access disruption caused by npm re-extracting a running executable.
 
-The launcher never scans `.bin` symlinks. When the package's `package.json` declares an exact Bun pin (e.g. `1.3.14`), a candidate whose `package.json`/version is missing or mismatched is rejected.
+The launcher never scans `.bin` symlinks. When the package's `package.json` declares an exact Bun pin (e.g. `1.4.4`), a candidate whose `package.json`/version is missing or mismatched is rejected.
 
 #### npm v12 install-script default-deny
 

@@ -1092,6 +1092,25 @@ describe('runTestFileWithTimeoutRetry', () => {
   });
 });
 
+/**
+ * Runs `run` with the process working directory set to `dir`. `runTestFile`
+ * spawns `bun test` in the runner's cwd, and under `packages/cli` Bun loads the
+ * bunfig preloads (core, jsdom, react, ink). Measured on macOS that is 0.7 s
+ * warm and 1.2 s with a cold transpiler cache, against 0.16 s without them; the
+ * Windows CI runner took 1.7 to 4.4 s for the same child. These tests exercise
+ * runner mechanics with a trivial child under a 4 s budget, so they spawn from
+ * a scratch directory that has no bunfig.
+ */
+async function withChildCwd<T>(dir: string, run: () => Promise<T>): Promise<T> {
+  const saved = process.cwd();
+  process.chdir(dir);
+  try {
+    return await run();
+  } finally {
+    process.chdir(saved);
+  }
+}
+
 async function withShortPerFileTimeout<T>(run: () => Promise<T>): Promise<T> {
   const saved = process.env[PER_FILE_TIMEOUT_ENV_VAR];
   // 4s leaves headroom for child Bun startup under CI load while staying far
@@ -1180,7 +1199,9 @@ it('finishes within the runner budget', async () => { await Bun.sleep(50); });`,
       );
       process.env[PER_FILE_TIMEOUT_ENV_VAR] = '4000';
       const startedAt = performance.now();
-      const result = await runTestFile(file, childEnv);
+      const result = await withChildCwd(session.root, () =>
+        runTestFile(file, childEnv),
+      );
       expect(
         result.passed,
         JSON.stringify({
@@ -1222,10 +1243,12 @@ it('finishes within the runner budget', async () => { await Bun.sleep(50); });`,
       const logs: string[] = [];
 
       const result = await withShortPerFileTimeout(() =>
-        runTestFileWithTimeoutRetry(
-          file,
-          () => runTestFile(file),
-          (message) => logs.push(message),
+        withChildCwd(dir, () =>
+          runTestFileWithTimeoutRetry(
+            file,
+            () => runTestFile(file),
+            (message) => logs.push(message),
+          ),
         ),
       );
 
@@ -1290,9 +1313,11 @@ it('reaps a timed-out child even when timeout notification throws', async () => 
   try {
     const file = writeFlakyThenPassTest(dir);
     const result = await withShortPerFileTimeout(() =>
-      runTestFile(file, undefined, () => {
-        throw new Error('notification failed');
-      }),
+      withChildCwd(dir, () =>
+        runTestFile(file, undefined, () => {
+          throw new Error('notification failed');
+        }),
+      ),
     );
     expect(result.timedOut).toBe(true);
     expect(result.passed).toBe(false);

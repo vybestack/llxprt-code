@@ -785,7 +785,7 @@
     "@vybestack/llxprt-code-telemetry": "file:../telemetry",
     "@dqbd/tiktoken": "1.0.22",
     "@iarna/toml": "^2.2.5",
-    "@modelcontextprotocol/sdk": "^1.25.2",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "@vybestack/llxprt-code-tools": "file:../tools",
     "@xterm/headless": "5.5.0",
     "ajv": "^8.17.1",
@@ -795,18 +795,18 @@
     "fzf": "^0.5.2",
     "glob": "^12.0.0",
     "ignore": "^7.0.0",
-    "js-yaml": "^4.2.0",
+    "js-yaml": "^4.3.2",
     "marked": "^15.0.12",
     "mime-types": "^3.0.1",
     "mnemonist": "^0.40.3",
     "picomatch": "^4.0.4",
     "read-package-up": "^11.0.0",
-    "shell-quote": "^1.10.0",
-    "simple-git": "^3.36.0",
+    "shell-quote": "^1.12.0",
+    "simple-git": "^4.0.2",
     "strip-ansi": "^7.1.0",
     "tree-sitter-bash": "^0.25.0",
     "tree-sitter-pwsh": "^0.38.1",
-    "undici": "^7.29.0",
+    "undici": "^7.30.1",
     "web-tree-sitter": "^0.25.10",
     "zod": "^3.25.76"
   },
@@ -830,6 +830,6 @@
     "typescript": "^5.3.3"
   },
   "engines": {
-    "node": ">=24"
+    "node": ">=24.22.1"
   }
 }

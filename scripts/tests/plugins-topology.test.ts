@@ -275,8 +275,9 @@ describe('each plugin context is a self-contained release unit', () => {
       ) as { engines?: { bun?: unknown } };
       // bun 1.3.x rejects the plugin lockfile (unresolved root peers) on
       // every install after the first and hangs re-resolving; 1.4.2 fixed
-      // it. The engines floor keeps plugin-local installs honest.
-      expect(manifest.engines?.bun).toBe('>=1.4.2');
+      // it. The floor is the repository Bun pin (1.4.4 carries the eMudhra
+      // CA removal, issue #3930), which keeps plugin-local installs honest.
+      expect(manifest.engines?.bun).toBe('>=1.4.4');
     }
   });
 

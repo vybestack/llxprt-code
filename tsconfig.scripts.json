@@ -37,6 +37,8 @@
     "scripts/check-storage-import-boundary.ts",
     "scripts/check-storage-package-cycle.ts",
     "scripts/chmod_executable.ts",
+    "scripts/link-bun-runtime.ts",
+    "scripts/tests/link-bun-runtime.test.ts",
     "scripts/clean.ts",
     "scripts/copy_bundle_assets.ts",
     "scripts/copy_files.ts",

@@ -637,6 +637,7 @@ describe('base + a malformed plugin install', () => {
           '',
         ].join('\n'),
       );
+      // Await the body so the fixture outlives the module import it performs.
       return await run(root, pluginName);
     } finally {
       rmSync(root, { recursive: true, force: true });

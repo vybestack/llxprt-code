@@ -289,7 +289,7 @@
     "fast-glob": "^3.3.3",
     "glob": "^12.0.0",
     "html-to-text": "^9.0.5",
-    "shell-quote": "^1.10.0",
+    "shell-quote": "^1.12.0",
     "turndown": "^7.2.2",
     "zod": "^3.25.76",
     "zod-to-json-schema": "^3.25.1",
@@ -303,7 +303,7 @@
     "@ast-grep/lang-rust": "^0.0.6",
     "@lvce-editor/ripgrep": "^5.1.0",
     "mime-types": "^3.0.1",
-    "sharp": "^0.35.3"
+    "sharp": "^0.35.5"
   },
   "devDependencies": {
     "@types/html-to-text": "^9.0.4",
@@ -313,6 +313,6 @@
     "@types/mime-types": "^3.0.1"
   },
   "engines": {
-    "node": ">=24"
+    "node": ">=24.22.1"
   }
 }

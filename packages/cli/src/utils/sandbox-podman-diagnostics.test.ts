@@ -18,9 +18,34 @@ const DIAGNOSTIC_MAX_BYTES = 4096;
 // deadline only ends those runs when a test asks for it explicitly.
 const READINESS_DEADLINE_NOT_REACHED_MS = 60_000;
 
+const FIRST_EXEC_WARMUP_ENV = 'ISSUE3534_FIXTURE_WARMUP';
+
+/**
+ * Writes a fixture executable and runs it once so the operating system's
+ * first-execution check of a newly written file completes before the test
+ * starts timing the bridge. On macOS that check takes seconds under load
+ * (the same trivial script runs in about 5ms from its second execution on),
+ * which otherwise lands inside the 1s readiness poll and the elapsed-time
+ * assertions. The warm-up run exits before the fixture does anything else.
+ */
 function writeExecutable(filePath: string, content: string): void {
-  fs.writeFileSync(filePath, content);
+  const [shebang, ...body] = content.split('\n');
+  fs.writeFileSync(
+    filePath,
+    [shebang, `[ -n "$${FIRST_EXEC_WARMUP_ENV}" ] && exit 0`, ...body].join(
+      '\n',
+    ),
+  );
   fs.chmodSync(filePath, 0o755);
+  const warmup = spawnSync(filePath, [], {
+    env: { ...process.env, [FIRST_EXEC_WARMUP_ENV]: '1' },
+    timeout: 30000,
+  });
+  if (warmup.error !== undefined || warmup.status !== 0) {
+    throw new Error(`Fixture warm-up failed for ${filePath}`, {
+      cause: warmup.error,
+    });
+  }
 }
 
 function shellQuote(value: string): string {

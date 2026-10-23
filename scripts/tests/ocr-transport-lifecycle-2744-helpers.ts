@@ -33,6 +33,17 @@ export interface OcrScenarioScope {
   stopMonitor(): Promise<Record<string, unknown>>;
 }
 
+/**
+ * Destroys a request the scenario owns. Node and Bun >= 1.4 emit an
+ * ECONNRESET "socket hang up" 'error' when a request is destroyed before a
+ * response arrives; with no listener that becomes an uncaught exception. The
+ * scope initiated this teardown, so that error is the expected outcome.
+ */
+function destroyOwnedRequest(request: http.ClientRequest): void {
+  request.once('error', () => {});
+  request.destroy();
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -85,7 +96,7 @@ export async function withOcrScenario<T>(
           try {
             onRequest?.(createdRequest);
           } catch (error) {
-            createdRequest.destroy();
+            destroyOwnedRequest(createdRequest);
             clientRequests.delete(createdRequest);
             throw error;
           }
@@ -130,7 +141,7 @@ export async function withOcrScenario<T>(
         clientRequests.delete(request);
         continue;
       }
-      request.destroy();
+      destroyOwnedRequest(request);
     } catch (error) {
       cleanupFailures.push(error);
     }

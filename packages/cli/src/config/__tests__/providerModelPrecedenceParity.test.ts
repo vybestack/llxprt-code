@@ -180,7 +180,7 @@ describe('providerModelPrecedenceParity: 4-level provider chain', () => {
   const originalArgv = process.argv;
 
   beforeEach(() => {
-    vi.resetAllMocks();
+    vi.clearAllMocks();
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
@@ -240,7 +240,7 @@ describe('providerModelPrecedenceParity: 6-level model chain', () => {
   const originalArgv = process.argv;
 
   beforeEach(() => {
-    vi.resetAllMocks();
+    vi.clearAllMocks();
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );

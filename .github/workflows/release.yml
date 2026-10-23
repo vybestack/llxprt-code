@@ -148,7 +148,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # ratchet:actions/setup-node@v7
         with:
-          node-version: '24'
+          node-version-file: '.nvmrc'
           cache: 'npm'
 
       - name: Setup Bun
@@ -158,11 +158,16 @@ jobs:
           bun-version-file: '.bun-version'
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: 'Link lockfile-installed Bun and apply dependency patches'
+        run: |-
+          node scripts/link-bun-runtime.ts
+          node scripts/postinstall.cjs
 
       - name: Fix rollup platform dependency
         run: |
-          npm install @rollup/rollup-linux-x64-gnu@4.59.0 --no-save || true
+          npm install @rollup/rollup-linux-x64-gnu@4.59.0 --no-save --ignore-scripts || true
 
       - name: Get the version
         id: version
@@ -277,7 +282,7 @@ jobs:
         if: steps.duplicate_check.outputs.is_duplicate != 'true'
         uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6' # ratchet:oven-sh/setup-bun@v2
         with:
-          bun-version: '1.4.2'
+          bun-version-file: '.bun-version'
 
       - name: Install runtime plugin dependencies for preflight
         if: steps.duplicate_check.outputs.is_duplicate != 'true'
@@ -617,10 +622,9 @@ jobs:
         with:
           # Plugin lockfiles are lockfileVersion 2 (bun >= 1.4.2) because
           # plugin-local installs need bun 1.4.2's handling of unresolved
-          # root peers (see plugins/README.md). Everything after this point
-          # is plugin builds and npm publishes; the base-CLI build above
-          # already ran under the repo-wide .bun-version pin.
-          bun-version: '1.4.2'
+          # root peers (see plugins/README.md). The repo-wide .bun-version
+          # pin satisfies that floor, so it stays the single source of truth.
+          bun-version-file: '.bun-version'
 
       - name: Build runtime plugin packages
         if: ${{ steps.duplicate_check.outputs.is_duplicate != 'true' }}

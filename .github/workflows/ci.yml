@@ -491,11 +491,12 @@ jobs:
       # node_modules, which the root `bun install` does not populate, so the
       # compiler reports TS2307/TS7006 and blocks the service-shape scanner.
       # Plugin installs need bun >= 1.4.2 for the same reason as the
-      # runtime_plugins job (the repo pin re-resolves the plugin lockfile and
-      # stalls on hosted runners).
+      # runtime_plugins job (older Bun re-resolves the plugin lockfile and
+      # stalls on hosted runners). The repo pin in .bun-version satisfies
+      # that floor, so the bootstrap reads the version from it.
       - name: 'Install runtime plugin dependencies for the audit'
         run: |-
-          curl -fsSL https://bun.sh/install | BUN_INSTALL="$RUNNER_TEMP/bun-plugin" bash -s "bun-v1.4.2"
+          curl -fsSL https://bun.sh/install | BUN_INSTALL="$RUNNER_TEMP/bun-plugin" bash -s "bun-v$(cat .bun-version)"
           for plugin in plugins/*/; do
             if [ -f "${plugin}package.json" ]; then
               (cd "$plugin" && "$RUNNER_TEMP/bun-plugin/bin/bun" install --omit=peer)
@@ -1073,7 +1074,7 @@ jobs:
       - name: 'Fix rollup platform dependency'
         if: steps.filter.outputs.affected == 'true'
         run: |-
-          npm install @rollup/rollup-win32-x64-msvc --no-save || true
+          npm install @rollup/rollup-win32-x64-msvc@4.59.0 --no-save --ignore-scripts || true
         shell: 'bash'
 
       - name: 'Run launcher shim and output-generator tests'
@@ -1162,6 +1163,7 @@ jobs:
         uses: 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020' # ratchet:actions/setup-node@v7
         with:
           node-version: '${{ matrix.node-version }}'
+          check-latest: true
 
       - name: 'Setup Bun'
         uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6' # ratchet:oven-sh/setup-bun@v2
@@ -1189,13 +1191,14 @@ jobs:
         # plugins/ directory (#2759), and the google-gemini plugin imports
         # @ai-sdk/google from its own node_modules at load time. Plugin
         # installs need bun >= 1.4.2 for the same reason as the
-        # runtime_plugins job: the repo pin rejects the plugin lockfile's
+        # runtime_plugins job: older Bun rejects the plugin lockfile's
         # unresolved root peers, discards the lock, and re-resolves, which
-        # stalls indefinitely on hosted runners.
+        # stalls indefinitely on hosted runners. The repo pin in
+        # .bun-version satisfies that floor, so the bootstrap reads it.
         run: |-
           bun install
           git checkout -- bun.lock
-          curl -fsSL https://bun.sh/install | BUN_INSTALL="$RUNNER_TEMP/bun-plugin" bash -s "bun-v1.4.2"
+          curl -fsSL https://bun.sh/install | BUN_INSTALL="$RUNNER_TEMP/bun-plugin" bash -s "bun-v$(cat .bun-version)"
           for plugin in plugins/*/; do
             if [ -f "${plugin}package.json" ]; then
               (cd "$plugin" && "$RUNNER_TEMP/bun-plugin/bin/bun" install --omit=peer)
@@ -1602,6 +1605,7 @@ jobs:
         uses: 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020' # ratchet:actions/setup-node@v7
         with:
           node-version: '${{ matrix.node-version }}'
+          check-latest: true
 
       - name: 'Setup Bun'
         uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6' # ratchet:oven-sh/setup-bun@v2
@@ -1779,9 +1783,8 @@ jobs:
         with:
           # Plugin-local flows need bun >= 1.4.2: earlier releases reject the
           # plugin lockfile's unresolved root peers on re-install and hang.
-          # The repo-wide pin (.bun-version) stays older on purpose so the
-          # root bun.lock format is never migrated.
-          bun-version: '1.4.2'
+          # The repo-wide pin (.bun-version) satisfies that floor.
+          bun-version-file: '.bun-version'
 
       # The plugin contexts sit outside the root workspaces (issue #2759), so
       # each one installs, typechecks, tests, builds, and pack-smokes from its

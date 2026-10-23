@@ -77,6 +77,7 @@ jobs:
         uses: 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020' # ratchet:actions/setup-node@v7
         with:
           node-version: '${{ matrix.node-version }}'
+          check-latest: true
           cache: 'npm'
 
       - name: 'Setup Bun'
@@ -104,11 +105,16 @@ jobs:
 
       - name: 'Install dependencies for testing'
         run: |-
-          npm ci
+          npm ci --ignore-scripts
+
+      - name: 'Link lockfile-installed Bun and apply dependency patches'
+        run: |-
+          node scripts/link-bun-runtime.ts
+          node scripts/postinstall.cjs
 
       - name: 'Fix rollup platform dependency'
         run: |-
-          npm install @rollup/rollup-win32-x64-msvc --no-save || true
+          npm install @rollup/rollup-win32-x64-msvc@4.59.0 --no-save --ignore-scripts || true
         shell: 'bash'
 
       - name: 'Build project (agents and scripts shards)'
@@ -215,6 +221,7 @@ jobs:
         uses: 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020' # ratchet:actions/setup-node@v7
         with:
           node-version: '${{ matrix.node-version }}'
+          check-latest: true
           cache: 'npm'
 
       - name: 'Setup Bun'
@@ -224,14 +231,19 @@ jobs:
 
       - name: 'Install dependencies for testing'
         run: |-
-          npm ci
+          npm ci --ignore-scripts
+
+      - name: 'Link lockfile-installed Bun and apply dependency patches'
+        run: |-
+          node scripts/link-bun-runtime.ts
+          node scripts/postinstall.cjs
 
       - name: 'Fix rollup platform dependency'
         run: |-
           if [ "$(uname -m)" == "arm64" ]; then
-            npm install @rollup/rollup-darwin-arm64 --no-save || true
+            npm install @rollup/rollup-darwin-arm64@4.59.0 --no-save --ignore-scripts || true
           else
-            npm install @rollup/rollup-darwin-x64 --no-save || true
+            npm install @rollup/rollup-darwin-x64@4.59.0 --no-save --ignore-scripts || true
           fi
         shell: 'bash'
 
@@ -316,7 +328,7 @@ jobs:
       - name: 'Set up Node.js 24.x'
         uses: 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020' # ratchet:actions/setup-node@v7
         with:
-          node-version: '24.x'
+          node-version-file: '.nvmrc'
 
       - name: 'Setup Bun'
         uses: 'oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6' # ratchet:oven-sh/setup-bun@v2
@@ -373,6 +385,7 @@ jobs:
         uses: 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020' # ratchet:actions/setup-node@v7
         with:
           node-version: '${{ matrix.node-version }}'
+          check-latest: true
 
       - name: 'Setup Bun'
         # `npm run build` invokes bun scripts/build.ts and requires the Bun
@@ -402,7 +415,12 @@ jobs:
         shell: 'pwsh'
 
       - name: 'Install dependencies'
-        run: 'npm ci'
+        run: 'npm ci --ignore-scripts'
+
+      - name: 'Link lockfile-installed Bun and apply dependency patches'
+        run: |-
+          node scripts/link-bun-runtime.ts
+          node scripts/postinstall.cjs
 
       - name: 'Build project'
         run: 'npm run build'
@@ -504,7 +522,7 @@ jobs:
       - name: 'Set up Node.js'
         uses: 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020' # ratchet:actions/setup-node@v7
         with:
-          node-version: '24.x'
+          node-version-file: '.nvmrc'
           cache: 'npm'
 
       - name: 'Setup Bun'
@@ -591,7 +609,7 @@ jobs:
       - name: 'Set up Node.js'
         uses: 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020' # ratchet:actions/setup-node@v7
         with:
-          node-version: '24.x'
+          node-version-file: '.nvmrc'
           cache: 'npm'
 
       - name: 'Setup Bun'

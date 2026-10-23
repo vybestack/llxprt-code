@@ -167,7 +167,7 @@ describe('folderTrustOriginalSettingsParity: trust uses original settings', () =
   const originalArgv = process.argv;
 
   beforeEach(() => {
-    vi.resetAllMocks();
+    vi.clearAllMocks();
     capturedTrustCheckSettings = undefined;
     capturedTrustCheckWorkingDirectory = undefined;
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue(

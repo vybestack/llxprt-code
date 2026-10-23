@@ -204,7 +204,13 @@ export class GitService {
 
   private get shadowGitRepository(): SimpleGit {
     const repoDir = this.getHistoryDir();
-    return simpleGit(this.projectRoot).env({
+    // simple-git 4 refuses GIT_* variables supplied through .env() unless they
+    // are named in allowEnvironment. GIT_DIR and GIT_WORK_TREE are how the
+    // shadow repository is attached to the project work tree.
+    return simpleGit({
+      baseDir: this.projectRoot,
+      allowEnvironment: ['GIT_DIR', 'GIT_WORK_TREE'],
+    }).env({
       GIT_DIR: path.join(repoDir, '.git'),
       GIT_WORK_TREE: this.projectRoot,
       // Prevent git from using the user's global git config.
