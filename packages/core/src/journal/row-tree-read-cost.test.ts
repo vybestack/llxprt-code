@@ -1,0 +1,42 @@
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { describe, expect, it } from 'bun:test';
+import { encodeBodylessFrame } from './frame.js';
+import { createRecordAccess } from './recordAccess.js';
+import { encodeRowTreeNode } from './rowTreeNode.js';
+import { readRowTreeNode } from './rowTreeReader.js';
+import {
+  syntheticEntry,
+  NO_KINDS,
+} from './__tests__/support/rowTreeFixtures.js';
+import { SeededRandom } from './__tests__/support/seededRandom.js';
+
+describe('row tree positional read cost', () => {
+  it.each([1, 8])(
+    'reads a %i-entry node with one descriptor read',
+    async (count) => {
+      const random = new SeededRandom(1);
+      const entries = Array.from({ length: count }, (_, index) =>
+        syntheticEntry(random, index, NO_KINDS),
+      );
+      const record = encodeRowTreeNode({ kind: 'leaf', entries });
+      const bytes = encodeBodylessFrame(record.kind, record.kindHeader);
+      let reads = 0;
+      const access = createRecordAccess(
+        'read-cost',
+        {
+          async readAt(position, length): Promise<Uint8Array> {
+            reads += 1;
+            return bytes.slice(position, position + length);
+          },
+        },
+        { selfOffset: 0, durableEnd: bytes.length },
+      );
+
+      expect(await readRowTreeNode(access, 0)).toStrictEqual({
+        kind: 'leaf',
+        entries,
+      });
+      expect(reads).toBe(1);
+    },
+  );
+});
