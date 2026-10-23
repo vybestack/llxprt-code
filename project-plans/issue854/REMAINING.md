@@ -25,7 +25,7 @@ Rules that stay: no compatibility shims, no eslint-disable, no type-escape casts
 | 2 | OpenAI Responses native request route | Done: stateless `4dc55e707`, stateful `be3ecbcda` |
 | 3 | Anthropic native request route | Done. Uncached `88e8ab2e6`, caching `781dae82b`, recovery without media `558608de4`, stored media aggregate `95d7c5725`/`7d823b208`, tails `b816a22bf`, persisted media `f60921f05`, media estimates `a6cfbe72b`, media tails `888a16754`, image budgets `fad44fbb8`, image recovery `455b4dfbf`, views `7d4e1c01b`, affected-span repair replacing the shape whitelist `a033ba8fc` |
 | 4 | Native request log/dump | Done: Anthropic `29522b461`, Chat/Mistral/Kimi `20a7e03f3`, Responses `7c63e0c6c` |
-| 5 | Floating-promise lint errors | 12 unawaited `close()` calls in providers test support (`journal-provider-fixture.ts`, `native-random-purge.ts`, `native-seed-cases.ts`, `journal-curated-source-failure`, `journal-wire-body-golden`, `semantic-purge-body` tests). Same race as #3929 |
+| 5 | Floating-promise lint errors | Done in `df03074e1`. Pinned requests failing with "History changed before the native request format fill" after any history change (from `e912dba1d`) fixed in `a02a55af1` |
 | 6 | Performance and memory | Tool-heavy memory test inside its 170,000 ms budget; Anthropic "real tool round after 4000 rows" test takes 88 to 100 s and times out under load (400 rows cost 233,464 physical reads) |
 | 7 | Default flip and deletion | `journal` is the default; old JSONL backend, `historyBackendSelect.ts`, `AnthropicSpooledRequest.ts`, `message-table/tool-id-index.ts`, `WireBodySpool`, `KeyedRowIndex`, the Responses disk serializer and old-only scratch code deleted |
 | 8 | Branch cleanup | PR diff contains product code, tests, fixtures and the design doc, not proof receipts or evidence logs |
@@ -42,6 +42,7 @@ On the journal backend no provider request reaches a body spool or per-request f
 - `packages/providers/src/anthropic/anthropic-stream-repair-scale.test.ts`: three failures at `150d36e02`, one with the native-route changes.
 - `packages/providers/src/anthropic/journal-anthropic-append-lifecycle.test.ts`: two failures at `150d36e02`.
 - `packages/providers/src/anthropic/journal-anthropic-lifecycle.test.ts`: "bounds live auxiliary metadata" fails at `150d36e02` with 10 entries against a limit of 7.
+- `core` `formatTables.test.ts`: `mediaContribRows` design-table mismatch, 7 pass/1 fail at `df03074e1`.
 - `bun:ffi` type error in `core/src/journal/flushRecords.ts` under providers `tsconfig.test-bun.json`.
 
 Several of these are old-backend paths and may disappear with item 7. Whatever survives gets fixed or filed before the PR.
