@@ -1,6 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { createHistoryProviderFileBindingStore } from './provider-file-binding.js';
+import {
+  expectedRange,
+  journalMediaParticipant as mediaParticipant,
+  rejectedValue,
+} from './chronology-rollback-test-helpers.js';
 import {
   detachedDigest,
   detachedDurableDigest,
@@ -13,25 +17,19 @@ import {
   bindingContentId,
   bindingFile,
 } from './provider-binding-bridge-test-helpers.js';
-import {
-  mediaParticipant,
-  rejectedValue,
-  expectedRange,
-} from './chronology-rollback-test-helpers.js';
+import { createHistoryProviderFileBindingStore } from './provider-file-binding.js';
 
 async function seed(fixture: DetachedFixture, size: number): Promise<void> {
-  for await (const row of bindingBridgeRows(size))
-    await fixture.recorder.commit('content', { content: row });
-  await fixture.history.recalculateTotalTokens();
+  await fixture.history.detachedValues.replace(bindingBridgeRows(size));
 }
 async function bindingFault(size: number, stage: string): Promise<number> {
   return withDetachedFixture(async (fixture) => {
-    const { history, recorder, owners } = fixture;
+    const { history, recorder, owners, io } = fixture;
     await seed(fixture, size);
     const expected = await detachedDigest(bindingBridgeRows(size));
     const primary = new Error(`binding ${stage} failure`);
     if (stage === 'zero' || stage === 'prefix')
-      recorder.failAdmissionAfter(stage === 'zero' ? 0 : 2);
+      io.rejectNextWrite(primary, stage === 'zero' ? 'records' : 'trailer');
     if (stage === 'prepare')
       await history.registerMediaOwner(
         mediaParticipant(() => {
@@ -61,7 +59,7 @@ async function bindingFault(size: number, stage: string): Promise<number> {
           bindingFile,
         ),
       ),
-    ).toBe(stage === 'zero' || stage === 'prefix' ? recorder.failure : primary);
+    ).toBe(primary);
     expect(await detachedDigest(history.streamRawHistory())).toStrictEqual(
       expected,
     );
@@ -124,8 +122,7 @@ describe('provider binding value edge cases', () => {
       );
       Object.freeze(row.metadata?.chronology);
       Object.freeze(row.metadata);
-      await recorder.commit('content', { content: row });
-      await history.recalculateTotalTokens();
+      await history.addBatch([row]);
       const failure = new Error('large binding rollback');
       history.once('tokensUpdated', () => {
         throw failure;

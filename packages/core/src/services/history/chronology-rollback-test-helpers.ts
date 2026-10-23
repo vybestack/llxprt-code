@@ -121,9 +121,15 @@ export function mediaParticipant(
 export function journalMediaParticipant(
   prepare: () => ReturnType<HistoryMediaOwner['prepareReplacement']>,
 ): HistoryMediaOwner {
+  const prepareReferences: NonNullable<
+    HistoryMediaOwner['prepareReferenceReplacement']
+  > = async (references) => {
+    for await (const reference of references) void reference;
+    return prepare();
+  };
   return {
-    prepareReferenceAddition: prepare,
-    prepareReferenceReplacement: prepare,
+    prepareReferenceAddition: prepareReferences,
+    prepareReferenceReplacement: prepareReferences,
     prepareReplacement: prepare,
     adopt: () => undefined,
     reconcile: async () => undefined,
