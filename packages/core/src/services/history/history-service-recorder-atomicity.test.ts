@@ -3,6 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import { isDeepStrictEqual } from 'node:util';
 import { TRAILER_RECORD_BYTES } from '../../journal/trailerRecord.js';
+import { RECORD_KIND } from '../../journal/recordKinds.js';
 import { JournalWriterPoisonedError } from '../../journal/errors.js';
 import { persistedMutationRows } from './__tests__/support/service-recorder-mutations.js';
 import {
@@ -27,7 +28,10 @@ describe('HistoryService replacement acknowledgement and failed writer isolation
       const version = session.store.published;
       const beforeTokens = history.getTotalTokens();
       const beforeRange = history.getContextRange();
-      primary.failures.gateWriteAt = writes(primary) + 1;
+      const trailers = primary.seams.events.filter(
+        (event) => event.type === 'write' && event.kind === RECORD_KIND.TRAILER,
+      ).length;
+      primary.failures.gateTrailerAt = trailers;
       let completed = false;
       let acknowledged = false;
       const replacement = history.detachedValues
@@ -40,7 +44,12 @@ describe('HistoryService replacement acknowledgement and failed writer isolation
           completed = true;
         });
       try {
-        while (writes(primary) <= (primary.failures.gateWriteAt ?? 0))
+        while (
+          primary.seams.events.filter(
+            (event) =>
+              event.type === 'write' && event.kind === RECORD_KIND.TRAILER,
+          ).length <= trailers
+        )
           await new Promise<void>((resolve) => setImmediate(resolve));
         const written = primary.seams.events.filter(
           (event) => event.type === 'write',

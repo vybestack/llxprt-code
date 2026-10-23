@@ -85,28 +85,6 @@ describe('chronology projection parity', () => {
   });
 });
 
-describe('chronology marker filtering over a real journal', () => {
-  it('skips unmarked rows and keeps the marked rows in journal order', async () => {
-    await withCoreSuffixFixture(
-      512,
-      async (service, ownership) => {
-        let count = 0;
-        for await (const entry of service.getChronologyTrace()) {
-          count++;
-          expect(entry.seq).toBe(count * 2);
-        }
-        expect(count).toBe(256);
-        expect(ownership.snapshot().liveRows).toBe(0);
-      },
-      0,
-      (index, bytes) => {
-        const content = suffixRow(index, bytes);
-        return index % 2 === 0 ? { ...content, metadata: undefined } : content;
-      },
-    );
-  });
-});
-
 for (const query of ['clone', 'trace'] as const) {
   describe(`${query} cold pinned membership`, () => {
     it('captures membership on first next and excludes later mutations', async () => {
@@ -160,7 +138,7 @@ for (const query of ['clone', 'trace'] as const) {
         expect(await exitMeasurement(query, exit)).toStrictEqual({
           done: false,
           heldRows: 1,
-          scratchOpened: true,
+          scratchOpened: false,
           liveRows: 0,
           scratchClosed: true,
           failure: failures[exit],

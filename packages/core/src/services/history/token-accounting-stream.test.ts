@@ -1,8 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
 import {
+  withAccountingFixture as withCoreSuffixFixture,
   accountingFactory,
   accountingRow,
   accountingTexts,

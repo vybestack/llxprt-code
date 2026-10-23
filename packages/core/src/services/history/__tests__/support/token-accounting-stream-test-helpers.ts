@@ -1,9 +1,35 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { HistoryService } from '../../HistoryService.js';
+import { HistoryService } from '../../HistoryService.js';
+import type { RowCounters } from '../../../../recording/journalCounters.js';
+import { RowOwnership } from '../../../../recording/rowOwnership.js';
+import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
 import type { IContent } from '../../IContent.js';
 import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import type { RuntimeTokenizerFactory } from '../../../../runtime/contracts/RuntimeTokenizerFactory.js';
 
+export function withAccountingFixture(
+  size: number,
+  action: (
+    service: HistoryService,
+    ownership: RowOwnership,
+    counters: RowCounters,
+  ) => Promise<void>,
+  payloadBytes = 0,
+  makeRow: (index: number, bytes: number) => IContent = accountingRow,
+): Promise<void> {
+  return withCoreSuffixFixture(
+    size,
+    action,
+    payloadBytes,
+    makeRow,
+    new RowOwnership(),
+    (options) => {
+      const service = new HistoryService(options);
+      service.setTokenizerFactory(accountingFactory(() => 0));
+      return service;
+    },
+  );
+}
 export function accountingRow(index: number, payloadBytes = 2048): IContent {
   const speakers: Array<IContent['speaker']> = ['human', 'ai', 'tool'];
   return {

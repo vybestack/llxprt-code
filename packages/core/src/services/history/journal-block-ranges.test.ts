@@ -63,9 +63,7 @@ describe('native row block and metadata range reads', () => {
       const closed = await session.store.snapshot();
       const entry = await closed.entryAt(0);
       await closed.close();
-      await expect(closed.readBlock(entry, 1)).rejects.toThrow(
-        'pin was released',
-      );
+      expect(() => closed.readBlock(entry, 1)).toThrow('pin was released');
     } finally {
       await session.close();
     }

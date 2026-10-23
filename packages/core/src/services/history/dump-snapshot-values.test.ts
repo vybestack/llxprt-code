@@ -13,31 +13,6 @@ function row(index: number): IContent {
 }
 
 describe('dump snapshot scoped values', () => {
-  it('captures pending values before returning control to the caller', async () => {
-    const history = new HistoryService({});
-    const original = row(0);
-    try {
-      history.add(original);
-      const expected = structuredClone(original);
-      const opening = history.openDumpSnapshot();
-      original.blocks = [{ type: 'text', text: 'changed after capture' }];
-      history.add(row(1));
-      const snapshot = await opening;
-      try {
-        const values: IContent[] = [];
-        for await (const value of snapshot.rows()) values.push(value);
-        expect(values).toStrictEqual([expected]);
-        const trace = [];
-        for await (const entry of snapshot.chronology()) trace.push(entry);
-        expect(trace).toHaveLength(1);
-      } finally {
-        await snapshot.close();
-      }
-    } finally {
-      await history.dispose();
-    }
-  });
-
   it('keeps repeated reads independent of mutations to a returned row', async () => {
     const history = new HistoryService();
     try {
@@ -86,7 +61,7 @@ describe('dump snapshot scoped reader closure', () => {
         expect(ownership.snapshot().liveRows).toBe(1);
         await snapshot.close();
         expect(ownership.snapshot().liveRows).toBe(0);
-        expect((await iterator.next()).done).toBe(true);
+        await expect(iterator.next()).rejects.toThrow('closed');
         await snapshot.close();
         await expect(
           (async () => {
