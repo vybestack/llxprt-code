@@ -1,9 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { batchRow } from './__tests__/support/addbatch-stream-test-helpers.js';
 import {
-  batchRow,
-  withBatchFixture,
-} from './__tests__/support/addbatch-stream-test-helpers.js';
+  createRecorderForTest,
+  recordRowsForTest,
+} from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
+import { JournalHistoryStore } from './journalHistoryStore.js';
+import { requireJournalRecorder } from './recorderBackend.js';
+import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
 import type { IContent } from './IContent.js';
 
 function summaryRow(
@@ -23,10 +27,15 @@ function summaryRow(
 }
 
 describe('scalar chronology and filter semantics', () => {
+  const directory = useTempDir('scalar-range-');
   it.each([false, true])(
     'uses positional boundaries and omits derived summary spans only for legacy membership=%s',
     async (legacy) => {
-      await withBatchFixture(async ({ history, recorder }) => {
+      const recorder = createRecorderForTest({ chatsDir: directory() });
+      const history = new JournalHistoryStore(
+        await requireJournalRecorder(recorder).session(),
+      );
+      try {
         const first = summaryRow(0, 41, 10, 14);
         const second: IContent = legacy
           ? {
@@ -41,9 +50,9 @@ describe('scalar chronology and filter semantics', () => {
             }
           : summaryRow(1, 2, 13, 16);
         const third = summaryRow(2, 3, 30, 31);
-        for (const content of [first, second, third])
-          await recorder.commit('content', { content });
-        expect(history.getContextRange()).toStrictEqual({
+        await recordRowsForTest(recorder, [first, second, third]);
+        await history.waitForCommit();
+        expect(history.contextRange([])).toStrictEqual({
           firstSeq: 41,
           lastSeq: 3,
           totalEntries: 3,
@@ -55,18 +64,21 @@ describe('scalar chronology and filter semantics', () => {
                 { start: 30, end: 31, reason: 'compressed' },
               ],
         });
-        expect(history.getStatistics()).toStrictEqual({
+        expect(history.statistics()).toStrictEqual({
           totalMessages: 3,
           userMessages: 1,
           aiMessages: 1,
           toolCalls: 3,
           toolResponses: 3,
         });
-        expect(await history.getLastUserContent()).toStrictEqual(first);
+        expect(await history.lastContent('human')).toStrictEqual(first);
         expect(
-          (await history.getLastAIContent())?.metadata?.chronology?.seq,
+          (await history.lastContent('ai'))?.metadata?.chronology?.seq,
         ).toBe(legacy ? undefined : 2);
-      });
+      } finally {
+        await history.dispose();
+        await recorder.dispose();
+      }
     },
   );
 });

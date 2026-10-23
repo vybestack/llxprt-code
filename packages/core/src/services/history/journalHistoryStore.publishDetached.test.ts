@@ -4,12 +4,11 @@ import * as path from 'node:path';
 import { describe, expect, it } from 'bun:test';
 import { openJournalReadOnly } from '../../journal/journalReader.js';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
+import { detachedRow } from './detached-rollback-test-helpers.js';
 import {
-  detachedRow,
-  detachedRows,
-  withDetachedFixture,
-} from './detached-rollback-test-helpers.js';
-import { exactTokenizer, rowsOf } from './chronology-rollback-test-helpers.js';
+  exactTokenizer,
+  expectedRange,
+} from './chronology-rollback-test-helpers.js';
 import type {
   DetachedHistoryHost,
   DetachedHistoryTransform,
@@ -53,24 +52,6 @@ function shape(rows: readonly IContent[]): unknown[] {
 
 function seedRows(bytes: number): IContent[] {
   return Array.from({ length: SEED }, (_, index) => detachedRow(index, bytes));
-}
-
-/** The old store: a HistoryService on its own journal, driven through the detached API. */
-async function viaOldStore(
-  transform: DetachedHistoryTransform,
-  bytes = SEED_BYTES,
-): Promise<Outcome> {
-  return withDetachedFixture(async ({ history }) => {
-    await history.detachedValues.replace(detachedRows(SEED, bytes));
-    await history.waitForTokenUpdates();
-    await history.detachedValues.transform(transform);
-    await history.waitForTokenUpdates();
-    return {
-      rows: shape(await rowsOf(history)),
-      tokens: history.getTotalTokens(),
-      range: history.getContextRange(),
-    };
-  });
 }
 
 interface Observed {
@@ -146,6 +127,7 @@ async function openJournal(
     observed,
     startTokens,
     dispose: async () => {
+      for (const batch of observed.batches) await batch.source.retire();
       await store.dispose();
       await estimator.dispose();
     },
@@ -238,28 +220,7 @@ async function commitSeqOf(file: string): Promise<number | undefined> {
 describe('JournalHistoryStore.publishDetached', () => {
   const directory = useTempDir('journal-publish-detached-');
 
-  describe('gives the result the old store gives', () => {
-    const cases: Array<[string, DetachedHistoryTransform]> = [
-      ['a compression that keeps a tail', compressKeepingTail],
-      ['a density pass (remove and replace)', thinOut],
-      ['a result that keeps a head and replaces the rest', keepHeadThenReplace],
-      ['a result that keeps every row', keepAll],
-      ['a result cut to its first rows', keepFirstThree],
-      ['an emptied result', keepNothing],
-    ];
-    for (const [name, transform] of cases) {
-      it(`for ${name}: same rows, tokens and context range`, async () => {
-        const expected = await viaOldStore(transform);
-        const actual = await viaJournalStore(
-          path.join(directory(), 'equal.llxj'),
-          transform,
-        );
-        expect(actual.rows).toStrictEqual(expected.rows);
-        expect(actual.tokens).toBe(expected.tokens);
-        expect(actual.range).toStrictEqual(expected.range);
-      });
-    }
-
+  describe('density membership', () => {
     it('records the spans a density pass leaves behind', async () => {
       const actual = await viaJournalStore(
         path.join(directory(), 'spans.llxj'),
@@ -648,9 +609,7 @@ describe('JournalHistoryStore.publishDetached', () => {
           expect(last(observed.applied)?.tokens).toBe(startTokens);
           expect(last(observed.applied)?.spans).toStrictEqual([]);
           expect(stamper.snapshot()).toStrictEqual(chronologyBefore);
-          expect(last(observed.ranges)).toStrictEqual(
-            (await viaOldStore(keepAll)).range,
-          );
+          expect(last(observed.ranges)).toStrictEqual(expectedRange(SEED));
           expect(await commitSeqOf(file)).toBe(
             (commitAfterCompression ?? 0) + 1,
           );

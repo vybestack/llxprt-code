@@ -1,9 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import {
-  withRemovalFixture,
-  assertRemovalRows,
-} from './history-removals-test-helpers.js';
+import { assertRemovalRows } from './history-removals-test-helpers.js';
+import { withNativeDetachedFixture } from './__tests__/support/detached-contract-fixture.js';
 import {
   accountingFactory,
   accountingRow,
@@ -13,7 +11,7 @@ import {
 
 describe('pop rollback with pending token updates', () => {
   it('restores the settled token total when admission-time estimates finish during pop', async () => {
-    await withRemovalFixture(async ({ history }) => {
+    await withNativeDetachedFixture(async ({ history }) => {
       const entered = deferred();
       const release = deferred();
       let first = true;

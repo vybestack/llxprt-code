@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { withNativeDetachedFixture } from './__tests__/support/detached-contract-fixture.js';
 import { describe, expect, it } from 'bun:test';
 import { gcAndSweep } from 'bun:jsc';
 import { setImmediate } from 'node:timers/promises';
@@ -6,9 +7,7 @@ import { appendFileSync } from 'node:fs';
 import type { IContent, ChronologyMarker } from './IContent.js';
 import {
   detachedDigest,
-  detachedDurableDigest,
   detachedRow,
-  withDetachedFixture,
 } from './detached-rollback-test-helpers.js';
 import { rejectedValue, rowsOf } from './chronology-rollback-test-helpers.js';
 
@@ -66,7 +65,7 @@ function retainingRows(rows: readonly IContent[]): readonly IContent[] {
 }
 
 async function runOwnershipCase(size: number, fail: boolean): Promise<number> {
-  return withDetachedFixture(async ({ history, recorder, owners }) => {
+  return withNativeDetachedFixture(async ({ history, primaryRows, owners }) => {
     await history.replaceBatch([
       detachedRow(0),
       detachedRow(1),
@@ -92,7 +91,7 @@ async function runOwnershipCase(size: number, fail: boolean): Promise<number> {
         expect(await detachedDigest(history.streamRawHistory())).toStrictEqual(
           candidate,
         );
-        expect(await detachedDurableDigest(recorder)).toStrictEqual(candidate);
+        expect(await detachedDigest(primaryRows())).toStrictEqual(candidate);
         expect(history.getTotalTokens()).toBe(4 * (size + 3));
         if (fail) throw failure;
       },
@@ -109,7 +108,7 @@ async function runOwnershipCase(size: number, fail: boolean): Promise<number> {
     expect(await detachedDigest(history.streamRawHistory())).toStrictEqual(
       expected,
     );
-    expect(await detachedDurableDigest(recorder)).toStrictEqual(expected);
+    expect(await detachedDigest(primaryRows())).toStrictEqual(expected);
     expect(history.getTotalTokens()).toBe(fail ? 12 : 4 * (size + 3));
     await history.addBatch([detachedRow(fail ? 3 : size + 3)]);
     return (await detachedDigest(history.streamRawHistory())).count;
@@ -128,7 +127,7 @@ describe('addBatch value ownership and real compensation', () => {
   }
 
   it('accepts frozen repeated aliases without stamping caller metadata', async () => {
-    await withDetachedFixture(async ({ history, recorder }) => {
+    await withNativeDetachedFixture(async ({ history, primaryRows }) => {
       const caller = Object.freeze({
         speaker: 'human',
         blocks: [{ type: 'text', text: 'caller alias' }],
@@ -144,12 +143,12 @@ describe('addBatch value ownership and real compensation', () => {
         caller.blocks,
         caller.blocks,
       ]);
-      expect((await detachedDurableDigest(recorder)).count).toBe(2);
+      expect((await detachedDigest(primaryRows())).count).toBe(2);
     });
   });
 
   it('accepts a complete row larger than nine MiB without a blanket row-size ban', async () => {
-    await withDetachedFixture(async ({ history, recorder }) => {
+    await withNativeDetachedFixture(async ({ history, primaryRows }) => {
       const marker = { seq: 1, userTurn: 1, step: 0, recordedAt: 0 };
       const caller = {
         ...detachedRow(0, 9 * 1024 * 1024 + 1),
@@ -158,7 +157,7 @@ describe('addBatch value ownership and real compensation', () => {
       await history.addBatch([caller]);
       expect(caller.metadata.chronology).toBe(marker);
       expect((await rowsOf(history))[0]).toStrictEqual(caller);
-      expect((await detachedDurableDigest(recorder)).bytes).toBeGreaterThan(
+      expect((await detachedDigest(primaryRows())).bytes).toBeGreaterThan(
         9 * 1024 * 1024,
       );
     });

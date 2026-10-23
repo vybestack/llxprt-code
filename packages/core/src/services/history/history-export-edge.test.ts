@@ -1,13 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { withNativeDetachedFixture } from './__tests__/support/detached-contract-fixture.js';
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { withBatchFixture } from './__tests__/support/addbatch-stream-test-helpers.js';
 import { exportSummaryRow, sha256 } from './export-summary-test-helpers.js';
 import type { IContent } from './IContent.js';
 
 describe('JSON export serialization', () => {
   it('exports admitted detached values with dates, undefined and non-finite tool values normalized', async () => {
-    await withBatchFixture(async ({ history, owners }) => {
+    await withNativeDetachedFixture(async ({ history, owners }) => {
       const original = [0, 1].map(
         (index) =>
           ({
@@ -63,7 +63,7 @@ describe('JSON export serialization', () => {
   });
 
   it('rejects a row whose serialization fails at admission and remains usable', async () => {
-    await withBatchFixture(async ({ history, owners }) => {
+    await withNativeDetachedFixture(async ({ history, owners }) => {
       let fail = true;
       const original = exportSummaryRow(0);
       const row = {

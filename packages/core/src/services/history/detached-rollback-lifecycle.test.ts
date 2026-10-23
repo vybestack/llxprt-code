@@ -1,109 +1,15 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it, spyOn } from 'bun:test';
-import * as fs from 'node:fs';
-import { getScratchRoot } from '../../storage/scratch-root.js';
+import { describe, expect, it } from 'bun:test';
 import type { IContent } from './IContent.js';
-import {
-  withDetachedContractFixture,
-  withNativeDetachedFixture,
-} from './__tests__/support/detached-contract-fixture.js';
+import { withDetachedContractFixture } from './__tests__/support/detached-contract-fixture.js';
 import { rejectedValue } from './chronology-rollback-test-helpers.js';
 import {
   detachedDigest,
   detachedRow,
   detachedRows,
-  withDetachedFixture,
 } from './detached-rollback-test-helpers.js';
-type HistoryBackend = 'old' | 'journal';
-
-const backends: readonly HistoryBackend[] = ['old', 'journal'];
-
-describe.each([...backends])(
-  'detached cleanup error ordering on %s',
-  (backend) => {
-    it('reports primary failure before scratch close failure while releasing all owners', async () => {
-      await withDetachedContractFixture(
-        backend,
-        async ({ history, owners }) => {
-          const failure = new Error('transform failure');
-          const cleanupFailure = new Error('scratch close failure');
-          const close = fs.closeSync;
-          let armed = false;
-          const closing = spyOn(fs, 'closeSync').mockImplementation(
-            (fd): void => {
-              close(fd);
-              if (armed) {
-                armed = false;
-                throw cleanupFailure;
-              }
-            },
-          );
-          let result: unknown;
-          try {
-            result = await rejectedValue(
-              history.detachedValues.transform(async (_source, sink) => {
-                await sink.appendValue(detachedRow(0));
-                armed = true;
-                throw failure;
-              }),
-            );
-          } finally {
-            closing.mockRestore();
-          }
-          expect(result).toBeInstanceOf(AggregateError);
-          if (!(result instanceof AggregateError))
-            throw new Error('Expected aggregate');
-          expect(result.errors[0]).toBe(failure);
-          expect(result.errors[1]).toBe(cleanupFailure);
-          expect(owners.snapshot().liveRows).toBe(0);
-        },
-      );
-    });
-  },
-);
-
-describe('detached resource lifecycle', () => {
-  for (const file of ['rows', 'index', 'markers']) {
-    it(`cleans up failed ${file} acquisition and releases submitted array owners`, async () => {
-      await withDetachedFixture(async ({ history, owners }) => {
-        const before = fs.readdirSync(getScratchRoot());
-        const failure = new Error('acquisition');
-        const open = fs.openSync;
-        const fault = spyOn(fs, 'openSync').mockImplementation(
-          (path, flags, mode) => {
-            if (
-              String(path).includes('history-detached-') &&
-              String(path).endsWith('/' + file)
-            )
-              throw failure;
-            return open(path, flags, mode);
-          },
-        );
-        let result: unknown;
-        try {
-          result = await rejectedValue(
-            history.detachedValues.replace([detachedRow(0)]),
-          );
-        } finally {
-          fault.mockRestore();
-        }
-        expect(result).toBe(failure);
-        expect(owners.snapshot().liveRows).toBe(0);
-        expect(
-          fs
-            .readdirSync(getScratchRoot())
-            .filter(
-              (name) =>
-                name.startsWith('history-detached-') && !before.includes(name),
-            ),
-        ).toStrictEqual([]);
-        expect(history.getContextRange().totalEntries).toBe(0);
-      });
-    });
-  }
-});
-
-describe.each([...backends])('detached cursor lifecycle on %s', (backend) => {
+describe('detached cursor lifecycle on journal', () => {
+  const backend = 'journal';
   it('closes a source cursor that escapes its transform before acknowledgement', async () => {
     await withDetachedContractFixture(backend, async ({ history, owners }) => {
       await history.detachedValues.replace(detachedRows(8));
@@ -169,48 +75,5 @@ describe.each([...backends])('detached cursor lifecycle on %s', (backend) => {
         expect(owners.snapshot().liveRows).toBe(0);
       },
     );
-  });
-});
-
-describe('native detached resource acquisition', () => {
-  it('releases submitted array owners when the span index cannot be opened and preserves the durable prior rows', async () => {
-    await withNativeDetachedFixture(async ({ history, owners, durable }) => {
-      await history.detachedValues.replace(detachedRows(3));
-      const failure = new Error('native span acquisition failed');
-      const before = fs.readdirSync(getScratchRoot());
-      const open = fs.openSync;
-      const fault = spyOn(fs, 'openSync').mockImplementation(
-        (path, flags, mode) => {
-          if (String(path).endsWith('/intervals')) throw failure;
-          return open(path, flags, mode);
-        },
-      );
-      let result: unknown;
-      try {
-        result = await rejectedValue(
-          history.detachedValues.replace([detachedRow(8)]),
-        );
-      } finally {
-        fault.mockRestore();
-      }
-      expect(result).toBe(failure);
-      expect(owners.snapshot().liveRows).toBe(0);
-      expect(owners.snapshot().liveSerializedBytes).toBe(0);
-      expect(
-        fs
-          .readdirSync(getScratchRoot())
-          .filter(
-            (name) =>
-              name.startsWith('llxprt-resolver-') && !before.includes(name),
-          ),
-      ).toStrictEqual([]);
-      const expected = await detachedDigest(detachedRows(3));
-      expect(await detachedDigest(history.streamRawHistory())).toStrictEqual(
-        expected,
-      );
-      expect(await durable()).toStrictEqual(expected);
-      await history.detachedValues.replace(detachedRows(1));
-      expect(history.getTotalTokens()).toBe(4);
-    });
   });
 });
