@@ -15,7 +15,9 @@
  * auth flows without a circular import.
  */
 
+import { randomUUID } from 'node:crypto';
 import {
+  oauthUIBridge,
   type OAuthTokenRequestMetadata,
   type OAuthTokenWithExtras,
 } from '@vybestack/llxprt-code-auth';
@@ -73,6 +75,7 @@ type AuthFlight = {
   settled: boolean;
   signalAuthCompletion: boolean;
   completionSignaled: boolean;
+  readonly attemptId: string;
 };
 
 type MultiBucketAuthenticatorLike = {
@@ -173,6 +176,12 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     options?: AuthCompletionOptions,
   ): Promise<void> {
     const shouldSignalAuthCompletion = options?.signalAuthCompletion ?? false;
+    if (shouldSignalAuthCompletion) {
+      Object.assign(globalThis, {
+        __oauth_auth_complete: false,
+        __oauth_auth_error: undefined,
+      });
+    }
     logger.debug(
       () => `[FLOW] authenticate() called for provider: ${providerName}`,
     );
@@ -207,17 +216,20 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     // participant remains (signal-less participants such as the manual
     // /auth flow keep it alive).
     const controller = new AbortController();
+    const attemptId = randomUUID();
     const flight: AuthFlight = {
       promise: this.authenticateInternal(
         providerName,
         bucket,
         controller.signal,
+        attemptId,
       ),
       controller,
       participants: 1,
       settled: false,
       signalAuthCompletion: shouldSignalAuthCompletion,
       completionSignaled: false,
+      attemptId,
     };
     this.wireFlightSettlement(flightKey, flight);
     this.authInFlight.set(flightKey, flight);
@@ -305,7 +317,18 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
 
   private wireFlightSettlement(flightKey: string, flight: AuthFlight): void {
     void flight.promise
-      .catch(() => undefined)
+      .then(
+        () => oauthUIBridge.settleDialog(flight.attemptId),
+        (error: unknown) => {
+          oauthUIBridge.settleDialog(flight.attemptId, error);
+          if (flight.signalAuthCompletion) {
+            Object.assign(globalThis, {
+              __oauth_auth_error:
+                error instanceof Error ? error.message : String(error),
+            });
+          }
+        },
+      )
       .then(() => {
         flight.settled = true;
         if (flight.participants <= 0) {
@@ -325,8 +348,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
       return;
     }
     flight.completionSignaled = true;
-    (global as { __oauth_auth_complete?: boolean }).__oauth_auth_complete =
-      true;
+    Object.assign(globalThis, { __oauth_auth_complete: true });
   }
 
   /**
@@ -337,6 +359,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     providerName: string,
     bucket: string | undefined,
     signal: AbortSignal | undefined,
+    attemptId: string,
   ): Promise<void> {
     const provider = this.providerRegistry.getProvider(providerName);
     if (!provider) {
@@ -381,7 +404,13 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
         return;
       }
 
-      await this.doInitiateAuth(providerName, bucket, provider, signal);
+      await this.doInitiateAuth(
+        providerName,
+        bucket,
+        provider,
+        signal,
+        attemptId,
+      );
     } catch (error) {
       logger.debug(
         () =>
@@ -462,22 +491,16 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     bucket: string | undefined,
     provider: OAuthProvider,
     signal: AbortSignal | undefined,
+    attemptId: string,
   ): Promise<void> {
     const priorToken = await this.tokenStore.getToken(providerName, bucket);
 
     // Inform the provider of the current bucket so it can look up the
     // correct browser profile association before launching the browser.
-    provider.setAuthContext?.({ bucket });
+    provider.setAuthContext?.({ bucket, attemptId });
 
-    logger.debug(
-      () => `[FLOW] Calling provider.initiateAuth() for ${providerName}...`,
-    );
-    const token = (await provider.initiateAuth(signal)) as
-      | OAuthToken
-      | null
-      | undefined;
-    logger.debug(
-      () => `[FLOW] provider.initiateAuth() returned token for ${providerName}`,
+    const token = await Promise.resolve<OAuthToken | null | undefined>(
+      provider.initiateAuth(signal),
     );
 
     if (token == null) {
@@ -485,9 +508,6 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     }
 
     throwIfAborted(signal);
-    logger.debug(
-      () => `[FLOW] Saving token to tokenStore for ${providerName}...`,
-    );
     await this.tokenStore.saveToken(providerName, token, bucket);
     if (signal?.aborted === true) {
       // Cancellation raced the commit: restore the prior credentials so a
@@ -508,12 +528,8 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
       }
       throw signal.reason;
     }
-    logger.debug(() => `[FLOW] Token saved to tokenStore for ${providerName}`);
 
     ensureOAuthEnabled(this.providerRegistry, providerName);
-    logger.debug(
-      () => `[FLOW] authenticate() completed successfully for ${providerName}`,
-    );
   }
 
   /**
