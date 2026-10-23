@@ -47,8 +47,9 @@ export async function replaceNormalizedRow(
     }
     return low;
   }
-  const first = await boundary(false);
-  const end = await boundary(true);
+  const afterTail = count === 0 || (await read(queries, count)).label < label;
+  const first = afterTail ? count + 1 : await boundary(false);
+  const end = afterTail ? count + 1 : await boundary(true);
   const removed = end - first;
   let unchanged = removed === positions.length;
   for (let index = 0; unchanged && index < positions.length; index++) {
