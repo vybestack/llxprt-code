@@ -1,180 +1,151 @@
-/**
- * Copyright 2026 Vybestack LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-/** @plan PLAN-20260917-ISSUE854.P05 @requirement G2 */
-import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
-import { describe, expect, it } from 'bun:test';
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
+import { HistoryService } from '../services/history/HistoryService.js';
+import type { IContent } from '../services/history/IContent.js';
+import { JournalSession } from '../services/history/journalSession.js';
+import { JournalRecordingService } from './journalRecordingService.js';
+import { makeDensityResult } from './durable-mutations.test.helpers.js';
+import { readJournalSnapshot } from './__tests__/support/journalSnapshot.js';
 import {
-  makeContent,
-  toolCallContent,
-  startLiveSession,
-  addLiveRows,
-  makeDensityResult,
-  projectLive,
-  resolveLiveJournal,
-  expectProjectedRowsEqual,
-  toProjected,
-  expectLiveSpansResolved,
-  rowEnvelopeMap,
-  chronOf,
-  textOf,
-  useDurableDirs,
-} from './durable-mutations.test.helpers.js';
+  PROJECT_HASH,
+  recordingConfig,
+  rowTexts,
+  textRow,
+} from './__tests__/support/journalRecordingFixture.js';
 
-describe('Durable mutations @plan:PLAN-20260917-ISSUE854.P05 @requirement:G2', () => {
-  const dirs = useDurableDirs();
-  // -------------------------------------------------------------------------
-  // EQUIVALENCE harness — the same mutation script applied to a real
-  // HistoryService and to a journal through the durable ops. RED today at the
-  // missing recorder methods.
-  // -------------------------------------------------------------------------
-
-  it('density removal: journal through recordDensityChange resolves to the live projection with matching membership spans', async () => {
-    const session = startLiveSession(dirs.chatsDir);
-    await addLiveRows(session, [
-      makeContent('A', 'human'),
-      makeContent('B', 'ai'),
-      makeContent('C', 'ai'),
-    ]);
-
-    await session.history.applyDensityResult(makeDensityResult([1]));
-    await collectRowsForAssertions(
-      session.history.streamRawHistory(),
-      async (contentsForAssertions) => {
-        const live = projectLive(contentsForAssertions);
-        expect(live).toStrictEqual([
-          { chron: 1, text: 'A' },
-          { chron: 3, text: 'C' },
-        ]);
-
-        const resolved = await resolveLiveJournal(session);
-        expectProjectedRowsEqual(toProjected(resolved), live);
-        await expectLiveSpansResolved(session, resolved);
-      },
-    );
+describe('durable native mutations preserve membership and chronology', () => {
+  const directory = useTempDir('durable-native-');
+  let history: HistoryService;
+  let recording: JournalRecordingService;
+  beforeEach(() => {
+    recording = JournalRecordingService.create(recordingConfig(directory()));
+    history = new HistoryService({ recording });
   });
-  it('density replacement: the journal reproduces the replacement row under the inherited marker', async () => {
-    const session = startLiveSession(dirs.chatsDir);
-    await addLiveRows(session, [
-      makeContent('A', 'human'),
-      makeContent('B', 'ai'),
-      makeContent('C', 'ai'),
-    ]);
-
-    await session.history.applyDensityResult(
-      makeDensityResult([], new Map([[1, makeContent('B-dense', 'ai')]])),
-    );
-    await collectRowsForAssertions(
-      session.history.streamRawHistory(),
-      async (contentsForAssertions) => {
-        const live = projectLive(contentsForAssertions);
-        expect(live).toStrictEqual([
-          { chron: 1, text: 'A' },
-          { chron: 2, text: 'B-dense' },
-          { chron: 3, text: 'C' },
-        ]);
-
-        const resolved = await resolveLiveJournal(session);
-        expectProjectedRowsEqual(toProjected(resolved), live);
-        await expectLiveSpansResolved(session, resolved);
-      },
-    );
+  afterEach(async () => {
+    await history.dispose();
+    await recording.dispose();
   });
-});
 
-describe('Durable mutations @plan:PLAN-20260917-ISSUE854.P05 @requirement:G2 / live equivalence cases 2', () => {
-  const dirs = useDurableDirs();
-  it('synthetic insert: journal through recordSyntheticInsert resolves to the live validateAndFix projection', async () => {
-    const session = startLiveSession(dirs.chatsDir);
-    await addLiveRows(session, [
-      makeContent('Q1', 'human'),
-      toolCallContent('call-7', 'working'),
+  async function saved(): Promise<readonly IContent[]> {
+    await history.waitForCommit();
+    await recording.flush();
+    const file = recording.getFilePath();
+    if (file === null) throw new Error('Missing journal');
+    return (await readJournalSnapshot(file, PROJECT_HASH)).history;
+  }
+  async function assertRows(
+    expected: ReadonlyArray<{ chron: number; text: string }>,
+  ): Promise<void> {
+    const durable = await saved();
+    expect(
+      durable.map((content) => ({
+        chron: content.metadata?.chronology?.seq,
+        text: rowTexts([content])[0],
+      })),
+    ).toStrictEqual([...expected]);
+    expect(await Array.fromAsync(history.streamRawHistory())).toStrictEqual([
+      ...durable,
     ]);
-
-    await session.history.validateAndFix();
-    await collectRowsForAssertions(
-      session.history.streamRawHistory(),
-      async (contentsForAssertions) => {
-        const live = projectLive(contentsForAssertions);
-        expect(live).toHaveLength(3);
-        await collectRowsForAssertions(
-          session.history.streamRawHistory(),
-          async (contentsForAssertions) => {
-            const synthetic = contentsForAssertions[2];
-
-            const resolved = await resolveLiveJournal(session);
-            expectProjectedRowsEqual(toProjected(resolved), live);
-
-            // The inserted row is attributed to its own envelope, not the anchor's.
-            const envelopeByChron = await rowEnvelopeMap(
-              session.recording.getFilePath() as string,
-            );
-            const insertedEnvelope = resolved.rows[2]?.seq;
-            expect(envelopeByChron.get(chronOf(synthetic))).toBe(
-              insertedEnvelope,
-            );
-            expect(insertedEnvelope).not.toBe(envelopeByChron.get(2));
-          },
-        );
-      },
+    const survivors = new Set(
+      durable.map((row) => row.metadata?.chronology?.seq),
     );
+    for (const span of history.getContextRange().removedInterior) {
+      for (let seq = span.start; seq <= span.end; seq++)
+        expect(survivors.has(seq)).toBe(span.reason === 'density-replaced');
+    }
+  }
+  function call(): IContent {
+    return {
+      speaker: 'ai',
+      blocks: [
+        { type: 'text', text: 'B' },
+        {
+          type: 'tool_call',
+          id: 'call-7',
+          name: 'runner',
+          parameters: { q: 1 },
+        },
+      ],
+    };
+  }
+
+  it('retains the exact density-removal prefix and membership spans', async () => {
+    await history.addBatch([
+      textRow('A'),
+      textRow('B', 'ai'),
+      textRow('C', 'ai'),
+    ]);
+    await history.applyDensityResult(makeDensityResult([1]));
+    expect(history.getStatistics().totalMessages).toBeGreaterThan(0);
+    await assertRows([
+      { chron: 1, text: 'A' },
+      { chron: 3, text: 'C' },
+    ]);
   });
-  it('combined script: density removal, synthetic insert, and prefix rewind resolve to the live projection', async () => {
-    const session = startLiveSession(dirs.chatsDir);
-    await addLiveRows(session, [
-      makeContent('A', 'human'),
-      toolCallContent('call-9', 'B'),
-      makeContent('C', 'ai'),
-      makeContent('D', 'human'),
+  it('persists a density replacement under the inherited chronology marker', async () => {
+    await history.addBatch([
+      textRow('A'),
+      textRow('B', 'ai'),
+      textRow('C', 'ai'),
     ]);
-
-    await session.history.applyDensityResult(makeDensityResult([2]));
-    await session.history.validateAndFix();
-    await collectRowsForAssertions(
-      session.history.streamRawHistory(),
-      async (contentsForAssertions) => {
-        const afterInsert = contentsForAssertions;
-        const synthetic = afterInsert[2];
-        expect(textOf(synthetic)).not.toBe('C');
-
-        // Live prefix rewind (durable op: the existing cutSeq rewind).
-        const remaining = [...afterInsert.slice(0, -1)];
-        await session.history.replaceAll(remaining);
-        await collectRowsForAssertions(
-          session.history.streamRawHistory(),
-          async (contentsForAssertions) => {
-            const live = projectLive(contentsForAssertions);
-            expect(live.map((row) => row.text)).toStrictEqual([
-              'A',
-              'B',
-              textOf(synthetic),
-            ]);
-
-            const resolved = await resolveLiveJournal(session);
-            expect(resolved.rows.map((row) => row.text)).toStrictEqual([
-              'A',
-              'B',
-              textOf(synthetic),
-            ]);
-            expect(resolved.rows.map((row) => row.chron)).toStrictEqual(
-              live.map((row) => row.chron),
-            );
-            await expectLiveSpansResolved(session, resolved);
-          },
-        );
-      },
+    await history.applyDensityResult(
+      makeDensityResult([], new Map([[1, textRow('B-dense', 'ai')]])),
     );
+    expect(history.getStatistics().totalMessages).toBeGreaterThan(0);
+    await assertRows([
+      { chron: 1, text: 'A' },
+      { chron: 2, text: 'B-dense' },
+      { chron: 3, text: 'C' },
+    ]);
+  });
+  it('persists a synthetic response with its own row identity and chronology', async () => {
+    await history.addBatch([textRow('Q1'), call()]);
+    await history.validateAndFix();
+    const rows = await saved();
+    expect(rows).toHaveLength(3);
+    expect(rows[2].speaker).toBe('tool');
+    expect(rows[2].blocks).toContainEqual(
+      expect.objectContaining({ type: 'tool_response', callId: 'call-7' }),
+    );
+    expect(rows.map((row) => row.metadata?.chronology?.seq)).toStrictEqual([
+      1, 2, 3,
+    ]);
+    const file = recording.getFilePath();
+    if (file === null) throw new Error('Missing journal');
+    const session = await JournalSession.open(file);
+    try {
+      const stored = await Array.fromAsync(session.rows());
+      expect(new Set(stored.map((row) => row.entry.label)).size).toBe(3);
+      expect(stored[2].entry.recordOffset).not.toBe(
+        stored[1].entry.recordOffset,
+      );
+    } finally {
+      await session.close();
+    }
+  });
+  it('retains density removal and synthetic response after a prefix rewind', async () => {
+    await history.addBatch([
+      textRow('A'),
+      call(),
+      textRow('C', 'ai'),
+      textRow('D'),
+    ]);
+    await history.applyDensityResult(makeDensityResult([2]));
+    await history.validateAndFix();
+    const before = await Array.fromAsync(history.streamRawHistory());
+    expect(before).toHaveLength(4);
+    expect(before[2].blocks).toContainEqual(
+      expect.objectContaining({ type: 'tool_response', callId: 'call-7' }),
+    );
+    await history.replaceAll(before.slice(0, -1));
+    const durable = await saved();
+    expect(durable).toStrictEqual(before.slice(0, 3));
+    expect(rowTexts(durable).slice(0, 2)).toStrictEqual(['A', 'B']);
+    expect(durable.map((row) => row.metadata?.chronology?.seq)).toStrictEqual([
+      1,
+      2,
+      before[2].metadata?.chronology?.seq,
+    ]);
   });
 });
