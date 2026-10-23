@@ -60,6 +60,25 @@ describe('stored Chat token summaries', () => {
     });
   });
 
+  it('round trips revision 2 with omitted reasoning bytes and refuses its reserved tail', () => {
+    const identity = identitySlotSummary('chat');
+    if (identity.kind !== 'chat') throw new Error('Chat identity required');
+    const summary: ChatSummary = {
+      ...identity,
+      thinkingRank: { units: 2, last: 1 },
+      omittedReasoningBytes: 123,
+    };
+    const encoded = encodeSlotSummary(summary);
+    expect(new DataView(encoded.buffer).getUint32(272, true)).toBe(2);
+    expect(decodeSlotSummary(encoded, { summaryKind: 'chat' })).toStrictEqual(
+      summary,
+    );
+    encoded[292] = 1;
+    expect(() => decodeSlotSummary(encoded, { summaryKind: 'chat' })).toThrow(
+      /padding/,
+    );
+  });
+
   it('refuses unknown rank revisions, impossible coordinates and nonzero reserved bytes', () => {
     const identity = identitySlotSummary('chat');
     if (identity.kind !== 'chat') throw new Error('Chat identity required');
@@ -68,7 +87,7 @@ describe('stored Chat token summaries', () => {
       thinkingRank: { units: 2, last: 1 },
     });
     for (const [offset, value] of [
-      [272, 2],
+      [272, 3],
       [276, 0],
       [280, 3],
       [284, 1],

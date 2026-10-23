@@ -247,7 +247,7 @@ The plain part:
 
 **Empty label fields.** Labels are 1-based (Section 2.6), so a label field with value 0 means that no row qualifies. This holds for the max-label fields (`lastThinking`, `lastInvalidate`, `lastCacheable`) and the min-label fields (`firstAnchor`, `firstImage`). Composition treats 0 as the identity: the max of 0 and `x` is `x`, and a min skips an operand that is 0, so the min of 0 and `x` is `x` and the min of 0 and 0 is 0. A composition that used 0 as an ordinary minimum would report no anchor for every range that contains an empty child. The empty aggregate (no rows) is all zero bytes. The codec stores the value it is given, and the composition helpers of phase 2 implement the rule above and are tested against it. A node whose range holds no qualifying row therefore stores 0 and never a sentinel like `2^64-1`.
 
-The plain fields add up to 312 bytes, and 8 reserved zero bytes bring the part to 320. The statistics counters, the chronology seq pair and the per-speaker labels let `getStatistics()` and `getContextRange()` answer from the published trailer with no row read; a conversation statistic that no aggregate carries (the token total of the old `ConversationStatistics`) is not offered. (`lastCall` of the earlier draft is gone: on a pin the Responses dangling set is empty, 7.3. `pairSensitiveRows` is new.)
+The plain fields add up to 316 bytes, including `mediaContribRows`, the number of rows with stored media contributions. Four reserved zero bytes bring the part to 320. The statistics counters, the chronology seq pair and the per-speaker labels let `getStatistics()` and `getContextRange()` answer from the published trailer with no row read; a conversation statistic that no aggregate carries (the token total of the old `ConversationStatistics`) is not offered. (`lastCall` of the earlier draft is gone: on a pin the Responses dangling set is empty, 7.3. `pairSensitiveRows` is new.)
 
 **Transfer summaries.** Each format slot holds a `SlotSummary` of 296 bytes (Sections 7.2, 7.3, 7.4 and 8.2). It holds two variants, each a table over the boundary states of the format, plus side tables for Anthropic. The variant dimension is thinking present or absent for Anthropic and chat, and reasoning items present or absent for Responses (8.2). A variant with `K` states stores, in this order:
 
@@ -485,7 +485,8 @@ Code 0 is invalid.
 | lastHuman | 288 | 8 | u64 |
 | lastAi | 296 | 8 | u64 |
 | lastTool | 304 | 8 | u64 |
-| reserved | 312 | 8 | u8[8] |
+| mediaContribRows | 312 | 4 | u32 |
+| reserved | 316 | 4 | u8[4] |
 | summaries | 320 | 888 | u8[888] |
 
 Counts are `u32`. Token, byte and character totals are `u64`. The five label fields are `u64` labels, 0 meaning none (Section 2.5). `ownerBloom` is a `u64` bit set. `stamp` is three `{gen, imageGen}` pairs of `u32`. `reserved` is zero. Nothing is padded for alignment.
