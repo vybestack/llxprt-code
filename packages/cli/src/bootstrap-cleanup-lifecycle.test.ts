@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { SessionClientOwner } from '../../agents/src/session/session-client-owner.js';
+import { seedSessionRows } from './__tests__/journal-recording.js';
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import {
@@ -27,7 +28,7 @@ import {
   ApprovalMode,
   Config,
   ExitCodes,
-  SessionRecordingService,
+  createSessionRecorder,
   getProjectHash,
 } from '@vybestack/llxprt-code-core';
 import * as acp from '@vybestack/llxprt-code-zed-acp';
@@ -456,7 +457,7 @@ describe('real startup activation owner cleanup', () => {
     root = directory,
   ): Promise<{ path: string; id: string }> {
     const id = crypto.randomUUID();
-    const recording = new SessionRecordingService({
+    const recording = createSessionRecorder({
       sessionId: id,
       projectHash: getProjectHash(root),
       chatsDir: new Storage(root).getProjectChatsDir(),
@@ -464,10 +465,12 @@ describe('real startup activation owner cleanup', () => {
       provider: 'fake',
       model: 'fake-model',
     });
-    recording.recordContent({
-      speaker: 'human',
-      blocks: [{ type: 'text', text: 'session seed' }],
-    });
+    await seedSessionRows(recording, [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'session seed' }],
+      },
+    ]);
     await recording.flush();
     const path = recording.getFilePath();
     if (!path) throw new Error('Session file was not created');
