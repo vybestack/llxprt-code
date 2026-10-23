@@ -61,7 +61,7 @@ function makeTempDir(): string {
 
 function bunContext(code: string, cwd: string): RunContext {
   return {
-    command: 'bun',
+    command: process.execPath,
     commandArgs: ['-e', code],
     testDir: cwd,
   };

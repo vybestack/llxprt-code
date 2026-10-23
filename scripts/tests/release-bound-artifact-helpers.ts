@@ -181,6 +181,7 @@ export async function packReleaseArtifacts(
     'README.md',
     'LICENSE',
     'scripts/bind-release-deps.ts',
+    'scripts/lib/npm-command.cjs',
     'scripts/utils/error-guards.ts',
     'scripts/utils/release-packages.ts',
   ]) {
