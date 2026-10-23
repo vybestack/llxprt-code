@@ -14,6 +14,7 @@ void vi.mock('@vybestack/llxprt-code-core', () => ({
 }));
 
 import {
+  EditorSettingsManager,
   editorSettingsManager,
   EDITOR_DISPLAY_NAMES,
 } from './editorSettingsManager.js';
@@ -36,5 +37,61 @@ describe('editorSettingsManager', () => {
     const antigravityDisplay = displays.find((d) => d.type === 'antigravity');
     expect(antigravityDisplay).toBeDefined();
     expect(antigravityDisplay?.name).toContain('Antigravity');
+  });
+
+  describe('availability probing', () => {
+    function countingProbes(installed: ReadonlySet<EditorType>): {
+      readonly probed: EditorType[];
+      readonly manager: EditorSettingsManager;
+    } {
+      const probed: EditorType[] = [];
+      const manager = new EditorSettingsManager({
+        hasEditor: (type) => {
+          probed.push(type);
+          return installed.has(type);
+        },
+        isAllowedInSandbox: () => true,
+      });
+      return { probed, manager };
+    }
+
+    it('probes nothing until the editors are first requested', () => {
+      const { probed, manager } = countingProbes(new Set());
+
+      expect(probed).toStrictEqual([]);
+      manager.getAvailableEditorDisplays();
+      expect(probed.sort()).toStrictEqual(
+        (Object.keys(EDITOR_DISPLAY_NAMES) as EditorType[]).sort(),
+      );
+    });
+
+    it('probes once and returns the same list on later requests', () => {
+      const { probed, manager } = countingProbes(new Set());
+
+      const first = manager.getAvailableEditorDisplays();
+      const probesAfterFirst = probed.length;
+
+      expect(manager.getAvailableEditorDisplays()).toBe(first);
+      expect(probed).toHaveLength(probesAfterFirst);
+    });
+
+    it('marks editors that are not installed as disabled', () => {
+      const { manager } = countingProbes(new Set<EditorType>(['vim']));
+
+      const byType = new Map(
+        manager.getAvailableEditorDisplays().map((d) => [d.type, d]),
+      );
+
+      expect(byType.get('vim')).toStrictEqual({
+        name: 'Vim',
+        type: 'vim',
+        disabled: false,
+      });
+      expect(byType.get('emacs')).toStrictEqual({
+        name: 'Emacs (Not installed)',
+        type: 'emacs',
+        disabled: true,
+      });
+    });
   });
 });

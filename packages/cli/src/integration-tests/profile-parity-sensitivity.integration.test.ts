@@ -5,6 +5,9 @@
  */
 
 import { describe, expect, it } from 'bun:test';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import type { z } from 'zod';
 import {
   type ProcessOutcome,
@@ -13,6 +16,15 @@ import {
   parityDescription,
   probeCredential,
 } from './profile-parity-harness.js';
+
+function isRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 describe(`${parityDescription}: harness sensitivity`, () => {
   const fixture = installParityFixture();
@@ -29,6 +41,37 @@ describe(`${parityDescription}: harness sensitivity`, () => {
           { terminateWhenStderrContains: 'Synthetic child interruption' },
         ),
       ).rejects.toThrow(/SIGTERM[\s\S]*Synthetic child interruption/);
+    });
+
+    it('ends the whole process tree of a terminated child and reports how far the launch got', async () => {
+      const marker = 'Synthetic tree ready';
+      const pidFile = join(fixture.dir, 'grandchild.pid');
+      const failure = await fixture
+        .runProcess(
+          [
+            '--eval',
+            `const { spawn } = await import('node:child_process');
+             const { writeFileSync } = await import('node:fs');
+             const grandchild = spawn(process.execPath, ['--eval', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+             writeFileSync(${JSON.stringify(pidFile)}, String(grandchild.pid));
+             process.stderr.write(${JSON.stringify(marker)});
+             setInterval(() => {}, 1000);`,
+          ],
+          { terminateWhenStderrContains: marker },
+        )
+        .then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+
+      expect(failure).toBeInstanceOf(Error);
+      expect(failure instanceof Error ? failure.message : '').toMatch(
+        /stages since spawn: preload loaded \+\d+ms, first output \+\d+ms, last request logged not reached, exit \+\d+ms, close \+\d+ms\n/,
+      );
+      const grandchildPid = Number(await readFile(pidFile, 'utf8'));
+      await waitFor(() => expect(isRunning(grandchildPid)).toBe(false), {
+        timeout: 10000,
+      });
     });
 
     it('does not mistake an ordinary non-zero exit status for an interruption', async () => {

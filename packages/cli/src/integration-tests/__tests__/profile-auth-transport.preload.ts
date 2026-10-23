@@ -17,6 +17,8 @@ if (!dir) throw new Error('PROFILE_PARITY_DIR is required');
 const keyringPath = join(dir, 'keyring.json');
 const eventsPath = join(dir, 'boundary-events.jsonl');
 const requestsPath = join(dir, 'requests.jsonl');
+// Lets the parent date the end of Bun boot and preload when a launch hangs.
+writeFileSync(join(dir, 'preload-loaded'), '');
 const keyringSchema = z.record(z.string());
 const requestSchema = z.object({ model: z.string() }).passthrough();
 const localFetch = globalThis.fetch;

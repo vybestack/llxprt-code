@@ -29,48 +29,65 @@ export const EDITOR_DISPLAY_NAMES: Record<EditorType, string> = {
   hx: 'Helix',
 };
 
-class EditorSettingsManager {
-  private readonly availableEditors: EditorDisplay[];
+export interface EditorProbes {
+  hasEditor(type: EditorType): boolean;
+  isAllowedInSandbox(type: EditorType): boolean;
+}
 
-  constructor() {
-    const editorTypes: EditorType[] = [
-      'antigravity',
-      'zed',
-      'vscode',
-      'vscodium',
-      'windsurf',
-      'cursor',
-      'vim',
-      'emacs',
-      'neovim',
-      'hx',
-    ];
-    this.availableEditors = [
+const EDITOR_TYPES: readonly EditorType[] = [
+  'antigravity',
+  'zed',
+  'vscode',
+  'vscodium',
+  'windsurf',
+  'cursor',
+  'vim',
+  'emacs',
+  'neovim',
+  'hx',
+];
+
+/**
+ * Lists the editors the settings dialog offers. Telling whether an editor is
+ * installed runs a synchronous `where.exe`/`command -v` shell for every
+ * candidate command, so the list is built the first time the dialog asks for
+ * it. Building it when this module loads put all of those spawns into every
+ * launch, including noninteractive ones that never open the dialog.
+ */
+export class EditorSettingsManager {
+  private availableEditors: EditorDisplay[] | undefined;
+
+  constructor(
+    private readonly probes: EditorProbes = {
+      hasEditor: checkHasEditorType,
+      isAllowedInSandbox: allowEditorTypeInSandbox,
+    },
+  ) {}
+
+  getAvailableEditorDisplays(): EditorDisplay[] {
+    this.availableEditors ??= [
       {
         name: 'None',
         type: 'not_set',
         disabled: false,
       },
-      ...editorTypes.map((type) => {
-        const hasEditor = checkHasEditorType(type);
-        const isAllowedInSandbox = allowEditorTypeInSandbox(type);
-
-        let labelSuffix = !isAllowedInSandbox
-          ? ' (Not available in sandbox)'
-          : '';
-        labelSuffix = !hasEditor ? ' (Not installed)' : labelSuffix;
-
-        return {
-          name: EDITOR_DISPLAY_NAMES[type] + labelSuffix,
-          type,
-          disabled: !hasEditor || !isAllowedInSandbox,
-        };
-      }),
+      ...EDITOR_TYPES.map((type) => this.describeEditor(type)),
     ];
+    return this.availableEditors;
   }
 
-  getAvailableEditorDisplays(): EditorDisplay[] {
-    return this.availableEditors;
+  private describeEditor(type: EditorType): EditorDisplay {
+    const hasEditor = this.probes.hasEditor(type);
+    const isAllowedInSandbox = this.probes.isAllowedInSandbox(type);
+
+    let labelSuffix = !isAllowedInSandbox ? ' (Not available in sandbox)' : '';
+    labelSuffix = !hasEditor ? ' (Not installed)' : labelSuffix;
+
+    return {
+      name: EDITOR_DISPLAY_NAMES[type] + labelSuffix,
+      type,
+      disabled: !hasEditor || !isAllowedInSandbox,
+    };
   }
 }
 

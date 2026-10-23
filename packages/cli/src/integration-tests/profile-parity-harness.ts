@@ -19,7 +19,7 @@ import {
   expect,
   it,
 } from 'bun:test';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { scryptSync } from 'node:crypto';
 import {
   mkdir,
@@ -142,25 +142,104 @@ export interface RunProcessOptions {
   readonly terminateWhenStderrContains?: string;
 }
 
+/** Written by the preload the moment the child's test transport is installed. */
+const PRELOAD_MARKER = 'preload-loaded';
+
+/** Wall-clock stamps of one launch, used to say where a hung child stalled. */
+interface LaunchTimeline {
+  readonly spawnedAt: number;
+  firstOutputAt?: number;
+  exitedAt?: number;
+  closedAt?: number;
+}
+
+/**
+ * Ends a child together with every process it started. A descendant that
+ * outlives its parent keeps the case directory open as its working directory,
+ * which on Windows fails the later removal with EBUSY and hides the real error.
+ * Windows has no process groups to signal, and `taskkill /T` finds descendants
+ * only through a live parent, so the tree must be ended while the root runs.
+ */
+function killProcessTree(child: ChildProcess): void {
+  const pid = child.pid;
+  if (pid === undefined) return;
+  if (process.platform === 'win32') {
+    const result = spawnSync('taskkill', ['/pid', String(pid), '/T', '/F'], {
+      stdio: 'ignore',
+    });
+    if (result.error !== undefined) throw result.error;
+    return;
+  }
+  try {
+    process.kill(-pid, 'SIGTERM');
+  } catch (error) {
+    // The group is already gone: the child exited between the decision to end
+    // it and this call.
+    if (!(error instanceof Error && 'code' in error && error.code === 'ESRCH'))
+      throw error;
+  }
+}
+
+async function statIfPresent(
+  path: string,
+): Promise<{ readonly size: number; readonly mtimeMs: number } | undefined> {
+  try {
+    return await stat(path);
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT')
+      return undefined;
+    throw error;
+  }
+}
+
+/**
+ * Names how far a launch got, so a hung child reports the stage that stalled:
+ * Bun boot and preload, CLI startup up to the first inference request, CLI
+ * shutdown up to process exit, and stdio drain up to close.
+ */
+async function describeStages(
+  dir: string,
+  timeline: LaunchTimeline,
+): Promise<string> {
+  const since = (at: number | undefined): string =>
+    at === undefined
+      ? 'not reached'
+      : `+${Math.round(at - timeline.spawnedAt)}ms`;
+  const preload = await statIfPresent(join(dir, PRELOAD_MARKER));
+  // The log is emptied before each launch, so content means a request arrived.
+  const requests = await statIfPresent(join(dir, 'requests.jsonl'));
+  return [
+    `preload loaded ${since(preload?.mtimeMs)}`,
+    `first output ${since(timeline.firstOutputAt)}`,
+    `last request logged ${since(requests !== undefined && requests.size > 0 ? requests.mtimeMs : undefined)}`,
+    `exit ${since(timeline.exitedAt)}`,
+    `close ${since(timeline.closedAt)}`,
+  ].join(', ');
+}
+
 async function launchProcess(
   dir: string,
   transpilerCachePath: string,
   args: readonly string[],
   options: RunProcessOptions,
 ): Promise<ProcessOutcome> {
+  await rm(join(dir, PRELOAD_MARKER), { force: true });
   return new Promise((resolvePromise, reject) => {
     const child = spawn(process.execPath, ['--preload', preload, ...args], {
       cwd: dir,
       env: isolatedEnv(dir, transpilerCachePath),
       stdio: ['ignore', 'pipe', 'pipe'],
+      // A POSIX group lets the whole tree be signalled; Windows ends it by pid.
+      detached: process.platform !== 'win32',
     });
+    const timeline: LaunchTimeline = { spawnedAt: Date.now() };
     let stdout = '';
     let stderr = '';
     let termination: string | undefined;
     const terminate = (reason: string): void => {
       if (termination !== undefined) return;
       termination = reason;
-      child.kill('SIGTERM');
+      killProcessTree(child);
     };
     const timer = setTimeout(
       () => terminate(`timeout after ${CHILD_TIMEOUT_MS}ms`),
@@ -169,9 +248,11 @@ async function launchProcess(
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
     child.stdout.on('data', (data: string) => {
+      timeline.firstOutputAt ??= Date.now();
       stdout += data;
     });
     child.stderr.on('data', (data: string) => {
+      timeline.firstOutputAt ??= Date.now();
       stderr += data;
       const marker = options.terminateWhenStderrContains;
       if (marker !== undefined && stderr.includes(marker)) {
@@ -182,19 +263,29 @@ async function launchProcess(
       clearTimeout(timer);
       reject(error);
     });
+    child.on('exit', () => {
+      timeline.exitedAt = Date.now();
+    });
     child.on('close', (code, signal) => {
       clearTimeout(timer);
+      timeline.closedAt = Date.now();
       const interruption =
         termination ?? (signal === null ? undefined : `signal ${signal}`);
-      if (interruption !== undefined) {
-        reject(
-          new Error(
-            `Profile parity child terminated by ${interruption}: ${stderr}`,
-          ),
-        );
+      if (interruption === undefined) {
+        resolvePromise({ stdout, stderr, exitCode: code ?? -1 });
         return;
       }
-      resolvePromise({ stdout, stderr, exitCode: code ?? -1 });
+      describeStages(dir, timeline).then(
+        (stages) =>
+          reject(
+            new Error(
+              `Profile parity child terminated by ${interruption}\n` +
+                `stages since spawn: ${stages}\n` +
+                `stdout: ${stdout}\nstderr: ${stderr}`,
+            ),
+          ),
+        reject,
+      );
     });
   });
 }
