@@ -43,7 +43,6 @@ async function retainingMerge(size: number, copy: boolean): Promise<number> {
               retained.push(kept);
             };
             let retention = Promise.resolve();
-            target.on('contentAdded', retain);
             target.on('contentBatchAdded', (batch) => {
               retention = (async () => {
                 for await (const row of batch.rows()) retain(row);
