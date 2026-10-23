@@ -78,6 +78,7 @@ interface Scenario {
   enforce: (
     estimateRows?: (rows: IContent[]) => Promise<number>,
     pendingRecoverable?: boolean,
+    whileSelectionOpen?: () => Promise<void>,
   ) => Promise<IContent[]>;
   /** The provider compression callback captured by the last enforce call. */
   capturedCallback: () => RuntimeCompressionCallback;
@@ -115,7 +116,7 @@ function scenario(
     pending,
     performCompression: harness.performCompression,
     fallback,
-    enforce: (estimateRows, pendingRecoverable) =>
+    enforce: (estimateRows, pendingRecoverable, whileSelectionOpen) =>
       enforceProviderSourceForTest(
         harness.handler,
         historyService,
@@ -124,6 +125,7 @@ function scenario(
         provider,
         estimateRows,
         pendingRecoverable,
+        whileSelectionOpen,
       ),
     capturedCallback: () => {
       if (callback === undefined)
@@ -500,10 +502,13 @@ describe('provider-source pending boundaries, callbacks and restore (Issue #2588
       const estimateSpy = vi
         .spyOn(historyService, 'estimateTokensForContents')
         .mockResolvedValue(1_000);
-      await s.enforce();
-      const callback = s.capturedCallback();
-      estimateSpy.mockResolvedValue(150_000);
-      return thrownBy(() => callback());
+      return thrownBy(() =>
+        s.enforce(undefined, undefined, async () => {
+          const callback = s.capturedCallback();
+          estimateSpy.mockResolvedValue(150_000);
+          await callback();
+        }),
+      );
     }
 
     it('reports the compression failure through the structured overflow error when performCompression throws and truncation cannot fit', async () => {

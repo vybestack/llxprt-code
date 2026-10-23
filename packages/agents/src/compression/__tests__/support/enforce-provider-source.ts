@@ -35,6 +35,7 @@ export function enforceProviderSourceForTest(
   estimateRows: (rows: IContent[]) => Promise<number> = (rows) =>
     history.estimateTokensForContents(rows),
   pendingRecoverable = true,
+  whileSelectionOpen?: () => Promise<void>,
 ): Promise<IContent[]> {
   return enforceProviderSourceSelectionForTest(
     handler,
@@ -45,6 +46,7 @@ export function enforceProviderSourceForTest(
     async (candidate) => estimateRows(await collectSelection(candidate)),
     undefined,
     pendingRecoverable,
+    whileSelectionOpen,
   );
 }
 
@@ -67,6 +69,7 @@ export async function enforceProviderSourceSelectionForTest(
     realOpen: () => Promise<PendingAwareRequestSelection>,
   ) => Promise<PendingAwareRequestSelection> = (realOpen) => realOpen(),
   pendingRecoverable = true,
+  whileSelectionOpen?: () => Promise<void>,
 ): Promise<IContent[]> {
   let pendingRows = pendingContents;
   const realOpen = async (): Promise<PendingAwareRequestSelection> => {
@@ -101,7 +104,9 @@ export async function enforceProviderSourceSelectionForTest(
       pending,
     );
     opened.add(enforced);
-    return await collectSelection(enforced);
+    const rows = await collectSelection(enforced);
+    await whileSelectionOpen?.();
+    return rows;
   } finally {
     for (const selection of opened) await selection.close();
   }

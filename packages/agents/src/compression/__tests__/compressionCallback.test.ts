@@ -127,21 +127,26 @@ const observeAttachedCallbackRunsCompressionMachineryAndReturnsHistoryContents =
       }),
     };
 
+    let currentContents: IContent[] = [];
+    let result: IContent[] = [];
+    let repeatedResult: IContent[] = [];
     await enforceProviderSourceForTest(
       chat['compressionHandler'],
       historyService,
       [],
       'test-prompt',
-      providerWithCallback as unknown as IProvider,
+      providerWithCallback,
+      undefined,
+      true,
+      async () => {
+        const callback = expectCapturedCallback(capturedCallback);
+        currentContents = await Array.fromAsync(
+          historyService.getCuratedForProviderStream(),
+        );
+        result = await readCallback(callback);
+        repeatedResult = await readCallback(callback);
+      },
     );
-
-    const callback = expectCapturedCallback(capturedCallback);
-    const currentContents = await Array.fromAsync(
-      historyService.getCuratedForProviderStream(),
-    );
-    const result = await readCallback(callback);
-
-    const repeatedResult = await readCallback(callback);
 
     const attachedCallbackRunsCompressionMachineryAndReturnsHistoryContentsObservation1 =
       result.every(
@@ -207,16 +212,19 @@ const observePreservesPendingRequestContentsWhenCallbackRecomposesCompressedHist
       }),
     };
 
+    let result: IContent[] = [];
     await enforceProviderSourceForTest(
       chat['compressionHandler'],
       historyService,
       [pending],
       'test-prompt',
-      providerWithCallback as unknown as IProvider,
+      providerWithCallback,
+      undefined,
+      true,
+      async () => {
+        result = await readCallback(expectCapturedCallback(capturedCallback));
+      },
     );
-
-    const callback = expectCapturedCallback(capturedCallback);
-    const result = await readCallback(callback);
 
     return { result, pending };
   };
@@ -271,16 +279,19 @@ const observePreservesAPendingMatchingToolResponseWithoutDuplicatingHistory =
       }),
     };
 
+    let result: IContent[] = [];
     await enforceProviderSourceForTest(
       chat['compressionHandler'],
       historyService,
       [pendingToolResult],
       'test-prompt',
-      providerWithCallback as unknown as IProvider,
+      providerWithCallback,
+      undefined,
+      true,
+      async () => {
+        result = await readCallback(expectCapturedCallback(capturedCallback));
+      },
     );
-
-    const callback = expectCapturedCallback(capturedCallback);
-    const result = await readCallback(callback);
 
     assertToolResponseResult(result, 'pending-call', {
       value: 'large tool response '.repeat(50),
