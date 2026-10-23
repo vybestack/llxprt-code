@@ -5,9 +5,12 @@ import type { LocalMediaStore } from '../../../../../core/src/storage/local-medi
 import { MediaAdmissionService } from '../../../../../core/src/storage/media-admission-service.js';
 import { exactTokenizer } from '../../../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import {
+  detachedDigest,
   detachedRow,
+  detachedRows,
   type DetachedFixture,
 } from '../../../../../core/src/services/history/detached-rollback-test-helpers.js';
+import { JournalHistoryStore } from '../../../../../core/src/services/history/journalHistoryStore.js';
 import type { IContent } from '../../../../../core/src/services/history/IContent.js';
 import type { AgentClientContract } from '../../../../../core/src/core/clientContract.js';
 
@@ -33,6 +36,18 @@ export async function withArrayClient<T>(
     await cleanup();
   }
 }
+export async function seedClientArrayHistory(
+  fixture: DetachedFixture,
+  size: number,
+): Promise<void> {
+  const journal = fixture.history.detachedValues.host().journal;
+  if (!(journal instanceof JournalHistoryStore))
+    throw new Error('Client array fixture requires a journal history store');
+  await journal.replaceFrom(detachedRows(size), size);
+  await fixture.history.recalculateTotalTokens();
+  await fixture.history.waitForCommit();
+}
+
 export function forbidClientArrayRollback(fixture: DetachedFixture): void {
   const reject = async (): Promise<never> => {
     throw new Error('Client restore entered legacy array rollback');
@@ -43,6 +58,50 @@ export function forbidClientArrayRollback(fixture: DetachedFixture): void {
 export function clientArrayRows(size: number, bytes = 2048): IContent[] {
   return Array.from({ length: size }, (_, index) => detachedRow(index, bytes));
 }
+export async function expectedClientArrayOutcome(
+  size: number,
+  stage: string,
+  batch: boolean,
+): Promise<object> {
+  const success = stage === 'success';
+  const digest = await detachedDigest(
+    (async function* (): AsyncGenerator<IContent, void, unknown> {
+      for (let index = 0; index < size; index++) {
+        const row = detachedRow(index);
+        yield success && index === size - 1
+          ? { ...row, blocks: [{ type: 'text', text: `replacement-${index}` }] }
+          : row;
+      }
+    })(),
+  );
+  const publication = [
+    'prepare',
+    'publish',
+    ...(batch ? ['batch'] : []),
+    'tokens',
+    'range',
+    'finalize',
+  ];
+  const observed = success
+    ? publication
+    : publication.slice(0, publication.indexOf(stage) + 1);
+  return {
+    live: digest,
+    durable: digest,
+    tokens: size * 4 + 17 - (success ? 3 : 0),
+    range: {
+      firstSeq: 1,
+      lastSeq: size,
+      totalEntries: size,
+      removedInterior: [],
+      approximate: false,
+    },
+    anchor: batch && success ? 0 : 1,
+    order:
+      success || stage === 'prepare' ? observed : [...observed, 'rollback'],
+  };
+}
+
 export async function withClientOracle<T>(
   store: LocalMediaStore,
   rows: readonly IContent[],

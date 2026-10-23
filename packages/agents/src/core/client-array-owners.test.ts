@@ -9,7 +9,7 @@ import {
   type DetachedFixture,
 } from '../../../core/src/services/history/detached-rollback-test-helpers.js';
 import {
-  mediaParticipant,
+  journalMediaParticipant as mediaParticipant,
   rejectedValue,
 } from '../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import { RowOwnership } from '../../../core/src/recording/rowOwnership.js';
@@ -21,6 +21,7 @@ import {
   clientArrayRows,
   forbidClientArrayRollback,
   recordClientProof,
+  seedClientArrayHistory,
   withArrayClient,
   type ClientArrayFixture,
 } from './__tests__/support/client-array-test-helpers.js';
@@ -55,7 +56,8 @@ async function pendingCheckpoint(
 ): Promise<number> {
   const { history, owners } = fixture;
   const { client } = clientFixture;
-  for (let index = 0; index < size; index++) history.add(detachedRow(index));
+  await seedClientArrayHistory(fixture, size - 1);
+  history.add(detachedRow(size - 1));
   await history.waitForTokenUpdates();
   history.setCacheAnchorSeq(1);
   const ready = gate();

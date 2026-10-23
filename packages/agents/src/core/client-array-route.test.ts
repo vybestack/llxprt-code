@@ -7,7 +7,7 @@ import {
 } from '../../../core/src/services/history/detached-rollback-test-helpers.js';
 import {
   expectedRange,
-  mediaParticipant,
+  journalMediaParticipant as mediaParticipant,
 } from '../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import type { IContent } from '../../../core/src/services/history/IContent.js';
 import {
@@ -73,8 +73,8 @@ function registerScale(size: number): void {
             'publish',
             'batch',
             'tokens',
-            'finalize',
             'range',
+            'finalize',
           ]);
           expect(owners.snapshot().liveRows).toBe(0);
           recordClientProof({
