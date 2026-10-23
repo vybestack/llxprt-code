@@ -5,8 +5,11 @@
  */
 import { describe, expect, it, spyOn, type Mock } from 'bun:test';
 import { readFile, readdir } from 'node:fs/promises';
-import { basename } from 'node:path';
-import { replaySession } from '@vybestack/llxprt-code-core';
+import { readJournalCheckpoints } from '@vybestack/llxprt-code-core/recording/journalSessionListing.js';
+import {
+  readRecordedFacts,
+  readRecordedRows,
+} from '../../__tests__/journal-recording.js';
 import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { chatOwnerCommand } from './chatOwnerCommand.js';
@@ -29,8 +32,8 @@ function action(name: string) {
 }
 
 describe('owner-backed /chat command route', () => {
-  it('creates, lists, renames and deletes through one active owner and durable JSONL', async () => {
-    await withRecordingLifetimeFixture(async ({ agent, config, chatsDir }) => {
+  it('creates, lists, renames and deletes through one active owner and durable journal state', async () => {
+    await withRecordingLifetimeFixture(async ({ agent, chatsDir }) => {
       await agent.setHistory([human('seed'), ai('reply')]);
       await agent.session.setRecording({ enabled: true });
       const context = createMockCommandContext({ services: { agent } });
@@ -54,21 +57,15 @@ describe('owner-backed /chat command route', () => {
       expect(await action('delete')(context, 'renamed')).toMatchObject({
         messageType: 'info',
       });
-      const replay = await replaySession(path, basename(config.projectTempDir));
-      if (!replay.ok) throw new Error(replay.error);
-      expect(replay.ok).toBe(true);
-      expect(replay.checkpoints).toContainEqual(
-        expect.objectContaining({ name: 'renamed', deleted: true }),
-      );
+      expect(await readJournalCheckpoints(path)).toStrictEqual([]);
       expect(
         (await readdir(chatsDir)).filter((file) => file.endsWith('.lock')),
       ).toHaveLength(1);
-      expect(await readFile(path, 'utf8')).toContain('"checkpoint_deleted"');
     });
   }, 30000);
 
   it('refuses collisions until confirmation and overwrites create, rename and name', async () => {
-    await withRecordingLifetimeFixture(async ({ agent, config }) => {
+    await withRecordingLifetimeFixture(async ({ agent }) => {
       await agent.setHistory([human('seed')]);
       await agent.session.setRecording({ enabled: true });
       const context = createMockCommandContext({ services: { agent } });
@@ -100,15 +97,13 @@ describe('owner-backed /chat command route', () => {
       });
       const path = agent.session.getRecording().path;
       if (!path) throw new Error('No owner recording');
-      const replay = await replaySession(path, basename(config.projectTempDir));
-      if (!replay.ok) throw new Error(replay.error);
-      expect(replay.sessionName).toBe('occupied');
+      expect((await readRecordedFacts(path)).name).toBe('occupied');
       expect(await agent.session.listCheckpoints()).toHaveLength(0);
     });
   }, 30000);
 
   it('restores and clears owner history with UI-only replay and no duplicate client history write', async () => {
-    await withRecordingLifetimeFixture(async ({ agent, config, chatsDir }) => {
+    await withRecordingLifetimeFixture(async ({ agent, chatsDir }) => {
       await agent.setHistory([
         human('first'),
         ai('one'),
@@ -141,11 +136,9 @@ describe('owner-backed /chat command route', () => {
       }
       const path = agent.session.getRecording().path;
       if (!path) throw new Error('No owner recording');
-      const replay = await replaySession(path, basename(config.projectTempDir));
-      if (!replay.ok) throw new Error(replay.error);
-      expect(JSON.stringify(replay.history)).not.toContain('third');
-      const raw = await readFile(path, 'utf8');
-      expect(raw).toContain('"rewind"');
+      expect(JSON.stringify(await readRecordedRows(path))).not.toContain(
+        'third',
+      );
       expect(
         (await readdir(chatsDir)).filter((file) => file.endsWith('.lock')),
       ).toHaveLength(1);
@@ -153,19 +146,18 @@ describe('owner-backed /chat command route', () => {
   }, 30000);
 
   it('preserves live and durable history on restore failure and does not repaint UI', async () => {
-    await withRecordingLifetimeFixture(async ({ agent, config }) => {
+    await withRecordingLifetimeFixture(async ({ agent }) => {
       await agent.setHistory([human('first'), ai('one'), human('second')]);
       await agent.session.setRecording({ enabled: true });
       const context = createMockCommandContext({ services: { agent } });
       const client = agent.agentClient;
-      const original = client.setHistoryFromSource.bind(client);
-      const fault = spyOn(
-        client,
-        'setHistoryFromSource',
-      ).mockImplementationOnce(async (...args) => {
-        await original(...args);
-        throw new Error('restore interrupted');
-      });
+      const original = client.resetChat.bind(client);
+      const fault = spyOn(client, 'resetChat').mockImplementationOnce(
+        async (...args) => {
+          await original(...args);
+          throw new Error('restore interrupted');
+        },
+      );
       try {
         expect(await action('restore')(context, '1')).toMatchObject({
           messageType: 'error',
@@ -176,9 +168,7 @@ describe('owner-backed /chat command route', () => {
       const path = agent.session.getRecording().path;
       if (!path) throw new Error('No owner recording');
       await agent.session.flushRecording();
-      const replay = await replaySession(path, basename(config.projectTempDir));
-      if (!replay.ok) throw new Error(replay.error);
-      expect(JSON.stringify(replay.history)).toContain('second');
+      expect(JSON.stringify(await readRecordedRows(path))).toContain('second');
       expect(JSON.stringify(await agent.session.getHistory())).toContain(
         'second',
       );
@@ -187,39 +177,31 @@ describe('owner-backed /chat command route', () => {
   }, 30000);
 
   it('isolates borrowed sibling and resolves closed checkpoints by ID', async () => {
-    await withRecordingLifetimeFixture(
-      async ({ agent, borrow, config, chatsDir }) => {
-        const sibling = await borrow();
-        await agent.setHistory([human('owner')]);
-        await agent.session.setRecording({ enabled: true });
-        await sibling.setHistory([human('sibling')]);
-        await sibling.session.setRecording({ enabled: true });
-        const saved = await sibling.session.createCheckpoint('foreign');
-        const siblingPath = sibling.session.getRecording().path;
-        await sibling.session.setRecording({ enabled: false });
-        const context = createMockCommandContext({ services: { agent } });
-        expect(
-          await action('rename')(context, 'foreign new-foreign'),
-        ).toMatchObject({ messageType: 'info' });
-        expect(
-          await action('delete')(context, `${saved.checkpointId} --force`),
-        ).toMatchObject({ messageType: 'info' });
-        const siblingReplay = await replaySession(
-          siblingPath ?? '',
-          basename(config.projectTempDir),
-        );
-        if (!siblingReplay.ok) throw new Error(siblingReplay.error);
-        expect(siblingReplay.checkpoints).toContainEqual(
-          expect.objectContaining({ name: 'new-foreign', deleted: true }),
-        );
-        const ownerPath = agent.session.getRecording().path;
-        if (!ownerPath) throw new Error('No owner recording');
-        expect(await readFile(ownerPath, 'utf8')).not.toContain('new-foreign');
-        expect(
-          (await readdir(chatsDir)).filter((file) => file.endsWith('.lock')),
-        ).toHaveLength(1);
-      },
-    );
+    await withRecordingLifetimeFixture(async ({ agent, borrow, chatsDir }) => {
+      const sibling = await borrow();
+      await agent.setHistory([human('owner')]);
+      await agent.session.setRecording({ enabled: true });
+      await sibling.setHistory([human('sibling')]);
+      await sibling.session.setRecording({ enabled: true });
+      const saved = await sibling.session.createCheckpoint('foreign');
+      const siblingPath = sibling.session.getRecording().path;
+      await sibling.session.setRecording({ enabled: false });
+      const context = createMockCommandContext({ services: { agent } });
+      expect(
+        await action('rename')(context, 'foreign new-foreign'),
+      ).toMatchObject({ messageType: 'info' });
+      expect(
+        await action('delete')(context, `${saved.checkpointId} --force`),
+      ).toMatchObject({ messageType: 'info' });
+      if (!siblingPath) throw new Error('No sibling recording');
+      expect(await readJournalCheckpoints(siblingPath)).toStrictEqual([]);
+      const ownerPath = agent.session.getRecording().path;
+      if (!ownerPath) throw new Error('No owner recording');
+      expect(await readFile(ownerPath, 'utf8')).not.toContain('new-foreign');
+      expect(
+        (await readdir(chatsDir)).filter((file) => file.endsWith('.lock')),
+      ).toHaveLength(1);
+    });
   }, 30000);
   it('resumes a checkpoint through the same owner with UI history replay', async () => {
     await withRecordingLifetimeFixture(async ({ agent, chatsDir }) => {

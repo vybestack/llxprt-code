@@ -5,7 +5,6 @@
  */
 
 import { describe, expect, it, vi } from 'bun:test';
-import { readFile } from 'node:fs/promises';
 import { coreEvents, CoreEvent } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { ConsoleMessageItem } from '../types.js';
@@ -14,7 +13,7 @@ import { renderHook, waitFor } from '../../__tests__/render.js';
 import { useCoreEventHandlers } from './useCoreEventHandlers.js';
 
 describe('owner-backed UI feedback listener', () => {
-  it('removes the old listener and writes only to the current Agent after owner replacement', async () => {
+  it('removes the old listener and displays each feedback once after owner replacement', async () => {
     await withRecordingLifetimeFixture(async ({ agent, borrow }) => {
       await agent.setHistory([
         { speaker: 'human', blocks: [{ type: 'text', text: 'first' }] },
@@ -40,10 +39,8 @@ describe('owner-backed UI feedback listener', () => {
         { initialProps: { owner: agent } },
       );
       coreEvents.emitFeedback('warning', 'first owner feedback');
-      await waitFor(async () => {
-        expect(await readFile(firstPath, 'utf8')).toContain(
-          'first owner feedback',
-        );
+      await waitFor(() => {
+        expect(displayed).toStrictEqual(['first owner feedback']);
       });
       await agent.session.setRecording({ enabled: false });
       const next = await borrow();
@@ -55,14 +52,12 @@ describe('owner-backed UI feedback listener', () => {
       if (!nextPath) throw new Error('Missing second recording path');
       rerender({ owner: next });
       coreEvents.emitFeedback('error', 'second owner feedback');
-      await waitFor(async () => {
-        expect(await readFile(nextPath, 'utf8')).toContain(
+      await waitFor(() => {
+        expect(displayed).toStrictEqual([
+          'first owner feedback',
           'second owner feedback',
-        );
+        ]);
       });
-      expect(await readFile(firstPath, 'utf8')).not.toContain(
-        'second owner feedback',
-      );
       expect(rawWrite).not.toHaveBeenCalled();
       unmount();
       coreEvents.emit(CoreEvent.UserFeedback, {

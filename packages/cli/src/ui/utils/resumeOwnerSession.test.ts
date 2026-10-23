@@ -11,6 +11,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createAgent, type Agent } from '@vybestack/llxprt-code-agents';
 import { resumeOwnerSession } from './resumeOwnerSession.js';
+import { readRecordedFacts } from '../../__tests__/journal-recording.js';
 
 const fixture = fileURLToPath(
   new URL(
@@ -133,14 +134,16 @@ describe('interactive owner session replay', () => {
       resumeOwnerSession(agent, 'absent-owner', 'allowed'),
     ).rejects.toThrow('Failed to resume session');
     await agent.session.recordRecordingEvent({
-      type: 'session_event',
-      severity: 'warning',
-      message: 'still-running-after-failed-resume',
+      type: 'directories_changed',
+      directories: ['/still-running-after-failed-resume'],
     });
     const path = agent.session.getRecording().path;
     if (path === undefined) throw new Error('Recording was not materialized');
-    expect(await readFile(path, 'utf8')).toContain(
-      'still-running-after-failed-resume',
+    expect((await readRecordedFacts(path)).directories).toStrictEqual([
+      '/still-running-after-failed-resume',
+    ]);
+    expect(JSON.stringify(await agent.session.getHistory())).toContain(
+      'retain failed resume session',
     );
     await agent.session.setRecording({ enabled: false });
     expect(

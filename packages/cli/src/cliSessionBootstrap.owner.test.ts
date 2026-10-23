@@ -10,6 +10,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createAgent, type Agent } from '@vybestack/llxprt-code-agents';
 import { Config } from '@vybestack/llxprt-code-core';
+import { readRecordedFacts } from './__tests__/journal-recording.js';
 import {
   setupOwnerSessionRecording,
   type OwnerResumedRows,
@@ -205,24 +206,23 @@ describe('foreground noninteractive recording owner', () => {
       type: 'directories_changed',
       directories: ['/first', '/second'],
     });
-    await agent.session.recordRecordingEvent({
-      type: 'session_event',
-      severity: 'warning',
-      message: 'first-warning',
+    expect(await readRecordedFacts(path)).toMatchObject({
+      provider: 'first-provider',
+      model: 'first-model',
+      directories: ['/first', '/second'],
     });
-    const beforeStop = await readFile(path, 'utf8');
-    expect(beforeStop).toContain('"type":"provider_switch"');
-    expect(beforeStop).toContain('"type":"directories_changed"');
-    expect(beforeStop).toContain('"type":"session_event"');
-    expect(beforeStop).toContain('first-warning');
-
     await agent.session.setRecording({ enabled: false });
+    const beforeStop = await readFile(path);
     await agent.session.recordRecordingEvent({
-      type: 'session_event',
-      severity: 'error',
-      message: 'must-not-appear',
+      type: 'provider_switch',
+      provider: 'must-not-appear',
+      model: 'must-not-appear',
     });
-    expect(await readFile(path, 'utf8')).not.toContain('must-not-appear');
+    await agent.session.recordRecordingEvent({
+      type: 'directories_changed',
+      directories: ['/must-not-appear'],
+    });
+    expect(await readFile(path)).toStrictEqual(beforeStop);
 
     const resumed = await built('owner-1', roots[0]);
     await setupOwnerSessionRecording(
@@ -241,16 +241,12 @@ describe('foreground noninteractive recording owner', () => {
       type: 'directories_changed',
       directories: ['/resumed'],
     });
-    await resumed.agent.session.recordRecordingEvent({
-      type: 'session_event',
-      severity: 'info',
-      message: 'resumed-event',
+    expect(await readRecordedFacts(path)).toMatchObject({
+      provider: 'next-provider',
+      model: 'next-model',
+      directories: ['/resumed'],
     });
-    const afterResume = await readFile(path, 'utf8');
-    expect(afterResume).toContain('next-provider');
-    expect(afterResume).toContain('/resumed');
-    expect(afterResume).toContain('resumed-event');
-    expect(afterResume).not.toContain('must-not-appear');
+    expect(await readFile(path, 'utf8')).not.toContain('must-not-appear');
   }, 30000);
 
   it('falls back to a fresh owned recording when a continue target is missing', async () => {

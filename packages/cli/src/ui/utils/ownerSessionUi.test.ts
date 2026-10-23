@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from 'bun:test';
 import { readFile, readdir } from 'node:fs/promises';
+import { readRecordedFacts } from '../../__tests__/journal-recording.js';
 import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import {
   importOwnerSession,
@@ -109,12 +110,18 @@ describe('owner-backed interactive session operations', () => {
         'active session',
       );
       await agent.session.recordRecordingEvent({
-        type: 'session_event',
-        severity: 'info',
-        message: 'survived',
+        type: 'provider_switch',
+        provider: 'survived',
+        model: 'survivor-model',
       });
       if (!path) throw new Error('No recording');
-      expect(await readFile(path, 'utf8')).toContain('survived');
+      expect(await readRecordedFacts(path)).toMatchObject({
+        provider: 'survived',
+        model: 'survivor-model',
+      });
+      expect(JSON.stringify(await agent.session.getHistory())).toContain(
+        'survivor',
+      );
       expect(
         (await readdir(chatsDir)).filter((file) => file.endsWith('.lock')),
       ).toHaveLength(1);

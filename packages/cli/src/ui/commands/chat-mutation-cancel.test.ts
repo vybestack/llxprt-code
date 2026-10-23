@@ -57,7 +57,7 @@ for (const name of ['clear', 'restore']) {
           const fault = spyOn(store, 'reserve').mockImplementation(
             async (row, owner) => {
               await reserve(row, owner);
-              if (owner.startsWith('chat-mutation:'))
+              if (owner.startsWith('clear-snapshot:'))
                 controller.abort(new Error('capture cancelled'));
             },
           );
