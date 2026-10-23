@@ -203,7 +203,7 @@ export class JournalHistoryStore
 
   private bindStartupRecorder(): Promise<void> {
     const { recording } = this.options;
-    return recording === undefined
+    return this.disposed || recording === undefined
       ? Promise.resolve()
       : this.attachJournal(recording);
   }

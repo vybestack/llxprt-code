@@ -1,6 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
+import { join } from 'node:path';
 import { JournalStore } from '../../journal/journalStore.js';
+import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
+import { JournalRecordingService } from '../../recording/journalRecordingService.js';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 
@@ -9,6 +12,26 @@ function row(text: string): IContent {
 }
 
 describe('HistoryService journal disposal', () => {
+  const directory = useTempDir('history-startup-disposal-');
+
+  it('cancels recorder attachment when disposed immediately after construction', async () => {
+    const recorder = JournalRecordingService.create({
+      sessionId: 'startup-disposal',
+      projectHash: 'project',
+      chatsDir: join(directory(), 'chats'),
+      workspaceDirs: ['/work'],
+      provider: 'test',
+      model: 'test',
+    });
+    const history = new HistoryService({ recording: recorder });
+    try {
+      await expect(history.dispose()).resolves.toBeUndefined();
+      await expect(history.openDumpSnapshot()).rejects.toThrow('disposed');
+    } finally {
+      await recorder.dispose();
+    }
+  });
+
   it('rejects with the journal disposal failure', async () => {
     const history = new HistoryService();
     history.add(row('seed'));
