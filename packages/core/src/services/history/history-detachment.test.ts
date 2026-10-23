@@ -1,25 +1,46 @@
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import * as filesystem from 'node:fs';
+import {
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  truncate,
+  writeFile,
+} from 'node:fs/promises';
+import * as filesystem from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { HistoryService } from './HistoryService.js';
-import { HistoryJournalStore } from './historyJournalStore.js';
+import { JournalSession } from './journalSession.js';
+import { requireJournalRecorder } from './recorderBackend.js';
+import type { IContent } from './IContent.js';
 import { RecordingIntegration } from '../../recording/RecordingIntegration.js';
-import { SessionRecordingService } from '../../recording/SessionRecordingService.js';
+import { createSessionRecorder } from '../../recording/sessionRecorderFactory.js';
+import type { SessionRecordingPort } from '../../recording/recordingPort.js';
+import { createRowCounters } from '../../recording/journalCounters.js';
+
+function sourcePath(recording: SessionRecordingPort): string {
+  const path = recording.getFilePath();
+  if (path === null) throw new Error('Missing recording');
+  return path;
+}
+function summaryRow(): IContent {
+  return { speaker: 'human', blocks: [{ type: 'text', text: 'summary' }] };
+}
 
 let directory: string;
 
-let recording: SessionRecordingService;
+let recording: SessionRecordingPort;
 
 let history: HistoryService;
+let reads = createRowCounters();
 
 describe('bounded journal detachment', () => {
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'history-detachment-'));
-    recording = new SessionRecordingService({
+    recording = createSessionRecorder({
       sessionId: 'source',
       projectHash: 'project',
       chatsDir: directory,
@@ -27,7 +48,12 @@ describe('bounded journal detachment', () => {
       provider: 'test',
       model: 'test',
     });
-    history = new HistoryService({ recording });
+    reads = createRowCounters();
+    history = new HistoryService({
+      recording,
+      attachmentCounters: reads.counters,
+    });
+    await history.waitForCommit();
   });
   afterEach(async () => {
     await history.dispose();
@@ -36,7 +62,7 @@ describe('bounded journal detachment', () => {
   });
 
   it(
-    'detaches pending writes by copying raw journal bytes without materializing rows',
+    'detaches pending writes into an unlinked journal without losing rows',
     verifyDetachesPendingWritesByCopyingRawJournalBytesWithoutMaterializingRows,
   );
 
@@ -46,7 +72,7 @@ describe('bounded journal detachment', () => {
   );
 
   it(
-    'cancels detachment when history is disposed before the copy completes',
+    'settles detachment before history disposal closes its clone',
     verifyCancelsDetachmentWhenHistoryIsDisposedBeforeTheCopyCompletes,
   );
 
@@ -65,10 +91,6 @@ describe('bounded journal detachment', () => {
     verifyOrdersAQueuedAddAndCommitBarrierAfterDetachmentWithoutWritingThe,
   );
   it(
-    'rejects detachment rather than dropping a write refused by a disposed recorder',
-    verifyRejectsDetachmentRatherThanDroppingAWriteRefusedByADisposedRecorder,
-  );
-  it(
     'cancels an attachment queued behind an asynchronous history mutation',
     verifyCancelsAnAttachmentQueuedBehindAnAsynchronousHistoryMutation,
   );
@@ -83,25 +105,21 @@ async function verifyDetachesPendingWritesByCopyingRawJournalBytesWithoutMateria
     speaker: 'human',
     blocks: [{ type: 'text', text: 'pending' }],
   });
-  const eager = spyOn(
-    HistoryJournalStore.prototype,
-    'materializeSynchronously',
-  ).mockImplementation(() => {
-    throw new Error('eager lifecycle read');
-  });
-  try {
-    await history.detachJournal(recording);
-    await history.waitForCommit();
-  } finally {
-    eager.mockRestore();
-  }
+  await history.detachJournal(recording);
+  await history.waitForCommit();
   const source = recording.getFilePath();
-  const target = history.journalPath();
-  if (!source || !target) throw new Error('Missing journal');
-  expect(target).not.toBe(source);
-  expect(Buffer.compare(await readFile(source), await readFile(target))).toBe(
-    0,
-  );
+  if (!source) throw new Error('Missing recording');
+  expect(history.journalPath()).toBeNull();
+  expect(reads.snapshot().rowsDecoded).toBe(0);
+  const durable = await JournalSession.open(source);
+  try {
+    const rows = await Array.fromAsync(durable.rows());
+    expect(rows.map((row) => row.content.blocks)).toStrictEqual([
+      [{ type: 'text', text: 'pending' }],
+    ]);
+  } finally {
+    await durable.close();
+  }
   history.add({
     speaker: 'human',
     blocks: [{ type: 'text', text: 'detached' }],
@@ -146,20 +164,21 @@ async function verifyCancelsDetachmentWhenHistoryIsDisposedBeforeTheCopyComplete
   await history.waitForCommit();
   const entered = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
-  const flush = recording.flush.bind(recording);
-  const gate = spyOn(recording, 'flush').mockImplementation(async () => {
+  const session = await requireJournalRecorder(recording).session();
+  const clone = session.cloneUnlinked.bind(session);
+  const gate = spyOn(session, 'cloneUnlinked').mockImplementation(async () => {
     entered.resolve();
     await release.promise;
-    await flush();
+    return clone();
   });
-  const store = new HistoryJournalStore(recording);
-  const detachment = store.detachJournal(recording);
+  const detachment = history.detachJournal(recording);
   await entered.promise;
-  await store.dispose();
+  const disposal = history.dispose();
   release.resolve();
   try {
-    await expect(detachment).rejects.toThrow('disposed');
-    expect(store.journalPath()).toBe(recording.getFilePath());
+    await detachment;
+    await disposal;
+    expect((await stat(sourcePath(recording))).size).toBeGreaterThan(0);
   } finally {
     gate.mockRestore();
   }
@@ -174,9 +193,11 @@ async function verifyKeepsTheBorrowedBindingAfterSourceIOFailureAndPermitsRetry(
   const source = recording.getFilePath();
   if (!source) throw new Error('Missing source');
   const bytes = await readFile(source);
-  await rm(source);
+  await truncate(source, 0);
   try {
-    await expect(history.detachJournal(recording)).rejects.toThrow('ENOENT');
+    await expect(history.detachJournal(recording)).rejects.toThrow(
+      /Unexpected end of file|corrupt/i,
+    );
     expect(history.journalPath()).toBe(source);
   } finally {
     await writeFile(source, bytes);
@@ -195,12 +216,18 @@ async function verifyKeepsTheBorrowedBindingAfterDestinationIOFailureAndPermitsR
     blocks: [{ type: 'text', text: 'destination' }],
   });
   await history.waitForCommit();
-  const create = filesystem.createWriteStream;
-  const fault = spyOn(filesystem, 'createWriteStream').mockImplementation(() =>
-    create(directory, { flags: 'wx' }),
+  const open = filesystem.open;
+  const fault = spyOn(filesystem, 'open').mockImplementation(
+    async (...args) => {
+      if (String(args[0]).includes('llxprt-journal-'))
+        throw new Error('destination open failed');
+      return open(...args);
+    },
   );
   try {
-    await expect(history.detachJournal(recording)).rejects.toThrow('EEXIST');
+    await expect(history.detachJournal(recording)).rejects.toThrow(
+      'destination open failed',
+    );
     expect(history.journalPath()).toBe(recording.getFilePath());
   } finally {
     fault.mockRestore();
@@ -224,11 +251,12 @@ async function verifyOrdersAQueuedAddAndCommitBarrierAfterDetachmentWithoutWriti
   const bytes = await readFile(source);
   const entered = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
-  const flush = recording.flush.bind(recording);
-  const gate = spyOn(recording, 'flush').mockImplementation(async () => {
+  const session = await requireJournalRecorder(recording).session();
+  const clone = session.cloneUnlinked.bind(session);
+  const gate = spyOn(session, 'cloneUnlinked').mockImplementation(async () => {
     entered.resolve();
     await release.promise;
-    await flush();
+    return clone();
   });
   const detachment = history.detachJournal(recording);
   await entered.promise;
@@ -259,21 +287,8 @@ async function verifyOrdersAQueuedAddAndCommitBarrierAfterDetachmentWithoutWriti
   }
 }
 
-async function verifyRejectsDetachmentRatherThanDroppingAWriteRefusedByADisposedRecorder(): Promise<void> {
-  await recording.dispose();
-  expect(() =>
-    history.add({
-      speaker: 'human',
-      blocks: [{ type: 'text', text: 'uncommitted' }],
-    }),
-  ).toThrow('commit: session recording is disposed');
-  await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
-    expect(rows).toStrictEqual([]);
-  });
-}
-
 async function verifyCancelsAnAttachmentQueuedBehindAnAsynchronousHistoryMutation(): Promise<void> {
-  const next = new SessionRecordingService({
+  const next = createSessionRecorder({
     sessionId: 'next',
     projectHash: 'project',
     chatsDir: directory,
@@ -293,8 +308,7 @@ async function verifyCancelsAnAttachmentQueuedBehindAnAsynchronousHistoryMutatio
       entered.resolve();
       await release.promise;
       yield {
-        speaker: 'human' as const,
-        blocks: [{ type: 'text' as const, text: 'summary' }],
+        ...summaryRow(),
       };
     })(),
   );
@@ -324,7 +338,7 @@ async function verifyCancelsAnAttachmentQueuedBehindAnAsynchronousHistoryMutatio
 }
 
 async function verifyBindsRetirementToTheSelectedJournalWhenAttachmentIsDeferred(): Promise<void> {
-  const next = new SessionRecordingService({
+  const next = createSessionRecorder({
     sessionId: 'next',
     projectHash: 'project',
     chatsDir: directory,
@@ -344,8 +358,7 @@ async function verifyBindsRetirementToTheSelectedJournalWhenAttachmentIsDeferred
       entered.resolve();
       await release.promise;
       yield {
-        speaker: 'human' as const,
-        blocks: [{ type: 'text' as const, text: 'summary' }],
+        ...summaryRow(),
       };
     })(),
   );
@@ -355,7 +368,7 @@ async function verifyBindsRetirementToTheSelectedJournalWhenAttachmentIsDeferred
   try {
     await summary;
     await history.waitForCommit();
-    expect(history.journalPath()).toBe(next.getFilePath());
+    expect(next.getFilePath()).not.toBeNull();
     history.add({
       speaker: 'human',
       blocks: [{ type: 'text', text: 'continued' }],

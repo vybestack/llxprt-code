@@ -1,54 +1,68 @@
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { HistoryService } from './HistoryService.js';
-import { Storage } from '@vybestack/llxprt-code-settings';
-import { SessionPersistenceService } from '../../storage/SessionPersistenceService.js';
 import type { IContent } from './IContent.js';
 import { RecordingIntegration } from '../../recording/RecordingIntegration.js';
-import { SessionRecordingService } from '../../recording/SessionRecordingService.js';
+import { createSessionRecorder } from '../../recording/sessionRecorderFactory.js';
+import type { SessionRecordingPort } from '../../recording/recordingPort.js';
 import {
-  createRecordedSession,
-  PROJECT_HASH,
-} from '../../recording/__tests__/support/p05dTestKit.js';
-import {
-  resumeJsonlSession,
-  type JsonlResumeResult as ResumeResult,
-} from '../../recording/resumeSession.js';
-import { JournalResolver } from '../../recording/journalResolver.js';
+  resumeJournalSession,
+  type JournalResumeResult as ResumeResult,
+} from '../../recording/journalResume.js';
+import { JournalSession } from './journalSession.js';
+const PROJECT_HASH = 'persistence-owner';
 
 function row(text: string): IContent {
   return { speaker: 'human', blocks: [{ type: 'text', text }] };
 }
 
 async function reopen(file: string): Promise<IContent[]> {
-  const resolver = await JournalResolver.open(file);
+  const session = await JournalSession.open(file);
   try {
     const rows: IContent[] = [];
-    for await (const entry of resolver.resolve()) rows.push(entry.content);
+    for await (const entry of session.rows()) rows.push(entry.content);
     return rows;
   } finally {
-    await resolver.close();
+    await session.close();
   }
+}
+
+function recordingPath(recording: SessionRecordingPort): string {
+  const path = recording.getFilePath();
+  if (path === null) throw new Error('Missing recording');
+  return path;
 }
 
 let directory: string;
 
 let history: HistoryService;
 
-let old: SessionRecordingService;
+let old: SessionRecordingPort;
 
 let integration: RecordingIntegration;
 
 let resumed: ResumeResult | undefined;
 
 async function candidate(): Promise<ResumeResult> {
-  const fixture = await createRecordedSession(directory, { rows: 3 });
-  const result = await resumeJsonlSession({
-    continueRef: fixture.sessionId,
+  const recording = createSessionRecorder({
+    sessionId: 'candidate',
+    projectHash: PROJECT_HASH,
+    chatsDir: directory,
+    workspaceDirs: [],
+    provider: 'test',
+    model: 'test',
+  });
+  const seeded = new HistoryService({ recording });
+  await seeded.addBatch([row('row-0'), row('row-1'), row('row-2')]);
+  await seeded.waitForCommit();
+  await seeded.dispose();
+  await recording.dispose();
+  const result = await resumeJournalSession({
+    continueRef: 'candidate',
     chatsDir: directory,
     projectHash: PROJECT_HASH,
     currentProvider: 'test',
@@ -63,7 +77,7 @@ async function candidate(): Promise<ResumeResult> {
 describe('journal persistence ownership', () => {
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'history-persistence-'));
-    old = new SessionRecordingService({
+    old = createSessionRecorder({
       sessionId: 'old',
       projectHash: PROJECT_HASH,
       chatsDir: directory,
@@ -95,7 +109,7 @@ describe('journal persistence ownership', () => {
     verifyDoesNotReattachARejectedRecorderWhenPublicationSubscribesBeforeFailing,
   );
   it(
-    'finishes an in-flight journal snapshot before disposal settles',
+    'finishes an in-flight journal flush before disposal settles',
     verifyFinishesAnInFlightJournalSnapshotBeforeDisposalSettles,
   );
 
@@ -136,17 +150,19 @@ describe('journal persistence ownership', () => {
 
 async function verifyPreservesAdoptedChronologyThroughIndependentReopenAndAddressedReplacement(): Promise<void> {
   const result = await candidate();
-  await history.adoptResumeBoot(result.recording, result.boot);
+  await history.adoptResumeBoot(result.recording, result.resumePoint);
   await collectRowsForAssertions(history.streamRawHistory(), async (rows) => {
     const adopted = rows;
     expect<readonly IContent[]>(
-      await reopen(result.boot.filePath),
+      await reopen(recordingPath(result.recording)),
     ).toStrictEqual(adopted);
     const replacement = { ...adopted[1], blocks: row('replacement').blocks };
     await history.replaceBatch([adopted[0], replacement, adopted[2]]);
     await history.waitForCommit();
     expect(
-      (await reopen(result.boot.filePath)).map((item) => item.blocks),
+      (await reopen(recordingPath(result.recording))).map(
+        (item) => item.blocks,
+      ),
     ).toStrictEqual([
       row('row-0').blocks,
       row('replacement').blocks,
@@ -159,7 +175,7 @@ async function verifyDoesNotReattachARejectedRecorderWhenPublicationSubscribesBe
   const result = await candidate();
   const next = new RecordingIntegration(result.recording);
   await expect(
-    history.adoptResumeBoot(result.recording, result.boot, () => {
+    history.adoptResumeBoot(result.recording, result.resumePoint, () => {
       void next.subscribeToJournal(history);
       throw new Error('subscribed publication failed');
     }),
@@ -176,24 +192,12 @@ async function verifyDoesNotReattachARejectedRecorderWhenPublicationSubscribesBe
 async function verifyFinishesAnInFlightJournalSnapshotBeforeDisposalSettles(): Promise<void> {
   const entered = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
-  class GatedPersistence extends SessionPersistenceService {
-    override async saveJournal(journal: string): Promise<void> {
-      entered.resolve();
-      await release.promise;
-      await super.saveJournal(journal);
-    }
-  }
-  await integration.dispose();
-  const storage = new Storage(directory);
-  const persistence = new GatedPersistence(
-    {
-      projectRoot: storage.getProjectRoot(),
-      chatsDir: storage.getProjectChatsDir(),
-    },
-    'gated',
-  );
-  integration = new RecordingIntegration(old, persistence);
-  void integration.subscribeToJournal(history);
+  const flush = old.flush.bind(old);
+  const gate = spyOn(old, 'flush').mockImplementation(async () => {
+    entered.resolve();
+    await release.promise;
+    await flush();
+  });
   history.add(row('snapshot row'));
   const boundary = integration.flushAtTurnBoundary();
   await entered.promise;
@@ -206,13 +210,11 @@ async function verifyFinishesAnInFlightJournalSnapshotBeforeDisposalSettles(): P
   release.resolve();
   await boundary;
   await disposal;
-  const loaded = await persistence.loadMostRecent();
+  gate.mockRestore();
   expect(settledBeforeRelease).toBe(false);
-  expect(loaded?.history.map((item) => item.blocks)).toStrictEqual([
-    row('old row').blocks,
-    row('snapshot row').blocks,
-  ]);
-  await loaded?.mediaOwnership.release();
+  expect(
+    (await reopen(recordingPath(old))).map((item) => item.blocks),
+  ).toStrictEqual([row('old row').blocks, row('snapshot row').blocks]);
 }
 
 async function verifyRecordsARowOnceWhenObserversAndHistoryShareTheJournal(): Promise<void> {
@@ -227,13 +229,13 @@ async function verifyExcludesTheOldJournalAfterAdoptionEvenBeforeItsIntegrationI
   await old.flush();
   const oldPath = old.getFilePath()!;
   const before = await readFile(oldPath);
-  await history.adoptResumeBoot(result.recording, result.boot);
+  await history.adoptResumeBoot(result.recording, result.resumePoint);
   history.add(row('new row'));
   await history.waitForCommit();
   await integration.flushAtTurnBoundary();
   expect(Buffer.compare(await readFile(oldPath), before)).toBe(0);
   expect(
-    (await reopen(result.boot.filePath)).map((item) => item.blocks),
+    (await reopen(recordingPath(result.recording))).map((item) => item.blocks),
   ).toStrictEqual([
     row('row-0').blocks,
     row('row-1').blocks,
@@ -271,7 +273,11 @@ async function verifyWaitForCommitIncludesAPrecedingAsynchronousSummaryAndSubseq
 
 async function verifyDoesNotDisposeARecorderOwnedByItsCaller(): Promise<void> {
   await history.dispose();
-  await old.commit('content', { content: row('caller still owns recorder') });
+  const continued = new HistoryService();
+  await continued.addBatch([row('caller still owns recorder')]);
+  await continued.attachJournal(old, true);
+  await continued.waitForCommit();
+  await continued.dispose();
   const reopened = await reopen(old.getFilePath()!);
   expect(reopened[reopened.length - 1].blocks).toStrictEqual(
     row('caller still owns recorder').blocks,
@@ -284,7 +290,7 @@ async function verifySerializesTokenRecalculationAndConfigurationBehindAdoptionP
   const release = Promise.withResolvers<void>();
   const adoption = history.adoptResumeBoot(
     result.recording,
-    result.boot,
+    result.resumePoint,
     async () => {
       entered.resolve();
       await release.promise;
@@ -320,31 +326,16 @@ async function verifyDetachesADisabledIntegrationWithoutStoppingLiveHistoryOrWri
 async function verifyPersistsAddDensityDeletionSyntheticRepairCompressionAndClearOnlyToThe(): Promise<void> {
   const result = await candidate();
   const oldBytes = await readFile(old.getFilePath()!);
-  const storage = new Storage(directory);
-  const persistence = new SessionPersistenceService(
-    {
-      projectRoot: storage.getProjectRoot(),
-      chatsDir: storage.getProjectChatsDir(),
-    },
-    'snapshot',
-  );
-  const next = new RecordingIntegration(result.recording, persistence);
-  await history.adoptResumeBoot(result.recording, result.boot);
+  const next = new RecordingIntegration(result.recording);
+  await history.adoptResumeBoot(result.recording, result.resumePoint);
   void next.subscribeToJournal(history);
   const check = async (): Promise<void> => {
     await next.flushAtTurnBoundary();
     await collectRowsForAssertions(history.streamRawHistory(), async (rows) => {
       expect<readonly IContent[]>(
-        await reopen(result.boot.filePath),
+        await reopen(recordingPath(result.recording)),
       ).toStrictEqual(rows);
     });
-    const loaded = await persistence.loadMostRecent();
-    await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
-      expect<readonly IContent[] | undefined>(loaded?.history).toStrictEqual(
-        rows,
-      );
-    });
-    await loaded?.mediaOwnership.release();
     expect(await readFile(old.getFilePath()!)).toStrictEqual(oldBytes);
   };
   try {
@@ -393,7 +384,9 @@ async function verifyPersistsAddDensityDeletionSyntheticRepairCompressionAndClea
           await check();
           await history.clear();
           await check();
-          expect(await reopen(result.boot.filePath)).toStrictEqual([]);
+          expect(await reopen(recordingPath(result.recording))).toStrictEqual(
+            [],
+          );
         },
       );
     });
@@ -405,12 +398,12 @@ async function verifyPersistsAddDensityDeletionSyntheticRepairCompressionAndClea
 async function verifyRetainsTheOldRecordingSubscriptionWhenPublicationRollsBack(): Promise<void> {
   const result = await candidate();
   await result.recording.flush();
-  const candidateBytes = await readFile(result.boot.filePath);
+  const candidateBytes = await readFile(recordingPath(result.recording));
   const entered = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   const adoption = history.adoptResumeBoot(
     result.recording,
-    result.boot,
+    result.resumePoint,
     async () => {
       entered.resolve();
       await release.promise;
@@ -430,6 +423,9 @@ async function verifyRetainsTheOldRecordingSubscriptionWhenPublicationRollsBack(
     (await reopen(old.getFilePath()!)).map((item) => item.blocks),
   ).toStrictEqual([row('old row').blocks, row('queued rollback row').blocks]);
   expect(
-    Buffer.compare(await readFile(result.boot.filePath), candidateBytes),
+    Buffer.compare(
+      await readFile(recordingPath(result.recording)),
+      candidateBytes,
+    ),
   ).toBe(0);
 }

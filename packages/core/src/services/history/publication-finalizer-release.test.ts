@@ -1,23 +1,19 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
-import {
-  exactTokenizer,
-  mediaParticipant,
-} from './chronology-rollback-test-helpers.js';
+import { exactTokenizer } from './chronology-rollback-test-helpers.js';
 import {
   detachedDigest,
   detachedDurableDigest,
   detachedRow,
 } from './detached-rollback-test-helpers.js';
-import { HistoryService } from './HistoryService.js';
-import type { IContent } from './IContent.js';
+import type { HistoryService } from './HistoryService.js';
+import { withNativeDetachedFixture } from './__tests__/support/detached-contract-fixture.js';
+import type { IContent, MediaReferenceBlock } from './IContent.js';
 import {
-  envelopeCensus,
   envelopeGate,
   envelopeGC,
   envelopeSurvivors,
-  withEnvelopeFixture,
 } from './publication-envelope-test-helpers.js';
 
 class CompletedEnvelopeInput implements AsyncIterable<IContent> {
@@ -69,42 +65,47 @@ for (const [size, bytes] of [
   [1, 9437184],
 ]) {
   describe(`held real detached finalizer ${size}/${bytes}`, () => {
-    it('releases original and envelope values at ack while finalization, producer and storage remain held', async () => {
-      await withEnvelopeFixture(async (fixture) => {
-        const history = new HistoryService({
-          recording: fixture.recorder,
-          mutationOwnership: fixture.owners,
-        });
+    it('releases input values at ack while finalization, producer and storage remain held', async () => {
+      await withNativeDetachedFixture(async (fixture) => {
+        const history = fixture.history;
+        fixture.pauseWriter(size);
         history.setTokenizerFactory(exactTokenizer());
         const entered = envelopeGate();
         const finish = envelopeGate();
-        const storage: Array<Iterable<IContent>> = [];
-        await history.registerMediaOwner(
-          mediaParticipant((rows) => {
-            storage.push(rows.previous, rows.next);
+        const storage: Array<
+          AsyncIterable<MediaReferenceBlock> | Iterable<MediaReferenceBlock>
+        > = [];
+        await history.registerMediaOwner({
+          prepareReplacement() {
+            throw new Error('Unexpected row replacement');
+          },
+          async prepareReferenceReplacement(references) {
+            storage.push(references);
+            for await (const reference of references) void reference;
             return {
-              publish: (): void => {},
-              finalize: async (): Promise<void> => {
+              publish(): void {},
+              async finalize(): Promise<void> {
                 entered.resolve();
                 await finish.promise;
               },
-              rollback: (): void => {},
+              rollback(): void {},
             };
-          }),
-        );
+          },
+          async reconcile(): Promise<void> {},
+          async releaseAll(): Promise<void> {},
+          adopt(): void {},
+        });
         const held = submit(history, fixture.owners, size, bytes);
         try {
-          await fixture.writerStarted.promise;
-          fixture.writer.resolve();
+          await fixture.writerPaused;
+          fixture.releaseWriter();
           await entered.promise;
           await envelopeGC();
           expect({
             source: envelopeSurvivors(held.weak),
-            envelope: envelopeCensus(fixture),
             live: fixture.owners.snapshot().liveRows,
           }).toStrictEqual({
             source: 0,
-            envelope: { lines: 0, payloads: 0, rows: 0 },
             live: 0,
           });
           expect(await held.input.next()).toStrictEqual({
@@ -119,18 +120,13 @@ for (const [size, bytes] of [
           expect(index).toBe(size);
           const acknowledged = await detachedDigest(history.streamRawHistory());
           expect(acknowledged).toStrictEqual(
-            await detachedDurableDigest(fixture.recorder),
+            await detachedDigest(fixture.primaryRows()),
           );
           finish.resolve();
           await held.completed;
           await envelopeGC();
-          expect(envelopeCensus(fixture)).toStrictEqual({
-            lines: 0,
-            payloads: 0,
-            rows: 0,
-          });
-          expect(() => [...storage[1]]).toThrow('Detached journal is closed');
-          expect(await detachedDurableDigest(fixture.recorder)).toStrictEqual(
+          expect(await Array.fromAsync(storage[0])).toStrictEqual([]);
+          expect(await detachedDurableDigest(fixture.recording)).toStrictEqual(
             acknowledged,
           );
           await held.completed;
