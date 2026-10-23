@@ -8,7 +8,7 @@ import {
   withDetachedFixture,
 } from '../../../core/src/services/history/detached-rollback-test-helpers.js';
 import {
-  mediaParticipant,
+  journalMediaParticipant as mediaParticipant,
   rejectedValue,
   rowsOf,
 } from '../../../core/src/services/history/chronology-rollback-test-helpers.js';
