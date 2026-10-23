@@ -30,7 +30,11 @@ import {
   readMistralMapping,
   type MistralMapping,
 } from './mistralMapping.js';
-import { nextCuratedEntry, curatedEntryAt } from './curatedQueries.js';
+import {
+  nextCuratedEntry,
+  curatedEntryAt,
+  curatedEntryWithOrdinalAt,
+} from './curatedQueries.js';
 import { IdFactQueries, type IdFactDeps } from './idFactQueries.js';
 import type { IdNodeCache } from './idTrieCache.js';
 import { IdTrieReader } from './idTrieReader.js';
@@ -435,6 +439,21 @@ export class VersionSnapshot {
   get curatedRows(): number {
     this.requireOpen();
     return this.version?.aggregate.curated ?? 0;
+  }
+
+  async sourceOrdinalAt(index: number): Promise<number> {
+    this.requireOpen();
+    const root = this.rootRef();
+    if (root === undefined)
+      throw new RangeError('Curated row of an empty snapshot');
+    return (
+      await curatedEntryWithOrdinalAt(
+        this.read.access,
+        root,
+        this.curatedRows,
+        index,
+      )
+    ).ordinal;
   }
 
   curatedAt(index: number): Promise<RowEntry> {

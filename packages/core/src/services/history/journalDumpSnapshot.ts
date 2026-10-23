@@ -102,10 +102,7 @@ export class JournalDumpSnapshot implements HistoryDumpSnapshot {
   }
 
   sourceOrdinalAt(index: number): Promise<number> {
-    return this.readers.read(async () => {
-      const entry = await this.snapshot.curatedAt(index);
-      return this.snapshot.rowsBelow(entry.label);
-    });
+    return this.readers.read(() => this.snapshot.sourceOrdinalAt(index));
   }
 
   checkpointRows(

@@ -39,9 +39,19 @@ export async function curatedEntryAt(
   total: number,
   index: number,
 ): Promise<RowEntry> {
+  return (await curatedEntryWithOrdinalAt(access, root, total, index)).entry;
+}
+
+export async function curatedEntryWithOrdinalAt(
+  access: RecordAccess,
+  root: RowTreeRootRef,
+  total: number,
+  index: number,
+): Promise<{ readonly entry: RowEntry; readonly ordinal: number }> {
   if (!Number.isInteger(index) || index < 0 || index >= total)
     throw new RangeError('Curated row index is out of range');
   let within = index;
+  let ordinal = 0;
   let node = await readRowTreeNode(access, root.offset);
   while (node.kind === 'internal') {
     let next: number | undefined;
@@ -51,15 +61,18 @@ export async function curatedEntryAt(
         break;
       }
       within -= slot.aggregate.curated;
+      ordinal += slot.count;
     }
     if (next === undefined)
       throw new JournalFormatError('Curated aggregate exceeds its children');
     node = await readRowTreeNode(access, next);
   }
-  const entry = node.entries
-    .filter((candidate) => (candidate.flags & ROW_FLAG.curated) !== 0)
-    .find((_, index) => index === within);
-  if (entry === undefined)
-    throw new JournalFormatError('Curated aggregate exceeds its entries');
-  return entry;
+  for (const entry of node.entries) {
+    if ((entry.flags & ROW_FLAG.curated) !== 0) {
+      if (within === 0) return { entry, ordinal };
+      within--;
+    }
+    ordinal++;
+  }
+  throw new JournalFormatError('Curated aggregate exceeds its entries');
 }
