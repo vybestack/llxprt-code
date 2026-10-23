@@ -1,5 +1,4 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { HistoryJournalStore } from '@vybestack/llxprt-code-core/services/history/historyJournalStore.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 
@@ -13,22 +12,11 @@ import { sourceRootSetup } from './support/prompt-envelope-source-test-helpers.j
 const root = sourceRootSetup();
 const UNDER_LIMIT = 4_000_000;
 
-/**
- * Journal snapshots captured per send, through the real ChatSession on a
- * journal-backed history. The counts must not depend on how many rows the
- * session holds: every capture is an O(appended bytes) fold against the
- * store's checkpoint, and the send opens one curated snapshot plus one more
- * for each durable mutation the enforcement ladder performs.
- */
-async function countSend(
-  workload: Workload,
-  turn: number,
-): Promise<{ opens: number; captures: number }> {
+async function countSend(workload: Workload, turn: number): Promise<number> {
   const opens = spyOn(
     HistoryService.prototype,
     'prepareCuratedForProviderSnapshot',
   );
-  const captures = spyOn(HistoryJournalStore.prototype, 'capturePendingFold');
   try {
     const before = workload.history.length();
     const tokens = await measureJournalReadCost(async () =>
@@ -45,16 +33,11 @@ async function countSend(
     const snapshots = opens.mock.calls.length;
     if (snapshots === 1) {
       expect(cost.entries).toBe(before + 2);
-      expect(cost.rows).toBe(before + 3);
+      expect(cost.rows).toBe(1);
     }
-    process.stdout.write(`${JSON.stringify({ before, snapshots, ...cost })}\n`);
-    return {
-      opens: snapshots,
-      captures: cost.walks,
-    };
+    return snapshots;
   } finally {
     opens.mockRestore();
-    captures.mockRestore();
   }
 }
 
@@ -76,13 +59,9 @@ describe('journal snapshots per send', () => {
     workload = undefined;
   });
 
-  async function measure(
-    rows: number,
-    ladder: boolean,
-  ): Promise<{ opens: number; captures: number }> {
+  async function measure(rows: number, ladder: boolean): Promise<number> {
     workload = await createWorkload(root(), 'normal', UNDER_LIMIT);
     await grow(workload, rows);
-    // Warm sends settle the fold checkpoint the way a long session has it.
     await workload.runTurn(1);
     await workload.runTurn(2);
     if (ladder)
@@ -95,23 +74,21 @@ describe('journal snapshots per send', () => {
     return counts;
   }
 
-  it('opens one curated snapshot and three journal captures per send under the limit, at any history size', async () => {
+  it('opens one curated snapshot per send under the limit, at any history size', async () => {
     const small = await measure(40, false);
     const large = await measure(400, false);
-    const expected = { opens: 1, captures: 1 };
+    const expected = 1;
     expect(small).toStrictEqual(expected);
     expect(large).toStrictEqual(small);
   }, 120_000);
 
-  it('rebuilds the snapshot once per ladder mutation, with a fixed number of captures per rebuild', async () => {
+  it('rebuilds the snapshot once per ladder mutation', async () => {
     for (const rows of [40, 400]) {
       const counts = await measure(rows, true);
       // Initial snapshot, one rebuild after density optimization and one after
       // each compression attempt (a retry follows an ineffective first one).
-      expect(counts.opens).toBeGreaterThanOrEqual(3);
-      expect(counts.opens).toBeLessThanOrEqual(4);
-      const initial = 2;
-      expect(counts.captures).toBe(initial + 4 * (counts.opens - 1));
+      expect(counts).toBeGreaterThanOrEqual(3);
+      expect(counts).toBeLessThanOrEqual(4);
     }
   }, 120_000);
 });

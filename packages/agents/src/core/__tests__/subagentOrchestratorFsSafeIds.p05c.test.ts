@@ -3,6 +3,8 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
+import { readJournalFileFacts } from '@vybestack/llxprt-code-core/recording/journalSessionListing.js';
 
 /**
  * P05c target contract: the SubagentOrchestrator allocates each child's
@@ -25,10 +27,7 @@ import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagen
 import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { isValidSafeSessionId } from '@vybestack/llxprt-code-core/recording/janitor/sessionSafety.js';
-import {
-  SESSION_FILE_ID_PREFIX_LENGTH,
-  SessionRecordingService,
-} from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
+import { SESSION_FILE_ID_PREFIX_LENGTH } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
 import type { AgentRuntimeLoaderOptions } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
@@ -274,7 +273,7 @@ describe('mandatory launch journal lifecycle', () => {
     setSystemTime(new Date('2026-09-21T12:00:00Z'));
     const config = makeForegroundConfig();
     const chatsDir = config.projectChatsDir;
-    const parent = await SessionRecordingService.createLocked({
+    const parent = await createLockedSessionRecorder({
       sessionId: PARENT_SESSION_ID,
       projectHash: 'parent',
       chatsDir,
@@ -282,10 +281,10 @@ describe('mandatory launch journal lifecycle', () => {
       provider: 'gemini',
       model: 'gemini-1.5-flash',
     });
-    await parent.commit('session_event', {
-      severity: 'info',
-      message: 'parent',
-    });
+    await recordRowsForTest(parent, [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'parent' }] },
+    ]);
+    await parent.flush();
     const parentFile = parent.getFilePath();
     if (parentFile === null) throw new Error('Parent file missing');
     const before = await readFile(parentFile, 'utf8');
@@ -296,7 +295,7 @@ describe('mandatory launch journal lifecycle', () => {
       orchestrator.launch({ name: 'scout' }),
     ]);
     const files = (await readdir(chatsDir)).filter((file) =>
-      file.endsWith('.jsonl'),
+      file.endsWith('.llxj'),
     );
     expect(new Set(files).size).toBe(3);
     expect(new Set(files.map((file) => file.slice(0, 27))).size).toBe(1);
@@ -304,38 +303,38 @@ describe('mandatory launch journal lifecycle', () => {
       (await readdir(chatsDir)).filter((file) => file.endsWith('.lock')),
     ).toHaveLength(3);
     const headers = await Promise.all(
-      files.map(async (file) => readFile(join(chatsDir, file), 'utf8')),
+      files.map((file) => readJournalFileFacts(join(chatsDir, file))),
     );
-    const childHeader = headers.find((text) =>
-      text.includes('"kind":"subagent"'),
-    );
-    if (childHeader === undefined) throw new Error('Child header missing');
-    const header: unknown = JSON.parse(childHeader.split('\n')[0]);
-    expect(header).toMatchObject({
-      payload: { kind: 'subagent', parentSessionId: PARENT_SESSION_ID },
-    });
+    expect(
+      headers.some(
+        (header) =>
+          header?.facts.start.kind === 'subagent' &&
+          header.facts.start.parentSessionId === PARENT_SESSION_ID,
+      ),
+    ).toBe(true);
     const childId = capturedStates(runtimeLoader)[0].sessionId;
     const nestedConfig = makeForegroundConfig(childId, config.getTargetDir());
     const nested = await buildOrchestrator(nestedConfig).orchestrator.launch({
       name: 'helper',
     });
     const nestedFiles = await readdir(chatsDir);
-    expect(nestedFiles.filter((file) => file.endsWith('.jsonl'))).toHaveLength(
+    expect(nestedFiles.filter((file) => file.endsWith('.llxj'))).toHaveLength(
       4,
     );
     const nestedFile = nestedFiles.find(
-      (file) => file.endsWith('.jsonl') && !files.includes(file),
+      (file) => file.endsWith('.llxj') && !files.includes(file),
     );
     if (nestedFile === undefined) throw new Error('Nested journal missing');
     const nestedText = await readFile(join(chatsDir, nestedFile), 'utf8');
-    const nestedHeader: unknown = JSON.parse(nestedText.split('\n')[0]);
-    expect(nestedHeader).toMatchObject({
-      payload: { kind: 'subagent', parentSessionId: childId },
+    const nestedHeader = await readJournalFileFacts(join(chatsDir, nestedFile));
+    expect(nestedHeader?.facts.start).toMatchObject({
+      kind: 'subagent',
+      parentSessionId: childId,
     });
     expect(nestedText).toContain('"text":"child"');
     await nested.dispose();
     expect(
-      (await readdir(chatsDir)).filter((file) => file.endsWith('.jsonl')),
+      (await readdir(chatsDir)).filter((file) => file.endsWith('.llxj')),
     ).toHaveLength(3);
     await first.dispose();
     await second.dispose();
@@ -369,7 +368,7 @@ describe('mandatory launch journal failure cleanup', () => {
       const chatsDir = config.projectChatsDir;
       const { orchestrator } = buildOrchestrator(config, async () => {
         const files = await readdir(chatsDir);
-        expect(files.filter((file) => file.endsWith('.jsonl'))).toHaveLength(1);
+        expect(files.filter((file) => file.endsWith('.llxj'))).toHaveLength(1);
         expect(files.filter((file) => file.endsWith('.lock'))).toHaveLength(1);
         if (mode === 'failure') throw new Error('runtime assembly failed');
         if (mode === 'cancel') {
@@ -398,165 +397,157 @@ describe('mandatory launch journal failure cleanup', () => {
   );
 });
 
-describe.each(['old', 'journal'] as const)(
-  'production child history on %s',
-  (backend) => {
-    afterEach(restoreBackend);
+describe.each(['journal'] as const)('production child history on %s', () => {
+  afterEach(restoreBackend);
 
-    afterEach(resetRuntimeAfterTest);
+  afterEach(resetRuntimeAfterTest);
 
-    it.each(['normal', 'execution-failure', 'execution-cancel'] as const)(
-      'persists isolated child history and releases it after %s',
-      async (mode) => {
-        const config = makeForegroundConfig();
-        const parent = await createLockedSessionRecorder({
-          sessionId: PARENT_SESSION_ID,
-          projectHash: 'parent',
-          chatsDir: config.projectChatsDir,
-          workspaceDirs: [],
-          provider: 'gemini',
-          model: 'gemini-1.5-flash',
-        });
-        const parentHistory = new HistoryService({ recording: parent });
-        parentHistory.add({
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'parent' }],
-        });
-        await parentHistory.waitForCommit();
-        const parentFile = parent.getFilePath();
-        if (parentFile === null) throw new Error('Missing parent file');
-        const before = await readFile(parentFile);
-        const baseline = (await readdir(config.projectChatsDir)).sort();
-        const { orchestrator } = buildOrchestrator(config);
+  it.each(['normal', 'execution-failure', 'execution-cancel'] as const)(
+    'persists isolated child history and releases it after %s',
+    async (mode) => {
+      const config = makeForegroundConfig();
+      const parent = await createLockedSessionRecorder({
+        sessionId: PARENT_SESSION_ID,
+        projectHash: 'parent',
+        chatsDir: config.projectChatsDir,
+        workspaceDirs: [],
+        provider: 'gemini',
+        model: 'gemini-1.5-flash',
+      });
+      const parentHistory = new HistoryService({ recording: parent });
+      parentHistory.add({
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'parent' }],
+      });
+      await parentHistory.waitForCommit();
+      const parentFile = parent.getFilePath();
+      if (parentFile === null) throw new Error('Missing parent file');
+      const before = await readFile(parentFile);
+      const baseline = (await readdir(config.projectChatsDir)).sort();
+      const { orchestrator } = buildOrchestrator(config);
+      try {
+        const result = await orchestrator.launch({ name: 'helper' });
         try {
-          const result = await orchestrator.launch({ name: 'helper' });
-          try {
-            const history = result.runtime.history;
-            expect(
-              history
-                .journalPath()
-                ?.endsWith(backend === 'journal' ? '.llxj' : '.jsonl'),
-            ).toBe(true);
-            await collectJournalRowsForAssertions(history, (rows) => {
-              expect(rows.map((row) => row.blocks)).toStrictEqual([
-                [{ type: 'text', text: 'child' }],
-              ]);
-            });
-            const dump = await history.openDumpSnapshot();
-            const outcome = await executeChild(history, mode).then(
-              () => 'completed',
-              (error: unknown) =>
-                error instanceof Error ? error.message : String(error),
-            );
-            const expectedOutcomes = {
-              normal: 'completed',
-              'execution-failure': 'child execution failed',
-              'execution-cancel': 'The operation was aborted.',
-            };
-            expect(outcome).toBe(expectedOutcomes[mode]);
-            await collectJournalRowsForAssertions(history, (rows) => {
-              expect(rows.map((row) => row.speaker)).toStrictEqual([
-                'human',
-                'ai',
-              ]);
-            });
-            if (backend === 'old') await dump.close();
-            await result.dispose();
-            await expect(
-              Promise.resolve().then(() => history.openDumpSnapshot()),
-            ).rejects.toThrow(/disposed/);
-            await expect(
-              Promise.resolve().then(() =>
-                dump.rows()[Symbol.asyncIterator]().next(),
-              ),
-            ).rejects.toThrow(/closed/);
-            expect(
-              (await readdir(config.projectChatsDir)).sort(),
-            ).toStrictEqual(baseline);
-            expect(await readFile(parentFile)).toStrictEqual(before);
-          } finally {
-            await result.dispose();
-          }
-        } finally {
-          await parentHistory.dispose();
-          await parent.dispose();
-        }
-      },
-    );
-
-    it.each(['runtime-failure', 'scope-failure', 'cancel', 'timeout'] as const)(
-      'releases history reads and removes file and lock after %s',
-      async (mode) => {
-        const config = makeForegroundConfig();
-        const controller = new AbortController();
-        let dump:
-          | Awaited<ReturnType<HistoryService['openDumpSnapshot']>>
-          | undefined;
-        let history: HistoryService | undefined;
-        const { orchestrator } = buildOrchestrator(
-          config,
-          async (options) => {
-            history = options.overrides?.historyService;
-            if (history === undefined) throw new Error('Missing child history');
-            history.add({
-              speaker: 'human',
-              blocks: [{ type: 'text', text: 'in-flight child' }],
-            });
-            await history.waitForCommit();
-            dump = await history.openDumpSnapshot();
-            if (mode === 'runtime-failure') throw new Error('runtime failed');
-            if (mode === 'cancel') controller.abort();
-            if (mode === 'timeout') {
-              await new Promise<void>((resolve) => {
-                const deadline = AbortSignal.timeout(1);
-                deadline.addEventListener(
-                  'abort',
-                  () => {
-                    controller.abort(deadline.reason);
-                    resolve();
-                  },
-                  { once: true },
-                );
-              });
-            }
-          },
-          () => {
-            if (mode === 'scope-failure') throw new Error('scope failed');
-          },
-        );
-        try {
-          await expect(
-            orchestrator.launch({ name: 'helper' }, controller.signal),
-          ).rejects.toThrow(
-            {
-              'runtime-failure': /runtime failed/,
-              'scope-failure': /scope failed/,
-              cancel: /aborted/,
-              timeout: /aborted/,
-            }[mode],
+          const history = result.runtime.history;
+          expect(history.journalPath()?.endsWith('.llxj')).toBe(true);
+          await collectJournalRowsForAssertions(history, (rows) => {
+            expect(rows.map((row) => row.blocks)).toStrictEqual([
+              [{ type: 'text', text: 'child' }],
+            ]);
+          });
+          const dump = await history.openDumpSnapshot();
+          const outcome = await executeChild(history, mode).then(
+            () => 'completed',
+            (error: unknown) =>
+              error instanceof Error ? error.message : String(error),
           );
-          if (dump === undefined) throw new Error('Missing child read');
-          if (history === undefined) throw new Error('Missing child history');
-          const childHistory = history;
+          const expectedOutcomes = {
+            normal: 'completed',
+            'execution-failure': 'child execution failed',
+            'execution-cancel': 'The operation was aborted.',
+          };
+          expect(outcome).toBe(expectedOutcomes[mode]);
+          await collectJournalRowsForAssertions(history, (rows) => {
+            expect(rows.map((row) => row.speaker)).toStrictEqual([
+              'human',
+              'ai',
+            ]);
+          });
+
+          await result.dispose();
           await expect(
-            Promise.resolve().then(() => childHistory.openDumpSnapshot()),
+            Promise.resolve().then(() => history.openDumpSnapshot()),
           ).rejects.toThrow(/disposed/);
-          const heldDump = dump;
-          if (backend === 'old') await heldDump.close();
           await expect(
             Promise.resolve().then(() =>
-              heldDump.rows()[Symbol.asyncIterator]().next(),
+              dump.rows()[Symbol.asyncIterator]().next(),
             ),
           ).rejects.toThrow(/closed/);
-          expect(await readdir(config.projectChatsDir)).toStrictEqual([]);
+          expect((await readdir(config.projectChatsDir)).sort()).toStrictEqual(
+            baseline,
+          );
+          expect(await readFile(parentFile)).toStrictEqual(before);
         } finally {
-          await dump?.close();
-          await history?.dispose();
+          await result.dispose();
         }
-      },
-    );
-  },
-);
+      } finally {
+        await parentHistory.dispose();
+        await parent.dispose();
+      }
+    },
+  );
+
+  it.each(['runtime-failure', 'scope-failure', 'cancel', 'timeout'] as const)(
+    'releases history reads and removes file and lock after %s',
+    async (mode) => {
+      const config = makeForegroundConfig();
+      const controller = new AbortController();
+      let dump:
+        | Awaited<ReturnType<HistoryService['openDumpSnapshot']>>
+        | undefined;
+      let history: HistoryService | undefined;
+      const { orchestrator } = buildOrchestrator(
+        config,
+        async (options) => {
+          history = options.overrides?.historyService;
+          if (history === undefined) throw new Error('Missing child history');
+          history.add({
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'in-flight child' }],
+          });
+          await history.waitForCommit();
+          dump = await history.openDumpSnapshot();
+          if (mode === 'runtime-failure') throw new Error('runtime failed');
+          if (mode === 'cancel') controller.abort();
+          if (mode === 'timeout') {
+            await new Promise<void>((resolve) => {
+              const deadline = AbortSignal.timeout(1);
+              deadline.addEventListener(
+                'abort',
+                () => {
+                  controller.abort(deadline.reason);
+                  resolve();
+                },
+                { once: true },
+              );
+            });
+          }
+        },
+        () => {
+          if (mode === 'scope-failure') throw new Error('scope failed');
+        },
+      );
+      try {
+        await expect(
+          orchestrator.launch({ name: 'helper' }, controller.signal),
+        ).rejects.toThrow(
+          {
+            'runtime-failure': /runtime failed/,
+            'scope-failure': /scope failed/,
+            cancel: /aborted/,
+            timeout: /aborted/,
+          }[mode],
+        );
+        if (dump === undefined) throw new Error('Missing child read');
+        if (history === undefined) throw new Error('Missing child history');
+        const childHistory = history;
+        await expect(
+          Promise.resolve().then(() => childHistory.openDumpSnapshot()),
+        ).rejects.toThrow(/disposed/);
+        const heldDump = dump;
+        await expect(
+          Promise.resolve().then(() =>
+            heldDump.rows()[Symbol.asyncIterator]().next(),
+          ),
+        ).rejects.toThrow(/closed/);
+        expect(await readdir(config.projectChatsDir)).toStrictEqual([]);
+      } finally {
+        await dump?.close();
+        await history?.dispose();
+      }
+    },
+  );
+});
 
 async function executeChild(
   history: HistoryService,
