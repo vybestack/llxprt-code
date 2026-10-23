@@ -241,7 +241,7 @@ export class DiskDensityOptimization implements DiskDensityResult {
           (block) => block.type !== 'tool_call' || !stale.has(block.id),
         );
         if (
-          stale.size === calls.length &&
+          row.blocks.length - blocks.length === calls.length &&
           (blocks.length === 0 ||
             blocks.every(
               (block) => block.type === 'text' && block.text.trim() === '',
