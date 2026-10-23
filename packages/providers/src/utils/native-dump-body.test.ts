@@ -20,6 +20,27 @@ describe('native dump stream cleanup', () => {
     await rm(root, { recursive: true, force: true });
   });
 
+  it('emits only nonempty wire chunks while retaining diagnostic-only pieces', async () => {
+    const body = new NativeDumpBody(async function* () {
+      yield nativeDumpLiteral('', '{"messages":');
+      yield nativeDumpLiteral('[]', '[]}');
+      yield nativeDumpLiteral('');
+    });
+    const result = await dumpSDKRequestContext(
+      'test',
+      '/messages',
+      body.dump,
+      'http://local',
+    );
+    const chunks: Uint8Array[] = [];
+    for await (const chunk of body.stream()) chunks.push(chunk);
+    await body.dispose();
+    expect(chunks).toStrictEqual([Buffer.from('[]')]);
+    expect(
+      await Bun.file(join(result.dumpDir, result.requestFilename)).json(),
+    ).toMatchObject({ request: { body: { messages: [] } } });
+  });
+
   it('removes an incomplete dump when cancellation aborts its remaining source', async () => {
     const signal = new AbortController();
     const body = new NativeDumpBody(async function* () {

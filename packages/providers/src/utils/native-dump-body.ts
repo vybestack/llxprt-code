@@ -140,7 +140,7 @@ export class NativeDumpBody {
         const next = await iterator.next();
         if (next.done === true) break;
         await this.append(next.value);
-        yield next.value.wire;
+        if (next.value.wire.byteLength !== 0) yield next.value.wire;
       }
     } finally {
       try {
