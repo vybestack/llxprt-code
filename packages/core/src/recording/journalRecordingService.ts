@@ -44,6 +44,7 @@ import {
   type RecordingMediaOwner,
 } from './journalRecordingMedia.js';
 import { hydrateRecordedMedia } from '../storage/recorded-media-transfer.js';
+import { verifyHistoryMedia } from '../storage/media-reference-lifecycle.js';
 import type { IContent } from '../services/history/IContent.js';
 
 export interface JournalRecordingConfig {
@@ -169,10 +170,15 @@ export class JournalRecordingService implements SessionRecordingPort {
     this.materialization = Promise.resolve(session);
   }
 
-  hydrateMedia(content: IContent): Promise<void> {
-    return hydrateRecordedMedia(
+  async hydrateMedia(content: IContent): Promise<void> {
+    await hydrateRecordedMedia(
       this.config.mediaStore,
       content.blocks.filter((block) => block.type === 'media'),
+    );
+    await verifyHistoryMedia(
+      [content],
+      this.config.mediaStore,
+      'session-replay',
     );
   }
 
