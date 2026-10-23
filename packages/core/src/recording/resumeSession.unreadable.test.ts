@@ -1,345 +1,251 @@
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- *
- * Issue #3732: resuming legacy "unknown provider" recordings, and bare
- * continue skipping a newest candidate that fails replay.
- */
-
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import * as fs from 'node:fs/promises';
-import * as os from 'node:os';
-import * as path from 'node:path';
+/** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { afterEach, describe, expect, it } from 'bun:test';
+import { chmod, utimes, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
+import { retiredJournalMessage } from '../journal/journalRefusal.js';
+import { userRow } from './__tests__/support/recordedJournals.js';
+import { readJournalSnapshot } from './__tests__/support/journalSnapshot.js';
+import { JournalRecordingService } from './journalRecordingService.js';
 import { SessionLockManager } from './SessionLockManager.js';
-import { SessionRecordingService } from './SessionRecordingService.js';
-import {
-  writeCorruptHeaderSession,
-  writeLegacyUnknownProviderSession,
-  writeUnsupportedVersionSession,
-} from './__tests__/recording-file-fixtures.js';
 import {
   CONTINUE_LATEST,
   resumeSession,
   type ResumeResult,
 } from './resumeSession.js';
-import { collectBootRows } from './resumeSession.test.helpers.js';
-
-// The fixtures are JSONL recordings; session discovery follows the environment.
 
 const PROJECT_HASH = 'resume-unreadable-project';
 
-async function createHealthySession(
-  chatsDir: string,
-  sessionId: string,
-): Promise<string> {
-  const recording = new SessionRecordingService({
-    sessionId,
-    projectHash: PROJECT_HASH,
-    chatsDir,
-    workspaceDirs: ['/test/workspace'],
-    provider: 'anthropic',
-    model: 'claude-4',
-  });
-  recording.recordContent({
-    speaker: 'human',
-    blocks: [{ type: 'text', text: `hello from ${sessionId}` }],
-  });
-  await recording.flush();
-  const filePath = recording.getFilePath()!;
-  await recording.dispose();
-  return filePath;
-}
-
-async function setModifiedTime(filePath: string, iso: string): Promise<void> {
-  const when = new Date(iso);
-  await fs.utimes(filePath, when, when);
-}
-
-describe('resumeSession with legacy and unreadable recordings (issue #3732)', () => {
-  let tempDir: string;
-  let chatsDir: string;
+describe('resumeSession isolates unreadable recordings', () => {
+  const directory = useTempDir('resume-3732-');
   const resumed: ResumeResult[] = [];
-
-  beforeEach(async () => {
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'resume-3732-'));
-    chatsDir = path.join(tempDir, 'chats');
-    await fs.mkdir(chatsDir, { recursive: true });
-  });
-
   afterEach(async () => {
-    for (const result of resumed.splice(0)) {
-      await result.recording.dispose();
-    }
-    await fs.rm(tempDir, { recursive: true, force: true });
+    for (const result of resumed.splice(0)) await result.recording.dispose();
   });
 
-  function resume(
-    continueRef: string,
-    overrides: { currentProvider?: string; currentModel?: string } = {},
-  ): ReturnType<typeof resumeSession> {
+  async function healthy(
+    sessionId: string,
+    provider = 'anthropic',
+    model = 'claude-4',
+  ): Promise<string> {
+    const recording = JournalRecordingService.create({
+      sessionId,
+      projectHash: PROJECT_HASH,
+      chatsDir: directory(),
+      workspaceDirs: ['/test/workspace'],
+      provider,
+      model,
+    });
+    try {
+      await (
+        await recording.session()
+      ).append([
+        userRow(`hello from ${sessionId}`),
+        { speaker: 'ai', blocks: [{ type: 'text', text: 'reply' }] },
+      ]);
+      await recording.flush();
+      const file = recording.getFilePath();
+      if (file === null) throw new Error('Missing journal recording');
+      return file;
+    } finally {
+      await recording.dispose();
+    }
+  }
+
+  async function retired(sessionId: string): Promise<string> {
+    const file = join(directory(), `session-${sessionId}.jsonl`);
+    await writeFile(file, '{"v":99,"type":"session_start"}\n');
+    return file;
+  }
+
+  function resume(continueRef: string): ReturnType<typeof resumeSession> {
     return resumeSession({
       continueRef,
       projectHash: PROJECT_HASH,
-      chatsDir,
-      currentProvider: overrides.currentProvider ?? 'claudecode',
-      currentModel: overrides.currentModel ?? 'claude-opus-5-5',
+      chatsDir: directory(),
+      currentProvider: 'claudecode',
+      currentModel: 'claude-opus-5-5',
       workspaceDirs: ['/test/workspace'],
     });
   }
 
-  async function resumeOk(
-    continueRef: string,
-    overrides: { currentProvider?: string; currentModel?: string } = {},
-  ): Promise<ResumeResult> {
-    const result = await resume(continueRef, overrides);
+  async function resumeOk(continueRef: string): Promise<ResumeResult> {
+    const result = await resume(continueRef);
     if (!result.ok) throw new Error(`resume failed: ${result.error}`);
     resumed.push(result);
     return result;
   }
 
-  it('resumes a legacy unknown-provider recording by explicit session id', async () => {
-    await writeLegacyUnknownProviderSession(chatsDir, {
-      sessionId: 'legacy-explicit-0001',
-      projectHash: PROJECT_HASH,
-      timestamp: '2026-10-08T21:18:08.000Z',
-    });
-
-    const result = await resumeOk('legacy-explicit-0001');
-
+  it('resumes a journal with an unknown provider by explicit session ID', async () => {
+    await healthy('unknown-explicit-0001', 'unknown', 'unknown');
+    const result = await resumeOk('unknown-explicit-0001');
     expect({
       sessionId: result.metadata.sessionId,
       provider: result.metadata.provider,
       model: result.metadata.model,
-      historyLength: (await collectBootRows(result.boot.streamRows())).length,
+      historyLength: (await Array.fromAsync(result.boot.streamRows())).length,
     }).toStrictEqual({
-      sessionId: 'legacy-explicit-0001',
-      provider: 'claudecode',
-      model: 'claude-opus-5-5',
+      sessionId: 'unknown-explicit-0001',
+      provider: 'unknown',
+      model: 'unknown',
       historyLength: 2,
     });
-  });
-
-  it('resumes a legacy unknown-provider recording as the newest session for bare continue', async () => {
-    await createHealthySession(chatsDir, 'older-healthy-0001');
-    const legacy = await writeLegacyUnknownProviderSession(chatsDir, {
-      sessionId: 'legacy-newest-0001',
-      projectHash: PROJECT_HASH,
-      timestamp: '2026-10-08T21:18:08.000Z',
+    const file = result.recording.getFilePath();
+    if (file === null) throw new Error('Missing resumed journal');
+    expect(
+      (await readJournalSnapshot(file, PROJECT_HASH)).metadata,
+    ).toMatchObject({
+      provider: 'claudecode',
+      model: 'claude-opus-5-5',
     });
-    await setModifiedTime(legacy.filePath, '2030-01-01T00:00:00.000Z');
-
-    const result = await resumeOk(CONTINUE_LATEST);
-
-    expect(result.metadata.sessionId).toBe('legacy-newest-0001');
   });
 
-  it('skips a newest candidate that fails replay and resumes the next readable session', async () => {
-    const healthyPath = await createHealthySession(
-      chatsDir,
+  it('resumes the newest unknown-provider journal for bare continue', async () => {
+    await healthy('older-healthy-0001');
+    const file = await healthy('unknown-newest-0001', 'unknown', 'unknown');
+    const when = new Date('2030-01-01T00:00:00.000Z');
+    await utimes(file, when, when);
+    expect((await resumeOk(CONTINUE_LATEST)).metadata.sessionId).toBe(
+      'unknown-newest-0001',
+    );
+  });
+
+  it('skips a newest unreadable candidate and resumes the next readable session', async () => {
+    const file = await healthy('older-healthy-0002');
+    const older = new Date('2030-01-01T00:00:00.000Z');
+    await utimes(file, older, older);
+    const corrupt = await retired('newest-corrupt-0002');
+    const newer = new Date('2031-01-01T00:00:00.000Z');
+    await utimes(corrupt, newer, newer);
+    expect((await resumeOk(CONTINUE_LATEST)).metadata.sessionId).toBe(
       'older-healthy-0002',
     );
-    await setModifiedTime(healthyPath, '2030-01-01T00:00:00.000Z');
-    const corrupt = await writeUnsupportedVersionSession(chatsDir, {
-      sessionId: 'newest-corrupt-0002',
-      projectHash: PROJECT_HASH,
-      timestamp: '2026-10-08T21:18:08.000Z',
-    });
-    await setModifiedTime(corrupt.filePath, '2031-01-01T00:00:00.000Z');
-
-    const result = await resumeOk(CONTINUE_LATEST);
-
-    expect(result.metadata.sessionId).toBe('older-healthy-0002');
   });
 
-  it('releases the lock taken on a skipped unreadable candidate', async () => {
-    await createHealthySession(chatsDir, 'older-healthy-0003');
-    const corrupt = await writeUnsupportedVersionSession(chatsDir, {
-      sessionId: 'newest-corrupt-0003',
-      projectHash: PROJECT_HASH,
-      timestamp: '2026-10-08T21:18:08.000Z',
-    });
-    await setModifiedTime(corrupt.filePath, '2031-01-01T00:00:00.000Z');
-
+  it('leaves skipped unreadable candidates unlocked', async () => {
+    await healthy('older-healthy-0003');
+    await retired('newest-corrupt-0003');
     await resumeOk(CONTINUE_LATEST);
-
     expect({
       corruptLocked: await SessionLockManager.isLocked(
-        chatsDir,
+        directory(),
         'newest-corrupt-0003',
       ),
       resumedLocked: await SessionLockManager.isLocked(
-        chatsDir,
+        directory(),
         'older-healthy-0003',
       ),
     }).toStrictEqual({ corruptLocked: false, resumedLocked: true });
   });
 
-  it('fails naming the file and reason and holds no lock when every candidate fails replay', async () => {
-    const unsupported = await writeUnsupportedVersionSession(chatsDir, {
-      sessionId: 'only-unsupported-0004',
-      projectHash: PROJECT_HASH,
-      timestamp: '2026-10-08T21:18:08.000Z',
-    });
-
+  it('names the file and reason without holding a lock when every candidate is unreadable', async () => {
+    const file = await retired('only-unsupported-0004');
     const result = await resume(CONTINUE_LATEST);
-
     expect({
       outcome: result.ok
         ? 'resumed'
         : {
-            error: result.error.includes('Unsupported recording version 99'),
-            skipped: result.skippedRecordings?.map((r) => r.filePath),
+            error: result.error.includes(retiredJournalMessage(file)),
+            skipped: result.skippedRecordings?.map(
+              (recording) => recording.filePath,
+            ),
           },
       locked: await SessionLockManager.isLocked(
-        chatsDir,
+        directory(),
         'only-unsupported-0004',
       ),
     }).toStrictEqual({
-      outcome: { error: true, skipped: [unsupported.filePath] },
+      outcome: { error: true, skipped: [file] },
       locked: false,
     });
   });
 
-  it('fails naming the file and reason when every recording has an unreadable header', async () => {
-    const corrupt = await writeCorruptHeaderSession(chatsDir, {
-      sessionId: 'only-corrupt-0004',
-      projectHash: PROJECT_HASH,
-      timestamp: '2026-10-08T21:18:08.000Z',
-    });
-
+  it('reports the complete refusal when the only file is retired', async () => {
+    const file = await retired('only-corrupt-0004');
     const result = await resume(CONTINUE_LATEST);
-
     expect(
       result.ok
         ? 'resumed'
-        : {
-            error: result.error,
-            skipped: result.skippedRecordings,
-          },
+        : { error: result.error, skipped: result.skippedRecordings },
     ).toStrictEqual({
-      error: `No sessions found for this project; skipped unreadable recordings: ${corrupt.filePath}: Invalid session_start: missing or malformed required fields`,
-      skipped: [
-        {
-          sessionId: 'only-corrupt-0004',
-          filePath: corrupt.filePath,
-          reason: 'Invalid session_start: missing or malformed required fields',
-        },
-      ],
+      error: `No sessions found for this project; skipped unreadable recordings: ${file}: ${retiredJournalMessage(file)}`,
+      skipped: [{ filePath: file, reason: retiredJournalMessage(file) }],
     });
   });
 
-  it('reports the unreadable recordings on a successful bare resume', async () => {
-    await createHealthySession(chatsDir, 'older-healthy-0006');
-    const unsupported = await writeUnsupportedVersionSession(chatsDir, {
-      sessionId: 'newest-unsupported-0006',
-      projectHash: PROJECT_HASH,
-      timestamp: '2026-10-08T21:18:08.000Z',
-    });
-    const corrupt = await writeCorruptHeaderSession(chatsDir, {
-      sessionId: 'corrupt-header-0006',
-      projectHash: PROJECT_HASH,
-      timestamp: '2026-10-07T21:18:08.000Z',
-    });
-    await setModifiedTime(unsupported.filePath, '2031-01-01T00:00:00.000Z');
-
+  it('reports every unreadable recording on a successful bare resume', async () => {
+    await healthy('older-healthy-0006');
+    const unsupported = await retired('newest-unsupported-0006');
+    const corrupt = await retired('corrupt-header-0006');
     const result = await resumeOk(CONTINUE_LATEST);
-
     expect({
       resumed: result.metadata.sessionId,
       skipped: result.skippedRecordings
-        .map((r) => r.filePath)
-        .sort((a, b) => a.localeCompare(b)),
+        .map((recording) => recording.filePath)
+        .sort(),
     }).toStrictEqual({
       resumed: 'older-healthy-0006',
-      skipped: [corrupt.filePath, unsupported.filePath].sort((a, b) =>
-        a.localeCompare(b),
-      ),
+      skipped: [corrupt, unsupported].sort(),
     });
   });
 
-  it('reports the unreadable recordings on a successful explicit resume', async () => {
-    await createHealthySession(chatsDir, 'healthy-0007');
-    const corrupt = await writeCorruptHeaderSession(chatsDir, {
-      sessionId: 'corrupt-header-0007',
-      projectHash: PROJECT_HASH,
-      timestamp: '2026-10-08T21:18:08.000Z',
-    });
-
-    const result = await resumeOk('healthy-0007');
-
-    expect(result.skippedRecordings).toStrictEqual([
-      {
-        sessionId: 'corrupt-header-0007',
-        filePath: corrupt.filePath,
-        reason: 'Invalid session_start: missing or malformed required fields',
-      },
+  it('reports unreadable recordings on a successful explicit resume', async () => {
+    await healthy('healthy-0007');
+    const file = await retired('corrupt-header-0007');
+    expect((await resumeOk('healthy-0007')).skippedRecordings).toStrictEqual([
+      { filePath: file, reason: retiredJournalMessage(file) },
     ]);
   });
 
   it('reports no skipped recordings when every recording is readable', async () => {
-    await createHealthySession(chatsDir, 'healthy-0008');
-
-    const result = await resumeOk(CONTINUE_LATEST);
-
-    expect(result.skippedRecordings).toStrictEqual([]);
-  });
-
-  it('still fails an explicit reference to a recording that fails replay without trying other sessions', async () => {
-    await createHealthySession(chatsDir, 'older-healthy-0005');
-    await writeUnsupportedVersionSession(chatsDir, {
-      sessionId: 'explicit-unsupported-0005',
-      projectHash: PROJECT_HASH,
-      timestamp: '2026-10-08T21:18:08.000Z',
-    });
-
-    const result = await resume('explicit-unsupported-0005');
-
-    expect(result.ok ? 'resumed' : result.error).toMatch(
-      /^Failed to replay session: Unsupported recording version 99/,
+    await healthy('healthy-0008');
+    expect((await resumeOk(CONTINUE_LATEST)).skippedRecordings).toStrictEqual(
+      [],
     );
   });
 
-  it('fails an explicit reference to a recording with an unreadable header naming its reason', async () => {
-    await createHealthySession(chatsDir, 'older-healthy-0009');
-    await writeCorruptHeaderSession(chatsDir, {
-      sessionId: 'explicit-corrupt-0009',
-      projectHash: PROJECT_HASH,
-      timestamp: '2026-10-08T21:18:08.000Z',
-    });
-
-    const result = await resume('explicit-corrupt-0009');
-
-    expect(result.ok ? 'resumed' : result.error).toMatch(
-      /^Failed to replay session: Invalid session_start/,
+  it('fails an explicit unreadable file reference without falling back to healthy sessions', async () => {
+    await healthy('older-healthy-0005');
+    const file = await retired('explicit-unsupported-0005');
+    const result = await resume(file);
+    expect(result.ok ? 'resumed' : result.error).toBe(
+      retiredJournalMessage(file),
     );
   });
 
-  describe('when the chats directory cannot be written', () => {
-    afterEach(async () => {
-      await fs.chmod(chatsDir, 0o700);
-    });
+  it('names the refusal reason for an explicitly named unreadable file', async () => {
+    await healthy('older-healthy-0009');
+    const file = await retired('explicit-corrupt-0009');
+    const result = await resume('session-explicit-corrupt-0009.jsonl');
+    expect(result.ok ? 'resumed' : result.error).toBe(
+      retiredJournalMessage(file),
+    );
+  });
 
-    it('propagates the permission error instead of reporting lock contention', async () => {
-      await createHealthySession(chatsDir, 'locked-out-0010');
-      await fs.chmod(chatsDir, 0o500);
-
+  it('propagates a directory permission error instead of reporting lock contention', async () => {
+    await healthy('locked-out-0010');
+    await chmod(directory(), 0o500);
+    try {
       await expect(resume(CONTINUE_LATEST)).rejects.toMatchObject({
         code: 'EACCES',
       });
       await expect(resume('locked-out-0010')).rejects.toMatchObject({
         code: 'EACCES',
       });
-    });
+    } finally {
+      await chmod(directory(), 0o700);
+    }
   });
 
   it('reports contention when another process holds the session lock', async () => {
-    await createHealthySession(chatsDir, 'contended-0011');
-    const holder = await SessionLockManager.acquire(chatsDir, 'contended-0011');
+    await healthy('contended-0011');
+    const holder = await SessionLockManager.acquire(
+      directory(),
+      'contended-0011',
+    );
     try {
       const bare = await resume(CONTINUE_LATEST);
       const explicit = await resume('contended-0011');
-
       expect({
         bare: bare.ok ? 'resumed' : bare.error,
         explicit: explicit.ok ? 'resumed' : explicit.error,
