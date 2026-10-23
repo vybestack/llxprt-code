@@ -20,6 +20,7 @@ import type { HistoryCheckpoint } from './historyCheckpointRows.js';
 import type { ChronologyStamper } from './historyChronology.js';
 import type { SpanWindow } from './historySpanWindow.js';
 import type { HistoryStorePort } from './historyStorePort.js';
+import { ObservedJournalBatch } from './observedJournalBatch.js';
 import type { SemanticPurgeSnapshot } from './semantic-purge-native.js';
 export type {
   DetachedHistoryOptions,
@@ -79,65 +80,24 @@ function notifyDetachedBatch(
 }
 
 /** The committed batch as one `contentBatchAdded`; the row ownership census counts each row while a listener holds it. */
-export function notifyDetachedRows(
+export async function notifyDetachedRows(
   history: HistoryServiceCore,
   ownership: RowOwnership | undefined,
   source: HistoryBatchRowSource,
   publishContent = false,
-): void | Promise<void> {
-  try {
-    history.emit(
-      'contentBatchAdded',
-      ownership === undefined
-        ? source
-        : {
-            length: source.length,
-            async *rows() {
-              for await (const row of source.rows()) {
-                ownership.retain(row);
-                try {
-                  yield row;
-                } finally {
-                  ownership.release(row);
-                }
-              }
-            },
-            retire: () => source.retire(),
-          },
-    );
-  } catch (error) {
-    const released = releaseRead({ close: () => source.retire() }, { error });
-    if (released !== undefined) {
-      return released.then(() => {
-        throw error;
-      });
-    }
-    throw error;
-  }
-  return publishContent
-    ? notifyContentRows(history, ownership, source)
-    : source.retire();
-}
-
-async function notifyContentRows(
-  history: HistoryServiceCore,
-  ownership: RowOwnership | undefined,
-  source: HistoryBatchRowSource,
 ): Promise<void> {
+  const batch = new ObservedJournalBatch(source, ownership);
   let failure: { error: unknown } | undefined;
   try {
-    for await (const row of source.rows()) {
-      ownership?.retain(row);
-      try {
-        history.emit('contentAdded', row);
-      } finally {
-        ownership?.release(row);
-      }
+    history.emit('contentBatchAdded', batch);
+    await batch.drain();
+    if (publishContent) {
+      for await (const row of batch.rows()) history.emit('contentAdded', row);
     }
   } catch (error) {
     failure = { error };
   }
-  await releaseRead({ close: () => source.retire() }, failure);
+  await releaseRead({ close: () => batch.retire() }, failure);
   if (failure !== undefined) throw failure.error;
 }
 
