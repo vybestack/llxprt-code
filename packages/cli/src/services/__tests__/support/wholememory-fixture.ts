@@ -1,9 +1,15 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { mkdir, open } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import type { MediaReferenceBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type {
+  IContent,
+  MediaReferenceBlock,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
+import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
+import { encodeContentRow } from '@vybestack/llxprt-code-core/services/history/journalRowCodec.js';
+import type { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
 
 export const MEMORY_PROJECT = 'wholememory-project';
 export const MEMORY_PAGE = 16;
@@ -19,48 +25,63 @@ export function fixtureText(index: number): string {
     createHash('sha256').update(`${index}:${part}`).digest('hex'),
   ).join('');
 }
+async function appendMemoryFixtureRow(
+  session: JournalSession,
+  content: IContent,
+  workload: MemoryWorkload,
+): Promise<void> {
+  if (workload !== 'compressed') {
+    await session.append([content]);
+    return;
+  }
+  const version = session.store.published;
+  if (version === undefined) throw new Error('Missing seeded version');
+  await session.store.commit([
+    {
+      kind: 'compress',
+      summary: encodeContentRow(
+        { ...content, metadata: { isSummary: true } },
+        { owner: 0 },
+      ),
+      retainFromLabel: version.nextLabel,
+      expectedReplaced: 1,
+    },
+  ]);
+}
 
 /** Runs only in the parent process, never on the measured heap. */
 export async function writeMemoryFixture(
   directory: string,
   count: number,
   workload: MemoryWorkload,
+  identity: { sessionId: string; name: string } = {
+    sessionId: 'wholememory',
+    name: '',
+  },
 ): Promise<void> {
   await mkdir(directory, { recursive: true });
   const media = await prepareMediaFixture(directory, workload);
-  const handle = await open(join(directory, 'session-wholememory.jsonl'), 'w');
-  let seq = 0;
-  const append = async (type: string, payload: unknown): Promise<void> => {
-    await handle.write(
-      `${JSON.stringify({
-        v: 1,
-        seq: ++seq,
-        ts: '2026-09-21T00:00:00Z',
-        type,
-        payload,
-      })}\n`,
-    );
-  };
+  const recording = JournalRecordingService.create({
+    chatsDir: directory,
+    sessionId: identity.sessionId,
+    projectHash: MEMORY_PROJECT,
+    workspaceDirs: [],
+    provider: 'test',
+    model: 'test',
+  });
   try {
-    await append('session_start', {
-      sessionId: 'wholememory',
-      projectHash: MEMORY_PROJECT,
-      workspaceDirs: [],
-      provider: 'test',
-      model: 'test',
-      kind: 'main',
-      startTime: '2026-09-21T00:00:00Z',
-    });
+    const session = await recording.session();
+    if (identity.name !== '') await recording.setSessionName(identity.name);
     if (workload === 'compressed') {
-      await append('content', {
-        content: {
+      await session.append([
+        {
           speaker: 'human',
           blocks: [{ type: 'text', text: 'initial' }],
         },
-      });
+      ]);
     }
     for (let index = 0; index < count; index += 1) {
-      const content = {
+      const content: IContent = {
         speaker: index % 2 === 1 ? 'ai' : 'human',
         blocks: [
           { type: 'text', text: fixtureText(index) },
@@ -78,27 +99,17 @@ export async function writeMemoryFixture(
             : []),
         ],
       };
-      await append(
-        workload === 'compressed' ? 'compressed' : 'content',
-        workload === 'compressed'
-          ? { summary: content, itemsCompressed: 1 }
-          : { content },
-      );
+      await appendMemoryFixtureRow(session, content, workload);
     }
     if (workload === 'wide-metadata') {
-      await append('directories_changed', {
-        directories: Array.from(
-          { length: 512 },
-          (_, index) => `/${fixtureText(index)}`,
-        ),
-      });
+      recording.recordDirectoriesChanged(
+        Array.from({ length: 512 }, (_, index) => `/${fixtureText(index)}`),
+      );
     }
-    await append('checkpoint_created', {
-      checkpointId: 'memory-checkpoint',
-      name: 'memory-checkpoint',
-    });
+    await recording.createCheckpoint('memory-checkpoint');
+    await recording.flush();
   } finally {
-    await handle.close();
+    await recording.dispose();
   }
 }
 

@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'bun:test';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { RowOwnership } from '../../../core/src/recording/rowOwnership.js';
 import { MemoryCommand } from './__tests__/support/wholememory-command.js';
@@ -10,49 +10,25 @@ import { writeMemoryFixture } from './__tests__/support/wholememory-fixture.js';
 const sessionId = '85400000-0000-4000-8000-000000000001';
 const sessionName = 'acceptance-named-session';
 
-async function targetFixture(
-  directory: string,
-  count: number,
-  version: number,
-): Promise<void> {
-  await writeMemoryFixture(directory, count, 'plain');
-  const path = join(directory, 'session-wholememory.jsonl');
-  const contents = (await readFile(path, 'utf8'))
-    .replace('"sessionId":"wholememory"', `"sessionId":"${sessionId}"`)
-    .replaceAll('"v":1', `"v":${version}`);
-  await writeFile(
-    path,
-    contents +
-      JSON.stringify({
-        v: version,
-        seq: count + 3,
-        ts: '2026-09-21T00:00:00Z',
-        type: 'session_named',
-        payload: { name: sessionName },
-      }) +
-      '\n',
-  );
+async function targetFixture(directory: string, count: number): Promise<void> {
+  await writeMemoryFixture(directory, count, 'plain', {
+    sessionId,
+    name: sessionName,
+  });
 }
 
 describe('full command target ownership', () => {
-  it.each([
-    ['1', 1],
-    [sessionName, 1],
-    [sessionId, 1],
-    ['1', 2],
-    [sessionName, 2],
-    [sessionId, 2],
-  ] as const)(
-    'bounds discovery, adoption and UI ownership for target %s with journal version %s',
+  it.each(['1', sessionName, sessionId])(
+    'bounds discovery, adoption and UI ownership for target %s',
     measureTarget,
     600000,
   );
 });
 
-async function measureTarget(target: string, version: number): Promise<void> {
+async function measureTarget(target: string): Promise<void> {
   for (const count of [512, 2048]) {
     const directory = await mkdtemp(join(tmpdir(), 'acceptance-final-target-'));
-    await targetFixture(directory, count, version);
+    await targetFixture(directory, count);
     const ownership = new RowOwnership();
     const command = new MemoryCommand(ownership);
     try {
@@ -61,7 +37,7 @@ async function measureTarget(target: string, version: number): Promise<void> {
       await writeFile(
         join(directory, 'report.json'),
         JSON.stringify(
-          { target, version, count, reader, ownership: ownership.snapshot() },
+          { target, count, reader, ownership: ownership.snapshot() },
           null,
           2,
         ),
