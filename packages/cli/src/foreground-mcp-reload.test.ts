@@ -41,6 +41,16 @@ function isAlive(pid: number): boolean {
   }
 }
 
+// Stopping a stdio server lets it exit gracefully before escalating to
+// signals, and the runtime reaps the child asynchronously, so a stopped PID
+// can stay signalable briefly. Poll well past both windows.
+async function waitForExit(pid: number): Promise<void> {
+  await waitFor(() => expect(isAlive(pid)).toBe(false), {
+    timeout: 10_000,
+    interval: 100,
+  });
+}
+
 describe('foreground /mcp reload (issue #3937)', () => {
   const directories: string[] = [];
   const configs: Config[] = [];
@@ -199,7 +209,7 @@ describe('foreground /mcp reload (issue #3937)', () => {
     expect(JSON.stringify(result.llmContent)).toContain('beta_tool');
     expect(agent.tools.get('mcp__alpha__alpha_tool')).toBeUndefined();
     expect(toolNames(agent, 'alpha')).toStrictEqual([]);
-    await waitFor(() => expect(isAlive(alphaPid)).toBe(false));
+    await waitForExit(alphaPid);
   });
 
   it('disconnects every server when the configuration is emptied', async () => {
@@ -219,6 +229,6 @@ describe('foreground /mcp reload (issue #3937)', () => {
 
     expect(serverNames(agent)).toStrictEqual([]);
     expect(toolNames(agent, 'alpha')).toStrictEqual([]);
-    await waitFor(() => expect(isAlive(alphaPid)).toBe(false));
+    await waitForExit(alphaPid);
   });
 });
