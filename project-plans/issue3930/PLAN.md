@@ -751,6 +751,70 @@ directory that holds the child's test file for the duration of the call and rest
 from the working directory, so the child starts without preloads. After the change the budget
 test takes about 160 ms on macOS (previously about 1.2 s cold), and the file passes in 10.6 s.
 
+### Addendum: the same exposure in the agents runner
+
+Windows Test-Infra Gate job 120182545750 (`tmp/ci3932/r7-win.log`) then failed
+`runner timeout environment > uses the runner budget rather than a supplied child override` after
+4260 ms. It lives in `packages/agents/test-bun/run-bun-tests.issue3253.bun.ts`, not in the cli
+suite, so `withChildCwd` never covered it. The two anonymous `(fail) hangs` and `(fail) fails` lines
+in that log are intentional fixture output.
+
+The agents runner differs from the cli one: `runTestFile` spawns with `cwd: WORKSPACE_ROOT`
+(`packages/agents`, fixed so the runner behaves the same from any directory), so a `process.chdir`
+in the test cannot move the child. `packages/agents/bunfig.toml` preloads
+`test-setup-storage-isolation.ts` and `browser-launch-guard.ts`, which is the same kind of preload
+graph. `runTestFile` therefore gains an optional fourth parameter, `cwd`, defaulting to
+`WORKSPACE_ROOT`. Real runs are unchanged. The three agents tests that give a trivial child a 4000 ms
+budget pass their scratch directory. Budgets and assertions are unchanged. No shared helper was
+added: the cli suite moves the working directory because its runner spawns from `process.cwd()`, the
+agents suite passes an argument, and the two mechanisms share no code.
+
+Audit of every runner suite that spawns a child through a runner:
+
+| Suite | Child cwd source | Tight-budget trivial child | Action |
+| --- | --- | --- | --- |
+| `packages/cli/test/run-bun-tests.test.ts` | `process.cwd()` | 3 tests, done in f564de940 | none |
+| `packages/agents/test-bun/run-bun-tests.issue3253.bun.ts` | `WORKSPACE_ROOT` | 3 tests | fixed here |
+| `packages/core/test/run-bun-tests.test.ts` | `WORKSPACE_ROOT` | 1500 ms hang fixtures | none, see below |
+| `packages/auth/src/__tests__/run-bun-tests.behavior.test.ts` | `WORKSPACE_ROOT` | none (default budget) | none |
+| `scripts/tests/*` | their own runner copies | none | none |
+
+The core and auth runners pass `--preload bun-preload.ts` explicitly, and that file is also the whole
+of what their bunfig preloads (plus `browser-launch-guard.ts`), so a scratch cwd would not remove it.
+Measured on macOS, Bun 1.4.4, 5 cold-cache runs each (`tmp/ci3932/fix7/measure.ts`, not committed):
+
+| Child | cwd package dir | cwd scratch dir |
+| --- | --- | --- |
+| agents | 437 to 532 ms | 183 to 223 ms |
+| core (with `--preload`) | 408 to 440 ms | 407 to 469 ms |
+| auth (with `--preload`) | 199 to 219 ms | 202 to 219 ms |
+
+Only agents benefits, so core and auth are left alone. Core's 1500 ms fixtures expect a timeout and
+its one that waits for a pid file has a 5 s deadline for the file, which the explicit preload cost
+(about 0.4 s here) does not threaten.
+
+Local timings (macOS, Bun 1.4.4, three runs each of `bun test ./test-bun/run-bun-tests.issue3253.bun.ts`
+from `packages/agents`, session env, the child's own `Ran 1 test` time in brackets where it has one):
+
+| Test | Before | After |
+| --- | --- | --- |
+| uses the runner budget rather than a supplied child override | 658, 519, 540 ms (child 605, 496, 522) | 168, 199, 173 ms (child 160, 188, 164) |
+| kills a timed-out child, retries the file, and keeps the passing-attempt JUnit report | 4378, 4334, 4442 ms | 4117, 4168, 4141 ms |
+| returns the second real timeout and leaves no stale JUnit report | 8075, 8161, 8052 ms | 8007, 8009, 8010 ms |
+
+The last two are dominated by the 4000 ms budget plus reaping (two attempts for the second), so the
+saving shows only as the child reaching its test body sooner. The first is the failing test: the
+child's start-up fell from about 0.5 s to about 0.17 s here, a 3x cut that on the Windows runner
+(1.7 to 4.4 s for the old cli child) is the difference between passing and expiring.
+
+Tests touched in this round:
+
+- `packages/agents/test-bun/run-bun-tests.issue3253.bun.ts`
+  - `real agents test-file child retries > kills a timed-out child, retries the file, and keeps the passing-attempt JUnit report`
+  - `real agents test-file child retries > returns the second real timeout and leaves no stale JUnit report`
+  - `runner timeout environment > uses the runner budget rather than a supplied child override`
+- `packages/agents/run-bun-tests.ts`: optional `cwd` parameter on `runTestFile` (production default unchanged).
+
 ## Guard coverage for nightly privileged jobs
 
 `scripts/tests/supply-chain-pins.test.ts` classified every `nightly.yml` job as unprivileged. The
