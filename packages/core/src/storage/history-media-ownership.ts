@@ -139,6 +139,7 @@ export class HistoryMediaOwnership implements HistoryMediaOwner {
     return {
       publish: async () => {
         for await (const reference of references) {
+          if (next.matches(reference)) continue;
           ownership?.retain(reference);
           try {
             next.set(reference);

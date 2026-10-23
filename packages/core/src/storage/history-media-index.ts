@@ -8,6 +8,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import { createHash } from 'node:crypto';
 import {
   isMediaReferenceBlock,
@@ -33,6 +34,13 @@ export class HistoryMediaIndex {
   has(contentId: string): boolean {
     const path = this.path(contentId);
     return path !== undefined && existsSync(path);
+  }
+
+  matches(reference: MediaReferenceBlock): boolean {
+    const path = this.path(reference.contentId);
+    if (path === undefined || !existsSync(path)) return false;
+    const stored: unknown = JSON.parse(readFileSync(path, 'utf8'));
+    return isDeepStrictEqual(stored, reference);
   }
 
   set(reference: MediaReferenceBlock): void {
