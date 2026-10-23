@@ -2,6 +2,8 @@
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   assertRowIndex,
+  isProviderRequestSource,
+  type ProviderRequestSelection,
   type ProviderRequestRows,
 } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { ProviderNormalizationDisk } from '@vybestack/llxprt-code-core/services/history/provider-normalization-disk.js';
@@ -50,9 +52,9 @@ export function acquireRequestRows(
 }
 
 /**
- * The row selection behind a leased request stream. Reads the rest of a
- * one-shot stream onto the lease's scratch disk (one row in memory at a time)
- * and returns a repeatable selection with a known count and random access.
+ * The row selection behind a leased request stream. Journal producers open
+ * their indexed selection directly; unindexed one-shot streams still stage
+ * on the lease's scratch disk. The lease owns either selection until close.
  * Throws when `contents` was not handed out by {@link acquireRequestRows}.
  */
 export function stagedRequestRows(
@@ -71,6 +73,7 @@ export function stagedRequestRows(
 
 class RequestRowsLease {
   private disk: ProviderNormalizationDisk | undefined;
+  private admission: Promise<ProviderRequestSelection> | undefined;
   private source: AsyncIterator<IContent> | undefined;
   private length = 0;
   private exhausted = false;
@@ -132,6 +135,12 @@ class RequestRowsLease {
   async staged(): Promise<ProviderRequestRows> {
     this.assertOpen();
     if (this.rows !== undefined) return this.rows;
+    if (this.input !== undefined && isProviderRequestSource(this.input)) {
+      this.admission ??= this.input.openProviderRequest(this.signal);
+      const rows = await this.admission;
+      this.assertOpen();
+      return rows;
+    }
     while (!this.exhausted) {
       this.assertOpen();
       await this.stageNext();
@@ -158,6 +167,10 @@ class RequestRowsLease {
     this.assertOpen();
     if (this.rows !== undefined) {
       yield* this.rows.openReader(this.signal);
+      return;
+    }
+    if (this.input !== undefined && isProviderRequestSource(this.input)) {
+      yield* (await this.staged()).openReader(this.signal);
       return;
     }
     for (let index = 0; ; index++) {
@@ -220,7 +233,14 @@ class RequestRowsLease {
       this.readers.clear();
       const source = this.source;
       this.source = undefined;
-      await source?.return?.();
+      try {
+        await source?.return?.();
+      } finally {
+        await this.admission?.then(
+          (rows) => rows.close(),
+          () => undefined,
+        );
+      }
     }
   }
 }

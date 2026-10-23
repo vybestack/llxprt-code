@@ -683,18 +683,25 @@ export class HistoryService extends HistoryServiceReads {
    *
    * @plan PLAN-20260917-ISSUE854.P05b3
    */
-  async *getCuratedForProviderStream(
+  getCuratedForProviderStream(
     tailContents: IContent[] = [],
     signal?: AbortSignal,
     historyOverride?: Iterable<IContent> | AsyncIterable<IContent>,
   ): AsyncGenerator<IContent, void, unknown> {
-    yield* streamProviderContentSnapshot(
-      await this.prepareCuratedForProviderSnapshot(
+    const openProviderRequest = (requestSignal?: AbortSignal) => {
+      const signals = [signal, requestSignal].filter(
+        (value): value is AbortSignal => value !== undefined,
+      );
+      return this.prepareCuratedForProviderSnapshot(
         tailContents,
-        { signal },
+        { signal: AbortSignal.any(signals) },
         historyOverride,
-      ),
-    );
+      );
+    };
+    const stream = async function* () {
+      yield* streamProviderContentSnapshot(await openProviderRequest());
+    };
+    return Object.assign(stream(), { openProviderRequest });
   }
 
   /** Append pinned source rows atomically, retaining duplicate values and markers. */

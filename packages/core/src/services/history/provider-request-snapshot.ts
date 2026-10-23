@@ -41,6 +41,19 @@ export interface ProviderRequestSelection extends ProviderRequestRows {
   close(): void | Promise<void>;
 }
 
+export interface ProviderRequestSource extends AsyncIterable<IContent> {
+  openProviderRequest(signal?: AbortSignal): Promise<ProviderRequestSelection>;
+}
+
+export function isProviderRequestSource(
+  source: AsyncIterable<IContent>,
+): source is ProviderRequestSource {
+  return (
+    'openProviderRequest' in source &&
+    typeof source.openProviderRequest === 'function'
+  );
+}
+
 /** A selection over rows already resident in memory; closing it releases nothing. */
 export function inMemoryRequestSelection(
   rows: readonly IContent[],
