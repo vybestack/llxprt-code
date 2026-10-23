@@ -84,6 +84,8 @@ export type PreparedProfileAdoption = (() => void) & {
 };
 
 export class HistoryService extends HistoryServiceReads {
+  private disposal: Promise<void> | undefined;
+
   /**
    * @param options.recording injects the journal store. Omitted, the service
    *   records into its own temp-file-backed journal; call
@@ -327,18 +329,20 @@ export class HistoryService extends HistoryServiceReads {
    * rejects with the journal's disposal failure; callers must await it.
    */
   dispose(): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
+    return (this.disposal ??= new Promise<void>((resolve, reject) => {
       this.runSynchronousHistoryMutation(() => {
         this.disposeInternal().then(resolve, reject);
       });
-    });
+    }));
   }
 
   private async disposeInternal(): Promise<void> {
     this.invalidatePendingSyncs();
     this.removeAllListeners();
 
-    const journalDisposal = this.journal.dispose();
+    const journalDisposal = this.journal.dispose(() =>
+      this.waitForOwnershipSettlement(),
+    );
     this.tokenTickets.close();
     this.totalTokens = 0;
     this.baseTokenOffset = 0;

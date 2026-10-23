@@ -433,5 +433,5 @@ export interface HistoryStorePort {
     execute: (restore: () => Promise<void>) => Promise<T>,
   ): Promise<T>;
 
-  dispose(): Promise<void>;
+  dispose(beforeClose?: () => Promise<void>): Promise<void>;
 }

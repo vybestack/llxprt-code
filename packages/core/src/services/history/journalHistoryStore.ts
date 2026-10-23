@@ -649,14 +649,18 @@ export class JournalHistoryStore
   }
 
   /** Settles the queue, then closes the journal. */
-  dispose(): Promise<void> {
-    return (this.disposal ??= this.disposeInternal().catch((error: unknown) => {
-      this.disposal = Promise.resolve();
-      throw error;
-    }));
+  dispose(beforeClose?: () => Promise<void>): Promise<void> {
+    return (this.disposal ??= this.disposeInternal(beforeClose).catch(
+      (error: unknown) => {
+        this.disposal = Promise.resolve();
+        throw error;
+      },
+    ));
   }
 
-  private async disposeInternal(): Promise<void> {
+  private async disposeInternal(
+    beforeClose?: () => Promise<void>,
+  ): Promise<void> {
     this.disposed = true;
     await this.queue;
     await this.startup;
@@ -667,6 +671,7 @@ export class JournalHistoryStore
     )
       failures.push(this.failure.error);
     for (const close of [
+      async () => beforeClose?.(),
       ...[...this.openDumps].map((dump) => () => dump.close()),
       () => this.publication.close(),
       async () => {
