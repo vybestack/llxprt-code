@@ -76,6 +76,7 @@ export class RecordingPrimary {
       this.selected = undefined;
     if (this.selected === undefined && state.adopted !== undefined) {
       const origin = state.mirrors.primaryOriginId();
+      if (origin === undefined) return edits;
       const { id: owner } = await state.owners.resolve(origin);
       this.selected = { recorder: state.adopted, origin, owner };
     }
