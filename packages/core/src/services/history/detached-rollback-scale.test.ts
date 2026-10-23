@@ -1,6 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { appendFileSync } from 'node:fs';
+import type { RowOwnershipStats } from '../../recording/rowOwnership.js';
+import {
+  journalMediaParticipant as mediaParticipant,
+  rejectedValue,
+} from './chronology-rollback-test-helpers.js';
 import {
   detachedDigest,
   detachedDurableDigest,
@@ -8,12 +13,7 @@ import {
   detachedRows,
   withDetachedFixture,
 } from './detached-rollback-test-helpers.js';
-import {
-  mediaParticipant,
-  rejectedValue,
-} from './chronology-rollback-test-helpers.js';
 import type { IContent } from './IContent.js';
-import type { RowOwnershipStats } from '../../recording/rowOwnership.js';
 
 const limits = { rows: 440, serializedBytes: 8 * 1024 * 1024 };
 function record(value: object): void {
@@ -60,12 +60,13 @@ async function arraySubmission(size: number): Promise<number> {
 }
 
 async function rollbackScale(size: number, stage: string): Promise<number> {
-  return withDetachedFixture(async ({ history, recorder, owners }) => {
+  return withDetachedFixture(async ({ history, recorder, owners, io }) => {
     await history.detachedValues.replace(detachedRows(size));
     const expected = await detachedDigest(detachedRows(size));
     const failure = new Error('post ack');
     let held: RowOwnershipStats | undefined;
-    if (stage !== 'ack') recorder.failAdmissionAfter(stage === 'zero' ? 0 : 2);
+    if (stage !== 'ack')
+      io.rejectNextWrite(failure, stage === 'zero' ? 'records' : 'trailer');
     const result = await rejectedValue(
       history.detachedValues.transform(
         async (source, sink) => {
@@ -84,7 +85,7 @@ async function rollbackScale(size: number, stage: string): Promise<number> {
         },
       ),
     );
-    expect(result).toBe(stage === 'ack' ? failure : recorder.failure);
+    expect(result).toBe(failure);
     expect(await detachedDigest(history.streamRawHistory())).toStrictEqual(
       expected,
     );

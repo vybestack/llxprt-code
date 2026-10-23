@@ -8,6 +8,10 @@ import {
   withRollbackFixture,
 } from './chronology-rollback-test-helpers.js';
 
+function lastRowOf<T>(rows: readonly T[]): T | undefined {
+  return rows[rows.length - 1];
+}
+
 describe('history merge chronology stamping', () => {
   it('stamps unmarked source rows in append order and reconciles the next new marker', async () => {
     await withNativeDetachedFixture(async ({ history: source, session }) => {
@@ -43,7 +47,7 @@ describe('history merge chronology stamping', () => {
         target.add(fresh);
         await target.waitForCommit();
         expect(
-          (await rowsOf(target)).at(-1)?.metadata?.chronology,
+          lastRowOf(await rowsOf(target))?.metadata?.chronology,
         ).toMatchObject({
           seq: 35,
           userTurn: 13,

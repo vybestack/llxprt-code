@@ -1,8 +1,22 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { describe, expect, it } from 'bun:test';
 import {
-  nativeDensityRollback,
+  durableRowsOf,
+  exactTokenizer,
+  rejectedValue,
+  rowsOf,
+  withRollbackFixture,
+} from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
+import {
+  densityHandler,
+  densityRow,
+  digestRows,
+  digestStream,
+} from './density-disk-helpers.js';
+import {
   nativeDensityPublication,
+  nativeDensityRollback,
 } from './support/native-density-lifecycle.js';
 function collectGarbage(): void {
   const runtime: unknown = Reflect.get(globalThis, 'Bun');
@@ -12,36 +26,25 @@ function collectGarbage(): void {
     throw new Error('Bun GC is unavailable');
   runtime.gc(true);
 }
-import {
-  withRollbackFixture,
-  rowsOf,
-  durableRowsOf,
-  rejectedValue,
-  exactTokenizer,
-} from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
-import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
-import {
-  densityHandler,
-  densityRow,
-  digestRows,
-  digestStream,
-} from './density-disk-helpers.js';
 
 async function admissionRollback(
   size: number,
 ): Promise<{ before: string; after: string }> {
   return withRollbackFixture(async (history, recorder) => {
-    for (let index = 0; index < size; index++)
-      await recorder.commit('content', { content: densityRow(index) });
+    await history.addBatch(
+      Array.from({ length: size }, (_, index) => densityRow(index)),
+    );
+    await history.waitForCommit();
     const before = digestRows(
       Array.from({ length: size }, (_, index) => densityRow(index)),
     );
     history.syncTotalTokens(size * 4);
     const handler = densityHandler(history);
-    recorder.failAdmissionAfter(2);
-    expect(await rejectedValue(handler.ensureDensityOptimized())).toBe(
-      recorder.failure,
-    );
+    const failure = new Error('density publication failed');
+    history.once('tokensUpdated', () => {
+      throw failure;
+    });
+    expect(await rejectedValue(handler.ensureDensityOptimized())).toBe(failure);
     expect(await digestStream(history.streamRawHistory())).toBe(before);
     expect(history.getTotalTokens()).toBe(size * 4);
     expect(handler.densityDirty).toBe(false);

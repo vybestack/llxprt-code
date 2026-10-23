@@ -986,6 +986,21 @@
       "bun": "./src/journal/idKeys.ts",
       "import": "./dist/src/journal/idKeys.js"
     },
+    "./journal/rowReads.js": {
+      "types": "./dist/src/journal/rowReads.d.ts",
+      "bun": "./src/journal/rowReads.ts",
+      "import": "./dist/src/journal/rowReads.js"
+    },
+    "./journal/rowTreeReader.js": {
+      "types": "./dist/src/journal/rowTreeReader.d.ts",
+      "bun": "./src/journal/rowTreeReader.ts",
+      "import": "./dist/src/journal/rowTreeReader.js"
+    },
+    "./services/history/journalRowCodec.js": {
+      "types": "./dist/src/services/history/journalRowCodec.d.ts",
+      "bun": "./src/services/history/journalRowCodec.ts",
+      "import": "./dist/src/services/history/journalRowCodec.js"
+    },
     "./recording/sessionMetaKeys.js": {
       "types": "./dist/src/recording/sessionMetaKeys.d.ts",
       "bun": "./src/recording/sessionMetaKeys.ts",

@@ -1,13 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalResolver } from '@vybestack/llxprt-code-core/recording/journalResolver.js';
 import { isJournalFileName } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
-import { openJournalReadOnly } from '../../../core/src/journal/journalReader.js';
-import { readStoredRow } from '../../../core/src/journal/rowReads.js';
+import { openJournalReadOnly } from '@vybestack/llxprt-code-core/journal/journalReader.js';
+import { readStoredRow } from '@vybestack/llxprt-code-core/journal/rowReads.js';
 import {
   iterateRowEntries,
   rowTreeRootOf,
-} from '../../../core/src/journal/rowTreeReader.js';
-import { decodeStoredRow } from '../../../core/src/services/history/journalRowCodec.js';
+} from '@vybestack/llxprt-code-core/journal/rowTreeReader.js';
+import { decodeStoredRow } from '@vybestack/llxprt-code-core/services/history/journalRowCodec.js';
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 

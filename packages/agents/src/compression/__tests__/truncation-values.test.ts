@@ -1,31 +1,30 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
-import {
-  withValueTransformFixture,
-  transformProbes,
-  transformPhaseSampler,
-  pauseTransformFinalization,
-} from '@vybestack/llxprt-code-core/services/history/transform-value-test-helpers.js';
 import { probedTransformInput } from '@vybestack/llxprt-code-core/services/history/__tests__/support/transform-value-fixtures-test-helpers.js';
+import { rejectedValue } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-test-helpers.js';
 import {
   detachedDigest,
   detachedDurableDigest,
 } from '@vybestack/llxprt-code-core/services/history/detached-rollback-test-helpers.js';
-import { rejectedValue } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-test-helpers.js';
+import {
+  pauseTransformFinalization,
+  transformPhaseSampler,
+  transformProbes,
+  withValueTransformFixture,
+} from '@vybestack/llxprt-code-core/services/history/transform-value-test-helpers.js';
+import { describe, expect, it } from 'bun:test';
+import { observeRowOwnership } from './support/observed-row-ownership.js';
 import {
   executeTruncation,
   truncationValueRow,
   truncationValues,
-  expectedTruncationValue,
 } from './truncation-value-helpers.js';
 
-import { publishedTruncationProbes } from './truncation-value-observers.js';
+import type { SessionRecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { AdmissionFailureRecorder } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-test-helpers.js';
 
 async function finalValues(
   history: HistoryService,
-  recorder: AdmissionFailureRecorder,
+  recorder: SessionRecordingPort,
   size: number,
   rollback: boolean,
 ): Promise<void> {
@@ -62,7 +61,7 @@ async function ownership(size: number, rollback: boolean): Promise<number> {
     history.openDumpSnapshot = async () => {
       throw new Error('Borrowed dump preparation reached');
     };
-    const published = publishedTruncationProbes(recorder, size);
+
     const expected = await detachedDigest(
       truncationValues(size, 11, 2048, true),
     );
@@ -71,6 +70,7 @@ async function ownership(size: number, rollback: boolean): Promise<number> {
       history,
       rollback ? failure : undefined,
     );
+    const observed = observeRowOwnership(owners);
     fixture.pauseWriter();
     let returned = false;
     const operation = rejectedValue(
@@ -89,22 +89,21 @@ async function ownership(size: number, rollback: boolean): Promise<number> {
       ]);
       expect(returned).toBe(false);
       expect(owners.snapshot().liveRows).toBeGreaterThan(0);
-      expect(owners.snapshot().liveSerializedBytes).toBeGreaterThanOrEqual(
-        Buffer.byteLength(JSON.stringify(expectedTruncationValue(11, 11))),
-      );
+      expect(owners.snapshot().liveRows).toBe(observed.rows());
+      expect(observed.bytes()).toBeGreaterThan(2048);
+      expect(owners.snapshot().liveSerializedBytes).toBe(observed.bytes());
       await sample('writer-paused');
-      await published('writer-paused');
       fixture.releaseWriter();
       await paused.acknowledged;
       expect(returned).toBe(false);
       await sample('acknowledged');
-      await published('acknowledged');
-      expect(await detachedDurableDigest(recorder)).toStrictEqual(expected);
+      expect(await detachedDigest(fixture.primaryRows())).toStrictEqual(
+        expected,
+      );
       expect(history.getTotalTokens()).toBe(size - 11);
       paused.release();
       expect(await operation).toBe(rollback ? failure : undefined);
       await sample(rollback ? 'rollback' : 'complete');
-      await published(rollback ? 'rollback' : 'complete');
       await finalValues(history, recorder, size, rollback);
       expect(owners.snapshot().liveRows).toBe(0);
       expect(
@@ -115,6 +114,7 @@ async function ownership(size: number, rollback: boolean): Promise<number> {
       fixture.releaseWriter();
       paused.release();
       await operation;
+      observed.close();
     }
   });
 }
