@@ -78,7 +78,7 @@ export async function publishDetachedOnJournal(
     failures.push(error);
   }
   try {
-    await store.settleFanout();
+    if (publication !== undefined) await store.settleFanout();
   } catch (error) {
     if (failure === undefined && failures.length === 0) throw error;
     failures.push(error);
