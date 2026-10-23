@@ -167,7 +167,12 @@ describe('production filesystem roots', () => {
             systemInstruction: input.systemInstruction,
           }),
         );
-        yield* generate.call(this, { ...input, contents });
+        yield* generate.call(this, {
+          ...input,
+          contents: (async function* () {
+            yield* contents;
+          })(),
+        });
       });
       for await (const event of built.owner
         .getAgentClient()
