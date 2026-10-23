@@ -26,8 +26,10 @@ Rules that stay: no compatibility shims, no eslint-disable, no type-escape casts
 | 3 | Anthropic native request route | Done. Uncached `88e8ab2e6`, caching `781dae82b`, recovery without media `558608de4`, stored media aggregate `95d7c5725`/`7d823b208`, tails `b816a22bf`, persisted media `f60921f05`, media estimates `a6cfbe72b`, media tails `888a16754`, image budgets `fad44fbb8`, image recovery `455b4dfbf`, views `7d4e1c01b`, affected-span repair replacing the shape whitelist `a033ba8fc` |
 | 4 | Native request log/dump | Done: Anthropic `29522b461`, Chat/Mistral/Kimi `20a7e03f3`, Responses `7c63e0c6c` |
 | 5 | Floating-promise lint errors | Done in `df03074e1`. Pinned requests failing with "History changed before the native request format fill" after any history change (from `e912dba1d`) fixed in `a02a55af1` |
-| 6 | Performance and memory | Tool-heavy memory test inside its 170,000 ms budget; Anthropic "real tool round after 4000 rows" test takes 88 to 100 s and times out under load (400 rows cost 233,464 physical reads) |
-| 7 | Default flip and deletion | `journal` is the default; old JSONL backend, `historyBackendSelect.ts`, `AnthropicSpooledRequest.ts`, `message-table/tool-id-index.ts`, `WireBodySpool`, `KeyedRowIndex`, the Responses disk serializer and old-only scratch code deleted |
+| 6 | Performance and memory | Done: tool-heavy test 128.7 s inside its 170 s budget (`c5e14b67a`, `85bde6d35`); Anthropic tool-round reads halved (`9d2edb930`). Open: 8,192-row replacement takes about 60 s (two commit groups, 2,276 writes); measure CPU cost per row |
+| 7a | Default flip | Done in `3341b7673`: journal is the only backend, selector deleted. Test conversion since then fixed about 30 production bugs. Core inventory with Bun 1.3.14 (`tmp/inventory/core.log`): 999/1054 files pass, 55 fail (`tmp/inventory/core-fail-files.txt`); agents, cli and providers inventories not yet run |
+| 7b | Deletion | Waves in `DELETION-PLAN.md` (`377e32fd7`): 4, 106 and 67 files. Blockers: generic `/dump` still uses old dump builders; generic overrides and bare provider streams still reach normalization staging; token tickets still allocate a value spool; Kimi still uses `KeyedRowIndex` for media uploads |
+| 7c | Merge main | origin/main moved Bun to 1.4.4 (#3930) plus 5 other fixes. Memory tests pinned to 1.3.14 must follow |
 | 8 | Branch cleanup | PR diff contains product code, tests, fixtures and the design doc, not proof receipts or evidence logs |
 | 9 | Ship | test, lint, typecheck, format, build, lunahigh smoke; PR; CI green |
 
