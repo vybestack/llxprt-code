@@ -31,7 +31,7 @@ function isCloser(byte: number): boolean {
  * The scanner state of one re-indentation: a few scalars, nothing
  * proportional to the value.
  */
-class Reindenter {
+export class Reindenter {
   readonly #indents = new Indents();
   readonly #startLevel: number;
   #level: number;

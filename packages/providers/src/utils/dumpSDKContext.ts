@@ -41,7 +41,13 @@ export interface RequestDumpMetadata {
  * is the one an in-memory body would have produced.
  */
 export class StreamedDumpBody {
-  constructor(readonly bytes: () => AsyncIterable<Uint8Array>) {}
+  constructor(
+    readonly bytes: () => AsyncIterable<Uint8Array>,
+    readonly start?: (
+      request: DumpRequest,
+      provider: string,
+    ) => Promise<DumpRequestResult>,
+  ) {}
 }
 
 /** Nesting level of the `body` member inside the dump file's request object. */
@@ -180,6 +186,15 @@ export async function dumpSDKRequestContext(
   );
 
   if (requestParams instanceof StreamedDumpBody) {
+    if (requestParams.start !== undefined)
+      return requestParams.start(
+        buildSDKDumpRequest(
+          buildSDKDumpUrl(providerName, endpoint, baseURL),
+          undefined,
+          metadata,
+        ),
+        providerName,
+      );
     return dumpSDKRequestContextBodyBytes(
       providerName,
       endpoint,

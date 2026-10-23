@@ -343,6 +343,18 @@ export class AnthropicStreamRepair {
         ? piece
         : JSON.stringify(transform(piece));
   }
+  wirePieces(
+    prefix?: AnthropicMessage,
+    cache?: AnthropicCachePlan,
+    mediaStage?: MediaStage,
+    recoveryBudget?: ImageDimensionBudget,
+  ): AsyncIterable<AnthropicWirePiece> {
+    return resolveAnthropicWireMedia(
+      this.serializePieces((value) => value, prefix, cache),
+      mediaStage,
+      recoveryBudget,
+    );
+  }
   private async *serializePieces(
     transform: (value: unknown) => unknown,
     prefix?: AnthropicMessage,

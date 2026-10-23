@@ -17,6 +17,13 @@ import {
 import { StreamedSegment, writeEnvelope } from '../utils/envelope-writer.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
 import { wantsRequestDump } from '../utils/dumpContext.js';
+import type { StreamedDumpBody } from '../utils/dumpSDKContext.js';
+import {
+  NativeDumpBody,
+  nativeDumpLiteral,
+  nativeDumpValue,
+  nativeDumpEnvelope,
+} from '../utils/native-dump-body.js';
 import {
   buildRequestEnvelope,
   planAnthropicRequest,
@@ -82,7 +89,7 @@ export interface NativeAnthropicRequest {
         discard(): void;
       }
     | undefined;
-  readonly dump: undefined;
+  readonly dump: StreamedDumpBody | undefined;
   readonly recoveredImages: number;
   release(): Promise<void>;
 }
@@ -153,9 +160,11 @@ async function releaseNativeRequest(
   body: NativeAnthropicBody,
   projection: NativeAnthropicEstimateProjection | undefined,
   query: IndexedJournalRequestSnapshot,
+  capture: NativeDumpBody,
 ): Promise<void> {
   try {
     await body.dispose();
+    await capture.dispose();
   } finally {
     try {
       await projection?.dispose();
@@ -193,21 +202,23 @@ async function requestFromEngine(
   if (length > DEFAULT_HTTP_JSON_ENVELOPE_BYTES)
     throw envelopeTooLargeError(DEFAULT_HTTP_JSON_ENVELOPE_BYTES, length);
   const parts = await envelopeParts(envelope);
-  const body = new NativeAnthropicBody(async function* () {
+  const dumped = await envelopeParts(nativeDumpEnvelope(envelope));
+  const capture = new NativeDumpBody(async function* () {
     signal?.throwIfAborted();
-    yield parts.head;
-    for await (const piece of engine.serialize(
-      undefined,
+    yield nativeDumpLiteral(parts.head, dumped.head);
+    for await (const piece of engine.wirePieces(
       prefix,
       measured.cache,
       mediaStage,
       recoveryBudget,
     )) {
       signal?.throwIfAborted();
-      yield Buffer.from(piece);
+      if (typeof piece === 'string') yield nativeDumpLiteral(piece);
+      else yield* nativeDumpValue(piece);
     }
-    yield parts.tail;
-  }, length);
+    yield nativeDumpLiteral(parts.tail, dumped.tail);
+  });
+  const body = new NativeAnthropicBody(() => capture.stream(), length);
   const projection = estimate
     ? new NativeAnthropicEstimateProjection(
         engine,
@@ -231,9 +242,11 @@ async function requestFromEngine(
               void projection.dispose();
             },
           },
-    dump: undefined,
+    dump: wantsRequestDump(params.options.invocation.ephemerals.dumpcontext)
+      ? capture.dump
+      : undefined,
     recoveredImages,
-    release: () => releaseNativeRequest(body, projection, query),
+    release: () => releaseNativeRequest(body, projection, query, capture),
   };
 }
 
@@ -391,23 +404,13 @@ async function prepareNativeAnthropicRequest(
   );
 }
 
-function canUseNativeAnthropic(
-  params: AnthropicPlanParams,
-  rows: ProviderRequestRows,
-): boolean {
-  return (
-    rows.native !== undefined &&
-    !wantsRequestDump(params.options.invocation.ephemerals.dumpcontext)
-  );
-}
-
 export async function prepareAnthropicRequestRows(
   params: AnthropicPlanParams,
   rows: ProviderRequestRows,
   mediaStage: MediaStage | undefined,
   options: SpooledRequestOptions = {},
 ): Promise<PreparedAnthropicRequest> {
-  if (canUseNativeAnthropic(params, rows))
+  if (rows.native !== undefined)
     return prepareNativeAnthropicRequest(
       params,
       rows,
