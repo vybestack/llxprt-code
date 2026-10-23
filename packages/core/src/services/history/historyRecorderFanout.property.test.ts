@@ -108,9 +108,6 @@ describe('recorder mirrors stay replayable under random operations', () => {
           await service.replaceAll(rows.slice(0, keep), undefined, {
             origin: who.owner,
           });
-          // A single kept row is the shape of a compression: the row becomes
-          // the cutter's summary.
-          if (keep === 1) await ownNewRows(who.id, true);
           return;
         }
         case 'insert':
@@ -205,11 +202,10 @@ describe('recorder mirrors stay replayable under random operations', () => {
 
   it('after every operation each mirror replays to its own rows of the shared history', async () => {
     const seeds = Array.from({ length: CASES }, (_, index) => index + 1);
-    await expect(
-      (async () => {
-        for (const seed of seeds) await runCase(seed);
-      })(),
-    ).resolves.toBeUndefined();
+    const result = await (async () => {
+      for (const seed of seeds) await runCase(seed);
+    })();
+    expect(result).toBeUndefined();
   }, 120_000);
 });
 

@@ -62,7 +62,8 @@ describe('held production dump snapshots release caller identities', () => {
       try {
         await fixture.history.waitForTokenUpdates();
         await fixture.history.waitForCommit();
-        await fixture.history.dispose();
+        await fixture.history.clear();
+        expect(fixture.history.isEmpty()).toBe(true);
         await settle(fixture.probes);
         expect(
           fixture.probes.filter((probe) => probe.deref() !== undefined),
