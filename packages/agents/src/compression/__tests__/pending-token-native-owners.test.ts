@@ -17,10 +17,11 @@ import {
 } from './pending-token-native-helpers.js';
 import { truncateLargestToolResponses } from '../toolResultTruncator.js';
 
-function historyOver(
+async function historyOver(
   owned: OwnedJournal,
-): ReturnType<typeof journalRoutedHistory> {
+): Promise<ReturnType<typeof journalRoutedHistory>> {
   const history = journalRoutedHistory(owned);
+  await history.waitForCommit();
   history.openToolResponseRanking = (policy, overlay) =>
     owned.store.openToolResponseRanking(policy, overlay);
   history.historyMutationGuard = () => {
@@ -55,7 +56,7 @@ describe('pending-token native publication source ownership', () => {
         join(directory(), 'owners.llxj'),
         input,
       );
-      const history = historyOver(owned);
+      const history = await historyOver(owned);
       const pinned = await owned.session.store.snapshot();
       try {
         const limit = (size - 1) * 1000 - 451;

@@ -13,10 +13,11 @@ import { truncateToolResponsesInOnePass } from '../toolResponseOnePass.js';
 import { toolRankingRow } from './tool-truncation-stream-helpers.js';
 import { nativeRankingProjection } from './support/native-ranking-projection.js';
 
-function historyOver(
+async function historyOver(
   owned: OwnedJournal,
-): ReturnType<typeof journalRoutedHistory> {
+): Promise<ReturnType<typeof journalRoutedHistory>> {
   const history = journalRoutedHistory(owned);
+  await history.waitForCommit();
   history.openToolResponseRanking = (policy, overlay) =>
     owned.store.openToolResponseRanking(policy, overlay);
   history.historyMutationGuard = () => {
@@ -42,7 +43,7 @@ describe('native global ranking source owners', () => {
           origin: index % 2 === 0 ? 'owner-a' : 'owner-b',
         })),
       );
-      const history = historyOver(owned);
+      const history = await historyOver(owned);
       const pinned = await owned.session.store.snapshot();
       try {
         const limit = Math.floor((size - 1) * 1000 * 0.78);
