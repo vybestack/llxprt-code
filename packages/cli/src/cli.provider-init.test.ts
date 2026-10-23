@@ -394,7 +394,7 @@ describe('cli main provider initialization', () => {
         name.endsWith('.lock'),
       );
       const sessionFiles = filesDuringStartup.filter((name) =>
-        name.endsWith('.jsonl'),
+        name.endsWith('.llxj'),
       );
       if (!recording.path) throw new Error('Owner recording was not started');
       const continuedTranscript = await readFile(recording.path, 'utf8');

@@ -16,13 +16,15 @@ Reflect.set(globalThis, 'IS_REACT_ACT_ENVIRONMENT', true);
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { act } from 'react';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
+import {
+  readRecordedFacts,
+  seedSessionRows,
+} from '../../__tests__/journal-recording.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   RecordingIntegration,
-  isSessionStartHeader,
-  requireJsonlRecorder,
   type AgentClientContract,
   type HydratedModel,
   type SessionRecordingPort,
@@ -176,50 +178,17 @@ describe('provider changes made in dialogs reach the session recording (issue #3
     await rm(root, { recursive: true, force: true });
   });
 
-  /** Send the first message, then read back what reached the file. */
-  async function recordedFile(): Promise<{
-    header: { provider: string; model: string };
-    switches: Array<{ provider: unknown; model: unknown }>;
-  }> {
-    requireJsonlRecorder(recording).recordContent({
-      speaker: 'human',
-      blocks: [{ type: 'text', text: 'first message' }],
-    });
-    await recording.flush();
-    const lines = (await readFile(recording.getFilePath()!, 'utf-8'))
-      .trim()
-      .split('\n')
-      .map((line): unknown => JSON.parse(line));
-    const [first] = lines;
-    const header =
-      typeof first === 'object' && first !== null
-        ? Reflect.get(first, 'payload')
-        : undefined;
-    if (!isSessionStartHeader(header)) {
-      throw new Error('First recorded line is not a valid session_start');
-    }
-    const switches = lines.flatMap((line) => {
-      if (
-        typeof line !== 'object' ||
-        line === null ||
-        Reflect.get(line, 'type') !== 'provider_switch'
-      ) {
-        return [];
-      }
-      const payload: unknown = Reflect.get(line, 'payload');
-      return typeof payload === 'object' && payload !== null
-        ? [
-            {
-              provider: Reflect.get(payload, 'provider'),
-              model: Reflect.get(payload, 'model'),
-            },
-          ]
-        : [];
-    });
-    return {
-      header: { provider: header.provider, model: header.model },
-      switches,
-    };
+  async function recordedFile(): Promise<{ provider: string; model: string }> {
+    await seedSessionRows(recording, [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'first message' }],
+      },
+    ]);
+    const path = recording.getFilePath();
+    if (path === null) throw new Error('Missing recording');
+    const facts = await readRecordedFacts(path);
+    return { provider: facts.provider, model: facts.model };
   }
 
   function addMessage(message: {
@@ -230,7 +199,7 @@ describe('provider changes made in dialogs reach the session recording (issue #3
     addedMessages.push(message.content);
   }
 
-  it('records a cross-provider model picker selection in the header and as a provider_switch', async () => {
+  it('records a cross-provider model picker selection in the durable provider facts', async () => {
     const store = createDialogStore();
     store.commands.openDialog({ kind: 'models', payload: {} });
     const { result } = renderHook(() =>
@@ -252,13 +221,13 @@ describe('provider changes made in dialogs reach the session recording (issue #3
     });
 
     expect(await recordedFile()).toStrictEqual({
-      header: { provider: 'codex', model: 'gpt-6-luna' },
-      switches: [{ provider: 'codex', model: 'gpt-6-luna' }],
+      provider: 'codex',
+      model: 'gpt-6-luna',
     });
     expect(addedMessages).not.toContain('error');
   });
 
-  it('records a same-provider model picker selection as a provider_switch', async () => {
+  it('records a same-provider model picker selection in the durable provider facts', async () => {
     config.setProvider('codex');
     const store = createDialogStore();
     store.commands.openDialog({ kind: 'models', payload: {} });
@@ -281,12 +250,12 @@ describe('provider changes made in dialogs reach the session recording (issue #3
     });
 
     expect(await recordedFile()).toStrictEqual({
-      header: { provider: 'codex', model: 'gpt-6-luna' },
-      switches: [{ provider: 'codex', model: 'gpt-6-luna' }],
+      provider: 'codex',
+      model: 'gpt-6-luna',
     });
   });
 
-  it('records a profile chosen in the load-profile dialog in the header and as a provider_switch', async () => {
+  it('records a profile chosen in the load-profile dialog in the durable provider facts', async () => {
     const dialogs = createDialogOpeners(createDialogStore());
     const { result } = renderHook(() =>
       useLoadProfileDialog({
@@ -301,13 +270,13 @@ describe('provider changes made in dialogs reach the session recording (issue #3
     });
 
     expect(await recordedFile()).toStrictEqual({
-      header: { provider: 'codex', model: 'gpt-6-luna' },
-      switches: [{ provider: 'codex', model: 'gpt-6-luna' }],
+      provider: 'codex',
+      model: 'gpt-6-luna',
     });
     expect(addedMessages).toStrictEqual(["Profile 'lunahigh' loaded"]);
   });
 
-  it('records a profile loaded from the profile management dialogs in the header and as a provider_switch', async () => {
+  it('records a profile loaded from the profile management dialogs in the durable provider facts', async () => {
     const dialogs = createDialogOpeners(createDialogStore());
     const { result } = renderHook(() =>
       useProfileManagement({
@@ -322,8 +291,8 @@ describe('provider changes made in dialogs reach the session recording (issue #3
     });
 
     expect(await recordedFile()).toStrictEqual({
-      header: { provider: 'codex', model: 'gpt-6-luna' },
-      switches: [{ provider: 'codex', model: 'gpt-6-luna' }],
+      provider: 'codex',
+      model: 'gpt-6-luna',
     });
   });
 
@@ -349,9 +318,10 @@ describe('provider changes made in dialogs reach the session recording (issue #3
       await result.current.handleSelect('lunahigh');
     });
 
-    expect((await recordedFile()).switches).toStrictEqual([
-      { provider: 'codex', model: 'gpt-6-luna' },
-    ]);
+    expect(await recordedFile()).toStrictEqual({
+      provider: 'codex',
+      model: 'gpt-6-luna',
+    });
   });
 
   describe('when the session recording cannot accept the switch', () => {

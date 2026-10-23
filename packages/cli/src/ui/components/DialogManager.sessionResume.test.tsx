@@ -13,30 +13,37 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   SessionDiscovery,
-  SessionRecordingService,
+  createSessionRecorder,
+  type SessionRecordingPort,
+  type RecordingIntegration,
   getProjectHash,
   type LockHandle,
 } from '@vybestack/llxprt-code-core';
 import { renderHook } from '../../__tests__/render.js';
+import { seedSessionRows } from '../../__tests__/journal-recording.js';
 import { createTurnStore } from '../stores/turn/turnStore.js';
 import { useSessionBrowserHandler } from './DialogManager.js';
 
 const SESSION_ID = 'browser-resume-session';
-const CORRUPT_REASON =
-  'Invalid session_start: missing or malformed required fields';
+function corruptReason(path: string): string {
+  return `Session file ${path} ends inside its header (8 bytes)`;
+}
 
 describe('session browser resume with an unreadable recording present (issue #3732)', () => {
   let root: string;
-  let committed: SessionRecordingService | null;
+  let committed: SessionRecordingPort | null;
+  let committedIntegration: RecordingIntegration | null;
   let committedLock: LockHandle | null;
 
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), 'browser-resume-3732-'));
     committed = null;
+    committedIntegration = null;
     committedLock = null;
   });
 
   afterEach(async () => {
+    await committedIntegration?.dispose();
     await committed?.dispose();
     await committedLock?.release();
     await rm(root, { recursive: true, force: true });
@@ -47,7 +54,7 @@ describe('session browser resume with an unreadable recording present (issue #37
     await mkdir(chatsDir, { recursive: true });
     const projectRoot = join(root, 'project');
     const projectHash = getProjectHash(projectRoot);
-    const recording = new SessionRecordingService({
+    const recording = createSessionRecorder({
       chatsDir,
       sessionId: SESSION_ID,
       projectHash,
@@ -55,34 +62,19 @@ describe('session browser resume with an unreadable recording present (issue #37
       provider: 'test-provider',
       model: 'test-model',
     });
-    recording.recordContent({
-      speaker: 'human',
-      blocks: [{ type: 'text', text: 'restored conversation' }],
-    });
+    await seedSessionRows(recording, [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'restored conversation' }],
+      },
+    ]);
     await recording.flush();
     await recording.dispose();
     const corruptPath = join(
       chatsDir,
-      'session-2026-10-08T21-18-08-corrupt.jsonl',
+      'session-2026-10-08T21-18-08-corrupt.llxj',
     );
-    await writeFile(
-      corruptPath,
-      `${JSON.stringify({
-        v: 1,
-        seq: 1,
-        ts: '2026-10-08T21:18:08.000Z',
-        type: 'session_start',
-        payload: {
-          sessionId: 'corrupt-browser-session',
-          projectHash,
-          workspaceDirs: ['/x'],
-          provider: 'anthropic',
-          model: 42,
-          startTime: '2026-10-08T21:18:08.000Z',
-        },
-      })}\n`,
-      'utf-8',
-    );
+    await writeFile(corruptPath, 'LLXJRNL\0', 'utf-8');
     const [target] = await SessionDiscovery.listContinueTargets(
       chatsDir,
       projectHash,
@@ -121,11 +113,12 @@ describe('session browser resume with an unreadable recording present (issue #37
             getCurrentLockHandle: () => null,
             getCurrentMetadata: () => null,
             setRecording: (
-              next: SessionRecordingService | null,
-              _integration: unknown,
+              next: SessionRecordingPort | null,
+              integration: RecordingIntegration | null,
               lock: LockHandle | null,
             ) => {
               committed = next;
+              committedIntegration = integration;
               committedLock = lock;
             },
           },
@@ -142,7 +135,7 @@ describe('session browser resume with an unreadable recording present (issue #37
       .history.map((item) => ('text' in item ? item.text : item.type));
     expect(visible).toStrictEqual([
       'restored conversation',
-      `Warning: Skipped unreadable session recording ${corruptPath}: ${CORRUPT_REASON}`,
+      `Warning: Skipped unreadable session recording ${corruptPath}: ${corruptReason(corruptPath)}`,
     ]);
     unmount();
   });

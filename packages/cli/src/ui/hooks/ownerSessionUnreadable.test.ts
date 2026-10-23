@@ -25,8 +25,10 @@ import {
 } from './slashCommandHandlers.js';
 import { convertMessageToHistoryItem } from './slashCommandProcessorSupport.js';
 
-const BROKEN_NAME = 'session-2026-10-08T21-18-08-broken000001.jsonl';
-const EMPTY_FILE_REASON = 'Empty file or unreadable first line';
+const BROKEN_NAME = 'session-2026-10-08T21-18-08-broken000001.llxj';
+function brokenReason(path: string): string {
+  return `Session file ${path} ends inside its header (8 bytes)`;
+}
 
 const human = (text: string) => ({
   speaker: 'human' as const,
@@ -42,7 +44,7 @@ describe('owner mode with an unreadable recording present (issue #3732)', () => 
       if (!sourceId) throw new Error('Missing source session');
       await agent.session.setRecording({ enabled: false });
       const brokenPath = join(chatsDir, BROKEN_NAME);
-      await writeFile(brokenPath, '', 'utf-8');
+      await writeFile(brokenPath, 'LLXJRNL\0', 'utf-8');
 
       const next = await borrow();
       const turnStore = createTurnStore();
@@ -90,7 +92,7 @@ describe('owner mode with an unreadable recording present (issue #3732)', () => 
         .history.map((item) => ('text' in item ? item.text : item.type));
       expect(visible).toStrictEqual([
         'owner restored conversation',
-        `Warning: Skipped unreadable session recording ${brokenPath}: ${EMPTY_FILE_REASON}`,
+        `Warning: Skipped unreadable session recording ${brokenPath}: ${brokenReason(brokenPath)}`,
       ]);
     });
   });
@@ -99,7 +101,7 @@ describe('owner mode with an unreadable recording present (issue #3732)', () => 
     await withRecordingLifetimeFixture(async ({ borrow, chatsDir }) => {
       await mkdir(chatsDir, { recursive: true });
       const brokenPath = join(chatsDir, BROKEN_NAME);
-      await writeFile(brokenPath, '', 'utf-8');
+      await writeFile(brokenPath, 'LLXJRNL\0', 'utf-8');
       const next = await borrow();
       const failure = await resumeOwnerSession(
         next,
@@ -111,8 +113,9 @@ describe('owner mode with an unreadable recording present (issue #3732)', () => 
       );
 
       expect(failure).toBeInstanceOf(Error);
-      expect((failure as Error).message).toContain(
-        `unreadable recording skipped: ${brokenPath}: ${EMPTY_FILE_REASON}`,
+      if (!(failure instanceof Error)) throw new Error('Missing resume error');
+      expect(failure.message).toContain(
+        `unreadable recording skipped: ${brokenPath}: ${brokenReason(brokenPath)}`,
       );
     });
   });
@@ -125,7 +128,7 @@ describe('owner mode with an unreadable recording present (issue #3732)', () => 
         const sourceId = (await agent.session.listSessions()).at(0)?.id;
         if (!sourceId) throw new Error('Missing source session');
         await agent.session.setRecording({ enabled: false });
-        await writeFile(join(chatsDir, BROKEN_NAME), '', 'utf-8');
+        await writeFile(join(chatsDir, BROKEN_NAME), 'LLXJRNL\0', 'utf-8');
         const next = await borrow();
 
         const browser = renderHook(() =>

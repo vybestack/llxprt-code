@@ -55,7 +55,7 @@ describe('startup restoration from a journal session', () => {
         getHistoryService: () => history,
         hasChatInitialized: () => false,
         storeHistoryForLaterUse: async (source) => {
-          stored.push(source);
+          stored.push(await Array.fromAsync(source));
         },
       },
       resumed.recording,

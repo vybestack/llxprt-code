@@ -11,7 +11,7 @@ import { hasDialogRequest } from '../../__tests__/dialogStore.js';
 import { createDialogStore } from '../stores/dialog/dialogStore.js';
 import { createDialogOpeners } from '../stores/dialog/dialogOpeners.js';
 import { MessageType } from '../types.js';
-import { readFile } from 'node:fs/promises';
+import { readRecordedFacts } from '../../__tests__/journal-recording.js';
 import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 
 // The provider service is the external boundary; dialog and message delivery stay real.
@@ -63,7 +63,7 @@ describe('provider switch notices', () => {
     expect(hasDialogRequest(store, 'provider')).toBe(false);
     unmount();
   });
-  it('records a provider selection in the Agent session exactly once', async () => {
+  it('records a provider selection in the Agent session without a raw write', async () => {
     await withRecordingLifetimeFixture(async ({ agent }) => {
       await agent.setHistory([
         { speaker: 'human', blocks: [{ type: 'text', text: 'start' }] },
@@ -85,11 +85,10 @@ describe('provider switch notices', () => {
       await act(async () => {
         await result.current.handleSelect('owner-provider');
       });
-      const lines = (await readFile(path, 'utf8')).split('\n');
-      expect(
-        lines.filter((line) => line.includes('provider_switch')),
-      ).toHaveLength(1);
-      expect(lines.join('\n')).toContain('owner-provider');
+      expect(await readRecordedFacts(path)).toMatchObject({
+        provider: 'owner-provider',
+        model: 'fallback-model',
+      });
       expect(rawWrite).not.toHaveBeenCalled();
       unmount();
     });

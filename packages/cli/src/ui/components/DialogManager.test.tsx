@@ -25,7 +25,7 @@ import {
   createMockSettings,
 } from '../../__tests__/render.js';
 import type { HydratedModel } from '@vybestack/llxprt-code-core';
-import { readFile } from 'node:fs/promises';
+import { readRecordedFacts } from '../../__tests__/journal-recording.js';
 import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 
 // Mock the providers runtime barrel to avoid the broken dist dependency chain.
@@ -153,10 +153,10 @@ describe('useModelDialogHandler', () => {
       await waitFor(() =>
         expect(hasDialogRequest(store, 'modelConfig')).toBe(true),
       );
-      const lines = (await readFile(path, 'utf8')).split('\n');
-      expect(
-        lines.filter((line) => line.includes('provider_switch')),
-      ).toHaveLength(1);
+      expect(await readRecordedFacts(path)).toMatchObject({
+        provider: 'openai',
+        model: 'new-model',
+      });
       expect(rawWrite).not.toHaveBeenCalled();
       unmount();
     });
