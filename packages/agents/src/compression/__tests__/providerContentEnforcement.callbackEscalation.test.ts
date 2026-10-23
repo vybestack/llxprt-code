@@ -163,6 +163,7 @@ async function buildGuardedHarness(
   let capturedCallback: GuardAwareCallback | null = null;
   const provider = {
     name: 'load-balancer',
+    getModels: async () => [],
     generateChatCompletion: vi.fn(),
     setCompressionCallback: vi.fn((cb: CompressionCallback | null) => {
       if (cb !== null) capturedCallback = cb;
