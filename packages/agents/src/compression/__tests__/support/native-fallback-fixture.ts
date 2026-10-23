@@ -152,6 +152,7 @@ export async function withNativeFallbackFixture(
   const owner = new FinalizationOwner(media);
   history.setTokenizerFactory(exactTokenizer());
   try {
+    await history.waitForCommit();
     await action({
       history,
       seed: suffixSeeder(recording, history),
