@@ -8,7 +8,10 @@ import {
   ROW_SPEAKER,
 } from '../../journal/rowRecord.js';
 
-export const planSourceRowOccurrences: OccurrencePlanner = async (row) => {
+export const planSourceRowOccurrences = async (
+  row: Parameters<OccurrencePlanner>[0],
+  _facts?: Parameters<OccurrencePlanner>[1],
+): Promise<readonly IdOccurrence[]> => {
   if ((row.flags & ROW_FLAG.curated) === 0) return [];
   const split =
     row.speaker === ROW_SPEAKER.tool &&

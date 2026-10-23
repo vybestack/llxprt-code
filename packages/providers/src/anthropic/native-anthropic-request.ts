@@ -1,4 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import {
+  callerOwnedAnthropicEngine,
+  callerOwnedAnthropicCache,
+} from './caller-owned-anthropic.js';
 import type { UnsupportedMediaEntry } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { readAnthropicMediaLedger } from './anthropic-media-ledger.js';
 import { IndexedJournalRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/indexed-journal-request-snapshot.js';
@@ -155,7 +159,7 @@ async function envelopeParts(
 async function releaseNativeRequest(
   body: NativeAnthropicBody,
   projection: NativeAnthropicEstimateProjection | undefined,
-  query: IndexedJournalRequestSnapshot,
+  query: Pick<IndexedJournalRequestSnapshot, 'close'>,
   capture: NativeDumpBody,
 ): Promise<void> {
   try {
@@ -174,8 +178,8 @@ async function requestFromEngine(
   params: AnthropicPlanParams,
   plan: AnthropicRequestPlan,
   envelope: Readonly<Record<string, unknown>>,
-  query: IndexedJournalRequestSnapshot,
-  engine: AnthropicStreamRepair,
+  query: Pick<IndexedJournalRequestSnapshot, 'close'>,
+  engine: Pick<AnthropicStreamRepair, 'serialize' | 'wirePieces'>,
   measured: StoredAnthropicRequestPlan,
   estimate: boolean,
   mediaStage: MediaStage | undefined,
@@ -420,12 +424,67 @@ async function prepareNativeAnthropicRequest(
   );
 }
 
+async function prepareCallerOwnedAnthropic(
+  params: AnthropicPlanParams,
+  rows: ProviderRequestRows,
+  mediaStage: MediaStage | undefined,
+  options: SpooledRequestOptions,
+): Promise<NativeAnthropicRequest> {
+  const plan = planAnthropicRequest(params);
+  const settings = nativeSettings(params, plan);
+  const envelope = buildRequestEnvelope(plan, params);
+  const engine = await callerOwnedAnthropicEngine(rows, settings, {
+    strip: plan.reasoningSettings.stripFromContext,
+    includeInContext: plan.reasoningSettings.includeInContext,
+  });
+  const cache = plan.wantCaching
+    ? await callerOwnedAnthropicCache(
+        engine,
+        settings,
+        plan.requestSettings.ttl,
+      )
+    : undefined;
+  let bytes = 0;
+  for await (const piece of engine.serialize(
+    (value) => value,
+    undefined,
+    cache,
+    mediaStage,
+    options.recoveryBudget,
+  ))
+    bytes += Buffer.byteLength(piece);
+  const parts = await envelopeParts(envelope);
+  return requestFromEngine(
+    params,
+    plan,
+    envelope,
+    { close: () => undefined },
+    engine,
+    {
+      contentLength: parts.head.length + bytes + parts.tail.length,
+      messagesBytes: bytes,
+      messages: 0,
+      key: 0n,
+      generation: 0,
+      settings,
+      cache,
+    },
+    options.estimate === true,
+    mediaStage,
+    [],
+    options.recoveryBudget,
+    0,
+  );
+}
+
 export async function prepareAnthropicRequestRows(
   params: AnthropicPlanParams,
   rows: ProviderRequestRows,
   mediaStage: MediaStage | undefined,
   options: SpooledRequestOptions = {},
 ): Promise<PreparedAnthropicRequest> {
+  if (rows.callerOwned === true)
+    return prepareCallerOwnedAnthropic(params, rows, mediaStage, options);
   if (rows.native !== undefined)
     return prepareNativeAnthropicRequest(
       params,

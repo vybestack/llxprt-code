@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import { CallerOwnedToolQuery } from '../utils/caller-owned-tool-query.js';
 import { requestFormatSlot } from '@vybestack/llxprt-code-core/services/history/native-provider-format.js';
 import type { RowFormatSettings } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
 import type { SlotSummary } from '@vybestack/llxprt-code-core/journal/slotSummary.js';
@@ -142,9 +143,9 @@ export class NativeResponsesPrompt {
     estimation = false,
   ): AsyncGenerator<ResponsesInputItem> {
     this.requireOpen();
-    const indexed = this.rows.native?.indexed;
-    if (indexed === undefined)
-      throw new Error('Native Responses requires journal rows');
+    const indexed =
+      this.rows.native?.indexed ??
+      (await CallerOwnedToolQuery.create(this.rows));
     let counter = 0;
     const selected = this.selectedRows(skipRows, estimation);
     const source = estimation
@@ -276,7 +277,17 @@ async function historyByteLength(
 ): Promise<number> {
   const rows = options.requestRows;
   const native = rows?.native;
-  if (rows === undefined || native === undefined)
+  if (rows === undefined)
+    throw new Error('Native Responses requires request rows');
+  if (rows.callerOwned === true)
+    return callerOwnedByteLength(
+      options,
+      shell,
+      reasoningIdTime,
+      selection,
+      rows,
+    );
+  if (native === undefined)
     throw new Error('Native Responses requires journal rows');
   const settings = nativeSettings(options);
   const registration = responsesLengthRegistration(settings);
@@ -326,6 +337,39 @@ async function historyByteLength(
   return plan.contentLength;
 }
 
+async function callerOwnedByteLength(
+  options: ResponsesRequest,
+  shell: ResponsesRequestShell,
+  reasoningIdTime: number,
+  selection: NativeResponsesSelection,
+  rows: ProviderRequestRows,
+): Promise<number> {
+  const query = await CallerOwnedToolQuery.create(rows);
+  const context = {
+    includeReasoningInContext: options.includeReasoningInContext,
+    outputLimits: options.outputLimits,
+    debug: () => undefined,
+    mediaPdfEnabled: options.pdfEnabled,
+    reasoningIdTime,
+    serverSideParentActive: selection.stateful.parentId !== undefined,
+  };
+  let bytes = 2;
+  let items = 0;
+  let counter = 0;
+  for (let at = selection.skipRows; at < rows.count; at++) {
+    const row = await rows.readAt(at, options.invocation.signal);
+    const pairs = await responsesUnitPairs(row, query, selection.skipRows);
+    for (const item of buildOpenAIResponsesUnit(
+      row,
+      context,
+      pairs,
+      () => `rs_${reasoningIdTime}_${counter++}`,
+    ))
+      bytes += jsonValueByteLength(item) + Number(items++ > 0);
+  }
+  return overrideByteLength(shell.request, []) - 2 + bytes;
+}
+
 function overrideByteLength(
   request: OpenAIResponsesRequest,
   value: unknown,
@@ -347,8 +391,11 @@ export async function prepareNativeResponsesPrompt(
   selection: NativeResponsesSelection,
 ): Promise<NativeResponsesPrompt> {
   const rows = options.requestRows;
-  if (rows?.native === undefined)
-    throw new Error('Native Responses requires journal rows');
+  if (
+    rows === undefined ||
+    (rows.native === undefined && rows.callerOwned !== true)
+  )
+    throw new Error('Native Responses requires native request rows');
   const bytes =
     selection.inputOverride === undefined
       ? await historyByteLength(options, shell, reasoningIdTime, selection)

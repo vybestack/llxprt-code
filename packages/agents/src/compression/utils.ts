@@ -46,7 +46,7 @@ import type { ProviderRequestCollaborators } from '@vybestack/llxprt-code-core/r
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { buildCompressionChatOptions } from './compressionSystemPrompt.js';
-import { inMemoryRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import { callerOwnedProviderRequest } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 
 /**
  * Aggregate text from content blocks, handling spacing between text and
@@ -260,7 +260,9 @@ export async function runVerificationPass(
   resolvedOptions?: RuntimeGenerateChatOptions['resolved'],
   invocation?: RuntimeGenerateChatOptions['invocation'],
 ): Promise<string> {
-  const verificationRequest = verificationMessages(initialSummary);
+  const verificationRequest = await callerOwnedProviderRequest(
+    verificationMessages(initialSummary),
+  );
 
   try {
     const providerRuntime =
@@ -274,7 +276,7 @@ export async function runVerificationPass(
       providerRuntime.config?.getTargetDir(),
     ).generateChatCompletion(
       await buildCompressionChatOptions({
-        requestRows: inMemoryRequestSelection(verificationRequest),
+        requestRows: verificationRequest,
         providerRuntime,
         resolvedConfig,
         fallbackConfig: context.config,
@@ -312,6 +314,8 @@ export async function runVerificationPass(
     }
   } catch {
     // Verification is best-effort — fall back to initial summary on any error
+  } finally {
+    await verificationRequest.close();
   }
 
   return initialSummary;

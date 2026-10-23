@@ -11,6 +11,7 @@ import type {
   HistoryStorePort,
 } from './historyStorePort.js';
 import { oldProviderRequest } from './old-provider-request.js';
+import { callerOwnedProviderRequest } from './caller-owned-provider-request.js';
 
 export function prepareJournalProviderRequest(
   store: Pick<HistoryStorePort, 'streamRows' | 'waitForCommit'> & {
@@ -25,6 +26,12 @@ export function prepareJournalProviderRequest(
   return async (request) => {
     await store.waitForCommit();
     const override = request.historyOverride;
+    if (Array.isArray(override))
+      return callerOwnedProviderRequest(
+        override,
+        request.tail,
+        request.options,
+      );
     if (override !== undefined) {
       return isNativeProviderHistory(override)
         ? override.prepareProviderSnapshot(request.tail, request.options)

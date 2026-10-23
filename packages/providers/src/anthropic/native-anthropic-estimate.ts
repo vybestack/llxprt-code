@@ -61,7 +61,7 @@ export class NativeAnthropicEstimateProjection {
   readonly protocol = 'anthropic-messages';
   private closed = false;
   constructor(
-    private readonly engine: AnthropicStreamRepair,
+    private readonly engine: Pick<AnthropicStreamRepair, 'serialize'>,
     private readonly envelope: Readonly<Record<string, unknown>>,
     readonly signal?: AbortSignal,
     private readonly prefix?: AnthropicMessage,

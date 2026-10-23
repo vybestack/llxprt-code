@@ -246,7 +246,7 @@ export async function buildDiskTextResponsesContext(
   );
   const prepared = await buildResponsesRequestShell(request, deps, stateful);
   try {
-    const native = rows.native !== undefined;
+    const native = rows.native !== undefined || rows.callerOwned === true;
     const prompt = native
       ? await prepareNativeResponsesPrompt(
           request,

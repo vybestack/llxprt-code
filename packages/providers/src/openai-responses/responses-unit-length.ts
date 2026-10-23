@@ -24,7 +24,7 @@ export interface ResponsesUnitLength {
 
 export async function responsesUnitPairs(
   unit: IContent,
-  query: IndexedJournalRequestSnapshot,
+  query: Pick<IndexedJournalRequestSnapshot, 'count' | 'normalizedCount'>,
   from = 0,
 ): Promise<ResponsesToolPairs> {
   const range = { from, to: query.count };

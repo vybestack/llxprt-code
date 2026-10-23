@@ -130,7 +130,7 @@ export class NativeChatEstimateProjection {
   private closed = false;
   private readonly settings: RowFormatSettings;
   constructor(
-    private readonly native: NativeProviderFormat,
+    private readonly native: NativeProviderFormat | undefined,
     settings: RowFormatSettings,
     private readonly selected: 0 | 1 | 2,
     private readonly system: string,
@@ -170,11 +170,14 @@ export class NativeChatEstimateProjection {
   ): Promise<StoredChatMessagePlan> {
     if (this.streamedPlan !== undefined)
       return this.streamedPlan(settings, count);
+    const native = this.native;
+    if (native === undefined)
+      throw new Error('Chat estimate requires a native planner');
     const registration = plainChatLengthRegistration(settings, count);
-    return this.native.withFormat(registration, (snapshot) =>
+    return native.withFormat(registration, (snapshot) =>
       planRequestChatMessages(
         snapshot,
-        this.native.indexed,
+        native.indexed,
         registration.settings,
         this.selected,
         this.system,

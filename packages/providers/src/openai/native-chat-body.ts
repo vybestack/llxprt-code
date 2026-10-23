@@ -3,6 +3,7 @@ import {
   requestFormatSlot,
   type NativeProviderFormat,
 } from '@vybestack/llxprt-code-core/services/history/native-provider-format.js';
+import { callerOwnedChatIds } from './caller-owned-chat-ids.js';
 import { mistralRowIds } from './native-mistral-row.js';
 import type { NativeMistralResolver } from './native-mistral-row.js';
 import { nativeKimiRowIds } from './native-kimi-row.js';
@@ -280,13 +281,13 @@ async function acquireKimiRowIds(
  * is folded from the request's units with the ids the journal's Kimi facts
  * give, one unit at a time, and the body is then written from the same units.
  */
-async function planKimiChat(
+async function planStreamedChat(
   rows: ProviderRequestRows,
   settings: RowFormatSettings,
   selected: 0 | 1 | 2,
   system: string,
   signal: AbortSignal | undefined,
-  rowIds: NativeRowIds,
+  rowIds: NativeRowIds | undefined,
   rowInput: ChatRowInput,
   count?: ChatUnitTokenMeasurer,
 ): Promise<StoredChatMessagePlan> {
@@ -314,7 +315,7 @@ function kimiChatPlanner(
     const { rowIds, release } = await acquireKimiRowIds(native);
     try {
       return {
-        plan: await planKimiChat(
+        plan: await planStreamedChat(
           rows,
           settings,
           selected,
@@ -344,7 +345,7 @@ function kimiStreamedPlan(
   return async (settings, count) => {
     const { rowIds, release } = await acquireKimiRowIds(native);
     try {
-      return await planKimiChat(
+      return await planStreamedChat(
         rows,
         settings,
         selected,
@@ -576,8 +577,51 @@ interface ChatPlanning {
   readonly streamedPlan: StreamedChatPlan | undefined;
 }
 
+async function callerOwnedPlanning(
+  rows: ProviderRequestRows,
+  options: NormalizedGenerateChatOptions,
+  settings: RowFormatSettings,
+  rowInput: ChatRowInput,
+  signal: AbortSignal | undefined,
+): Promise<ChatPlanning> {
+  const rowIds = await callerOwnedChatIds(
+    rows,
+    settings.chat?.toolFormat ?? 'openai',
+  );
+  const plan = (
+    captured: RowFormatSettings,
+    selected: 0 | 1 | 2,
+    system: string,
+    count?: ChatUnitTokenMeasurer,
+  ) =>
+    planStreamedChat(
+      rows,
+      captured,
+      selected,
+      system,
+      signal,
+      rowIds,
+      rowInput,
+      count,
+    );
+  return {
+    planner: async (selected, system) => ({
+      plan: await plan(settings, selected, system),
+      rowIds,
+    }),
+    bodySettings: settings,
+    streamedPlan: (captured, count) =>
+      plan(
+        captured,
+        selectedVariant(reasoningStrip(options)),
+        options.systemInstruction ?? '',
+        count,
+      ),
+  };
+}
+
 async function chatPlanning(
-  native: NativeProviderFormat,
+  native: NativeProviderFormat | undefined,
   rows: ProviderRequestRows,
   options: NormalizedGenerateChatOptions,
   settings: RowFormatSettings,
@@ -588,6 +632,16 @@ async function chatPlanning(
   },
 ): Promise<ChatPlanning> {
   const toolFormat = settings.chat?.toolFormat;
+  if (rows.callerOwned === true)
+    return callerOwnedPlanning(
+      rows,
+      options,
+      settings,
+      rowInput,
+      request.signal,
+    );
+  if (native === undefined)
+    throw new Error('Native Chat requires indexed request rows');
   if (toolFormat === 'kimi')
     return {
       planner: kimiChatPlanner(
@@ -646,8 +700,6 @@ export async function prepareNativePlainRequest(
   >
 > {
   const native = rows.native;
-  if (native === undefined)
-    throw new Error('Native Chat requires indexed request rows');
   const settings = nativeChatSettings(options, toolFormat);
   const signal = getRequestSignal(options);
   const system = options.systemInstruction ?? '';

@@ -521,7 +521,7 @@ export async function prepareRequest(
   };
   const nativeRows = options.requestRows;
   const body =
-    nativeRows?.native !== undefined
+    nativeRows?.native !== undefined || nativeRows?.callerOwned === true
       ? await prepareNativePlainRequest(
           envelope,
           nativeRows,

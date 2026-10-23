@@ -3,6 +3,7 @@ import type {
   IContent,
   ContentBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { IndexedJournalRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/indexed-journal-request-snapshot.js';
 import type { RowFormatSettings } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
 import { normalizeToAnthropicToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
@@ -52,7 +53,15 @@ function chainStart(row: IContent, enabled: boolean): boolean {
   );
 }
 
-export class AnthropicRepairSource {
+export type AnthropicRepairRows = Pick<
+  IndexedJournalRequestSnapshot,
+  'count' | 'normalizedCount' | 'normalizedPosition'
+> &
+  Pick<ProviderRequestRows, 'readAt'>;
+
+export class AnthropicRepairSource<
+  Query extends AnthropicRepairRows = IndexedJournalRequestSnapshot,
+> {
   readonly options: AnthropicMessageConversionOptions;
   readonly work = {
     unitReads: 0,
@@ -63,7 +72,7 @@ export class AnthropicRepairSource {
     chainSearchUnits: 0,
   };
   constructor(
-    readonly query: IndexedJournalRequestSnapshot,
+    readonly query: Query,
     readonly settings: RowFormatSettings,
     readonly index?: AnthropicRequestRepairIndex,
     private readonly observeRow?: (row: IContent, at: number) => Promise<void>,

@@ -8,6 +8,7 @@ import type { NativeProviderFormat } from './native-provider-format.js';
 const SCRATCH_CHECK_ROWS = 64;
 
 export interface ProviderRequestRows {
+  readonly callerOwned?: true;
   readonly native?: NativeProviderFormat;
   readonly count: number;
   readonly openReader: (
@@ -80,6 +81,7 @@ export function providerRequestRows(
 ): ProviderRequestRows {
   return Object.freeze({
     ...(snapshot.native === undefined ? {} : { native: snapshot.native }),
+    ...(snapshot.callerOwned === true ? { callerOwned: true } : {}),
     count: snapshot.count,
     openReader: (signal?: AbortSignal) => snapshot.openReader(signal),
     readAt: (index: number, signal?: AbortSignal) =>

@@ -35,6 +35,8 @@ import { compressOneShotViaDisk } from './__tests__/support/oneshot-disk-adapter
 import { buildCompressionSystemInstruction } from './compressionSystemPrompt.js';
 import { compressMiddleOutViaDisk } from './__tests__/support/middleout-disk-adapter.js';
 import { runVerificationPass } from './utils.js';
+import { OpenAIProvider } from '@vybestack/llxprt-code-providers/openai/OpenAIProvider.js';
+import { operationFileCreates } from './__tests__/support/operation-file-creates.js';
 import {
   CompressionLoadBalancingProvider,
   type CompressionLoadBalancerCandidate,
@@ -493,5 +495,64 @@ describe('Load-balanced compression prompt assembly (issue #3176, D5+D8)', () =>
     expect(calls[0].systemInstruction).toContain(
       'mode=subagent provider=provider-a model=model-a',
     );
+  });
+});
+
+describe('verification native request rows', () => {
+  it('preserves verification request bytes and returns an improved summary without scratch files', async () => {
+    const bodies: string[] = [];
+    const improved = '<state_snapshot>checked summary</state_snapshot>';
+    const server = Bun.serve({
+      hostname: '127.0.0.1',
+      port: 0,
+      async fetch(request) {
+        bodies.push(await request.text());
+        return new Response(
+          'data: ' +
+            JSON.stringify({
+              id: 'verify',
+              object: 'chat.completion.chunk',
+              created: 1,
+              model: 'test-model',
+              choices: [
+                { index: 0, delta: { content: improved }, finish_reason: null },
+              ],
+            }) +
+            '\n\ndata: [DONE]\n\n',
+          { headers: { 'content-type': 'text/event-stream' } },
+        );
+      },
+    });
+    const provider = new OpenAIProvider(
+      'test-key',
+      `http://127.0.0.1:${server.port}/v1`,
+    );
+    const context = buildContext(provider);
+    const resolved = context.resolveProvider();
+    const verify = () =>
+      runVerificationPass(
+        provider,
+        'initial summary',
+        context,
+        resolved.runtime,
+        undefined,
+        {
+          model: 'test-model',
+          baseURL: `http://127.0.0.1:${server.port}/v1`,
+          authToken: 'test-key',
+        },
+        resolved.invocation,
+      );
+    try {
+      expect(await verify()).toBe(improved);
+      const created = await operationFileCreates(async () => {
+        expect(await verify()).toBe(improved);
+      }, true);
+      expect(created).toStrictEqual({ files: [], directories: [] });
+      expect(bodies).toHaveLength(2);
+      expect(bodies[1]).toBe(bodies[0]);
+    } finally {
+      await server.stop(true);
+    }
   });
 });

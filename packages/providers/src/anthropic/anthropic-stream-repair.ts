@@ -8,6 +8,7 @@ import {
 import { JournalFormatError } from '@vybestack/llxprt-code-core/journal/errors.js';
 import {
   AnthropicRepairSource,
+  type AnthropicRepairRows,
   type RepairMessage,
   type RepairPiece,
   type RepairPolicy,
@@ -97,10 +98,12 @@ export function numericRepairPiece(
       };
 }
 
-export class AnthropicStreamRepair {
+export class AnthropicStreamRepair<
+  Query extends AnthropicRepairRows = IndexedJournalRequestSnapshot,
+> {
   private constructor(
-    readonly source: AnthropicRepairSource,
-    readonly tools: AnthropicToolRepair,
+    readonly source: AnthropicRepairSource<Query>,
+    readonly tools: AnthropicToolRepair<Query>,
     readonly policy: RepairPolicy,
     readonly lastThinking: number,
   ) {}
@@ -126,6 +129,20 @@ export class AnthropicStreamRepair {
       new AnthropicToolRepair(source, index),
       { ...policy },
       last,
+    );
+  }
+  static async fromSource<Query extends AnthropicRepairRows>(
+    source: AnthropicRepairSource<Query>,
+    index: AnthropicRequestRepairIndex,
+    policy: RepairPolicy,
+  ): Promise<AnthropicStreamRepair<Query>> {
+    return new AnthropicStreamRepair(
+      source,
+      new AnthropicToolRepair(source, index),
+      policy,
+      policy.strip === 'allButLast' && policy.includeInContext !== false
+        ? await source.lastThinking()
+        : -1,
     );
   }
   private redact(message: RepairMessage): boolean {

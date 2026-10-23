@@ -4,6 +4,7 @@ import type { AnthropicMessageBlock } from './AnthropicMessageNormalizer.js';
 import type { AnthropicRequestRepairIndex } from './anthropic-repair-index.js';
 import type {
   AnthropicRepairSource,
+  AnthropicRepairRows,
   RepairMessage,
 } from './anthropic-repair-source.js';
 
@@ -22,7 +23,7 @@ const interrupted = (id: string): ResultBlock => ({
   is_error: true,
 });
 
-export class AnthropicToolRepair {
+export class AnthropicToolRepair<Query extends AnthropicRepairRows> {
   readonly work = {
     walks: 0,
     recursiveWalks: 0,
@@ -34,7 +35,7 @@ export class AnthropicToolRepair {
   };
 
   constructor(
-    readonly source: AnthropicRepairSource,
+    readonly source: AnthropicRepairSource<Query>,
     readonly index: AnthropicRequestRepairIndex,
   ) {}
   decision(
