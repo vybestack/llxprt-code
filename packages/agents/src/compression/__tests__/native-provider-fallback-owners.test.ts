@@ -30,6 +30,7 @@ describe('native provider fallback current owners', () => {
         })),
       );
       const history = journalRoutedHistory(owned);
+      await history.waitForCommit();
       history.setTokenizerFactory(exactTokenizer());
       history.syncTotalTokens(size + 2);
       await history.waitForTokenUpdates();
