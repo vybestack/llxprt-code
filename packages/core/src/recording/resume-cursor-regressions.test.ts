@@ -1,213 +1,192 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { beforeEach, afterEach, expect, it, describe } from 'bun:test';
-import { mkdtemp, rm, readFile, appendFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { afterEach, describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
-import { SessionRecordingService } from './SessionRecordingService.js';
+import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
+import { resumeSession } from './resumeSession.js';
+import { requireJournalRecorder } from '../services/history/recorderBackend.js';
+import type { SessionRecordingPort } from './recordingPort.js';
+import { JournalRecordingService } from './journalRecordingService.js';
+import { readJournalSnapshot } from './__tests__/support/journalSnapshot.js';
+import { readJournalFileFacts } from './journalSessionListing.js';
+import { LocalMediaStore } from '../storage/local-media-store.js';
 import {
-  resumeJsonlSession,
-  type JsonlResumeResult as ResumeResult,
-} from './resumeSession.js';
-import { ResumeCursorBoot } from './resumeCursorBoot.js';
-import { JournalResolver } from './journalResolver.js';
-import { replaySession } from './ReplayEngine.js';
-import { scanResumeMetadata } from './resumeMetadata.js';
-import { createRowCounters } from './journalCounters.js';
-import type { IContent } from '../services/history/IContent.js';
+  PROJECT_HASH,
+  PAGE_BOUND,
+  recordingConfig,
+  seedRecording,
+  requireBoot,
+  textRow,
+  useJournalReadProbe,
+} from './__tests__/support/journalRecordingFixture.js';
 
-let root: string;
-
-let writer: SessionRecordingService;
-
-let result: ResumeResult | undefined;
-
-async function boot(): Promise<ResumeResult> {
-  const resumed = await resumeJsonlSession({
-    continueRef: writer.getSessionId(),
-    projectHash: 'project',
-    chatsDir: root,
-    currentProvider: 'test',
-    currentModel: 'model',
-    workspaceDirs: [],
+describe('native resume row and metadata regressions', () => {
+  const directory = useTempDir('resume-regressions-native-');
+  const probe = useJournalReadProbe();
+  const recordings: SessionRecordingPort[] = [];
+  afterEach(async () => {
+    for (const recording of recordings.splice(0)) await recording.dispose();
   });
-  if (!resumed.ok) throw new Error(resumed.error);
-  result = resumed;
-  return resumed;
-}
 
-async function rows(source: AsyncIterable<IContent>): Promise<IContent[]> {
-  const collected: IContent[] = [];
-  for await (const row of source) collected.push(row);
-  return collected;
-}
-
-describe('resume cursor regressions', () => {
-  beforeEach(async () => {
-    root = await mkdtemp(join(tmpdir(), 'resume-regression-'));
-    writer = new SessionRecordingService({
-      sessionId: crypto.randomUUID(),
-      projectHash: 'project',
-      chatsDir: root,
-      provider: 'test',
-      model: 'model',
+  it('strips stored-response markers only from rows predating the resume boundary', async () => {
+    const seed = await seedRecording(directory(), 0);
+    const writer = await JournalRecordingService.open(
+      recordingConfig(directory(), {
+        sessionId: seed.recording.getSessionId(),
+      }),
+      seed.filePath,
+    );
+    await (
+      await writer.session()
+    ).append([
+      { ...textRow('retained', 'ai'), metadata: { responsesStored: true } },
+    ]);
+    await writer.dispose();
+    const result = await resumeSession({
+      continueRef: writer.getSessionId(),
+      projectHash: PROJECT_HASH,
+      chatsDir: directory(),
+      currentProvider: 'test',
+      currentModel: 'model',
       workspaceDirs: [],
     });
-    writer.recordContent({
-      speaker: 'ai',
-      blocks: [{ type: 'text', text: 'retained' }],
-      metadata: { responsesStored: true },
+    const boot = requireBoot(result);
+    if (!result.ok) throw new Error(result.error);
+    recordings.push(result.recording);
+    await (
+      await requireJournalRecorder(result.recording).session()
+    ).append([
+      { ...textRow('later', 'ai'), metadata: { responsesStored: true } },
+    ]);
+    const restored = await Array.fromAsync(boot.streamRows());
+    expect(restored).toHaveLength(2);
+    expect(restored[0].metadata?.responsesStored).toBeUndefined();
+    expect(restored[1].metadata?.responsesStored).toBe(true);
+    const durable = await readJournalSnapshot(seed.filePath, PROJECT_HASH);
+    expect(
+      durable.history.map((row) => row.metadata?.responsesStored),
+    ).toStrictEqual([true, true]);
+  });
+
+  it('releases a cancelled row iterator while the recorder remains usable', async () => {
+    const seed = await seedRecording(directory(), 3);
+    const result = await resumeSession({
+      continueRef: seed.recording.getSessionId(),
+      projectHash: PROJECT_HASH,
+      chatsDir: directory(),
+      currentProvider: 'test',
+      currentModel: 'model',
+      workspaceDirs: [],
     });
-    await writer.flush();
-  });
-  afterEach(async () => {
-    await result?.recording.dispose();
-    await writer.dispose();
-    await rm(root, { recursive: true, force: true });
-  });
-  it(
-    'strips response markers only from resume rows and freezes the selected prefix',
-    verifyStripsResponseMarkersOnlyFromResumeRowsAndFreezesTheSelectedPrefix,
-  );
-  it(
-    'closes the cursor when consumption is cancelled and recording is disposed',
-    verifyClosesTheCursorWhenConsumptionIsCancelledAndRecordingIsDisposed,
-  );
-  it(
-    'does not read appended metadata beyond the supplied byte limit',
-    verifyDoesNotReadAppendedMetadataBeyondTheSuppliedByteLimit,
-  );
-  it(
-    'preserves metadata and malformed metadata warnings without decoding rows',
-    verifyPreservesMetadataAndMalformedMetadataWarningsWithoutDecodingRows,
-  );
-  it(
-    'rejects an out-of-file byte watermark',
-    verifyRejectsAnOutOfFileByteWatermark,
-  );
-
-  it(
-    'rejects malformed media during row consumption and closes the boot',
-    verifyRejectsMalformedMediaDuringRowConsumptionAndClosesTheBoot,
-  );
-});
-
-async function verifyStripsResponseMarkersOnlyFromResumeRowsAndFreezesTheSelectedPrefix(): Promise<void> {
-  const resumed = await boot();
-  resumed.recording.recordContent({
-    speaker: 'human',
-    blocks: [{ type: 'text', text: 'later' }],
-  });
-  await resumed.recording.flush();
-  const restored = await rows(resumed.boot.streamRows());
-  expect(restored).toHaveLength(1);
-  expect(restored[0].metadata?.responsesStored).toBeUndefined();
-  const resolver = await JournalResolver.open(resumed.boot.filePath);
-  try {
-    for await (const entry of resolver.resolve()) {
-      expect(entry.content.metadata?.responsesStored).toBe(true);
+    const boot = requireBoot(result);
+    if (!result.ok) throw new Error(result.error);
+    recordings.push(result.recording);
+    for await (const row of boot.streamRows()) {
+      expect(row.blocks).toStrictEqual(seed.contents[0].blocks);
       break;
     }
-  } finally {
-    await resolver.close();
-  }
-  expect((await replaySession(resumed.boot.filePath, 'project')).ok).toBe(true);
-}
+    expect(probe().activeReads).toBe(0);
+    expect(await Array.fromAsync(boot.streamRows())).toStrictEqual(
+      seed.contents,
+    );
+    await result.recording.dispose();
+  });
 
-async function verifyClosesTheCursorWhenConsumptionIsCancelledAndRecordingIsDisposed(): Promise<void> {
-  const resumed = await boot();
-  for await (const row of resumed.boot.streamRows()) {
-    expect(row.blocks[0]).toStrictEqual({ type: 'text', text: 'retained' });
-    break;
-  }
-  await expect(resumed.boot.cursor.pageBack(1)).rejects.toThrow('closed');
-  await resumed.recording.dispose();
-}
-
-async function verifyDoesNotReadAppendedMetadataBeyondTheSuppliedByteLimit(): Promise<void> {
-  const file = writer.getFilePath();
-  if (!file) throw new Error('missing journal');
-  const bytes = await readFile(file);
-  await appendFile(
-    file,
-    JSON.stringify({
-      v: 99,
-      seq: 3,
-      type: 'session_metadata',
-      payload: { title: 'outside' },
-    }) + '\n',
-  );
-  const kit = createRowCounters();
-  const scan = await scanResumeMetadata(
-    file,
-    'project',
-    bytes.length,
-    kit.counters,
-  );
-  expect(scan.replay.ok).toBe(true);
-  expect(scan.watermark).toBe(bytes.length);
-  expect(kit.snapshot().recordsDecoded).toBe(2);
-  expect(kit.snapshot().rowsDecoded).toBe(0);
-}
-
-async function verifyPreservesMetadataAndMalformedMetadataWarningsWithoutDecodingRows(): Promise<void> {
-  writer.recordProviderSwitch('other', 'new-model');
-  writer.recordDirectoriesChanged(['/changed']);
-  await writer.flush();
-  const file = writer.getFilePath();
-  if (!file) throw new Error('missing journal');
-  await appendFile(
-    file,
-    JSON.stringify({
-      v: 1,
-      seq: 5,
-      type: 'session_metadata',
-      payload: { title: 42 },
-    }) + '\n',
-  );
-  const oracle = await replaySession(file, 'project');
-  const kit = createRowCounters();
-  const scan = await scanResumeMetadata(
-    file,
-    'project',
-    (await readFile(file)).length,
-    kit.counters,
-  );
-  if (!oracle.ok || !scan.replay.ok) throw new Error('metadata scan failed');
-  expect(scan.replay.metadata).toStrictEqual(oracle.metadata);
-  expect(scan.replay.warnings).toStrictEqual(oracle.warnings);
-  expect(kit.snapshot().rowsDecoded).toBe(0);
-}
-
-async function verifyRejectsAnOutOfFileByteWatermark(): Promise<void> {
-  const file = writer.getFilePath();
-  if (!file) throw new Error('missing journal');
-  await expect(
-    ResumeCursorBoot.open(file, 2, (await readFile(file)).length + 1),
-  ).rejects.toThrow('watermark');
-}
-
-async function verifyRejectsMalformedMediaDuringRowConsumptionAndClosesTheBoot(): Promise<void> {
-  const file = writer.getFilePath();
-  if (!file) throw new Error('missing journal');
-  await appendFile(
-    file,
-    JSON.stringify({
-      v: 1,
-      seq: 3,
-      type: 'content',
-      payload: {
-        content: {
-          speaker: 'human',
-          blocks: [
-            { type: 'media', encoding: 'reference', contentId: 'missing' },
-          ],
-        },
+  it('reads current provider, directories and title with bounded descriptor reads and no row decode', async () => {
+    const seed = await seedRecording(directory(), 40);
+    const writer = await JournalRecordingService.open(
+      recordingConfig(directory(), {
+        sessionId: seed.recording.getSessionId(),
+      }),
+      seed.filePath,
+    );
+    writer.recordProviderSwitch('other', 'new-model');
+    writer.recordDirectoriesChanged(['/changed']);
+    writer.recordSessionMetadata('title');
+    await writer.dispose();
+    probe().reset();
+    const facts = await readJournalFileFacts(seed.filePath);
+    expect(facts).toMatchObject({
+      facts: {
+        provider: 'other',
+        model: 'new-model',
+        directories: ['/changed'],
+        title: 'title',
       },
-    }) + '\n',
+      rows: 40,
+    });
+    expect(probe().decodedRows).toBe(0);
+    expect(probe().reads).toBeGreaterThan(0);
+    expect(probe().reads).toBeLessThanOrEqual(PAGE_BOUND);
+  });
+
+  it.each(['missing', 'malformed', 'valid'])(
+    'validates %s referenced media during streamed boot without retaining reads or reservations',
+    async (mode) => {
+      const sourceMedia = new LocalMediaStore({
+        rootDirectory: join(directory(), 'source-media'),
+        quotaBytes: 1024,
+      });
+      const media = new LocalMediaStore({
+        rootDirectory: join(directory(), 'media'),
+        quotaBytes: 1024,
+      });
+      try {
+        const reference = await sourceMedia.admit({
+          bytes: new Uint8Array([1, 2, 3]),
+          mimeType: 'image/png',
+          semanticMetadata: {},
+        });
+        const seed = await seedRecording(directory(), 0);
+        const writer = await JournalRecordingService.open(
+          recordingConfig(directory(), {
+            sessionId: seed.recording.getSessionId(),
+          }),
+          seed.filePath,
+        );
+        const block =
+          mode === 'malformed'
+            ? { ...reference, contentId: 'bad-id' }
+            : reference;
+        await (
+          await writer.session()
+        ).append([{ speaker: 'human', blocks: [block] }]);
+        await writer.dispose();
+        if (mode === 'valid')
+          await media.admit({
+            bytes: new Uint8Array([1, 2, 3]),
+            mimeType: 'image/png',
+            semanticMetadata: {},
+          });
+        const result = await resumeSession({
+          continueRef: writer.getSessionId(),
+          projectHash: PROJECT_HASH,
+          chatsDir: directory(),
+          currentProvider: 'test',
+          currentModel: 'model',
+          workspaceDirs: [],
+          mediaStore: media,
+        });
+        const boot = requireBoot(result);
+        if (!result.ok) throw new Error(result.error);
+        recordings.push(result.recording);
+        const outcome = await Array.fromAsync(boot.streamRows()).then(
+          (rows) => ({ status: 'fulfilled', blocks: rows[0].blocks }),
+          (error: unknown) => ({ status: 'rejected', error }),
+        );
+        const validationError = expect.objectContaining({
+          message: expect.stringContaining('Media reference validation failed'),
+        });
+        expect(outcome).toStrictEqual(
+          mode === 'valid'
+            ? { status: 'fulfilled', blocks: [reference] }
+            : { status: 'rejected', error: validationError },
+        );
+        expect(probe().activeReads).toBe(0);
+        expect(await media.hasReservations(reference.contentId)).toBe(false);
+      } finally {
+        await media.close();
+        await sourceMedia.close();
+      }
+    },
   );
-  const resumed = await boot();
-  await expect(rows(resumed.boot.streamRows())).rejects.toThrow(
-    'Media reference validation failed',
-  );
-  await expect(resumed.boot.cursor.pageBack(1)).rejects.toThrow('closed');
-}
+});

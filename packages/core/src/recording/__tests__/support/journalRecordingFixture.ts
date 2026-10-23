@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, spyOn } from 'bun:test';
+import * as fs from 'node:fs';
 import * as positional from '../../../journal/positionalFile.js';
 import * as codec from '../../../services/history/journalRowCodec.js';
 import type { IContent } from '../../../services/history/IContent.js';
@@ -125,6 +126,7 @@ export function useJournalReadProbe(): () => {
   reset(): void;
 } {
   const read = positional.createFileHandleReader;
+  const syncRead = fs.readSync;
   const decode = codec.decodeStoredRow;
   const stats = {
     reads: 0,
@@ -157,6 +159,24 @@ export function useJournalReadProbe(): () => {
         },
       }),
     );
+    const syncSpy = spyOn(fs, 'readSync').mockImplementation(
+      (
+        ...args:
+          | [number, NodeJS.ArrayBufferView, fs.ReadOptions?]
+          | [
+              number,
+              NodeJS.ArrayBufferView,
+              number,
+              number,
+              fs.ReadPosition | null,
+            ]
+      ): number => {
+        stats.reads += 1;
+        stats.peakReads = Math.max(stats.peakReads, stats.activeReads + 1);
+        if (args.length === 5) return syncRead(...args);
+        return syncRead(...args);
+      },
+    );
     const decoderSpy = spyOn(codec, 'decodeStoredRow').mockImplementation(
       (...args) => {
         stats.decodedRows += 1;
@@ -165,6 +185,7 @@ export function useJournalReadProbe(): () => {
     );
     restore = () => {
       readerSpy.mockRestore();
+      syncSpy.mockRestore();
       decoderSpy.mockRestore();
     };
   });
