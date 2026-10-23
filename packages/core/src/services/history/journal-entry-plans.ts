@@ -24,9 +24,9 @@ export async function* journalEntryPlans(
     let current = await parts.next();
     while (current.done !== true && current.value.entry.label === entry.label) {
       const part = current.value;
-      const next = await parts.next();
       const self = await selfResponsePlan(source, part);
       if (self !== undefined) yield self;
+      const next = await parts.next();
       const adjacent = await responseAdjacent(
         source,
         part,

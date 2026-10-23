@@ -4,11 +4,7 @@ import type { RecordAccess } from './recordAccess.js';
 import { JournalFormatError } from './errors.js';
 import { unitCount } from './unitContributions.js';
 import type { RowEntry } from './rowEntry.js';
-import {
-  entryAt,
-  readRowTreeNode,
-  type RowTreeRootRef,
-} from './rowTreeReader.js';
+import { readRowTreeNode, type RowTreeRootRef } from './rowTreeReader.js';
 
 /**
  * How many live rows have a label below `cut`: one node per level, chosen by
@@ -40,8 +36,8 @@ export async function countRowsBelow(
 }
 
 /**
- * The entry of the live row `label`, or undefined when no row has it: two
- * descents. `root` undefined is an empty tree.
+ * The entry of the live row `label`, or undefined when no row has it.
+ * `root` undefined is an empty tree.
  */
 export async function entryByLabel(
   access: RecordAccess,
@@ -49,10 +45,13 @@ export async function entryByLabel(
   label: bigint,
 ): Promise<RowEntry | undefined> {
   if (root === undefined) return undefined;
-  const ordinal = await countRowsBelow(access, root, label);
-  if (ordinal >= root.rows) return undefined;
-  const entry = await entryAt(access, root, ordinal);
-  return entry.label === label ? entry : undefined;
+  let node = await readRowTreeNode(access, root.offset);
+  while (node.kind === 'internal') {
+    const next = node.slots.find((slot) => slot.maxLabel >= label);
+    if (next === undefined) return undefined;
+    node = await readRowTreeNode(access, next.childOffset);
+  }
+  return node.entries.find((entry) => entry.label === label);
 }
 export interface IndexedUnit {
   readonly entry: RowEntry;

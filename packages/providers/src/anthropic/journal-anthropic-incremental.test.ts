@@ -350,7 +350,7 @@ describe('incremental native Anthropic stored summaries', () => {
       }
     });
   }
-  for (const count of [40, 4000]) {
+  for (const count of [40, 400, 4000]) {
     it(`maintains a real tool round after ${count} fixed-density source rows without whole fills`, async () => {
       const counter = { reads: 0 };
       const ranges: Array<{ start: number; end: number }> = [];

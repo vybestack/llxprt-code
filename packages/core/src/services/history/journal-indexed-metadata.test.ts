@@ -20,19 +20,26 @@ import { assertPersistedOccurrences } from './__tests__/support/persisted-occurr
 
 async function measured(session: JournalSession): Promise<{
   readonly snapshot: VersionSnapshot;
-  readonly stats: { heads: number; blocks: number; bodies: number };
+  readonly stats: {
+    heads: number;
+    blocks: number;
+    bodies: number;
+    rows: Set<number>;
+  };
 }> {
   const read = await session.store.openRead();
-  const stats = { heads: 0, blocks: 0, bodies: 0 };
+  const stats = { heads: 0, blocks: 0, bodies: 0, rows: new Set<number>() };
   const raw = read.access;
   const access: RecordAccess = {
     recordError: raw.recordError,
     readRecordHead(offset, what, prefetch) {
       stats.heads++;
+      if (what === 'ROW') stats.rows.add(offset);
       return raw.readRecordHead(offset, what, prefetch);
     },
     readRecordStart(offset, what, prefetch) {
       stats.heads++;
+      if (what === 'ROW') stats.rows.add(offset);
       return raw.readRecordStart(offset, what, prefetch);
     },
     readRecordRange(head, offset, length) {
@@ -138,6 +145,45 @@ describe('indexed metadata native mutation and read bounds', () => {
       }
     }, 120000);
   }
+
+  it('reads a selected self unit without opening its successor source row', async () => {
+    const session = await JournalSession.create(
+      `${directory()}/self-unit.llxj`,
+      {
+        journal: testJournalSeams().dependencies,
+      },
+    );
+    const rows: readonly IContent[] = [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'selected' }],
+        metadata: {},
+      },
+      { speaker: 'ai', blocks: [call('successor')], metadata: {} },
+      { speaker: 'tool', blocks: [response('successor')], metadata: {} },
+    ];
+    try {
+      await session.append(rows);
+      const { snapshot, stats } = await measured(session);
+      const indexed = await IndexedJournalRequestSnapshot.create(snapshot);
+      try {
+        const selected = await snapshot.entryAt(0);
+        stats.rows.clear();
+        expect(await indexed.readAt(0)).toStrictEqual(rows[0]);
+        expect([...stats.rows]).toStrictEqual([selected.recordOffset]);
+        stats.rows.clear();
+        const next = await snapshot.entryAt(1);
+        expect(await indexed.readAt(1)).toStrictEqual(rows[1]);
+        expect([...stats.rows]).toStrictEqual([next.recordOffset]);
+        expect((await indexed.readAt(2)).blocks).toStrictEqual(rows[2].blocks);
+      } finally {
+        await indexed.close();
+        await snapshot.close();
+      }
+    } finally {
+      await session.close();
+    }
+  });
 
   it('represents an empty uncommitted journal without a row read', async () => {
     const session = await JournalSession.create(`${directory()}/empty.llxj`, {

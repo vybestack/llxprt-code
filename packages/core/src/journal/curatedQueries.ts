@@ -5,31 +5,22 @@ import { ROW_FLAG } from './rowRecord.js';
 import { readRowTreeNode, type RowTreeRootRef } from './rowTreeReader.js';
 import { JournalFormatError } from './errors.js';
 
-async function curatedThrough(
+async function curatedAfter(
   access: RecordAccess,
-  root: RowTreeRootRef,
+  offset: number,
   label: bigint,
-): Promise<number> {
-  let node = await readRowTreeNode(access, root.offset);
-  let count = 0;
-  while (node.kind === 'internal') {
-    let next: number | undefined;
-    for (const slot of node.slots) {
-      if (slot.maxLabel <= label) count += slot.aggregate.curated;
-      else {
-        next = slot.childOffset;
-        break;
-      }
-    }
-    if (next === undefined) return count;
-    node = await readRowTreeNode(access, next);
+): Promise<RowEntry | undefined> {
+  const node = await readRowTreeNode(access, offset);
+  if (node.kind === 'leaf')
+    return node.entries.find(
+      (entry) => entry.label > label && (entry.flags & ROW_FLAG.curated) !== 0,
+    );
+  for (const slot of node.slots) {
+    if (slot.maxLabel <= label || slot.aggregate.curated === 0) continue;
+    const entry = await curatedAfter(access, slot.childOffset, label);
+    if (entry !== undefined) return entry;
   }
-  return (
-    count +
-    node.entries.filter(
-      (entry) => entry.label <= label && (entry.flags & ROW_FLAG.curated) !== 0,
-    ).length
-  );
+  return undefined;
 }
 
 export async function nextCuratedEntry(
@@ -38,9 +29,8 @@ export async function nextCuratedEntry(
   total: number,
   label: bigint,
 ): Promise<RowEntry | undefined> {
-  const within = await curatedThrough(access, root, label);
-  if (within === total) return undefined;
-  return curatedEntryAt(access, root, total, within);
+  if (total === 0) return undefined;
+  return curatedAfter(access, root.offset, label);
 }
 
 export async function curatedEntryAt(
