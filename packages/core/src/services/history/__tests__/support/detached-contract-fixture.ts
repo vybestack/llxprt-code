@@ -141,9 +141,9 @@ function nativeGraph(
   }
 }
 
-export async function withNativeDetachedFixture(
-  action: (fixture: NativeDetachedFixture) => Promise<void>,
-): Promise<void> {
+export async function withNativeDetachedFixture<T>(
+  action: (fixture: NativeDetachedFixture) => Promise<T>,
+): Promise<T> {
   const root = mkdtempSync(join(tmpdir(), 'native-detached-contract-'));
   const io = new DetachedIOFaults();
   const writer = await heldSession(root, io);
@@ -156,7 +156,7 @@ export async function withNativeDetachedFixture(
   history.setTokenizerFactory(exactTokenizer());
   try {
     await history.waitForCommit();
-    await action({
+    return await action({
       history,
       owners,
       writerPaused: writer.paused,

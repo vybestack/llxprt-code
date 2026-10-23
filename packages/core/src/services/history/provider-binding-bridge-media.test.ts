@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { withNativeDetachedFixture } from './__tests__/support/detached-contract-fixture.js';
 import { describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -7,11 +8,7 @@ import { LocalMediaStore } from '../../storage/local-media-store.js';
 import { MediaAdmissionService } from '../../storage/media-admission-service.js';
 import { HistoryMediaOwnership } from '../../storage/history-media-ownership.js';
 import { createHistoryProviderFileBindingStore } from './provider-file-binding.js';
-import {
-  withDetachedFixture,
-  detachedDigest,
-  detachedDurableDigest,
-} from './detached-rollback-test-helpers.js';
+import { detachedDigest } from './detached-rollback-test-helpers.js';
 import { bindingFile } from './provider-binding-bridge-test-helpers.js';
 import { rejectedValue } from './chronology-rollback-test-helpers.js';
 import type { IContent } from './IContent.js';
@@ -45,7 +42,7 @@ describe('binding bridge local media reservations', () => {
       quotaBytes: 1024,
     });
     try {
-      await withDetachedFixture(async ({ history, recorder }) => {
+      await withNativeDetachedFixture(async ({ history, primaryRows }) => {
         const rows = await admittedImage(store);
         const reference = rows[0].blocks[0];
         if (reference.type !== 'media' || reference.encoding !== 'reference')
@@ -72,7 +69,7 @@ describe('binding bridge local media reservations', () => {
         expect(await detachedDigest(history.streamRawHistory())).toStrictEqual(
           expected,
         );
-        expect(await detachedDurableDigest(recorder)).toStrictEqual(expected);
+        expect(await detachedDigest(primaryRows())).toStrictEqual(expected);
         const rollbackReservation = await store.hasReservations(
           reference.contentId,
         );

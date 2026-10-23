@@ -140,6 +140,7 @@ export async function reconcileMediaOnJournal(
   store: JournalHistoryStore,
   owner: HistoryMediaOwner,
 ): Promise<void> {
+  await store.settleFanout();
   const effect = await prepareMediaReplacement(owner, currentReferences(store));
   try {
     await effect.publish();
