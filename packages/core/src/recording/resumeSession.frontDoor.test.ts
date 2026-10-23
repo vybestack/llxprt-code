@@ -1,12 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, describe, expect, it } from 'bun:test';
+import { writeFile } from 'node:fs/promises';
+import { join, basename } from 'node:path';
 import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
 import { retiredJournalMessage } from '../journal/journalRefusal.js';
 import type { IContent } from '../services/history/IContent.js';
-import {
-  PROJECT_HASH,
-  createRecordedSession,
-} from './__tests__/support/p05dTestKit.js';
+import { PROJECT_HASH } from './__tests__/support/p05dTestKit.js';
 import { createResumableSession } from './__tests__/support/resumableSession.js';
 import { JournalRecordingService } from './journalRecordingService.js';
 import { JournalResumeBoot } from './journalResume.js';
@@ -65,8 +64,12 @@ describe('the resume front door', () => {
   });
 
   it('refuses a retired JSONL session without acquiring its lock', async () => {
-    const fixture = await createRecordedSession(directory(), { rows: 3 });
-    const result = await resumeSession(request(fixture.sessionId));
+    const fixture = {
+      sessionId: 'retired-session',
+      filePath: join(directory(), 'session-retired-session.jsonl'),
+    };
+    await writeFile(fixture.filePath, '{"v":1,"type":"session_start"}\n');
+    const result = await resumeSession(request(basename(fixture.filePath)));
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('Resumed a retired JSONL session');
     expect(result.error).toContain(retiredJournalMessage(fixture.filePath));

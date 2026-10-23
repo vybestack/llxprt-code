@@ -29,7 +29,7 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { HistoryService } from '../services/history/HistoryService.js';
+import { encodeContentRow } from '../services/history/journalRowCodec.js';
 import { type IContent } from '../services/history/IContent.js';
 import { SessionLockManager } from './SessionLockManager.js';
 import { JournalRecordingService } from './journalRecordingService.js';
@@ -214,12 +214,12 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: reconstructs h
         projectHash: PROJECT_HASH,
       });
       const svc = JournalRecordingService.create(config);
-      const history = new HistoryService({ recording: svc });
+      const session = await svc.session();
 
       // Add initial content
-      history.add(makeContent('old msg 1', 'human'));
-      history.add(makeContent('old msg 2', 'ai'));
-      history.add(makeContent('old msg 3', 'human'));
+      await session.append([makeContent('old msg 1', 'human')]);
+      await session.append([makeContent('old msg 2', 'ai')]);
+      await session.append([makeContent('old msg 3', 'human')]);
 
       // Compress all prior content
       const summary: IContent = {
@@ -227,15 +227,21 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: reconstructs h
         blocks: [{ type: 'text', text: 'Summary of prior conversation' }],
         metadata: { isSummary: true },
       };
-      history.startCompression();
-      history.endCompression(summary, 3);
+      const version = session.store.published;
+      if (version === undefined) throw new Error('Missing seeded version');
+      await session.store.commit([
+        {
+          kind: 'compress',
+          summary: encodeContentRow(summary, { owner: 0 }),
+          retainFromLabel: version.nextLabel,
+          expectedReplaced: 3,
+        },
+      ]);
 
       // Add new content after compression
-      history.add(makeContent('new msg after compression', 'human'));
-      history.add(makeContent('new response', 'ai'));
+      await session.append([makeContent('new msg after compression', 'human')]);
+      await session.append([makeContent('new response', 'ai')]);
 
-      await history.waitForCommit();
-      await history.dispose();
       await svc.flush();
       await svc.dispose();
 

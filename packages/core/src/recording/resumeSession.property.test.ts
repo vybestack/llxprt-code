@@ -22,17 +22,18 @@ import * as fc from 'fast-check';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { SessionRecordingService } from './SessionRecordingService.js';
-import { resumeJsonlSession } from './resumeSession.js';
+import { readJournalFileFacts } from './journalSessionListing.js';
+import { JournalRecordingService } from './journalRecordingService.js';
+import { encodeContentRow } from '../services/history/journalRowCodec.js';
+import { resumeSession } from './resumeSession.js';
 import { type IContent } from '../services/history/IContent.js';
 import {
   PROJECT_HASH,
   makeConfig,
   makeContent,
   alternatingSpeaker,
-  createTestSession,
+  createJournalTestSession,
   makeResumeRequest,
-  readJsonlFile,
   expectOk,
   collectBootRows,
   useResumeFixture,
@@ -71,12 +72,12 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: preserves any 
                 blocks: [{ type: 'text' as const, text: item.text }],
               }));
 
-              await createTestSession(localChatsDir, {
+              await createJournalTestSession(localChatsDir, {
                 projectHash: PROJECT_HASH,
                 contents,
               });
 
-              const result = await resumeJsonlSession(
+              const result = await resumeSession(
                 makeResumeRequest(localChatsDir),
               );
 
@@ -130,13 +131,13 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: detects provid
             await fs.mkdir(localChatsDir, { recursive: true });
 
             try {
-              await createTestSession(localChatsDir, {
+              await createJournalTestSession(localChatsDir, {
                 projectHash: PROJECT_HASH,
                 provider: sessionProvider,
                 model: 'model-a',
               });
 
-              const result = await resumeJsonlSession(
+              const result = await resumeSession(
                 makeResumeRequest(localChatsDir, {
                   currentProvider,
                   currentModel: 'model-b',
@@ -146,20 +147,12 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: detects provid
               const okResult = expectOk(result);
               await okResult.recording.flush();
 
-              // Verify provider_switch event was recorded
-              const events = await readJsonlFile(
+              const facts = await readJournalFileFacts(
                 okResult.recording.getFilePath()!,
               );
-              const switchEvents = events.filter(
-                (e) => e.type === 'provider_switch',
-              );
-              expect(switchEvents.length).toBeGreaterThanOrEqual(1);
-
-              const payload = switchEvents[switchEvents.length - 1].payload as {
-                provider: string;
-                model: string;
-              };
-              expect(payload.provider).toBe(currentProvider);
+              expect(facts).toBeDefined();
+              expect(facts?.facts.provider).toBe(currentProvider);
+              expect(facts?.facts.model).toBe('model-b');
 
               await okResult.recording.dispose();
               await okResult.lockHandle.release();
@@ -200,29 +193,41 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: sequence is mo
                 originalContents.push(makeContent(`original-${i}`));
               }
 
-              await createTestSession(localChatsDir, {
+              await createJournalTestSession(localChatsDir, {
                 projectHash: PROJECT_HASH,
                 contents: originalContents,
               });
 
-              const result = await resumeJsonlSession(
+              const result = await resumeSession(
                 makeResumeRequest(localChatsDir),
               );
 
               const okResult = expectOk(result);
-              // Add new events
+              if (!(okResult.recording instanceof JournalRecordingService))
+                throw new Error('Expected journal recorder');
+              const session = await okResult.recording.session();
+              let previous = session.store.published?.commitSeq;
+              if (previous === undefined)
+                throw new Error('Missing resumed version');
               for (let i = 0; i < newCount; i++) {
-                okResult.recording.recordContent(makeContent(`new-${i}`));
+                await session.append([makeContent(`new-${i}`)]);
+                const next = session.store.published?.commitSeq;
+                expect(next).toBeGreaterThan(previous);
+                if (next === undefined)
+                  throw new Error('Missing appended version');
+                previous = next;
               }
-              await okResult.recording.flush();
-
-              // Verify monotonic seq across entire file
-              const events = await readJsonlFile(
-                okResult.recording.getFilePath()!,
+              const contents = await Array.fromAsync(session.rows());
+              expect(
+                contents.map(({ content }) => content.blocks),
+              ).toStrictEqual(
+                [
+                  ...originalContents,
+                  ...Array.from({ length: newCount }, (_, i) =>
+                    makeContent(`new-${i}`),
+                  ),
+                ].map((content) => content.blocks),
               );
-              for (let i = 1; i < events.length; i++) {
-                expect(events[i].seq).toBeGreaterThan(events[i - 1].seq);
-              }
 
               await okResult.recording.dispose();
               await okResult.lockHandle.release();
@@ -262,12 +267,12 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: resume always 
                 contents.push(makeContent(`content-${i}`));
               }
 
-              await createTestSession(localChatsDir, {
+              await createJournalTestSession(localChatsDir, {
                 projectHash: PROJECT_HASH,
                 contents,
               });
 
-              const result = await resumeJsonlSession(
+              const result = await resumeSession(
                 makeResumeRequest(localChatsDir),
               );
 
@@ -315,11 +320,13 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: compression + 
                 sessionId,
                 projectHash: PROJECT_HASH,
               });
-              const svc = new SessionRecordingService(config);
+              const svc = JournalRecordingService.create(config);
+
+              const session = await svc.session();
 
               // Pre-compression content
               for (let i = 0; i < preCompressCount; i++) {
-                svc.recordContent(makeContent(`pre-${i}`));
+                await session.append([makeContent(`pre-${i}`)]);
               }
 
               // Compression
@@ -328,17 +335,27 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: compression + 
                 blocks: [{ type: 'text', text: 'Summary' }],
                 metadata: { isSummary: true },
               };
-              svc.recordCompressed(summary, preCompressCount);
+              const version = session.store.published;
+              if (version === undefined)
+                throw new Error('Missing seeded version');
+              await session.store.commit([
+                {
+                  kind: 'compress',
+                  summary: encodeContentRow(summary, { owner: 0 }),
+                  retainFromLabel: version.nextLabel,
+                  expectedReplaced: preCompressCount,
+                },
+              ]);
 
               // Post-compression content
               for (let i = 0; i < postCompressCount; i++) {
-                svc.recordContent(makeContent(`post-${i}`));
+                await session.append([makeContent(`post-${i}`)]);
               }
 
               await svc.flush();
               await svc.dispose();
 
-              const result = await resumeJsonlSession(
+              const result = await resumeSession(
                 makeResumeRequest(localChatsDir),
               );
 
@@ -384,12 +401,12 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: resume succeed
                 contents.push(makeContent(`msg-${i}`, alternatingSpeaker(i)));
               }
 
-              await createTestSession(localChatsDir, {
+              await createJournalTestSession(localChatsDir, {
                 projectHash: PROJECT_HASH,
                 contents,
               });
 
-              const result = await resumeJsonlSession(
+              const result = await resumeSession(
                 makeResumeRequest(localChatsDir),
               );
 
