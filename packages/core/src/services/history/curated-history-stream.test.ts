@@ -1,7 +1,5 @@
-import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { HistoryService } from './HistoryService.js';
 import { buildProviderContent } from './historyProviderPipeline.js';
@@ -96,13 +94,16 @@ describe('curated membership snapshots', () => {
       const first = service.streamCuratedHistory();
       const second = service.streamCuratedHistory();
       service.add(suffixRow(1));
-      const expectedFirst = curatedHistoryForTest(service);
+      const expectedFirst = [suffixRow(0), suffixRow(1)];
       const firstHead = await first.next();
       service.add(suffixRow(2));
-      const expectedSecond = curatedHistoryForTest(service);
+      const expectedSecond = [suffixRow(0), suffixRow(1), suffixRow(2)];
       const secondHead = await second.next();
       await service.clear();
       service.add(suffixRow(3));
+      const third = service.streamCuratedHistory();
+      const thirdHead = await third.next();
+      expect(ownership.snapshot().liveRows).toBe(3);
       expect([
         firstHead.value,
         ...(await collectCuratedFixture(first)),
@@ -111,9 +112,10 @@ describe('curated membership snapshots', () => {
         secondHead.value,
         ...(await collectCuratedFixture(second)),
       ]).toStrictEqual(expectedSecond);
-      expect(
-        await collectCuratedFixture(service.streamCuratedHistory()),
-      ).toStrictEqual(curatedHistoryForTest(service));
+      expect([
+        thirdHead.value,
+        ...(await collectCuratedFixture(third)),
+      ]).toStrictEqual([suffixRow(3)]);
       expect(ownership.snapshot().liveRows).toBe(0);
       expect(ownership.snapshot().peakRows).toBe(3);
     });
@@ -142,7 +144,7 @@ describe('curated membership snapshots', () => {
 
 describe('curated reader lifecycle', () => {
   for (const exit of ['return', 'throw', 'break', 'consumer-throw'] as const) {
-    it(`closes its fold and releases the yielded row on ${exit}`, async () => {
+    it(`releases the yielded row without creating scratch on ${exit}`, async () => {
       await withSuffixFixture(
         512,
         async (service, ownership) => {
@@ -152,7 +154,7 @@ describe('curated reader lifecycle', () => {
           const created = scratchDirectories().filter(
             (dir) => !before.includes(dir),
           );
-          expect(created.length).toBeGreaterThan(0);
+          expect(created).toStrictEqual([]);
           expect(ownership.snapshot().liveRows).toBe(1);
           try {
             const failures = {
@@ -163,7 +165,9 @@ describe('curated reader lifecycle', () => {
             };
             expect(await consumeCuratedExit(stream, exit)).toBe(failures[exit]);
             expect(ownership.snapshot().liveRows).toBe(0);
-            expect(created.every((dir) => !existsSync(dir))).toBe(true);
+            expect(
+              scratchDirectories().filter((dir) => !before.includes(dir)),
+            ).toStrictEqual([]);
           } finally {
             await stream.return();
           }

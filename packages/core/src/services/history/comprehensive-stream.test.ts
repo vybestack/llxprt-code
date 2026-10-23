@@ -1,7 +1,6 @@
 import { collectJournalRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { existsSync } from 'node:fs';
 import {
   journalShapeRow,
   scratchDirectories,
@@ -173,7 +172,7 @@ describe('comprehensive cursor exits', () => {
     'consumer-throw': 'consumer failed',
   };
   for (const exit of ['return', 'throw', 'break', 'consumer-throw'] as const) {
-    it(`releases row ownership and scratch on ${exit}`, async () => {
+    it(`releases row ownership without creating scratch on ${exit}`, async () => {
       await withSuffixFixture(512, async (service, ownership) => {
         const before = scratchDirectories();
         const stream = service.getComprehensive();
@@ -183,12 +182,14 @@ describe('comprehensive cursor exits', () => {
           const opened = scratchDirectories().filter(
             (directory) => !before.includes(directory),
           );
-          expect(opened.length).toBeGreaterThan(0);
+          expect(opened).toStrictEqual([]);
           expect(await exitFailure(stream, exit)).toBe(failures[exit]);
           expect(ownership.snapshot().liveRows).toBe(0);
-          expect(opened.every((directory) => !existsSync(directory))).toBe(
-            true,
-          );
+          expect(
+            scratchDirectories().filter(
+              (directory) => !before.includes(directory),
+            ),
+          ).toStrictEqual([]);
         } finally {
           await stream.return();
         }
@@ -220,11 +221,14 @@ describe('comprehensive cursor exits', () => {
       const opened = scratchDirectories().filter(
         (directory) => !before.includes(directory),
       );
+      expect(opened).toStrictEqual([]);
       expect(ownership.snapshot().liveRows).toBe(1);
       controller.abort(new Error('comprehensive cancelled'));
       await expect(stream.next()).rejects.toThrow('comprehensive cancelled');
       expect(ownership.snapshot().liveRows).toBe(0);
-      expect(opened.every((directory) => !existsSync(directory))).toBe(true);
+      expect(
+        scratchDirectories().filter((directory) => !before.includes(directory)),
+      ).toStrictEqual([]);
     });
   });
 });
