@@ -14,35 +14,37 @@
  * limitations under the License.
  */
 
+import { isDeepStrictEqual } from 'node:util';
 import type {
-  ToolRankingPolicy,
   ToolRankingOverlay,
+  ToolRankingPolicy,
 } from '../../journal/tool-ranking-fill.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
+import type { SessionRecordingPort } from '../../recording/recordingPort.js';
+import type { CompressionInputSnapshot } from './compressionInput.js';
+import type { ConversationStatistics } from './curationDebugLogger.js';
+import { notifyDetachedRows } from './detachedHistoryAPI.js';
+import { isCuratedContent } from './historyCuration.js';
+import type { HistoryDensityRows } from './historyDensityRows.js';
+import type { HistoryDumpSnapshot } from './historyDumpSnapshot.js';
+import { estimateMergedAppendTokens } from './historyMergeRows.js';
+import type { HistoryMutationSnapshot } from './historyMutationSnapshot.js';
+import { RemovalObserverFailure } from './historyRemovalObserverFailure.js';
+import { publishResumeRestoration } from './historyResumeProjection.js';
 import type {
   HistoryRepair,
+  ResumeBoot,
   StagedProfileAdoption,
 } from './historyStorePort.js';
-import { RemovalObserverFailure } from './historyRemovalObserverFailure.js';
-import { estimateMergedAppendTokens } from './historyMergeRows.js';
-import type { HistoryDensityRows } from './historyDensityRows.js';
-import type { HistoryMutationSnapshot } from './historyMutationSnapshot.js';
-import type { HistoryDumpSnapshot } from './historyDumpSnapshot.js';
-import type { CompressionInputSnapshot } from './compressionInput.js';
-export type {
-  HistoryDumpSource,
-  HistoryDumpSnapshot,
-} from './historyDumpSnapshot.js';
-import { publishResumeRestoration } from './historyResumeProjection.js';
-import type { ResumeBoot } from './historyStorePort.js';
-import type { SessionRecordingPort } from '../../recording/recordingPort.js';
-import { isDeepStrictEqual } from 'node:util';
-import type { IContent } from './IContent.js';
 import { estimateContentTokens as estimateContentTokensImpl } from './historyTokenEstimation.js';
-import type { ConversationStatistics } from './curationDebugLogger.js';
-export type { ToolPairingStreamOptions } from './historyToolPairing.js';
-import { isCuratedContent } from './historyCuration.js';
+import type { IContent } from './IContent.js';
 import { streamProviderContentSnapshot } from './provider-request-snapshot.js';
+export type { HistoryJsonSink } from './history-export.js';
+export type {
+  HistoryDumpSnapshot,
+  HistoryDumpSource,
+} from './historyDumpSnapshot.js';
+export type { ToolPairingStreamOptions } from './historyToolPairing.js';
 export type { ProviderRequestSnapshot } from './provider-request-snapshot.js';
 
 import {
@@ -50,7 +52,6 @@ import {
   writeHistoryJson,
   type HistoryJsonSink,
 } from './history-export.js';
-export type { HistoryJsonSink } from './history-export.js';
 import {
   ChronologyStamper,
   projectChronologyTraceEntry,
@@ -65,8 +66,8 @@ export type {
   HistoryBatchOptions,
   HistoryMediaOwner,
   HistoryOwnedMediaReservation,
-  PreparedHistoryBatchEffect,
   HistoryServiceJournalOptions,
+  PreparedHistoryBatchEffect,
 } from './HistoryServiceCore.js';
 
 /**
@@ -699,7 +700,11 @@ export class HistoryService extends HistoryServiceReads {
       this.journal.mergeFrom({
         source: other.journal,
         ownership: this.mutationOwnership,
-        host: this.detachedValues.host(),
+        host: {
+          ...this.detachedValues.host(),
+          notifyRows: (rows) =>
+            notifyDetachedRows(this, this.mutationOwnership, rows, true),
+        },
         publish: (nextHistory, previous) =>
           this.publishMergedRows(nextHistory, previous),
       }),

@@ -1,31 +1,31 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { SemanticPurgeSnapshot } from './semantic-purge-native.js';
-import type { HistoryStorePort } from './historyStorePort.js';
 import { releaseRead } from '../../journal/pinLease.js';
-import type { HistoryServiceCore } from './HistoryServiceCore.js';
-import type { ChronologyStamper } from './historyChronology.js';
-import type { SpanWindow } from './historySpanWindow.js';
-import type { HistoryMediaOwner } from './historyBatchContracts.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
+import type { HistoryServiceCore } from './HistoryServiceCore.js';
 import type { IContent } from './IContent.js';
+import {
+  detachedValueSubmission,
+  type DetachedHistoryHost,
+  type DetachedHistoryOptions,
+  type DetachedHistoryTask,
+  type DetachedHistoryTransform,
+} from './detachedHistoryMutation.js';
 import {
   emitHistoryBatchValues,
   type HistoryBatchRows,
   type HistoryBatchRowSource,
 } from './history-batch-values.js';
+import type { HistoryMediaOwner } from './historyBatchContracts.js';
 import type { HistoryCheckpoint } from './historyCheckpointRows.js';
-import {
-  detachedValueSubmission,
-  type DetachedHistoryTask,
-  type DetachedHistoryHost,
-  type DetachedHistoryTransform,
-  type DetachedHistoryOptions,
-} from './detachedHistoryMutation.js';
+import type { ChronologyStamper } from './historyChronology.js';
+import type { SpanWindow } from './historySpanWindow.js';
+import type { HistoryStorePort } from './historyStorePort.js';
+import type { SemanticPurgeSnapshot } from './semantic-purge-native.js';
 export type {
-  DetachedHistoryTransform,
   DetachedHistoryOptions,
-  DetachedHistorySource,
   DetachedHistorySink,
+  DetachedHistorySource,
+  DetachedHistoryTransform,
 } from './detachedHistoryMutation.js';
 
 export interface DetachedHistoryAPI {
@@ -83,6 +83,7 @@ export function notifyDetachedRows(
   history: HistoryServiceCore,
   ownership: RowOwnership | undefined,
   source: HistoryBatchRowSource,
+  publishContent = false,
 ): void | Promise<void> {
   try {
     history.emit(
@@ -113,7 +114,31 @@ export function notifyDetachedRows(
     }
     throw error;
   }
-  return source.retire();
+  return publishContent
+    ? notifyContentRows(history, ownership, source)
+    : source.retire();
+}
+
+async function notifyContentRows(
+  history: HistoryServiceCore,
+  ownership: RowOwnership | undefined,
+  source: HistoryBatchRowSource,
+): Promise<void> {
+  let failure: { error: unknown } | undefined;
+  try {
+    for await (const row of source.rows()) {
+      ownership?.retain(row);
+      try {
+        history.emit('contentAdded', row);
+      } finally {
+        ownership?.release(row);
+      }
+    }
+  } catch (error) {
+    failure = { error };
+  }
+  await releaseRead({ close: () => source.retire() }, failure);
+  if (failure !== undefined) throw failure.error;
 }
 
 async function openSemanticPurge(
