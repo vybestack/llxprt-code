@@ -22,7 +22,7 @@
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
-import { observeHistorySynchronouslyForTest as testHistory } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { describe, expect, it } from 'bun:test';
 import { applyCompressionWithAnchor } from './__tests__/support/cacheAnchor.js';
 
@@ -42,11 +42,30 @@ function summary(text: string): IContent {
   };
 }
 
-function entryTexts(historyService: HistoryService): string[] {
-  return testHistory(historyService).map((entry) => {
-    const block = entry.blocks[0];
-    return block.type === 'text' ? block.text : `<${block.type}>`;
-  });
+async function entryTexts(historyService: HistoryService): Promise<string[]> {
+  return (await collectRawHistory(historyService)).map(entryText);
+}
+
+function entryText(entry: IContent): string {
+  const block = entry.blocks[0];
+  return block.type === 'text' ? block.text : `<${block.type}>`;
+}
+
+async function releasedPrefix(
+  historyService: HistoryService,
+  length: number,
+): Promise<string[]> {
+  const snapshot = await historyService.openDumpSnapshot();
+  try {
+    const texts: string[] = [];
+    for await (const row of snapshot.rows()) {
+      if (texts.length === length) break;
+      texts.push(entryText(row));
+    }
+    return texts;
+  } finally {
+    await snapshot.close();
+  }
 }
 
 function apply(
@@ -316,7 +335,7 @@ describe('applyCompressionWithAnchor atomic anchor publication (#3070)', () => {
   });
 });
 
-describe('applyCompressionWithAnchor under an active compression lock, old synchronous protocol (#3338)', () => {
+describe('applyCompressionWithAnchor under an active compression lock (#3338)', () => {
   it('flushes rebuild content before the lock release and keeps ordinary streaming adds on both sides streaming after it', async () => {
     const historyService = new HistoryService({});
     for (const c of [
@@ -344,12 +363,15 @@ describe('applyCompressionWithAnchor under an active compression lock, old synch
             `contentAdded:${block.type === 'text' ? block.text : block.type}`,
           );
         });
-        let textsAtRelease: string[] | undefined;
+        let textsAtRelease: Promise<string[]> | undefined;
         historyService.on('compressionLockReleased', () => {
           observed.push('compressionLockReleased');
-          // Snapshot AT the release, not after endCompression: this is what
-          // actually witnesses that the rebuild was committed first.
-          textsAtRelease = entryTexts(historyService);
+          // Capture membership at release; later queued work only appends
+          // after this prefix, whose values are read through a pinned snapshot.
+          textsAtRelease = releasedPrefix(
+            historyService,
+            historyService.getStatistics().totalMessages,
+          );
         });
         historyService.on('compressionEnded', () => {
           observed.push('compressionEnded');
@@ -381,14 +403,14 @@ describe('applyCompressionWithAnchor under an active compression lock, old synch
         // the awaits above: the rebuild is already published, and neither queued
         // streaming add has landed yet. Without this the ordering guarantee was
         // only established by the test's own choreography.
-        expect(textsAtRelease).toStrictEqual([
+        expect(await textsAtRelease).toStrictEqual([
           'original-1',
           'original-2',
           'compressed',
           'original-3',
         ]);
 
-        expect(entryTexts(historyService)).toStrictEqual([
+        expect(await entryTexts(historyService)).toStrictEqual([
           'original-1',
           'original-2',
           'compressed',
