@@ -22,16 +22,16 @@ import { isAtCommand, isSlashCommand } from '../../utils/commandUtils.js';
 import { type UseHistoryManagerReturn } from '../useHistoryManager.js';
 import { processSlashCommandResult } from './streamUtils.js';
 import {
-  buildAtCommandRuntimeFromStream,
   handleAtCommand,
+  type AtCommandRuntime,
 } from '../atCommandProcessor.js';
-import type { StreamRuntime, UiSubagentManager } from '../../cliUiRuntime.js';
+import type { UiSubagentManager } from '../../cliUiRuntime.js';
 import type { FindMcpResource } from '../atCommandProcessorHelpers.js';
 import type { AgentToolHandle } from '@vybestack/llxprt-code-agents';
 
 export interface PrepareQueryDeps {
   findResource: FindMcpResource;
-  runtime: StreamRuntime;
+  atCommandConfig: AtCommandRuntime;
   // @plan:ISSUE-2376 — resolves read_many_files/glob via the public Agent
   // surface for @file processing, replacing direct
   // getToolRegistry().getTool access.
@@ -120,7 +120,7 @@ async function processStringQuery(
   deps: PrepareQueryDeps,
 ): Promise<AgentRequestInput | null> {
   const {
-    runtime,
+    atCommandConfig,
     logUserPrompt,
     logger,
     shellModeActive,
@@ -161,7 +161,7 @@ async function processStringQuery(
   if (isAtCommand(trimmedQuery)) {
     const atCommandResult = await handleAtCommand({
       query: trimmedQuery,
-      config: buildAtCommandRuntimeFromStream(runtime),
+      config: atCommandConfig,
       getToolHandle: deps.getToolHandle,
       readResource: deps.readResource,
       findResource: deps.findResource,

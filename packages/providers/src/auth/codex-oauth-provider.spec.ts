@@ -70,7 +70,7 @@ describe('CodexOAuthProvider - Concurrency and State Management', () => {
       releaseAuthLock: vi.fn(async () => undefined),
     };
 
-    provider = new CodexOAuthProvider(mockTokenStore);
+    provider = new CodexOAuthProvider(globalThis.fetch, mockTokenStore);
   });
 
   afterEach(() => {

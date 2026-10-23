@@ -59,7 +59,6 @@ export function createHistoryRuntimeFixture(options: {
     },
     tools: { listToolNames: () => [], getToolMetadata: () => undefined },
     providerRuntime: createProviderRuntimeContext({
-      settingsService,
       runtimeId: options.state.runtimeId,
     }),
     prepareProviderInvocation: (name, parameters, signal) =>

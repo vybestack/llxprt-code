@@ -39,7 +39,12 @@ export function createProviderGraphFixture(repoRoot: string): {
       ),
     },
     testOnlyEdges: {
-      providers: [...source.testOnlyEdges.providers, 'telemetry'],
+      providers: [
+        ...source.testOnlyEdges.providers.filter(
+          (edge) => edge !== 'telemetry',
+        ),
+        'telemetry',
+      ],
     },
     observers: {},
     pathObservers: [],
@@ -51,7 +56,15 @@ export function createProviderGraphFixture(repoRoot: string): {
   )
     .trim()
     .split('\n');
-  for (const file of files) {
+  const deleted = new Set(
+    execFileSync('git', ['ls-files', '--deleted'], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    })
+      .trim()
+      .split('\n'),
+  );
+  for (const file of files.filter((path) => !deleted.has(path))) {
     mkdirSync(dirname(join(root, file)), { recursive: true });
     copyFileSync(join(repoRoot, file), join(root, file));
     if (!/\.(?:test|spec)\./.test(file) && !file.includes('/__tests__/')) {

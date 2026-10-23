@@ -152,7 +152,8 @@ describe('#2373 config boundary guard', () => {
     const text = readFileSync(join(UI_ROOT, 'cliUiRuntime.ts'), 'utf8');
 
     // The narrow boundaries that decompose the former Config-shaped catch-all.
-    expect(text).toMatch(/export\s+interface\s+AgentClientSource\s*\{/);
+    expect(text).not.toMatch(/\bAgentClientSource\b|\bagentClientSource\b/);
+    expect(text).not.toMatch(/\bgetAgentClient\b|\bagentClient\b/);
     expect(text).toMatch(/export\s+interface\s+SessionIdentity\s*\{/);
     expect(text).toMatch(/export\s+interface\s+ModelState\s*\{/);
     expect(text).toMatch(/export\s+interface\s+StreamRuntime\s*\{/);
@@ -165,23 +166,27 @@ describe('#2373 config boundary guard', () => {
     );
     const input = read('ui/containers/AppContainer/hooks/useAppInput.ts');
     const runtime = read('ui/AppContainerRuntime.tsx');
+    const app = read('ui/App.tsx');
 
-    expect(bootstrap).toMatch(/streamRuntime:\s*StreamRuntime/);
-    expect(bootstrap).toMatch(/uiRuntime:\s*UiRuntime/);
+    expect(bootstrap).toMatch(/subscribeHistoryTokens:\s*Parameters/);
+    expect(bootstrap).toMatch(/readLlxprtMdFileCount:\s*\(\)\s*=>\s*number/);
+    expect(bootstrap).not.toMatch(/\b(?:uiRuntime|streamRuntime):/);
     expect(bootstrap).not.toMatch(/\bconfig:\s*CliUiRuntime\b/);
     expect(bootstrap).not.toMatch(/\bconfig:\s*SlashCommandRuntime\b/);
     expect(bootstrap).not.toMatch(/\bconfig:\s*props\./);
     expect(bootstrap).not.toMatch(/\bconfig:\s*uiRuntime/);
     expect(bootstrap).not.toMatch(/agentClientSource:\s*props\.config/);
 
-    expect(input).toMatch(/streamRuntime:\s*AppBootstrapResult/);
+    expect(input).toMatch(/AppInputParams extends InputStreamOperations/);
     expect(input).not.toMatch(/uiRuntime:\s*AppBootstrapResult/);
-    expect(input).toMatch(/slashCommandRuntime:\s*SlashCommandRuntime/);
+    expect(input).not.toMatch(/\b(?:agent|streamRuntime|slashCommandRuntime):/);
     expect(input).not.toMatch(/AppBootstrapResult\['config'\]/);
     expect(input).not.toMatch(/useAgentStream\([^)]*\bslashCommandRuntime\b/);
 
-    expect(runtime).toMatch(/streamRuntime:\s*bootstrap\.streamRuntime/);
-    expect(runtime).toMatch(/uiRuntime:\s*bootstrap\.uiRuntime/);
+    expect(`${runtime}\n${app}`).toMatch(
+      /disposeInput:\s*props\.disposeInput[\s\S]*disposeInput:\s*AppContainerProps\['disposeInput'\]\s*=\s*\(\)\s*=>\s*this\.props\.agent\.dispose\(\)/,
+    );
+    expect(runtime).toMatch(/readLlxprtMdFileCount:\s*useBound/);
     expect(runtime).not.toMatch(/bootstrap\.config/);
     expect(runtime).not.toMatch(/(?:props|bootstrap)\.config\b/);
   });
@@ -220,11 +225,13 @@ describe('#2373 config boundary guard', () => {
     expect(input).not.toMatch(/config:\s*CliUiRuntime\b/);
   });
 
-  it('keeps the MCP command path on an explicit MCP runtime boundary', () => {
+  it('keeps MCP display and auth commands independent of the legacy runtime bag', () => {
     const display = read('ui/commands/mcpDisplay.ts');
     const command = read('ui/commands/mcpCommand.ts');
+    const auth = read('ui/commands/mcpAuth.ts');
 
-    expect(display).toMatch(/RuntimeMcpServices\s*=\s*McpCommandRuntime/);
+    expect(display).not.toMatch(/McpCommandRuntime|RuntimeMcpServices/);
+    expect(auth).not.toMatch(/McpCommandRuntime|RuntimeMcpServices/);
     expect(display).not.toMatch(/Omit<CliUiRuntime/);
     expect(display).not.toMatch(/asRuntimeConfig/);
     expect(command).not.toMatch(/asRuntimeConfig/);

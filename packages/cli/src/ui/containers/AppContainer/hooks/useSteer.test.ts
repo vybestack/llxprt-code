@@ -18,7 +18,7 @@ describe('useSteer', () => {
       blocked: false,
     }));
     const { result } = renderHook(() =>
-      useSteer({ injectSteer }, StreamingState.Responding, sanitizeContent),
+      useSteer(injectSteer, StreamingState.Responding, sanitizeContent),
     );
 
     let consumed = false;
@@ -34,7 +34,7 @@ describe('useSteer', () => {
   it('injects sanitized text while streaming without a tool executing', () => {
     const injectSteer = vi.fn();
     const { result } = renderHook(() =>
-      useSteer({ injectSteer }, StreamingState.Responding, () => ({
+      useSteer(injectSteer, StreamingState.Responding, () => ({
         text: 'steer text',
         blocked: false,
       })),
@@ -53,7 +53,7 @@ describe('useSteer', () => {
     const injectSteer = vi.fn();
     const sanitizeContent = vi.fn();
     const { result } = renderHook(() =>
-      useSteer({ injectSteer }, StreamingState.Idle, sanitizeContent),
+      useSteer(injectSteer, StreamingState.Idle, sanitizeContent),
     );
 
     expect(result.current('newline')).toBe(false);
@@ -64,7 +64,7 @@ describe('useSteer', () => {
   it('does not inject blocked content', () => {
     const injectSteer = vi.fn();
     const { result } = renderHook(() =>
-      useSteer({ injectSteer }, StreamingState.Responding, () => ({
+      useSteer(injectSteer, StreamingState.Responding, () => ({
         text: '',
         blocked: true,
       })),
@@ -77,7 +77,7 @@ describe('useSteer', () => {
   it('does not crash when sanitization fails', () => {
     const injectSteer = vi.fn();
     const { result } = renderHook(() =>
-      useSteer({ injectSteer }, StreamingState.Responding, () => {
+      useSteer(injectSteer, StreamingState.Responding, () => {
         throw new Error('sanitizer failure');
       }),
     );

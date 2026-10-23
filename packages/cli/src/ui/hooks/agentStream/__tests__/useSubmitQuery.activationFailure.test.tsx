@@ -1,8 +1,10 @@
+import { submissionOperations } from './submission-operations.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { streamPolicyOperations } from './stream-policy-operations.js';
 
 /**
  * Regression tests for issue #2379: "Bun nightly glm profile hangs before
@@ -143,8 +145,15 @@ function renderUseSubmitQuery(deps: ActivationFailureDeps) {
   // anchored to the imported interface and avoids fresh-object-literal
   // excess-property checks that can misfire under incremental typecheck caches.
   const hookDeps: UseSubmitQueryDeps = {
-    runtime: createStreamRuntimeForTest(),
-    agent: createMockAgentClient() as unknown as Agent,
+    ...{ runtime: createStreamRuntimeForTest() },
+    ...streamPolicyOperations(createStreamRuntimeForTest()),
+    ...submissionOperations(
+      createMockAgentClient() as unknown as Agent,
+      {
+        flushAtTurnBoundary: vi.fn(),
+      } as unknown as RecordingIntegration,
+      undefined,
+    ),
     addItem: deps.addItem,
     settings: {} as never,
     onDebugMessage: vi.fn(),
@@ -188,9 +197,6 @@ function renderUseSubmitQuery(deps: ActivationFailureDeps) {
     submitQueryRef: { current: null },
     isResponding: false,
     streamingState: StreamingState.Idle,
-    recordingIntegration: {
-      flushAtTurnBoundary: vi.fn(),
-    } as unknown as RecordingIntegration,
   };
   return renderHook(() => useSubmitQuery(hookDeps));
 }
@@ -264,7 +270,9 @@ describe('useSubmitQuery — pre-request activation failure (issue #2379)', () =
     expect(handleSubmissionErrorMock).toHaveBeenCalledWith(
       activationError,
       expect.any(Function),
-      expect.any(Object), // config must be a real object, not undefined/null
+      expect.any(Function),
+      expect.any(Function),
+      expect.any(Function),
       expect.any(Function),
       expect.any(Number),
     );
@@ -293,7 +301,9 @@ describe('useSubmitQuery — pre-request activation failure (issue #2379)', () =
       (
         _error: unknown,
         _addItem: unknown,
-        _config: unknown,
+        _getProvider: unknown,
+        _readSelectedProvider: unknown,
+        _getModel: unknown,
         onAuthError: () => void,
       ) => {
         onAuthError();

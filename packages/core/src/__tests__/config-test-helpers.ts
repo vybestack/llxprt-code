@@ -3,19 +3,10 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { TestMcpRuntime } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import type { Config } from '../config/config.js';
 
 export { makeFakeConfig } from '@vybestack/llxprt-code-test-utils/core/config.js';
 
-import { initializeTestConfig as initializeConfig } from '@vybestack/llxprt-code-test-utils/core/config.js';
-import type { Config } from '../config/config.js';
-
-export async function initializeTestConfig(
-  ...args: Parameters<typeof initializeConfig>
-): Promise<TestMcpRuntime> {
-  const runtime = await initializeConfig(...args);
-  return runtime;
-}
 import type { RuntimeProviderManager } from '../../index.js';
 import type {
   AgentClientContract,
@@ -45,6 +36,9 @@ function emptyChatStream(): AsyncGenerator<never> {
 
 function createTestAgentChat(): AgentChatContract {
   return {
+    appendGeneration: async () => {
+      throw new Error('Fixture chat does not publish detached generation');
+    },
     sendMessage: async () => emptyModelOutput(),
     sendMessageStream: async () => emptyChatStream(),
     generateDirectMessage: async () => emptyModelOutput(),

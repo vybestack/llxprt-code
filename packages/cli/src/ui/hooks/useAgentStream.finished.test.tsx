@@ -23,7 +23,7 @@ import {
 import { act } from 'react';
 import { renderHook } from '../../__tests__/render.js';
 import { waitFor } from '../../__tests__/async.js';
-import { useAgentStream } from './agentStream/index.js';
+import { useTestAgentStream as useAgentStream } from './__tests__/use-stream-owner-inputs.js';
 import { createStreamRuntimeForTest } from './agentStream/__tests__/streamRuntimeTestHelper.js';
 import * as atCommandProcessor from './atCommandProcessor.js';
 import { useReactToolScheduler } from './useReactToolScheduler.js';
@@ -91,11 +91,13 @@ void vi.mock('./slashCommandProcessor.js', () => ({
 
 // --- Tests for useAgentStream Hook ---
 describe('useAgentStream', () => {
-  let mockAddItem: Mock<Parameters<typeof useAgentStream>[2]>;
+  let mockAddItem: Mock<Parameters<typeof useAgentStream>[2]['addItem']>;
   let mockConfig: Config;
   let contextLimit: number | undefined;
   let mockOnDebugMessage: Mock<(message: string) => void>;
-  let mockHandleSlashCommand: Mock<Parameters<typeof useAgentStream>[6]>;
+  let mockHandleSlashCommand: Mock<
+    Parameters<typeof useAgentStream>[2]['handleSlashCommand']
+  >;
   let mockScheduleToolCalls: Mock<ReturnType<typeof useReactToolScheduler>[1]>;
   let mockCancelAllToolCalls: Mock<ReturnType<typeof useReactToolScheduler>[3]>;
   let mockMarkToolsAsDisplayCleared: Mock<
@@ -106,7 +108,9 @@ describe('useAgentStream', () => {
     contextLimit = undefined;
     vi.clearAllMocks(); // Clear mocks before each test
 
-    mockAddItem = vi.fn<Parameters<typeof useAgentStream>[2]>(() => 0);
+    mockAddItem = vi.fn<Parameters<typeof useAgentStream>[2]['addItem']>(
+      () => 0,
+    );
     // Define the mock for getAgentClient
 
     const contentGeneratorConfig = {
@@ -200,7 +204,7 @@ describe('useAgentStream', () => {
   // Helper to create mock tool calls - reduces boilerplate
 
   // Helper to render hook with default parameters - reduces boilerplate
-  const renderHookWithDefaults = (
+  const renderHookWithDefaults = async (
     options: {
       shellModeActive?: boolean;
       onCancelSubmit?: (shouldRestorePrompt?: boolean) => void;
@@ -219,29 +223,37 @@ describe('useAgentStream', () => {
       onAuthError = () => {},
     } = options;
 
+    const agentForHook1 = await createFakeAgentFromMockClient(
+      new MockedAgentClientClass(mockConfig),
+    );
     return renderHook(() =>
       useAgentStream(
-        createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
-        [],
-        mockAddItem,
+        agentForHook1,
         createStreamRuntimeForTest(mockConfig, {
           ephemeral: {
             getEphemeralSetting: (key) =>
               key === 'context-limit' ? contextLimit : undefined,
           },
         }),
-        mockLoadedSettings,
-        mockOnDebugMessage,
-        mockHandleSlashCommand,
-        shellModeActive,
-        () => 'vscode' as EditorType,
-        onAuthError,
-        performMemoryRefresh,
-        () => {},
-        onCancelSubmit,
-        setShellInputFocused,
-        80,
-        24,
+        {
+          history: [],
+          addItem: mockAddItem,
+          settings: mockLoadedSettings,
+          onDebugMessage: mockOnDebugMessage,
+          handleSlashCommand: mockHandleSlashCommand,
+          shellModeActive,
+          getPreferredEditor: () => 'vscode' as EditorType,
+          onAuthError,
+          performMemoryRefresh,
+          onEditorClose: () => {},
+          onCancelSubmit,
+          setShellInputFocused,
+          terminalWidth: 80,
+          terminalHeight: 24,
+        },
+        undefined,
+        undefined,
+        undefined,
       ),
     );
   };
@@ -262,29 +274,37 @@ describe('useAgentStream', () => {
         })(),
       );
 
+      const agentForHook2 = await createFakeAgentFromMockClient(
+        new MockedAgentClientClass(mockConfig),
+      );
       const { result } = renderHook(() =>
         useAgentStream(
-          createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
-          [],
-          mockAddItem,
+          agentForHook2,
           createStreamRuntimeForTest(mockConfig, {
             ephemeral: {
               getEphemeralSetting: (key) =>
                 key === 'context-limit' ? contextLimit : undefined,
             },
           }),
-          mockLoadedSettings,
-          mockOnDebugMessage,
-          mockHandleSlashCommand,
-          false,
-          () => 'vscode' as EditorType,
-          () => {},
-          () => Promise.resolve(),
-          () => {},
-          () => {},
-          () => {},
-          80,
-          24,
+          {
+            history: [],
+            addItem: mockAddItem,
+            settings: mockLoadedSettings,
+            onDebugMessage: mockOnDebugMessage,
+            handleSlashCommand: mockHandleSlashCommand,
+            shellModeActive: false,
+            getPreferredEditor: () => 'vscode' as EditorType,
+            onAuthError: () => {},
+            performMemoryRefresh: () => Promise.resolve(),
+            onEditorClose: () => {},
+            onCancelSubmit: () => {},
+            setShellInputFocused: () => {},
+            terminalWidth: 80,
+            terminalHeight: 24,
+          },
+          undefined,
+          undefined,
+          undefined,
         ),
       );
 
@@ -322,7 +342,7 @@ describe('useAgentStream', () => {
         })(),
       );
 
-      const { result } = renderHookWithDefaults();
+      const { result } = await renderHookWithDefaults();
 
       await act(async () => {
         await result.current.submitQuery('risky request');
@@ -356,7 +376,7 @@ describe('useAgentStream', () => {
         })(),
       );
 
-      const { result } = renderHookWithDefaults();
+      const { result } = await renderHookWithDefaults();
 
       await act(async () => {
         await result.current.submitQuery('normal request');
@@ -424,7 +444,7 @@ describe('useAgentStream', () => {
             })(),
           );
 
-          const { result } = renderHookWithDefaults();
+          const { result } = await renderHookWithDefaults();
 
           await act(async () => {
             await result.current.submitQuery('Test overflow');
@@ -462,29 +482,37 @@ describe('useAgentStream', () => {
         })(),
       );
 
+      const agentForHook3 = await createFakeAgentFromMockClient(
+        new MockedAgentClientClass(mockConfig),
+      );
       const { result } = renderHook(() =>
         useAgentStream(
-          createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
-          [],
-          mockAddItem,
+          agentForHook3,
           createStreamRuntimeForTest(mockConfig, {
             ephemeral: {
               getEphemeralSetting: (key) =>
                 key === 'context-limit' ? contextLimit : undefined,
             },
           }),
-          mockLoadedSettings,
-          mockOnDebugMessage,
-          mockHandleSlashCommand,
-          false,
-          () => 'vscode' as EditorType,
-          () => {},
-          () => Promise.resolve(),
-          () => {},
-          onCancelSubmitSpy,
-          () => {},
-          80,
-          24,
+          {
+            history: [],
+            addItem: mockAddItem,
+            settings: mockLoadedSettings,
+            onDebugMessage: mockOnDebugMessage,
+            handleSlashCommand: mockHandleSlashCommand,
+            shellModeActive: false,
+            getPreferredEditor: () => 'vscode' as EditorType,
+            onAuthError: () => {},
+            performMemoryRefresh: () => Promise.resolve(),
+            onEditorClose: () => {},
+            onCancelSubmit: onCancelSubmitSpy,
+            setShellInputFocused: () => {},
+            terminalWidth: 80,
+            terminalHeight: 24,
+          },
+          undefined,
+          undefined,
+          undefined,
         ),
       );
 
@@ -538,7 +566,7 @@ describe('useAgentStream', () => {
         })(),
       );
 
-      const { result } = renderHookWithDefaults();
+      const { result } = await renderHookWithDefaults();
 
       await act(async () => {
         await result.current.submitQuery(`Test ${stopReason}`);
@@ -696,29 +724,37 @@ describe('useAgentStream', () => {
       ];
     });
 
+    const agentForHook4 = await createFakeAgentFromMockClient(
+      new MockedAgentClientClass(mockConfig),
+    );
     const { result } = renderHook(() =>
       useAgentStream(
-        createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
-        [],
-        mockAddItem,
+        agentForHook4,
         createStreamRuntimeForTest(mockConfig, {
           ephemeral: {
             getEphemeralSetting: (key) =>
               key === 'context-limit' ? contextLimit : undefined,
           },
         }),
-        mockLoadedSettings,
-        mockOnDebugMessage,
-        mockHandleSlashCommand,
-        false,
-        () => 'vscode' as EditorType,
-        vi.fn(),
-        vi.fn(),
-        () => {},
-        vi.fn(),
-        vi.fn(),
-        80,
-        24,
+        {
+          history: [],
+          addItem: mockAddItem,
+          settings: mockLoadedSettings,
+          onDebugMessage: mockOnDebugMessage,
+          handleSlashCommand: mockHandleSlashCommand,
+          shellModeActive: false,
+          getPreferredEditor: () => 'vscode' as EditorType,
+          onAuthError: vi.fn(),
+          performMemoryRefresh: vi.fn(),
+          onEditorClose: () => {},
+          onCancelSubmit: vi.fn(),
+          setShellInputFocused: vi.fn(),
+          terminalWidth: 80,
+          terminalHeight: 24,
+        },
+        undefined,
+        undefined,
+        undefined,
       ),
     );
 

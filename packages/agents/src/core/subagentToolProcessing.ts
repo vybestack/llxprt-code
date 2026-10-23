@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 /**
  * @fileoverview Tool call dispatch, emit handling, and response building
  * for subagents.
@@ -12,46 +11,33 @@ import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookE
  * Extracted from subagent.ts as part of Issue #1581 (Phase 3).
  */
 
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type {
-  ContentBlock,
-  IContent,
-  ToolCallBlock,
-} from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import {
-  enforceImageBudget,
-  buildOmissionFeedback,
-} from './imagePayloadBudget.js';
-import { type ToolCallRequestInfo, type ToolCallResponseInfo } from './turn.js';
-import {
-  executeToolCall,
-  type ToolExecutionConfig,
-} from './nonInteractiveToolExecutor.js';
-import type {
-  AgentRuntimeContext,
-  ToolRegistryView,
-} from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
-import { type ToolResultDisplay } from '@vybestack/llxprt-code-tools';
-import { type CompletedToolCall } from './coreToolScheduler.js';
-import { LocalTodoStore as TodoStore } from '@vybestack/llxprt-code-tools';
-import { Storage } from '@vybestack/llxprt-code-settings/storage/Storage.js';
-import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
-import {
-  createErrorResponse,
-  toolFailureMarker,
-} from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import {
   SubagentTerminateMode,
   type OutputConfig,
   type OutputObject,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import { assembleSchedulerOwner } from '../session/assembleSchedulerOwner.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type {
+  ContentBlock,
+  IContent,
+  ToolCallBlock,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
+import {
+  createErrorResponse,
+  toolFailureMarker,
+} from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
+import { type ToolResultDisplay } from '@vybestack/llxprt-code-tools';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
+import { type CompletedToolCall } from './coreToolScheduler.js';
 import { isToolNameRestricted } from './hookToolRestrictions.js';
+import {
+  buildOmissionFeedback,
+  enforceImageBudget,
+} from './imagePayloadBudget.js';
 import { SCOPE_LOCAL_EMIT_TOOL_NAME } from './toolGovernance.js';
+import { type ToolCallRequestInfo, type ToolCallResponseInfo } from './turn.js';
 
 // ---------------------------------------------------------------------------
 // Pure helpers
@@ -220,7 +206,7 @@ function readResponse(call: CompletedToolCall):
 
 export function resolveToolName(
   rawName: string | undefined,
-  toolsView: ToolRegistryView,
+  hasTool: (name: string) => boolean,
 ): string | null {
   if (!rawName) {
     const missingToolName: string | null = null;
@@ -249,7 +235,7 @@ export function resolveToolName(
     if (!candidate) {
       continue;
     }
-    if (toolsView.getToolMetadata(candidate)) {
+    if (hasTool(candidate)) {
       return candidate;
     }
   }
@@ -522,17 +508,18 @@ export function buildPartsFromCompletedCalls(
 // ---------------------------------------------------------------------------
 
 export interface ProcessFunctionCallsContext {
-  output: OutputObject;
-  outputConfig?: OutputConfig;
-  subagentId: string;
-  logger: DebugLogger;
-  toolExecutorContext: ToolExecutionConfig;
-  config: Config;
-  messageBus?: MessageBus;
-  readonly hookOwner?: HookExecutionOwner;
+  readonly output: OutputObject;
+  readonly outputConfig?: OutputConfig;
+  readonly subagentId: string;
+  readonly logger: DebugLogger;
+  readonly imagePayloadBudgetBytes: number;
+  readonly executeToolCall: (
+    request: ToolCallRequestInfo,
+    signal: AbortSignal,
+  ) => Promise<NonInteractiveToolExecutionResult>;
 }
 
-interface NonInteractiveToolExecutionResult {
+export interface NonInteractiveToolExecutionResult {
   readonly status: CompletedToolCall['status'];
   readonly response: ToolCallResponseInfo;
 }
@@ -709,7 +696,7 @@ function applyImageBudget(
   toolResponseBlocks: ContentBlock[],
   ctx: ProcessFunctionCallsContext,
 ): ContentBlock[] {
-  const budgetBytes = ctx.config.getImagePayloadBudgetBytes();
+  const budgetBytes = ctx.imagePayloadBudgetBytes;
   if (budgetBytes <= 0) {
     return toolResponseBlocks;
   }
@@ -796,31 +783,7 @@ async function executeNonInteractiveTool(
     };
   }
 
-  const messageBus = ctx.messageBus;
-  const registry = ctx.toolExecutorContext.getToolRegistry();
-  if (registry === undefined) throw new Error('Missing child tool selection');
-  const completed = await executeToolCall(
-    (callbacks) => {
-      if (!messageBus)
-        throw new Error('Child tool execution requires its message bus');
-      return assembleSchedulerOwner(ctx.subagentId, {
-        telemetry: ctx.toolExecutorContext.telemetry,
-        config: ctx.config,
-        messageBus,
-        toolRegistry: registry,
-        readApprovalMode: ctx.toolExecutorContext.readApprovalMode,
-        getToolGovernance: () => ctx.toolExecutorContext.readGovernance(),
-        readExecutionPolicy: () =>
-          ctx.toolExecutorContext.readExecutionPolicy(),
-        toolContextInteractiveMode: false,
-        ...callbacks,
-      });
-    },
-    requestInfo,
-    abortController.signal,
-    ctx.hookOwner,
-  );
-  return { status: completed.status, response: completed.response };
+  return ctx.executeToolCall(requestInfo, abortController.signal);
 }
 
 function logToolResult(
@@ -848,68 +811,27 @@ function logToolResult(
 // Task-list completion prompt
 // ---------------------------------------------------------------------------
 
-export async function buildTodoCompletionPrompt(
-  runtimeContext: AgentRuntimeContext,
-  subagentId: string,
-  logger: DebugLogger,
-): Promise<string | null> {
-  const sessionId = runtimeContext.state.sessionId;
-  if (!sessionId) {
-    const missingSessionPrompt: string | null = null;
-    return missingSessionPrompt;
+export interface TodoCompletionItem {
+  readonly content: string;
+  readonly status: string;
+}
+
+export function buildTodoCompletionPrompt(
+  todos: readonly TodoCompletionItem[],
+): string | null {
+  const outstanding = todos.filter((todo) => todo.status !== 'completed');
+  if (outstanding.length === 0) return null;
+
+  const previewCount = Math.min(3, outstanding.length);
+  const previewLines = outstanding
+    .slice(0, previewCount)
+    .map((todo) => `- ${todo.content}`);
+  if (outstanding.length > previewCount) {
+    previewLines.push(`- ... and ${outstanding.length - previewCount} more`);
   }
 
-  try {
-    // Inject the canonical Storage data root explicitly:
-    // TodoStore must receive explicit canonical data-root injection. The
-    // subagentId preserves per-subagent isolation via a distinct filename.
-    // Extracted once so the primary and fallback reads stay consistent (#6).
-    const todoDataDirResolver = () => Storage.getGlobalDataDir();
-    let todos = await new TodoStore(
-      sessionId,
-      { dataDirResolver: todoDataDirResolver },
-      subagentId,
-    ).readTodos();
-    if (todos.length === 0) {
-      todos = await new TodoStore(sessionId, {
-        dataDirResolver: todoDataDirResolver,
-      }).readTodos();
-    }
-
-    if (todos.length === 0) {
-      const noTodosPrompt: string | null = null;
-      return noTodosPrompt;
-    }
-
-    const outstanding = todos.filter((todo) => todo.status !== 'completed');
-
-    if (outstanding.length === 0) {
-      const noOutstandingPrompt: string | null = null;
-      return noOutstandingPrompt;
-    }
-
-    const previewCount = Math.min(3, outstanding.length);
-    const previewLines = outstanding
-      .slice(0, previewCount)
-      .map((todo) => `- ${todo.content}`);
-    if (outstanding.length > previewCount) {
-      previewLines.push(`- ... and ${outstanding.length - previewCount} more`);
-    }
-
-    return [
-      'You still have todos in your todo list. Complete them before finishing.',
-      previewLines.length > 0
-        ? `Outstanding items:\n${previewLines.join('\n')}`
-        : undefined,
-    ]
-      .filter(Boolean)
-      .join('\n\n');
-  } catch (error) {
-    logger.warn(
-      () =>
-        `Subagent ${subagentId} could not inspect todos: ${error instanceof Error ? error.message : String(error)}`,
-    );
-    const todoInspectionUnavailable: string | null = null;
-    return todoInspectionUnavailable;
-  }
+  return [
+    'You still have todos in your todo list. Complete them before finishing.',
+    `Outstanding items:\n${previewLines.join('\n')}`,
+  ].join('\n\n');
 }

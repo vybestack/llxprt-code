@@ -1,3 +1,8 @@
+import {
+  captureAgentAdoption,
+  fixtureAgentResources,
+} from './agent-resource-capture.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { createSessionSettingsFixture } from './session-settings-fixture.js';
 /**
  * @license
@@ -11,13 +16,12 @@ import { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTask
 import { McpRuntimeOwner } from '../../mcpRuntimeAssembly.js';
 
 import { createServer } from 'node:http';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
 import {
   ApprovalMode,
-  fromConfig,
   toConfigParameters,
   type Agent,
   type AgentSchedulerFactory,
@@ -83,6 +87,7 @@ function responseChunk(child: boolean, launch: boolean): string {
 export interface DisposalJoinFixture {
   readonly manager: AsyncTaskManager;
   readonly agent: Agent;
+  readonly client: AgentClientContract;
   readonly adoptSibling: () => Promise<Agent>;
   readonly siblingWork: ReturnType<typeof createHeldFetch>;
   readonly config: Config;
@@ -108,6 +113,7 @@ function createHeldFetch(
 ): Omit<
   DisposalJoinFixture,
   | 'manager'
+  | 'client'
   | 'agent'
   | 'childStatus'
   | 'timeline'
@@ -206,28 +212,40 @@ async function createParentServer(): Promise<{
   };
 }
 
-function bindSibling(
+function createDisposalSettings(
   config: Config,
   runtime: McpRuntimeOwner,
   siblings: Agent[],
   manager: AsyncTaskManager,
-  settingsRoot: ReturnType<typeof createSessionSettingsFixture>,
-): DisposalJoinFixture['adoptSibling'] {
-  return adoptSibling.bind(
-    undefined,
-    config,
-    runtime,
-    siblings,
-    manager,
+): {
+  settingsRoot: ReturnType<typeof createSessionSettingsFixture>;
+  adoptSibling: DisposalJoinFixture['adoptSibling'];
+} {
+  const settingsRoot = createSessionSettingsFixture(config);
+  return {
     settingsRoot,
-  );
+    adoptSibling: adoptSibling.bind(
+      undefined,
+      config,
+      runtime,
+      siblings,
+      manager,
+      settingsRoot,
+    ),
+  };
+}
+
+/** Canonical path so owned and expected directories agree on Windows 8.3 names. */
+async function createFixtureDirectory(): Promise<string> {
+  return realpath(await mkdtemp(join(tmpdir(), 'async-child-disposal-join-')));
 }
 
 export async function withDisposalJoinFixture(
   scenario: (fixture: DisposalJoinFixture) => Promise<void>,
   toolSchedulerFactory?: AgentSchedulerFactory,
+  extraTools: readonly string[] = [],
 ): Promise<void> {
-  const directory = await mkdtemp(join(tmpdir(), 'async-child-disposal-join-'));
+  const directory = await createFixtureDirectory();
   const server = await createParentServer();
   const timeline: string[] = [];
   const external = createHeldFetch(`${server.baseUrl}/child`, timeline);
@@ -240,9 +258,14 @@ export async function withDisposalJoinFixture(
   let childStatus: Promise<string> | undefined;
   const errors: unknown[] = [];
   try {
-    config = await createChildConfig(directory, server.baseUrl);
+    config = await createChildConfig(directory, server.baseUrl, extraTools);
     mcpRuntime = await McpRuntimeOwner.create(createTestOAuthBinding(), config);
-    const settingsRoot = createSessionSettingsFixture(config);
+    const { settingsRoot, adoptSibling } = createDisposalSettings(
+      config,
+      mcpRuntime,
+      siblings,
+      manager,
+    );
     agent = await adoptParent(
       config,
       mcpRuntime,
@@ -252,15 +275,9 @@ export async function withDisposalJoinFixture(
       toolSchedulerFactory,
     );
     childStatus = observeTerminalTask(manager, timeline);
-    const adopt = bindSibling(
-      config,
-      mcpRuntime,
-      siblings,
-      manager,
-      settingsRoot,
-    );
     await scenario({
       agent,
+      client: fixtureAgentResources(agent).publishedClient(agent),
       manager,
       ...external,
       timeline,
@@ -268,7 +285,7 @@ export async function withDisposalJoinFixture(
       siblingWork,
       settingsOwner: settingsRoot.settingsOwner,
       config,
-      adoptSibling: adopt,
+      adoptSibling,
       workspaceTrust: mcpRuntime.trust,
       workspacePaths: mcpRuntime.workspacePaths,
       instructionReads: mcpRuntime.workspaceMemory.operations,
@@ -314,14 +331,33 @@ async function adoptSibling(
     config,
     parentSettings.settingsOwner.createChildStore(),
   );
-  const sibling = await fromConfig({
-    settingsOwner: siblingSettings.settingsOwner,
-    settingsService: siblingSettings.settingsService,
+  const sibling = await captureAgentAdoption(
     config,
-    asyncTaskManager: manager,
+    siblingSettings.settingsService,
+    { mcpOwnership: 'caller' },
+    siblingSettings.settingsOwner,
+    undefined,
+    undefined,
+    undefined,
     mcpRuntime,
-    mcpOwnership: 'caller',
-  });
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    manager,
+  );
   siblings.push(sibling);
   return sibling;
 }
@@ -329,6 +365,7 @@ async function adoptSibling(
 async function createChildConfig(
   directory: string,
   baseUrl: string,
+  extraTools: readonly string[],
 ): Promise<Config> {
   const profiles = new ProfileManager(join(directory, 'profiles'));
   await profiles.saveProfile('disposal-child', {
@@ -370,7 +407,7 @@ async function createChildConfig(
       approvalMode: ApprovalMode.YOLO,
       folderTrust: true,
       interactive: false,
-      coreTools: ['task', 'check_async_tasks'],
+      coreTools: ['task', 'check_async_tasks', ...extraTools],
       telemetry: { enabled: false },
       recording: { enabled: false },
     }),
@@ -415,18 +452,48 @@ async function adoptParent(
   baseUrl: string,
   toolSchedulerFactory?: AgentSchedulerFactory,
 ): Promise<Agent> {
-  return fromConfig({
+  return captureAgentAdoption(
     config,
-    mcpRuntime,
-    toolSchedulerFactory,
-    asyncTaskManager: manager,
-    settingsOwner: settingsRoot.settingsOwner,
-    settingsService: settingsRoot.settingsService,
-    mcpOwnership: 'caller',
-    activation: {
-      provider: 'openai',
-      model: 'parent-model',
-      cliOverrides: { key: 'local-test-key', baseUrl },
+    settingsRoot.settingsService,
+    {
+      activation: {
+        provider: 'openai',
+        model: 'parent-model',
+        cliOverrides: { key: 'local-test-key', baseUrl },
+      },
+      mcpOwnership: 'caller',
     },
-  });
+    settingsRoot.settingsOwner,
+    undefined,
+    undefined,
+    undefined,
+    mcpRuntime,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    manager,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    toolSchedulerFactory,
+  );
 }

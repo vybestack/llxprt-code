@@ -1,7 +1,7 @@
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { captureProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
-import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
-const fixtureOwners = installRuntimeTestOwners();
+import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
+const fixtureOwnersBorrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -19,7 +19,6 @@ import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { LoggingProviderWrapper } from '../LoggingProviderWrapper.js';
 import type { GenerateChatOptions } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry/telemetry/uiTelemetry.js';
 import * as sdk from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
 import { ProviderPerformanceTracker } from '../logging/ProviderPerformanceTracker.js';
 import {
@@ -47,51 +46,56 @@ describe('#10 exact counts for all scenarios', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.spyOn(sdk, 'isTelemetrySdkInitialized').mockReturnValue(false);
-    uiTelemetryService.reset();
   });
 
   it('direct success emits exactly 1 request, 0 errors', async () => {
     const config = createConfig(false);
-    const wrapperSettings1 = fixtureOwners.adopt(
+    const wrapperSettings1 = fixtureOwnersBorrowedSettings(
       config,
       new SettingsService(),
-    ).settingsOwner;
-    const wrapper = new LoggingProviderWrapper(
-      new SuccessProvider(SUCCESS_CHUNKS),
-      config,
-      undefined,
-      () => captureProviderRequestDiagnostics(config, wrapperSettings1),
     );
-    wrapper.setRuntimeContextResolver(() => ({
+    const wrapper = Object.assign(
+      new LoggingProviderWrapper(
+        new SuccessProvider(SUCCESS_CHUNKS),
+        config,
+        undefined,
+        () => captureProviderRequestDiagnostics(config, wrapperSettings1),
+      ),
+      { metrics: wrapperSettings1.telemetry.localMetrics },
+    );
+    wrapper.setInvocationDataReader(() => ({
       runtimeId: 'test',
-      settingsService: { getConfig: () => config } as never,
-      config,
+      globalSettings: {},
+      providerSettings: {},
       metadata: {},
     }));
     await consumeStream(
       wrapper.generateChatCompletion(makeOptions(config, makeContent())),
     );
-    const snap = uiTelemetryService.getSessionSnapshot();
+    const snap = wrapper.metrics.getSessionSnapshot();
     expect(snap.totalApiRequests).toBe(1);
     expect(snap.totalApiErrors).toBe(0);
   });
 
   it('direct sync throw emits exactly 1 request, 1 error', async () => {
     const config = createConfig(false);
-    const wrapperSettings2 = fixtureOwners.adopt(
+    const wrapperSettings2 = fixtureOwnersBorrowedSettings(
       config,
       new SettingsService(),
-    ).settingsOwner;
-    const wrapper = new LoggingProviderWrapper(
-      new SyncThrowProvider(),
-      config,
-      undefined,
-      () => captureProviderRequestDiagnostics(config, wrapperSettings2),
     );
-    wrapper.setRuntimeContextResolver(() => ({
+    const wrapper = Object.assign(
+      new LoggingProviderWrapper(
+        new SyncThrowProvider(),
+        config,
+        undefined,
+        () => captureProviderRequestDiagnostics(config, wrapperSettings2),
+      ),
+      { metrics: wrapperSettings2.telemetry.localMetrics },
+    );
+    wrapper.setInvocationDataReader(() => ({
       runtimeId: 'test',
-      settingsService: { getConfig: () => config } as never,
-      config,
+      globalSettings: {},
+      providerSettings: {},
       metadata: {},
     }));
     await expect(
@@ -99,7 +103,7 @@ describe('#10 exact counts for all scenarios', () => {
         wrapper.generateChatCompletion(makeOptions(config, makeContent())),
       ),
     ).rejects.toThrow('Synchronous throw');
-    const snap = uiTelemetryService.getSessionSnapshot();
+    const snap = wrapper.metrics.getSessionSnapshot();
     expect(snap.totalApiRequests).toBe(1);
     expect(snap.totalApiErrors).toBe(1);
   });
@@ -112,20 +116,20 @@ describe('#10 exact counts for all scenarios', () => {
         blocks: [{ type: 'text', text: 'chunk1' }],
       } as IContent,
     ]);
-    const wrapperSettings3 = fixtureOwners.adopt(
+    const wrapperSettings3 = fixtureOwnersBorrowedSettings(
       config,
       new SettingsService(),
-    ).settingsOwner;
-    const wrapper = new LoggingProviderWrapper(
-      provider,
-      config,
-      undefined,
-      () => captureProviderRequestDiagnostics(config, wrapperSettings3),
     );
-    wrapper.setRuntimeContextResolver(() => ({
+    const wrapper = Object.assign(
+      new LoggingProviderWrapper(provider, config, undefined, () =>
+        captureProviderRequestDiagnostics(config, wrapperSettings3),
+      ),
+      { metrics: wrapperSettings3.telemetry.localMetrics },
+    );
+    wrapper.setInvocationDataReader(() => ({
       runtimeId: 'test',
-      settingsService: { getConfig: () => config } as never,
-      config,
+      globalSettings: {},
+      providerSettings: {},
       metadata: {},
     }));
     const stream = wrapper.generateChatCompletion(
@@ -134,7 +138,7 @@ describe('#10 exact counts for all scenarios', () => {
     await stream.next();
     await stream.return?.(undefined);
     await waitFor(() => {
-      const snap = uiTelemetryService.getSessionSnapshot();
+      const snap = wrapper.metrics.getSessionSnapshot();
       expect(snap.totalApiRequests).toBe(1);
       expect(snap.totalApiErrors).toBe(1);
     });
@@ -150,7 +154,7 @@ describe('#10 exact counts for all scenarios', () => {
     await consumeStream(
       wrapper.generateChatCompletion(makeOptions(config, makeContent())),
     );
-    const snap = uiTelemetryService.getSessionSnapshot();
+    const snap = wrapper.metrics.getSessionSnapshot();
     expect(snap.totalApiRequests).toBe(2);
     expect(snap.totalApiErrors).toBe(1);
   });
@@ -170,7 +174,7 @@ describe('#10 exact counts for all scenarios', () => {
         wrapper.generateChatCompletion(makeOptions(config, makeContent())),
       ),
     ).rejects.toThrow('503 Server Error');
-    const snap = uiTelemetryService.getSessionSnapshot();
+    const snap = wrapper.metrics.getSessionSnapshot();
     expect(snap.totalApiRequests).toBe(2);
     expect(snap.totalApiErrors).toBe(2);
   });
@@ -188,7 +192,7 @@ describe('#10 exact counts for all scenarios', () => {
     await expect(
       consumeStream(wrapper.generateChatCompletion(options)),
     ).rejects.toThrow(/abort/i);
-    const snap = uiTelemetryService.getSessionSnapshot();
+    const snap = wrapper.metrics.getSessionSnapshot();
     expect(snap.totalApiRequests).toBe(0);
     expect(snap.totalApiErrors).toBe(0);
   });
@@ -198,7 +202,6 @@ describe('#10 logging parity and conversation write count', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.spyOn(sdk, 'isTelemetrySdkInitialized').mockReturnValue(false);
-    uiTelemetryService.reset();
   });
 
   it('aggregates exactly 1 model regardless of SDK initialization', async () => {
@@ -208,7 +211,7 @@ describe('#10 logging parity and conversation write count', () => {
     await consumeStream(
       wrapper.generateChatCompletion(makeOptions(config, makeContent())),
     );
-    const metrics = uiTelemetryService.getMetrics();
+    const metrics = wrapper.metrics.getMetrics();
     expect(Object.keys(metrics.models)).toHaveLength(1);
   });
 
@@ -218,7 +221,7 @@ describe('#10 logging parity and conversation write count', () => {
     await consumeStream(
       wrapper.generateChatCompletion(makeOptions(config, makeContent())),
     );
-    const metrics = uiTelemetryService.getMetrics();
+    const metrics = wrapper.metrics.getMetrics();
     expect(Object.keys(metrics.models)).toHaveLength(1);
   });
 });
@@ -238,25 +241,27 @@ describe('LoggingProviderWrapper sync invocation timing (finding #5)', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.spyOn(sdk, 'isTelemetrySdkInitialized').mockReturnValue(false);
-    uiTelemetryService.reset();
   });
 
   it('sync throw records a finite non-negative monotonic elapsed duration', async () => {
     const config = createConfig(false);
-    const wrapperSettings4 = fixtureOwners.adopt(
+    const wrapperSettings4 = fixtureOwnersBorrowedSettings(
       config,
       new SettingsService(),
-    ).settingsOwner;
-    const wrapper = new LoggingProviderWrapper(
-      new SyncThrowProvider(),
-      config,
-      undefined,
-      () => captureProviderRequestDiagnostics(config, wrapperSettings4),
     );
-    wrapper.setRuntimeContextResolver(() => ({
+    const wrapper = Object.assign(
+      new LoggingProviderWrapper(
+        new SyncThrowProvider(),
+        config,
+        undefined,
+        () => captureProviderRequestDiagnostics(config, wrapperSettings4),
+      ),
+      { metrics: wrapperSettings4.telemetry.localMetrics },
+    );
+    wrapper.setInvocationDataReader(() => ({
       runtimeId: 'test',
-      settingsService: { getConfig: () => config } as never,
-      config,
+      globalSettings: {},
+      providerSettings: {},
       metadata: {},
     }));
     await expect(
@@ -264,7 +269,7 @@ describe('LoggingProviderWrapper sync invocation timing (finding #5)', () => {
         wrapper.generateChatCompletion(makeOptions(config, makeContent())),
       ),
     ).rejects.toThrow('Synchronous throw');
-    const snap = uiTelemetryService.getSessionSnapshot();
+    const snap = wrapper.metrics.getSessionSnapshot();
     // The monotonic elapsed must be finite and non-negative (Date.now
     // wall-clock changes would break this with the old Date.now approach).
     expect(Number.isFinite(snap.accumulatedApiTimeMs)).toBe(true);
@@ -284,20 +289,20 @@ describe('LoggingProviderWrapper sync invocation timing (finding #5)', () => {
     // Provider that advances the mocked performance.now by 5ms before
     // throwing synchronously, simulating real elapsed work.
     const provider = new SyncThrowProvider();
-    const wrapperSettings5 = fixtureOwners.adopt(
+    const wrapperSettings5 = fixtureOwnersBorrowedSettings(
       config,
       new SettingsService(),
-    ).settingsOwner;
-    const wrapper = new LoggingProviderWrapper(
-      provider,
-      config,
-      undefined,
-      () => captureProviderRequestDiagnostics(config, wrapperSettings5),
     );
-    wrapper.setRuntimeContextResolver(() => ({
+    const wrapper = Object.assign(
+      new LoggingProviderWrapper(provider, config, undefined, () =>
+        captureProviderRequestDiagnostics(config, wrapperSettings5),
+      ),
+      { metrics: wrapperSettings5.telemetry.localMetrics },
+    );
+    wrapper.setInvocationDataReader(() => ({
       runtimeId: 'test',
-      settingsService: { getConfig: () => config } as never,
-      config,
+      globalSettings: {},
+      providerSettings: {},
       metadata: {},
     }));
 
@@ -314,7 +319,7 @@ describe('LoggingProviderWrapper sync invocation timing (finding #5)', () => {
       ),
     ).rejects.toThrow('Synchronous throw');
 
-    const snap = uiTelemetryService.getSessionSnapshot();
+    const snap = wrapper.metrics.getSessionSnapshot();
     // The recorded elapsed is the monotonic delta (5ms), finite and
     // non-negative — NOT affected by any Date.now wall-clock change.
     expect(snap.accumulatedApiTimeMs).toBe(5);

@@ -84,6 +84,7 @@ type ParsedCodeLine =
   | { ok: false; errorText: string };
 
 export interface CodeSearchToolDependencies {
+  fetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
   keyStorage?: Pick<IToolKeyStorage, 'resolveKey'>;
   readTokenLimit?: () => unknown;
 }
@@ -222,12 +223,15 @@ class CodeSearchToolInvocation extends BaseToolInvocation<
       };
 
       const endpointUrl = await this.buildEndpointUrl();
-      const response = await fetch(endpointUrl, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(codeRequest),
-        signal: localController.signal,
-      });
+      const response = await (this.dependencies.fetch ?? globalThis.fetch)(
+        endpointUrl,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(codeRequest),
+          signal: localController.signal,
+        },
+      );
 
       const cancelRequest = (): void => localController.abort();
 

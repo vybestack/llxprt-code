@@ -1,3 +1,4 @@
+import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -13,10 +14,11 @@ import { buildRoundRobinResolvedOptions } from '../../../../../providers/src/loa
 
 export async function memberOptions(
   member: ResolvedSubProfile,
+  storage: Pick<ProviderKeyStorageLike, 'getKey'>,
 ): Promise<GenerateChatOptions> {
   const logger = new DebugLogger('profile-member-auth-test');
   return buildRoundRobinResolvedOptions(
-    await resolveMemberAuthentication(member, logger),
+    await resolveMemberAuthentication(member, logger, storage),
     { contents: [] },
     {
       lbProfileEphemeralSettings: undefined,

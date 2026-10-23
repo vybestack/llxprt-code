@@ -72,7 +72,9 @@ export type AgentEventRouter = (
 ) => void;
 
 export interface UseAgentEventStreamArgs {
-  agent: Agent;
+  stream: Agent['stream'];
+  setDisplayCallbacks: Agent['tools']['setDisplayCallbacks'];
+  setEditorCallbacks: Agent['tools']['setEditorCallbacks'];
   /** Adds a history item (used for tool-completion display). */
   addItem: UseHistoryManagerReturn['addItem'];
   /**
@@ -167,6 +169,7 @@ function handleToolsComplete(
 export function useAgentEventStream(
   args: UseAgentEventStreamArgs,
 ): UseAgentEventStreamReturn {
+  const { setDisplayCallbacks, setEditorCallbacks } = args;
   const processedMemoryTools = useMemo(() => new Set<string>(), []);
 
   // Latest-ref pattern: a single ref holds the latest args so stable wrapper
@@ -186,8 +189,7 @@ export function useAgentEventStream(
   // the agent instance changes. Cleanup clears the registration so a stale
   // unmounted hook's closures cannot linger on the long-lived Agent.
   useEffect(() => {
-    const agent = args.agent;
-    agent.tools.setDisplayCallbacks({
+    setDisplayCallbacks({
       onToolCallsUpdate: (toolCalls) =>
         latestArgs.current.onToolCallsUpdate?.(toolCalls),
       outputUpdateHandler: (callId, update) =>
@@ -203,16 +205,16 @@ export function useAgentEventStream(
         );
       },
     });
-    agent.tools.setEditorCallbacks({
+    setEditorCallbacks({
       getPreferredEditor: () => latestArgs.current.getPreferredEditor?.(),
       onEditorOpen: () => latestArgs.current.onEditorOpen?.(),
       onEditorClose: () => latestArgs.current.onEditorClose?.(),
     });
     return () => {
-      agent.tools.setDisplayCallbacks({});
-      agent.tools.setEditorCallbacks({});
+      setDisplayCallbacks({});
+      setEditorCallbacks({});
     };
-  }, [args.agent, processedMemoryTools]);
+  }, [setDisplayCallbacks, setEditorCallbacks, processedMemoryTools]);
 
   // Holds the in-flight runStream promise so overlapping calls can be
   // serialized (see runStream for details).
@@ -258,7 +260,7 @@ export function useAgentEventStream(
           // semantics are needed (verified in toolCompletionHandler.ts).
           processedMemoryTools.clear();
           return iterateAgentStream(
-            args.agent,
+            args.stream,
             message,
             signal,
             promptId,
@@ -275,7 +277,7 @@ export function useAgentEventStream(
         }
       }
     },
-    [args.agent, processedMemoryTools],
+    [args.stream, processedMemoryTools],
   );
 
   return { runStream };
@@ -316,7 +318,7 @@ function toAgentInput(message: AgentRequestInput): AgentInput {
 }
 
 function iterateAgentStream(
-  agent: Agent,
+  stream: Agent['stream'],
   message: AgentRequestInput,
   signal: AbortSignal,
   promptId: string,
@@ -326,7 +328,7 @@ function iterateAgentStream(
   return (async (): Promise<SubmissionOutcome> => {
     let outcome: SubmissionOutcome = { status: 'completed' };
     const input = toAgentInput(message);
-    const iterator = agent.stream(input, { signal, promptId });
+    const iterator = stream(input, { signal, promptId });
     const observer = args.onAgentEventObserved;
     // Shared dispatch-with-catch: one bad event must not abort the entire
     // stream. Extracted so both the observer-absent and observer-present

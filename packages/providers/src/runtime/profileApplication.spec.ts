@@ -12,8 +12,8 @@ import {
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ProviderManager } from '../ProviderManager.js';
 import { OpenAIProvider } from '../openai/OpenAIProvider.js';
-import { switchActiveProvider } from './providerSwitch.js';
-import { switchProviderForProfile } from './profile-application/switchProfileProvider.js';
+import { switchActiveProvider } from '../../../agents/src/api/provider-switch/provider-switch.js';
+import { switchProviderForProfile } from '../../../agents/src/api/profile-application/switchProfileProvider.js';
 
 class LocalConfig extends Config {}
 
@@ -29,7 +29,13 @@ describe('Profile Application timeout preservation (Issue #1049)', () => {
       debugMode: false,
     });
     const manager = new ProviderManager(
-      createProviderRuntimeContext({ settingsService: settings, config }),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settings,
+      config,
+      createProviderRuntimeContext({}),
     );
     manager.registerProvider(new OpenAIProvider('test-key'));
     const timeouts = {

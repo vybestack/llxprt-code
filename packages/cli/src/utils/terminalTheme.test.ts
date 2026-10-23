@@ -1,3 +1,4 @@
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -19,7 +20,7 @@ import { join } from 'node:path';
 import { Config, coreEvents } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { initializeTestSessionRoot } from '../integration-tests/test-utils.js';
+import { initializeTestAgent } from '../integration-tests/test-utils.js';
 
 import type { LoadedSettings } from '../config/settings.js';
 import { setupTerminalAndTheme } from './terminalTheme.js';
@@ -76,7 +77,12 @@ describe('setupTerminalAndTheme', () => {
       sessionId: 'test-session',
       model: 'test-model',
     });
-    await initializeTestSessionRoot(config, undefined, settingsService);
+    await initializeTestAgent(
+      config,
+      undefined,
+      settingsService,
+      new SessionSettingsOwner(settingsService),
+    );
 
     // Create a minimal mock LoadedSettings
     mockSettings = {

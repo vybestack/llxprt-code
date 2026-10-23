@@ -1,4 +1,6 @@
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
+import { createTestChildOrchestrator } from './__tests__/child-launch-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -13,21 +15,21 @@ const fixturePaths = installTestWorkspacePaths({
   isTrusted: () => true,
 });
 
-import { describe, expect, it, vi } from 'bun:test';
-import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
-import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
-import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { RunConfig } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import { SubagentOrchestrator } from './subagentOrchestrator.js';
+import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
+import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import type { RunConfig } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
+import { describe, expect, it, vi } from 'bun:test';
 import {
-  makeForegroundConfig,
-  createRuntimeBundle,
   createOrchestratorForTurns,
+  createRuntimeBundle,
   createScopeFactory,
   extractRunConfig,
+  makeForegroundConfig,
 } from './__tests__/subagentOrchestrator-test-helpers.js';
+import { SubagentOrchestrator } from './subagentOrchestrator.js';
 
 const baseProfile: Profile = {
   version: 1,
@@ -114,7 +116,8 @@ describe('SubagentOrchestrator - token-usage identity (issue #3130)', () => {
     const foregroundConfig = makeForegroundConfig();
 
     const ownedSettings1 = createSessionSettingsFixture(foregroundConfig);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       workspaceTrust: ownedSettings1.workspaceTrust,
       createChildSettings: () =>
         ownedSettings1.settingsOwner.createChildStore(),
@@ -161,7 +164,8 @@ describe('SubagentOrchestrator - Config Resolution', () => {
     const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle());
 
     const ownedSettings2 = createSessionSettingsFixture(foregroundConfig);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       workspaceTrust: ownedSettings2.workspaceTrust,
       createChildSettings: () =>
         ownedSettings2.settingsOwner.createChildStore(),
@@ -205,7 +209,8 @@ describe('SubagentOrchestrator - Config Resolution', () => {
     const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle());
 
     const ownedSettings3 = createSessionSettingsFixture(foregroundConfig);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       workspaceTrust: ownedSettings3.workspaceTrust,
       createChildSettings: () =>
         ownedSettings3.settingsOwner.createChildStore(),
@@ -256,7 +261,8 @@ describe('SubagentOrchestrator - Config Resolution', () => {
     const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
 
     const ownedSettings4 = createSessionSettingsFixture(foregroundConfig);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       workspaceTrust: ownedSettings4.workspaceTrust,
       createChildSettings: () =>
         ownedSettings4.settingsOwner.createChildStore(),
@@ -332,7 +338,8 @@ describe('SubagentOrchestrator - Config Resolution', () => {
     const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
 
     const ownedSettings5 = createSessionSettingsFixture(foregroundConfig);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       workspaceTrust: ownedSettings5.workspaceTrust,
       createChildSettings: () =>
         ownedSettings5.settingsOwner.createChildStore(),
@@ -387,7 +394,8 @@ describe('SubagentOrchestrator - Config Resolution', () => {
     const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
 
     const ownedSettings6 = createSessionSettingsFixture(foregroundConfig);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       workspaceTrust: ownedSettings6.workspaceTrust,
       createChildSettings: () =>
         ownedSettings6.settingsOwner.createChildStore(),
@@ -452,7 +460,8 @@ describe('SubagentOrchestrator - Config Resolution', () => {
 
     const foregroundRoot1 = configWithParentTurns;
     const foregroundSettings1 = createSessionSettingsFixture(foregroundRoot1);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       workspaceTrust: foregroundSettings1.workspaceTrust,
       createChildSettings: () =>
         foregroundSettings1.settingsOwner.createChildStore(),
@@ -506,7 +515,8 @@ describe('SubagentOrchestrator - Config Resolution', () => {
 
     const foregroundRoot2 = configWithDynamicTurns;
     const foregroundSettings2 = createSessionSettingsFixture(foregroundRoot2);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       workspaceTrust: foregroundSettings2.workspaceTrust,
       createChildSettings: () =>
         foregroundSettings2.settingsOwner.createChildStore(),
@@ -567,7 +577,8 @@ describe('SubagentOrchestrator - Config Resolution', () => {
 
     const foregroundRoot3 = configWithParentTurns;
     const foregroundSettings3 = createSessionSettingsFixture(foregroundRoot3);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       workspaceTrust: foregroundSettings3.workspaceTrust,
       createChildSettings: () =>
         foregroundSettings3.settingsOwner.createChildStore(),
@@ -629,7 +640,8 @@ describe('SubagentOrchestrator - Config Resolution', () => {
 
     const foregroundRoot4 = configWithParentTurns;
     const foregroundSettings4 = createSessionSettingsFixture(foregroundRoot4);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       workspaceTrust: foregroundSettings4.workspaceTrust,
       createChildSettings: () =>
         foregroundSettings4.settingsOwner.createChildStore(),
@@ -680,7 +692,8 @@ describe('SubagentOrchestrator - Config Resolution', () => {
 
     const foregroundRoot5 = configWithUnlimitedParentTurns;
     const foregroundSettings5 = createSessionSettingsFixture(foregroundRoot5);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       workspaceTrust: foregroundSettings5.workspaceTrust,
       createChildSettings: () =>
         foregroundSettings5.settingsOwner.createChildStore(),
@@ -804,7 +817,8 @@ describe('SubagentOrchestrator - Config Resolution', () => {
     const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle());
 
     const ownedSettings7 = createSessionSettingsFixture(foregroundConfig);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       workspaceTrust: ownedSettings7.workspaceTrust,
       createChildSettings: () =>
         ownedSettings7.settingsOwner.createChildStore(),
@@ -845,7 +859,8 @@ describe('SubagentOrchestrator - MessageBus threading (Issue #2312)', () => {
     const sessionMessageBus = new MessageBus();
 
     const ownedSettings8 = createSessionSettingsFixture(foregroundConfig);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       workspaceTrust: ownedSettings8.workspaceTrust,
       createChildSettings: () =>
         ownedSettings8.settingsOwner.createChildStore(),
@@ -866,9 +881,8 @@ describe('SubagentOrchestrator - MessageBus threading (Issue #2312)', () => {
 
     expect(factory).toHaveBeenCalledTimes(1);
     const factoryCall = factory.mock.calls[0];
-    // SubAgentScope.create(name, config, prompt, model, run, toolConfig, outputConfig, overrides, signal)
-    const overridesArg = factoryCall[7];
-    expect(overridesArg).toBeDefined();
-    expect(overridesArg.messageBus).toBe(sessionMessageBus);
+    const runtimeArg = factoryCall[7];
+    expect(runtimeArg).toBeDefined();
+    expect(factoryCall[15]).toBe(sessionMessageBus);
   });
 });

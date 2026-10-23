@@ -1,3 +1,6 @@
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { scopeInputs } from './subagent-test-helpers.js';
+import type { SubagentTestInputs } from './subagent-test-helpers.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -24,7 +27,6 @@
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { SubAgentScope } from '../subagent.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   createProviderRuntimeContext,
   type ProviderRuntimeContext,
@@ -37,12 +39,7 @@ import type {
   AgentRuntimeTelemetryAdapter,
   ToolRegistryView,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import type {
-  PromptConfig,
-  ModelConfig,
-  RunConfig,
-  SubAgentRuntimeOverrides,
-} from '../subagentTypes.js';
+import type { PromptConfig, ModelConfig, RunConfig } from '../subagentTypes.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type { ContentGenerator } from '../contentGenerator.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
@@ -155,10 +152,6 @@ function createStatelessRuntimeBundle(options?: {
     ({
       runtimeId: 'runtime-bundle',
       metadata: {},
-      settingsService: {
-        get: vi.fn(),
-        set: vi.fn(),
-      },
     } as unknown as ProviderRuntimeContext);
 
   const toolRegistry =
@@ -197,6 +190,12 @@ function createStatelessRuntimeBundle(options?: {
   });
 
   return {
+    telemetryRoot: RootTelemetry.prepare({
+      enabled: false,
+      sessionId: 'stateless-child',
+      maxBytes: 1024,
+      maxFiles: 1,
+    }),
     runtimeContext,
     history,
     providerAdapter,
@@ -229,7 +228,7 @@ function createRuntimeOverrides(
     toolRegistry?: ToolRegistry;
   } = {},
 ): {
-  overrides: SubAgentRuntimeOverrides;
+  overrides: SubagentTestInputs;
   runtimeBundle: AgentRuntimeLoaderResult;
   environmentLoader: EnvironmentLoader;
 } {
@@ -239,7 +238,7 @@ function createRuntimeOverrides(
   const environmentLoader =
     options.environmentLoader ?? createEnvironmentLoader();
 
-  const overrides: SubAgentRuntimeOverrides = {
+  const overrides: SubagentTestInputs = {
     readMcpInstructions: () => undefined,
     runtimeBundle,
     environmentContextLoader: environmentLoader,
@@ -297,7 +296,7 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
         runConfig,
         undefined,
         undefined,
-        overrides,
+        ...scopeInputs(overrides),
       );
 
       // THEN Config.setModel() should NEVER be called
@@ -339,7 +338,7 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
         runConfig,
         undefined,
         undefined,
-        providerOverrides,
+        ...scopeInputs(providerOverrides),
       );
 
       // THEN Config.setProvider() should NEVER be called
@@ -375,7 +374,7 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
         runConfig,
         undefined,
         undefined,
-        mutatorOverrides,
+        ...scopeInputs(mutatorOverrides),
       );
 
       // ZERO Config mutations allowed
@@ -401,7 +400,7 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
       runConfig,
       undefined,
       undefined,
-      overrides,
+      ...scopeInputs(overrides),
     );
 
     expect(loaderSpy).not.toHaveBeenCalled();
@@ -438,7 +437,7 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
         runConfig,
         undefined,
         undefined,
-        overrides,
+        ...scopeInputs(overrides),
       );
 
       // WHEN SubAgentScope is created
@@ -474,7 +473,7 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
         runConfig,
         undefined,
         undefined,
-        frozenOverrides,
+        ...scopeInputs(frozenOverrides),
       );
 
       // Access internal runtimeContext (will fail with current Config-based implementation)
@@ -519,7 +518,7 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
         runConfig,
         undefined,
         undefined,
-        overridesA,
+        ...scopeInputs(overridesA),
       );
 
       const { overrides: overridesB } = createRuntimeOverrides();
@@ -531,7 +530,7 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
         runConfig,
         undefined,
         undefined,
-        overridesB,
+        ...scopeInputs(overridesB),
       );
 
       // Access runtime contexts (will fail with current Config-based implementation)
@@ -570,7 +569,7 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
         runConfig,
         undefined,
         undefined,
-        histOverridesA,
+        ...scopeInputs(histOverridesA),
       );
 
       const { overrides: histOverridesB } = createRuntimeOverrides();
@@ -582,7 +581,7 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
         runConfig,
         undefined,
         undefined,
-        histOverridesB,
+        ...scopeInputs(histOverridesB),
       );
 
       // Access runtime contexts
@@ -635,7 +634,7 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
         runConfig,
         undefined,
         undefined,
-        overrides,
+        ...scopeInputs(overrides),
       );
 
       // Access runtime context (will fail with current Config-based implementation)
@@ -680,7 +679,7 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
         runConfig,
         undefined,
         undefined,
-        runtimeOverrides,
+        ...scopeInputs(runtimeOverrides),
       );
 
       // Access runtime context
@@ -734,7 +733,7 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
         runConfig,
         undefined,
         undefined,
-        overrides,
+        ...scopeInputs(overrides),
       );
 
       // Verify that SubAgentScope was created successfully (setModel was NOT called)
@@ -762,7 +761,7 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
           runConfig,
           undefined,
           undefined,
-          { readMcpInstructions: () => undefined },
+          ...scopeInputs({ readMcpInstructions: () => undefined }),
         ),
       ).rejects.toThrow('runtime bundle');
     });
@@ -811,9 +810,7 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
       );
       const runConfig = createTestRunConfig();
 
-      const settingsService = new SettingsService();
       const providerRuntime = createProviderRuntimeContext({
-        settingsService,
         runtimeId: 'override-runtime',
       });
 
@@ -859,7 +856,7 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
           runConfig,
           undefined,
           undefined,
-          overrides,
+          ...scopeInputs(overrides),
         ),
       ).resolves.toBeInstanceOf(SubAgentScope);
     });

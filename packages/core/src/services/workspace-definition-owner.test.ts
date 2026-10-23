@@ -7,8 +7,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
 import type { Profile } from '@vybestack/llxprt-code-settings';
+import { gateReadFile } from '../utils/__tests__/gated-read-file.js';
 import { WorkspaceDefinitionOwner } from './workspace-definition-owner.js';
 
 const profile: Profile = {
@@ -203,20 +203,30 @@ describe('workspace profile and subagent definitions', () => {
 
   it('closes admission synchronously and joins an accepted physical profile read', async () => {
     await mkdir(path.join(directory, 'custom-profiles'), { recursive: true });
-    const fifo = path.join(directory, 'custom-profiles/held.json');
-    execFileSync('mkfifo', [fifo]);
-    const accepted = owner.profileReads.loadProfile('held');
-    let finished = false;
-    const disposal = owner.dispose().then(() => {
-      finished = true;
-    });
-    expect(() => owner.profileReads.listProfiles()).toThrow('closed');
-    await new Promise<void>((resolve) => setTimeout(resolve, 20));
-    expect(finished).toBe(false);
-    await writeFile(fifo, JSON.stringify(profile));
-    expect((await accepted).modelParams.temperature).toBeGreaterThan(0);
-    await disposal;
-    expect(finished).toBe(true);
+    await writeFile(
+      path.join(directory, 'custom-profiles/held.json'),
+      JSON.stringify(profile),
+    );
+    const read = gateReadFile(
+      (file) => path.basename(String(file)) === 'held.json',
+    );
+    try {
+      const accepted = owner.profileReads.loadProfile('held');
+      await read.entered;
+      let finished = false;
+      const disposal = owner.dispose().then(() => {
+        finished = true;
+      });
+      expect(() => owner.profileReads.listProfiles()).toThrow('closed');
+      await new Promise<void>((resolve) => setTimeout(resolve, 20));
+      expect(finished).toBe(false);
+      read.release();
+      expect((await accepted).modelParams.temperature).toBeGreaterThan(0);
+      await disposal;
+      expect(finished).toBe(true);
+    } finally {
+      read.restore();
+    }
   });
   it('shares physical files while isolating workspace contribution catalogues', async () => {
     const workspace = owner.forkContributions();
@@ -330,23 +340,30 @@ describe('workspace profile and subagent definitions', () => {
   it('joins physical work accepted by a contribution fork when its shared root closes', async () => {
     const profiles = path.join(directory, 'custom-profiles');
     await mkdir(profiles, { recursive: true });
-    const fifo = path.join(profiles, 'shared-held.json');
-    execFileSync('mkfifo', [fifo]);
+    await writeFile(
+      path.join(profiles, 'shared-held.json'),
+      JSON.stringify(profile),
+    );
+    const read = gateReadFile(
+      (file) => path.basename(String(file)) === 'shared-held.json',
+    );
     const fork = owner.forkContributions();
-    const accepted = fork.profileReads.loadProfile('shared-held');
-    let closed = false;
-    const closing = owner.dispose().then(() => {
-      closed = true;
-    });
     try {
+      const accepted = fork.profileReads.loadProfile('shared-held');
+      await read.entered;
+      let closed = false;
+      const closing = owner.dispose().then(() => {
+        closed = true;
+      });
       await new Promise<void>((resolve) => setTimeout(resolve, 20));
       expect(closed).toBe(false);
       expect(() => fork.subagentReads.listSubagents()).toThrow('closed');
-    } finally {
-      await writeFile(fifo, JSON.stringify(profile));
+      read.release();
       await Promise.all([accepted, closing]);
+      expect(closed).toBe(true);
+    } finally {
+      read.restore();
       await fork.dispose();
     }
-    expect(closed).toBe(true);
   });
 });

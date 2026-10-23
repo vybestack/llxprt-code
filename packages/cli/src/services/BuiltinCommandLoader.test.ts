@@ -19,88 +19,25 @@ void vi.mock('../ui/commands/profileCommand.js', () => ({
   },
 }));
 
-void vi.mock('../ui/commands/uiprofileCommand.js', () => ({
-  uiprofileCommand: {
-    name: 'uiprofile',
-    description: 'UI Profile command',
-    kind: CommandKind.BUILT_IN,
-  },
-}));
-
-void vi.mock('../ui/commands/aboutCommand.js', () => ({
-  aboutCommand: {
-    name: 'about',
-    description: 'About the CLI',
-    kind: CommandKind.BUILT_IN,
-  },
-}));
-
-void vi.mock('../ui/commands/ideCommand.js', () => ({
-  ideCommand: vi.fn().mockReturnValue({
-    name: 'ide',
-    description: 'IDE command',
-    kind: CommandKind.BUILT_IN,
-  }),
-}));
-void vi.mock('../ui/commands/restoreCommand.js', () => ({
-  restoreCommand: vi.fn(),
-}));
-void vi.mock('../ui/commands/permissionsCommand.js', () => ({
-  permissionsCommand: {
-    name: 'permissions',
-    description: 'Permissions command',
-    kind: CommandKind.BUILT_IN,
-  },
-}));
-
-import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
-import { BuiltinCommandLoader } from './BuiltinCommandLoader.js';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { BuiltinCommandLoader } from '../__tests__/builtin-loader-fixture.js';
+import { createUnconfiguredBuiltinOwners } from '../__tests__/unconfigured-model-command.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { CommandKind } from '../ui/commands/types.js';
 
-import { restoreCommand } from '../ui/commands/restoreCommand.js';
-
-void vi.mock('../ui/commands/authCommand.js', () => ({ authCommand: {} }));
 void vi.mock('../ui/commands/bugCommand.js', () => ({ bugCommand: {} }));
-void vi.mock('../ui/commands/chatCommand.js', () => ({ chatCommand: {} }));
-void vi.mock('../ui/commands/clearCommand.js', () => ({ clearCommand: {} }));
 void vi.mock('../ui/commands/compressCommand.js', () => ({
   compressCommand: {},
 }));
-void vi.mock('../ui/commands/docsCommand.js', () => ({ docsCommand: {} }));
 void vi.mock('../ui/commands/editorCommand.js', () => ({ editorCommand: {} }));
 void vi.mock('../ui/commands/extensionsCommand.js', () => ({
   extensionsCommand: () => ({}),
 }));
-void vi.mock('../ui/commands/helpCommand.js', () => ({ helpCommand: {} }));
-void vi.mock('../ui/commands/memoryCommand.js', () => ({ memoryCommand: {} }));
-void vi.mock('../ui/commands/modelCommand.js', () => ({
-  modelCommand: { name: 'model' },
-}));
 void vi.mock('../ui/commands/privacyCommand.js', () => ({
   privacyCommand: {},
 }));
-void vi.mock('../ui/commands/quitCommand.js', () => ({ quitCommand: {} }));
-void vi.mock('../ui/commands/quotaCommand.js', () => ({
-  quotaCommand: {
-    name: 'quota',
-    description: 'Quota command',
-    kind: CommandKind.BUILT_IN,
-  },
-}));
 void vi.mock('../ui/commands/statsCommand.js', () => ({ statsCommand: {} }));
 void vi.mock('../ui/commands/themeCommand.js', () => ({ themeCommand: {} }));
-void vi.mock('../ui/commands/toolsCommand.js', () => ({ toolsCommand: {} }));
-void vi.mock('../ui/commands/skillsCommand.js', () => ({
-  skillsCommand: { name: 'skills' },
-}));
-void vi.mock('../ui/commands/mcpCommand.js', () => ({
-  mcpCommand: {
-    name: 'mcp',
-    description: 'MCP command',
-    kind: 'BUILT_IN',
-  },
-}));
 
 // Default the file to production behavior. The dedicated development case at
 // the end re-registers this module immediately before exercising uiprofile.
@@ -112,12 +49,19 @@ void vi.mock('../utils/installationInfo.js', () => {
   };
 });
 
+function loaderOwners() {
+  return {
+    ...createUnconfiguredBuiltinOwners(),
+    ideCommand: {
+      name: 'ide',
+      description: 'manage IDE integration',
+      kind: CommandKind.BUILT_IN,
+    },
+  };
+}
+
 describe('BuiltinCommandLoader', () => {
   let mockConfig: Config;
-
-  const restoreCommandMock = restoreCommand as unknown as Mock<
-    (...args: never[]) => unknown
-  >;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -131,28 +75,33 @@ describe('BuiltinCommandLoader', () => {
       isAdminSkillsEnabled: () => true,
       getProjectTempDir: () => '/tmp/llxprt-test-project',
     } as unknown as Config;
+  });
 
-    restoreCommandMock.mockReturnValue({
+  it('registers the restore command supplied by its owner', async () => {
+    const restore = {
       name: 'restore',
       description: 'Restore command',
       kind: CommandKind.BUILT_IN,
-    });
-  });
+    };
+    const owners = {
+      ...loaderOwners(),
+      restoreCommand: restore,
+    };
+    const loader = new BuiltinCommandLoader(
+      owners,
+      composeFixtureRuntime(mockConfig),
+    );
+    const commands = await loader.loadCommands(new AbortController().signal);
 
-  it('should correctly pass the config object to restore command factory', async () => {
-    const runtime = composeFixtureRuntime(mockConfig);
-    const loader = new BuiltinCommandLoader(runtime);
-    await loader.loadCommands(new AbortController().signal);
-
-    // ideCommand is now a constant, no longer needs config
-    expect(restoreCommandMock).toHaveBeenCalledTimes(1);
-    expect(restoreCommandMock).toHaveBeenCalledWith(runtime);
+    expect(commands.find((command) => command.name === 'restore')).toBe(
+      restore,
+    );
   });
 
   it('should filter out null command definitions returned by factories', async () => {
     // ideCommand is now a constant SlashCommand
     const runtime = composeFixtureRuntime(mockConfig);
-    const loader = new BuiltinCommandLoader(runtime);
+    const loader = new BuiltinCommandLoader(loaderOwners(), runtime);
     const commands = await loader.loadCommands(new AbortController().signal);
 
     // The 'ide' command should be present.
@@ -165,16 +114,14 @@ describe('BuiltinCommandLoader', () => {
   });
 
   it('should handle a null config gracefully when calling factories', async () => {
-    const loader = new BuiltinCommandLoader(null);
-    await loader.loadCommands(new AbortController().signal);
-    // ideCommand is now a constant, no longer needs config
-    expect(restoreCommandMock).toHaveBeenCalledTimes(1);
-    expect(restoreCommandMock).toHaveBeenCalledWith(null);
+    const loader = new BuiltinCommandLoader(loaderOwners(), null);
+    const commands = await loader.loadCommands(new AbortController().signal);
+    expect(commands.some((command) => command.name === 'restore')).toBe(false);
   });
 
   it('should return a list of all loaded commands', async () => {
     const runtime = composeFixtureRuntime(mockConfig);
-    const loader = new BuiltinCommandLoader(runtime);
+    const loader = new BuiltinCommandLoader(loaderOwners(), runtime);
     const commands = await loader.loadCommands(new AbortController().signal);
 
     const aboutCmd = commands.find((c) => c.name === 'about');
@@ -190,7 +137,7 @@ describe('BuiltinCommandLoader', () => {
 
   it('should include permissions command', async () => {
     const runtime = composeFixtureRuntime(mockConfig);
-    const loader = new BuiltinCommandLoader(runtime);
+    const loader = new BuiltinCommandLoader(loaderOwners(), runtime);
     const commands = await loader.loadCommands(new AbortController().signal);
     const permissionsCmd = commands.find((c) => c.name === 'permissions');
     expect(permissionsCmd).toBeDefined();
@@ -198,7 +145,7 @@ describe('BuiltinCommandLoader', () => {
 
   it('should exclude development-only commands in production mode', async () => {
     const runtime = composeFixtureRuntime(mockConfig);
-    const loader = new BuiltinCommandLoader(runtime);
+    const loader = new BuiltinCommandLoader(loaderOwners(), runtime);
     const commands = await loader.loadCommands(new AbortController().signal);
     expect(
       commands.find((command) => command.name === 'uiprofile'),
@@ -210,7 +157,7 @@ describe('BuiltinCommandLoader', () => {
   // is therefore what guarantees `/image` is discoverable in both surfaces.
   it('should include the image command with a description so it appears in /help and completion', async () => {
     const runtime = composeFixtureRuntime(mockConfig);
-    const loader = new BuiltinCommandLoader(runtime);
+    const loader = new BuiltinCommandLoader(loaderOwners(), runtime);
     const commands = await loader.loadCommands(new AbortController().signal);
 
     const imageCmd = commands.find((c) => c.name === 'image');
@@ -223,7 +170,7 @@ describe('BuiltinCommandLoader', () => {
 
   it('should include quota command', async () => {
     const runtime = composeFixtureRuntime(mockConfig);
-    const loader = new BuiltinCommandLoader(runtime);
+    const loader = new BuiltinCommandLoader(loaderOwners(), runtime);
     const commands = await loader.loadCommands(new AbortController().signal);
     const quotaCmd = commands.find((c) => c.name === 'quota');
     expect(quotaCmd).toBeDefined();
@@ -237,6 +184,7 @@ describe('BuiltinCommandLoader', () => {
       getEnableHooksUI: () => false,
     } as unknown as Config;
     const loader = new BuiltinCommandLoader(
+      loaderOwners(),
       composeFixtureRuntime(mockConfigWithMessageBus),
     );
     const commands = await loader.loadCommands(new AbortController().signal);
@@ -264,7 +212,7 @@ describe('BuiltinCommandLoader profile', () => {
 
   it('should always include profile command', async () => {
     const runtime = composeFixtureRuntime(mockConfig);
-    const loader = new BuiltinCommandLoader(runtime);
+    const loader = new BuiltinCommandLoader(loaderOwners(), runtime);
     const commands = await loader.loadCommands(new AbortController().signal);
     const profileCmd = commands.find((c) => c.name === 'profile');
     expect(profileCmd).toBeDefined();
@@ -279,7 +227,7 @@ describe('BuiltinCommandLoader profile', () => {
       };
     });
     const runtime = composeFixtureRuntime(mockConfig);
-    const loader = new BuiltinCommandLoader(runtime);
+    const loader = new BuiltinCommandLoader(loaderOwners(), runtime);
     const commands = await loader.loadCommands(new AbortController().signal);
     const uiprofileCmd = commands.find((c) => c.name === 'uiprofile');
     expect(uiprofileCmd).toBeDefined();

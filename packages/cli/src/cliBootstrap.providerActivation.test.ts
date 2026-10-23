@@ -1,3 +1,4 @@
+import { capturedActivation } from '../../agents/src/api/__tests__/helpers/activation-acquisition-capture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -72,9 +73,13 @@ function makeProviderManager(activeProviderName: string): {
   settingsService: SettingsService;
 } {
   const settingsService = new SettingsService();
-  const manager = new ProviderManager({
+  const manager = new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     settingsService,
-  });
+  );
   managers.push(manager);
   return {
     providerManager: Object.assign(manager, {
@@ -88,35 +93,38 @@ function makeProviderManagerWithNoActive(): {
   settingsService: SettingsService;
 } {
   const settingsService = new SettingsService();
-  const manager = new ProviderManager({
+  const manager = new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     settingsService,
-  });
+  );
   managers.push(manager);
   return { providerManager: manager, settingsService };
 }
-function makeOperation(
+async function makeOperation(
   config: Config,
   manager: ProviderManager,
   settingsService: SettingsService,
 ) {
-  const operation = createProviderSessionOwner(
+  const operation = await createProviderSessionOwner(
     config,
     manager,
     settingsService,
   );
   return {
     preflight: preflightMock,
-    workspaceDefinitions: operation.workspaceDefinitions,
-    workspaceTrust: operation.workspaceTrust,
-    trustCleanup: operation.trustCleanup,
-    workspaceMemory: operation.workspaceMemory,
-    workspaceMemoryOwnership: operation.workspaceMemoryOwnership,
-    workspaceFilesystem: operation.workspaceFilesystem,
+    workspaceDefinitions: capturedActivation(operation).workspaceDefinitions,
+    workspaceTrust: capturedActivation(operation).workspaceTrust,
+    trustCleanup: capturedActivation(operation).trustCleanup,
+    workspaceMemory: capturedActivation(operation).workspaceMemory,
+    workspaceMemoryOwnership:
+      capturedActivation(operation).workspaceMemoryOwnership,
+    workspaceFilesystem: capturedActivation(operation).workspaceFilesystem,
     sessionClient: operation.sessionClient,
-    takeMediaOwner: operation.takeMediaOwner.bind(operation),
-    settingsOwnerOwnership: operation.settingsOwnerOwnership,
-    takeSettingsOwner: operation.takeSettingsOwner.bind(operation),
-    takeSessionClient: operation.takeSessionClient.bind(operation),
+    settingsOwnerOwnership:
+      capturedActivation(operation).settingsOwnerOwnership,
     dispose: () => operation.dispose(),
   };
 }
@@ -157,7 +165,7 @@ describe('activateConfiguredProvider (declarative, #2374 round-3 Fix 5)', () => 
       config,
       providerManager,
       makeArgs(),
-      makeOperation(config, providerManager, settingsService),
+      await makeOperation(config, providerManager, settingsService),
     );
 
     expect(failed.authFailed).toBe(false);
@@ -176,7 +184,7 @@ describe('activateConfiguredProvider (declarative, #2374 round-3 Fix 5)', () => 
       config,
       providerManager,
       makeArgs(),
-      makeOperation(config, providerManager, settingsService),
+      await makeOperation(config, providerManager, settingsService),
     );
 
     expect(failed.authFailed).toBe(true);
@@ -193,7 +201,7 @@ describe('activateConfiguredProvider (declarative, #2374 round-3 Fix 5)', () => 
       config,
       providerManager,
       makeArgs(),
-      makeOperation(config, providerManager, settingsService),
+      await makeOperation(config, providerManager, settingsService),
     );
 
     const intent: ProviderActivationIntent = preflightMock.mock.calls[0][0];
@@ -214,7 +222,7 @@ describe('activateConfiguredProvider (declarative, #2374 round-3 Fix 5)', () => 
       config,
       providerManager,
       makeArgs(),
-      makeOperation(config, providerManager, settingsService),
+      await makeOperation(config, providerManager, settingsService),
     );
 
     const intent: ProviderActivationIntent = preflightMock.mock.calls[0][0];
@@ -235,7 +243,7 @@ describe('activateConfiguredProvider (declarative, #2374 round-3 Fix 5)', () => 
       config,
       providerManager,
       makeArgs(),
-      makeOperation(config, providerManager, settingsService),
+      await makeOperation(config, providerManager, settingsService),
     );
 
     const intent: ProviderActivationIntent = preflightMock.mock.calls[0][0];
@@ -259,7 +267,7 @@ describe('activateConfiguredProvider (declarative, #2374 round-3 Fix 5)', () => 
       config,
       providerManager,
       makeArgs(),
-      makeOperation(config, providerManager, settingsService),
+      await makeOperation(config, providerManager, settingsService),
     );
 
     const intent: ProviderActivationIntent = preflightMock.mock.calls[0][0];
@@ -287,7 +295,7 @@ describe('activateConfiguredProvider (declarative, #2374 round-3 Fix 5)', () => 
       config,
       providerManager,
       makeArgs(),
-      makeOperation(config, providerManager, settingsService),
+      await makeOperation(config, providerManager, settingsService),
     );
 
     const intent: ProviderActivationIntent = preflightMock.mock.calls[0][0];
@@ -318,7 +326,7 @@ describe('activateConfiguredProvider (declarative, #2374 round-3 Fix 5)', () => 
       config,
       providerManager,
       makeArgs(),
-      makeOperation(config, providerManager, settingsService),
+      await makeOperation(config, providerManager, settingsService),
     );
 
     expect(failed.authFailed).toBe(true);

@@ -10,21 +10,14 @@ import type { Agent } from '../agent.js';
 import { TaskLaunchOwner } from '../../session/task-launch-owner.js';
 import type { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
 import { buildAgent } from './helpers/agentHarness.js';
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
 
 function taskOwner(agent: Agent): TaskLaunchOwner {
-  if (
-    !('deps' in agent) ||
-    typeof agent.deps !== 'object' ||
-    agent.deps === null
-  )
-    throw new Error('Expected Agent dependencies');
-  if (
-    !('taskLaunchOwner' in agent.deps) ||
-    !(agent.deps.taskLaunchOwner instanceof TaskLaunchOwner)
-  ) {
+  const owner = fixtureAgentResources(agent).taskOwner;
+  if (!(owner instanceof TaskLaunchOwner)) {
     throw new Error('Expected Agent task owner');
   }
-  return agent.deps.taskLaunchOwner;
+  return owner;
 }
 
 async function seedTask(

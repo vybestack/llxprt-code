@@ -212,7 +212,6 @@ function buildNormalizedOptions(
   const { ephemerals = {}, ...optionOverrides } = overrides;
   const settings = new SettingsService();
   const runtime = createProviderRuntimeContext({
-    settingsService: settings,
     runtimeId: 'test-runtime',
   });
   const config = createRuntimeConfigStub(settings, {});

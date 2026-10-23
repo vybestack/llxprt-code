@@ -158,11 +158,7 @@ describe('openai-responses-media-resolution', () => {
     settings.setProviderSetting(provider.name, 'model', 'gpt-5.6');
     const config = createRuntimeConfigStub(settings);
     const runtime = createProviderRuntimeContext({
-      settingsService: settings,
-      config,
       runtimeId: 'responses-media-stateful',
-      mediaResolver: resolver,
-      requestMediaBudgetBytes: budget,
     });
     const invocation = createRuntimeInvocationContext({
       runtimeId: runtime.runtimeId,
@@ -183,8 +179,8 @@ describe('openai-responses-media-resolution', () => {
 
     for await (const _content of bindProviderMedia(
       provider,
-      runtime.mediaResolver,
-      runtime.requestMediaBudgetBytes,
+      resolver,
+      budget,
     ).generateChatCompletion(options)) {
       // Drain the real transport parser.
     }

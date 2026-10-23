@@ -1,6 +1,8 @@
-import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
+import { createHistoryChat } from './chatSession-runtime-helpers.js';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
+import { configureHistoryProviderSettings } from './chatSession-runtime-helpers.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -14,20 +16,19 @@ const modelTools = installModelToolFixture();
  * Sibling to chatSession.runtime.test.ts (split to avoid file-level max-lines disable).
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { ChatSession } from './chatSession.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
-import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   createProviderRuntimeContext,
   type ProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
+
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
@@ -35,7 +36,10 @@ import {
   createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
-import { createConfigParams } from './chatSession-runtime-helpers.js';
+import {
+  createConfigParams,
+  invocationData,
+} from './chatSession-runtime-helpers.js';
 
 describe('ChatSession runtime history and tool-call behavior', () => {
   let settingsService: SettingsService;
@@ -47,20 +51,16 @@ describe('ChatSession runtime history and tool-call behavior', () => {
     settingsService = new SettingsService();
     config = new Config(createConfigParams(settingsService));
 
-    settingsService.set('providers.stub.base-url', 'https://stub.example.com');
-    settingsService.set('providers.stub.auth-key', 'stub-api-key');
-    settingsService.set('providers.stub.model', 'stub-model');
+    configureHistoryProviderSettings(settingsService);
 
     providerRuntime = createProviderRuntimeContext({
-      settingsService,
-      config,
       runtimeId: 'test.runtime',
       metadata: { source: 'chatSession.runtime.history.test' },
     });
 
     manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    configureProviderRuntimeFactories(config, manager);
+    configureProviderTokenizer(manager);
   });
 
   it('commits tool call/response even when model returns only thinking after tool results', async () => {
@@ -91,7 +91,12 @@ describe('ChatSession runtime history and tool-call behavior', () => {
     const historyService = new HistoryService();
     const view = createAgentRuntimeContext({
       prepareProviderInvocation: (name, parameters, signal) =>
-        captureProviderInvocation(providerRuntime, name, parameters, signal),
+        captureProviderInvocation(
+          invocationData(providerRuntime, name, settingsService),
+          name,
+          parameters,
+          signal,
+        ),
       state: runtimeState,
       history: historyService,
       settings: {
@@ -113,12 +118,7 @@ describe('ChatSession runtime history and tool-call behavior', () => {
       providerRuntime: { ...providerRuntime },
     });
 
-    const chat = new ChatSession(
-      view,
-      {} as unknown as ContentGenerator,
-      {},
-      [],
-    );
+    const chat = createHistoryChat(view, config);
 
     const inputToolCall: IContent = {
       speaker: 'ai',
@@ -191,7 +191,12 @@ describe('ChatSession runtime history and tool-call behavior', () => {
 
     const view = createAgentRuntimeContext({
       prepareProviderInvocation: (name, parameters, signal) =>
-        captureProviderInvocation(providerRuntime, name, parameters, signal),
+        captureProviderInvocation(
+          invocationData(providerRuntime, name, settingsService),
+          name,
+          parameters,
+          signal,
+        ),
       state: runtimeState,
       history: historyService,
       settings: {
@@ -209,12 +214,7 @@ describe('ChatSession runtime history and tool-call behavior', () => {
       providerRuntime: { ...providerRuntime },
     });
 
-    const chat = new ChatSession(
-      view,
-      {} as unknown as ContentGenerator,
-      {},
-      [],
-    );
+    const chat = createHistoryChat(view, config);
 
     const completed = [
       {
@@ -316,7 +316,12 @@ describe('ChatSession runtime history and tool-call behavior', () => {
     });
     const view = createAgentRuntimeContext({
       prepareProviderInvocation: (name, parameters, signal) =>
-        captureProviderInvocation(providerRuntime, name, parameters, signal),
+        captureProviderInvocation(
+          invocationData(providerRuntime, name, settingsService),
+          name,
+          parameters,
+          signal,
+        ),
       state: runtimeState,
       history: historyService,
       settings: {
@@ -338,12 +343,7 @@ describe('ChatSession runtime history and tool-call behavior', () => {
       providerRuntime: { ...providerRuntime },
     });
 
-    const chat = new ChatSession(
-      view,
-      {} as unknown as ContentGenerator,
-      {},
-      [],
-    );
+    const chat = createHistoryChat(view, config);
 
     const completed = [
       {
@@ -489,7 +489,12 @@ describe('ChatSession runtime history and tool-call behavior', () => {
     const historyService = new HistoryService();
     const view = createAgentRuntimeContext({
       prepareProviderInvocation: (name, parameters, signal) =>
-        captureProviderInvocation(providerRuntime, name, parameters, signal),
+        captureProviderInvocation(
+          invocationData(providerRuntime, name, settingsService),
+          name,
+          parameters,
+          signal,
+        ),
       state: runtimeState,
       history: historyService,
       settings: {
@@ -511,12 +516,7 @@ describe('ChatSession runtime history and tool-call behavior', () => {
       providerRuntime: { ...providerRuntime },
     });
 
-    const chat = new ChatSession(
-      view,
-      {} as unknown as ContentGenerator,
-      {},
-      [],
-    );
+    const chat = createHistoryChat(view, config);
 
     const stream = await chat.sendMessageStream(
       { message: 'Trigger tool call' },
@@ -586,7 +586,12 @@ describe('ChatSession runtime history and tool-call behavior', () => {
 
     const view = createAgentRuntimeContext({
       prepareProviderInvocation: (name, parameters, signal) =>
-        captureProviderInvocation(providerRuntime, name, parameters, signal),
+        captureProviderInvocation(
+          invocationData(providerRuntime, name, settingsService),
+          name,
+          parameters,
+          signal,
+        ),
       state: runtimeState,
       history: historyService,
       settings: {
@@ -607,12 +612,7 @@ describe('ChatSession runtime history and tool-call behavior', () => {
       providerRuntime: { ...providerRuntime },
     });
 
-    const chat = new ChatSession(
-      view,
-      {} as unknown as ContentGenerator,
-      {},
-      [],
-    );
+    const chat = createHistoryChat(view, config);
 
     await chat.sendMessage({ message: 'Continue' }, 'prompt-123');
 
@@ -689,7 +689,12 @@ describe('ChatSession runtime history and tool-call behavior', () => {
     const historyService = new HistoryService();
     const view = createAgentRuntimeContext({
       prepareProviderInvocation: (name, parameters, signal) =>
-        captureProviderInvocation(providerRuntime, name, parameters, signal),
+        captureProviderInvocation(
+          invocationData(providerRuntime, name, settingsService),
+          name,
+          parameters,
+          signal,
+        ),
       state: runtimeState,
       history: historyService,
       settings: {
@@ -710,12 +715,7 @@ describe('ChatSession runtime history and tool-call behavior', () => {
       providerRuntime: { ...providerRuntime },
     });
 
-    const chat = new ChatSession(
-      view,
-      {} as unknown as ContentGenerator,
-      {},
-      [],
-    );
+    const chat = createHistoryChat(view, config);
 
     await chat.sendMessage({ message: 'Hello there!' }, 'prompt-123');
 
@@ -768,7 +768,12 @@ describe('ChatSession runtime history and tool-call behavior', () => {
       const historyService = new HistoryService();
       const view = createAgentRuntimeContext({
         prepareProviderInvocation: (name, parameters, signal) =>
-          captureProviderInvocation(providerRuntime, name, parameters, signal),
+          captureProviderInvocation(
+            invocationData(providerRuntime, name, settingsService),
+            name,
+            parameters,
+            signal,
+          ),
         state: runtimeState,
         history: historyService,
         settings: {
@@ -790,12 +795,7 @@ describe('ChatSession runtime history and tool-call behavior', () => {
         providerRuntime: { ...providerRuntime },
       });
 
-      const chat = new ChatSession(
-        view,
-        {} as unknown as ContentGenerator,
-        {},
-        [],
-      );
+      const chat = createHistoryChat(view, config);
       const { Turn, AgentEventType } = await import('./turn.js');
       const turn = new Turn(chat, 'prompt-123');
 

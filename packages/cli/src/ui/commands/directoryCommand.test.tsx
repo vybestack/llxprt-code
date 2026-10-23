@@ -3,12 +3,17 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
 const composeFixtureRuntime = installWorkspaceRuntimeFixture();
 
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
-import { directoryCommand, expandHomeDir } from './directoryCommand.js';
+import { createDirectoryCommand, expandHomeDir } from './directoryCommand.js';
+import {
+  bindDirectoryCommand,
+  bindDirectoryChangeRecording,
+} from './directoryCommandHost.js';
 import {
   loadServerHierarchicalMemory,
   type Config,
@@ -16,8 +21,11 @@ import {
 import type { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceContext.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { assertDefined } from '../../__tests__/assertions.js';
-import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
-import type { CommandContext } from './types.js';
+import {
+  uiFixtureResources,
+  createUiSessionOwner,
+} from '../../__tests__/uiSessionOwner.js';
+import type { SlashCommand } from './types.js';
 import { MessageType } from '../types.js';
 import * as os from 'os';
 import * as path from 'path';
@@ -50,20 +58,47 @@ function rejectDirectory(
   };
 }
 
+async function createDirectoryOwner() {
+  const owner = await createUiSessionOwner();
+  const client = uiFixtureResources(owner).client;
+  return { addDirectoryContext: () => client.addDirectoryContext() };
+}
+
 describe('directoryCommand', () => {
-  let mockContext: CommandContext;
+  let mockContext: CommandOwnerFixture;
   let mockConfig: Config;
   let mockWorkspaceContext: WorkspaceContext;
-  const addCommand = directoryCommand.subCommands?.find(
-    (c) => c.name === 'add',
-  );
-  const showCommand = directoryCommand.subCommands?.find(
-    (c) => c.name === 'show',
-  );
-
-  assertDefined(addCommand);
-  assertDefined(showCommand);
-  beforeEach(() => {
+  function getSubCommand(name: string): SlashCommand {
+    const command = createDirectoryCommand(
+      bindDirectoryCommand(
+        mockContext.services.config ?? null,
+        async () => {
+          const agent = mockContext.services.agent;
+          if (agent === null) throw new Error('Session agent is unavailable');
+          await agent.addDirectoryContext();
+        },
+        bindDirectoryChangeRecording(
+          mockContext.recordingOwner,
+          async (event) => {
+            const agent = mockContext.services.agent;
+            if (!agent) throw new Error('Session agent is unavailable');
+            await agent.session.recordRecordingEvent(event);
+          },
+          mockContext.recordingIntegration?.recordDirectoriesChanged.bind(
+            mockContext.recordingIntegration,
+          ),
+        ),
+        mockContext.ui.addItem,
+        mockContext.ui.setLlxprtMdFileCount,
+      ),
+    );
+    const subCommand = command.subCommands?.find(
+      (candidate) => candidate.name === name,
+    );
+    assertDefined(subCommand);
+    return subCommand;
+  }
+  beforeEach(async () => {
     mockLoadServerHierarchicalMemory.mockReset();
     mockLoadServerHierarchicalMemory.mockResolvedValue({
       memoryContent: '',
@@ -105,7 +140,7 @@ describe('directoryCommand', () => {
         },
         agent: createMockCommandContext({
           services: {
-            agent: { agentClient: createUiSessionOwner().agentClient },
+            agent: await createDirectoryOwner(),
           },
         }).services.agent,
         settings: {
@@ -118,12 +153,12 @@ describe('directoryCommand', () => {
       ui: {
         addItem: vi.fn(),
       },
-    } as unknown as CommandContext;
+    } as unknown as CommandOwnerFixture;
   });
 
   describe('show', () => {
     it('should display the list of directories', () => {
-      void showCommand.action!(mockContext, '');
+      void getSubCommand('show').action!(mockContext, '');
       expect(mockWorkspaceContext.getDirectories).toHaveBeenCalled();
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -139,7 +174,7 @@ describe('directoryCommand', () => {
 
   describe('add', () => {
     it('should show an error if no path is provided', () => {
-      void addCommand.action!(mockContext, '');
+      void getSubCommand('add').action!(mockContext, '');
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.ERROR,
@@ -151,7 +186,7 @@ describe('directoryCommand', () => {
 
     it('should call addDirectory and show a success message for a single path', async () => {
       const newPath = path.normalize('/home/user/new-project');
-      await addCommand.action!(mockContext, newPath);
+      await getSubCommand('add').action!(mockContext, newPath);
       expect(mockWorkspaceContext.addDirectory).toHaveBeenCalledWith(newPath);
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -165,7 +200,10 @@ describe('directoryCommand', () => {
     it('should call addDirectory for each path and show a success message for multiple paths', async () => {
       const newPath1 = path.normalize('/home/user/new-project1');
       const newPath2 = path.normalize('/home/user/new-project2');
-      await addCommand.action!(mockContext, `${newPath1},${newPath2}`);
+      await getSubCommand('add').action!(
+        mockContext,
+        `${newPath1},${newPath2}`,
+      );
       expect(mockWorkspaceContext.addDirectory).toHaveBeenCalledWith(newPath1);
       expect(mockWorkspaceContext.addDirectory).toHaveBeenCalledWith(newPath2);
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
@@ -187,7 +225,7 @@ describe('directoryCommand', () => {
         throw error;
       });
       const newPath = path.normalize('/home/user/invalid-project');
-      await addCommand.action!(mockContext, newPath);
+      await getSubCommand('add').action!(mockContext, newPath);
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.ERROR,
@@ -207,7 +245,10 @@ describe('directoryCommand', () => {
         >
       ).mockImplementation(rejectDirectory(invalidPath, error));
 
-      await addCommand.action!(mockContext, `${validPath},${invalidPath}`);
+      await getSubCommand('add').action!(
+        mockContext,
+        `${validPath},${invalidPath}`,
+      );
 
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -263,13 +304,13 @@ describe('directoryCommand', () => {
           },
           agent: createMockCommandContext({
             services: {
-              agent: { agentClient: createUiSessionOwner().agentClient },
+              agent: await createDirectoryOwner(),
             },
           }).services.agent,
         },
       };
 
-      await addCommand.action!(mockContext, untrustedPath);
+      await getSubCommand('add').action!(mockContext, untrustedPath);
 
       // Should NOT have called addDirectory
       expect(mockWorkspaceContext.addDirectory).not.toHaveBeenCalled();
@@ -317,13 +358,13 @@ describe('directoryCommand', () => {
           },
           agent: createMockCommandContext({
             services: {
-              agent: { agentClient: createUiSessionOwner().agentClient },
+              agent: await createDirectoryOwner(),
             },
           }).services.agent,
         },
       };
 
-      await addCommand.action!(mockContext, unresolvedPath);
+      await getSubCommand('add').action!(mockContext, unresolvedPath);
 
       expect(mockWorkspaceContext.addDirectory).not.toHaveBeenCalled();
       expect(mockContext.ui.addItem).toHaveBeenCalledWith(
@@ -361,13 +402,13 @@ describe('directoryCommand', () => {
           },
           agent: createMockCommandContext({
             services: {
-              agent: { agentClient: createUiSessionOwner().agentClient },
+              agent: await createDirectoryOwner(),
             },
           }).services.agent,
         },
       };
 
-      await addCommand.action!(mockContext, trustedPath);
+      await getSubCommand('add').action!(mockContext, trustedPath);
 
       // Should have called addDirectory
       expect(mockWorkspaceContext.addDirectory).toHaveBeenCalledWith(
@@ -411,13 +452,16 @@ describe('directoryCommand', () => {
           },
           agent: createMockCommandContext({
             services: {
-              agent: { agentClient: createUiSessionOwner().agentClient },
+              agent: await createDirectoryOwner(),
             },
           }).services.agent,
         },
       };
 
-      await addCommand.action!(mockContext, `${trustedPath},${untrustedPath}`);
+      await getSubCommand('add').action!(
+        mockContext,
+        `${trustedPath},${untrustedPath}`,
+      );
 
       // Should have called addDirectory only for trusted path
       expect(mockWorkspaceContext.addDirectory).toHaveBeenCalledWith(
@@ -480,13 +524,16 @@ describe('directoryCommand', () => {
           },
           agent: createMockCommandContext({
             services: {
-              agent: { agentClient: createUiSessionOwner().agentClient },
+              agent: await createDirectoryOwner(),
             },
           }).services.agent,
         },
       };
 
-      const result = await addCommand.action!(mockContext, trustedPath);
+      const result = await getSubCommand('add').action!(
+        mockContext,
+        trustedPath,
+      );
 
       // Should return early with restrictive sandbox message
       expect(result).toStrictEqual({
@@ -541,13 +588,13 @@ describe('directoryCommand', () => {
           },
           agent: createMockCommandContext({
             services: {
-              agent: { agentClient: createUiSessionOwner().agentClient },
+              agent: await createDirectoryOwner(),
             },
           }).services.agent,
         },
       };
 
-      await addCommand.action!(
+      await getSubCommand('add').action!(
         mockContext,
         `${trustedPath},${rejectedRawPath}`,
       );

@@ -5,14 +5,16 @@
  */
 
 import { useKeybindings } from './useKeybindings.js';
-import type { UiRuntime } from '../../../cliUiRuntime.js';
+import type { UseKeybindingsParams } from './useKeybindings.js';
 import type { TerminalStore } from '../../../stores/terminal/terminalStore.js';
 import type { SettingsProfileStore } from '../../../stores/settings/settingsStore.js';
 import type { TurnStore } from '../../../stores/turn/turnStore.js';
 import { useStoreSelector } from '../../../stores/useStoreSelector.js';
 
 interface InputKeybindingsParams {
-  uiRuntime: UiRuntime;
+  readIdeMode: UseKeybindingsParams['ideContext']['getIdeMode'];
+  readInteractiveShellEnabled: UseKeybindingsParams['shell']['getEnableInteractiveShell'];
+  readMcpServers: UseKeybindingsParams['mcp']['getMcpServers'];
   terminalStore: TerminalStore;
   settingsStore: SettingsProfileStore;
   turnStore: TurnStore;
@@ -86,7 +88,7 @@ function useTerminalDisplayState(terminalStore: TerminalStore) {
 }
 
 export function useInputKeybindings(p: InputKeybindingsParams) {
-  const { uiRuntime, terminalStore, settingsStore, turnStore, buffer } = p;
+  const { terminalStore, settingsStore, turnStore, buffer } = p;
   const {
     requestCtrlCExit,
     requestCtrlDExit,
@@ -134,8 +136,7 @@ export function useInputKeybindings(p: InputKeybindingsParams) {
     shell: {
       activeShellPtyId: display.activeShellPtyId,
       setEmbeddedShellFocused,
-      getEnableInteractiveShell: () =>
-        uiRuntime.shell.getEnableInteractiveShell(),
+      getEnableInteractiveShell: p.readInteractiveShellEnabled,
     },
     copyMode: {
       copyModeEnabled: display.copyModeEnabled,
@@ -143,11 +144,11 @@ export function useInputKeybindings(p: InputKeybindingsParams) {
       useAlternateBuffer: display.useAlternateBuffer,
     },
     ideContext: {
-      getIdeMode: () => uiRuntime.ide.getIdeMode(),
+      getIdeMode: p.readIdeMode,
       ideContextState,
     },
     mcp: {
-      getMcpServers: () => uiRuntime.mcp.getMcpServers(),
+      getMcpServers: p.readMcpServers,
     },
   });
 }

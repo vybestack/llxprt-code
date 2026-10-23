@@ -6,17 +6,7 @@ import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.j
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { assertDefined } from '@vybestack/llxprt-code-test-utils';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-import * as os from 'node:os';
 import { InvalidStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
-import { ChatSession } from './chatSession.js';
-import {
-  TokenUsageLogger,
-  type SerializedTokenUsageRecord,
-} from './TokenUsageLogger.js';
 import {
   createAgentRuntimeState,
   type AgentRuntimeState,
@@ -27,7 +17,17 @@ import {
   createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
+import { assertDefined } from '@vybestack/llxprt-code-test-utils';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { createTokenSyncTestFixture } from './__tests__/helpers/tokenSyncTestFixture.js';
+import { ChatSession } from './chatSession.js';
+import {
+  TokenUsageLogger,
+  type SerializedTokenUsageRecord,
+} from './TokenUsageLogger.js';
 
 function makeTempLogPath(): string {
   return path.join(
@@ -134,7 +134,7 @@ function buildTokenSyncView(
   };
   return createAgentRuntimeContext({
     ...createSessionPolicyFixture(
-      providerRuntimeSnapshot.settingsService,
+      fixture.runtimeSetup.settingsService,
       providerRuntimeSnapshot.runtimeId,
     ),
     state: runtimeState,
@@ -219,7 +219,19 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
 
     const view = buildTokenSyncView(fixture, mockProvider, 'int-test-session');
 
-    const chat = new ChatSession(view, mockContentGenerator, {}, []);
+    const chat = new ChatSession(
+      view,
+      fixture.mockConfig,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockContentGenerator,
+      {},
+      [],
+    );
 
     const realLogger = new TokenUsageLogger(true, logFile);
     chat.setTokenUsageLoggerForTesting(realLogger);
@@ -301,7 +313,19 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
       'int-test-session-2',
     );
 
-    const chat = new ChatSession(view, mockContentGenerator, {}, []);
+    const chat = new ChatSession(
+      view,
+      fixture.mockConfig,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockContentGenerator,
+      {},
+      [],
+    );
 
     const realLogger = new TokenUsageLogger(true, logFile);
     chat.setTokenUsageLoggerForTesting(realLogger);
@@ -370,7 +394,19 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
 
     const view = buildTokenSyncView(fixture, mockProvider, 'ac12-join-session');
 
-    const chat = new ChatSession(view, mockContentGenerator, {}, []);
+    const chat = new ChatSession(
+      view,
+      fixture.mockConfig,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockContentGenerator,
+      {},
+      [],
+    );
 
     const realLogger = new TokenUsageLogger(true, logFile);
     chat.setTokenUsageLoggerForTesting(realLogger);
@@ -472,7 +508,19 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
       'ac12-cached-session',
     );
 
-    const chat = new ChatSession(view, mockContentGenerator, {}, []);
+    const chat = new ChatSession(
+      view,
+      fixture.mockConfig,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockContentGenerator,
+      {},
+      [],
+    );
 
     const realLogger = new TokenUsageLogger(true, logFile);
     chat.setTokenUsageLoggerForTesting(realLogger);
@@ -559,7 +607,19 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
       'timing-stream-session',
     );
 
-    const chat = new ChatSession(view, mockContentGenerator, {}, []);
+    const chat = new ChatSession(
+      view,
+      fixture.mockConfig,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockContentGenerator,
+      {},
+      [],
+    );
 
     const realLogger = new TokenUsageLogger(true, logFile);
     chat.setTokenUsageLoggerForTesting(realLogger);
@@ -627,7 +687,19 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
       'usage-only-session',
     );
 
-    const chat = new ChatSession(view, mockContentGenerator, {}, []);
+    const chat = new ChatSession(
+      view,
+      fixture.mockConfig,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockContentGenerator,
+      {},
+      [],
+    );
 
     const realLogger = new TokenUsageLogger(true, logFile);
     chat.setTokenUsageLoggerForTesting(realLogger);
@@ -722,7 +794,19 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
       'abandoned-timing-session',
     );
 
-    const chat = new ChatSession(view, mockContentGenerator, {}, []);
+    const chat = new ChatSession(
+      view,
+      fixture.mockConfig,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockContentGenerator,
+      {},
+      [],
+    );
 
     const realLogger = new TokenUsageLogger(true, logFile);
     chat.setTokenUsageLoggerForTesting(realLogger);
@@ -811,7 +895,19 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
       mockProvider,
       'empty-stream-session',
     );
-    const chat = new ChatSession(view, mockContentGenerator, {}, []);
+    const chat = new ChatSession(
+      view,
+      fixture.mockConfig,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockContentGenerator,
+      {},
+      [],
+    );
     const realLogger = new TokenUsageLogger(true, logFile);
     chat.setTokenUsageLoggerForTesting(realLogger);
     const promptId = 'empty-stream-prompt';

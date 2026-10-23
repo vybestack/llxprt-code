@@ -3,604 +3,314 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
-import { describe, it, expect, beforeEach } from 'bun:test';
-import type { AgentClientContract as AgentClient } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import {
-  CompressionStatus,
-  PerformCompressionResult,
-} from '@vybestack/llxprt-code-core/core/turn.js';
-import { compressCommand } from './compressCommand.js';
+import { beforeEach, describe, expect, it } from 'bun:test';
+import type { Agent } from '@vybestack/llxprt-code-agents';
+import { CompressionStatus } from '@vybestack/llxprt-code-core/core/turn.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { MessageType } from '../types.js';
-import type { CommandContext } from './types.js';
 import type {
-  HistoryItemWithoutId,
   HistoryItemCompression,
   HistoryItemError,
+  HistoryItemWithoutId,
 } from '../types.js';
+import { bindCompressCommand } from './compressCommandHost.js';
+import {
+  createCompressCommand,
+  makePendingCompression,
+} from './compressCommand.js';
+import type { SlashCommand } from './types.js';
+
+type AgentCompressionResult = Awaited<ReturnType<Agent['compress']>>;
 
 interface CapturedState {
-  items: HistoryItemWithoutId[];
-  pendingItems: Array<HistoryItemWithoutId | null>;
+  readonly items: HistoryItemWithoutId[];
+  readonly pendingItems: Array<HistoryItemWithoutId | null>;
 }
 
 function setupCapturingContext(): {
-  context: CommandContext;
+  context: CommandOwnerFixture;
   state: CapturedState;
 } {
-  const state: CapturedState = {
-    items: [],
-    pendingItems: [],
-  };
+  const state: CapturedState = { items: [], pendingItems: [] };
   const base = createMockCommandContext();
   base.ui.addItem = ((item: HistoryItemWithoutId) => {
     state.items.push(item);
-  }) as CommandContext['ui']['addItem'];
+  }) as CommandOwnerFixture['ui']['addItem'];
   base.ui.setPendingItem = ((item: HistoryItemWithoutId | null) => {
     state.pendingItems.push(item);
     base.ui.pendingItem = item;
-  }) as CommandContext['ui']['setPendingItem'];
+  }) as CommandOwnerFixture['ui']['setPendingItem'];
   return { context: base, state };
 }
 
+function commandFor(result: AgentCompressionResult): SlashCommand {
+  return createCompressCommand(bindCompressCommand(async () => result));
+}
+
 function findCompressionItem(
-  items: HistoryItemWithoutId[],
+  items: readonly HistoryItemWithoutId[],
 ): HistoryItemCompression | undefined {
   return items.find(
-    (i): i is HistoryItemCompression => i.type === MessageType.COMPRESSION,
+    (item): item is HistoryItemCompression =>
+      item.type === MessageType.COMPRESSION,
   );
 }
 
 function findErrorItem(
-  items: HistoryItemWithoutId[],
+  items: readonly HistoryItemWithoutId[],
 ): HistoryItemError | undefined {
-  return items.find((i): i is HistoryItemError => i.type === MessageType.ERROR);
+  return items.find(
+    (item): item is HistoryItemError => item.type === MessageType.ERROR,
+  );
 }
 
-function sequentialTokenCounts(
-  first: number,
-  subsequent: number,
-): () => number {
-  let callCount = 0;
-  return () => {
-    callCount++;
-    return callCount === 1 ? first : subsequent;
-  };
-}
-
-describe('compressCommand', () => {
-  let context: CommandContext;
+describe('compress command', () => {
+  let context: CommandOwnerFixture;
   let state: CapturedState;
 
   beforeEach(() => {
     ({ context, state } = setupCapturingContext());
   });
 
-  it('returns already-compressing error when a compression request is pending', async () => {
-    context.ui.pendingItem = {
-      type: MessageType.COMPRESSION,
-      compression: {
-        isPending: true,
-        originalTokenCount: null,
-        newTokenCount: null,
-        compressionStatus: null,
-      },
-    };
-
-    await compressCommand.action!(context, '');
-
-    expect(state.items).toHaveLength(1);
-    const errorItem = findErrorItem(state.items);
-    expect(errorItem).toBeDefined();
-    expect(errorItem!.text).toContain('Already compressing');
-  });
-
-  it('uses COMPRESSED when token count decreases after compression', async () => {
-    const performCompression = async () => PerformCompressionResult.COMPRESSED;
-    const getTotalTokens = sequentialTokenCounts(1200, 800);
-
-    const chat = {
-      performCompression,
-      getHistoryService: () => ({
-        getTotalTokens,
-      }),
-      wasRecentlyCompressed: () => false,
-    };
-
-    context.services.agent = createMockCommandContext({
-      services: {
-        agent: {
-          get agentClient() {
-            return (() =>
-              ({
-                hasChatInitialized: () => true,
-                getChat: () => chat,
-              }) as unknown as AgentClient)();
-          },
-        },
-      },
-    }).services.agent;
-
-    await compressCommand.action!(context, '');
-
-    expect(state.pendingItems[0]).toStrictEqual(
-      expect.objectContaining({
-        type: MessageType.COMPRESSION,
-        compression: expect.objectContaining({ isPending: true }),
-      }),
-    );
-
-    const compressionItem = findCompressionItem(state.items);
-    expect(compressionItem).toBeDefined();
-    expect(compressionItem!.compression).toStrictEqual({
-      isPending: false,
-      originalTokenCount: 1200,
-      newTokenCount: 800,
-      compressionStatus: CompressionStatus.COMPRESSED,
+  it('reports an error when a compression request is already pending', async () => {
+    context.ui.pendingItem = makePendingCompression();
+    const command = createCompressCommand(async () => {
+      throw new Error(
+        'compression should not start while another request is pending',
+      );
     });
 
-    expect(state.pendingItems[state.pendingItems.length - 1]).toBeNull();
+    await command.action!(context, '');
+
+    expect(state.items).toHaveLength(1);
+    expect(findErrorItem(state.items)?.text).toContain('Already compressing');
+    expect(state.pendingItems).toHaveLength(0);
+    expect(state.pendingItems.at(-1)).toBeUndefined();
   });
 
-  it('uses NOOP when token count is unchanged and compression did not run recently', async () => {
-    const performCompression = async () =>
-      PerformCompressionResult.SKIPPED_EMPTY;
-    const getTotalTokens = () => 1000;
+  it('maps a compressed result with fewer tokens to COMPRESSED', async () => {
+    const command = commandFor({
+      status: 'compressed',
+      originalTokenCount: 1200,
+      newTokenCount: 800,
+    });
 
-    const chat = {
-      performCompression,
-      getHistoryService: () => ({
-        getTotalTokens,
-      }),
-      wasRecentlyCompressed: () => false,
-    };
+    await command.action!(context, '');
 
-    context.services.agent = createMockCommandContext({
-      services: {
-        agent: {
-          get agentClient() {
-            return (() =>
-              ({
-                hasChatInitialized: () => true,
-                getChat: () => chat,
-              }) as unknown as AgentClient)();
-          },
-        },
-      },
-    }).services.agent;
+    const item = findCompressionItem(state.items);
+    expect(item).toBeDefined();
+    expect(item?.compression.isPending).toBe(false);
+    expect(item?.compression.originalTokenCount).toBe(1200);
+    expect(item?.compression.newTokenCount).toBe(800);
+    expect(item?.compression.compressionStatus).toBe(
+      CompressionStatus.COMPRESSED,
+    );
+    expect(state.pendingItems[0]?.type).toBe(MessageType.COMPRESSION);
+    expect(state.pendingItems.at(-1)).toBeNull();
+  });
 
-    await compressCommand.action!(context, '');
+  it('maps an unchanged compressed result to NOOP', async () => {
+    const command = commandFor({
+      status: 'compressed',
+      originalTokenCount: 1000,
+      newTokenCount: 1000,
+    });
 
-    const compressionItem = findCompressionItem(state.items);
-    expect(compressionItem).toBeDefined();
-    expect(compressionItem!.compression.compressionStatus).toBe(
-      CompressionStatus.NOOP,
+    await command.action!(context, '');
+
+    expect(
+      findCompressionItem(state.items)?.compression.compressionStatus,
+    ).toBe(CompressionStatus.NOOP);
+    expect(
+      findCompressionItem(state.items)?.compression.originalTokenCount,
+    ).toBe(1000);
+    expect(findCompressionItem(state.items)?.compression.newTokenCount).toBe(
+      1000,
     );
   });
 
-  it('uses NOOP when token count is unchanged, result is SKIPPED_EMPTY, and compression ran recently', async () => {
-    const performCompression = async () =>
-      PerformCompressionResult.SKIPPED_EMPTY;
-    const getTotalTokens = () => 1000;
+  it('maps a larger compressed result to the inflated-token failure', async () => {
+    const command = commandFor({
+      status: 'compressed',
+      originalTokenCount: 1000,
+      newTokenCount: 1200,
+    });
 
-    const chat = {
-      performCompression,
-      getHistoryService: () => ({
-        getTotalTokens,
-      }),
-      wasRecentlyCompressed: () => true,
-    };
+    await command.action!(context, '');
 
-    context.services.agent = createMockCommandContext({
-      services: {
-        agent: {
-          get agentClient() {
-            return (() =>
-              ({
-                hasChatInitialized: () => true,
-                getChat: () => chat,
-              }) as unknown as AgentClient)();
-          },
-        },
-      },
-    }).services.agent;
-
-    await compressCommand.action!(context, '');
-
-    const compressionItem = findCompressionItem(state.items);
-    expect(compressionItem).toBeDefined();
-    expect(compressionItem!.compression.compressionStatus).toBe(
-      CompressionStatus.NOOP,
+    expect(
+      findCompressionItem(state.items)?.compression.compressionStatus,
+    ).toBe(CompressionStatus.COMPRESSION_FAILED_INFLATED_TOKEN_COUNT);
+    expect(
+      findCompressionItem(state.items)?.compression.originalTokenCount,
+    ).toBe(1000);
+    expect(findCompressionItem(state.items)?.compression.newTokenCount).toBe(
+      1200,
     );
   });
 
-  it('shows unavailable-chat error when chat is not initialized', async () => {
-    context.services.agent = createMockCommandContext({
-      services: {
-        agent: {
-          get agentClient() {
-            return (() =>
-              ({
-                hasChatInitialized: () => false,
-              }) as unknown as AgentClient)();
-          },
-        },
-      },
-    }).services.agent;
+  it('maps an explicit noop result to NOOP', async () => {
+    const command = commandFor({ status: 'noop' });
 
-    await compressCommand.action!(context, '');
+    await command.action!(context, '');
 
-    const errorItem = findErrorItem(state.items);
-    expect(errorItem).toBeDefined();
-    expect(errorItem!.text).toBe(
+    expect(
+      findCompressionItem(state.items)?.compression.compressionStatus,
+    ).toBe(CompressionStatus.NOOP);
+    expect(state.pendingItems.at(-1)).toBeNull();
+  });
+
+  it('maps a skipped result to NOOP', async () => {
+    const command = commandFor({ status: 'skipped' });
+
+    await command.action!(context, '');
+
+    expect(
+      findCompressionItem(state.items)?.compression.compressionStatus,
+    ).toBe(CompressionStatus.NOOP);
+    expect(
+      findCompressionItem(state.items)?.compression.originalTokenCount,
+    ).toBeNull();
+  });
+
+  it('maps a failed result to COMPRESSION_FAILED', async () => {
+    const command = commandFor({ status: 'failed' });
+
+    await command.action!(context, '');
+
+    expect(
+      findCompressionItem(state.items)?.compression.compressionStatus,
+    ).toBe(CompressionStatus.COMPRESSION_FAILED);
+    expect(
+      findCompressionItem(state.items)?.compression.newTokenCount,
+    ).toBeNull();
+  });
+
+  it('keeps a failed status when token counts decreased', async () => {
+    const command = commandFor({
+      status: 'failed',
+      originalTokenCount: 1200,
+      newTokenCount: 800,
+    });
+
+    await command.action!(context, '');
+
+    expect(
+      findCompressionItem(state.items)?.compression.compressionStatus,
+    ).toBe(CompressionStatus.COMPRESSION_FAILED);
+    expect(
+      findCompressionItem(state.items)?.compression.originalTokenCount,
+    ).toBe(1200);
+    expect(findCompressionItem(state.items)?.compression.newTokenCount).toBe(
+      800,
+    );
+  });
+
+  it('maps missing token counts on a compressed result to NOOP', async () => {
+    const command = commandFor({ status: 'compressed' });
+
+    await command.action!(context, '');
+
+    expect(
+      findCompressionItem(state.items)?.compression.compressionStatus,
+    ).toBe(CompressionStatus.NOOP);
+    expect(
+      findCompressionItem(state.items)?.compression.originalTokenCount,
+    ).toBeNull();
+  });
+
+  it('maps an incomplete token-count pair to NOOP', async () => {
+    const command = commandFor({
+      status: 'compressed',
+      originalTokenCount: 900,
+    });
+
+    await command.action!(context, '');
+
+    expect(
+      findCompressionItem(state.items)?.compression.compressionStatus,
+    ).toBe(CompressionStatus.NOOP);
+    expect(
+      findCompressionItem(state.items)?.compression.originalTokenCount,
+    ).toBe(900);
+    expect(
+      findCompressionItem(state.items)?.compression.newTokenCount,
+    ).toBeNull();
+  });
+
+  it('keeps a complete count pair when the new count is absent', async () => {
+    const command = commandFor({
+      status: 'compressed',
+      newTokenCount: 700,
+    });
+
+    await command.action!(context, '');
+
+    expect(
+      findCompressionItem(state.items)?.compression.compressionStatus,
+    ).toBe(CompressionStatus.NOOP);
+    expect(
+      findCompressionItem(state.items)?.compression.originalTokenCount,
+    ).toBeNull();
+    expect(findCompressionItem(state.items)?.compression.newTokenCount).toBe(
+      700,
+    );
+  });
+
+  it('reports the missing registered Agent when no compression owner is bound', async () => {
+    const command = createCompressCommand(bindCompressCommand(null));
+
+    await command.action!(context, '');
+
+    expect(findErrorItem(state.items)?.text).toBe(
       'Chat instance not available for compression.',
     );
-    expect(state.pendingItems[state.pendingItems.length - 1]).toBeNull();
+    expect(state.pendingItems[0]?.type).toBe(MessageType.COMPRESSION);
+    expect(state.pendingItems.at(-1)).toBeNull();
   });
 
-  it('uses COMPRESSION_FAILED when all strategies fail (PerformCompressionResult.FAILED)', async () => {
-    const performCompression = async () => PerformCompressionResult.FAILED;
-    const getTotalTokens = () => 1000;
+  it('converts a rejected compression operation into a UI error', async () => {
+    const command = createCompressCommand(async () => {
+      throw new Error('provider rejected compression');
+    });
 
-    const chat = {
-      performCompression,
-      getHistoryService: () => ({
-        getTotalTokens,
-      }),
-      wasRecentlyCompressed: () => false,
-    };
+    await command.action!(context, '');
 
-    context.services.agent = createMockCommandContext({
-      services: {
-        agent: {
-          get agentClient() {
-            return (() =>
-              ({
-                hasChatInitialized: () => true,
-                getChat: () => chat,
-              }) as unknown as AgentClient)();
-          },
-        },
-      },
-    }).services.agent;
-
-    await compressCommand.action!(context, '');
-
-    const compressionItem = findCompressionItem(state.items);
-    expect(compressionItem).toBeDefined();
-    expect(compressionItem!.compression.compressionStatus).toBe(
-      CompressionStatus.COMPRESSION_FAILED,
+    expect(findErrorItem(state.items)?.text).toBe(
+      'Failed to compress chat history: provider rejected compression',
     );
+    expect(state.pendingItems[0]?.type).toBe(MessageType.COMPRESSION);
+    expect(state.pendingItems.at(-1)).toBeNull();
   });
 
-  it('uses COMPRESSION_FAILED when compression is in cooldown (PerformCompressionResult.SKIPPED_COOLDOWN)', async () => {
-    const performCompression = async () =>
-      PerformCompressionResult.SKIPPED_COOLDOWN;
-    const getTotalTokens = () => 1000;
-
-    const chat = {
-      performCompression,
-      getHistoryService: () => ({
-        getTotalTokens,
-      }),
-      wasRecentlyCompressed: () => false,
-    };
-
-    context.services.agent = createMockCommandContext({
-      services: {
-        agent: {
-          get agentClient() {
-            return (() =>
-              ({
-                hasChatInitialized: () => true,
-                getChat: () => chat,
-              }) as unknown as AgentClient)();
-          },
-        },
-      },
-    }).services.agent;
-
-    await compressCommand.action!(context, '');
-
-    const compressionItem = findCompressionItem(state.items);
-    expect(compressionItem).toBeDefined();
-    expect(compressionItem!.compression.compressionStatus).toBe(
-      CompressionStatus.COMPRESSION_FAILED,
+  it('renders non-Error rejection values in the UI error', async () => {
+    const command = createCompressCommand(() =>
+      Promise.reject('provider unavailable'),
     );
-  });
 
-  it('uses ALREADY_COMPRESSED when core reports COMPRESSED but tokens did not decrease and compression was recent before command', async () => {
-    const performCompression = async () => PerformCompressionResult.COMPRESSED;
-    const getTotalTokens = () => 1000;
+    await command.action!(context, '');
 
-    const chat = {
-      performCompression,
-      getHistoryService: () => ({
-        getTotalTokens,
-      }),
-      wasRecentlyCompressed: () => true,
-    };
-
-    context.services.agent = createMockCommandContext({
-      services: {
-        agent: {
-          get agentClient() {
-            return (() =>
-              ({
-                hasChatInitialized: () => true,
-                getChat: () => chat,
-              }) as unknown as AgentClient)();
-          },
-        },
-      },
-    }).services.agent;
-
-    await compressCommand.action!(context, '');
-
-    const compressionItem = findCompressionItem(state.items);
-    expect(compressionItem).toBeDefined();
-    expect(compressionItem!.compression.compressionStatus).toBe(
-      CompressionStatus.ALREADY_COMPRESSED,
+    expect(findErrorItem(state.items)?.text).toBe(
+      'Failed to compress chat history: provider unavailable',
     );
+    expect(state.items).toHaveLength(1);
+    expect(state.pendingItems.at(-1)).toBeNull();
   });
 
-  it('uses NOOP when core reports COMPRESSED but tokens did not decrease and compression was not recent before command', async () => {
-    const performCompression = async () => PerformCompressionResult.COMPRESSED;
-    const getTotalTokens = () => 1000;
+  it('does not wrap the missing-chat error with the generic compression prefix', async () => {
+    const command = createCompressCommand(async () => {
+      throw new Error('Chat instance not available for compression.');
+    });
 
-    const chat = {
-      performCompression,
-      getHistoryService: () => ({
-        getTotalTokens,
-      }),
-      wasRecentlyCompressed: () => false,
-    };
+    await command.action!(context, '');
 
-    context.services.agent = createMockCommandContext({
-      services: {
-        agent: {
-          get agentClient() {
-            return (() =>
-              ({
-                hasChatInitialized: () => true,
-                getChat: () => chat,
-              }) as unknown as AgentClient)();
-          },
-        },
-      },
-    }).services.agent;
-
-    await compressCommand.action!(context, '');
-
-    const compressionItem = findCompressionItem(state.items);
-    expect(compressionItem).toBeDefined();
-    expect(compressionItem!.compression.compressionStatus).toBe(
-      CompressionStatus.NOOP,
-    );
-  });
-
-  it('uses COMPRESSION_FAILED_INFLATED_TOKEN_COUNT when core reports COMPRESSED but token count increases', async () => {
-    const performCompression = async () => PerformCompressionResult.COMPRESSED;
-    const getTotalTokens = sequentialTokenCounts(1000, 1200);
-
-    const chat = {
-      performCompression,
-      getHistoryService: () => ({
-        getTotalTokens,
-      }),
-      wasRecentlyCompressed: () => true,
-    };
-
-    context.services.agent = createMockCommandContext({
-      services: {
-        agent: {
-          get agentClient() {
-            return (() =>
-              ({
-                hasChatInitialized: () => true,
-                getChat: () => chat,
-              }) as unknown as AgentClient)();
-          },
-        },
-      },
-    }).services.agent;
-
-    await compressCommand.action!(context, '');
-
-    const compressionItem = findCompressionItem(state.items);
-    expect(compressionItem).toBeDefined();
-    expect(compressionItem!.compression.compressionStatus).toBe(
-      CompressionStatus.COMPRESSION_FAILED_INFLATED_TOKEN_COUNT,
-    );
-  });
-
-  it('shows error when performCompression throws an exception', async () => {
-    const performCompression = async () => {
-      throw new Error('API connection refused');
-    };
-    const getTotalTokens = () => 1000;
-
-    const chat = {
-      performCompression,
-      getHistoryService: () => ({
-        getTotalTokens,
-      }),
-      wasRecentlyCompressed: () => false,
-    };
-
-    context.services.agent = createMockCommandContext({
-      services: {
-        agent: {
-          get agentClient() {
-            return (() =>
-              ({
-                hasChatInitialized: () => true,
-                getChat: () => chat,
-              }) as unknown as AgentClient)();
-          },
-        },
-      },
-    }).services.agent;
-
-    await compressCommand.action!(context, '');
-
-    const errorItem = findErrorItem(state.items);
-    expect(errorItem).toBeDefined();
-    expect(errorItem!.text).toContain('Failed to compress chat history');
-    expect(errorItem!.text).toContain('API connection refused');
-    expect(state.pendingItems[state.pendingItems.length - 1]).toBeNull();
-  });
-
-  it('checks wasRecentlyCompressed when result is FAILED', async () => {
-    let recentlyCompressedCalled = false;
-    const performCompression = async () => PerformCompressionResult.FAILED;
-    const getTotalTokens = () => 1000;
-
-    const chat = {
-      performCompression,
-      getHistoryService: () => ({
-        getTotalTokens,
-      }),
-      wasRecentlyCompressed: () => {
-        recentlyCompressedCalled = true;
-        return true;
-      },
-    };
-
-    context.services.agent = createMockCommandContext({
-      services: {
-        agent: {
-          get agentClient() {
-            return (() =>
-              ({
-                hasChatInitialized: () => true,
-                getChat: () => chat,
-              }) as unknown as AgentClient)();
-          },
-        },
-      },
-    }).services.agent;
-
-    await compressCommand.action!(context, '');
-
-    expect(recentlyCompressedCalled).toBe(true);
-    const compressionItem = findCompressionItem(state.items);
-    expect(compressionItem).toBeDefined();
-    expect(compressionItem!.compression.compressionStatus).toBe(
-      CompressionStatus.COMPRESSION_FAILED,
-    );
-  });
-
-  it('checks wasRecentlyCompressed when result is SKIPPED_COOLDOWN', async () => {
-    let recentlyCompressedCalled = false;
-    const performCompression = async () =>
-      PerformCompressionResult.SKIPPED_COOLDOWN;
-    const getTotalTokens = () => 1000;
-
-    const chat = {
-      performCompression,
-      getHistoryService: () => ({
-        getTotalTokens,
-      }),
-      wasRecentlyCompressed: () => {
-        recentlyCompressedCalled = true;
-        return true;
-      },
-    };
-
-    context.services.agent = createMockCommandContext({
-      services: {
-        agent: {
-          get agentClient() {
-            return (() =>
-              ({
-                hasChatInitialized: () => true,
-                getChat: () => chat,
-              }) as unknown as AgentClient)();
-          },
-        },
-      },
-    }).services.agent;
-
-    await compressCommand.action!(context, '');
-
-    expect(recentlyCompressedCalled).toBe(true);
-    const compressionItem = findCompressionItem(state.items);
-    expect(compressionItem).toBeDefined();
-    expect(compressionItem!.compression.compressionStatus).toBe(
-      CompressionStatus.COMPRESSION_FAILED,
-    );
-  });
-
-  it('uses COMPRESSION_FAILED when result is FAILED even if tokens decreased', async () => {
-    const performCompression = async () => PerformCompressionResult.FAILED;
-    const getTotalTokens = sequentialTokenCounts(1000, 700);
-
-    const chat = {
-      performCompression,
-      getHistoryService: () => ({
-        getTotalTokens,
-      }),
-      wasRecentlyCompressed: () => false,
-    };
-
-    context.services.agent = createMockCommandContext({
-      services: {
-        agent: {
-          get agentClient() {
-            return (() =>
-              ({
-                hasChatInitialized: () => true,
-                getChat: () => chat,
-              }) as unknown as AgentClient)();
-          },
-        },
-      },
-    }).services.agent;
-
-    await compressCommand.action!(context, '');
-
-    const compressionItem = findCompressionItem(state.items);
-    expect(compressionItem).toBeDefined();
-    expect(compressionItem!.compression.compressionStatus).toBe(
-      CompressionStatus.COMPRESSION_FAILED,
-    );
-  });
-
-  it('shows error when chat has no history service', async () => {
-    let performCompressionCalled = false;
-    const chat = {
-      performCompression: async () => {
-        performCompressionCalled = true;
-        return PerformCompressionResult.COMPRESSED;
-      },
-      getHistoryService: () => null,
-      wasRecentlyCompressed: () => false,
-    };
-
-    context.services.agent = createMockCommandContext({
-      services: {
-        agent: {
-          get agentClient() {
-            return (() =>
-              ({
-                hasChatInitialized: () => true,
-                getChat: () => chat,
-              }) as unknown as AgentClient)();
-          },
-        },
-      },
-    }).services.agent;
-
-    await compressCommand.action!(context, '');
-
-    expect(performCompressionCalled).toBe(false);
-    const errorItem = findErrorItem(state.items);
-    expect(errorItem).toBeDefined();
-    expect(errorItem!.text).toBe(
+    expect(findErrorItem(state.items)?.text).toBe(
       'Chat instance not available for compression.',
     );
-    expect(state.pendingItems[state.pendingItems.length - 1]).toBeNull();
+    expect(state.items).toHaveLength(1);
+    expect(state.pendingItems[0]?.type).toBe(MessageType.COMPRESSION);
+    expect(state.pendingItems.at(-1)).toBeNull();
   });
 });

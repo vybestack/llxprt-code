@@ -10,101 +10,65 @@ import type {
   MessageActionReturn,
 } from './types.js';
 import { CommandKind } from './types.js';
-import type { Agent } from '@vybestack/llxprt-code-agents';
 
-async function logoutViaAgent(
-  agent: Agent,
-  provider: string,
-): Promise<MessageActionReturn> {
-  try {
-    // Validate provider against the agent's known provider list since
-    // auth.status() only returns 'authenticated'/'unauthenticated' (never
-    // 'unknown'), so it cannot reject unsupported providers.
-    const knownProviders = agent.listProviders().map((p) => p.name);
-    if (!knownProviders.includes(provider)) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: `Unknown provider: ${provider}. Supported: ${knownProviders.join(', ')}`,
-      };
-    }
-    const authStatus = agent.auth.status(provider);
-    const wasAuthenticated = authStatus === 'authenticated';
-    await agent.auth.logout(provider);
-    return {
-      type: 'message',
-      messageType: 'info',
-      content: wasAuthenticated
-        ? `Successfully logged out of ${provider}`
-        : `Cleaned up authentication state for ${provider} (was not authenticated)`,
-    };
-  } catch (error) {
-    return logoutErrorHandler(provider, error);
-  }
+export type LogoutOutcome =
+  | { readonly kind: 'unknown-provider'; readonly message: string }
+  | { readonly kind: 'logged-out'; readonly wasAuthenticated: boolean };
+
+/**
+ * The credential operation /logout needs from its owning session. The host
+ * decides how a provider is validated and signed out of.
+ */
+export interface LogoutCommandOperations {
+  readonly logout: (provider: string) => Promise<LogoutOutcome>;
 }
 
-function logoutErrorHandler(
-  provider: string,
-  error: unknown,
-): MessageActionReturn {
-  const errorMessage = error instanceof Error ? error.message : String(error);
+export function createLogoutCommand(
+  operations: LogoutCommandOperations,
+): SlashCommand {
   return {
-    type: 'message',
-    messageType: 'error',
-    content: `Failed to logout from ${provider}: ${errorMessage}`,
+    name: 'logout',
+    description:
+      'logout from OAuth authentication for a provider (gemini, claudecode, codex)',
+    kind: CommandKind.BUILT_IN,
+    action: async (
+      _context: CommandContext,
+      args: string,
+    ): Promise<MessageActionReturn> => {
+      const provider = args.trim();
+      if (!provider) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content:
+            'Please specify a provider to logout from: /logout <provider>\nSupported providers: gemini, claudecode, codex',
+        };
+      }
+      try {
+        const outcome = await operations.logout(provider);
+        if (outcome.kind === 'unknown-provider') {
+          return {
+            type: 'message',
+            messageType: 'error',
+            content: outcome.message,
+          };
+        }
+        return {
+          type: 'message',
+          messageType: 'info',
+          content: outcome.wasAuthenticated
+            ? `Successfully logged out of ${provider}`
+            : `Cleaned up authentication state for ${provider} (was not authenticated)`,
+        };
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `Failed to logout from ${provider}: ${errorMessage}`,
+        };
+      }
+    },
   };
 }
-
-async function logoutViaRuntimeApi(
-  context: CommandContext,
-  provider: string,
-): Promise<MessageActionReturn> {
-  try {
-    const oauthManager = context.oauthControl;
-    const supportedProviders = oauthManager.getSupportedProviders();
-    if (!supportedProviders.includes(provider)) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: `Unknown provider: ${provider}. Supported providers: ${supportedProviders.join(', ')}`,
-      };
-    }
-    const isAuthenticated = await oauthManager.isAuthenticated(provider);
-    await oauthManager.logout(provider);
-    return {
-      type: 'message',
-      messageType: 'info',
-      content: isAuthenticated
-        ? `Successfully logged out of ${provider}`
-        : `Cleaned up authentication state for ${provider} (was not authenticated)`,
-    };
-  } catch (error) {
-    return logoutErrorHandler(provider, error);
-  }
-}
-
-export const logoutCommand: SlashCommand = {
-  name: 'logout',
-  description:
-    'logout from OAuth authentication for a provider (gemini, claudecode, codex)',
-  kind: CommandKind.BUILT_IN,
-  action: async (
-    context: CommandContext,
-    args: string,
-  ): Promise<MessageActionReturn> => {
-    const provider = args.trim();
-    if (!provider) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content:
-          'Please specify a provider to logout from: /logout <provider>\nSupported providers: gemini, claudecode, codex',
-      };
-    }
-    const agent = context.services.agent;
-    if (agent) {
-      return logoutViaAgent(agent, provider);
-    }
-    return logoutViaRuntimeApi(context, provider);
-  },
-};

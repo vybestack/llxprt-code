@@ -35,7 +35,6 @@ export interface AgentConstructionInput {
   editorCallbacks: AgentConfig['editorCallbacks'];
   toolSchedulerFactory: AgentConfig['toolSchedulerFactory'];
   runtimeFactoryBindings: AgentConfig['runtimeFactoryBindings'];
-  runtimeActivationBindings: AgentConfig['runtimeActivationBindings'];
   tokenStore: AgentConfig['tokenStore'];
 }
 
@@ -48,6 +47,10 @@ export function parseAgentConstruction(
     githubBrokerClient: _githubBrokerClient,
     disposeGitHubBroker: _disposeGitHubBroker,
     imageOperation: _imageOperation,
+    sessionOverrides: _sessionOverrides,
+    oauthSettings: _oauthSettings,
+    providerContributions: _providerContributions,
+    parentTrustPort,
     onApproval,
     onOAuthPrompt,
     mcpHost: hostInput,
@@ -57,16 +60,28 @@ export function parseAgentConstruction(
     definitionOwner,
     definitionOwnership,
     memoryOwner,
+    executeShellCommand: _executeShellCommand,
+    filesystemService: _filesystemService,
     filesystemOwner,
     filesystemOwnership,
     editorCallbacks,
     toolSchedulerFactory,
     runtimeFactoryBindings,
-    runtimeActivationBindings,
     tokenStore,
+    credentialAuthority: _credentialAuthority,
     mediaOwner: suppliedMediaOwner,
     ...validatable
   } = rawConfig;
+  validateHostTransports(_filesystemService, _executeShellCommand);
+  if (parentTrustPort !== undefined && trustPort !== undefined)
+    throw new Error('Agent cannot combine borrowed and inherited trust');
+  if (
+    _filesystemService !== undefined &&
+    (filesystemOwner !== undefined || filesystemOwnership === 'caller')
+  )
+    throw new Error(
+      'Filesystem transport requires an Agent-owned workspace root',
+    );
   const parsed = AgentConfigSchema.parse(validatable);
   const resolvedAuth = resolveAuthType(parsed.auth);
   const runtimeId = parsed.sessionId ?? generateRuntimeId();
@@ -92,7 +107,6 @@ export function parseAgentConstruction(
     editorCallbacks,
     toolSchedulerFactory,
     runtimeFactoryBindings,
-    runtimeActivationBindings,
     tokenStore,
     suppliedMediaOwner,
   };
@@ -101,10 +115,13 @@ export function parseAgentConstruction(
 export function agentMcpAssemblyOptions(
   raw: AgentConfig,
   construction: ReturnType<typeof parseAgentConstruction>,
-): McpAssemblyOptions & Pick<AgentConfig, 'imageOperation'> {
+  trustPort: AgentConfig['trustPort'],
+): McpAssemblyOptions &
+  Pick<AgentConfig, 'imageOperation' | 'credentialAuthority'> {
   return {
     imageOperation: raw.imageOperation,
-    trustPort: raw.trustPort,
+    credentialAuthority: raw.credentialAuthority,
+    trustPort,
     idePort: raw.idePort,
     mcpHost: { ...construction.hostInput },
     mcpTokenStorage: construction.mcpTokenStorage,
@@ -113,7 +130,30 @@ export function agentMcpAssemblyOptions(
     definitionOwner: raw.definitionOwner,
     definitionOwnership: raw.definitionOwnership,
     memoryOwner: construction.memoryOwner,
+    filesystemService: raw.filesystemService,
     filesystemOwner: construction.filesystemOwner,
     filesystemOwnership: construction.filesystemOwnership,
   };
+}
+
+function validateHostTransports(filesystem: unknown, shell: unknown): void {
+  if (shell !== undefined && typeof shell !== 'function')
+    throw new Error(
+      'Invalid host transport: shell execution must be a function',
+    );
+  if (filesystem !== undefined && !isFilesystemTransport(filesystem))
+    throw new Error(
+      'Invalid host transport: filesystem requires text read and write operations',
+    );
+}
+
+function isFilesystemTransport(
+  value: unknown,
+): value is NonNullable<AgentConfig['filesystemService']> {
+  if (typeof value !== 'object' || value === null) return false;
+  if (!('readTextFile' in value) || !('writeTextFile' in value)) return false;
+  return (
+    typeof value.readTextFile === 'function' &&
+    typeof value.writeTextFile === 'function'
+  );
 }

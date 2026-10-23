@@ -1,3 +1,4 @@
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 /**
  * @license
@@ -37,7 +38,12 @@ describe('MiddleOutStrategy edge cases', () => {
     it('returns original history when fewer than 4 middle messages', async () => {
       const history = generateHistory(6);
       const ctx = buildContext({ history });
-      const strategy = new MiddleOutStrategy();
+      const strategy = new MiddleOutStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
 
       const result = await strategy.compress(ctx);
 
@@ -52,7 +58,12 @@ describe('MiddleOutStrategy edge cases', () => {
     it('returns original history for very small conversation', async () => {
       const history = generateHistory(3);
       const ctx = buildContext({ history });
-      const strategy = new MiddleOutStrategy();
+      const strategy = new MiddleOutStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
 
       const result = await strategy.compress(ctx);
 
@@ -87,7 +98,12 @@ describe('MiddleOutStrategy edge cases', () => {
         topPreserveThreshold: 0.3,
         preserveThreshold: 0.3,
       });
-      const strategy = new MiddleOutStrategy();
+      const strategy = new MiddleOutStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       const result = await strategy.compress(ctx);
 
       expect(result.kind).toBe('noop');
@@ -105,7 +121,12 @@ describe('MiddleOutStrategy edge cases', () => {
   describe('edge cases', () => {
     it('handles empty history gracefully', async () => {
       const ctx = buildContext({ history: [] });
-      const strategy = new MiddleOutStrategy();
+      const strategy = new MiddleOutStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
 
       const result = await strategy.compress(ctx);
 
@@ -119,7 +140,12 @@ describe('MiddleOutStrategy edge cases', () => {
     it('handles history with exactly the minimum compressible middle', async () => {
       const history = generateHistory(10);
       const ctx = buildContext({ history });
-      const strategy = new MiddleOutStrategy();
+      const strategy = new MiddleOutStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
 
       const result = await strategy.compress(ctx);
 
@@ -149,14 +175,26 @@ describe('MiddleOutStrategy edge cases', () => {
         history,
         resolveProvider: () => ({
           invocation: captureProviderInvocation(
-            testProviderRuntime,
+            {
+              runtimeId: testProviderRuntime.runtimeId,
+              metadata: testProviderRuntime.metadata,
+              globalSettings: new SettingsService().getAllGlobalSettings(),
+              providerSettings: new SettingsService().getProviderSettings(
+                multiChunkProvider.name,
+              ),
+            },
             multiChunkProvider.name,
           ),
           provider: multiChunkProvider,
           runtime: testProviderRuntime,
         }),
       });
-      const strategy = new MiddleOutStrategy();
+      const strategy = new MiddleOutStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
 
       const result = await strategy.compress(ctx);
       const topCount = result.metadata.topPreserved!;
@@ -193,7 +231,12 @@ describe('MiddleOutStrategy edge cases', () => {
         }
 
         const ctx = buildContext({ history });
-        const strategy = new MiddleOutStrategy();
+        const strategy = new MiddleOutStrategy(
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+        );
         const result = await strategy.compress(ctx);
 
         const bottomStart =
@@ -215,7 +258,12 @@ describe('MiddleOutStrategy edge cases', () => {
     it('does not modify split when last human message is already in toKeepBottom', async () => {
       const history = generateHistory(20);
       const ctx = buildContext({ history });
-      const strategy = new MiddleOutStrategy();
+      const strategy = new MiddleOutStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
 
       const result = await strategy.compress(ctx);
 
@@ -236,7 +284,12 @@ describe('MiddleOutStrategy edge cases', () => {
       }
 
       const ctx = buildContext({ history });
-      const strategy = new MiddleOutStrategy();
+      const strategy = new MiddleOutStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       const result = await strategy.compress(ctx);
 
       expect(result.metadata.strategyUsed).toBe('middle-out');
@@ -263,7 +316,12 @@ describe('MiddleOutStrategy edge cases', () => {
         }
 
         const ctx = buildContext({ history });
-        const strategy = new MiddleOutStrategy();
+        const strategy = new MiddleOutStrategy(
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+        );
         const result = await strategy.compress(ctx);
 
         const topCount = result.metadata.topPreserved!;
@@ -297,7 +355,12 @@ describe('MiddleOutStrategy edge cases', () => {
       }
 
       const ctx = buildContext({ history });
-      const strategy = new MiddleOutStrategy();
+      const strategy = new MiddleOutStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       const result = await strategy.compress(ctx);
 
       const topCount = result.metadata.topPreserved!;

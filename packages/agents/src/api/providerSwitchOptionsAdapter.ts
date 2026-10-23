@@ -1,3 +1,7 @@
+import type { ProviderSwitcher } from '@vybestack/llxprt-code-core';
+import type { AgentProviderState } from './control/authState.js';
+import type { AgentProviderSwitchResult } from './agent.js';
+import { UNCONFIGURED_PROVIDER } from './constants.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -73,4 +77,76 @@ export function toRuntimeSwitchOptions(
     };
   }
   return adapted;
+}
+
+export async function applyFacadeProviderSwitch(
+  provider: string,
+  model: string | undefined,
+  options: AgentProviderSwitchOptions | undefined,
+  state: AgentProviderState,
+  switchProvider: ProviderSwitcher,
+  selectModel: (model: string) => Promise<void>,
+  refreshAuth: () => Promise<void>,
+  restoreVisibility: () => Promise<void>,
+  rebuild: () => void,
+): Promise<AgentProviderSwitchResult> {
+  const previousProvider = state.provider;
+  // switchActiveProvider rebuilds the content generator internally; under the
+  // fake seam the named provider is not registered and this throws (no-op).
+  let providerChanged = false;
+  let infoMessages: readonly string[] = [];
+  let defaultModel: string | undefined;
+  try {
+    const switchResult = await switchProvider(
+      provider,
+      toRuntimeSwitchOptions(options),
+    );
+    providerChanged = switchResult.changed;
+    infoMessages = switchResult.infoMessages;
+    defaultModel = switchResult.defaultModel;
+  } catch (error) {
+    // Only the EXPECTED fake-seam case is suppressed: the fake seam sets
+    // LLXPRT_FAKE_RESPONSES to a fixture-file path (never the string '1'), so
+    // the seam predicate is simply "the env var is set at all". A REAL
+    // provider-switch failure (env var not set) must propagate so a genuine
+    // failure is never reported as success — facade state below is then left
+    // untouched.
+    const isFakeSeam = process.env.LLXPRT_FAKE_RESPONSES !== undefined;
+    if (!isFakeSeam) {
+      throw error;
+    }
+    // Provider not registered (fake seam) — the active provider handles all
+    // requests. Per-agent state still reflects the switch (getProvider etc.).
+  }
+  if (providerChanged) {
+    // Real provider switch succeeded; apply the requested model (if any) via
+    // setActiveModel + the explicit model-only rebuild.
+    if (model !== undefined && model !== state.model) {
+      await selectModel(model);
+      await refreshAuth();
+    }
+    await restoreVisibility();
+  } else if (model !== undefined && model !== state.model) {
+    // Same provider, different model — apply the model to the runtime
+    // without reinitializing the content generator (the provider did not
+    // change, so the client/HistoryService identity is preserved).
+    // setActiveModel updates the model on the existing provider; the
+    // rebuild() below propagates it to the loop (#2374 deepthinker finding).
+    await selectModel(model);
+  }
+  // Under the fake seam (providerChanged === false), the client is unchanged;
+  // history/HistoryService identity is trivially preserved (same client).
+  state.provider = provider;
+  if (model !== undefined) {
+    state.model = model;
+  }
+  rebuild();
+  return {
+    changed: providerChanged,
+    previousProvider:
+      previousProvider === UNCONFIGURED_PROVIDER ? null : previousProvider,
+    nextProvider: provider,
+    ...(defaultModel !== undefined ? { defaultModel } : {}),
+    infoMessages,
+  };
 }

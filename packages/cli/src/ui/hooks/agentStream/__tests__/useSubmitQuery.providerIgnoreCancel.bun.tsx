@@ -1,9 +1,13 @@
+import { adoptFixture as fromConfig } from '../../../../../../agents/src/api/__tests__/helpers/adoption-fixture.js';
+import { submissionOperations } from './submission-operations.js';
+import { CredentialAuthority } from '../../../../../../providers/src/auth/proxy/credential-store-factory.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { streamPolicyOperations } from './stream-policy-operations.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 
 /**
@@ -77,8 +81,8 @@ import type { Todo } from '@vybestack/llxprt-code-tools';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { Storage } from '@vybestack/llxprt-code-settings/storage/Storage.js';
-import { createIsolatedRuntimeContext } from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
-import type { IsolatedRuntimeContextHandle } from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
+import { ProviderManager } from '@vybestack/llxprt-code-providers';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import type {
   GenerateChatOptions,
   IModel,
@@ -88,8 +92,10 @@ import type {
 // The agents package is consumed ONLY through its public root (#3222): the
 // engine below is assembled by fromConfig adoption, never by reaching into
 // package internals.
+// The agents package is consumed ONLY through its public root (#3222): the
+// engine below is assembled by fromConfig adoption, never by reaching into
+// package internals.
 import {
-  fromConfig,
   toConfigParameters,
   type Agent,
   type AgentEvent,
@@ -97,6 +103,7 @@ import {
 } from '@vybestack/llxprt-code-agents';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { agentStreamOperations } from './helpers/agentStreamOperations.js';
 
 // ─── Module mocks (UI-side only; the engine below is real) ──────────────────
 
@@ -366,7 +373,8 @@ async function createEngineEnv(): Promise<EngineEnv> {
   };
 
   let config: Config | undefined;
-  let handle: IsolatedRuntimeContextHandle | undefined;
+  let providerManager: ProviderManager | undefined;
+  let settingsOwner: SessionSettingsOwner | undefined;
   let agent: Agent | undefined;
   let policyOwner: RuntimePolicyOwner | undefined;
   try {
@@ -382,35 +390,51 @@ async function createEngineEnv(): Promise<EngineEnv> {
     const settingsService = new SettingsService();
     policyOwner = new RuntimePolicyOwner(config);
     const messageBus = policyOwner.session.messageBus;
-    handle = createIsolatedRuntimeContext(
-      {
-        runtimeId: SESSION_ID,
-        config,
-        messageBus,
-        prepare: (ctx) => {
-          ctx.providerManager.registerProvider(transport);
-          void ctx.providerManager.setActiveProvider(transport.name);
-        },
-      },
+    const credentialAuthority = new CredentialAuthority();
+    settingsOwner = new SessionSettingsOwner(settingsService);
+    settingsOwner.bindTelemetry(config);
+    providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       settingsService,
+      config,
+      undefined,
+      credentialAuthority,
+      settingsOwner,
     );
-    await handle.activate();
+    providerManager.registerProvider(transport);
+    providerManager.setActiveProvider(transport.name);
     // No explicit config.initialize() here: fromConfig installs the default
     // agent runtime factories (agentClientFactory et al.) and runs
     // ensureInitialized during adoption — the factory-less Config idiom.
-    agent = await fromConfig({
-      settingsService,
-      settingsOwner: handle.settingsOwner,
+    agent = await fromConfig(
       config,
-      providerManager: handle.providerManager,
-      sessionId: SESSION_ID,
+      settingsService,
+      {
+        sessionId: SESSION_ID,
+        activation: { provider: 'fake', model: 'fake-model' },
+      },
+      settingsOwner,
+      providerManager,
+      undefined,
       messageBus,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      credentialAuthority,
       policyOwner,
-      activation: { provider: 'fake', model: 'fake-model' },
-    });
+    );
 
     const builtConfig = config;
-    const builtHandle = handle;
+    const builtManager = providerManager;
+    const builtSettings = settingsOwner;
     const builtAgent = agent;
     const startedPrompts: string[] = [];
     const streamConcurrency = createStreamConcurrencyProbe();
@@ -428,7 +452,8 @@ async function createEngineEnv(): Promise<EngineEnv> {
       routedEvents: [],
       dispose: async (): Promise<void> => {
         await builtAgent.dispose().catch(() => undefined);
-        await Promise.resolve(builtHandle.cleanup()).catch(() => undefined);
+        builtManager.dispose();
+        await builtSettings.dispose();
         await policyOwner?.dispose();
         await builtConfig.dispose().catch(() => undefined);
         restoreEnv();
@@ -436,9 +461,8 @@ async function createEngineEnv(): Promise<EngineEnv> {
     };
   } catch (error) {
     await agent?.dispose().catch(() => undefined);
-    if (handle !== undefined) {
-      await Promise.resolve(handle.cleanup()).catch(() => undefined);
-    }
+    providerManager?.dispose();
+    await settingsOwner?.dispose();
     await policyOwner?.dispose();
     await config?.dispose().catch(() => undefined);
     restoreEnv();
@@ -492,12 +516,21 @@ function renderHarness(options: {
     current: false,
   };
 
+  const operations = agentStreamOperations(env.agent);
+  const policyOps = streamPolicyOperations(
+    createStreamRuntimeForTest({}, createMockOverrides()),
+  );
+  const submissionOps = submissionOperations(
+    env.agent,
+    options.recordingIntegration,
+    undefined,
+  );
   const hook = renderHook(
     ({ streamingState }: { streamingState: StreamingState }) => {
       const queue = useQueuedSubmissions();
       const processAgentEventRef = useRef<AgentEventRouter | null>(null);
       const eventStream = useAgentEventStream({
-        agent: env.agent,
+        ...operations,
         addItem: handles.addItem,
         processAgentEventRef,
         flushPendingHistoryItem: handles.flushPendingHistoryItem,
@@ -514,15 +547,15 @@ function renderHarness(options: {
       runStreamRef.current = eventStream.runStream;
 
       const submitDeps: UseSubmitQueryDeps = {
-        runtime: createStreamRuntimeForTest({}, createMockOverrides()),
-        agent: env.agent,
+        ...policyOps,
+        ...submissionOps,
         addItem: handles.addItem,
         removeItems: vi.fn(),
         settings: createLoadedSettings(),
         onDebugMessage: vi.fn(),
         onCancelSubmit: vi.fn(),
         onAuthError: vi.fn(),
-        recordingIntegration: options.recordingIntegration,
+
         sanitizeContent: (text: string) => ({ text, blocked: false }),
         flushPendingHistoryItem: handles.flushPendingHistoryItem,
         pendingResponse: new PendingResponseBuffer(undefined),

@@ -6,10 +6,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  CheckpointService,
   SessionDiscovery,
   SessionLockManager,
-  deleteSession,
 } from '@vybestack/llxprt-code-core';
 import type { ContinueTarget } from '@vybestack/llxprt-code-core';
 import type { Key } from './useKeypress.js';
@@ -21,11 +19,6 @@ import type {
 } from './useSessionBrowser.js';
 import { useSessionKeypressHandler } from './useSessionBrowserKeypress.js';
 import { buildEnrichedSession } from './sessionBrowserTarget.js';
-import {
-  deleteOwnerBrowserTarget,
-  listOwnerBrowserListing,
-  ownerBrowserSessionId,
-} from '../utils/ownerSessionUi.js';
 import { warnUnreadableRecordings } from '../utils/warnUnreadableRecordings.js';
 
 const PAGE_SIZE = 20;
@@ -437,6 +430,7 @@ interface LoaderDeps {
 }
 
 function useSessionLoader(props: UseSessionBrowserProps, deps: LoaderDeps) {
+  const { readCatalog } = props;
   const processSession = useSessionProcessor(
     props.chatsDir,
     deps.generationRef,
@@ -445,21 +439,9 @@ function useSessionLoader(props: UseSessionBrowserProps, deps: LoaderDeps) {
   return useCallback(async () => {
     const currentGen = beginSessionLoad(deps);
     try {
-      const detailed = props.ownerAgent
-        ? await listOwnerBrowserListing(props.ownerAgent)
-        : await SessionDiscovery.listContinueTargetsDetailed(
-            props.chatsDir,
-            props.projectHash,
-            props.mediaStore,
-          );
+      const detailed = await readCatalog();
       if (currentGen !== deps.generationRef.current) return;
-      const currentSessionId = props.ownerAgent
-        ? ownerBrowserSessionId(
-            props.ownerAgent,
-            detailed.targets,
-            props.currentSessionId,
-          )
-        : props.currentSessionId;
+      const currentSessionId = detailed.currentSessionId;
       warnUnreadableRecordings(
         'Session browser',
         detailed.unreadableRecordings,
@@ -481,15 +463,7 @@ function useSessionLoader(props: UseSessionBrowserProps, deps: LoaderDeps) {
       );
       deps.coreSetters.setIsLoading(false);
     }
-  }, [
-    deps,
-    processSession,
-    props.chatsDir,
-    props.currentSessionId,
-    props.mediaStore,
-    props.ownerAgent,
-    props.projectHash,
-  ]);
+  }, [deps, processSession, readCatalog]);
 }
 
 function beginSessionLoad(deps: LoaderDeps): number {
@@ -648,27 +622,7 @@ async function executeDeleteSession(
 ): Promise<void> {
   deps.selectedTargetKeyRef.current = session.targetKey;
   try {
-    if (props.ownerAgent) {
-      await deleteOwnerBrowserTarget(props.ownerAgent, session.target);
-    } else if (session.target.kind === 'checkpoint') {
-      await deleteCheckpointTarget(session.target, props);
-    } else {
-      const locked = await SessionLockManager.isLocked(
-        props.chatsDir,
-        session.target.session.sessionId,
-      );
-      if (locked) {
-        deps.setters.setError('Cannot delete: session is in use');
-        deps.setters.setDeleteConfirmIndex(null);
-        return;
-      }
-      const result = await deleteSession(
-        session.target.session.sessionId,
-        props.chatsDir,
-        props.projectHash,
-      );
-      if (!result.ok) throw new Error(result.error);
-    }
+    await props.deleteTarget(session.target);
     deps.setters.setDeleteConfirmIndex(null);
     await deps.loadSessions();
   } catch (err) {
@@ -677,26 +631,6 @@ async function executeDeleteSession(
   }
 }
 
-async function deleteCheckpointTarget(
-  target: Extract<ContinueTarget, { kind: 'checkpoint' }>,
-  props: UseSessionBrowserProps,
-): Promise<void> {
-  if (props.activeRecording?.getSessionId() === target.source.sessionId) {
-    await new CheckpointService(props.mediaStore).deleteCheckpoint(
-      props.activeRecording,
-      props.projectHash,
-      target.checkpointId,
-    );
-    return;
-  }
-  await new CheckpointService(props.mediaStore).deleteCheckpointClosed(
-    target.source.filePath,
-    props.projectHash,
-    props.chatsDir,
-    target.source.sessionId,
-    target.checkpointId,
-  );
-}
 function useSessionBrowserEffects(params: {
   isLoading: boolean;
   derived: DerivedState;

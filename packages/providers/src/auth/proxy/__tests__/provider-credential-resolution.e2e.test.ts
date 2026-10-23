@@ -29,10 +29,7 @@ import type { IModel } from '../../../IModel.js';
 import { resolveRuntimeAuthToken } from '../../../utils/authToken.js';
 import { createCredentialResolutionError } from '../../../utils/credentialResolutionError.js';
 import { CredentialProxyServer } from '../credential-proxy-server.js';
-import {
-  createTokenStore,
-  resetFactorySingletons,
-} from '../credential-store-factory.js';
+import { HostCredentialOwner } from '../credential-store-factory.js';
 
 const PROFILE = 'issue3451-sandbox-profile';
 const PROVIDER = 'issue3451-proxy-provider';
@@ -42,6 +39,9 @@ const CREDENTIAL_SECRET = 'issue3451-live-credential-secret';
 class CredentialProbeProvider extends BaseProvider {
   constructor(oauthManager: OAuthManager) {
     super({
+      providerKeyStorage: new HostCredentialOwner(
+        process.env,
+      ).authority.createProviderKeyStorage(),
       name: PROVIDER,
       isOAuthEnabled: true,
       supportsOAuth: true,
@@ -181,7 +181,9 @@ function createSettings(): SettingsService {
 }
 
 function createProxyOAuthManager(): OAuthManager {
-  const tokenStore = createTokenStore();
+  const tokenStore = new HostCredentialOwner(
+    process.env,
+  ).authority.createTokenStore();
   return {
     getToken: async (provider) => {
       const token = await tokenStore.getToken(provider);
@@ -244,13 +246,11 @@ describe('Provider credential resolution through a sandbox proxy', () => {
     );
     originalSocket = process.env.LLXPRT_CREDENTIAL_SOCKET;
     delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-    resetFactorySingletons();
   });
 
   afterEach(async () => {
     const cleanupErrors: unknown[] = [];
     try {
-      resetFactorySingletons();
       for (const proxy of proxies.splice(0)) {
         try {
           await proxy.server.stop();

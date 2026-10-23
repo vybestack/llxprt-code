@@ -151,7 +151,9 @@ describe('CodexDeviceFlow - PKCE OAuth Flow', () => {
       });
     });
 
-    deviceFlow = new CodexDeviceFlow();
+    deviceFlow = new CodexDeviceFlow((input, init) =>
+      globalThis.fetch(input, init),
+    );
   });
 
   afterEach(async () => {

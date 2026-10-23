@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../../providers/src/auth/proxy/credential-store-factory.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -13,14 +14,18 @@ import {
   HookEventName,
   HookType,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
-import { ProviderManager } from '@vybestack/llxprt-code-providers';
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import { loadRuntimePlugins } from '@vybestack/llxprt-code-providers/composition.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
+import { createOpenAIAliasProvider } from '@vybestack/llxprt-code-providers/composition/aliasProviderFactory.js';
+import {
+  type ProviderAliasEntry,
+  type ProviderFactoryContext,
+  loadRuntimePlugins,
+} from '@vybestack/llxprt-code-providers/composition.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { installZedDefinitionFixture } from './__tests__/definition-fixture.js';
 import { unusedProfileApplication } from './test-profile-application.js';
 import {
-  createZedSessionConfig,
+  captureZedSessionParameters,
   type ZedSessionProviderInputs,
 } from './zed-session-agent.js';
 
@@ -30,47 +35,31 @@ const mockFromConfig = vi.fn();
 const actual = { ...(await import('@vybestack/llxprt-code-agents')) };
 void vi.mock('@vybestack/llxprt-code-agents', () => ({
   ...actual,
-  fromConfig: (...args: unknown[]) => mockFromConfig(...args),
+  createAgentFromSettingsSnapshot: (
+    ...args: Parameters<typeof actual.createAgentFromSettingsSnapshot>
+  ) => mockFromConfig(...args),
 }));
-
-interface CapturedSessionAgentOptions {
-  readonly config: Config;
-  readonly providerManager: ProviderManager;
-  readonly oauthManager: OAuthManager;
-}
-
-function fakeSessionAgent(options: CapturedSessionAgentOptions) {
-  return {
-    providerManager: options.providerManager,
-    getApprovalMode: () => 'default',
-    setApprovalMode: vi.fn(),
-    dispose: vi.fn().mockResolvedValue(undefined),
-    async *stream() {},
-    session: {
-      getRecordingTitle: () => undefined,
-      recordRecordingTitle: async () => undefined,
-    },
-    tools: { respondToConfirmation: vi.fn() },
-  };
-}
 
 describe('Zed session host declarations', () => {
   let projectRoot: string;
-  const captured: CapturedSessionAgentOptions[] = [];
+  const captured: Agent[] = [];
 
   beforeEach(async () => {
     projectRoot = await mkdtemp(join(tmpdir(), 'zed-host-declarations-'));
     captured.length = 0;
     mockFromConfig.mockImplementation(
-      async (options: CapturedSessionAgentOptions) => {
-        captured.push(options);
-        return fakeSessionAgent(options);
+      async (
+        ...args: Parameters<typeof actual.createAgentFromSettingsSnapshot>
+      ) => {
+        const agent = await actual.createAgentFromSettingsSnapshot(...args);
+        captured.push(agent);
+        return agent;
       },
     );
   });
 
   afterEach(async () => {
-    mockFromConfig.mockImplementation(actual.fromConfig);
+    mockFromConfig.mockImplementation(actual.createAgentFromSettingsSnapshot);
     await rm(projectRoot, { recursive: true, force: true });
   });
 
@@ -86,7 +75,6 @@ describe('Zed session host declarations', () => {
         sessionUpdate: vi.fn(async () => undefined),
       } as never,
       unusedProfileApplication,
-      new ProviderManager({ config: host, settingsService: hostSettings }),
       () => {
         const session = new SettingsService({ sessionSource: hostSettings });
         session.restoreFromStateSnapshot(hostSettings.exportForStateSnapshot());
@@ -95,7 +83,7 @@ describe('Zed session host declarations', () => {
       undefined,
       definitionFixture(),
       undefined,
-      providerInputs,
+      { ...providerInputs, credentialAuthority: new CredentialAuthority() },
     );
   }
 
@@ -125,6 +113,7 @@ describe('Zed session host declarations', () => {
       targetDir: projectRoot,
       cwd: projectRoot,
       model: 'host-model',
+      provider: 'openai',
       debugMode: false,
       enableHooks: true,
       hooks,
@@ -134,7 +123,9 @@ describe('Zed session host declarations', () => {
       disabledSkills: ['skill-off'],
       adminSkillsEnabled: false,
     });
-    const session = createZedSessionConfig(host, 'session', projectRoot);
+    const session = new Config(
+      captureZedSessionParameters(host, 'session', projectRoot),
+    );
     try {
       expect(session.getHooks()).toStrictEqual(hooks);
       expect(session.getProjectHooks()).toStrictEqual(projectHooks);
@@ -156,16 +147,29 @@ describe('Zed session host declarations', () => {
           providers: [
             {
               providerId: 'fixture-base',
-              createProvider: (entry: { alias: string }) => ({
-                name: entry.alias,
-                getModels: async () => [],
-                getServerTools: () => [],
-                getDefaultModel: () => `${entry.alias}-default`,
-              }),
+              createProvider: (
+                entry: ProviderAliasEntry,
+                context: ProviderFactoryContext,
+              ) =>
+                createOpenAIAliasProvider(
+                  entry,
+                  context.openaiApiKey,
+                  context.openaiBaseUrl,
+                  context.openaiProviderConfig,
+                  context.authOnlyEnabled,
+                ),
               builtinAliases: [
                 {
                   alias: 'fixture-alias',
-                  config: { baseProvider: 'fixture-base' },
+                  config: {
+                    baseProvider: 'fixture-base',
+                    'base-url': 'http://127.0.0.1:1/v1',
+                    'requires-auth': false,
+                    defaultModel: 'fixture-model',
+                    staticModels: [
+                      { id: 'fixture-model', name: 'Fixture model' },
+                    ],
+                  },
                 },
               ],
             },
@@ -178,6 +182,7 @@ describe('Zed session host declarations', () => {
       targetDir: projectRoot,
       cwd: projectRoot,
       model: 'host-model',
+      provider: 'openai',
       debugMode: false,
     });
     const agent = await newZedAgent(host, new SettingsService(), {
@@ -186,9 +191,9 @@ describe('Zed session host declarations', () => {
     try {
       await agent.newSession({ cwd: projectRoot } as never);
       expect(captured).toHaveLength(1);
-      expect(captured[0].providerManager.listProviders()).toContain(
-        'fixture-alias',
-      );
+      expect(
+        captured[0].listProviders().map((provider) => provider.name),
+      ).toContain('fixture-alias');
     } finally {
       await agent.disposeAll();
       await host.dispose();
@@ -213,11 +218,9 @@ describe('Zed session host declarations', () => {
     try {
       await agent.newSession({ cwd: projectRoot } as never);
       expect(captured).toHaveLength(1);
-      expect(captured[0].config.getProvider()).toBe('anthropic');
-      expect(captured[0].config.getModel()).toBe('selected-model');
-      expect(captured[0].providerManager.getActiveProviderName()).toBe(
-        'anthropic',
-      );
+      expect(captured[0].getProvider()).toBe('anthropic');
+      expect(captured[0].getModel()).toBe('selected-model');
+      expect(captured[0].getProvider()).toBe('anthropic');
     } finally {
       await agent.disposeAll();
       await host.dispose();
@@ -230,6 +233,7 @@ describe('Zed session host declarations', () => {
       targetDir: projectRoot,
       cwd: projectRoot,
       model: 'host-model',
+      provider: 'openai',
       debugMode: false,
     });
     const oauthSettings = {
@@ -246,7 +250,9 @@ describe('Zed session host declarations', () => {
     try {
       await agent.newSession({ cwd: projectRoot } as never);
       expect(captured).toHaveLength(1);
-      expect(captured[0].oauthManager.isOAuthEnabled('anthropic')).toBe(true);
+      expect(
+        (await captured[0].auth.detailedStatus('anthropic')).oauthEnabled,
+      ).toBe(true);
     } finally {
       await agent.disposeAll();
       await host.dispose();

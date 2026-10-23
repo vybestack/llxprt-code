@@ -1,19 +1,32 @@
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
+import { capturedSessionClient } from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import {
+  openCaller,
+  useFakeResponsesReplay,
+} from './helpers/caller-fixture.js';
+import { randomUUID } from 'node:crypto';
+import { runCleanupSteps } from '../../core/subagent-cleanup.js';
+import { beforeAll, afterAll, describe, expect, it, spyOn } from 'bun:test';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
+import { type Agent } from '../index.js';
+import { promises as fs } from 'node:fs';
+import { setImmediate } from 'node:timers/promises';
+import { SessionLockManager } from '@vybestack/llxprt-code-core/recording/SessionLockManager.js';
+import { drain } from './helpers/agentHarness.js';
+import { gate } from './helpers/recording-finalizer-join-fixture.js';
+import * as recordingFs from 'node:fs/promises';
+
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
-import { describe, expect, it, spyOn } from 'bun:test';
-import { promises as fs } from 'node:fs';
-import * as recordingFs from 'node:fs/promises';
-import { setImmediate } from 'node:timers/promises';
-import { SessionLockManager } from '@vybestack/llxprt-code-core/recording/SessionLockManager.js';
-import { drain } from './helpers/agentHarness.js';
-import {
-  gate,
-  withRecordingFinalizerFixture,
-} from './helpers/recording-finalizer-join-fixture.js';
 
 function containsCause(error: unknown, cause: Error): boolean {
   if (error === cause) return true;
@@ -34,81 +47,139 @@ const recordingEvents = [
 ];
 
 describe('public Agent recording finalizer join', () => {
-  it('joins the final public-turn journal append before releasing its real lock', async () => {
-    await withRecordingFinalizerFixture(
-      async ({ agent, chatsDir, sessionId }) => {
-        await agent.setHistory([
-          {
-            speaker: 'human',
-            blocks: [{ type: 'text', text: 'journal-seed' }],
-          },
+  let promptDirectory: string;
+  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+  beforeAll(async () => {
+    promptDirectory = await mkdtemp(join(tmpdir(), 'engine-prompts-'));
+    process.env.LLXPRT_PROMPTS_DIR = promptDirectory;
+    await initializePromptSystem();
+  });
+  afterAll(async () => {
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(promptDirectory, { recursive: true, force: true });
+  });
+
+  const credentials = useOwnedCredentials();
+  const callerFactories = createAgentRuntimeFactoryBindings();
+
+  useFakeResponsesReplay('multi-turn-text.jsonl');
+
+  async function withRecordingFinalizerFixture(
+    scenario: (
+      agent: Agent,
+      chatsDir: string,
+      sessionId: string,
+    ) => Promise<void>,
+  ): Promise<void> {
+    const caller = await openCaller(credentials().authority, callerFactories);
+    const sessionId = 'recording-finalizer-' + randomUUID();
+    const agent = await fromConfig(
+      caller.config,
+      caller.settings,
+      { sessionId },
+      caller.settingsOwner,
+      caller.manager,
+      undefined,
+      caller.policy.session.messageBus,
+      caller.mcp,
+      undefined,
+      capturedSessionClient(caller.owner),
+      undefined,
+      undefined,
+      undefined,
+      callerFactories,
+    );
+    try {
+      await scenario(agent, caller.config.projectChatsDir, sessionId);
+    } finally {
+      try {
+        await Promise.allSettled([agent.dispose()]);
+      } finally {
+        await runCleanupSteps([
+          caller.close,
+          () =>
+            rm(caller.config.projectTempDir, { recursive: true, force: true }),
         ]);
-        await agent.session.setRecording({ enabled: true });
-        const journal = agent.session.getRecording().path;
-        if (!journal) throw new Error('Recording journal missing');
-        const entered = gate();
-        const release = gate();
-        const append = recordingFs.appendFile;
-        const boundary = spyOn(recordingFs, 'appendFile').mockImplementation(
-          async (...args) => {
-            if (
-              args[0] === journal &&
-              String(args[1]).includes('turn one reply')
-            ) {
-              entered.release();
-              await release.promise;
-            }
-            return append(...args);
+      }
+    }
+  }
+
+  it('joins the final public-turn journal append before releasing its real lock', async () => {
+    await withRecordingFinalizerFixture(async (agent, chatsDir, sessionId) => {
+      await agent.setHistory([
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'journal-seed' }],
+        },
+      ]);
+      await agent.session.setRecording({ enabled: true });
+      const journal = agent.session.getRecording().path;
+      if (!journal) throw new Error('Recording journal missing');
+      const entered = gate();
+      const release = gate();
+      const append = recordingFs.appendFile;
+      const boundary = spyOn(recordingFs, 'appendFile').mockImplementation(
+        async (...args) => {
+          if (
+            args[0] === journal &&
+            String(args[1]).includes('turn one reply')
+          ) {
+            entered.release();
+            await release.promise;
+          }
+          return append(...args);
+        },
+      );
+      let disposal: Promise<void> | undefined;
+      const turn = drain(agent.stream('public-turn-before-final-append'));
+      try {
+        await entered.promise;
+        await turn;
+        let settled = false;
+        disposal = agent.dispose();
+        void disposal.then(
+          () => {
+            settled = true;
+          },
+          () => {
+            settled = true;
           },
         );
-        let disposal: Promise<void> | undefined;
-        const turn = drain(agent.stream('public-turn-before-final-append'));
+        await setImmediate();
+        expect(settled).toBe(false);
+        expect(await SessionLockManager.isLocked(chatsDir, sessionId)).toBe(
+          true,
+        );
+        expect(await fs.readFile(journal, 'utf8')).not.toContain(
+          'turn one reply',
+        );
+        release.release();
+        await disposal;
+        const transcript = await fs.readFile(journal, 'utf8');
+        expect(transcript).toContain('public-turn-before-final-append');
+        expect(transcript).toContain('turn one reply');
+        expect(await SessionLockManager.isLocked(chatsDir, sessionId)).toBe(
+          false,
+        );
+      } finally {
+        release.release();
         try {
-          await entered.promise;
-          await turn;
-          let settled = false;
-          disposal = agent.dispose();
-          void disposal.then(
-            () => {
-              settled = true;
-            },
-            () => {
-              settled = true;
-            },
-          );
-          await setImmediate();
-          expect(settled).toBe(false);
-          expect(await SessionLockManager.isLocked(chatsDir, sessionId)).toBe(
-            true,
-          );
-          expect(await fs.readFile(journal, 'utf8')).not.toContain(
-            'turn one reply',
-          );
-          release.release();
-          await disposal;
-          const transcript = await fs.readFile(journal, 'utf8');
-          expect(transcript).toContain('public-turn-before-final-append');
-          expect(transcript).toContain('turn one reply');
-          expect(await SessionLockManager.isLocked(chatsDir, sessionId)).toBe(
-            false,
-          );
+          await Promise.allSettled([turn, disposal ?? agent.dispose()]);
         } finally {
-          release.release();
-          try {
-            await Promise.allSettled([turn, disposal ?? agent.dispose()]);
-          } finally {
-            boundary.mockRestore();
-          }
+          boundary.mockRestore();
         }
-      },
-    );
+      }
+    });
   }, 30000);
 
   for (const failWrite of [false, true]) {
     it(`joins accepted persistence before releasing recording ownership${failWrite ? ' and retains its original failure' : ''}`, async () => {
       await withRecordingFinalizerFixture(
-        async ({ agent, chatsDir, sessionId }) => {
-          const history = agent.agentClient.getHistoryService();
+        async (agent, chatsDir, sessionId) => {
+          const history = fixtureAgentResources(agent)
+            .publishedClient(agent)
+            .getHistoryService();
           if (!history) throw new Error('Missing real history service');
           const baseline = recordingEvents.map((event) =>
             history.listenerCount(event),
@@ -146,7 +217,7 @@ describe('public Agent recording finalizer join', () => {
             async (from, to) => {
               if (
                 typeof to === 'string' &&
-                to.startsWith(`${chatsDir}/`) &&
+                dirname(to) === chatsDir &&
                 to.endsWith('.json')
               ) {
                 destination = to;

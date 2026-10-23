@@ -88,8 +88,8 @@ describe('runtime boundary production runner', () => {
         file.slice(workspace.length + 1),
       ),
     ).toEqual([
-      'packages/demo/src/nested/worker.ts',
-      'packages/demo/src/services.ts',
+      join('packages', 'demo', 'src', 'nested', 'worker.ts'),
+      join('packages', 'demo', 'src', 'services.ts'),
     ]);
   });
 

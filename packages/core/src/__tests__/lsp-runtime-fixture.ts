@@ -3,6 +3,12 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { afterEach } from 'bun:test';
+import { AcquisitionRelease } from '../lifecycle/acquisition-release.js';
+import { WorkspaceToolCatalogOwner } from '../services/workspace-tool-catalog-owner.js';
+import { RuntimePolicyOwner } from '../policy/policy-owner.js';
+import { createMcpApprovalPolicy } from '../policy/mcp-approval.js';
+import { initializeParser } from '../utils/shell-parser.js';
 import { LspServiceClient } from '@vybestack/llxprt-code-ide-integration';
 import type {
   AnyDeclarativeTool,
@@ -47,4 +53,59 @@ export function getRegisteredLspNavigationTools(
     throw new Error('LSP navigation tools are not registered yet');
   }
   return tools;
+}
+
+export function installLspToolCatalog(): (
+  config: Config,
+  lsp: WorkspaceLspOwner,
+) => Promise<WorkspaceToolCatalogOwner> {
+  const releases: Array<() => void | Promise<void>> = [];
+  afterEach(async () => {
+    const failures: unknown[] = [];
+    for (const close of releases.splice(0).reverse()) {
+      try {
+        await close();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length > 0)
+      throw new AggregateError(failures, 'LSP tool fixture cleanup failed');
+  });
+  return async (config, lsp) => {
+    const journal = new AcquisitionRelease();
+    const close = (): Promise<void> => journal.rollback();
+    releases.push(close);
+    try {
+      const policy = new RuntimePolicyOwner(config);
+      journal.acquire('policy', () => policy.dispose());
+      const catalog = new WorkspaceToolCatalogOwner(
+        config,
+        policy.session.messageBus,
+        policy.trust,
+      );
+      journal.acquire('files', () => catalog.dispose());
+      journal.acquire('files', () => lsp.dispose());
+      await initializeParser();
+      await catalog.initialize();
+      const approval = createMcpApprovalPolicy(
+        { ...policy.session.decisions, ...policy.session.confirmation },
+        async () => {},
+        () => {},
+      );
+      await lsp.initialize(catalog.publication, approval);
+      return catalog;
+    } catch (primary) {
+      releases.splice(releases.indexOf(close), 1);
+      try {
+        await close();
+      } catch (cleanup) {
+        throw new AggregateError(
+          [primary, cleanup],
+          'Fixture initialization cleanup failed',
+        );
+      }
+      throw primary;
+    }
+  };
 }

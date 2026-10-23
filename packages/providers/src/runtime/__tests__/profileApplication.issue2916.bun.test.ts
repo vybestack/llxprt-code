@@ -37,14 +37,14 @@ let tempDir: string | null = null;
 
 function createProviderKeyStorageDouble() {
   return {
-    getKey(name: string): Promise<string | null | undefined> {
+    getKey(name: string): Promise<string | null> {
       if (keyStorage.mode === 'error') {
         return Promise.reject(
           keyStorage.error ?? new Error('key storage error'),
         );
       }
       if (keyStorage.mode === 'resolved') {
-        return Promise.resolve(keyStorage.resolvedValue);
+        return Promise.resolve(keyStorage.resolvedValue ?? null);
       }
       return Promise.resolve(keyStorage.entries.get(name) ?? null);
     },
@@ -52,13 +52,13 @@ function createProviderKeyStorageDouble() {
 }
 
 import { useProfileOwner as installProfileOwner } from './profile-workflow-owner-fixture.js';
-import { assembleModelSelection } from '../providerMutations.js';
+import { assembleModelSelection } from '../../../../agents/src/api/model-selection.js';
 const root = installProfileOwner();
 
 await mock.module('../../auth/index.js', () => ({
   createProviderKeyStorage: () => createProviderKeyStorageDouble(),
 }));
-import type { ProviderSwitcher } from '../providerSwitch.js';
+import type { ProviderSwitcher } from '@vybestack/llxprt-code-core';
 
 const stubSwitchProvider: ProviderSwitcher = async (name) => {
   root().manager.setActiveProvider(name);
@@ -71,7 +71,9 @@ const stubSwitchProvider: ProviderSwitcher = async (name) => {
   };
 };
 
-const { applyProfileCascade } = await import('../profileApplication.js');
+const { applyProfileCascade } = await import(
+  '../../../../agents/src/api/profileApplication.js'
+);
 
 function applyProfileForTest(
   profile: Profile,
@@ -81,7 +83,6 @@ function applyProfileForTest(
   return applyProfileCascade(
     profile,
     options,
-    root().config,
     root().settings,
     root().manager,
     root().store,
@@ -92,6 +93,7 @@ function applyProfileForTest(
       applyParameter: (key, value) =>
         root().settingsOwner.writeUserParameter(key, value),
     },
+    (name) => createProviderKeyStorageDouble().getKey(name),
   );
 }
 
@@ -127,6 +129,8 @@ function asError(value: unknown): Error | undefined {
 
 describe('issue #2916: unresolved auth-key-name rejects profile application', () => {
   beforeEach(() => {
+    const storage = root().manager.getProviderKeys();
+    storage.getKey = createProviderKeyStorageDouble().getKey;
     root().manager.setActiveProvider('openai');
     root().settingsOwner.initializeProviderSelection('openai', 'gpt-4o');
     keyStorage = {

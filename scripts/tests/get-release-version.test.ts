@@ -249,7 +249,7 @@ describe('get-release-version script CLI contract', () => {
     expect(() => JSON.parse(result.stdout)).not.toThrow();
   }
 
-  const RUNTIME = process.env.BUN_EXECUTABLE ?? 'bun';
+  const RUNTIME = process.env.BUN_EXECUTABLE ?? process.execPath;
 
   function runScript(env = {}) {
     if (typeof realSpawnSync !== 'function') {

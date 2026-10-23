@@ -1,3 +1,5 @@
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -13,7 +15,6 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import {
   ApprovalMode,
-  fromConfig,
   toConfigParameters,
   type Agent,
 } from '@vybestack/llxprt-code-agents';
@@ -154,17 +155,29 @@ async function observeChild(
       subagentDirectory: join(directory, 'subagents'),
       sessionId: 'task-child-whitelist-session',
     });
-    agent = await fromConfig({
-      settingsService: new SettingsService(),
-      runtimeFactoryBindings: factories,
+    agent = await fromConfig(
       config,
-      activation: {
-        provider: 'openai',
-        model: 'whitelist-parent-model',
-        cliOverrides: { key: 'local-test-key', baseUrl },
+      new SettingsService(),
+      {
+        activation: {
+          provider: 'openai',
+          model: 'whitelist-parent-model',
+          cliOverrides: { key: 'local-test-key', baseUrl },
+        },
       },
-    });
-    const registry = agent.agentClient.tools;
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      factories,
+    );
+    const registry = fixtureAgentResources(agent).publishedClient(agent).tools;
     const task = agent.tools.get('task');
     if (!task) throw new Error('Public direct task handle unavailable');
     if (blockAll) await agent.tools.setEnabled(['task']);

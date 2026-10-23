@@ -7,7 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import {
   InteractiveAuthUnavailableError,
-  interactiveAuthCoordinator,
+  InteractiveAuthCoordinator,
   type InteractiveAuthChallenge,
   type InteractiveAuthHostHandler,
   type InteractiveAuthOutcome,
@@ -100,14 +100,16 @@ async function expectPending(promise: Promise<unknown>): Promise<void> {
  * @requirement REQ-2562-1
  */
 describe('InteractiveAuthCoordinator', () => {
+  let coordinator: InteractiveAuthCoordinator;
   beforeEach(async () => {
-    await interactiveAuthCoordinator.dispose();
-    interactiveAuthCoordinator.unbindHost();
+    coordinator = new InteractiveAuthCoordinator();
+    await coordinator.dispose();
+    coordinator.unbindHost();
   });
 
   afterEach(async () => {
-    await interactiveAuthCoordinator.dispose();
-    interactiveAuthCoordinator.unbindHost();
+    await coordinator.dispose();
+    coordinator.unbindHost();
   });
 
   /**
@@ -116,12 +118,10 @@ describe('InteractiveAuthCoordinator', () => {
    */
   it('fails immediately with an actionable typed error when no host is bound', async () => {
     const host = new RecordingHost();
-    interactiveAuthCoordinator.bindHost(host.handle);
-    interactiveAuthCoordinator.unbindHost();
+    coordinator.bindHost(host.handle);
+    coordinator.unbindHost();
 
-    const outcome = interactiveAuthCoordinator.requestAuth(
-      createChallenge('request-no-host'),
-    );
+    const outcome = coordinator.requestAuth(createChallenge('request-no-host'));
 
     await expect(outcome).rejects.toBeInstanceOf(
       InteractiveAuthUnavailableError,
@@ -134,7 +134,7 @@ describe('InteractiveAuthCoordinator', () => {
       'No interactive host is available to run codex/work authentication. Run `/auth codex` from the interactive host session.',
     );
     expect(host.calls).toHaveLength(0);
-    expect(interactiveAuthCoordinator.getActiveSessions()).toStrictEqual([]);
+    expect(coordinator.getActiveSessions()).toStrictEqual([]);
   });
 
   /**
@@ -143,16 +143,14 @@ describe('InteractiveAuthCoordinator', () => {
    */
   it('coalesces equivalent requests without exposing credentials and succeeds every waiter', async () => {
     const host = new RecordingHost();
-    interactiveAuthCoordinator.bindHost(host.handle);
+    coordinator.bindHost(host.handle);
     const firstChallenge = {
       ...createChallenge('request-a'),
       credentials: 'must-not-cross-the-host-boundary',
     };
 
-    const first = interactiveAuthCoordinator.requestAuth(firstChallenge);
-    const second = interactiveAuthCoordinator.requestAuth(
-      createChallenge('request-b'),
-    );
+    const first = coordinator.requestAuth(firstChallenge);
+    const second = coordinator.requestAuth(createChallenge('request-b'));
     await flushMicrotasks();
 
     expect(host.calls).toHaveLength(1);
@@ -161,7 +159,7 @@ describe('InteractiveAuthCoordinator', () => {
     expect(
       Object.prototype.hasOwnProperty.call(call.challenge, 'credentials'),
     ).toBe(false);
-    expect(interactiveAuthCoordinator.getActiveSessions()).toStrictEqual([
+    expect(coordinator.getActiveSessions()).toStrictEqual([
       {
         provider: 'codex',
         bucket: 'work',
@@ -176,7 +174,7 @@ describe('InteractiveAuthCoordinator', () => {
       { kind: 'succeeded', correlationId: 'request-a' },
       { kind: 'succeeded', correlationId: 'request-b' },
     ]);
-    expect(interactiveAuthCoordinator.getActiveSessions()).toStrictEqual([]);
+    expect(coordinator.getActiveSessions()).toStrictEqual([]);
   });
 
   /**
@@ -185,17 +183,13 @@ describe('InteractiveAuthCoordinator', () => {
    */
   it('cancels all shared waiters, aborts the attempt, ignores late rejection, and remains reusable', async () => {
     const host = new RecordingHost();
-    interactiveAuthCoordinator.bindHost(host.handle);
-    const first = interactiveAuthCoordinator.requestAuth(
-      createChallenge('cancel-a'),
-    );
-    const second = interactiveAuthCoordinator.requestAuth(
-      createChallenge('cancel-b'),
-    );
+    coordinator.bindHost(host.handle);
+    const first = coordinator.requestAuth(createChallenge('cancel-a'));
+    const second = coordinator.requestAuth(createChallenge('cancel-b'));
     await flushMicrotasks();
     const cancelledCall = getCall(host);
 
-    const cancelledCount = interactiveAuthCoordinator.cancelActiveSessions(
+    const cancelledCount = coordinator.cancelActiveSessions(
       'User cancelled authentication',
     );
 
@@ -205,12 +199,12 @@ describe('InteractiveAuthCoordinator', () => {
       { kind: 'cancelled', correlationId: 'cancel-a' },
       { kind: 'cancelled', correlationId: 'cancel-b' },
     ]);
-    expect(interactiveAuthCoordinator.getActiveSessions()).toStrictEqual([]);
+    expect(coordinator.getActiveSessions()).toStrictEqual([]);
 
     cancelledCall.completion.reject(new Error('late host rejection'));
     await flushMicrotasks();
 
-    const retry = interactiveAuthCoordinator.requestAuth(
+    const retry = coordinator.requestAuth(
       createChallenge('retry-after-cancel'),
     );
     await flushMicrotasks();
@@ -228,21 +222,21 @@ describe('InteractiveAuthCoordinator', () => {
    */
   it('allows only the first terminal transition to win a cancel and success race', async () => {
     const host = new RecordingHost();
-    interactiveAuthCoordinator.bindHost(host.handle);
-    const cancelled = interactiveAuthCoordinator.requestAuth(
+    coordinator.bindHost(host.handle);
+    const cancelled = coordinator.requestAuth(
       createChallenge('race-cancel-first'),
     );
     await flushMicrotasks();
 
     getCall(host).completion.resolve();
-    interactiveAuthCoordinator.cancelActiveSessions();
+    coordinator.cancelActiveSessions();
 
     await expect(cancelled).resolves.toStrictEqual({
       kind: 'cancelled',
       correlationId: 'race-cancel-first',
     });
 
-    const succeeded = interactiveAuthCoordinator.requestAuth(
+    const succeeded = coordinator.requestAuth(
       createChallenge('race-success-first'),
     );
     await flushMicrotasks();
@@ -251,7 +245,7 @@ describe('InteractiveAuthCoordinator', () => {
       kind: 'succeeded',
       correlationId: 'race-success-first',
     });
-    expect(interactiveAuthCoordinator.cancelActiveSessions()).toBe(0);
+    expect(coordinator.cancelActiveSessions()).toBe(0);
   });
 
   /**
@@ -260,9 +254,9 @@ describe('InteractiveAuthCoordinator', () => {
    */
   it('times out the session, aborts the host signal, and ignores late handler settlement', async () => {
     const host = new RecordingHost();
-    interactiveAuthCoordinator.bindHost(host.handle);
+    coordinator.bindHost(host.handle);
 
-    const outcome = interactiveAuthCoordinator.requestAuth(
+    const outcome = coordinator.requestAuth(
       createChallenge('timeout-request'),
       { timeoutMs: 25 },
     );
@@ -274,11 +268,11 @@ describe('InteractiveAuthCoordinator', () => {
       correlationId: 'timeout-request',
     });
     expect(call.signal.aborted).toBe(true);
-    expect(interactiveAuthCoordinator.getActiveSessions()).toStrictEqual([]);
+    expect(coordinator.getActiveSessions()).toStrictEqual([]);
 
     call.completion.reject(new Error('late timeout rejection'));
     await new Promise<void>((resolve) => setTimeout(resolve, 30));
-    expect(interactiveAuthCoordinator.getActiveSessions()).toStrictEqual([]);
+    expect(coordinator.getActiveSessions()).toStrictEqual([]);
   });
 
   /**
@@ -287,14 +281,10 @@ describe('InteractiveAuthCoordinator', () => {
    */
   it('returns a failed outcome with the host error to every waiter', async () => {
     const host = new RecordingHost();
-    interactiveAuthCoordinator.bindHost(host.handle);
+    coordinator.bindHost(host.handle);
     const failure = new Error('OAuth callback rejected the authorization code');
-    const first = interactiveAuthCoordinator.requestAuth(
-      createChallenge('failure-a'),
-    );
-    const second = interactiveAuthCoordinator.requestAuth(
-      createChallenge('failure-b'),
-    );
+    const first = coordinator.requestAuth(createChallenge('failure-a'));
+    const second = coordinator.requestAuth(createChallenge('failure-b'));
     await flushMicrotasks();
     const call = getCall(host);
 
@@ -310,7 +300,7 @@ describe('InteractiveAuthCoordinator', () => {
 
     call.completion.resolve();
     await flushMicrotasks();
-    expect(interactiveAuthCoordinator.getActiveSessions()).toStrictEqual([]);
+    expect(coordinator.getActiveSessions()).toStrictEqual([]);
   });
 
   /**
@@ -319,10 +309,8 @@ describe('InteractiveAuthCoordinator', () => {
    */
   it('treats an AbortError from the host as cancellation', async () => {
     const host = new RecordingHost();
-    interactiveAuthCoordinator.bindHost(host.handle);
-    const outcome = interactiveAuthCoordinator.requestAuth(
-      createChallenge('host-abort'),
-    );
+    coordinator.bindHost(host.handle);
+    const outcome = coordinator.requestAuth(createChallenge('host-abort'));
     await flushMicrotasks();
 
     getCall(host).completion.reject(
@@ -342,14 +330,11 @@ describe('InteractiveAuthCoordinator', () => {
   it('detaches one aborted waiter without stopping the shared host attempt', async () => {
     const host = new RecordingHost();
     const firstController = new AbortController();
-    interactiveAuthCoordinator.bindHost(host.handle);
-    const first = interactiveAuthCoordinator.requestAuth(
-      createChallenge('detached-a'),
-      { signal: firstController.signal },
-    );
-    const second = interactiveAuthCoordinator.requestAuth(
-      createChallenge('remaining-b'),
-    );
+    coordinator.bindHost(host.handle);
+    const first = coordinator.requestAuth(createChallenge('detached-a'), {
+      signal: firstController.signal,
+    });
+    const second = coordinator.requestAuth(createChallenge('remaining-b'));
     await flushMicrotasks();
     const call = getCall(host);
 
@@ -360,7 +345,7 @@ describe('InteractiveAuthCoordinator', () => {
       correlationId: 'detached-a',
     });
     expect(call.signal.aborted).toBe(false);
-    expect(interactiveAuthCoordinator.getActiveSessions()).toStrictEqual([
+    expect(coordinator.getActiveSessions()).toStrictEqual([
       {
         provider: 'codex',
         bucket: 'work',
@@ -384,11 +369,11 @@ describe('InteractiveAuthCoordinator', () => {
   it('aborts and removes an orphaned session when its final waiter detaches', async () => {
     const host = new RecordingHost();
     const requesterController = new AbortController();
-    interactiveAuthCoordinator.bindHost(host.handle);
-    const outcome = interactiveAuthCoordinator.requestAuth(
-      createChallenge('only-waiter'),
-      { signal: requesterController.signal, timeoutMs: 25 },
-    );
+    coordinator.bindHost(host.handle);
+    const outcome = coordinator.requestAuth(createChallenge('only-waiter'), {
+      signal: requesterController.signal,
+      timeoutMs: 25,
+    });
     await flushMicrotasks();
     const call = getCall(host);
 
@@ -399,10 +384,10 @@ describe('InteractiveAuthCoordinator', () => {
       correlationId: 'only-waiter',
     });
     expect(call.signal.aborted).toBe(true);
-    expect(interactiveAuthCoordinator.getActiveSessions()).toStrictEqual([]);
+    expect(coordinator.getActiveSessions()).toStrictEqual([]);
 
     await new Promise<void>((resolve) => setTimeout(resolve, 35));
-    expect(interactiveAuthCoordinator.getActiveSessions()).toStrictEqual([]);
+    expect(coordinator.getActiveSessions()).toStrictEqual([]);
   });
 
   /**
@@ -411,9 +396,9 @@ describe('InteractiveAuthCoordinator', () => {
    */
   it('disposes active sessions with cancelled outcomes exactly once', async () => {
     const host = new RecordingHost();
-    interactiveAuthCoordinator.bindHost(host.handle);
+    coordinator.bindHost(host.handle);
     let settlementCount = 0;
-    const outcome = interactiveAuthCoordinator
+    const outcome = coordinator
       .requestAuth(createChallenge('dispose-request'))
       .then((result): InteractiveAuthOutcome => {
         settlementCount += 1;
@@ -422,10 +407,7 @@ describe('InteractiveAuthCoordinator', () => {
     await flushMicrotasks();
     const call = getCall(host);
 
-    await Promise.all([
-      interactiveAuthCoordinator.dispose(),
-      interactiveAuthCoordinator.dispose(),
-    ]);
+    await Promise.all([coordinator.dispose(), coordinator.dispose()]);
 
     await expect(outcome).resolves.toStrictEqual({
       kind: 'cancelled',
@@ -433,7 +415,7 @@ describe('InteractiveAuthCoordinator', () => {
     });
     expect(settlementCount).toBe(1);
     expect(call.signal.aborted).toBe(true);
-    expect(interactiveAuthCoordinator.getActiveSessions()).toStrictEqual([]);
+    expect(coordinator.getActiveSessions()).toStrictEqual([]);
   });
 
   /**
@@ -443,8 +425,8 @@ describe('InteractiveAuthCoordinator', () => {
   it('lets timeout win a timeout and cancel race exactly once', async () => {
     const host = new RecordingHost();
     let settlementCount = 0;
-    interactiveAuthCoordinator.bindHost(host.handle);
-    const outcome = interactiveAuthCoordinator
+    coordinator.bindHost(host.handle);
+    const outcome = coordinator
       .requestAuth(createChallenge('timeout-cancel-race'), { timeoutMs: 10 })
       .then((result): InteractiveAuthOutcome => {
         settlementCount += 1;
@@ -455,7 +437,7 @@ describe('InteractiveAuthCoordinator', () => {
       kind: 'timed_out',
       correlationId: 'timeout-cancel-race',
     });
-    expect(interactiveAuthCoordinator.cancelActiveSessions()).toBe(0);
+    expect(coordinator.cancelActiveSessions()).toBe(0);
     getCall(host).completion.resolve();
     await flushMicrotasks();
     expect(settlementCount).toBe(1);
@@ -468,8 +450,8 @@ describe('InteractiveAuthCoordinator', () => {
   it('lets dispose win a dispose and success race exactly once', async () => {
     const host = new RecordingHost();
     let settlementCount = 0;
-    interactiveAuthCoordinator.bindHost(host.handle);
-    const outcome = interactiveAuthCoordinator
+    coordinator.bindHost(host.handle);
+    const outcome = coordinator
       .requestAuth(createChallenge('dispose-success-race'))
       .then((result): InteractiveAuthOutcome => {
         settlementCount += 1;
@@ -477,7 +459,7 @@ describe('InteractiveAuthCoordinator', () => {
       });
     await flushMicrotasks();
 
-    const disposal = interactiveAuthCoordinator.dispose();
+    const disposal = coordinator.dispose();
     getCall(host).completion.resolve();
     await disposal;
 
@@ -497,8 +479,8 @@ describe('InteractiveAuthCoordinator', () => {
     const host = new RecordingHost();
     const requesterController = new AbortController();
     let settlementCount = 0;
-    interactiveAuthCoordinator.bindHost(host.handle);
-    const outcome = interactiveAuthCoordinator
+    coordinator.bindHost(host.handle);
+    const outcome = coordinator
       .requestAuth(createChallenge('detach-settle-race'), {
         signal: requesterController.signal,
       })
@@ -530,8 +512,8 @@ describe('InteractiveAuthCoordinator', () => {
       readonly waiterCount: number;
       readonly kind?: string;
     }> = [];
-    interactiveAuthCoordinator.bindHost(host.handle);
-    const unsubscribe = interactiveAuthCoordinator.onStateChange((event) => {
+    coordinator.bindHost(host.handle);
+    const unsubscribe = coordinator.onStateChange((event) => {
       events.push({
         type: event.type,
         waiterCount: event.waiterCount,
@@ -539,12 +521,8 @@ describe('InteractiveAuthCoordinator', () => {
       });
     });
 
-    const first = interactiveAuthCoordinator.requestAuth(
-      createChallenge('event-a'),
-    );
-    const second = interactiveAuthCoordinator.requestAuth(
-      createChallenge('event-b'),
-    );
+    const first = coordinator.requestAuth(createChallenge('event-a'));
+    const second = coordinator.requestAuth(createChallenge('event-b'));
     await flushMicrotasks();
     getCall(host).completion.resolve();
     await Promise.all([first, second]);
@@ -556,7 +534,7 @@ describe('InteractiveAuthCoordinator', () => {
     ]);
 
     unsubscribe();
-    const later = interactiveAuthCoordinator.requestAuth(
+    const later = coordinator.requestAuth(
       createChallenge('event-after-unsubscribe'),
     );
     await flushMicrotasks();
@@ -571,17 +549,13 @@ describe('InteractiveAuthCoordinator', () => {
    */
   it('starts a fresh interaction for a request arriving after settlement', async () => {
     const host = new RecordingHost();
-    interactiveAuthCoordinator.bindHost(host.handle);
-    const first = interactiveAuthCoordinator.requestAuth(
-      createChallenge('first-session'),
-    );
+    coordinator.bindHost(host.handle);
+    const first = coordinator.requestAuth(createChallenge('first-session'));
     await flushMicrotasks();
     getCall(host).completion.resolve();
     await first;
 
-    const second = interactiveAuthCoordinator.requestAuth(
-      createChallenge('second-session'),
-    );
+    const second = coordinator.requestAuth(createChallenge('second-session'));
     await flushMicrotasks();
 
     expect(host.calls).toHaveLength(2);
@@ -609,13 +583,13 @@ describe('InteractiveAuthCoordinator', () => {
       }
       persistedCorrelations.push(challenge.correlationId);
     };
-    interactiveAuthCoordinator.bindHost(handler);
+    coordinator.bindHost(handler);
 
-    const cancelled = interactiveAuthCoordinator.requestAuth(
+    const cancelled = coordinator.requestAuth(
       createChallenge('must-not-persist'),
     );
     await flushMicrotasks();
-    interactiveAuthCoordinator.cancelActiveSessions();
+    coordinator.cancelActiveSessions();
     const cancelledCompletion = completions.find(
       (_completion, index) => index === 0,
     );
@@ -627,7 +601,7 @@ describe('InteractiveAuthCoordinator', () => {
     await flushMicrotasks();
     expect(persistedCorrelations).toStrictEqual([]);
 
-    const succeeded = interactiveAuthCoordinator.requestAuth(
+    const succeeded = coordinator.requestAuth(
       createChallenge('persist-after-success'),
     );
     await flushMicrotasks();
@@ -658,22 +632,16 @@ describe('InteractiveAuthCoordinator', () => {
     const host = new RecordingHost();
     const events: InteractiveAuthStateChangeEvent[] = [];
     let cancelOnWaiting = true;
-    const unsubscribe = interactiveAuthCoordinator.onStateChange((event) => {
+    const unsubscribe = coordinator.onStateChange((event) => {
       events.push(event);
       if (event.type === 'waiting' && cancelOnWaiting) {
-        interactiveAuthCoordinator.cancelActiveSessions(
-          'user cancelled immediately',
-        );
+        coordinator.cancelActiveSessions('user cancelled immediately');
       }
     });
-    interactiveAuthCoordinator.bindHost(host.handle);
+    coordinator.bindHost(host.handle);
 
-    const first = interactiveAuthCoordinator.requestAuth(
-      createChallenge('reentrant-1'),
-    );
-    const second = interactiveAuthCoordinator.requestAuth(
-      createChallenge('reentrant-2'),
-    );
+    const first = coordinator.requestAuth(createChallenge('reentrant-1'));
+    const second = coordinator.requestAuth(createChallenge('reentrant-2'));
 
     await expect(first).resolves.toStrictEqual({
       kind: 'cancelled',
@@ -684,14 +652,12 @@ describe('InteractiveAuthCoordinator', () => {
       correlationId: 'reentrant-2',
     });
     expect(host.calls).toHaveLength(2);
-    expect(interactiveAuthCoordinator.getActiveSessions()).toStrictEqual([]);
+    expect(coordinator.getActiveSessions()).toStrictEqual([]);
 
     cancelOnWaiting = false;
-    const retry = interactiveAuthCoordinator.requestAuth(
-      createChallenge('reentrant-retry'),
-    );
+    const retry = coordinator.requestAuth(createChallenge('reentrant-retry'));
     await flushMicrotasks();
-    expect(interactiveAuthCoordinator.getActiveSessions()).toHaveLength(1);
+    expect(coordinator.getActiveSessions()).toHaveLength(1);
     getCall(host, 2).completion.resolve();
     await expect(retry).resolves.toStrictEqual({
       kind: 'succeeded',

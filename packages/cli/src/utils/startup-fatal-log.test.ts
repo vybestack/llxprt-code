@@ -17,7 +17,6 @@
 
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
 import {
-  chmodSync,
   existsSync,
   mkdtempSync,
   readFileSync,
@@ -27,6 +26,7 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { FatalError, FatalSandboxError } from '@vybestack/llxprt-code-core';
+import { denyEntryCreation } from '../test-utils/filesystem-denial.js';
 import {
   appendStartupFatalLog,
   buildStartupFatalRecord,
@@ -151,7 +151,7 @@ describe('appendStartupFatalLog (AC1)', () => {
     expect(second.exitCode).toBe(52);
   });
 
-  // Root ignores directory mode bits, so the read-only setup cannot fail there.
+  // Root ignores directory mode bits, so the denial cannot hold there.
   it.skipIf(process.getuid?.() === 0)(
     'returns { ok: false } and does not throw when the log home is unwritable',
     () => {
@@ -159,12 +159,16 @@ describe('appendStartupFatalLog (AC1)', () => {
         path.join(tmpdir(), 'startup-fatal-ro-'),
       );
       tempRoots.push(readOnlyParent);
-      chmodSync(readOnlyParent, 0o500);
-      process.env.LLXPRT_LOG_HOME = path.join(readOnlyParent, 'log-home');
-      // A throw here fails the test; reaching the result assertion proves the
-      // crash-reporting path tolerated the unwritable log home.
-      const result = appendStartupFatalLog(sampleRecord('cannot write', 44));
-      expect(result.ok).toBe(false);
+      const restoreCreation = denyEntryCreation(readOnlyParent);
+      try {
+        process.env.LLXPRT_LOG_HOME = path.join(readOnlyParent, 'log-home');
+        // A throw here fails the test; reaching the result assertion proves
+        // the crash-reporting path tolerated the unwritable log home.
+        const result = appendStartupFatalLog(sampleRecord('cannot write', 44));
+        expect(result.ok).toBe(false);
+      } finally {
+        restoreCreation();
+      }
     },
   );
 });

@@ -8,6 +8,7 @@ import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { debugLogger } from '../utils/debugLogger.js';
 import { delay } from '../utils/delay.js';
+import { handleIsPathEntry, lstatPathEntry } from '../utils/fileIdentity.js';
 
 const LOG_FILE_NAME = 'logs.json';
 const BACKUP_RETENTION_DAYS = 30;
@@ -153,7 +154,19 @@ export class Logger {
   ): Promise<fs.FileHandle | null> {
     let handle: fs.FileHandle | undefined;
     try {
+      // 'wx' only reports a dangling symlink as occupied on POSIX; on Windows it
+      // creates the link's target. Any existing entry, link or not, is occupied.
+      if ((await lstatPathEntry(lockPath)) !== undefined) {
+        return null;
+      }
       handle = await fs.open(lockPath, 'wx');
+      if (!(await handleIsPathEntry(handle, lockPath))) {
+        // A link was swapped in between the check and the create; the path is
+        // not ours, so release the handle without touching it.
+        await handle.close();
+        handle = undefined;
+        return null;
+      }
       await handle.writeFile(
         JSON.stringify({ pid: process.pid, timestamp: Date.now() }),
         'utf-8',

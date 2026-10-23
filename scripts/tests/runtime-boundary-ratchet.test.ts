@@ -4,7 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { spawnSync } from 'node:child_process';
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -15,14 +17,9 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import {
   auditRuntimeStateBoundary,
+  formatBlockedAudit,
   type AuditPolicy,
 } from '../check-runtime-state-boundary.js';
-import {
-  evaluateRatchet,
-  formatBlockedAudit,
-  parseRatchetBaseline,
-  ratchetCountsFromResult,
-} from '../runtime-boundary-ratchet.js';
 
 const evidence = join(tmpdir(), 'llxprt-ratchet-fixtures');
 let workspace: string;
@@ -56,9 +53,6 @@ const twoBundlesSource = `${bundleSource}
 function audit() {
   return auditRuntimeStateBoundary(workspace, policy);
 }
-function baselineOf(text: string) {
-  return parseRatchetBaseline(text);
-}
 
 beforeEach(() => {
   mkdirSync(evidence, { recursive: true });
@@ -89,78 +83,98 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(workspace, { recursive: true, force: true }));
 
-describe('runtime boundary ratchet baseline', () => {
-  it('passes when bundle counts equal the baseline', () => {
+describe('strict runtime boundary enforcement after ratchet retirement', () => {
+  it('fails for an existing service bundle without an allowance', () => {
     put('packages/demo/src/bag.ts', bundleSource);
     const result = audit();
-    const verdict = evaluateRatchet(
-      result,
-      baselineOf(JSON.stringify({ counts: ratchetCountsFromResult(result) })),
-    );
     expect(result.findings.length).toBeGreaterThan(0);
-    expect(verdict).toMatchObject({
-      exitCode: 0,
-      increases: [],
-      decreases: [],
-      unratchetedFindings: [],
+    expect(result.exitCode).toBe(1);
+    expect(result.findings).toContainEqual(
+      expect.objectContaining({
+        rule: 'runtime-service-bundle',
+        owner: 'demo',
+        file: 'packages/demo/src/bag.ts',
+        line: 3,
+        column: 3,
+      }),
+    );
+    expect(result.compilerDiagnostics).toEqual([]);
+    expect(result.scanners).toEqual({
+      state: 'complete',
+      serviceShape: 'complete',
+      ambientDelegation: 'complete',
     });
   });
 
-  it('passes and reports a decrease when bundle counts fall below the baseline', () => {
+  it('passes only after the service bundle is removed', () => {
     put('packages/demo/src/bag.ts', bundleSource);
-    const result = audit();
-    const actual =
-      ratchetCountsFromResult(result).demo?.['runtime-service-bundle'];
-    const verdict = evaluateRatchet(
-      result,
-      baselineOf(
-        JSON.stringify({
-          counts: { demo: { 'runtime-service-bundle': (actual ?? 0) + 3 } },
-        }),
-      ),
-    );
-    expect(verdict.exitCode).toBe(0);
-    expect(verdict.decreases).toEqual([
-      {
-        owner: 'demo',
-        rule: 'runtime-service-bundle',
-        baseline: (actual ?? 0) + 3,
-        actual,
-      },
-    ]);
-  });
-
-  it('fails when a bundle count rises above the baseline', () => {
-    put('packages/demo/src/bag.ts', bundleSource);
-    const baseline = baselineOf(
-      JSON.stringify({ counts: ratchetCountsFromResult(audit()) }),
-    );
-    put('packages/demo/src/bag.ts', twoBundlesSource);
-    const verdict = evaluateRatchet(audit(), baseline);
-    expect(verdict.exitCode).toBe(1);
-    expect(verdict.increases.map((entry) => entry.rule)).toContain(
+    const before = audit();
+    expect(before.exitCode).toBe(1);
+    expect(before.findings.map((finding) => finding.rule)).toContain(
       'runtime-service-bundle',
     );
-    expect(verdict.unratchetedFindings).toEqual([]);
-  });
-
-  it('fails for a bundle in an owner the baseline does not list', () => {
-    put('packages/demo/src/bag.ts', bundleSource);
-    const verdict = evaluateRatchet(audit(), baselineOf('{"counts":{}}'));
-    expect(verdict.exitCode).toBe(1);
-    expect(verdict.increases.every((entry) => entry.baseline === 0)).toBe(true);
-  });
-
-  it('fails on a new mutable-state finding even when the baseline covers every bundle', () => {
-    put('packages/demo/src/bag.ts', bundleSource);
-    const baseline = baselineOf(
-      JSON.stringify({ counts: ratchetCountsFromResult(audit()) }),
+    put(
+      'packages/demo/src/bag.ts',
+      bundleSource.replace(
+        'export interface Bag { settings: Settings; manager: Manager; }',
+        '',
+      ),
     );
+    const result = audit();
+    expect(result.exitCode).toBe(0);
+    expect(result.findings).toEqual([]);
+    expect(result.compilerDiagnostics).toEqual([]);
+    expect(result.scanners).toEqual({
+      state: 'complete',
+      serviceShape: 'complete',
+      ambientDelegation: 'complete',
+    });
+  });
+
+  it('reports both service bundles and fails strictly', () => {
+    put('packages/demo/src/bag.ts', bundleSource);
+    expect(audit().exitCode).toBe(1);
+    put('packages/demo/src/bag.ts', twoBundlesSource);
+    const result = audit();
+    expect(result.exitCode).toBe(1);
+    expect(
+      result.findings
+        .filter((finding) => finding.rule === 'runtime-service-bundle')
+        .map((finding) => ({
+          owner: finding.owner,
+          file: finding.file,
+          column: finding.column,
+          line: finding.line,
+        })),
+    ).toEqual([
+      { owner: 'demo', file: 'packages/demo/src/bag.ts', column: 3, line: 3 },
+      { owner: 'demo', file: 'packages/demo/src/bag.ts', column: 3, line: 5 },
+    ]);
+    expect(result.countsByOwner.demo?.['runtime-service-bundle']).toBe(2);
+    expect(result.compilerDiagnostics).toEqual([]);
+  });
+
+  it('fails for a bundle without any owner allowance', () => {
+    put('packages/demo/src/bag.ts', bundleSource);
+    const result = audit();
+    expect(result.exitCode).toBe(1);
+    expect(
+      result.findings.map((finding) => ({
+        owner: finding.owner,
+        rule: finding.rule,
+      })),
+    ).toEqual([{ owner: 'demo', rule: 'runtime-service-bundle' }]);
+  });
+
+  it('fails on a new mutable-state finding alongside a bundle', () => {
+    put('packages/demo/src/bag.ts', bundleSource);
+    expect(audit().exitCode).toBe(1);
     put('packages/demo/src/runtime/state.ts', 'export let counter = 0;');
-    const verdict = evaluateRatchet(audit(), baseline);
-    expect(verdict.exitCode).toBe(1);
-    expect(verdict.unratchetedFindings.map((f) => f.rule)).toContain(
-      'mutable-state',
+    const result = audit();
+    expect(result.exitCode).toBe(1);
+    expect(result.findings.map((f) => f.rule)).toContain('mutable-state');
+    expect(result.findings.map((f) => f.rule)).toContain(
+      'runtime-service-bundle',
     );
   });
 
@@ -169,11 +183,9 @@ describe('runtime boundary ratchet baseline', () => {
       'packages/demo/src/scope.ts',
       "import { AsyncLocalStorage } from 'node:async_hooks'; export const scope = new AsyncLocalStorage<string>();",
     );
-    const verdict = evaluateRatchet(audit(), baselineOf('{"counts":{}}'));
-    expect(verdict.exitCode).toBe(1);
-    expect(verdict.unratchetedFindings.map((f) => f.rule)).toEqual([
-      'async-local-storage',
-    ]);
+    const result = audit();
+    expect(result.exitCode).toBe(1);
+    expect(result.findings.map((f) => f.rule)).toEqual(['async-local-storage']);
   });
 
   it('does not treat writes to ambient platform globals as module state', () => {
@@ -193,9 +205,9 @@ describe('runtime boundary ratchet baseline', () => {
 
   it('fails when compiler diagnostics exist', () => {
     put('packages/demo/src/broken.ts', 'export const value: number = "bad";');
-    const verdict = evaluateRatchet(audit(), baselineOf('{"counts":{}}'));
-    expect(verdict.exitCode).toBe(1);
-    expect(verdict.compilerDiagnosticCount).toBeGreaterThan(0);
+    const result = audit();
+    expect(result.exitCode).toBe(1);
+    expect(result.compilerDiagnostics.length).toBeGreaterThan(0);
   });
 
   it('names every compiler diagnostic and the blocked scanner', () => {
@@ -218,21 +230,90 @@ describe('runtime boundary ratchet baseline', () => {
     expect(formatBlockedAudit(audit())).toBe('');
   });
 
-  it('rejects baselines that record a non-ratcheted rule or an invalid count', () => {
-    expect(() => baselineOf('{"counts":{"core":{"mutable-state":1}}}')).toThrow(
-      'may only record',
+  it('fails strictly for a compiler-valid service bag parameter', () => {
+    put(
+      'packages/demo/src/bag.ts',
+      `${bundleSource}export function use(bag: Bag): number { return bag.settings.value; }`,
     );
-    expect(() =>
-      baselineOf('{"counts":{"core":{"runtime-service-bundle":-1}}}'),
-    ).toThrow('non-negative integer');
-    expect(() => baselineOf('{}')).toThrow('"counts"');
+    const result = audit();
+    expect(result.exitCode).toBe(1);
+    expect(result.compilerDiagnostics).toEqual([]);
+    expect(result.scanners).toEqual({
+      state: 'complete',
+      serviceShape: 'complete',
+      ambientDelegation: 'complete',
+    });
+    expect(result.findings).toContainEqual(
+      expect.objectContaining({
+        rule: 'runtime-service-bag-parameter',
+        file: 'packages/demo/src/bag.ts',
+        column: 21,
+        line: 4,
+        owner: 'demo',
+      }),
+    );
   });
 
-  it('keeps the committed baseline parseable and limited to ratcheted rules', () => {
-    const text = readFileSync(
-      resolve('scripts/runtime-service-shape-baseline.json'),
-      'utf8',
-    );
-    expect(Object.keys(baselineOf(text).counts).length).toBeGreaterThan(0);
+  it('does not retain a committed allowance baseline', () => {
+    expect(
+      existsSync(resolve('scripts/runtime-service-shape-baseline.json')),
+    ).toBe(false);
   });
+});
+
+describe('strict runtime boundary CLI contracts', () => {
+  it('runs the strict scanner without a baseline through the package command', () => {
+    const manifest: { scripts: Record<string, string> } = JSON.parse(
+      readFileSync(resolve('package.json'), 'utf8'),
+    );
+    expect(manifest.scripts['check:runtime-boundary']).toBe(
+      'bun scripts/check-runtime-state-boundary.ts',
+    );
+  });
+
+  for (const [title, args, option] of [
+    [
+      'rejects a separated baseline value',
+      ['--baseline', 'retired.json'],
+      '--baseline',
+    ],
+    [
+      'rejects an equals baseline value',
+      ['--baseline=retired.json'],
+      '--baseline',
+    ],
+    ['rejects a bare baseline flag', ['--baseline'], '--baseline'],
+    [
+      'rejects an unrelated unknown flag',
+      ['--not-a-boundary-option'],
+      '--not-a-boundary-option',
+    ],
+  ] satisfies ReadonlyArray<readonly [string, readonly string[], string]>) {
+    it(title, () => {
+      const output = join(workspace, 'must-not-exist.json');
+      const child = spawnSync(
+        process.execPath,
+        [
+          resolve('scripts/check-runtime-state-boundary.ts'),
+          '--workspace',
+          workspace,
+          '--output',
+          output,
+          ...args,
+        ],
+        { cwd: workspace, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
+      );
+      expect(child.error).toBeUndefined();
+      expect(child.signal).toBeNull();
+      expect(child.status).not.toBe(0);
+      expect(child.stderr).toContain('ERR_PARSE_ARGS_UNKNOWN_OPTION');
+      expect(child.stderr).toContain(option);
+      expect(child.stderr).not.toContain('"fatal"');
+      expect(child.stderr).not.toContain('"event"');
+      expect(child.stderr).not.toContain('"phase"');
+      expect(child.stderr).not.toContain('"compilerConfig"');
+      expect(child.stdout).toBe('');
+      expect(existsSync(output)).toBe(false);
+    });
+  }
 });

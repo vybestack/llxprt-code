@@ -19,8 +19,9 @@ import type {
   SessionMetrics,
   ModelMetrics,
   ToolCallStats,
+  SessionMetricReads,
+  SessionMetricSubscriptions,
 } from '@vybestack/llxprt-code-telemetry';
-import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 
 export enum ToolCallDecision {
   ACCEPT = 'accept',
@@ -341,11 +342,13 @@ const SessionStatsContext = createContext<SessionStatsContextValue | undefined>(
   undefined,
 );
 
-function createInitialSessionStats(): SessionStatsState {
+function createInitialSessionStats(
+  metrics: SessionMetricReads & SessionMetricSubscriptions,
+): SessionStatsState {
   return {
     sessionId: `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
     sessionStartTime: new Date(),
-    metrics: cloneSessionMetrics(uiTelemetryService.getMetrics()),
+    metrics: cloneSessionMetrics(metrics.getMetrics()),
     lastPromptTokenCount: 0,
     historyTokenCount: 0,
     promptCount: 0,
@@ -372,6 +375,7 @@ function applyTelemetryUpdate(
 
 function useTelemetryStatsUpdates(
   setStats: React.Dispatch<React.SetStateAction<SessionStatsState>>,
+  source: SessionMetricReads & SessionMetricSubscriptions,
 ) {
   useEffect(() => {
     const handleUpdate = ({
@@ -386,27 +390,26 @@ function useTelemetryStatsUpdates(
       );
     };
 
-    uiTelemetryService.on('update', handleUpdate);
+    const unsubscribe = source.subscribe(handleUpdate);
     handleUpdate({
-      metrics: uiTelemetryService.getMetrics(),
-      lastPromptTokenCount: uiTelemetryService.getLastPromptTokenCount(),
+      metrics: source.getMetrics(),
+      lastPromptTokenCount: source.getLastPromptTokenCount(),
     });
 
-    return () => {
-      uiTelemetryService.off('update', handleUpdate);
-    };
-  }, [setStats]);
+    return unsubscribe;
+  }, [setStats, source]);
 }
 
 // --- Provider Component ---
 
-export const SessionStatsProvider: React.FC<{ children: React.ReactNode }> = ({
-  children,
-}) => {
-  const [stats, setStats] = useState<SessionStatsState>(
-    createInitialSessionStats,
+export const SessionStatsProvider: React.FC<{
+  children: React.ReactNode;
+  metrics: SessionMetricReads & SessionMetricSubscriptions;
+}> = ({ children, metrics }) => {
+  const [stats, setStats] = useState<SessionStatsState>(() =>
+    createInitialSessionStats(metrics),
   );
-  useTelemetryStatsUpdates(setStats);
+  useTelemetryStatsUpdates(setStats, metrics);
 
   const startNewPrompt = useCallback(() => {
     setStats((prevState) => ({

@@ -675,7 +675,7 @@ function useKeypressSetup(
       if (!dragHandler.handleKey(key)) broadcast(key);
     };
 
-    process.stdin.setEncoding('utf8');
+    stdin.setEncoding('utf8');
     const dataListener = createKeypressPipeline(handleDragDropAndBroadcast);
 
     stdin.on('data', dataListener);

@@ -12,7 +12,10 @@ import {
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ProviderManager } from '../ProviderManager.js';
 import { OpenAIProvider } from '../openai/OpenAIProvider.js';
-import { switchActiveProvider } from './providerSwitch.js';
+import {
+  switchActiveProvider,
+  DEFAULT_PRESERVE_EPHEMERALS,
+} from '../../../agents/src/api/provider-switch/provider-switch.js';
 import { OAuthManager } from '../auth/oauth-manager.js';
 import {
   MemoryTokenStore,
@@ -51,9 +54,13 @@ describe('explicit provider switch ownership', () => {
     });
     configs.push(config);
     const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settings,
+      config,
       createProviderRuntimeContext({
-        config,
-        settingsService: settings,
         runtimeId: 'same-label',
         runtimeKind: 'agent',
       }),
@@ -72,6 +79,17 @@ describe('explicit provider switch ownership', () => {
       },
     };
   }
+  it('rejects external writes to the default preserved settings', () => {
+    const before = structuredClone(DEFAULT_PRESERVE_EPHEMERALS);
+    expect(Reflect.set(DEFAULT_PRESERVE_EPHEMERALS, '0', 'auth-key')).toBe(
+      false,
+    );
+    expect(Reflect.set(DEFAULT_PRESERVE_EPHEMERALS, '3', 'auth-key')).toBe(
+      false,
+    );
+    expect(DEFAULT_PRESERVE_EPHEMERALS).toStrictEqual(before);
+  });
+
   it('finishes delayed same-label owners independently outside runtime scopes', async () => {
     const first = owner();
     const second = owner();

@@ -3,12 +3,13 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { describe, it, expect, vi, type Mock } from 'bun:test';
-import { toolsCommand } from './toolsCommand.js';
+import { createToolsCommand } from './toolsCommand.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { MessageType } from '../types.js';
-import type { CommandContext } from './types.js';
+
 import type { Agent, ToolInfo } from '@vybestack/llxprt-code-agents';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
@@ -55,6 +56,21 @@ function createMockAgent(
   } as unknown as Agent;
 }
 
+function createCommand(context: CommandOwnerFixture) {
+  const agent = context.services.agent;
+  return createToolsCommand(
+    agent === null
+      ? null
+      : {
+          listTools: () => agent.tools.list(),
+          readSetting: (key) => agent.getEphemeralSetting(key),
+          writeSetting: (key, value) => agent.setEphemeralSetting(key, value),
+          refreshToolSchema: () => agent.agentClient.setTools(),
+        },
+    context.ui.addItem,
+  );
+}
+
 describe('toolsCommand', () => {
   it('keeps blank governance entries blank when toggling another tool', async () => {
     const settings = new SettingsService();
@@ -66,7 +82,7 @@ describe('toolsCommand', () => {
       },
     });
 
-    await toolsCommand.action!(context, 'disable "File Reader"');
+    await createCommand(context).action!(context, 'disable "File Reader"');
 
     expect(settings.get('tools.disabled')).toStrictEqual(['', 'file-reader']);
     expect(settings.get('tools.allowed')).toStrictEqual(['']);
@@ -80,7 +96,7 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
-    await toolsCommand.action!(mockContext, 'list');
+    await createCommand(mockContext).action!(mockContext, 'list');
 
     expect(mockContext.ui.addItem).toHaveBeenCalledWith(
       {
@@ -102,10 +118,10 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
-    await toolsCommand.action!(mockContext, 'list');
+    await createCommand(mockContext).action!(mockContext, 'list');
 
     const output = (
-      mockContext.ui.addItem as Mock<CommandContext['ui']['addItem']>
+      mockContext.ui.addItem as Mock<CommandOwnerFixture['ui']['addItem']>
     ).mock.calls[0][0].text;
     expect(output).toContain('File Reader [disabled]');
     expect(output).toContain('Code Editor [enabled]');
@@ -121,10 +137,10 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
-    await toolsCommand.action!(mockContext, 'list');
+    await createCommand(mockContext).action!(mockContext, 'list');
 
     const output = (
-      mockContext.ui.addItem as Mock<CommandContext['ui']['addItem']>
+      mockContext.ui.addItem as Mock<CommandOwnerFixture['ui']['addItem']>
     ).mock.calls[0][0].text;
     expect(output).toContain('File Reader');
     expect(output).not.toContain('MCP Search');
@@ -139,10 +155,10 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
-    await toolsCommand.action!(mockContext, 'disable mcp-search');
+    await createCommand(mockContext).action!(mockContext, 'disable mcp-search');
 
     const output = (
-      mockContext.ui.addItem as Mock<CommandContext['ui']['addItem']>
+      mockContext.ui.addItem as Mock<CommandOwnerFixture['ui']['addItem']>
     ).mock.calls[0][0];
     expect(output.type).toBe(MessageType.ERROR);
     expect(output.text).toContain('Tool "mcp-search" not found');
@@ -157,11 +173,14 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
-    await toolsCommand.action!(mockContext, 'disable "File Reader"');
+    await createCommand(mockContext).action!(
+      mockContext,
+      'disable "File Reader"',
+    );
 
     expect(settings.get('tools.disabled')).toStrictEqual(['file-reader']);
     const output = (
-      mockContext.ui.addItem as Mock<CommandContext['ui']['addItem']>
+      mockContext.ui.addItem as Mock<CommandOwnerFixture['ui']['addItem']>
     ).mock.calls[0][0].text;
     expect(output).toContain("Disabled tool 'File Reader'");
   });
@@ -177,7 +196,10 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
-    await toolsCommand.action!(mockContext, 'disable code-editor');
+    await createCommand(mockContext).action!(
+      mockContext,
+      'disable code-editor',
+    );
 
     expect(setToolsSpy).toHaveBeenCalled();
   });
@@ -193,11 +215,11 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
-    await toolsCommand.action!(mockContext, 'enable code-editor');
+    await createCommand(mockContext).action!(mockContext, 'enable code-editor');
 
     expect(settings.get('tools.disabled')).toStrictEqual([]);
     const output = (
-      mockContext.ui.addItem as Mock<CommandContext['ui']['addItem']>
+      mockContext.ui.addItem as Mock<CommandOwnerFixture['ui']['addItem']>
     ).mock.calls[0][0].text;
     expect(output).toContain("Enabled tool 'Code Editor'");
   });
@@ -211,10 +233,10 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
-    await toolsCommand.action!(mockContext, 'disable missing');
+    await createCommand(mockContext).action!(mockContext, 'disable missing');
 
     const output = (
-      mockContext.ui.addItem as Mock<CommandContext['ui']['addItem']>
+      mockContext.ui.addItem as Mock<CommandOwnerFixture['ui']['addItem']>
     ).mock.calls[0][0];
     expect(output.type).toBe(MessageType.ERROR);
     expect(output.text).toContain('Tool "missing" not found');
@@ -231,7 +253,7 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
-    await toolsCommand.action!(mockContext, 'enable code-editor');
+    await createCommand(mockContext).action!(mockContext, 'enable code-editor');
 
     expect(settings.get('tools.disabled')).toStrictEqual([]);
     expect(settings.get('tools.allowed')).toStrictEqual([]);
@@ -249,7 +271,7 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
-    await toolsCommand.action!(mockContext, 'enable code-editor');
+    await createCommand(mockContext).action!(mockContext, 'enable code-editor');
 
     expect(settings.get('tools.disabled')).toStrictEqual([]);
     expect(settings.get('tools.allowed')).toStrictEqual(
@@ -268,15 +290,15 @@ describe('toolsCommand', () => {
       ui: { addItem: vi.fn() },
     });
 
-    await toolsCommand.action!(mockContext, 'enable file-reader');
+    await createCommand(mockContext).action!(mockContext, 'enable file-reader');
 
     (
-      mockContext.ui.addItem as Mock<CommandContext['ui']['addItem']>
+      mockContext.ui.addItem as Mock<CommandOwnerFixture['ui']['addItem']>
     ).mockClear();
-    await toolsCommand.action!(mockContext, 'list');
+    await createCommand(mockContext).action!(mockContext, 'list');
 
     const output = (
-      mockContext.ui.addItem as Mock<CommandContext['ui']['addItem']>
+      mockContext.ui.addItem as Mock<CommandOwnerFixture['ui']['addItem']>
     ).mock.calls[0][0].text;
     expect(output).toContain('File Reader [enabled]');
     expect(output).toContain('Code Editor [enabled]');

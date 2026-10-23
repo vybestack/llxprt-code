@@ -179,7 +179,6 @@ export function buildRuntimeContext(
     telemetry: mockTelemetryAdapter,
     tools: mockToolsView,
     providerRuntime: createProviderRuntimeContext({
-      settingsService,
       runtimeId: runtimeState.runtimeId,
     }),
   });

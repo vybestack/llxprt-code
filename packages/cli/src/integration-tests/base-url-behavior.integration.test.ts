@@ -1,14 +1,13 @@
-import type { Agent } from '@vybestack/llxprt-code-agents';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import type {
+  Agent,
+  AgentProfilePreflight,
+} from '@vybestack/llxprt-code-agents';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
-import {
-  overrideInputs,
-  providerSwitchInputs,
-} from '../../../providers/src/runtime/__tests__/provider-switch-inputs.js';
 
 /**
  * @plan:PLAN-20260603-ISSUE1584.P12
@@ -28,16 +27,15 @@ import {
   Config,
   type RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
-import { assembleCliProviderRuntime } from '@vybestack/llxprt-code-providers/runtime/assembleCliProviderRuntime.js';
-import type { CliRuntimeRegistrationHandle } from '@vybestack/llxprt-code-providers/runtime/cliForegroundRuntime.js';
+import { prepareIntegrationPreflight } from './__tests__/prepare-preflight.js';
+import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import {
   createTempDirectory,
   cleanupTempDirectory,
-  initializeTestSessionRoot,
-  type CliTestSessionRoot,
+  initializeTestAgent,
 } from './test-utils.js';
-import { switchActiveProvider } from '@vybestack/llxprt-code-providers/runtime.js';
-import { setProviderBaseUrl } from '@vybestack/llxprt-code-providers/runtime/providerConfigUtils.js';
+import { switchActiveProvider } from '@vybestack/llxprt-code-agents';
+import { setProviderBaseUrl } from '../../../agents/src/api/providerConfigUtils.js';
 
 /**
  * @plan:PLAN-20250218-STATELESSPROVIDER.P07
@@ -47,13 +45,15 @@ import { setProviderBaseUrl } from '@vybestack/llxprt-code-providers/runtime/pro
  * @pseudocode:cli-runtime.md lines 9-15
  */
 describe('Base URL Runtime Helper Integration', () => {
+  const credentials = useOwnedCredentials();
   let tempDir: string;
   let config: Config;
-  let sessionRoot: CliTestSessionRoot;
+  let settingsOwner: SessionSettingsOwner;
+  let sessionRoot: Awaited<ReturnType<typeof initializeTestAgent>>;
   let providerManager: RuntimeProviderManager;
   let profileManager: ProfileManager;
   let settingsService: SettingsService;
-  let registration: CliRuntimeRegistrationHandle;
+  let preflight: AgentProfilePreflight;
   let sessionClient: Pick<Agent['sessionClient'], 'refreshAuth'>;
 
   beforeEach(async () => {
@@ -68,20 +68,23 @@ describe('Base URL Runtime Helper Integration', () => {
     });
     settingsService = new SettingsService();
     const runtimeId = 'base-url-test-runtime';
-    const assembled = assembleCliProviderRuntime({
-      settingsService,
+    preflight = await prepareIntegrationPreflight(
       config,
+      settingsService,
+      credentials().authority,
       runtimeId,
-      metadata: { source: 'base-url-test' },
-    });
-    providerManager = assembled.providerManager;
-    registration = assembled.registration;
-    sessionRoot = await initializeTestSessionRoot(
+      (manager) => {
+        providerManager = manager;
+      },
+    );
+    settingsOwner = new SessionSettingsOwner(settingsService);
+    sessionRoot = await initializeTestAgent(
       config,
       providerManager,
       settingsService,
+      settingsOwner,
     );
-    sessionClient = sessionRoot.agent.sessionClient;
+    sessionClient = sessionRoot.sessionClient;
 
     // Explicit per-test directory: the no-argument constructor resolves the
     // ambient global config root, which is the developer's own on a machine
@@ -90,7 +93,7 @@ describe('Base URL Runtime Helper Integration', () => {
   });
 
   afterEach(async () => {
-    registration.dispose();
+    await preflight.dispose();
     await cleanupTempDirectory(tempDir);
   });
 
@@ -102,14 +105,18 @@ describe('Base URL Runtime Helper Integration', () => {
     const customUrl = 'https://custom.openai.api/v1';
     const result = await setProviderBaseUrl(
       customUrl,
-      ...(await overrideInputs(sessionRoot)),
+      {
+        setEphemeralSetting: (key, value) =>
+          settingsOwner.writeUserParameter(key, value),
+      },
+      settingsService,
     );
 
     expect(result.success).toBe(true);
     expect(settingsService.getProviderSettings('openai')['base-url']).toBe(
       customUrl,
     );
-    expect(sessionRoot.agent.getEphemeralSetting('base-url')).toBe(customUrl);
+    expect(sessionRoot.getEphemeralSetting('base-url')).toBe(customUrl);
   });
 
   it('clears base URL when helper receives empty or "none" values', async () => {
@@ -119,7 +126,11 @@ describe('Base URL Runtime Helper Integration', () => {
 
     await setProviderBaseUrl(
       'https://custom.openai.api/v1',
-      ...(await overrideInputs(sessionRoot)),
+      {
+        setEphemeralSetting: (key, value) =>
+          settingsOwner.writeUserParameter(key, value),
+      },
+      settingsService,
     );
     expect(settingsService.getProviderSettings('openai')['base-url']).toBe(
       'https://custom.openai.api/v1',
@@ -127,17 +138,25 @@ describe('Base URL Runtime Helper Integration', () => {
 
     const clearResult = await setProviderBaseUrl(
       'none',
-      ...(await overrideInputs(sessionRoot)),
+      {
+        setEphemeralSetting: (key, value) =>
+          settingsOwner.writeUserParameter(key, value),
+      },
+      settingsService,
     );
     expect(clearResult.success).toBe(true);
     expect(
       settingsService.getProviderSettings('openai')['base-url'],
     ).toBeUndefined();
-    expect(sessionRoot.agent.getEphemeralSetting('base-url')).toBeUndefined();
+    expect(sessionRoot.getEphemeralSetting('base-url')).toBeUndefined();
 
     const emptyResult = await setProviderBaseUrl(
       '',
-      ...(await overrideInputs(sessionRoot)),
+      {
+        setEphemeralSetting: (key, value) =>
+          settingsOwner.writeUserParameter(key, value),
+      },
+      settingsService,
     );
     expect(emptyResult.success).toBe(true);
     expect(
@@ -153,7 +172,11 @@ describe('Base URL Runtime Helper Integration', () => {
 
     const result = await setProviderBaseUrl(
       'https://gemini.example/v1',
-      ...(await overrideInputs(sessionRoot)),
+      {
+        setEphemeralSetting: (key, value) =>
+          settingsOwner.writeUserParameter(key, value),
+      },
+      settingsService,
     );
     expect(result.success).toBe(true);
     expect(settingsService.getProviderSettings('gemini')['base-url']).toBe(
@@ -170,7 +193,11 @@ describe('Base URL Runtime Helper Integration', () => {
     await providerManager.setActiveProvider('openai');
     await setProviderBaseUrl(
       'https://provider-a.example',
-      ...(await overrideInputs(sessionRoot)),
+      {
+        setEphemeralSetting: (key, value) =>
+          settingsOwner.writeUserParameter(key, value),
+      },
+      settingsService,
     );
     expect(settingsService.getProviderSettings('openai')['base-url']).toBe(
       'https://provider-a.example',
@@ -179,9 +206,13 @@ describe('Base URL Runtime Helper Integration', () => {
     await switchActiveProvider(
       'anthropic',
       {},
-      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
-        sessionClient.refreshAuth(),
-      )),
+      config,
+      settingsService,
+      providerManager,
+      null,
+      undefined,
+      () => sessionClient.refreshAuth(),
+      settingsOwner,
     );
     expect(
       settingsService.getProviderSettings('openai')['base-url'],
@@ -214,7 +245,11 @@ describe('Base URL Runtime Helper Integration', () => {
 
     const result = await setProviderBaseUrl(
       loaded.ephemeralSettings['base-url'] as string,
-      ...(await overrideInputs(sessionRoot)),
+      {
+        setEphemeralSetting: (key, value) =>
+          settingsOwner.writeUserParameter(key, value),
+      },
+      settingsService,
     );
     expect(result.success).toBe(true);
     expect(settingsService.getProviderSettings('openai')['base-url']).toBe(

@@ -3,15 +3,17 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { vi, describe, it, expect, beforeEach } from 'bun:test';
-import { helpCommand } from './helpCommand.js';
-import { type CommandContext } from './types.js';
+import { createHelpCommand } from './helpCommand.js';
+
 import { MessageType } from '../types.js';
 import { assertDefined } from '../../__tests__/assertions.js';
 
 describe('helpCommand', () => {
-  let mockContext: CommandContext;
+  let helpCommand: ReturnType<typeof createHelpCommand>;
+  let mockContext: CommandOwnerFixture;
   let mockAddItem: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
@@ -20,7 +22,8 @@ describe('helpCommand', () => {
       ui: {
         addItem: mockAddItem,
       },
-    } as unknown as CommandContext;
+    } as unknown as CommandOwnerFixture;
+    helpCommand = createHelpCommand(mockContext.ui.addItem);
   });
 
   it("should add a HELP history item for '/help'", async () => {

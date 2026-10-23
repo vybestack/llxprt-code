@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 const retainedActivationOperations: Array<{ dispose(): void | Promise<void> }> =
   [];
@@ -44,14 +45,8 @@ import {
 } from '@vybestack/llxprt-code-core';
 import * as ServerConfig from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  ProviderManager,
-  type IProvider,
-} from '@vybestack/llxprt-code-providers';
-import {
-  loadPrecedenceProviderContributions,
-  registerPrecedenceProviders,
-} from './precedenceProviderContributions.js';
+import { ProviderManager } from '@vybestack/llxprt-code-providers';
+import { loadPrecedenceProviderContributions } from './precedenceProviderContributions.js';
 import { loadCliConfig } from '../config.js';
 import { parseArguments } from '../cliArgParser.js';
 import { READ_ONLY_TOOL_NAMES } from '../toolGovernance.js';
@@ -63,12 +58,6 @@ import { isWorkspaceTrusted } from '../trustedFolders.js';
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
 const realTrustedFoldersModule = { ...(await import('../trustedFolders.js')) };
-const realProfileBootstrapModule = {
-  ...(await import('../profileBootstrap.js')),
-};
-const realLlxprtCodeSettingsModule = {
-  ...(await import('@vybestack/llxprt-code-settings')),
-};
 const realLlxprtCodeCoreModule = {
   ...(await import('@vybestack/llxprt-code-core')),
 };
@@ -116,39 +105,6 @@ void vi.mock('read-package-up', () => ({
   ),
 }));
 
-void vi.mock('../profileBootstrap.js', () => {
-  const actual = realProfileBootstrapModule;
-  const { SettingsService: RealSettingsService } = realLlxprtCodeSettingsModule;
-  return {
-    ...actual,
-    prepareRuntimeForProfile: vi.fn(async () => {
-      const settingsService = new RealSettingsService();
-      const providerManager = new ProviderManager({ settingsService });
-      const provider: IProvider = {
-        name: 'openai',
-        getDefaultModel: () => 'test-model',
-        getModels: async () => [],
-        async *generateChatCompletion() {
-          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ready' }] };
-        },
-      };
-      providerManager.registerProvider(provider);
-      runtimeSettingsState.providerManager = providerManager;
-      return {
-        runtime: {
-          settingsService,
-          config: null,
-          runtimeId: 'mock-runtime',
-          metadata: {},
-        },
-        runtimeMessageBus: undefined,
-        providerManager,
-        oauthManager: null,
-      };
-    }),
-  };
-});
-
 const runtimeSettingsState = {
   context: null as {
     settingsService: SettingsService;
@@ -160,105 +116,6 @@ const runtimeSettingsState = {
   oauthManager: null as unknown,
   ephemeral: {} as Record<string, unknown>,
 };
-
-void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
-  const getProviderManager = () =>
-    runtimeSettingsState.providerManager ??
-    ({
-      listProviders: vi.fn(() => []),
-      getActiveProviderName: vi.fn(() => null),
-      setActiveProvider: vi.fn(),
-      getActiveProvider: vi.fn(() => undefined),
-      getAvailableModels: vi.fn(async () => []),
-      getProviderByName: vi.fn(() => ({
-        getDefaultModel: () => 'gemini-2.5-pro',
-      })),
-    } as unknown as ProviderManager);
-
-  return {
-    ephemeralSettingHelp: {},
-    parseEphemeralSettingValue: vi.fn((_key: string, rawValue: string) => ({
-      success: true,
-      value: rawValue,
-    })),
-    applyCliSetArguments: vi.fn(() => ({ modelParams: {} })),
-    applyProfileSnapshot: vi.fn(async () => ({
-      providerName: '',
-      modelName: '',
-      warnings: [],
-    })),
-    switchActiveProvider: vi.fn(async () => ({
-      changed: true,
-      previousProvider: null,
-      nextProvider: 'gemini',
-      infoMessages: [],
-    })),
-    applyCliArgumentOverrides: vi.fn(async () => {}),
-    providerManager: vi.fn(() => runtimeSettingsState.providerManager),
-    oauthManager: vi.fn(() => {
-      if (runtimeSettingsState.oauthManager === null) {
-        throw new Error('OAuthManager missing from runtime registration');
-      }
-      return runtimeSettingsState.oauthManager;
-    }),
-    providerStatus: vi.fn(() => ({ name: null })),
-    listProviders: vi.fn(() => []),
-    getActiveProviderName: vi.fn(() => null),
-    setActiveModel: vi.fn(async () => ({
-      changed: false,
-      previousModel: null,
-      nextModel: null,
-      infoMessages: [],
-    })),
-    listAvailableModels: vi.fn(async () => []),
-    getActiveModelName: vi.fn(() => null),
-    getActiveProfileName: vi.fn(() => null),
-    getActiveModelParams: vi.fn(() => ({})),
-    getEphemeralSettings: vi.fn(() => runtimeSettingsState.ephemeral),
-    getEphemeralSetting: vi.fn(
-      (key: string) => runtimeSettingsState.ephemeral[key] ?? undefined,
-    ),
-    setEphemeralSetting: vi.fn((key: string, value: unknown) => {
-      runtimeSettingsState.ephemeral[key] = value;
-    }),
-    setActiveModelParam: vi.fn(),
-    clearActiveModelParam: vi.fn(),
-    saveProfileSnapshot: vi.fn(async () => undefined),
-    saveLoadBalancerProfile: vi.fn(async () => undefined),
-    loadProfileByName: vi.fn(async () => undefined),
-    deleteProfileByName: vi.fn(async () => undefined),
-    listSavedProfiles: vi.fn(() => []),
-    getProfileByName: vi.fn(() => undefined),
-    setDefaultProfileName: vi.fn(),
-    updateActiveProviderBaseUrl: vi.fn(async () => ({
-      message: 'Base URL updated',
-    })),
-    updateActiveProviderApiKey: vi.fn(async () => ({ message: 'Key updated' })),
-    getRuntimeDiagnosticsSnapshot: vi.fn(() => ({})),
-    getActiveToolFormatState: vi.fn(() => ({})),
-    setActiveToolFormatOverride: vi.fn(),
-    getActiveProviderMetrics: vi.fn(() => undefined),
-    getSessionTokenUsage: vi.fn(() => undefined),
-    assembleCliProviderRuntime: vi.fn(
-      (input: {
-        settingsService: unknown;
-        config: unknown;
-        runtimeId: string;
-        metadata?: Record<string, unknown>;
-      }) => ({
-        runtime: {
-          settingsService: input.settingsService,
-          config: input.config,
-          runtimeId: input.runtimeId,
-          metadata: input.metadata,
-        },
-        runtimeMessageBus: { kind: 'session-bus' },
-        providerManager: getProviderManager(),
-        oauthManager: null,
-      }),
-    ),
-  };
-});
 
 void vi.mock('@vybestack/llxprt-code-core', () => {
   const actual = realLlxprtCodeCoreModule;
@@ -310,15 +167,13 @@ async function runConfig(settings: Settings, argv: string[] = []) {
     'test-session',
     parsedArgv,
     undefined,
-    {
-      settingsService: runtimeSettingsService,
-      sessionSettingsOwner: settingsOwner,
-      providerContributions: await loadPrecedenceProviderContributions(),
-      onProviderManagerReady: registerPrecedenceProviders,
-      onActivationBootstrapReady: (operation) => {
-        operation.takeSettingsOwner(runtimeSettingsService);
-        retainedActivationOperations.push(operation);
-      },
+    undefined,
+    runtimeSettingsService,
+    settingsOwner,
+    new CredentialAuthority(),
+    await loadPrecedenceProviderContributions(),
+    (operation) => {
+      retainedActivationOperations.push(operation);
     },
   );
   return { config, settingsOwner };

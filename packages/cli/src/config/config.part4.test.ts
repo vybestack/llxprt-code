@@ -3,6 +3,7 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 const retainedActivationOperations: Array<{ dispose(): void | Promise<void> }> =
   [];
@@ -23,14 +24,13 @@ async function loadConfigFixture(...args: Parameters<typeof loadCliConfig>) {
       args[3],
       args[4],
       args[5],
-      {
-        ...args[6],
-        settingsService: store,
-        sessionSettingsOwner: settingsOwner,
-        onActivationBootstrapReady: (operation) => {
-          operation.takeSettingsOwner(store);
-          retainedActivationOperations.push(operation);
-        },
+      undefined,
+      store,
+      settingsOwner,
+      new CredentialAuthority(),
+      undefined,
+      (operation) => {
+        retainedActivationOperations.push(operation);
       },
     );
     const root = { config, settingsOwner };
@@ -54,7 +54,6 @@ import {
 } from 'bun:test';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import { loadCliConfig } from './config.js';
 import { parseArguments } from './cliArgParser.js';
@@ -140,119 +139,6 @@ const runtimeSettingsState = {
   providerManager: null as ServerConfig.RuntimeProviderManager | null,
   oauthManager: null as unknown,
 };
-
-const actual = {
-  ...(await import('@vybestack/llxprt-code-providers/runtime.js')),
-};
-void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
-  const getProviderManager = () =>
-    runtimeSettingsState.providerManager ??
-    ({
-      listProviders: vi.fn(() => []),
-      getActiveProviderName: vi.fn(() => null),
-      setActiveProvider: vi.fn(),
-      getActiveProvider: vi.fn(() => undefined),
-      getAvailableModels: vi.fn(async () => []),
-      getProviderByName: vi.fn(() => ({
-        getDefaultModel: () => 'gemini-2.5-pro',
-      })),
-      accumulateSessionTokens: vi.fn(),
-    } as unknown as ServerConfig.RuntimeProviderManager);
-
-  return {
-    ephemeralSettingHelp: actual.ephemeralSettingHelp,
-    parseEphemeralSettingValue: vi.fn(actual.parseEphemeralSettingValue),
-    applyCliSetArguments: vi.fn(actual.applyCliSetArguments),
-    applyProfileSnapshot: vi.fn(
-      async (profile: {
-        provider?: string;
-        model?: string;
-        baseUrl?: string;
-      }) => ({
-        providerName: profile.provider ?? '',
-        modelName: profile.model ?? '',
-        baseUrl: profile.baseUrl,
-        warnings: [],
-      }),
-    ),
-    switchActiveProvider: vi.fn(async () => ({
-      changed: true,
-      previousProvider: null,
-      nextProvider: 'mock-provider',
-      infoMessages: [],
-    })),
-    applyCliArgumentOverrides: vi.fn(async () => {}),
-    providerManager: vi.fn(() => runtimeSettingsState.providerManager),
-    oauthManager: vi.fn(() => runtimeSettingsState.oauthManager ?? null),
-    providerStatus: vi.fn(() => ({
-      name:
-        runtimeSettingsState.providerManager?.getActiveProviderName() ??
-        runtimeSettingsState.context?.config?.getProvider() ??
-        null,
-    })),
-    listProviders: vi.fn(() => getProviderManager().listProviders()),
-    getActiveProviderName: vi.fn(() =>
-      getProviderManager().getActiveProviderName(),
-    ),
-    setActiveModel: vi.fn(async () => ({
-      changed: false,
-      previousModel: null,
-      nextModel: null,
-      infoMessages: [],
-    })),
-    listAvailableModels: vi.fn(async () =>
-      getProviderManager().getAvailableModels(),
-    ),
-    getActiveModelName: vi.fn(() => null),
-    getActiveProfileName: vi.fn(() => null),
-    getActiveModelParams: vi.fn(() => ({})),
-    getEphemeralSettings: vi.fn(() => ({})),
-    getEphemeralSetting: vi.fn(() => undefined),
-    setEphemeralSetting: vi.fn(),
-    setActiveModelParam: vi.fn(),
-    clearActiveModelParam: vi.fn(),
-    saveProfileSnapshot: vi.fn(async () => undefined),
-    saveLoadBalancerProfile: vi.fn(async () => undefined),
-    loadProfileByName: vi.fn(async () => undefined),
-    deleteProfileByName: vi.fn(async () => undefined),
-    listSavedProfiles: vi.fn(() => []),
-    getProfileByName: vi.fn(() => undefined),
-    setDefaultProfileName: vi.fn(),
-    updateActiveProviderBaseUrl: vi.fn(async () => undefined),
-    updateActiveProviderApiKey: vi.fn(async () => undefined),
-    getRuntimeDiagnosticsSnapshot: vi.fn(() => ({})),
-    getActiveToolFormatState: vi.fn(() => ({})),
-    setActiveToolFormatOverride: vi.fn(),
-    getActiveProviderMetrics: vi.fn(() => undefined),
-    getSessionTokenUsage: vi.fn(() => undefined),
-    assembleCliProviderRuntime: vi.fn(
-      (input: {
-        settingsService: unknown;
-        config: unknown;
-        runtimeId: string;
-        metadata?: Record<string, unknown>;
-      }) => {
-        const providerFileLifecycle = new ProviderFileLifecycle({
-          maxFiles: 100,
-          maxBytes: 512 * 1024 * 1024,
-        });
-        return {
-          registration: { providerFileLifecycle },
-          runtime: {
-            providerFileLifecycle,
-            settingsService: input.settingsService,
-            config: input.config,
-            runtimeId: input.runtimeId,
-            metadata: input.metadata,
-          },
-          runtimeMessageBus: { kind: 'session-bus' },
-          providerManager: getProviderManager(),
-          oauthManager: { id: 'oauth-manager' },
-        };
-      },
-    ),
-  };
-});
 
 void vi.mock('@vybestack/llxprt-code-core', () => {
   const actualServer = realLlxprtCodeCoreModule;
@@ -610,7 +496,7 @@ describe('loadCliConfig disableYoloMode', () => {
       security: { disableYoloMode: true },
     };
     await expect(
-      loadCliConfig(
+      loadConfigFixture(
         settings,
         [],
         new ExtensionEnablementManager(
@@ -676,7 +562,7 @@ describe('loadCliConfig secureModeEnabled', () => {
       admin: { secureModeEnabled: true },
     };
     await expect(
-      loadCliConfig(
+      loadConfigFixture(
         settings,
         [],
         new ExtensionEnablementManager(

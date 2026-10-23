@@ -11,12 +11,6 @@ import type {
   ConfirmationRequest,
 } from '../types.js';
 import type {
-  WorkspaceCheckpointOperations,
-  Logger,
-  RecordingIntegration,
-  SubagentDefinitionReads,
-  SubagentDefinitionWrites,
-  ProfileDefinitionReads,
   ValidatedSessionMediaPackage,
   Todo, // Import shared command action return types from core
   ToolActionReturn,
@@ -25,10 +19,6 @@ import type {
   SubmitPromptActionReturn,
   CommandActionReturn,
 } from '@vybestack/llxprt-code-core';
-import type { Agent } from '@vybestack/llxprt-code-agents';
-import type { RecordingSwapCallbacks } from '../../services/performResume.js';
-import type { LoadedSettings } from '../../config/settings.js';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
 import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 import type { SessionStatsState } from '../contexts/SessionContext.js';
 import type {
@@ -37,15 +27,8 @@ import type {
 } from '../state/extensions.js';
 import type { CommandArgumentSchema } from './schema/types.js';
 import type { SubagentView } from '../components/SubagentManagement/types.js';
-import type { RuntimeApi } from '../contexts/RuntimeContext.js';
-import type { ProviderAliasRefresh } from '../contexts/ProviderAliasRefreshContext.js';
-import type { OAuthControl } from '../contexts/OAuthControlContext.js';
 
-// Grouped dependencies for clarity and easier mocking
 export interface CommandContext {
-  runtimeApi: RuntimeApi;
-  refreshProviderAliases: ProviderAliasRefresh;
-  oauthControl: OAuthControl;
   /**
    * Aborted when the user cancels this slash-command invocation with Esc in
    * the interactive UI. In non-interactive mode this is the run-level abort
@@ -63,25 +46,6 @@ export interface CommandContext {
     name: string;
     /** The arguments string that follows the command name. */
     args: string;
-  };
-  // Core services and configuration
-  services: {
-    // Follow-up (#1569, abhipatel12): Ensure that config is never null.
-    config: CliUiRuntime | null;
-    /**
-     * The rich Agent facade adopted from the CLI runtime via fromConfig().
-     * Provides auth, mcp, tools, hooks, policy, tasks, session, profiles
-     * sub-surfaces so commands avoid deep runtime/core access.
-     * Null until bootstrap constructs it (or in non-interactive/test paths).
-     */
-    agent: Agent | null;
-    settings: LoadedSettings;
-    git:
-      | Pick<WorkspaceCheckpointOperations, 'restoreProjectFromSnapshot'>
-      | undefined;
-    logger: Logger;
-    subagentManager?: SubagentDefinitionReads & SubagentDefinitionWrites;
-    profileManager?: Pick<ProfileDefinitionReads, 'listProfiles'>;
   };
   // UI state and history management
   ui: {
@@ -139,15 +103,6 @@ export interface CommandContext {
   };
   // Flag to indicate if an overwrite has been confirmed
   overwriteConfirmed?: boolean;
-  /** Explicitly selects Agent-owned recording; absent retains raw interactive wiring. */
-  recordingOwner?: 'agent';
-  // Recording integration for session recording
-  recordingIntegration?: RecordingIntegration;
-  /**
-   * Callbacks for swapping recording infrastructure during session resume.
-   * @plan PLAN-20260214-SESSIONBROWSER.P23
-   */
-  recordingSwapCallbacks?: RecordingSwapCallbacks;
 }
 
 // Re-export core command action return types for convenience

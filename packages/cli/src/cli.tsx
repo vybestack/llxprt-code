@@ -1,29 +1,35 @@
+import {
+  parseBootstrapArgs,
+  prepareRuntimeForProfile,
+} from './config/profileBootstrap.js';
+import { resolveProxy } from './config/configBuilder.js';
+import type {
+  AgentForegroundHost,
+  AgentProfilePreflight,
+  Agent,
+} from '@vybestack/llxprt-code-agents';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import {
+  HostCredentialOwner,
+  type CredentialAuthority,
+} from '@vybestack/llxprt-code-providers/auth.js';
 import type { ProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition.js';
 import { createOAuthSettingsAdapter } from './auth/oauth-settings-adapter.js';
 import {
   type ImageOperationRunner,
-  type WorkspaceTrustControlPort,
   patchStdio,
   ExitCodes,
-  type ProfileDefinitionReads,
-  type SessionSettingsOwner,
-  type RuntimePolicyOwner,
   type LlxprtExtension,
   type WorkspaceSkillOperations,
-  type RuntimeProviderManager,
   type Config,
+  type IContent,
 } from '@vybestack/llxprt-code-core';
 import { SettingsService, Storage } from '@vybestack/llxprt-code-settings';
-
-import type { AgentProfileApplication } from '@vybestack/llxprt-code-agents';
 
 /**
  * @plan:PLAN-20260603-ISSUE1584.P12
@@ -71,7 +77,6 @@ if (wantWarningSuppression && !process.env.NODE_NO_WARNINGS) {
 import { parseArguments } from './config/cliArgParser.js';
 import { loadSettings, type LoadedSettings } from './config/settings.js';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
-import { createTokenStore } from '@vybestack/llxprt-code-providers/auth.js';
 import { applySandboxBashrc } from './utils/sandbox-bashrc.js';
 import {
   runStartupMigration,
@@ -81,6 +86,7 @@ import {
   cleanupCheckpoints,
   runExitCleanup,
   registerSyncCleanup,
+  registerCleanup,
 } from './utils/cleanup.js';
 import {
   runZedIntegration,
@@ -107,7 +113,10 @@ import {
   ensureAcpProviderActivated,
   type ConfiguredProviderActivationResult,
 } from './cliProviderInit.js';
-import { guardUnconfiguredProvider } from './unconfiguredProviderGuard.js';
+import {
+  guardUnconfiguredProvider,
+  reportUnconfiguredProviderError,
+} from './unconfiguredProviderGuard.js';
 import {
   constructAgentWithSpinner,
   prepareTerminalSession,
@@ -118,8 +127,8 @@ import {
   hasSessionManagementFlag,
 } from './cliSessionListAndDelete.js';
 import {
-  type RuntimeConfigBootstrap,
-  bootstrapRuntimeAndConfig,
+  discoverCliProviderContributions,
+  bootstrapRuntimeAndConfig as bootstrap,
   setupOwnerSessionRecording,
 } from './cliSessionBootstrap.js';
 import {
@@ -127,8 +136,35 @@ import {
   resolveBootstrapSelection,
   type BootstrapSelection,
 } from './observation/jspWiring.js';
-import { dispatchInteractiveOrNonInteractive } from './session/nonInteractiveSession.js';
-import { formatNonInteractiveError } from './session/errorReporting.js';
+import {
+  dispatchInteractiveOrNonInteractive,
+  runPipedOrPromptSession,
+  type ValidatedNonInteractiveRun,
+} from './session/nonInteractiveSession.js';
+import { getUserStartupWarnings } from './utils/userStartupWarnings.js';
+import { validateNonInteractiveAuth } from './validateNonInteractiveAuth.js';
+import {
+  createNonInteractiveRun,
+  createHeadlessTurn,
+  createHeadlessInput,
+  createHeadlessCommandRun,
+  createHeadlessCommandLoader,
+  resolveHeadlessSlash,
+  createHeadlessFeedback,
+  createHeadlessErrorReporter,
+} from './nonInteractiveBindings.js';
+import {
+  getActiveProviderNameForApiError,
+  getErrorFallbackModel,
+} from './utils/apiErrorFormatting.js';
+import {
+  resolveContentPrefixIdentity,
+  createCliModelIdentityRuntime,
+} from './ui/utils/modelIdentity.js';
+import {
+  reportNonInteractiveError,
+  formatNonInteractiveError,
+} from './session/errorReporting.js';
 import {
   runDirectImageModeAndExit,
   buildImageModeFlags,
@@ -194,37 +230,6 @@ function setupProcessLifecycle(): () => void {
  * internally, so the foreground Agent is NOT built in the main flow. Returns
  * true when the Zed/ACP path was taken (main should return immediately).
  */
-async function handleZedAcpIntegration(
-  config: Config,
-  cleanupStdio: () => void,
-  profileApplication: AgentProfileApplication,
-  providerManager: RuntimeProviderManager,
-  settingsService: SettingsService,
-  profileDefinitions: Pick<ProfileDefinitionReads, 'listProfiles'>,
-  trustPort: WorkspaceTrustControlPort,
-  providerContributions: ProviderContributionRegistry,
-): Promise<boolean> {
-  if (!config.getExperimentalZedIntegration()) {
-    return false;
-  }
-  cleanupStdio();
-  ensureAcpProviderActivated(config, providerManager);
-  await runZedIntegration(config, profileApplication, {
-    trustPort,
-    profileDefinitions,
-    providerManager,
-    onExitCleanup: runExitCleanup,
-    providerInputs: createZedProviderInputs(providerContributions),
-    createSessionSettings: () => {
-      const session = new SettingsService();
-      session.restoreFromStateSnapshot(
-        settingsService.exportForStateSnapshot(),
-      );
-      return session;
-    },
-  });
-  return true;
-}
 
 /**
  * Hands the ACP client the contributions this process already loaded and the
@@ -234,9 +239,11 @@ async function handleZedAcpIntegration(
  */
 function createZedProviderInputs(
   providerContributions: ProviderContributionRegistry,
+  credentialAuthority: CredentialAuthority,
 ): ZedSessionProviderInputs {
   const oauthSettings = createOAuthSettingsAdapter();
   return {
+    credentialAuthority,
     providerContributions,
     ...(oauthSettings !== undefined ? { oauthSettings } : {}),
   };
@@ -255,81 +262,217 @@ function hasExplicitProviderProfileSelector(argv: ParsedCliArgs): boolean {
  * connection and session recording run AFTER because they depend on the
  * initialize() the Agent performs.
  */
-async function constructForegroundAgentAndDispatch(
-  config: Config,
-  settings: LoadedSettings,
-  argv: ParsedCliArgs,
-  workspaceRoot: string,
-  providerActivation: ConfiguredProviderActivationResult,
-  hasPipedInput: boolean,
-  readStdinData: () => Promise<string>,
-  bootstrapSelection: BootstrapSelection | null,
-  getMcpAuthProviderFactory: RuntimeConfigBootstrap['getMcpAuthProviderFactory'],
-  providerManager: RuntimeProviderManager,
-  settingsService: SettingsService,
-  settingsOwner: SessionSettingsOwner,
-  policyOwner?: RuntimePolicyOwner,
-  oauthManager?: OAuthManager,
-  providerFileLifecycle?: ProviderFileLifecycle,
-): Promise<void> {
-  // Configure Unicode rendering before any Ink render (including the MCP
-  // initialization spinner inside constructAgentWithSpinner) so that Windows
-  // consoles with non-UTF-8 codepages fall back to ASCII borders/spinners.
-  configureUnicodeSupport(settings.merged.ui.unicode ?? 'auto');
-  let restartExtension:
+class ForegroundSessionHost {
+  readonly #foreground: Promise<Agent>;
+  #restartExtension:
     | ((extension: LlxprtExtension) => Promise<void>)
     | undefined;
-  let skillOperations:
+  #skillOperations:
     | Pick<
         WorkspaceSkillOperations,
         'list' | 'find' | 'reload' | 'isAdminEnabled'
       >
     | undefined;
-  const agent = await constructAgentWithSpinner(
-    config,
-    providerManager,
-    settingsService,
-    settingsOwner,
-    providerActivation.activationPreflight,
-    providerActivation.intent,
-    getMcpAuthProviderFactory,
-    (skills) => {
-      skillOperations = skills;
-    },
-    (restart) => {
-      restartExtension = restart;
-    },
-    policyOwner,
-    oauthManager,
-    providerFileLifecycle,
-  );
-  await connectIdeClientIfEnabled(agent.ide);
-
-  const recordingStartupWarnings: string[] = [];
-  const resumedHistory = await setupOwnerSessionRecording(
-    config,
-    agent,
-    argv,
-    bootstrapSelection,
-    recordingStartupWarnings,
-  );
-
-  await dispatchInteractiveOrNonInteractive({
-    oauthManager,
-    skillOperations,
-    restartExtension,
-    config,
-    agent,
-    settings,
-    workspaceRoot,
-    recordingOwner: 'agent',
-    runtimeSettings: { owner: settingsOwner, store: settingsService },
-    resumedHistory,
-    recordingStartupWarnings,
-    hasPipedInput,
-    readStdinData,
-    suppressStartupWelcome: hasExplicitProviderProfileSelector(argv),
-  });
+  constructor(
+    private readonly config: Config,
+    private readonly settings: LoadedSettings,
+    private readonly argv: ParsedCliArgs,
+    private readonly workspaceRoot: string,
+    providerActivation: ConfiguredProviderActivationResult,
+    private readonly preflight: AgentProfilePreflight,
+    private readonly hasPipedInput: boolean,
+    private readonly readStdinData: () => Promise<string>,
+    private readonly bootstrapSelection: BootstrapSelection | null,
+    getMcpAuthProviderFactory: NonNullable<
+      AgentForegroundHost['mcpHost']
+    >['getAuthProviderFactory'],
+    credentialAuthority: CredentialAuthority,
+  ) {
+    configureUnicodeSupport(settings.merged.ui.unicode ?? 'auto');
+    const receipt = providerActivation.token;
+    if (receipt === undefined)
+      throw new Error('Missing foreground activation receipt');
+    this.#foreground = constructAgentWithSpinner(
+      config,
+      preflight,
+      receipt,
+      providerActivation.intent ?? {},
+      credentialAuthority,
+      getMcpAuthProviderFactory,
+      (skills) => {
+        this.#skillOperations = skills;
+      },
+      (restart) => {
+        this.#restartExtension = restart;
+      },
+      argv,
+    );
+  }
+  async run(): Promise<void> {
+    const agent = await this.#foreground;
+    await connectIdeClientIfEnabled(
+      () => agent.ide.getIdeMode(),
+      agent.ide.setIdeClientConnected.bind(agent.ide),
+    );
+    const warnings: string[] = [];
+    const history = await setupOwnerSessionRecording(
+      this.config,
+      agent.session,
+      agent.session.listBrowserTargetsDetailed.bind(agent.session),
+      this.argv,
+      this.bootstrapSelection,
+      warnings,
+    );
+    const input = this.config.getQuestion();
+    await dispatchInteractiveOrNonInteractive(
+      input,
+      () =>
+        typeof this.config.isInteractive === 'function' &&
+        this.config.isInteractive(),
+      'agent',
+      warnings,
+      () => getUserStartupWarnings(this.settings.merged),
+      async (startupWarnings) => {
+        await this.launchInteractive(startupWarnings, history);
+      },
+      () => this.config.getOutputFormat(),
+      (initialInput) =>
+        runPipedOrPromptSession(
+          initialInput,
+          this.hasPipedInput,
+          this.readStdinData,
+          () => this.validateRun(),
+          () => agent.hooks.triggerSessionStart(),
+          (reason) => agent.hooks.triggerSessionEnd(reason),
+          (error) => reportNonInteractiveError(this.config, error),
+          () => this.preflight.flushTelemetry(),
+        ),
+    );
+    registerCleanup(() => this.preflight.dispose());
+  }
+  private async validateRun(): Promise<ValidatedNonInteractiveRun> {
+    const agent = await this.#foreground;
+    const validated = await validateNonInteractiveAuth(
+      this.settings.merged.useExternalAuth,
+      this.config,
+      this.settings,
+      runExitCleanup,
+      agent.hasActiveProvider,
+      (key, value) => agent.setEphemeralSetting(key, value),
+    );
+    return {
+      run: createNonInteractiveRun(
+        agent.hasActiveProvider,
+        () => reportUnconfiguredProviderError(validated),
+        () => validated.getOutputFormat(),
+        () => validated.getDebugMode(),
+        () => validated.getSessionId(),
+        () => validated.getModel(),
+        createHeadlessFeedback(() => validated.getDebugMode()),
+        () => agent.getEphemeralSetting('emojifilter'),
+        resolveHeadlessSlash(
+          true,
+          createHeadlessCommandRun(
+            createHeadlessCommandLoader(
+              () => validated.userCommandsDir,
+              () => validated.projectCommandsDir,
+              () => validated.getProjectRoot(),
+              () => validated.getExtensions(),
+              () => validated.getFolderTrust(),
+              () => agent.ide.isTrustedFolder.bind(agent.ide),
+              () => validated.getShellReplacement(),
+              () => validated.getExcludeTools(),
+              () => validated.getCoreTools(),
+              () => validated.getApprovalMode(),
+              () => validated.getShellExecutionConfig(),
+              () => validated.getTargetDir(),
+              () => validated.getShouldUseNodePtyShell(),
+            ),
+            () => validated.getSessionId(),
+            () => agent.metrics.getMetrics(),
+          ),
+        ),
+        () =>
+          this.headlessTurn(
+            () => validated.getFileFilteringOptions(),
+            () => validated.getEnableRecursiveFileSearch(),
+            () => validated.getMaxSessionTurns(),
+            () => validated.getQuiet(),
+            () => validated.getSessionId(),
+          ),
+        createHeadlessErrorReporter(
+          () => getActiveProviderNameForApiError(validated),
+          (provider) => getErrorFallbackModel(validated, provider),
+        ),
+        () => this.preflight.flushTelemetry(),
+      ),
+      report: (error) => reportNonInteractiveError(validated, error),
+    };
+  }
+  private async headlessTurn(
+    readFiltering: Parameters<typeof createHeadlessInput>[0],
+    readRecursive: Parameters<typeof createHeadlessInput>[1],
+    readMaxTurns: Parameters<typeof createHeadlessTurn>[2],
+    readQuiet: Parameters<typeof createHeadlessTurn>[3],
+    readSessionId: Parameters<typeof createHeadlessTurn>[4],
+  ) {
+    const agent = await this.#foreground;
+    return createHeadlessTurn(
+      createHeadlessInput(
+        readFiltering,
+        readRecursive,
+        (...args) => agent.workspace.shouldIgnoreFile(...args),
+        (...args) => agent.workspace.shouldGitIgnoreFile(...args),
+        (...args) => agent.workspace.shouldLlxprtIgnoreFile(...args),
+        (...args) => agent.workspace.filterFiles(...args),
+        (...args) => agent.workspace.filterFilesWithReport(...args),
+        (...args) => agent.workspace.getGlobExcludes(...args),
+        (...args) => agent.workspace.getReadManyFilesExcludes(...args),
+        () => agent.workspace.getDirectories(),
+        (path) => agent.workspace.containsPath(path),
+        (name) => agent.tools.get(name),
+        (server, uri) => agent.mcp.readResource(server, uri),
+        (identifier) => agent.mcp.findResource(identifier),
+      ),
+      (query, options) => agent.stream(query, options),
+      readMaxTurns,
+      readQuiet,
+      readSessionId,
+      () => agent.getEphemeralSetting('reasoning.includeInResponse') !== false,
+      () =>
+        resolveContentPrefixIdentity(
+          createCliModelIdentityRuntime({
+            getProvider: () => agent.getProvider(),
+            getModel: () => agent.getModel(),
+            getCurrentSequenceModel: () => agent.getCurrentSequenceModel(),
+            getActiveProfileName: () => agent.getActiveProfileName(),
+          }),
+        ),
+      () => agent.metrics.getMetrics(),
+      async () => {},
+    );
+  }
+  private async launchInteractive(
+    warnings: string[],
+    history: IContent[] | null,
+  ): Promise<void> {
+    const agent = await this.#foreground;
+    await startInteractiveUI(
+      this.config,
+      agent,
+      this.settings,
+      warnings,
+      this.workspaceRoot,
+      {
+        recordingOwner: 'agent',
+        runtimeSettings: this.preflight,
+        skillOperations: this.#skillOperations,
+        restartExtension: this.#restartExtension,
+        resumedHistory: history ?? undefined,
+        suppressStartupWelcome: hasExplicitProviderProfileSelector(this.argv),
+      },
+    );
+  }
 }
 
 /**
@@ -353,31 +496,31 @@ async function constructForegroundAgentAndDispatch(
  * 3. Agent construction (fromConfig): `constructAgentWithSpinner(config)` builds
  *    the SINGLE foreground Agent via `createForegroundAgent` → `fromConfig`,
  *    which OWNS Config.initialize() and the one session MessageBus (built from
- *    the Config's policy engine, exposed via `agent.getMessageBus()`) and
+ *    the Config's policy engine) and
  *    ADOPTS the preflight activation state without re-running a second
  *    activation sequence. Runtime state/context seeding, provider wiring, policy
  *    engine, and scheduler singletons all live behind that public API, not in
  *    CLI code. IDE connect and session recording run just after (they depend on
  *    initialize()).
  * 4. Render/Run: the ONE Agent is threaded into the interactive UI or reused by
- *    the non-interactive stream; consumers read the session bus from
- *    `agent.getMessageBus()` instead of a separately-threaded bus.
+ *    the non-interactive stream; UI consent and hook display bind named
+ *    operations on the Agent auth and hook controls.
  *
  * Zed/ACP is the exception: it runs its own runtime and constructs per-session
  * Agents via `fromConfig` internally, so no foreground Agent is built for it.
  */
-function prepareSandboxCredentialStartup(workspaceRoot: string): void {
+function prepareSandboxCredentialStartup(
+  workspaceRoot: string,
+): HostCredentialOwner {
   const sandboxSocket = process.env.LLXPRT_CREDENTIAL_SOCKET;
-  const capabilityFd = process.env.LLXPRT_CAPABILITY_FD;
-  if (sandboxSocket !== undefined || capabilityFd !== undefined) {
-    createTokenStore();
-  }
+  const credentialOwner = new HostCredentialOwner(process.env);
   if (sandboxSocket !== undefined) {
     applySandboxBashrc(
       `${workspaceRoot}/.llxprt/sandbox.bashrc`,
       workspaceRoot,
     );
   }
+  return credentialOwner;
 }
 
 /**
@@ -466,41 +609,131 @@ async function exitIfAuthenticationFailed(authFailed: boolean): Promise<void> {
   }
 }
 
+async function stopIfUnconfigured(
+  config: Config,
+  hasActiveProvider: () => boolean,
+): Promise<void> {
+  await guardUnconfiguredProvider(config, runExitCleanup, hasActiveProvider);
+}
+
+async function prepareForegroundPreflight(
+  argv: ParsedCliArgs,
+  authority: CredentialAuthority,
+  providerContributions: Awaited<
+    ReturnType<typeof discoverCliProviderContributions>
+  >['providerContributions'],
+): Promise<AgentProfilePreflight> {
+  const parsed = parseBootstrapArgs();
+  const preflight = await prepareRuntimeForProfile(
+    {
+      ...parsed,
+      runtimeMetadata: {
+        ...parsed.runtimeMetadata,
+        proxy: resolveProxy(argv.proxy),
+      },
+    },
+    authority,
+    undefined,
+    undefined,
+    providerContributions,
+  );
+  return preflight;
+}
+
+async function handleSandboxHop(
+  config: Config,
+  settings: LoadedSettings,
+  argv: ParsedCliArgs,
+  workspaceRoot: string,
+  preflight: AgentProfilePreflight,
+  authority: CredentialAuthority,
+  authFailed: boolean,
+  readStdinOnce: () => Promise<string>,
+  hasPipedInput: boolean,
+  bootstrapSelection: Parameters<
+    typeof maybeHopIntoSandbox
+  >[0]['bootstrapSelection'],
+): Promise<void> {
+  await maybeHopIntoSandbox({
+    config,
+    settings,
+    argv,
+    workspaceRoot,
+    prepareSandboxPreflight: () => preflight.forkSandboxPreflight(),
+    credentialAuthority: authority,
+    initialAuthFailed: authFailed,
+    readStdin: readStdinOnce,
+    hasPipedInput,
+    bootstrapSelection,
+  });
+}
+
+async function activateForegroundProvider(
+  config: Config,
+  argv: ParsedCliArgs,
+  preflight: AgentProfilePreflight,
+): Promise<ConfiguredProviderActivationResult> {
+  await stopIfUnconfigured(config, preflight.hasActiveProvider.bind(preflight));
+  return activateConfiguredProvider(config, preflight, argv, preflight);
+}
+
+async function prepareConfiguredTerminalSession(
+  config: Config,
+  settings: LoadedSettings,
+  argv: ParsedCliArgs,
+  readProfile: () => string | null,
+  loadProfile: AgentProfilePreflight['load'],
+): Promise<void> {
+  await exitAfterSessionListOrDelete(argv, config, () => config.dispose());
+  await rejectPromptInteractiveWithPipedStdin(argv);
+  await prepareTerminalSession(config, settings, argv);
+  await configureProvidersAndServices(
+    config,
+    settings,
+    argv,
+    readProfile,
+    loadProfile,
+  );
+}
+
 export async function main() {
-  // Capture and scrub LLXPRT_JSP_BOOTSTRAP_FILE before any child-capable
-  // startup. No file I/O; resolved later, validated at observation setup.
   const capturedEnvPath = captureBootstrapEnvPath();
-
   configureEarlyDebugLogging();
-
   await handleVersionAndHelpFlags(process.argv.slice(2));
 
-  const { cleanupStdio, workspaceRoot, settings, argv } =
+  const { cleanupStdio, workspaceRoot, settings, argv, credentialOwner } =
     await prepareCliStartupInput(capturedEnvPath);
 
   const { bootstrapSelection, hasPipedInput, readStdinOnce } =
     await prepareValidatedStartup(argv, capturedEnvPath, settings);
 
-  const boot = await bootstrapRuntimeAndConfig(settings, argv, workspaceRoot);
-  const { config, activationOperation } = boot;
+  const authority = credentialOwner.authority;
+  const { providerContributions, authFactories } =
+    await discoverCliProviderContributions();
+  const preflight = await prepareForegroundPreflight(
+    argv,
+    authority,
+    providerContributions,
+  );
+  const config = await bootstrap(
+    settings,
+    argv,
+    workspaceRoot,
+    authority,
+    preflight,
+  );
+  let preflightHandedOff = false;
 
   try {
-    await exitAfterSessionListOrDelete(argv, config, () => config.dispose());
-    await rejectPromptInteractiveWithPipedStdin(argv);
-
-    await prepareTerminalSession(config, settings, argv);
-
-    const providerManager = await configureProvidersAndServices(
+    await prepareConfiguredTerminalSession(
       config,
       settings,
       argv,
-      boot.runtimeSettingsService,
-      boot.profileApplication,
-      boot.providerManager,
+      () => preflight.getCurrentProfileName(),
+      (name) => preflight.load(name),
     );
 
-    const listing = config.getListExtensions();
-    await exitAfterExtensionList(listing, activationOperation);
+    await exitAfterExtensionList(config.getListExtensions(), preflight);
 
     // ACP/Zed runs its own runtime and constructs per-session Agents via
     // fromConfig internally; it must be handled BEFORE the general
@@ -509,8 +742,9 @@ export async function main() {
       await handleActivatedZedIntegration(
         config,
         cleanupStdio,
-        boot,
-        providerManager,
+        preflight,
+        providerContributions,
+        authority,
       )
     )
       return;
@@ -519,61 +753,57 @@ export async function main() {
     // BEFORE any provider activation or Agent construction when no provider is
     // active and we are NOT in interactive mode. Uses the shared
     // guardUnconfiguredProvider helper (single message, single exit code).
-    await guardUnconfiguredProvider(config, runExitCleanup, providerManager);
-
-    // Declarative provider-activation PREFLIGHT runs PRE-AGENT (#2374/#2378).
-    const providerActivation = await activateConfiguredProvider(
+    const providerActivation = await activateForegroundProvider(
       config,
-      providerManager,
       argv,
-      activationOperation,
+      preflight,
     );
-    const initialAuthFailed = providerActivation.authFailed;
-
     // hop into sandbox if outside and sandboxing is enabled
-    await maybeHopIntoSandbox({
+    await handleSandboxHop(
       config,
       settings,
       argv,
       workspaceRoot,
-      runtimeSettingsService: boot.runtimeSettingsService,
-      initialAuthFailed,
-      readStdin: readStdinOnce,
+      preflight,
+      authority,
+      providerActivation.authFailed,
+      readStdinOnce,
       hasPipedInput,
       bootstrapSelection,
-    });
-
-    await exitIfAuthenticationFailed(initialAuthFailed);
-
-    // Direct image mode: detect after config/auth but BEFORE conversational
-    // dispatch. Image mode runs the image-operation service directly and exits.
-    await exitIfDirectImage(argv, activationOperation.sessionClient);
-
-    // Cleanup sessions before agent construction.
-    await cleanupExpiredSessions(config, settings.merged, undefined, () =>
-      activationOperation.sessionClient.getAgentClient().getHistory(),
     );
 
-    await constructForegroundAgentAndDispatch(
+    await exitBeforeAgent(providerActivation.authFailed, argv, preflight);
+
+    // Cleanup sessions before agent construction.
+    await cleanupForegroundSessions(config, settings, preflight);
+
+    await new ForegroundSessionHost(
       config,
       settings,
       argv,
       workspaceRoot,
       providerActivation,
+      preflight,
       hasPipedInput,
       readStdinOnce,
       bootstrapSelection,
-      boot.getMcpAuthProviderFactory,
-      boot.providerManager,
-      boot.runtimeSettingsService,
-      boot.runtimeSettingsOwner,
-      boot.policyOwner,
-      boot.oauthManager,
-      boot.providerFileLifecycle,
-    );
+      (type) => authFactories.getAuthProviderFactory(type),
+      authority,
+    ).run();
+    preflightHandedOff = true;
   } finally {
-    await activationOperation.dispose();
+    if (!preflightHandedOff) await preflight.dispose();
   }
+}
+
+function cleanupForegroundSessions(
+  config: Config,
+  settings: LoadedSettings,
+  preflight: AgentProfilePreflight,
+): ReturnType<typeof cleanupExpiredSessions> {
+  return cleanupExpiredSessions(config, settings.merged, undefined, () =>
+    preflight.captureHistory(),
+  );
 }
 
 async function exitAfterExtensionList(
@@ -601,28 +831,45 @@ async function prepareValidatedStartup(
 async function handleActivatedZedIntegration(
   config: Config,
   cleanupStdio: () => void,
-  boot: RuntimeConfigBootstrap,
-  providerManager: RuntimeProviderManager,
+  preflight: AgentProfilePreflight,
+  providerContributions: ProviderContributionRegistry,
+  credentialAuthority: CredentialAuthority,
 ): Promise<boolean> {
-  const { activationOperation } = boot;
-  return handleZedAcpIntegration(
-    config,
-    cleanupStdio,
-    boot.profileApplication,
-    providerManager,
-    boot.runtimeSettingsService,
-    activationOperation.workspaceDefinitions.profileReads,
-    activationOperation.workspaceTrust,
-    boot.providerContributions,
-  );
+  if (!config.getExperimentalZedIntegration()) return false;
+  cleanupStdio();
+  ensureAcpProviderActivated(config, preflight);
+  await runZedIntegration(config, preflight, {
+    profileDefinitions: { listProfiles: () => preflight.listProfiles() },
+    trustPort: preflight,
+    onExitCleanup: runExitCleanup,
+    providerInputs: createZedProviderInputs(
+      providerContributions,
+      credentialAuthority,
+    ),
+    createSessionSettings: () => {
+      const session = new SettingsService();
+      session.restoreFromStateSnapshot(preflight.captureSettingsSnapshot());
+      return session;
+    },
+  });
+  return true;
 }
 
 async function prepareCliStartupInput(capturedEnvPath: string | undefined) {
   const cleanupStdio = setupProcessLifecycle();
   const workspaceRoot = process.cwd();
-  prepareSandboxCredentialStartup(workspaceRoot);
+  const credentialOwner = prepareSandboxCredentialStartup(workspaceRoot);
   const settings = loadSettings(workspaceRoot);
   await maybeRelaunchForMemory(settings, capturedEnvPath);
   const argv = await parseArguments(settings.merged);
-  return { cleanupStdio, workspaceRoot, settings, argv };
+  return { cleanupStdio, workspaceRoot, settings, argv, credentialOwner };
+}
+
+async function exitBeforeAgent(
+  authFailed: boolean,
+  argv: Parameters<typeof exitIfDirectImage>[0],
+  preflight: Parameters<typeof exitIfDirectImage>[1],
+): Promise<void> {
+  await exitIfAuthenticationFailed(authFailed);
+  await exitIfDirectImage(argv, preflight);
 }

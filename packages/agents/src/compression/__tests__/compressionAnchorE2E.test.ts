@@ -1,3 +1,4 @@
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 /**
  * @license
@@ -98,7 +99,14 @@ function buildHandler(opts: {
   const provider = createCaptureProvider(capturedRequests);
   const providerResult = {
     invocation: captureProviderInvocation(
-      testProviderRuntime as never,
+      {
+        runtimeId: testProviderRuntime.runtimeId,
+        metadata: testProviderRuntime.metadata,
+        globalSettings: new SettingsService().getAllGlobalSettings(),
+        providerSettings: new SettingsService().getProviderSettings(
+          provider.name,
+        ),
+      },
       provider.name,
     ),
     provider,
@@ -107,7 +115,12 @@ function buildHandler(opts: {
 
   const handler = new CompressionHandler(
     runtimeContext,
+    undefined,
     historyService,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     {},
     () => Promise.resolve(providerResult),
     () => Promise.resolve(undefined),

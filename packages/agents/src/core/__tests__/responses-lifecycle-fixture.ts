@@ -8,7 +8,9 @@ import { afterEach } from 'bun:test';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { createRuntimeTokenizerFactory } from '../../../../providers/src/composition/runtimeTokenizerFactory.js';
+import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import type { ToolSelection } from '@vybestack/llxprt-code-tools';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -76,9 +78,11 @@ function createProvider(harness: SocketHarness): {
   config: Config;
   providerRuntime: ReturnType<typeof createProviderRuntimeContext>;
   manager: TestRuntimeProviderManager;
-  promptEstimator: ReturnType<
-    typeof configureProviderRuntimeFactories
-  >['tokenizerFactory'];
+  promptEstimator: ReturnType<typeof createRuntimeTokenizerFactory>;
+  settingsService: SettingsService;
+  settingsOwner: ReturnType<
+    typeof createSessionSettingsFixture
+  >['settingsOwner'];
   provider: OpenAIResponsesProvider;
 } {
   const settingsService = new SettingsService();
@@ -86,21 +90,33 @@ function createProvider(harness: SocketHarness): {
   settingsService.set('retries', 0);
   const config = new Config({
     ...createConfigParams(settingsService),
+    cwd: process.cwd(),
+    targetDir: process.cwd(),
     model: 'gpt-5.6-sol',
+    provider: 'codex',
   });
-  const providerRuntime = createProviderRuntimeContext({
-    settingsService,
+  const { settingsOwner } = createSessionSettingsFixture(
     config,
+    settingsService,
+  );
+  const providerRuntime = createProviderRuntimeContext({
     runtimeId: 'responses-lifecycle',
   });
   const manager = new TestRuntimeProviderManager(providerRuntime);
   manager.setConfig(config);
-  const { tokenizerFactory: promptEstimator } =
-    configureProviderRuntimeFactories(config, manager);
+  const promptEstimator = createRuntimeTokenizerFactory();
   const provider = new SocketBoundaryProvider(harness);
   manager.registerProvider(provider);
   manager.setActiveProvider(provider.name);
-  return { config, providerRuntime, manager, promptEstimator, provider };
+  return {
+    config,
+    providerRuntime,
+    manager,
+    promptEstimator,
+    settingsService,
+    settingsOwner,
+    provider,
+  };
 }
 
 interface ResponsesLifecycleFixture {
@@ -111,6 +127,27 @@ interface ResponsesLifecycleFixture {
   runtime: AgentRuntimeContext;
   config: Config;
   contentGenerator: ContentGenerator;
+  telemetryRoot: RootTelemetry;
+  toolRegistry: ToolSelection;
+}
+
+function createLifecycleChatSession(
+  runtime: AgentRuntimeContext,
+  config: Config,
+): ChatSession {
+  return new ChatSession(
+    runtime,
+    config,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    unusedContentGenerator,
+    { systemInstruction: 'Exercise connection lifecycle recovery.' },
+    [],
+  );
 }
 
 export function installResponsesLifecycleFixture(): (
@@ -135,12 +172,30 @@ export function installResponsesLifecycleFixture(): (
       httpRequests += 1;
       throw new Error('Unexpected HTTP request');
     }, originalFetch);
-    const { config, providerRuntime, manager, promptEstimator, provider } =
-      createProvider(harness);
+    const {
+      config,
+      providerRuntime,
+      manager,
+      promptEstimator,
+      settingsService,
+      settingsOwner,
+      provider,
+    } = createProvider(harness);
     const history = new HistoryService();
+    const toolRegistry = modelTools();
     const runtime = createAgentRuntimeContext({
       prepareProviderInvocation: (name, parameters, signal) =>
-        captureProviderInvocation(providerRuntime, name, parameters, signal),
+        captureProviderInvocation(
+          {
+            runtimeId: providerRuntime.runtimeId,
+            metadata: providerRuntime.metadata,
+            globalSettings: settingsService.getAllGlobalSettings(),
+            providerSettings: settingsService.getProviderSettings(name),
+          },
+          name,
+          parameters,
+          signal,
+        ),
       state: createAgentRuntimeState({
         runtimeId: 'responses-lifecycle',
         provider: provider.name,
@@ -156,28 +211,22 @@ export function installResponsesLifecycleFixture(): (
         'reasoning.includeInResponse': false,
       },
       provider: createProviderAdapterFromManager(manager),
-      telemetry: createTelemetryAdapter(
-        config,
-        createSessionSettingsFixture(config).settingsOwner.telemetry,
-      ),
-      tools: createToolRegistryViewFromRegistry(modelTools()),
+      telemetry: createTelemetryAdapter(config, settingsOwner.telemetry),
+      tools: createToolRegistryViewFromRegistry(toolRegistry),
       providerRuntime,
       promptEstimator,
     });
     resources.push({ provider, config });
     return {
-      chat: new ChatSession(
-        runtime,
-        unusedContentGenerator,
-        { systemInstruction: 'Exercise connection lifecycle recovery.' },
-        [],
-      ),
+      chat: createLifecycleChatSession(runtime, config),
       history,
       provider,
       httpRequests: () => httpRequests,
       runtime,
       config,
       contentGenerator: unusedContentGenerator,
+      telemetryRoot: settingsOwner.telemetry,
+      toolRegistry,
     };
   };
 }

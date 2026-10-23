@@ -59,7 +59,7 @@ describe('useExitHandling', () => {
     const { result } = renderHook(() =>
       useExitHandling({
         handleSlashCommand: harness.handleSlashCommand,
-        config: harness.config,
+        endHookSession: harness.config.endHookSession,
       }),
     );
 
@@ -91,7 +91,7 @@ describe('useExitHandling', () => {
     const { result } = renderHook(() =>
       useExitHandling({
         handleSlashCommand: harness.handleSlashCommand,
-        config: harness.config,
+        endHookSession: harness.config.endHookSession,
       }),
     );
 
@@ -118,7 +118,7 @@ describe('useExitHandling', () => {
     const { result } = renderHook(() =>
       useExitHandling({
         handleSlashCommand: harness.handleSlashCommand,
-        config: harness.config,
+        endHookSession: harness.config.endHookSession,
       }),
     );
 
@@ -139,7 +139,7 @@ describe('useExitHandling', () => {
     const { result, unmount } = renderHook(() =>
       useExitHandling({
         handleSlashCommand: harness.handleSlashCommand,
-        config: harness.config,
+        endHookSession: harness.config.endHookSession,
       }),
     );
 
@@ -175,7 +175,7 @@ describe('useExitHandling', () => {
     const { result } = renderHook(() =>
       useExitHandling({
         handleSlashCommand: harness.handleSlashCommand,
-        config: harness.config,
+        endHookSession: harness.config.endHookSession,
       }),
     );
 
@@ -209,7 +209,7 @@ describe('useExitHandling', () => {
     const { result } = renderHook(() =>
       useExitHandling({
         handleSlashCommand: harness.handleSlashCommand,
-        config: harness.config,
+        endHookSession: harness.config.endHookSession,
         onBeforeExit: async () => {
           cleanupStarted = true;
           await cleanupPending;
@@ -264,12 +264,9 @@ describe('useExitHandling', () => {
       const { result } = renderHook(() =>
         useExitHandling({
           handleSlashCommand: harness.handleSlashCommand,
-          config: {
-            ...harness.config,
-            endHookSession: async (reason) => {
-              harness.events.push(`hook:${reason}`);
-              if (hookFails) throw new Error('hook execution failure');
-            },
+          endHookSession: async (reason) => {
+            harness.events.push(`hook:${reason}`);
+            if (hookFails) throw new Error('hook execution failure');
           },
           onBeforeExit: async () => {
             harness.events.push('cleanup');

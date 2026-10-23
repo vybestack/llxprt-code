@@ -118,6 +118,7 @@ function make429RateLimitError(message = 'Rate limit exceeded'): Error {
 function setupProvider(): {
   provider: AnthropicProvider;
   runtimeContext: ProviderRuntimeContext;
+  config: ReturnType<typeof createRuntimeConfigStub>;
   settingsService: SettingsService;
 } {
   const result = createProviderWithRuntime<AnthropicProvider>(
@@ -140,9 +141,9 @@ function setupProvider(): {
     },
   );
   const { provider, runtime, settingsService: svc } = result;
-  runtime.config ??= createRuntimeConfigStub(svc);
+  const config = createRuntimeConfigStub(svc);
 
-  return { provider, runtimeContext: runtime, settingsService: svc };
+  return { provider, runtimeContext: runtime, config, settingsService: svc };
 }
 
 function mediaMessages(png: string): IContent[] {
@@ -173,7 +174,8 @@ describe('AnthropicProvider prompt-envelope retry (@issue:3444)', () => {
     // never consumes its queued response); flush them explicitly.
     mockMessagesCreate.mockReset();
     const png = await pngBase64(64, 64);
-    const { provider, runtimeContext, settingsService } = setupProvider();
+    const { provider, runtimeContext, config, settingsService } =
+      setupProvider();
     mockMessagesCreate
       .mockRejectedValueOnce(make429RateLimitError())
       .mockResolvedValueOnce(createMockStream('recovered'));
@@ -183,7 +185,7 @@ describe('AnthropicProvider prompt-envelope retry (@issue:3444)', () => {
       contents: mediaMessages(png),
       settings: settingsService,
       runtime: runtimeContext,
-      config: runtimeContext.config,
+      config,
       ephemerals: { retries: 2, retrywait: 0 },
       resolved: { streaming: true },
     } as Parameters<typeof createProviderCallOptions>[0]);
@@ -231,7 +233,8 @@ describe('AnthropicProvider prompt-envelope retry (@issue:3444)', () => {
     // never consumes its queued response); flush them explicitly.
     mockMessagesCreate.mockReset();
     const png = await pngBase64(64, 64);
-    const { provider, runtimeContext, settingsService } = setupProvider();
+    const { provider, runtimeContext, config, settingsService } =
+      setupProvider();
     const firstError = make429RateLimitError('first SDK rate limit');
     const finalError = make429RateLimitError('final SDK rate limit');
     mockMessagesCreate
@@ -243,7 +246,7 @@ describe('AnthropicProvider prompt-envelope retry (@issue:3444)', () => {
       contents: mediaMessages(png),
       settings: settingsService,
       runtime: runtimeContext,
-      config: runtimeContext.config,
+      config,
       ephemerals: { retries: 2, retrywait: 0 },
     } as Parameters<typeof createProviderCallOptions>[0]);
 

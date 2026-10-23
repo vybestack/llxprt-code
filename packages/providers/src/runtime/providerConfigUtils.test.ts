@@ -12,7 +12,7 @@ import { OpenAIProvider } from '../openai/OpenAIProvider.js';
 import {
   setProviderApiKey,
   setProviderBaseUrl,
-} from './providerConfigUtils.js';
+} from '../../../agents/src/api/providerConfigUtils.js';
 
 describe('providerConfigUtils owner mutations', () => {
   let settings: SettingsService;
@@ -27,7 +27,13 @@ describe('providerConfigUtils owner mutations', () => {
   beforeEach(() => {
     settings = new SettingsService();
     owner = new SessionSettingsOwner(settings);
-    manager = new ProviderManager({ settingsService: settings });
+    manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settings,
+    );
     manager.registerProvider(new OpenAIProvider(undefined));
     manager.setActiveProvider('openai');
   });

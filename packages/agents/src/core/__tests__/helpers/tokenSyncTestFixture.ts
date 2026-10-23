@@ -87,7 +87,6 @@ export function createTokenSyncTestFixture(): TokenSyncTestFixture {
   // ambiently.
   const providerRuntimeSnapshot: ProviderRuntimeContext = {
     ...runtimeSetup.runtime,
-    config: mockConfig,
   };
 
   const mockContentGenerator: MockContentGenerator = {

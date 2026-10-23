@@ -1,3 +1,5 @@
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
+import { captureAgentCreation as createAgent } from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -7,20 +9,7 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { Agent } from './helpers/agentHarness.js';
 
 function activationSettings(agent: Agent): SettingsService {
-  if (
-    !('deps' in agent) ||
-    typeof agent.deps !== 'object' ||
-    agent.deps === null
-  ) {
-    throw new Error('Expected the actual adopted activation store');
-  }
-  if (
-    !('settingsService' in agent.deps) ||
-    !(agent.deps.settingsService instanceof SettingsService)
-  ) {
-    throw new Error('Expected the actual adopted activation store');
-  }
-  return agent.deps.settingsService;
+  return fixtureAgentResources(agent).settingsService;
 }
 
 import { describe, expect, it } from 'bun:test';
@@ -29,7 +18,6 @@ import { PLACEHOLDER_MODEL, UNCONFIGURED_PROVIDER } from '../constants.js';
 import { ProviderActivationIntentSchema } from '../config-schema.js';
 import {
   buildAgent,
-  createAgent,
   tempRoot,
   type AgentConfig,
 } from './helpers/agentHarness.js';
@@ -41,13 +29,17 @@ async function activationSnapshot(overrides: Partial<AgentConfig>) {
     return {
       provider: agent.getProvider(),
       model: agent.getModel(),
-      activeProvider: agent.providerManager.getActiveProviderName(),
+      activeProvider:
+        fixtureAgentResources(agent).manager.getActiveProviderName(),
       activeModel: settings.getProviderSettings('fake').model,
       key: agent.getEphemeralSetting('auth-key'),
       keyfile: agent.getEphemeralSetting('auth-keyfile'),
       baseUrl: agent.getEphemeralSetting('base-url'),
       settings: settings.getProviderSettings('fake'),
-      clientReady: agent.agentClient.getContentGeneratorConfig() !== undefined,
+      clientReady:
+        fixtureAgentResources(agent)
+          .publishedClient(agent)
+          .getContentGeneratorConfig() !== undefined,
     };
   } finally {
     await cleanup();
@@ -108,7 +100,8 @@ describe('createAgent single activation transition (#2534)', () => {
       try {
         const settings = activationSettings(agent);
         return {
-          activeProvider: agent.providerManager.getActiveProviderName(),
+          activeProvider:
+            fixtureAgentResources(agent).manager.getActiveProviderName(),
           activeScope: settings.getProviderSettings('fake'),
           requestedScope: settings.getProviderSettings('gemini'),
           ephemeralKey: agent.getEphemeralSetting('auth-key'),
@@ -236,8 +229,12 @@ describe('createAgent single activation transition (#2534)', () => {
           const settings = activationSettings(agent);
           expect(agent.getProvider()).toBe(provider);
           expect(agent.getModel()).toBe(model);
-          expect(agent.providerManager.getActiveProviderName()).toBe(active);
-          expect(agent.agentClient).toBeDefined();
+          expect(
+            fixtureAgentResources(agent).manager.getActiveProviderName(),
+          ).toBe(active);
+          expect(
+            fixtureAgentResources(agent).publishedClient(agent),
+          ).toBeDefined();
           expect(settings.getProviderSettings(provider).model).toBe(
             storedModel,
           );

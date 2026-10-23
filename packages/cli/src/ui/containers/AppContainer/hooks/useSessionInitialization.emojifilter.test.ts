@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { initializationOperations } from './__tests__/session-initialization-operations.js';
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { act } from 'react';
@@ -51,8 +52,7 @@ async function seedWith(
   const loadHistory = vi.fn();
   renderHook(() =>
     useSessionInitialization({
-      uiRuntime: makeConfig(emojiMode),
-      agent: makeAgent(),
+      ...initializationOperations(makeConfig(emojiMode), makeAgent()),
       addItem: vi.fn(),
       loadHistory,
       resumedHistory,

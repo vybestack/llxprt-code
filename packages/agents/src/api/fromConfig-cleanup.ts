@@ -4,13 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { getErrorMessage } from '@vybestack/llxprt-code-core';
-import type { Agent } from './agent.js';
-import { AgentActivationBootstrap } from './activationPreflightState.js';
-import type { FromConfigOptions } from './config-types.js';
-import type { HostGitHubBrokerOwner } from './host-github-broker-owner.js';
-import type { prepareImageConstruction } from './session-image-assembly.js';
-
-type ImageConstruction = ReturnType<typeof prepareImageConstruction>;
 
 function rejections(results: ReadonlyArray<PromiseSettledResult<unknown>>) {
   return results.flatMap((result) =>
@@ -18,39 +11,21 @@ function rejections(results: ReadonlyArray<PromiseSettledResult<unknown>>) {
   );
 }
 
-function flattenFailures(failure: unknown): unknown[] {
-  return failure instanceof AggregateError
-    ? failure.errors.flatMap(flattenFailures)
-    : [failure];
-}
-
 /**
- * Rethrows the primary bootstrap failure after cleanup. Cleanup operations
- * that join an already-failed construction step re-report the primary error
- * (possibly nested in an AggregateError); those are not cleanup failures and
- * are dropped by identity. Genuine cleanup failures are reported together
- * with the primary error, whose message leads the AggregateError message so
- * a top-level printer that shows only the message still names the cause.
+ * Repeated identities can represent separate release failures, and a nested
+ * owner failure has its own causal structure. Retain both without interpreting
+ * equality with the bootstrap failure as evidence that cleanup succeeded.
  */
 export function rethrowPrimaryAfterCleanup(
   primaryError: unknown,
   cleanupFailures: readonly unknown[],
   message: string,
 ): never {
-  const independent = [
-    ...new Set(cleanupFailures.flatMap(flattenFailures)),
-  ].filter((failure) => failure !== primaryError);
-  if (independent.length === 0) throw primaryError;
+  if (cleanupFailures.length === 0) throw primaryError;
   throw new AggregateError(
-    [primaryError, ...independent],
+    [primaryError, ...cleanupFailures],
     `${message}: ${getErrorMessage(primaryError)}`,
   );
-}
-
-function closeActivationPreflight(options: FromConfigOptions): Promise<void> {
-  return options.activationPreflight === undefined
-    ? Promise.resolve()
-    : AgentActivationBootstrap.close(options.activationPreflight.operation);
 }
 
 /**
@@ -60,22 +35,20 @@ function closeActivationPreflight(options: FromConfigOptions): Promise<void> {
  */
 export async function cleanupFailedFromConfig(
   primaryError: unknown,
-  options: FromConfigOptions,
-  github: HostGitHubBrokerOwner | undefined,
-  images: ImageConstruction,
+  closeGitHub: (() => Promise<void>) | undefined,
+  closeImages: () => Promise<void>,
+  closeDefinitions: (() => Promise<void>) | undefined,
+  closeMemory: (() => Promise<void>) | undefined,
+  closePreflight: (() => Promise<void>) | undefined,
 ): Promise<never> {
   const ownerCleanup = await Promise.allSettled([
-    github?.cleanupFailedConstruction(),
-    images.cleanupFailedConstruction(),
-    options.definitionOwnership === 'agent'
-      ? options.definitionOwner?.dispose()
-      : undefined,
-    options.memoryOwner?.ownership === 'agent'
-      ? options.memoryOwner.owner.dispose()
-      : undefined,
+    Promise.resolve().then(closeGitHub),
+    Promise.resolve().then(closeImages),
+    Promise.resolve().then(closeDefinitions),
+    Promise.resolve().then(closeMemory),
   ]);
   const preflightCleanup = await Promise.allSettled([
-    closeActivationPreflight(options),
+    Promise.resolve().then(closePreflight),
   ]);
   const failures = rejections([...ownerCleanup, ...preflightCleanup]);
   return rethrowPrimaryAfterCleanup(
@@ -90,13 +63,15 @@ export async function cleanupFailedFromConfig(
  * release fails the adopted agent is disposed so it does not leak.
  */
 export async function closePreflightAfterAdoption(
-  options: FromConfigOptions,
-  agent: Agent,
+  closePreflight: (() => Promise<void>) | undefined,
+  closeAgent: () => Promise<void>,
 ): Promise<void> {
   try {
-    await closeActivationPreflight(options);
+    await Promise.resolve().then(closePreflight);
   } catch (closeError) {
-    const agentCleanup = await Promise.allSettled([agent.dispose()]);
+    const agentCleanup = await Promise.allSettled([
+      Promise.resolve().then(closeAgent),
+    ]);
     const failures = rejections(agentCleanup);
     if (failures.length > 0)
       throw new AggregateError(
@@ -105,4 +80,92 @@ export async function closePreflightAfterAdoption(
       );
     throw closeError;
   }
+}
+
+export async function cleanupFailedAdoption(
+  primaryError: unknown,
+  closeRuntime: () => void | Promise<void>,
+  disposeWorkspace: (() => Promise<void>) | undefined,
+  closeMedia: (() => Promise<void>) | undefined,
+  closeClient: (() => Promise<void>) | undefined,
+): Promise<never> {
+  const mcpCleanup = await Promise.allSettled([
+    Promise.resolve().then(disposeWorkspace),
+  ]);
+  const clientCleanup = await Promise.allSettled([
+    Promise.resolve().then(closeClient),
+  ]);
+  const runtimeCleanup = await Promise.allSettled([
+    Promise.resolve().then(closeRuntime),
+  ]);
+  const mediaCleanup = await Promise.allSettled([
+    Promise.resolve().then(closeMedia),
+  ]);
+  const failures = rejections([
+    ...mcpCleanup,
+    ...clientCleanup,
+    ...runtimeCleanup,
+    ...mediaCleanup,
+  ]);
+  return rethrowPrimaryAfterCleanup(
+    primaryError,
+    failures,
+    'fromConfig bootstrap cleanup failed',
+  );
+}
+
+export async function cleanupFailedMediaAssembly(
+  error: unknown,
+  closePreflight: (() => void | Promise<void>) | undefined,
+  closeMedia: (() => Promise<void>) | undefined,
+  closeMcp: (() => Promise<void>) | undefined,
+): Promise<never> {
+  const clients = await Promise.allSettled([
+    Promise.resolve().then(closePreflight),
+  ]);
+  const resources = await Promise.allSettled([
+    Promise.resolve().then(closeMedia),
+    Promise.resolve().then(closeMcp),
+  ]);
+  const failures = rejections([...clients, ...resources]);
+  if (failures.length > 0)
+    throw new AggregateError(
+      [error, ...failures],
+      'Adopted media assembly cleanup failed',
+    );
+  throw error;
+}
+
+export async function cleanupFailedForegroundWorkspace(
+  primary: unknown,
+  closeMemory: () => Promise<void>,
+  closeFilesystem: () => Promise<void>,
+  closeTrust: () => Promise<void>,
+): Promise<never> {
+  const results: Array<PromiseSettledResult<void>> = [];
+  for (const close of [closeMemory, closeFilesystem, closeTrust])
+    results.push(
+      ...(await Promise.allSettled([Promise.resolve().then(close)])),
+    );
+  const failures = rejections(results);
+  return rethrowPrimaryAfterCleanup(
+    primary,
+    failures,
+    'Memory bootstrap cleanup failed',
+  );
+}
+export async function finishPreflightCleanup(
+  actions: ReadonlyArray<() => void | Promise<void>>,
+): Promise<void> {
+  const failures: unknown[] = [];
+  for (const close of actions) {
+    try {
+      await close();
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1)
+    throw new AggregateError(failures, 'Preflight cleanup failed');
 }

@@ -1,0 +1,384 @@
+name: 'Set up local Gemma 4 E2B model'
+description: >-
+  Installs the pinned Ollama 0.31.1 runtime for the current runner OS, starts it
+  on 127.0.0.1:12644, obtains the digest-pinned gemma4:e2b-it-qat model (from
+  a cache of the verified model store when one exists, otherwise from the
+  Ollama registry), proves that a real inference succeeds, and exports the provider environment the
+  integration tests and evals use. Shared by e2e.yml, nightly.yml and
+  _evals-run.yml so the model, version and digests are defined once. macOS
+  runs the model and its vision projector on the CPU because the hosted VM's
+  paravirtual Metal device aborts llama-server during projector warm-up.
+
+runs:
+  using: 'composite'
+  steps:
+    # ---- Linux (x86_64, CPU only) ----------------------------------------
+    - name: 'Install Ollama CPU runtime'
+      if: runner.os == 'Linux'
+      shell: 'bash'
+      run: |
+        set -euo pipefail
+        test "$(uname -m)" = 'x86_64'
+        mkdir -p "$RUNNER_TEMP/ollama"
+        curl --fail --show-error --location --retry 3 \
+          'https://ollama.com/download/ollama-linux-amd64.tar.zst?version=0.31.1' \
+          -o "$RUNNER_TEMP/ollama-linux-amd64.tar.zst"
+        printf '%s  %s\n' 'd297381efc136451f6fabb9dd644a67f70fe51c16815a0c4a95ff0e327a3afb4' "$RUNNER_TEMP/ollama-linux-amd64.tar.zst" | sha256sum --check -
+        tar --zstd \
+          --exclude='lib/ollama/cuda_v12/*' \
+          --exclude='lib/ollama/cuda_v13/*' \
+          --exclude='lib/ollama/vulkan/*' \
+          -xf "$RUNNER_TEMP/ollama-linux-amd64.tar.zst" -C "$RUNNER_TEMP/ollama"
+        rm "$RUNNER_TEMP/ollama-linux-amd64.tar.zst"
+        echo "$RUNNER_TEMP/ollama/bin" >>"$GITHUB_PATH"
+        "$RUNNER_TEMP/ollama/bin/ollama" --version
+
+    - name: 'Select CPU backend on Intel'
+      if: runner.os == 'Linux'
+      shell: 'bash'
+      run: |
+        set -euo pipefail
+        echo "Host architecture: $(uname -m)"
+        echo "Host CPU vendor: $(awk -F: '/^vendor_id[[:space:]]*:/ { gsub(/[[:space:]]/, "", $2); print $2; exit }' /proc/cpuinfo)"
+        if ! grep -qm1 '^vendor_id[[:space:]]*: GenuineIntel$' /proc/cpuinfo; then
+          echo 'Host is not Intel; leaving Ollama CPU variants untouched'
+          exit 0
+        fi
+        libdir="$RUNNER_TEMP/ollama/lib/ollama"
+        test -f "$libdir/libggml-cpu-haswell.so"
+        shopt -s nullglob
+        variants=("$libdir"/libggml-cpu-*.so)
+        (( ${#variants[@]} > 1 )) || { echo 'Expected multiple CPU variants in pinned Ollama runtime' >&2; exit 1; }
+        mkdir -p "$RUNNER_TEMP/ollama-disabled-cpu-backends"
+        for library in "${variants[@]}"; do
+          if [[ "$library" != "$libdir/libggml-cpu-haswell.so" ]]; then
+            mv "$library" "$RUNNER_TEMP/ollama-disabled-cpu-backends/"
+          fi
+        done
+        echo 'Intel Haswell pin: CPU variants visible to llama-server:'
+        printf '%s\n' "$libdir"/libggml-cpu-*.so
+        test "$(find "$libdir" -maxdepth 1 -name 'libggml-cpu-*.so' | wc -l)" -eq 1
+
+    # ---- macOS (native universal binary) ---------------------------------
+    - name: 'Install Ollama runtime (macOS)'
+      if: runner.os == 'macOS'
+      shell: 'bash'
+      run: |
+        set -euo pipefail
+        mkdir -p "$RUNNER_TEMP/ollama"
+        curl --fail --show-error --location --retry 3 \
+          'https://github.com/ollama/ollama/releases/download/v0.31.1/ollama-darwin.tgz' \
+          -o "$RUNNER_TEMP/ollama-darwin.tgz"
+        printf '%s  %s\n' '0c4f92389fcc1f651c17282e2eaffd68c8d3d06e1f7b307604102ad0e09a10c9' "$RUNNER_TEMP/ollama-darwin.tgz" | shasum -a 256 -c -
+        tar -xzf "$RUNNER_TEMP/ollama-darwin.tgz" -C "$RUNNER_TEMP/ollama"
+        rm "$RUNNER_TEMP/ollama-darwin.tgz"
+        test -x "$RUNNER_TEMP/ollama/ollama"
+        echo "$RUNNER_TEMP/ollama" >>"$GITHUB_PATH"
+        "$RUNNER_TEMP/ollama/ollama" --version
+
+    # ---- Windows (native x64) --------------------------------------------
+    - name: 'Install Ollama runtime (Windows)'
+      if: runner.os == 'Windows'
+      shell: 'pwsh'
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $zip = Join-Path $env:RUNNER_TEMP 'ollama-windows-amd64.zip'
+        $dest = Join-Path $env:RUNNER_TEMP 'ollama'
+        Invoke-WebRequest -Uri 'https://github.com/ollama/ollama/releases/download/v0.31.1/ollama-windows-amd64.zip' -OutFile $zip
+        $actual = (Get-FileHash -Algorithm SHA256 -Path $zip).Hash.ToLowerInvariant()
+        $expected = '9ecf5a631561c7dff3a143925f11e2008327be738a7279fcf0c5462b9c422700'
+        if ($actual -ne $expected) {
+          throw "ollama-windows-amd64.zip checksum mismatch: expected $expected, got $actual"
+        }
+        # 7-Zip is preinstalled on GitHub-hosted Windows runners and extracts
+        # this 1.5 GB archive far faster than Expand-Archive.
+        7z x -y "-o$dest" $zip | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "7z extraction failed with exit code $LASTEXITCODE" }
+        Remove-Item $zip
+        $exe = Join-Path $dest 'ollama.exe'
+        if (-not (Test-Path $exe)) { throw "ollama.exe not found at $exe" }
+        Add-Content -Path $env:GITHUB_PATH -Value $dest
+        & $exe --version
+        if ($LASTEXITCODE -ne 0) { throw "ollama --version failed with exit code $LASTEXITCODE" }
+
+    # ---- Restore the verified model store, start the server, pull on miss -
+    # The store (blobs plus manifest) is cached under a key that names the OS
+    # and the pinned model digest, so a hit is exactly the store that was
+    # digest-verified when it was saved. A hit never contacts the registry.
+    - name: 'Restore local Gemma 4 E2B model cache'
+      id: 'model-cache'
+      uses: 'actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9' # ratchet:actions/cache/restore@v6
+      with:
+        path: '${{ runner.temp }}/ollama-models'
+        key: 'ollama-models-${{ runner.os }}-gemma4-e2b-it-qat-07ea59a474013479c8b6b802bef095c40e964a1d776ba02f264c0e30e1aede0c'
+
+    - name: 'Start local Gemma 4 E2B model'
+      if: runner.os != 'Windows'
+      shell: 'bash'
+      env:
+        OLLAMA_HOST: '127.0.0.1:12644'
+        OLLAMA_CONTEXT_LENGTH: '32768'
+        OLLAMA_NUM_PARALLEL: '1'
+        OLLAMA_MODELS: '${{ runner.temp }}/ollama-models'
+        MODEL_CACHE_HIT: '${{ steps.model-cache.outputs.cache-hit }}'
+      run: |
+        set -euo pipefail
+        mkdir -p "$OLLAMA_MODELS"
+        if [[ "$RUNNER_OS" == macOS ]]; then
+          # The hosted macOS VM exposes an Apple Paravirtual Metal device on
+          # which llama-server aborts while warming up the vision projector
+          # (ggml-backend.cpp: pre-allocated tensor in MTL0 cannot run NONE).
+          # llama-server reads these from its environment, which it inherits
+          # from `ollama serve`, so the text model and the projector both stay
+          # on the CPU for warm-up and for every later request.
+          export LLAMA_ARG_N_GPU_LAYERS=0
+          export LLAMA_ARG_MMPROJ_OFFLOAD=0
+        fi
+        nohup ollama serve >"$RUNNER_TEMP/ollama-server.log" 2>&1 &
+        for _ in {1..60}; do
+          if curl --fail --silent "http://$OLLAMA_HOST/api/version"; then
+            break
+          fi
+          sleep 2
+        done
+        curl --fail --silent "http://$OLLAMA_HOST/api/version" | jq -e '.version == "0.31.1"'
+        if [[ "$MODEL_CACHE_HIT" == true ]]; then
+          echo 'Complete model store restored from cache; skipping ollama pull'
+        else
+          ollama pull gemma4:e2b-it-qat
+        fi
+        curl --fail --silent "http://$OLLAMA_HOST/api/tags" |
+          jq -e '.models[] | select(.name == "gemma4:e2b-it-qat" and .digest == "07ea59a474013479c8b6b802bef095c40e964a1d776ba02f264c0e30e1aede0c")'
+        df -h "$RUNNER_TEMP"
+
+    - name: 'Start local Gemma 4 E2B model (Windows)'
+      if: runner.os == 'Windows'
+      shell: 'pwsh'
+      env:
+        OLLAMA_HOST: '127.0.0.1:12644'
+        OLLAMA_CONTEXT_LENGTH: '32768'
+        OLLAMA_NUM_PARALLEL: '1'
+        OLLAMA_MODELS: '${{ runner.temp }}\ollama-models'
+        MODEL_CACHE_HIT: '${{ steps.model-cache.outputs.cache-hit }}'
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $exe = Join-Path $env:RUNNER_TEMP 'ollama\ollama.exe'
+        $log = Join-Path $env:RUNNER_TEMP 'ollama-server.log'
+        $errLog = Join-Path $env:RUNNER_TEMP 'ollama-server.err.log'
+        $launcher = Join-Path $env:RUNNER_TEMP 'start-ollama.cmd'
+        New-Item -ItemType Directory -Force -Path $env:OLLAMA_MODELS | Out-Null
+
+        # A server spawned as a child of this step was gone by the next step
+        # (connection refused). Win32_Process creates the process under the
+        # WMI service instead, outside the step's process tree, so the server
+        # lives for the whole job. That process does not inherit this step's
+        # environment, so the launcher script sets it.
+        $environment = foreach ($name in 'OLLAMA_HOST', 'OLLAMA_CONTEXT_LENGTH', 'OLLAMA_NUM_PARALLEL', 'OLLAMA_MODELS', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'TEMP', 'TMP') {
+          "set `"$name=$([Environment]::GetEnvironmentVariable($name))`""
+        }
+        Set-Content -Path $launcher -Encoding ascii -Value (@('@echo off') + $environment + "`"$exe`" serve >`"$log`" 2>`"$errLog`"")
+        $created = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
+          CommandLine      = "cmd.exe /d /c `"$launcher`""
+          CurrentDirectory = $env:RUNNER_TEMP
+        }
+        if ($created.ReturnValue -ne 0) { throw "Could not start the Ollama server: Win32_Process.Create returned $($created.ReturnValue)" }
+
+        $version = $null
+        for ($i = 0; $i -lt 60; $i++) {
+          if (-not (Get-Process -Id $created.ProcessId -ErrorAction SilentlyContinue)) {
+            Get-Content -Path $log, $errLog -ErrorAction SilentlyContinue | Select-Object -Last 40 | ForEach-Object { [Console]::Error.WriteLine($_) }
+            throw "The Ollama server launcher (PID $($created.ProcessId)) exited before the server answered"
+          }
+          try {
+            $version = (Invoke-RestMethod -Uri "http://$env:OLLAMA_HOST/api/version").version
+            break
+          } catch {
+            Start-Sleep -Seconds 2
+          }
+        }
+        if ($version -ne '0.31.1') { throw "Unexpected Ollama server version: '$version'" }
+
+        # Record the server's own PID (the launcher's child) so the next step
+        # can prove the same server survived the step boundary.
+        $server = @(Get-CimInstance -ClassName Win32_Process -Filter "ParentProcessId = $($created.ProcessId) AND Name = 'ollama.exe'")
+        if ($server.Count -ne 1) { throw "Expected exactly one ollama.exe child of the launcher (PID $($created.ProcessId)), found $($server.Count)" }
+        $serverPid = $server[0].ProcessId
+        Set-Content -Path (Join-Path $env:RUNNER_TEMP 'ollama-server.pid') -Value $serverPid
+        "OLLAMA_SERVER_PID=$serverPid" | Add-Content -Path $env:GITHUB_ENV
+        Write-Output "Ollama server PID: $serverPid"
+
+        if ($env:MODEL_CACHE_HIT -eq 'true') {
+          Write-Output 'Complete model store restored from cache; skipping ollama pull'
+        } else {
+          & $exe pull gemma4:e2b-it-qat
+          if ($LASTEXITCODE -ne 0) { throw "ollama pull failed with exit code $LASTEXITCODE" }
+        }
+        $tags = Invoke-RestMethod -Uri "http://$env:OLLAMA_HOST/api/tags"
+        $model = @($tags.models | Where-Object {
+          $_.name -eq 'gemma4:e2b-it-qat' -and
+          $_.digest -eq '07ea59a474013479c8b6b802bef095c40e964a1d776ba02f264c0e30e1aede0c'
+        })
+        if ($model.Count -ne 1) { throw 'Pinned gemma4:e2b-it-qat digest not found in /api/tags' }
+
+    - name: 'Verify local model server is still running (Windows)'
+      if: runner.os == 'Windows'
+      shell: 'pwsh'
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $recorded = [int](Get-Content -Path (Join-Path $env:RUNNER_TEMP 'ollama-server.pid'))
+        if ($env:OLLAMA_SERVER_PID -ne "$recorded") {
+          throw "OLLAMA_SERVER_PID ($env:OLLAMA_SERVER_PID) does not match the recorded server PID ($recorded)"
+        }
+        $server = Get-Process -Id $recorded -ErrorAction SilentlyContinue
+        if (-not $server -or $server.ProcessName -ne 'ollama') {
+          Get-Content -Path (Join-Path $env:RUNNER_TEMP 'ollama-server.err.log') -ErrorAction SilentlyContinue | Select-Object -Last 40 | ForEach-Object { [Console]::Error.WriteLine($_) }
+          throw "The Ollama server (PID $recorded) started by the previous step is no longer running"
+        }
+        Write-Output "Ollama server PID $recorded is still running"
+
+    # ---- Linux-only CPU backend evidence (reads /proc) -------------------
+    - name: 'Verify CPU backend warm-up'
+      if: runner.os == 'Linux'
+      shell: 'bash'
+      env:
+        OLLAMA_HOST: '127.0.0.1:12644'
+      run: |
+        set -euo pipefail
+        proc_root="${LLXPRT_PROC_ROOT:-/proc}"
+        vendor="$(awk -F: '/^vendor_id[[:space:]]*:/ { gsub(/[[:space:]]/, "", $2); print $2; exit }' "$proc_root/cpuinfo")"
+        echo "Host CPU vendor: $vendor"
+        [[ "$vendor" == GenuineIntel || "$vendor" == AuthenticAMD ]] || { echo "Unsupported CPU vendor: $vendor" >&2; exit 1; }
+        curl --fail --show-error --silent --max-time 300 \
+          "http://127.0.0.1:12644/api/generate" \
+          -H 'Content-Type: application/json' \
+          -d '{"model":"gemma4:e2b-it-qat","prompt":"Hello","stream":false,"think":false,"options":{"num_ctx":32768,"num_predict":16}}' \
+          | jq -e '.done == true and .error == null and (.response | length > 0)'
+        grep 'system_info:.*CPU :' "$RUNNER_TEMP/ollama-server.log" | tail -1 || true
+        process="$RUNNER_TEMP/ollama/lib/ollama/llama-server"
+        pid="$(pgrep -f "^$process --model " | head -1)" || true
+        [[ -n "$pid" ]] || { echo 'Live llama-server process not found' >&2; exit 1; }
+        maps="$proc_root/$pid/maps"
+        [[ -r "$maps" ]] || { echo "Live llama-server maps are unavailable: $maps" >&2; exit 1; }
+        cmdline="$proc_root/$pid/cmdline"
+        status="$proc_root/$pid/status"
+        [[ -r "$cmdline" && -r "$status" ]] || { echo 'Live llama-server process evidence disappeared' >&2; exit 1; }
+        printf 'llama-server cmdline: '
+        tr '\0' ' ' <"$cmdline"
+        echo
+        command_line="$(tr '\0' ' ' <"$cmdline")"
+        [[ "$command_line" == "$process --model "* ]] || { echo 'Matched PID is not the expected llama-server process' >&2; exit 1; }
+        ppid="$(awk '$1 == "PPid:" { print $2 }' "$status")"
+        [[ "$ppid" =~ ^[0-9]+$ && "$ppid" != 0 ]] || { echo 'llama-server parent PID is missing' >&2; exit 1; }
+        parent_cmdline="$proc_root/$ppid/cmdline"
+        [[ -r "$parent_cmdline" ]] || { echo 'llama-server parent process disappeared' >&2; exit 1; }
+        printf 'llama-server PPid: %s; parent cmdline: ' "$ppid"
+        tr '\0' ' ' <"$parent_cmdline"
+        echo
+        expected="$RUNNER_TEMP/ollama/lib/ollama/libggml-cpu-haswell.so"
+        maps_snapshot="$RUNNER_TEMP/llama-server-$pid.maps"
+        cat "$maps" >"$maps_snapshot" || { echo 'llama-server maps disappeared while being read' >&2; exit 1; }
+        cat "$maps_snapshot"
+        backends="$(grep -Eo '/[^ ]+/libggml-cpu(-[^ ]+)?\.so( \(deleted\))?' "$maps_snapshot" | sort -u || true)"
+        echo "Loaded CPU backends: ${backends:-none}"
+        [[ -n "$backends" ]] || { echo 'No mapped llama-server CPU backend' >&2; exit 1; }
+        if [[ "$vendor" == AuthenticAMD ]]; then
+          echo 'AMD: native Ollama CPU backend (variants untouched)'
+          exit 0
+        fi
+        while IFS= read -r backend; do
+          [[ "$backend" == "$expected" ]] || {
+            echo "Unexpected mapped llama-server CPU library: $backend" >&2
+            exit 1
+          }
+        done <<< "$backends"
+        grep -Fxq "$expected" <<< "$backends" || {
+          echo 'Expected haswell CPU library is not mapped' >&2
+          exit 1
+        }
+
+    - name: 'Verify CPU-only model inference'
+      if: runner.os == 'Linux'
+      shell: 'bash'
+      env:
+        OLLAMA_HOST: '127.0.0.1:12644'
+      run: |
+        set -euo pipefail
+        curl --fail --show-error --silent --max-time 300 \
+          "http://$OLLAMA_HOST/api/generate" \
+          -H 'Content-Type: application/json' \
+          -d '{"model":"gemma4:e2b-it-qat","prompt":"Reply with one word.","stream":false,"think":false,"options":{"num_ctx":32768,"num_predict":16}}' \
+          -o "$RUNNER_TEMP/ollama-inference.json"
+        jq -e '.done == true and .error == null and (.response | length > 0)' "$RUNNER_TEMP/ollama-inference.json" || {
+          cat "$RUNNER_TEMP/ollama-inference.json" >&2
+          exit 1
+        }
+        curl --fail --show-error --silent "http://$OLLAMA_HOST/api/ps" | \
+          jq -e '.models[] | select(.name == "gemma4:e2b-it-qat" and .size_vram == 0)'
+
+    # macOS and Windows runners expose no /proc and no guaranteed GPU
+    # absence, so only a real generation is proven there.
+    - name: 'Verify model inference (macOS and Windows)'
+      if: runner.os != 'Linux'
+      shell: 'pwsh'
+      env:
+        OLLAMA_HOST: '127.0.0.1:12644'
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $body = @{
+          model   = 'gemma4:e2b-it-qat'
+          prompt  = 'Reply with one word.'
+          stream  = $false
+          think   = $false
+          options = @{ num_ctx = 32768; num_predict = 16 }
+        } | ConvertTo-Json -Depth 5
+        $response = Invoke-RestMethod -Method Post -Uri "http://$env:OLLAMA_HOST/api/generate" `
+          -ContentType 'application/json' -Body $body -TimeoutSec 300
+        $raw = $response | ConvertTo-Json -Depth 5
+        Set-Content -Path (Join-Path $env:RUNNER_TEMP 'ollama-inference.json') -Value $raw
+        if (-not ($response.done -eq $true -and -not $response.error -and $response.response.Length -gt 0)) {
+          [Console]::Error.WriteLine($raw)
+          throw 'Local model inference did not return a completed non-empty response'
+        }
+
+    - name: 'Verify CPU-only model backend (macOS)'
+      if: runner.os == 'macOS'
+      shell: 'bash'
+      env:
+        OLLAMA_HOST: '127.0.0.1:12644'
+      run: |
+        set -euo pipefail
+        log="$RUNNER_TEMP/ollama-server.log"
+        curl --fail --silent "http://$OLLAMA_HOST/api/ps" |
+          jq -e '.models[] | select(.name == "gemma4:e2b-it-qat" and .size_vram == 0)'
+        grep -E 'offloaded 0/[0-9]+ layers to GPU' "$log"
+        grep -F 'CLIP using CPU backend' "$log"
+        if grep -E 'CLIP using MTL|MTL0 (model|KV|compute) buffer size' "$log"; then
+          echo 'llama-server placed model or projector buffers on the Metal device' >&2
+          exit 1
+        fi
+
+    # Reached only after the pull and the digest check above succeeded and the
+    # model generated; a failed or partial pull is never cached.
+    - name: 'Save local Gemma 4 E2B model cache'
+      if: steps.model-cache.outputs.cache-hit != 'true'
+      uses: 'actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9' # ratchet:actions/cache/save@v6
+      with:
+        path: '${{ runner.temp }}/ollama-models'
+        key: 'ollama-models-${{ runner.os }}-gemma4-e2b-it-qat-07ea59a474013479c8b6b802bef095c40e964a1d776ba02f264c0e30e1aede0c'
+
+    # ---- Provider environment for the tests that follow ------------------
+    - name: 'Export local model test environment'
+      shell: 'bash'
+      run: |
+        set -euo pipefail
+        {
+          echo 'OPENAI_API_KEY=ollama-local-only'
+          echo 'OPENAI_BASE_URL=http://127.0.0.1:12644/v1'
+          echo 'LLXPRT_DEFAULT_MODEL=gemma4:e2b-it-qat'
+          echo 'LLXPRT_DEFAULT_PROVIDER=openai'
+          echo 'LLXPRT_AUTH_TYPE=provider'
+          echo 'LLXPRT_TEST_PROFILE=local-gemma4-e2e'
+          echo 'LLXPRT_CONTEXT_LIMIT=32768'
+          echo 'LLXPRT_MAX_OUTPUT_TOKENS=8192'
+          echo 'LLXPRT_LOCAL_MODEL_E2E=true'
+        } >>"$GITHUB_ENV"

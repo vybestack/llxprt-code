@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { appendFile, readFile, writeFile } from 'node:fs/promises';
+import { appendFile, readFile, rename, writeFile } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
 import { join } from 'node:path';
 import { z } from 'zod';
@@ -187,7 +187,8 @@ async function readPhysicalCapability(
     z.record(z.unknown()).optional().parse(rpc.params?.arguments)?.hold ===
       'yes';
   if (held) {
-    await writeFile(join(directory, 'entered'), rpc.method);
+    await writeFile(join(directory, 'entered.tmp'), rpc.method);
+    await rename(join(directory, 'entered.tmp'), join(directory, 'entered'));
     await new Promise<void>((resolve) => releases.add(resolve));
   }
   const quantity = await readFile(join(directory, 'quantity'), 'utf8');

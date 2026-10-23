@@ -156,8 +156,6 @@ function buildContext(
         },
       },
       providerRuntime: {
-        settingsService: new SettingsService(),
-        config: undefined,
         runtimeId: 'test-provider-runtime',
         metadata: { source: 'test' },
       },
@@ -180,14 +178,23 @@ function buildContext(
       log: () => {},
     } as unknown as Logger,
     resolveProvider: () => {
+      const invocationSettings = new SettingsService();
       const runtime = {
-        settingsService: new SettingsService(),
-        config: undefined,
         runtimeId: 'test-provider-runtime',
         metadata: { source: 'test' },
       };
       return {
-        invocation: captureProviderInvocation(runtime, provider.name),
+        invocation: captureProviderInvocation(
+          {
+            runtimeId: runtime.runtimeId,
+            metadata: runtime.metadata,
+            globalSettings: invocationSettings.getAllGlobalSettings(),
+            providerSettings: invocationSettings.getProviderSettings(
+              provider.name,
+            ),
+          },
+          provider.name,
+        ),
         provider,
         runtime,
       };
@@ -207,7 +214,12 @@ function buildContext(
 
 describe('MiddleOutStrategy — usage propagation (Issue #1211)', () => {
   it('result.metadata.usage is populated when provider emits usage', async () => {
-    const strategy = new MiddleOutStrategy();
+    const strategy = new MiddleOutStrategy(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
     const ctx = buildContext();
 
     const result = await strategy.compress(ctx);
@@ -225,7 +237,12 @@ describe('MiddleOutStrategy — usage propagation (Issue #1211)', () => {
   });
 
   it('result.metadata.usage is undefined when provider emits no usage', async () => {
-    const strategy = new MiddleOutStrategy();
+    const strategy = new MiddleOutStrategy(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
     const provider = makeMockProviderNoUsage();
     const ctx = buildContext({ provider });
 
@@ -246,7 +263,12 @@ describe('MiddleOutStrategy — usage propagation (Issue #1211)', () => {
 
   const observeSummaryIContentHasUsageMetadataAttachedWhenProviderEmitsUsage =
     async () => {
-      const strategy = new MiddleOutStrategy();
+      const strategy = new MiddleOutStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       const ctx = buildContext();
 
       const result = await strategy.compress(ctx);
@@ -271,7 +293,12 @@ describe('MiddleOutStrategy — usage propagation (Issue #1211)', () => {
 
   const observeSummaryIContentHasNoUsageMetadataWhenProviderEmitsNoUsage =
     async () => {
-      const strategy = new MiddleOutStrategy();
+      const strategy = new MiddleOutStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       const provider = makeMockProviderNoUsage();
       const ctx = buildContext({ provider });
 
@@ -287,7 +314,12 @@ describe('MiddleOutStrategy — usage propagation (Issue #1211)', () => {
     };
 
   it('no compression returns result without usage (llmCallMade=false)', async () => {
-    const strategy = new MiddleOutStrategy();
+    const strategy = new MiddleOutStrategy(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
     // History too small to trigger compression (< 4 middle messages)
     const tinyHistory = [makeHumanMessage('hi'), makeAiMessage('hello')];
     const ctx = buildContext({ history: tinyHistory });
@@ -305,7 +337,12 @@ describe('MiddleOutStrategy — usage propagation (Issue #1211)', () => {
 
 describe('OneShotStrategy — usage propagation (Issue #1211)', () => {
   it('result.metadata.usage is populated when provider emits usage', async () => {
-    const strategy = new OneShotStrategy();
+    const strategy = new OneShotStrategy(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
     const ctx = buildContext();
 
     const result = await strategy.compress(ctx);
@@ -321,7 +358,12 @@ describe('OneShotStrategy — usage propagation (Issue #1211)', () => {
   });
 
   it('result.metadata.usage is undefined when provider emits no usage', async () => {
-    const strategy = new OneShotStrategy();
+    const strategy = new OneShotStrategy(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
     const provider = makeMockProviderNoUsage();
     const ctx = buildContext({ provider });
 
@@ -332,7 +374,12 @@ describe('OneShotStrategy — usage propagation (Issue #1211)', () => {
   });
 
   it('summary IContent (first entry in newHistory) has usage metadata attached', async () => {
-    const strategy = new OneShotStrategy();
+    const strategy = new OneShotStrategy(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
     const ctx = buildContext();
 
     const result = await strategy.compress(ctx);
@@ -349,7 +396,12 @@ describe('OneShotStrategy — usage propagation (Issue #1211)', () => {
   });
 
   it('summary IContent has no usage metadata when provider emits no usage', async () => {
-    const strategy = new OneShotStrategy();
+    const strategy = new OneShotStrategy(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
     const provider = makeMockProviderNoUsage();
     const ctx = buildContext({ provider });
 
@@ -362,7 +414,12 @@ describe('OneShotStrategy — usage propagation (Issue #1211)', () => {
   });
 
   it('no compression returns result without usage (llmCallMade=false)', async () => {
-    const strategy = new OneShotStrategy();
+    const strategy = new OneShotStrategy(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
     // History too small to trigger compression
     const tinyHistory = [makeHumanMessage('hi'), makeAiMessage('hello')];
     const ctx = buildContext({ history: tinyHistory });
@@ -396,7 +453,12 @@ describe('CompressionResultMetadata — usage field type (Issue #1211)', () => {
 
   const observeUsageFieldMatchesUsageStatsInterfaceShapeWhenPresent =
     async () => {
-      const strategy = new MiddleOutStrategy();
+      const strategy = new MiddleOutStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       const ctx = buildContext();
 
       const result = await strategy.compress(ctx);
@@ -449,7 +511,12 @@ describe('CompressionResultMetadata — usage field type (Issue #1211)', () => {
       },
     } as unknown as IProvider;
 
-    const strategy = new MiddleOutStrategy();
+    const strategy = new MiddleOutStrategy(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
     const ctx = buildContext({ provider });
 
     const result = await strategy.compress(ctx);

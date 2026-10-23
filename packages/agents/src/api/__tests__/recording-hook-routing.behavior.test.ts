@@ -1,11 +1,13 @@
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-
+import {
+  jsonlHookCommand,
+  removeJsonlHook,
+} from './helpers/jsonl-hook-command.js';
+import {
+  useRecordingPrompts,
+  withRecordingLifetimeFixture,
+} from './helpers/recording-owner-lifetime-fixture.js';
 import { describe, expect, it } from 'bun:test';
-import { readFile, rm } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -13,7 +15,12 @@ import {
   HookEventName,
   HookType,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
-import { withRecordingLifetimeFixture } from './helpers/recording-owner-lifetime-fixture.js';
+
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 function requirePath(path: string | undefined): string {
   if (path === undefined) throw new Error('Recording path missing');
@@ -21,11 +28,19 @@ function requirePath(path: string | undefined): string {
 }
 
 describe('borrowed facade lifecycle hook transcript routing', () => {
+  useRecordingPrompts();
   it('routes manual PreCompress command input through the current facade owner', async () => {
     const output = join(tmpdir(), `recording-hook-owner-${randomUUID()}.jsonl`);
     try {
       await withRecordingLifetimeFixture(
-        async ({ agent, borrow }) => {
+        async (
+          agent,
+          _config,
+          _settingsOwner,
+          _settingsService,
+          _oauthManager,
+          borrow,
+        ) => {
           const sibling = await borrow();
           await agent.setHistory([
             {
@@ -58,7 +73,7 @@ describe('borrowed facade lifecycle hook transcript routing', () => {
                 hooks: [
                   {
                     type: HookType.Command,
-                    command: `cat >> '${output}'; printf '\\n' >> '${output}'`,
+                    command: jsonlHookCommand(output),
                   },
                 ],
               },
@@ -67,7 +82,7 @@ describe('borrowed facade lifecycle hook transcript routing', () => {
         },
       );
     } finally {
-      await rm(output, { force: true });
+      await removeJsonlHook(output);
     }
   }, 30000);
 
@@ -83,7 +98,14 @@ describe('borrowed facade lifecycle hook transcript routing', () => {
     };
     try {
       await withRecordingLifetimeFixture(
-        async ({ agent, borrow }) => {
+        async (
+          agent,
+          _config,
+          _settingsOwner,
+          _settingsService,
+          _oauthManager,
+          borrow,
+        ) => {
           const sibling = await borrow();
           await agent.setHistory([
             {
@@ -116,7 +138,7 @@ describe('borrowed facade lifecycle hook transcript routing', () => {
                 hooks: [
                   {
                     type: HookType.Command,
-                    command: `cat >> '${output}'; printf '\\n' >> '${output}'`,
+                    command: jsonlHookCommand(output),
                   },
                 ],
               },
@@ -125,7 +147,7 @@ describe('borrowed facade lifecycle hook transcript routing', () => {
         },
       );
     } finally {
-      await rm(output, { force: true });
+      await removeJsonlHook(output);
     }
   }, 30000);
 
@@ -144,7 +166,14 @@ describe('borrowed facade lifecycle hook transcript routing', () => {
         .map((line) => JSON.parse(line));
     try {
       await withRecordingLifetimeFixture(
-        async ({ agent, borrow }) => {
+        async (
+          agent,
+          _config,
+          _settingsOwner,
+          _settingsService,
+          _oauthManager,
+          borrow,
+        ) => {
           const sibling = await borrow();
           await agent.setHistory([
             { speaker: 'human', blocks: [{ type: 'text', text: 'seed A' }] },
@@ -197,7 +226,7 @@ describe('borrowed facade lifecycle hook transcript routing', () => {
                 hooks: [
                   {
                     type: HookType.Command,
-                    command: `cat >> '${output}'; printf '\\n' >> '${output}'`,
+                    command: jsonlHookCommand(output),
                   },
                 ],
               },
@@ -206,46 +235,58 @@ describe('borrowed facade lifecycle hook transcript routing', () => {
         },
       );
     } finally {
-      await rm(output, { force: true });
+      await removeJsonlHook(output);
     }
   }, 30000);
 
   it('reads each exact owner after start, stop and resume even when Config and client are borrowed', async () => {
-    await withRecordingLifetimeFixture(async ({ agent, borrow }) => {
-      const sibling = await borrow();
-      const a: string[] = [];
-      const b: string[] = [];
-      agent.hooks.onHookExecution((request) => {
-        if (request.event === HookEventName.SessionEnd)
-          a.push(request.input.transcript_path);
-      });
-      sibling.hooks.onHookExecution((request) => {
-        if (request.event === HookEventName.SessionEnd)
-          b.push(request.input.transcript_path);
-      });
+    await withRecordingLifetimeFixture(
+      async (
+        agent,
+        _config,
+        _settingsOwner,
+        _settingsService,
+        _oauthManager,
+        borrow,
+      ) => {
+        const sibling = await borrow();
+        const a: string[] = [];
+        const b: string[] = [];
+        agent.hooks.onHookExecution((request) => {
+          if (request.event === HookEventName.SessionEnd)
+            a.push(request.input.transcript_path);
+        });
+        sibling.hooks.onHookExecution((request) => {
+          if (request.event === HookEventName.SessionEnd)
+            b.push(request.input.transcript_path);
+        });
 
-      await agent.setHistory([
-        { speaker: 'human', blocks: [{ type: 'text', text: 'owner A seed' }] },
-      ]);
-      await agent.session.setRecording({ enabled: true });
-      const original = requirePath(agent.session.getRecording().path);
-      await agent.hooks.triggerSessionEnd();
-      await sibling.hooks.triggerSessionEnd();
-      expect(a).toStrictEqual([original]);
-      expect(b).toStrictEqual(['']);
+        await agent.setHistory([
+          {
+            speaker: 'human',
+            blocks: [{ type: 'text', text: 'owner A seed' }],
+          },
+        ]);
+        await agent.session.setRecording({ enabled: true });
+        const original = requirePath(agent.session.getRecording().path);
+        await agent.hooks.triggerSessionEnd();
+        await sibling.hooks.triggerSessionEnd();
+        expect(a).toStrictEqual([original]);
+        expect(b).toStrictEqual(['']);
 
-      await agent.session.setRecording({ enabled: false });
-      await agent.hooks.triggerSessionEnd();
-      await sibling.hooks.triggerSessionEnd();
-      expect(a).toStrictEqual([original, '']);
-      expect(b).toStrictEqual(['', '']);
+        await agent.session.setRecording({ enabled: false });
+        await agent.hooks.triggerSessionEnd();
+        await sibling.hooks.triggerSessionEnd();
+        expect(a).toStrictEqual([original, '']);
+        expect(b).toStrictEqual(['', '']);
 
-      await agent.session.resume('latest');
-      const resumed = requirePath(agent.session.getRecording().path);
-      await agent.hooks.triggerSessionEnd();
-      await sibling.hooks.triggerSessionEnd();
-      expect(a).toStrictEqual([original, '', resumed]);
-      expect(b).toStrictEqual(['', '', '']);
-    });
+        await agent.session.resume('latest');
+        const resumed = requirePath(agent.session.getRecording().path);
+        await agent.hooks.triggerSessionEnd();
+        await sibling.hooks.triggerSessionEnd();
+        expect(a).toStrictEqual([original, '', resumed]);
+        expect(b).toStrictEqual(['', '', '']);
+      },
+    );
   }, 30000);
 });

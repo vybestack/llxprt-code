@@ -10,16 +10,13 @@
  * Verifies that Codex appears in supported providers and can be managed via /auth
  */
 
-import { createMockRuntimeApi } from '../components/__tests__/StatsDisplay.testHelpers.js';
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { AuthCommandExecutor } from './authCommand.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import type { CommandContext } from './types.js';
 
 describe('AuthCommand Codex OAuth Integration', () => {
   let mockOAuthManager: OAuthManager;
   let executor: AuthCommandExecutor;
-  let mockContext: CommandContext;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -44,23 +41,6 @@ describe('AuthCommand Codex OAuth Integration', () => {
     } as unknown as OAuthManager;
 
     executor = new AuthCommandExecutor(mockOAuthManager, () => {});
-
-    mockContext = {
-      runtimeApi: createMockRuntimeApi(),
-      oauthControl:
-        mockOAuthManager as unknown as CommandContext['oauthControl'],
-      refreshProviderAliases: vi.fn(async () => {}),
-      signal: new AbortController().signal,
-      services: {
-        config: null,
-        agent: null,
-        settings: {} as never,
-        git: undefined,
-        logger: {} as never,
-      },
-      ui: {} as never,
-      session: {} as never,
-    };
   });
 
   describe('Codex provider availability', () => {
@@ -80,7 +60,7 @@ describe('AuthCommand Codex OAuth Integration', () => {
         mockGetHigherPriority;
 
       // When: User enters /auth codex
-      const result = await executor.execute(mockContext, 'codex');
+      const result = await executor.execute('codex');
 
       // Then: Should show provider status (not error)
       expect(result.type).toBe('message');
@@ -101,7 +81,7 @@ describe('AuthCommand Codex OAuth Integration', () => {
         mockGetHigherPriority;
 
       // When: User enters /auth codex enable
-      const result = await executor.execute(mockContext, 'codex enable');
+      const result = await executor.execute('codex enable');
 
       // Then: Should enable OAuth
       expect(mockToggleOAuth).toHaveBeenCalledWith('codex');
@@ -123,7 +103,7 @@ describe('AuthCommand Codex OAuth Integration', () => {
         mockGetHigherPriority;
 
       // When: User enters /auth codex disable
-      const result = await executor.execute(mockContext, 'codex disable');
+      const result = await executor.execute('codex disable');
 
       // Then: Should disable OAuth
       expect(mockToggleOAuth).toHaveBeenCalledWith('codex');
@@ -149,7 +129,7 @@ describe('AuthCommand Codex OAuth Integration', () => {
       (mockOAuthManager.peekStoredToken as unknown) = mockPeekToken;
 
       // When: User enters /auth codex
-      const result = await executor.execute(mockContext, 'codex');
+      const result = await executor.execute('codex');
 
       // Then: Should show status
       expect(mockIsEnabled).toHaveBeenCalledWith('codex');
@@ -172,7 +152,7 @@ describe('AuthCommand Codex OAuth Integration', () => {
         mockGetHigherPriority;
 
       // When: User enters /auth codex
-      const result = await executor.execute(mockContext, 'codex');
+      const result = await executor.execute('codex');
 
       // Then: Should show status
       expect(result).toStrictEqual({
@@ -192,7 +172,7 @@ describe('AuthCommand Codex OAuth Integration', () => {
       (mockOAuthManager.logout as unknown) = mockLogout;
 
       // When: User enters /auth codex logout
-      const result = await executor.execute(mockContext, 'codex logout');
+      const result = await executor.execute('codex logout');
 
       // Then: Should logout (undefined bucket means default/no bucket)
       expect(mockLogout).toHaveBeenCalledWith('codex', undefined);

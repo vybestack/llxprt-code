@@ -1,9 +1,14 @@
+import {
+  captureActivationConstruction,
+  capturedActivation,
+} from '../../../agents/src/api/__tests__/helpers/activation-acquisition-capture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import type { AgentActivationOperation } from '@vybestack/llxprt-code-agents';
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
@@ -14,7 +19,6 @@ import {
   DEFAULT_CONTEXT_FILENAME,
   setLlxprtMdFilename,
 } from '@vybestack/llxprt-code-core';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { loadCliConfig } from './config.js';
 import { type CliArgs } from './cliArgParser.js';
 import type { Settings } from './settings.js';
@@ -25,156 +29,6 @@ void vi.mock('@vybestack/llxprt-code-core', () => ({
   isRipgrepAvailable: vi.fn().mockResolvedValue(true),
 }));
 
-const createRuntimeState = () => ({
-  runtime: {
-    runtimeId: 'cli.runtime.test',
-    metadata: {},
-    settingsService: new SettingsService(),
-  },
-  providerManager: {
-    getActiveProviderName: vi.fn(() => 'openai'),
-    getActiveProvider: vi.fn(() => ({
-      name: 'openai',
-      getDefaultModel: () => 'hf:zai-org/GLM-4.6',
-    })),
-    setActiveProvider: vi.fn().mockResolvedValue(undefined),
-    listProviders: vi.fn(() => ['openai']),
-    prepareStatelessProviderInvocation: vi.fn(),
-    getAvailableModels: vi
-      .fn()
-      .mockResolvedValue([
-        { id: 'hf:zai-org/GLM-4.6', name: 'hf:zai-org/GLM-4.6' },
-      ]),
-    getProviderByName: vi.fn(() => undefined),
-  },
-  oauthManager: null,
-});
-
-const runtimeStateRef = {
-  value: createRuntimeState(),
-};
-
-const resetRuntimeState = () => {
-  runtimeStateRef.value = createRuntimeState();
-};
-
-void vi.mock('./profileBootstrap.js', () => ({
-  parseBootstrapArgs: vi.fn(() => ({
-    bootstrapArgs: {
-      profileName: null,
-      providerOverride: null,
-      modelOverride: null,
-      keyOverride: null,
-      keyfileOverride: null,
-      baseurlOverride: null,
-      setOverrides: null,
-    },
-    runtimeMetadata: {},
-  })),
-  prepareRuntimeForProfile: vi.fn(async () => runtimeStateRef.value),
-  createBootstrapResult: vi.fn(
-    ({
-      runtime,
-      providerManager,
-      oauthManager,
-      bootstrapArgs,
-      profileApplication,
-    }) => ({
-      runtime,
-      providerManager,
-      oauthManager,
-      bootstrapArgs,
-      profile: profileApplication,
-    }),
-  ),
-}));
-
-void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
-  const getProviderManager = () => runtimeStateRef.value.providerManager;
-  const applyProfileSnapshot = vi.fn(async () => ({
-    providerName: 'openai',
-    modelName: 'hf:zai-org/GLM-4.6',
-    infoMessages: [],
-    warnings: [],
-    providerChanged: false,
-    didFallback: false,
-    requestedProvider: 'openai',
-  }));
-  const switchActiveProvider = vi.fn(async () => ({
-    changed: false,
-    previousProvider: null,
-    nextProvider: 'openai',
-    infoMessages: [],
-  }));
-  const applyCliArgumentOverrides = vi.fn(async () => {});
-  return {
-    ephemeralSettingHelp: {},
-    parseEphemeralSettingValue: vi.fn((_key: string, rawValue: string) => ({
-      success: true,
-      value: rawValue,
-    })),
-    applyCliSetArguments: vi.fn(() => ({ modelParams: {} })),
-    applyProfileSnapshot,
-    switchActiveProvider,
-    applyCliArgumentOverrides,
-    providerManager: vi.fn(() => runtimeStateRef.value.providerManager),
-    oauthManager: vi.fn(() => runtimeStateRef.value.oauthManager),
-    providerStatus: vi.fn(() => ({ name: 'openai', isReady: true })),
-    listProviders: vi.fn(() => getProviderManager().listProviders()),
-    getActiveProviderName: vi.fn(() =>
-      getProviderManager().getActiveProviderName(),
-    ),
-    setActiveModel: vi.fn(async () => ({
-      changed: false,
-      previousModel: null,
-      nextModel: 'hf:zai-org/GLM-4.6',
-      infoMessages: [],
-    })),
-    listAvailableModels: vi.fn(
-      async () => (await getProviderManager().getAvailableModels()) ?? [],
-    ),
-    getActiveModelName: vi.fn(() => 'hf:zai-org/GLM-4.6'),
-    getActiveModelParams: vi.fn(() => ({})),
-    getEphemeralSettings: vi.fn(() => ({})),
-    getEphemeralSetting: vi.fn(() => undefined),
-    setEphemeralSetting: vi.fn(),
-    setActiveModelParam: vi.fn(),
-    clearActiveModelParam: vi.fn(),
-    saveProfileSnapshot: vi.fn(async () => undefined),
-    saveLoadBalancerProfile: vi.fn(async () => undefined),
-    loadProfileByName: vi.fn(async () => undefined),
-    deleteProfileByName: vi.fn(async () => undefined),
-    listSavedProfiles: vi.fn(() => []),
-    getProfileByName: vi.fn(() => undefined),
-    setDefaultProfileName: vi.fn(),
-    updateActiveProviderBaseUrl: vi.fn(async () => undefined),
-    updateActiveProviderApiKey: vi.fn(async () => undefined),
-    getRuntimeDiagnosticsSnapshot: vi.fn(() => ({})),
-    getActiveToolFormatState: vi.fn(() => ({})),
-    setActiveToolFormatOverride: vi.fn(),
-    getActiveProviderMetrics: vi.fn(() => undefined),
-    getSessionTokenUsage: vi.fn(() => undefined),
-    assembleCliProviderRuntime: vi.fn(
-      (input: {
-        settingsService: unknown;
-        config: unknown;
-        runtimeId: string;
-        metadata?: Record<string, unknown>;
-      }) => ({
-        runtime: {
-          settingsService: input.settingsService,
-          config: input.config,
-          runtimeId: input.runtimeId,
-          metadata: input.metadata,
-        },
-        runtimeMessageBus: { kind: 'session-bus' },
-        providerManager: getProviderManager(),
-        oauthManager: { id: 'oauth-manager' },
-      }),
-    ),
-  };
-});
-
 describe('loadCliConfig memory discovery', () => {
   let tempRoot: string;
   let workspaceDir: string;
@@ -184,7 +38,6 @@ describe('loadCliConfig memory discovery', () => {
   let originalUserProfile: string | undefined;
 
   beforeEach(async () => {
-    resetRuntimeState();
     tempRoot = await fs.mkdtemp(
       path.join(os.tmpdir(), 'llxprt-cli-config-test-'),
     );
@@ -298,28 +151,35 @@ describe('loadCliConfig memory discovery', () => {
       './extension.js'
     );
     let operation: AgentActivationOperation | undefined;
-    const config = await loadCliConfig(
-      settings,
-      [],
-      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir()),
-      'test-session',
-      argv,
-      workspaceDir,
-      {
-        onActivationBootstrapReady: (owner) => {
+    const config = await captureActivationConstruction(() =>
+      loadCliConfig(
+        settings,
+        [],
+        new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir()),
+        'test-session',
+        argv,
+        workspaceDir,
+        undefined,
+        undefined,
+        undefined,
+        new CredentialAuthority(),
+        undefined,
+        (owner) => {
           operation = owner;
         },
-      },
+      ),
     );
 
     if (operation === undefined)
       throw new Error('Missing retained CLI activation root');
     try {
       expect(
-        operation.workspaceMemory.operations.snapshot().memoryContent,
+        capturedActivation(operation).workspaceMemory.operations.snapshot()
+          .memoryContent,
       ).toContain(contextContent);
       expect(
-        operation.workspaceMemory.operations.snapshot().fileCount,
+        capturedActivation(operation).workspaceMemory.operations.snapshot()
+          .fileCount,
       ).toBeGreaterThan(0);
       expect(config.getProvidedInstructions()).toBe('');
     } finally {
@@ -332,23 +192,30 @@ describe('loadCliConfig memory discovery', () => {
       './extension.js'
     );
     let operation: AgentActivationOperation | undefined;
-    await loadCliConfig(
-      createSettings('AGENTS.md'),
-      [],
-      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir()),
-      'test-session',
-      createArgv(),
-      workspaceDir,
-      {
-        onActivationBootstrapReady: (owner) => {
+    await captureActivationConstruction(() =>
+      loadCliConfig(
+        createSettings('AGENTS.md'),
+        [],
+        new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir()),
+        'test-session',
+        createArgv(),
+        workspaceDir,
+        undefined,
+        undefined,
+        undefined,
+        new CredentialAuthority(),
+        undefined,
+        (owner) => {
           operation = owner;
         },
-      },
+      ),
     );
     if (operation === undefined)
       throw new Error('Missing retained CLI activation root');
-    const memory = operation.workspaceMemory;
-    expect(operation.workspaceMemoryOwnership).toBe('transferred');
+    const memory = capturedActivation(operation).workspaceMemory;
+    expect(capturedActivation(operation).workspaceMemoryOwnership).toBe(
+      'transferred',
+    );
     const originalDispose = memory.dispose.bind(memory);
     let memoryDisposals = 0;
     memory.dispose = () => {

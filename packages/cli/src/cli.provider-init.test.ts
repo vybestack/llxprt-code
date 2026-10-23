@@ -1,3 +1,7 @@
+import {
+  captureAgentAdoption,
+  fixtureAgentResources,
+} from '../../agents/src/api/__tests__/helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -5,7 +9,6 @@
  */
 import type { CliArgs } from './config/cliArgParser.js';
 
-import { createProviderSessionOwner } from './integration-tests/__tests__/session-client-owner-fixture.js';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
@@ -28,7 +31,7 @@ import { fileURLToPath } from 'node:url';
 import * as cli from './cli.js';
 import { dynamicSettingsRegistry } from './utils/dynamicSettings.js';
 import { Config, OutputFormat } from '@vybestack/llxprt-code-core';
-import { createAgent, fromConfig } from '@vybestack/llxprt-code-agents';
+import { createAgent } from '@vybestack/llxprt-code-agents';
 import { createTestSessionMediaConfig } from './__tests__/sessionMediaConfig.js';
 
 const fakeResponses = fileURLToPath(
@@ -43,6 +46,7 @@ void vi.mock('./config/settings.js', () => ({
   ...actual,
   loadSettings: vi.fn(() => ({
     merged: {
+      extensions: { disabled: [] },
       advanced: {},
       security: { auth: {} },
       ui: { autoConfigureMaxOldSpaceSize: false, customThemes: {} },
@@ -60,25 +64,6 @@ void vi.mock('./config/config.js', () => ({
 
 void vi.mock('./config/cliArgParser.js', () => ({
   parseArguments: vi.fn(),
-}));
-
-const actualActual = {
-  ...(await import('@vybestack/llxprt-code-providers/runtime.js')),
-};
-void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
-  ...actualActual,
-  switchActiveProvider: vi.fn(async () => ({
-    changed: true,
-    previousProvider: null,
-    nextProvider: 'gemini',
-    infoMessages: [],
-  })),
-  setActiveModel: vi.fn(),
-  setActiveModelParam: vi.fn(),
-  clearActiveModelParam: vi.fn(),
-  getActiveModelParams: vi.fn(() => ({})),
-  loadProfileByName: vi.fn(),
-  applyCliArgumentOverrides: vi.fn(async () => {}),
 }));
 
 void vi.mock('./config/extension.js', () => ({
@@ -220,8 +205,7 @@ describe('cli main provider initialization', () => {
       getConversationLoggingEnabled: vi.fn(() => false),
       getMcpServers: vi.fn(() => ({})),
       getDebugMode: vi.fn(() => false),
-      getIdeMode: vi.fn(() => false),
-      getIdeClient: vi.fn(() => null),
+
       getListExtensions: vi.fn(() => false),
       getOutputFormat: vi.fn(() => OutputFormat.TEXT),
       getToolRegistryInfo: vi.fn(() => ({
@@ -253,20 +237,10 @@ describe('cli main provider initialization', () => {
         perf: { enabled: false, memory: false },
       })),
     });
-
-    const { manager } = createBootstrapManager(mockConfig);
     const { loadCliConfig } = await import('./config/config.js');
     const { parseArguments } = await import('./config/cliArgParser.js');
     (loadCliConfig as Mock<typeof loadCliConfig>).mockImplementationOnce(
-      handoffCliConfig(
-        mockConfig,
-        (store, owner) => ({
-          ...bootstrapOperationCapabilities(mockConfig, manager, store, owner),
-          preflight: preflightMock,
-          dispose: () => {},
-        }),
-        manager,
-      ),
+      handoffCliConfig(mockConfig, preflightMock),
     );
     (parseArguments as Mock<typeof parseArguments>).mockResolvedValueOnce({
       promptInteractive: undefined,
@@ -357,17 +331,9 @@ describe('cli main provider initialization', () => {
     });
     const { loadCliConfig } = await import('./config/config.js');
     const { parseArguments } = await import('./config/cliArgParser.js');
-    const { manager, settingsService } = createBootstrapManager(config);
+    const { settingsService } = createBootstrapManager(config);
     (loadCliConfig as Mock<typeof loadCliConfig>).mockImplementationOnce(
-      handoffCliConfig(
-        config,
-        (store, owner) => ({
-          ...bootstrapOperationCapabilities(config, manager, store, owner),
-          preflight: preflightMock,
-          dispose: () => {},
-        }),
-        manager,
-      ),
+      handoffCliConfig(config, preflightMock),
     );
     (parseArguments as Mock<typeof parseArguments>).mockResolvedValueOnce({
       promptInteractive: undefined,
@@ -381,15 +347,13 @@ describe('cli main provider initialization', () => {
       extensions: [],
       sessionSummary: undefined,
     } as unknown as CliArgs);
-    const owner = await fromConfig({
-      settingsService,
-      config,
+    const owner = await captureAgentAdoption(config, settingsService, {
       sessionId: freshId,
       sessionIdentityOwnership: 'config',
     });
-    const client = owner.agentClient;
+    const client = fixtureAgentResources(owner).publishedClient(owner);
     if (failRestore) {
-      vi.spyOn(client, 'setHistory').mockRejectedValueOnce(
+      vi.spyOn(client, 'restoreHistory').mockRejectedValueOnce(
         new Error('restore failed on purpose'),
       );
     }
@@ -507,45 +471,20 @@ describe('cli main provider initialization', () => {
   }, 30000);
 });
 
-function bootstrapOperationCapabilities(
-  config: Config,
-  manager: ProviderManager,
-  settingsService: SettingsService,
-  owner: Parameters<typeof createProviderSessionOwner>[3],
-) {
-  const operation = createProviderSessionOwner(
-    config,
-    manager,
-    settingsService,
-    owner,
-  );
-  return {
-    providerFileLifecycle: operation.providerFileLifecycle,
-    messageBus: operation.messageBus,
-    workspaceDefinitions: operation.workspaceDefinitions,
-    workspaceTrust: operation.workspaceTrust,
-    trustCleanup: operation.trustCleanup,
-    workspaceMemory: operation.workspaceMemory,
-    workspaceMemoryOwnership: operation.workspaceMemoryOwnership,
-    workspaceFilesystem: operation.workspaceFilesystem,
-    sessionClient: operation.sessionClient,
-    takeMediaOwner: operation.takeMediaOwner.bind(operation),
-    settingsOwnerOwnership: operation.settingsOwnerOwnership,
-    takeSettingsOwner: operation.takeSettingsOwner.bind(operation),
-    takeSessionClient: operation.takeSessionClient.bind(operation),
-  };
-}
-
 let bootstrapManagers: ProviderManager[] = [];
 function createBootstrapManager(config: Config): {
   manager: ProviderManager;
   settingsService: SettingsService;
 } {
   const settingsService = new SettingsService();
-  const manager = new ProviderManager({
-    config,
+  const manager = new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     settingsService,
-  });
+    config,
+  );
   bootstrapManagers.push(manager);
   return { manager, settingsService };
 }

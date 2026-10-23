@@ -12,14 +12,13 @@ import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import {
   createTempDirectory,
   cleanupTempDirectory,
-  initializeTestSessionRoot,
-  type CliTestSessionRoot,
+  initializeTestConfig,
 } from './test-utils.js';
 
 describe('Compression Settings Apply Integration Tests', () => {
   let tempDir: string;
   let config: Config;
-  let sessionRoot: CliTestSessionRoot;
+  let sessionRoot: Awaited<ReturnType<typeof initializeTestConfig>>;
   let profileManager: ProfileManager;
   let originalHome: string | undefined;
   let originalArgv: string[];
@@ -51,7 +50,7 @@ describe('Compression Settings Apply Integration Tests', () => {
     });
 
     // Initialize the config
-    sessionRoot = await initializeTestSessionRoot(config);
+    sessionRoot = await initializeTestConfig(config);
   });
 
   afterEach(async () => {
@@ -72,133 +71,114 @@ describe('Compression Settings Apply Integration Tests', () => {
   describe('Setting compression-threshold and context-limit via ephemeral settings', () => {
     it('should store compression settings in ephemeral settings', async () => {
       // Set compression settings via ephemeral settings
-      sessionRoot.agent.setEphemeralSetting('compression-threshold', 0.7);
-      sessionRoot.agent.setEphemeralSetting('context-limit', 100000);
+      sessionRoot.setEphemeralSetting('compression-threshold', 0.7);
+      sessionRoot.setEphemeralSetting('context-limit', 100000);
 
       // Verify ephemeral settings are stored
-      expect(
-        sessionRoot.agent.getEphemeralSetting('compression-threshold'),
-      ).toBe(0.7);
-      expect(sessionRoot.agent.getEphemeralSetting('context-limit')).toBe(
-        100000,
+      expect(sessionRoot.getEphemeralSetting('compression-threshold')).toBe(
+        0.7,
       );
+      expect(sessionRoot.getEphemeralSetting('context-limit')).toBe(100000);
 
       // Verify settings are accessible when needed by chatSession
-      const compressionThreshold = sessionRoot.agent.getEphemeralSetting(
+      const compressionThreshold = sessionRoot.getEphemeralSetting(
         'compression-threshold',
       );
-      const contextLimit =
-        sessionRoot.agent.getEphemeralSetting('context-limit');
+      const contextLimit = sessionRoot.getEphemeralSetting('context-limit');
 
       expect(compressionThreshold).toBe(0.7);
       expect(contextLimit).toBe(100000);
     });
 
     it('should apply only compression-threshold when context-limit is not set', async () => {
-      sessionRoot.agent.setEphemeralSetting('compression-threshold', 0.85);
+      sessionRoot.setEphemeralSetting('compression-threshold', 0.85);
 
       // Verify only compression-threshold is set
-      expect(
-        sessionRoot.agent.getEphemeralSetting('compression-threshold'),
-      ).toBe(0.85);
-      expect(
-        sessionRoot.agent.getEphemeralSetting('context-limit'),
-      ).toBeUndefined();
+      expect(sessionRoot.getEphemeralSetting('compression-threshold')).toBe(
+        0.85,
+      );
+      expect(sessionRoot.getEphemeralSetting('context-limit')).toBeUndefined();
     });
 
     it('should apply only context-limit when compression-threshold is not set', async () => {
-      sessionRoot.agent.setEphemeralSetting('context-limit', 150000);
+      sessionRoot.setEphemeralSetting('context-limit', 150000);
 
       // Verify only context-limit is set
       expect(
-        sessionRoot.agent.getEphemeralSetting('compression-threshold'),
+        sessionRoot.getEphemeralSetting('compression-threshold'),
       ).toBeUndefined();
-      expect(sessionRoot.agent.getEphemeralSetting('context-limit')).toBe(
-        150000,
-      );
+      expect(sessionRoot.getEphemeralSetting('context-limit')).toBe(150000);
     });
 
     it('should handle clearing compression settings', async () => {
       // Set initial values
-      sessionRoot.agent.setEphemeralSetting('compression-threshold', 0.6);
-      sessionRoot.agent.setEphemeralSetting('context-limit', 80000);
+      sessionRoot.setEphemeralSetting('compression-threshold', 0.6);
+      sessionRoot.setEphemeralSetting('context-limit', 80000);
 
-      expect(
-        sessionRoot.agent.getEphemeralSetting('compression-threshold'),
-      ).toBe(0.6);
-      expect(sessionRoot.agent.getEphemeralSetting('context-limit')).toBe(
-        80000,
+      expect(sessionRoot.getEphemeralSetting('compression-threshold')).toBe(
+        0.6,
       );
+      expect(sessionRoot.getEphemeralSetting('context-limit')).toBe(80000);
 
       // Clear the settings
-      sessionRoot.agent.setEphemeralSetting('compression-threshold', undefined);
-      sessionRoot.agent.setEphemeralSetting('context-limit', undefined);
+      sessionRoot.setEphemeralSetting('compression-threshold', undefined);
+      sessionRoot.setEphemeralSetting('context-limit', undefined);
 
       // Verify settings are cleared
       expect(
-        sessionRoot.agent.getEphemeralSetting('compression-threshold'),
+        sessionRoot.getEphemeralSetting('compression-threshold'),
       ).toBeUndefined();
-      expect(
-        sessionRoot.agent.getEphemeralSetting('context-limit'),
-      ).toBeUndefined();
+      expect(sessionRoot.getEphemeralSetting('context-limit')).toBeUndefined();
     });
 
     it('should validate compression-threshold range', async () => {
       // Compression threshold should be between 0 and 1
-      sessionRoot.agent.setEphemeralSetting('compression-threshold', 0.5);
-      expect(
-        sessionRoot.agent.getEphemeralSetting('compression-threshold'),
-      ).toBe(0.5);
+      sessionRoot.setEphemeralSetting('compression-threshold', 0.5);
+      expect(sessionRoot.getEphemeralSetting('compression-threshold')).toBe(
+        0.5,
+      );
 
-      sessionRoot.agent.setEphemeralSetting('compression-threshold', 0.99);
-      expect(
-        sessionRoot.agent.getEphemeralSetting('compression-threshold'),
-      ).toBe(0.99);
+      sessionRoot.setEphemeralSetting('compression-threshold', 0.99);
+      expect(sessionRoot.getEphemeralSetting('compression-threshold')).toBe(
+        0.99,
+      );
 
       // Config itself doesn't validate - validation happens in setCommand
       // So these values would be stored but rejected when used
-      sessionRoot.agent.setEphemeralSetting('compression-threshold', 1.5);
-      expect(
-        sessionRoot.agent.getEphemeralSetting('compression-threshold'),
-      ).toBe(1.5);
+      sessionRoot.setEphemeralSetting('compression-threshold', 1.5);
+      expect(sessionRoot.getEphemeralSetting('compression-threshold')).toBe(
+        1.5,
+      );
 
-      sessionRoot.agent.setEphemeralSetting('compression-threshold', -0.1);
-      expect(
-        sessionRoot.agent.getEphemeralSetting('compression-threshold'),
-      ).toBe(-0.1);
+      sessionRoot.setEphemeralSetting('compression-threshold', -0.1);
+      expect(sessionRoot.getEphemeralSetting('compression-threshold')).toBe(
+        -0.1,
+      );
     });
 
     it('should validate context-limit is positive', async () => {
       // Context limit should be positive
-      sessionRoot.agent.setEphemeralSetting('context-limit', 10000);
-      expect(sessionRoot.agent.getEphemeralSetting('context-limit')).toBe(
-        10000,
-      );
+      sessionRoot.setEphemeralSetting('context-limit', 10000);
+      expect(sessionRoot.getEphemeralSetting('context-limit')).toBe(10000);
 
-      sessionRoot.agent.setEphemeralSetting('context-limit', 200000);
-      expect(sessionRoot.agent.getEphemeralSetting('context-limit')).toBe(
-        200000,
-      );
+      sessionRoot.setEphemeralSetting('context-limit', 200000);
+      expect(sessionRoot.getEphemeralSetting('context-limit')).toBe(200000);
 
       // Config validates the value now rather than deferring to setCommand: a
       // non-positive context limit is rejected and leaves the setting unset.
-      sessionRoot.agent.setEphemeralSetting('context-limit', -1000);
-      expect(
-        sessionRoot.agent.getEphemeralSetting('context-limit'),
-      ).toBeUndefined();
+      sessionRoot.setEphemeralSetting('context-limit', -1000);
+      expect(sessionRoot.getEphemeralSetting('context-limit')).toBeUndefined();
 
-      sessionRoot.agent.setEphemeralSetting('context-limit', 0);
-      expect(
-        sessionRoot.agent.getEphemeralSetting('context-limit'),
-      ).toBeUndefined();
+      sessionRoot.setEphemeralSetting('context-limit', 0);
+      expect(sessionRoot.getEphemeralSetting('context-limit')).toBeUndefined();
     });
   });
 
   describe('Profiles with compression settings', () => {
     it('should save and load compression settings in profiles', async () => {
       // Set compression settings
-      sessionRoot.agent.setEphemeralSetting('compression-threshold', 0.75);
-      sessionRoot.agent.setEphemeralSetting('context-limit', 120000);
+      sessionRoot.setEphemeralSetting('compression-threshold', 0.75);
+      sessionRoot.setEphemeralSetting('context-limit', 120000);
 
       // Create a profile with compression settings
       const profile: Profile = {
@@ -209,10 +189,10 @@ describe('Compression Settings Apply Integration Tests', () => {
           temperature: 0.7,
         },
         ephemeralSettings: {
-          'compression-threshold': sessionRoot.agent.getEphemeralSetting(
+          'compression-threshold': sessionRoot.getEphemeralSetting(
             'compression-threshold',
           ) as number,
-          'context-limit': sessionRoot.agent.getEphemeralSetting(
+          'context-limit': sessionRoot.getEphemeralSetting(
             'context-limit',
           ) as number,
         },
@@ -230,14 +210,14 @@ describe('Compression Settings Apply Integration Tests', () => {
         model: 'gemini-2.0-flash-exp',
         cwd: tempDir,
       });
-      const newSessionRoot = await initializeTestSessionRoot(newConfig);
+      const newSessionRoot = await initializeTestConfig(newConfig);
 
       // Verify new config doesn't have compression settings initially
       expect(
-        newSessionRoot.agent.getEphemeralSetting('compression-threshold'),
+        newSessionRoot.getEphemeralSetting('compression-threshold'),
       ).toBeUndefined();
       expect(
-        newSessionRoot.agent.getEphemeralSetting('context-limit'),
+        newSessionRoot.getEphemeralSetting('context-limit'),
       ).toBeUndefined();
 
       // Load the profile
@@ -249,16 +229,14 @@ describe('Compression Settings Apply Integration Tests', () => {
       for (const [key, value] of Object.entries(
         loadedProfile.ephemeralSettings,
       )) {
-        newSessionRoot.agent.setEphemeralSetting(key, value);
+        newSessionRoot.setEphemeralSetting(key, value);
       }
 
       // Verify settings were loaded correctly
-      expect(
-        newSessionRoot.agent.getEphemeralSetting('compression-threshold'),
-      ).toBe(0.75);
-      expect(newSessionRoot.agent.getEphemeralSetting('context-limit')).toBe(
-        120000,
+      expect(newSessionRoot.getEphemeralSetting('compression-threshold')).toBe(
+        0.75,
       );
+      expect(newSessionRoot.getEphemeralSetting('context-limit')).toBe(120000);
     });
 
     it('should handle profiles with partial compression settings', async () => {
@@ -288,20 +266,20 @@ describe('Compression Settings Apply Integration Tests', () => {
         model: 'gemini-2.0-flash-exp',
         cwd: tempDir,
       });
-      const newSessionRoot = await initializeTestSessionRoot(newConfig);
+      const newSessionRoot = await initializeTestConfig(newConfig);
 
       for (const [key, value] of Object.entries(
         loadedProfile.ephemeralSettings,
       )) {
-        newSessionRoot.agent.setEphemeralSetting(key, value);
+        newSessionRoot.setEphemeralSetting(key, value);
       }
 
       // Verify only compression-threshold was loaded
+      expect(newSessionRoot.getEphemeralSetting('compression-threshold')).toBe(
+        0.65,
+      );
       expect(
-        newSessionRoot.agent.getEphemeralSetting('compression-threshold'),
-      ).toBe(0.65);
-      expect(
-        newSessionRoot.agent.getEphemeralSetting('context-limit'),
+        newSessionRoot.getEphemeralSetting('context-limit'),
       ).toBeUndefined();
     });
   });

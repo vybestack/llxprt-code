@@ -223,6 +223,7 @@ interface TmuxScriptConfig {
 }
 
 interface LoadedScript {
+  inputDiagnostics?: boolean;
   steps?: unknown[];
   startCommand?: unknown;
   tmux?: TmuxScriptConfig;
@@ -478,6 +479,7 @@ async function runScenario({
       sessionName,
       outDir,
       steps: script.steps,
+      inputDiagnostics: script.inputDiagnostics,
       defaults: {
         postTypeMs: 600,
         submitKeys: ['Enter'],

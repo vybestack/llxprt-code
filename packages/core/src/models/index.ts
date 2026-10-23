@@ -12,13 +12,13 @@
  *
  * @example
  * ```typescript
- * import { initializeModelRegistry, getModelRegistry } from '@vybestack/llxprt-code-core/models';
+ * import { ModelRegistry } from '@vybestack/llxprt-code-core/models';
  *
  * // Initialize on startup
- * await initializeModelRegistry();
+ * const registry = new ModelRegistry(rootFetch);
+ * await registry.initialize();
  *
  * // Get registry instance
- * const registry = getModelRegistry();
  *
  * // Query models
  * const allModels = registry.getAll();
@@ -30,8 +30,6 @@
 // Core registry
 export {
   ModelRegistry,
-  getModelRegistry,
-  initializeModelRegistry,
   type ModelSearchQuery,
   type ModelRegistryEvent,
 } from './registry.js';

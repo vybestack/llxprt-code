@@ -6,30 +6,23 @@
 
 import { useCallback, useSyncExternalStore } from 'react';
 
-import type { IdeState } from '../cliUiRuntime.js';
-
 /**
  * This hook listens for trust status updates from the IDE companion extension
  * and provides the current IDE trust status.
  */
-export function useIdeTrustListener(ide: Pick<IdeState, 'getIdeClient'>) {
+export function useIdeTrustListener(
+  readIdeWorkspaceTrust: () => boolean | undefined,
+  subscribeIdeWorkspaceTrust: (
+    listener: (trusted: boolean | undefined) => void,
+  ) => () => void,
+) {
   const subscribe = useCallback(
-    (onStoreChange: () => void) => {
-      const ideClient = ide.getIdeClient();
-      if (!ideClient) {
-        return () => {}; // Return empty cleanup function if no IDE client
-      }
-      ideClient.addTrustChangeListener(onStoreChange);
-      return () => {
-        ideClient.removeTrustChangeListener(onStoreChange);
-      };
-    },
-    [ide],
+    (onStoreChange: () => void) =>
+      subscribeIdeWorkspaceTrust(() => onStoreChange()),
+    [subscribeIdeWorkspaceTrust],
   );
 
-  const getSnapshot = () => ide.getIdeClient()?.getWorkspaceTrust();
-
-  const isIdeTrusted = useSyncExternalStore(subscribe, getSnapshot);
+  const isIdeTrusted = useSyncExternalStore(subscribe, readIdeWorkspaceTrust);
 
   return { isIdeTrusted };
 }

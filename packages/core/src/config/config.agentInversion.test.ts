@@ -1,3 +1,4 @@
+import { installTestWorkspaceSkills } from '../__tests__/workspace-skill-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -7,15 +8,15 @@ import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/wo
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '../session/session-settings-owner.js';
 
-import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
+import type { MessageBus } from '../confirmation-bus/message-bus.js';
 
 import { afterEach, describe, expect, it } from 'bun:test';
 import { createTaskRegistration } from '@vybestack/llxprt-code-agents';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
-import {
-  initializeTestMcpRuntime,
-  installTestWorkspaceFilesystem,
-} from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { composeWorkspaceSkills } from './skill-tool-sync.js';
+import { WorkspaceToolCatalogOwner } from '../services/workspace-tool-catalog-owner.js';
+import { initializeParser } from '../utils/shell-parser.js';
 import { RuntimePolicyOwner } from '../policy/policy-owner.js';
 import { WorkspaceDefinitionOwner } from '../services/workspace-definition-owner.js';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -27,105 +28,93 @@ import {
   type TaskToolRegistration,
 } from './toolRegistryFactory.js';
 
-const createFilesystem = installTestWorkspaceFilesystem();
-let configs: readonly Config[] = [];
-let settingsOwners: readonly SessionSettingsOwner[] = [];
-let policies: readonly RuntimePolicyOwner[] = [];
-let definitionRoots: ReadonlyArray<{
-  root: string;
-  owner: WorkspaceDefinitionOwner;
-}> = [];
-
-function configuration(): Config {
-  const config = new Config({
-    sessionId: 'construction-inversion',
-    targetDir: process.cwd(),
-    cwd: process.cwd(),
-    model: 'fixture',
-    debugMode: false,
-    trustedFolder: true,
-    coreTools: ['InjectedTaskTool', 'TaskTool'],
-  });
-  configs = [...configs, config];
-  return config;
-}
-
-async function assemble(config: Config, descriptor?: TaskToolRegistration) {
-  const root = await mkdtemp(join(tmpdir(), 'definition-inversion-'));
-  const definitions = new WorkspaceDefinitionOwner(
-    join(root, 'profiles'),
-    join(root, 'subagents'),
-  );
-  definitionRoots = [...definitionRoots, { root, owner: definitions }];
-  const settings = new SettingsService();
-  for (const [key, value] of Object.entries(config.getInitialSettings()))
-    settings.set(key, value);
-  const settingsOwner = new SessionSettingsOwner(settings);
-  settingsOwners = [...settingsOwners, settingsOwner];
-  const policy = new RuntimePolicyOwner(config);
-  policies = [...policies, policy];
-  const filesystem = createFilesystem({
-    targetDir: config.getTargetDir(),
-    includeDirectories: config.getConfiguredIncludeDirectories(),
-    isTrusted: () =>
-      new WorkspaceTrustLifecycle({
-        localTrust: config.initialWorkspaceTrust,
-      }).isTrustedFolder(),
-  });
-  const sessionRegistration =
-    descriptor === undefined
-      ? undefined
-      : {
-          ...descriptor,
-          create: (
-            config: unknown,
-            args: Parameters<TaskToolRegistration['create']>[1],
-          ) =>
-            descriptor.create(config, {
-              ...args,
-              createChildSettings: () => settingsOwner.createChildStore(),
-              readTaskPolicy: () => settingsOwner.readTaskPolicy(),
-              readRunPolicy: () => settingsOwner.readSubagentRunPolicy(),
-              readGovernance: () => settingsOwner.readToolGovernance([]),
-              instructions: emptyInstructionReads,
-            }),
-          buildArgs: (
-            config: unknown,
-            args: Parameters<TaskToolRegistration['buildArgs']>[1],
-          ) =>
-            descriptor.buildArgs(config, {
-              ...args,
-              createChildSettings: () => settingsOwner.createChildStore(),
-              readTaskPolicy: () => settingsOwner.readTaskPolicy(),
-              readRunPolicy: () => settingsOwner.readSubagentRunPolicy(),
-              readGovernance: () => settingsOwner.readToolGovernance([]),
-              instructions: emptyInstructionReads,
-            }),
-        };
-  const result = await createToolRegistry(
-    config,
-    config,
-    policy.session.messageBus,
-    () => settingsOwner.readRegistryPolicy(config.getExcludeTools() ?? []),
-    () => settingsOwner.readToolExecutionPolicy(),
-    filesystem.paths,
-    filesystem.files,
-    filesystem.ignore,
-    filesystem.scans,
-    undefined,
-    undefined,
-    sessionRegistration,
-    undefined,
-    true,
-    definitions.profileReads,
-    definitions.subagentReads,
-    undefined,
-    policy.trust,
-  );
-  return { ...result, messageBus: policy.session.messageBus };
-}
-
 describe('P01 construction inversion contracts', () => {
+  const createFilesystem = installTestWorkspaceFilesystem();
+
+  const acquireSkills = installTestWorkspaceSkills();
+
+  let configs: readonly Config[] = [];
+
+  let settingsOwners: readonly SessionSettingsOwner[] = [];
+
+  let policies: readonly RuntimePolicyOwner[] = [];
+
+  let definitionRoots: ReadonlyArray<{
+    root: string;
+    owner: WorkspaceDefinitionOwner;
+  }> = [];
+
+  function configuration(): Config {
+    const config = new Config({
+      sessionId: 'construction-inversion',
+      targetDir: process.cwd(),
+      cwd: process.cwd(),
+      model: 'fixture',
+      debugMode: false,
+      trustedFolder: true,
+      coreTools: ['InjectedTaskTool', 'TaskTool'],
+    });
+    configs = [...configs, config];
+    return config;
+  }
+
+  async function assemble(
+    config: Config,
+    descriptor?: (
+      config: Config,
+      settings: SessionSettingsOwner,
+      bus: MessageBus,
+    ) => TaskToolRegistration,
+  ) {
+    const root = await mkdtemp(join(tmpdir(), 'definition-inversion-'));
+    const definitions = new WorkspaceDefinitionOwner(
+      join(root, 'profiles'),
+      join(root, 'subagents'),
+    );
+    definitionRoots = [...definitionRoots, { root, owner: definitions }];
+    const settings = new SettingsService();
+    for (const [key, value] of Object.entries(config.getInitialSettings()))
+      settings.set(key, value);
+    const settingsOwner = new SessionSettingsOwner(settings);
+    settingsOwners = [...settingsOwners, settingsOwner];
+    const policy = new RuntimePolicyOwner(config);
+    policies = [...policies, policy];
+    const filesystem = createFilesystem({
+      targetDir: config.getTargetDir(),
+      includeDirectories: config.getConfiguredIncludeDirectories(),
+      isTrusted: () =>
+        new WorkspaceTrustLifecycle({
+          localTrust: config.initialWorkspaceTrust,
+        }).isTrustedFolder(),
+    });
+    const sessionRegistration = descriptor?.(
+      config,
+      settingsOwner,
+      policy.session.messageBus,
+    );
+    const result = await createToolRegistry(
+      config,
+      config,
+      policy.session.messageBus,
+      () => settingsOwner.readRegistryPolicy(config.getExcludeTools() ?? []),
+      () => settingsOwner.readToolExecutionPolicy(),
+      filesystem.paths,
+      filesystem.files,
+      filesystem.ignore,
+      filesystem.scans,
+      undefined,
+      undefined,
+      sessionRegistration,
+      undefined,
+      true,
+      definitions.profileReads,
+      definitions.subagentReads,
+      undefined,
+      policy.trust,
+    );
+    return { ...result, messageBus: policy.session.messageBus };
+  }
+
   afterEach(async () => {
     for (const { root, owner } of definitionRoots) {
       await owner.dispose();
@@ -148,44 +137,117 @@ describe('P01 construction inversion contracts', () => {
       throw new AggregateError(errors, 'Config fixture disposal failed');
   });
 
+  it('builds a child task from independently supplied session policy ports', () => {
+    const config = configuration();
+    const settings = new SessionSettingsOwner(new SettingsService());
+    settingsOwners = [...settingsOwners, settings];
+    const policy = new RuntimePolicyOwner(config);
+    policies = [...policies, policy];
+    const tool = createTaskRegistration(config, {
+      messageBus: policy.session.messageBus,
+      readTaskPolicy: () => settings.readTaskPolicy(),
+      readGovernance: () => settings.readToolGovernance([]),
+      launchChild: async () => {
+        throw new Error('Description-only scenario');
+      },
+    }).create();
+    expect(
+      tool
+        .build({ subagent_name: 'child', goal_prompt: 'Use parent policy' })
+        .getDescription(),
+    ).toContain('child');
+  });
+
   it('initializes workspace infrastructure without constructing a session client', async () => {
     const config = configuration();
-    const owner = await initializeTestMcpRuntime(config);
+    const skills = await acquireSkills(config);
+    const policy = new RuntimePolicyOwner(config);
+    policies = [...policies, policy];
+    const tools = new WorkspaceToolCatalogOwner(
+      config,
+      policy.session.messageBus,
+      policy.trust,
+    );
     try {
-      expect(owner.toolSelection).toBeDefined();
-      expect(owner.workspaceSkills.operations.list()).toStrictEqual([]);
+      await initializeParser();
+      await tools.initialize();
+      expect(tools.selection).toBeDefined();
+      expect(skills.operations.list()).toStrictEqual([]);
       expect('skillManager' in config).toBe(false);
       expect('agentClient' in config).toBe(false);
       expect('agentClientFactory' in config).toBe(false);
     } finally {
-      await owner.dispose();
+      await tools.dispose();
+      await skills.dispose();
     }
   });
 
   it('keeps exactly one workspace registry through repeated initialization requests', async () => {
     const config = configuration();
-    const owner = await initializeTestMcpRuntime(config);
+    const policy = new RuntimePolicyOwner(config);
+    policies = [...policies, policy];
+    const catalog = new WorkspaceToolCatalogOwner(
+      config,
+      policy.session.messageBus,
+      policy.trust,
+    );
+    const filesystem = createFilesystem({
+      targetDir: config.getTargetDir(),
+      includeDirectories: [],
+      isTrusted: () => policy.trust.isTrustedFolder(),
+    });
+    const skills = composeWorkspaceSkills(
+      config,
+      (directory, approved) =>
+        filesystem.admitSkillDirectory(directory, approved),
+      () => filesystem.notifyTrustChanged(),
+      policy.trust,
+      () => policy.session.messageBus,
+      { reloadPolicy: async () => ({}), registerTools: () => {} },
+      () => {
+        const lease = catalog.acceptSkillPublication();
+        return {
+          registry: lease.registry,
+          publish: async () => {},
+          release: lease.release,
+        };
+      },
+    );
     try {
+      await initializeParser();
+      await catalog.initialize();
+      await skills.initialize();
       const tool = new MockTool({ name: 'workspace_probe' });
-      owner.toolPublication.registerTool(tool);
-      const retained = owner.toolPublication.getTool(tool.name);
-      await config.ensureInitialized();
+      catalog.publication.registerTool(tool);
+      const retained = catalog.publication.getTool(tool.name);
+      await skills.initialize();
       expect(
-        new Set([tool, retained, owner.toolPublication.getTool(tool.name)])
-          .size,
+        new Set([tool, retained, catalog.publication.getTool(tool.name)]).size,
       ).toBe(1);
-      expect(owner.toolSelection.getAllToolNames()).toStrictEqual([tool.name]);
+      expect(catalog.selection.getAllToolNames()).toStrictEqual([tool.name]);
     } finally {
-      await owner.dispose();
+      await skills.dispose();
+      await catalog.dispose();
     }
   });
 
   it('uses injected TaskToolRegistration metadata instead of the concrete class name', async () => {
     const config = configuration();
-    const descriptor = {
-      ...createTaskRegistration(),
+    const descriptor = (
+      config: Config,
+      settings: SessionSettingsOwner,
+      bus: MessageBus,
+    ): TaskToolRegistration => ({
+      ...createTaskRegistration(config, {
+        messageBus: bus,
+        readTaskPolicy: () => settings.readTaskPolicy(),
+        readGovernance: () => settings.readToolGovernance([]),
+        launchChild: async () => {
+          throw new Error('Registration-only scenario');
+        },
+      }),
       className: 'InjectedTaskTool',
-    };
+    });
     const { registry, allPotentialTools, messageBus } = await assemble(
       config,
       descriptor,
@@ -198,12 +260,7 @@ describe('P01 construction inversion contracts', () => {
     expect(record.isRegistered).toBe(true);
     expect(record.toolName).not.toBe(record.toolClass?.name);
     expect(record.args[0]).toBe(config);
-    const args = record.args[1];
-    if (typeof args !== 'object' || args === null || !('messageBus' in args))
-      throw new Error(
-        'Missing session message bus in actual task construction',
-      );
-    expect(args.messageBus).toBe(messageBus);
+    expect(record.args[1]).toHaveProperty('messageBus', messageBus);
     const tool = registry.getTool('task');
     if (tool === undefined || record.toolClass === undefined)
       throw new Error('Missing actual constructed task');

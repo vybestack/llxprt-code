@@ -1,0 +1,20 @@
+name: 'Install tmux'
+description: >-
+  Provides a `tmux` executable on PATH for the real terminal harness tests on
+  macOS (Homebrew tmux). The tmux UI harness is POSIX-only by repo convention
+  (the LLXPRT_E2E_TMUX opt-in), so Windows runners do not install a
+  multiplexer.
+
+runs:
+  using: 'composite'
+  steps:
+    - name: 'Install tmux (macOS)'
+      if: runner.os == 'macOS'
+      shell: 'bash'
+      env:
+        HOMEBREW_NO_AUTO_UPDATE: '1'
+        HOMEBREW_NO_INSTALL_CLEANUP: '1'
+      run: |
+        set -euo pipefail
+        brew install tmux
+        tmux -V

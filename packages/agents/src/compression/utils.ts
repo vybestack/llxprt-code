@@ -1,3 +1,5 @@
+import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import type { ProviderFileBindingStore } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -254,6 +256,10 @@ export async function runVerificationPass(
   provider: IProvider,
   initialSummary: string,
   context: CompressionContext,
+  mediaResolver: RequestMediaResolutionService | undefined,
+  requestMediaBudgetBytes: number | undefined,
+  providerFileBindings: ProviderFileBindingStore | undefined,
+  providerFileLifecycle: object | undefined,
   resolvedRuntime?: ProviderRequestCollaborators,
   resolvedConfig?: Config,
   resolvedOptions?: RuntimeGenerateChatOptions['resolved'],
@@ -266,11 +272,11 @@ export async function runVerificationPass(
       resolvedRuntime ?? context.runtimeContext.providerRuntime;
     const stream = bindCompressionProvider(
       provider,
-      providerRuntime.mediaResolver,
-      providerRuntime.requestMediaBudgetBytes,
-      providerRuntime.providerFileBindings,
-      providerRuntime.providerFileLifecycle,
-      providerRuntime.config?.getTargetDir(),
+      mediaResolver,
+      requestMediaBudgetBytes,
+      providerFileBindings,
+      providerFileLifecycle,
+      resolvedConfig?.getTargetDir(),
     ).generateChatCompletion(
       await buildCompressionChatOptions({
         contents: verificationRequest,
@@ -418,9 +424,9 @@ export function sanitizeHistoryForCompression(
 
 export function bindCompressionProvider(
   provider: IProvider,
-  mediaResolver: ProviderRequestCollaborators['mediaResolver'],
+  mediaResolver: RequestMediaResolutionService | undefined,
   budgetBytes: number | undefined,
-  bindings: ProviderRequestCollaborators['providerFileBindings'],
+  bindings: ProviderFileBindingStore | undefined,
   lifecycle: object | undefined,
   workspaceDirectory: string | undefined,
 ): IProvider {
@@ -460,4 +466,26 @@ function verificationMessages(initialSummary: string): IContent[] {
       ],
     },
   ];
+}
+
+export function selectCompressionSummary(
+  newHistory: readonly IContent[],
+): IContent | undefined {
+  for (const entry of newHistory) {
+    if (entry.metadata?.reason === 'compression-state-snapshot') {
+      return entry;
+    }
+  }
+  for (const entry of newHistory) {
+    if (
+      entry.metadata?.isSummary === true ||
+      (entry.metadata?.synthetic === true &&
+        entry.blocks.some(
+          (b) => b.type === 'text' && b.text.includes('<state_snapshot>'),
+        ))
+    ) {
+      return entry;
+    }
+  }
+  return undefined;
 }

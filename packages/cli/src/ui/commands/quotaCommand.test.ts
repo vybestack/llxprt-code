@@ -1,13 +1,14 @@
-import { detectFromProviderConfig } from '../../runtime/providerInspection.js';
+import { detectFromProviderConfig } from '@vybestack/llxprt-code-agents';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { vi, describe, it, expect, beforeEach, type Mock } from 'bun:test';
-import { quotaCommand } from './quotaCommand.js';
-import { type CommandContext, CommandKind } from './types.js';
+import { registerQuotaCommand } from '../../__tests__/credential-command-test-owner.js';
+import { CommandKind, type SlashCommand } from './types.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { MessageType } from '../types.js';
 
@@ -43,7 +44,7 @@ const UUID_REGEX =
 /**
  * Get the last informational or error item added to the UI.
  */
-function getLastUiItem(ctx: CommandContext): {
+function getLastUiItem(ctx: CommandOwnerFixture): {
   type: 'info' | 'error';
   text?: string;
 } {
@@ -151,7 +152,8 @@ function makeCodexResetOauthManager(
 }
 
 describe('quotaCommand', () => {
-  let mockContext: CommandContext;
+  let mockContext: CommandOwnerFixture;
+  let quotaCommand: SlashCommand;
 
   beforeEach(() => {
     mockContext = createMockCommandContext({
@@ -164,11 +166,11 @@ describe('quotaCommand', () => {
           }
         },
         getAllAnthropicUsageInfo: () =>
-          optionalOAuthManagerMock().getAllAnthropicUsageInfo(),
+          optionalOAuthManagerMock().getAllAnthropicUsageInfo(globalThis.fetch),
         getAllCodexUsageInfo: () =>
-          optionalOAuthManagerMock().getAllCodexUsageInfo(),
+          optionalOAuthManagerMock().getAllCodexUsageInfo(globalThis.fetch),
         getAllCodexRateLimitResetCredits: () =>
-          oauthManagerMock().getAllCodexRateLimitResetCredits(),
+          oauthManagerMock().getAllCodexRateLimitResetCredits(globalThis.fetch),
         hasCodexToken: async () =>
           (await oauthManagerMock().getToken('codex')) !== null,
         listBuckets: (provider: string) =>
@@ -177,6 +179,10 @@ describe('quotaCommand', () => {
           oauthManagerMock().getTokenStore().getToken('codex', bucket),
       },
       runtimeApi: {
+        fetch: (
+          input: RequestInfo | URL,
+          init?: RequestInit,
+        ): Promise<Response> => globalThis.fetch(input, init),
         getEphemeralSetting: getEphemeralSettingMock,
         getActiveProviderName: getActiveProviderNameMock,
         detectProviderQuota: (name: string) => {
@@ -187,6 +193,8 @@ describe('quotaCommand', () => {
         },
       },
     });
+
+    quotaCommand = registerQuotaCommand(mockContext);
 
     oauthManagerMock.mockReset();
     optionalOAuthManagerMock.mockReset();
@@ -513,11 +521,11 @@ describe('quotaCommand', () => {
 
       expect(mockConsumeCodexRateLimitResetCredit).toHaveBeenCalledTimes(1);
       const callArgs = mockConsumeCodexRateLimitResetCredit.mock.calls[0];
-      expect(callArgs[0]).toBe('codex-access');
-      expect(callArgs[1]).toBe('acct-123');
-      expect(callArgs[2]).toBe('credit-1');
-      expect(callArgs[3]).toMatch(UUID_REGEX);
-      expect(callArgs[4]).toBeUndefined();
+      expect(callArgs[1]).toBe('codex-access');
+      expect(callArgs[2]).toBe('acct-123');
+      expect(callArgs[3]).toBe('credit-1');
+      expect(callArgs[4]).toMatch(UUID_REGEX);
+      expect(callArgs[5]).toBeUndefined();
 
       const calls = (
         mockContext.ui.addItem as Mock<typeof mockContext.ui.addItem>
@@ -662,6 +670,7 @@ describe('quotaCommand', () => {
       await reset!.action!(mockContext, '');
 
       expect(mockConsumeCodexRateLimitResetCredit).toHaveBeenCalledWith(
+        mockContext.runtimeApi.fetch,
         'codex-access',
         'acct-123',
         'valid-credit',
@@ -764,7 +773,7 @@ describe('quotaCommand', () => {
       expect(successItem).toBeDefined();
     });
 
-    it('forwards the custom base-url as the 5th arg to consumeCodexRateLimitResetCredit', async () => {
+    it('forwards the custom base-url as the 6th arg to consumeCodexRateLimitResetCredit', async () => {
       const oauthManager = makeCodexResetOauthManager();
       optionalOAuthManagerMock.mockReturnValue(oauthManager);
       oauthManagerMock.mockReturnValue(oauthManager);
@@ -791,7 +800,7 @@ describe('quotaCommand', () => {
           mockConsumeCodexRateLimitResetCredit as Mock<
             typeof mockConsumeCodexRateLimitResetCredit
           >
-        ).mock.calls[0][4],
+        ).mock.calls[0][5],
       ).toBe('https://example.test/backend-api');
     });
 
@@ -820,7 +829,7 @@ describe('quotaCommand', () => {
           mockConsumeCodexRateLimitResetCredit as Mock<
             typeof mockConsumeCodexRateLimitResetCredit
           >
-        ).mock.calls[0][4],
+        ).mock.calls[0][5],
       ).toBeUndefined();
     });
   });

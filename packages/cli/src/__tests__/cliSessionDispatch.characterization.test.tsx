@@ -1,4 +1,5 @@
-import { createUiSessionOwner } from './uiSessionOwner.js';
+import { useCommandOwners as installCommandOwners } from './command-owner-fixture.js';
+const makeDispatchAgent = installCommandOwners();
 /**
  * @plan PLAN-20260629-ISSUE2285.P11
  * @requirement REQ-006
@@ -59,7 +60,7 @@ import {
   setupUnhandledRejectionHandler,
 } from '../session/signalHandlers.js';
 import { initializeOutputListenersAndFlush } from '../session/outputListeners.js';
-import { dispatchInteractiveOrNonInteractive } from '../session/nonInteractiveSession.js';
+import { dispatchInteractiveOrNonInteractive } from '../__tests__/session-dispatch-fixture.js';
 import {
   startInteractiveUI,
   __resetInteractiveUIStateForTesting,
@@ -92,7 +93,7 @@ const dispatchTrace: string[] = [];
 void vi.mock('../cliAgentBootstrap.js', () => ({
   createForegroundAgent: vi.fn(async () => {
     dispatchTrace.push('createForegroundAgent');
-    return { fake: true, workspace: createUiSessionOwner().workspace };
+    return makeDispatchAgent(crypto.randomUUID());
   }),
 }));
 
@@ -116,11 +117,10 @@ void vi.mock('../utils/userStartupWarnings.js', () => ({
   getUserStartupWarnings: vi.fn(async () => []),
 }));
 
-void vi.mock('../nonInteractiveCli.js', () => ({
-  runNonInteractive: vi.fn(async () => {
+void vi.mock('../nonInteractiveBindings.js', () => ({
+  createNonInteractiveRun: () => async () => {
     dispatchTrace.push('runNonInteractive');
-    return 0;
-  }),
+  },
 }));
 
 void vi.mock('../validateNonInteractiveAuth.js', () => ({
@@ -214,16 +214,8 @@ function createMinimalSettings(options?: {
 // returning an empty output object ({} — no systemMessage/additionalContext).
 // Without it the runner throws before reaching runNonInteractive and the
 // dispatch-branch traces would never record the runner.
-function createFakeAgent(): unknown {
-  return {
-    workspace: createUiSessionOwner().workspace,
-    getMessageBus: () => ({}) as never,
-    hooks: {
-      triggerSessionStart: vi.fn(async () => ({})),
-    },
-    tools: { get: () => undefined },
-    dispose: vi.fn(async () => {}),
-  };
+async function createFakeAgent() {
+  return makeDispatchAgent(crypto.randomUUID());
 }
 
 // ---------------------------------------------------------------------------
@@ -275,7 +267,7 @@ describe('session-dispatch characterization', () => {
       await dispatchInteractiveOrNonInteractive({
         runtimeSettings: configRoot.runtimeSettings,
         config: config as never,
-        agent: createFakeAgent() as never,
+        agent: (await createFakeAgent()) as never,
         settings: settings as never,
         workspaceRoot: '/tmp/test',
         recordingOwner: 'agent',
@@ -305,7 +297,7 @@ describe('session-dispatch characterization', () => {
         dispatchInteractiveOrNonInteractive({
           runtimeSettings: configRoot.runtimeSettings,
           config: config as never,
-          agent: createFakeAgent() as never,
+          agent: (await createFakeAgent()) as never,
           settings: settings as never,
           workspaceRoot: '/tmp/test',
           recordingOwner: 'agent',
@@ -615,7 +607,7 @@ describe('session-dispatch characterization', () => {
         dispatchInteractiveOrNonInteractive({
           runtimeSettings: configRoot.runtimeSettings,
           config: config as never,
-          agent: createFakeAgent() as never,
+          agent: (await createFakeAgent()) as never,
           settings: settings as never,
           workspaceRoot: '/tmp/test',
           recordingOwner: 'agent',
@@ -647,7 +639,7 @@ describe('session-dispatch characterization', () => {
         await dispatchInteractiveOrNonInteractive({
           runtimeSettings: configRoot.runtimeSettings,
           config: config as never,
-          agent: createFakeAgent() as never,
+          agent: (await createFakeAgent()) as never,
           settings: settings as never,
           workspaceRoot: '/tmp/test',
           recordingOwner: 'agent',
@@ -692,7 +684,7 @@ describe('session-dispatch characterization', () => {
         dispatchInteractiveOrNonInteractive({
           runtimeSettings: configRoot.runtimeSettings,
           config: config as never,
-          agent: createFakeAgent() as never,
+          agent: (await createFakeAgent()) as never,
           settings: settings as never,
           workspaceRoot: '/tmp/test',
           recordingOwner: 'agent',
@@ -745,7 +737,7 @@ describe('session-dispatch characterization', () => {
 
       await startInteractiveUI(
         config as never,
-        createFakeAgent() as never,
+        (await createFakeAgent()) as never,
         settings as never,
         [],
         '/tmp/test',
@@ -775,7 +767,7 @@ describe('session-dispatch characterization', () => {
 
       await startInteractiveUI(
         config as never,
-        createFakeAgent() as never,
+        (await createFakeAgent()) as never,
         settings as never,
         [],
         '/tmp/test',
@@ -803,7 +795,7 @@ describe('session-dispatch characterization', () => {
 
       await startInteractiveUI(
         config as never,
-        createFakeAgent() as never,
+        (await createFakeAgent()) as never,
         settings as never,
         ['startup warning'],
         '/tmp/test',
@@ -1000,7 +992,7 @@ describe('session-dispatch characterization', () => {
     });
 
     /** Runs dispatch with the fixed recording/stdin arguments these cases share. */
-    function runDispatch(
+    async function runDispatch(
       { config, runtimeSettings }: ReturnType<typeof createMinimalConfig>,
       settings: unknown,
       recordingStartupWarnings: string[] = [],
@@ -1008,7 +1000,7 @@ describe('session-dispatch characterization', () => {
       return dispatchInteractiveOrNonInteractive({
         runtimeSettings,
         config: config as never,
-        agent: createFakeAgent() as never,
+        agent: (await createFakeAgent()) as never,
         settings: settings as never,
         workspaceRoot: '/tmp/test',
         recordingOwner: 'agent',

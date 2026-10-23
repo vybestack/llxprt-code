@@ -4,13 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 import * as fs from 'fs';
 import * as path from 'path';
-import type {
-  CommandContext,
-  SlashCommand,
-  SlashCommandActionReturn,
-} from './types.js';
+import type { SlashCommand, SlashCommandActionReturn } from './types.js';
 import { CommandKind } from './types.js';
 import { PromptService } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
@@ -90,50 +87,54 @@ function getFallbackInitCommandPrompt(): string {
 Write the complete content to the \`LLXPRT.md\` file. The output must be well-formatted Markdown.`;
 }
 
-export const initCommand: SlashCommand = {
-  name: 'init',
-  description: 'Analyzes the project and creates a tailored LLXPRT.md file.',
-  kind: CommandKind.BUILT_IN,
-  autoExecute: true,
-  action: async (
-    context: CommandContext,
-    _args: string,
-  ): Promise<SlashCommandActionReturn> => {
-    if (!context.services.config) {
+export function createInitCommand(
+  targetDir: string | undefined,
+  addItem: UseHistoryManagerReturn['addItem'],
+): SlashCommand {
+  return {
+    name: 'init',
+    description: 'Analyzes the project and creates a tailored LLXPRT.md file.',
+    kind: CommandKind.BUILT_IN,
+    autoExecute: true,
+    action: async (
+      _invocation,
+      _args: string,
+    ): Promise<SlashCommandActionReturn> => {
+      if (targetDir === undefined) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: 'Configuration not available.',
+        };
+      }
+      const llxprtMdPath = path.join(targetDir, 'LLXPRT.md');
+
+      if (fs.existsSync(llxprtMdPath)) {
+        return {
+          type: 'message',
+          messageType: 'info',
+          content:
+            'A LLXPRT.md file already exists in this directory. No changes were made.',
+        };
+      }
+
+      // Create an empty LLXPRT.md file
+      fs.writeFileSync(llxprtMdPath, '', 'utf8');
+
+      addItem(
+        {
+          type: 'info',
+          text: 'Empty LLXPRT.md created. Now analyzing the project to populate it.',
+        },
+        Date.now(),
+      );
+
+      const initPrompt = await getInitCommandPrompt();
+
       return {
-        type: 'message',
-        messageType: 'error',
-        content: 'Configuration not available.',
+        type: 'submit_prompt',
+        content: initPrompt,
       };
-    }
-    const targetDir = context.services.config.getTargetDir();
-    const llxprtMdPath = path.join(targetDir, 'LLXPRT.md');
-
-    if (fs.existsSync(llxprtMdPath)) {
-      return {
-        type: 'message',
-        messageType: 'info',
-        content:
-          'A LLXPRT.md file already exists in this directory. No changes were made.',
-      };
-    }
-
-    // Create an empty LLXPRT.md file
-    fs.writeFileSync(llxprtMdPath, '', 'utf8');
-
-    context.ui.addItem(
-      {
-        type: 'info',
-        text: 'Empty LLXPRT.md created. Now analyzing the project to populate it.',
-      },
-      Date.now(),
-    );
-
-    const initPrompt = await getInitCommandPrompt();
-
-    return {
-      type: 'submit_prompt',
-      content: initPrompt,
-    };
-  },
-};
+    },
+  };
+}

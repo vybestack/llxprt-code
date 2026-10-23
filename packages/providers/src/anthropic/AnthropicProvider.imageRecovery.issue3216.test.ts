@@ -178,6 +178,7 @@ function setupProvider(
 ): {
   provider: AnthropicProvider;
   runtimeContext: ProviderRuntimeContext;
+  config: ReturnType<typeof createRuntimeConfigStub>;
   settingsService: SettingsService;
 } {
   const result = createProviderWithRuntime<AnthropicProvider>(
@@ -198,7 +199,7 @@ function setupProvider(
     },
   );
   const { provider, runtime, settingsService: svc } = result;
-  runtime.config ??= createRuntimeConfigStub(svc);
+  const config = createRuntimeConfigStub(svc);
   // The budget must reach the provider through the real runtime path:
   // invocation.ephemerals is built by buildEphemeralsSnapshot from the
   // SettingsService global map (the same path model defaults take via
@@ -208,13 +209,14 @@ function setupProvider(
     svc.set('max-image-dimension', options.maxImageDimension ?? 2000);
   }
 
-  return { provider, runtimeContext: runtime, settingsService: svc };
+  return { provider, runtimeContext: runtime, config, settingsService: svc };
 }
 
 const buildCallOptions = (
   provider: AnthropicProvider,
   runtimeContext: ProviderRuntimeContext,
   settingsService: SettingsService,
+  config: ReturnType<typeof createRuntimeConfigStub>,
   contents: IContent[],
 ) =>
   createProviderCallOptions({
@@ -222,7 +224,7 @@ const buildCallOptions = (
     contents,
     settings: settingsService,
     runtime: runtimeContext,
-    config: runtimeContext.config,
+    config,
   } as Parameters<typeof createProviderCallOptions>[0]);
 
 async function consumeGenerator(
@@ -274,9 +276,11 @@ describe('AnthropicProvider image recovery (@issue:3216)', () => {
   it('proactively sanitizes oversized history images so no 400 is sent', async () => {
     vi.clearAllMocks();
     const big = await pngBase64(3000, 3000);
-    const { provider, runtimeContext, settingsService } = setupProvider({
-      withImageBudget: true,
-    });
+    const { provider, runtimeContext, config, settingsService } = setupProvider(
+      {
+        withImageBudget: true,
+      },
+    );
     mockMessagesCreate.mockResolvedValue(createMockStream('ok'));
 
     const messages: IContent[] = [
@@ -296,7 +300,13 @@ describe('AnthropicProvider image recovery (@issue:3216)', () => {
 
     await consumeGenerator(
       provider,
-      buildCallOptions(provider, runtimeContext, settingsService, messages),
+      buildCallOptions(
+        provider,
+        runtimeContext,
+        settingsService,
+        config,
+        messages,
+      ),
     );
 
     expect(mockMessagesCreate).toHaveBeenCalledTimes(1);
@@ -310,9 +320,11 @@ describe('AnthropicProvider image recovery (@issue:3216)', () => {
     vi.clearAllMocks();
     const big = await pngBase64(3000, 3000);
     // NO image budget in config — the error's own limit is used for recovery.
-    const { provider, runtimeContext, settingsService } = setupProvider({
-      withImageBudget: false,
-    });
+    const { provider, runtimeContext, config, settingsService } = setupProvider(
+      {
+        withImageBudget: false,
+      },
+    );
     mockMessagesCreate
       .mockRejectedValueOnce(make400ImageDimensionError())
       .mockResolvedValueOnce(createMockStream('recovered'));
@@ -333,7 +345,13 @@ describe('AnthropicProvider image recovery (@issue:3216)', () => {
 
     const result = await consumeGenerator(
       provider,
-      buildCallOptions(provider, runtimeContext, settingsService, messages),
+      buildCallOptions(
+        provider,
+        runtimeContext,
+        settingsService,
+        config,
+        messages,
+      ),
     );
 
     expect(mockMessagesCreate).toHaveBeenCalledTimes(2);
@@ -347,10 +365,12 @@ describe('AnthropicProvider image recovery (@issue:3216)', () => {
   it('intersects a configured budget with the provider-reported recovery limit', async () => {
     vi.clearAllMocks();
     const image = await pngBase64(2200, 1000);
-    const { provider, runtimeContext, settingsService } = setupProvider({
-      withImageBudget: true,
-      maxImageDimension: 2500,
-    });
+    const { provider, runtimeContext, config, settingsService } = setupProvider(
+      {
+        withImageBudget: true,
+        maxImageDimension: 2500,
+      },
+    );
     mockMessagesCreate
       .mockRejectedValueOnce(make400ImageDimensionError())
       .mockResolvedValueOnce(createMockStream('recovered'));
@@ -371,7 +391,13 @@ describe('AnthropicProvider image recovery (@issue:3216)', () => {
 
     const result = await consumeGenerator(
       provider,
-      buildCallOptions(provider, runtimeContext, settingsService, messages),
+      buildCallOptions(
+        provider,
+        runtimeContext,
+        settingsService,
+        config,
+        messages,
+      ),
     );
 
     expect(result.threw).toBe(false);
@@ -387,9 +413,11 @@ describe('AnthropicProvider image recovery (@issue:3216)', () => {
 
   it('does NOT retry for an unrelated 400 error', async () => {
     vi.clearAllMocks();
-    const { provider, runtimeContext, settingsService } = setupProvider({
-      withImageBudget: false,
-    });
+    const { provider, runtimeContext, config, settingsService } = setupProvider(
+      {
+        withImageBudget: false,
+      },
+    );
     mockMessagesCreate.mockRejectedValueOnce(make400UnrelatedError());
 
     const messages: IContent[] = [
@@ -401,7 +429,13 @@ describe('AnthropicProvider image recovery (@issue:3216)', () => {
 
     const result = await consumeGenerator(
       provider,
-      buildCallOptions(provider, runtimeContext, settingsService, messages),
+      buildCallOptions(
+        provider,
+        runtimeContext,
+        settingsService,
+        config,
+        messages,
+      ),
     );
 
     expect(result.threw).toBe(true);
@@ -411,9 +445,11 @@ describe('AnthropicProvider image recovery (@issue:3216)', () => {
   it('does NOT retry a second time if the sanitized request also fails', async () => {
     vi.clearAllMocks();
     const big = await pngBase64(3000, 3000);
-    const { provider, runtimeContext, settingsService } = setupProvider({
-      withImageBudget: false,
-    });
+    const { provider, runtimeContext, config, settingsService } = setupProvider(
+      {
+        withImageBudget: false,
+      },
+    );
     mockMessagesCreate
       .mockRejectedValueOnce(make400ImageDimensionError())
       .mockRejectedValueOnce(make400ImageDimensionError());
@@ -434,7 +470,13 @@ describe('AnthropicProvider image recovery (@issue:3216)', () => {
 
     const result = await consumeGenerator(
       provider,
-      buildCallOptions(provider, runtimeContext, settingsService, messages),
+      buildCallOptions(
+        provider,
+        runtimeContext,
+        settingsService,
+        config,
+        messages,
+      ),
     );
 
     expect(result.threw).toBe(true);
@@ -445,9 +487,11 @@ describe('AnthropicProvider image recovery (@issue:3216)', () => {
   it('does NOT consume a transport slot for recovery when the signal is already aborted', async () => {
     vi.clearAllMocks();
     const big = await pngBase64(3000, 3000);
-    const { provider, runtimeContext, settingsService } = setupProvider({
-      withImageBudget: false,
-    });
+    const { provider, runtimeContext, config, settingsService } = setupProvider(
+      {
+        withImageBudget: false,
+      },
+    );
 
     const messages: IContent[] = [
       {
@@ -470,6 +514,7 @@ describe('AnthropicProvider image recovery (@issue:3216)', () => {
       provider,
       runtimeContext,
       settingsService,
+      config,
       messages,
     );
     const attached = attachTransportAttemptBudget(baseOptions, 5);
@@ -504,9 +549,11 @@ describe('AnthropicProvider image recovery (@issue:3216)', () => {
   it('retries once after a 400 when oversized image is nested in tool_result media', async () => {
     vi.clearAllMocks();
     const big = await pngBase64(3000, 3000);
-    const { provider, runtimeContext, settingsService } = setupProvider({
-      withImageBudget: false,
-    });
+    const { provider, runtimeContext, config, settingsService } = setupProvider(
+      {
+        withImageBudget: false,
+      },
+    );
     mockMessagesCreate
       .mockRejectedValueOnce(make400ImageDimensionError())
       .mockResolvedValueOnce(createMockStream('recovered-nested'));
@@ -546,7 +593,13 @@ describe('AnthropicProvider image recovery (@issue:3216)', () => {
 
     const result = await consumeGenerator(
       provider,
-      buildCallOptions(provider, runtimeContext, settingsService, messages),
+      buildCallOptions(
+        provider,
+        runtimeContext,
+        settingsService,
+        config,
+        messages,
+      ),
     );
 
     expect(mockMessagesCreate).toHaveBeenCalledTimes(2);
@@ -570,9 +623,11 @@ describe('AnthropicProvider image recovery through RetryOrchestrator (@issue:321
   it('dimension-400 then sanitized retry 429 = exactly two physical calls (budget-exhausted)', async () => {
     vi.clearAllMocks();
     const big = await pngBase64(3000, 3000);
-    const { provider, runtimeContext, settingsService } = setupProvider({
-      withImageBudget: false,
-    });
+    const { provider, runtimeContext, config, settingsService } = setupProvider(
+      {
+        withImageBudget: false,
+      },
+    );
     mockMessagesCreate
       .mockRejectedValueOnce(make400ImageDimensionError())
       .mockRejectedValueOnce(make429RateLimitError());
@@ -604,7 +659,7 @@ describe('AnthropicProvider image recovery through RetryOrchestrator (@issue:321
       contents: messages,
       settings: settingsService,
       runtime: runtimeContext,
-      config: runtimeContext.config,
+      config,
       ephemerals: { retries: 2, retrywait: 0 },
     } as Parameters<typeof createProviderCallOptions>[0]);
 
@@ -629,9 +684,11 @@ describe('AnthropicProvider image recovery through RetryOrchestrator (@issue:321
   it('sanitized retry error propagates verbatim; no third physical call', async () => {
     vi.clearAllMocks();
     const big = await pngBase64(3000, 3000);
-    const { provider, runtimeContext, settingsService } = setupProvider({
-      withImageBudget: false,
-    });
+    const { provider, runtimeContext, config, settingsService } = setupProvider(
+      {
+        withImageBudget: false,
+      },
+    );
     // phys 1: poisoned original → 400 image-dimension error.
     // phys 2: sanitized retry → distinct 500 marker error.
     mockMessagesCreate
@@ -664,7 +721,7 @@ describe('AnthropicProvider image recovery through RetryOrchestrator (@issue:321
       contents: messages,
       settings: settingsService,
       runtime: runtimeContext,
-      config: runtimeContext.config,
+      config,
       ephemerals: { retries: 2, retrywait: 0 },
     } as Parameters<typeof createProviderCallOptions>[0]);
 
@@ -693,9 +750,11 @@ describe('AnthropicProvider image recovery through RetryOrchestrator (@issue:321
   it('does NOT resend the poisoned original on a subsequent outer attempt', async () => {
     vi.clearAllMocks();
     const big = await pngBase64(3000, 3000);
-    const { provider, runtimeContext, settingsService } = setupProvider({
-      withImageBudget: false,
-    });
+    const { provider, runtimeContext, config, settingsService } = setupProvider(
+      {
+        withImageBudget: false,
+      },
+    );
     mockMessagesCreate
       .mockRejectedValueOnce(make400ImageDimensionError()) // phys 1: poisoned
       .mockRejectedValueOnce(make429RateLimitError()) // phys 2: sanitized retry
@@ -725,7 +784,7 @@ describe('AnthropicProvider image recovery through RetryOrchestrator (@issue:321
       contents: messages,
       settings: settingsService,
       runtime: runtimeContext,
-      config: runtimeContext.config,
+      config,
       ephemerals: { retries: 3, retrywait: 0 },
       resolved: { streaming: true },
     } as Parameters<typeof createProviderCallOptions>[0]);

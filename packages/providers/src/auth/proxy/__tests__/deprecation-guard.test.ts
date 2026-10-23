@@ -212,9 +212,9 @@ describe('Deprecation Guards (P36)', () => {
   });
 
   describe('Factory Module is Single Entry Point', () => {
-    it('createTokenStore is exported from credential-store-factory', () => {
+    it('CredentialAuthority is exported from credential-store-factory for owner acquisition', () => {
       const matches = grepFiles(
-        'export function createTokenStore',
+        'export class CredentialAuthority',
         '*.ts',
         providersAuthRoot,
         ['node_modules', 'dist', '__tests__'],
@@ -245,21 +245,21 @@ describe('Deprecation Guards (P36)', () => {
       // of creating a partial fallback manager.
 
       const runtimeMatches = grepFiles(
-        'createOwnedTokenStore',
+        '.createTokenStore(',
         '*.ts',
-        path.resolve(providersSrcRoot, 'runtime'),
+        path.resolve(packagesRoot, 'agents', 'src', 'api'),
         ['node_modules', 'dist', '__tests__'],
       );
 
       const providerMatches = grepFiles(
-        'createTokenStore',
+        '.createTokenStore(',
         '*.ts',
         path.resolve(providersSrcRoot, 'composition'),
         ['node_modules', 'dist', '__tests__'],
       );
 
       const commandMatches = grepFiles(
-        'createTokenStore',
+        '.createTokenStore(',
         '*.ts',
         path.resolve(cliSrcRoot, 'ui/commands'),
         ['node_modules', 'dist', '__tests__'],
@@ -268,7 +268,7 @@ describe('Deprecation Guards (P36)', () => {
       // At least one consumer in each category that creates OAuthManager should
       // use the factory; the auth command should no longer create OAuthManager.
       const hasRuntimeFactoryImport = runtimeMatches.some((m) =>
-        m.includes('runtimeContextFactory.ts'),
+        m.includes('preferred-provider-acquisition.ts'),
       );
       const hasProviderFactoryImport = providerMatches.some((m) =>
         m.includes('providerManagerInstance.ts'),
@@ -278,7 +278,10 @@ describe('Deprecation Guards (P36)', () => {
       );
 
       expect(hasRuntimeFactoryImport).toBe(true);
-      expect(hasProviderFactoryImport).toBe(true);
+      expect(hasProviderFactoryImport).toBe(false);
+      expect(
+        runtimeMatches.some((match) => match.includes('profile-preflight.ts')),
+      ).toBe(true);
       expect(commandStillReferencesFactory).toBe(false);
     });
   });

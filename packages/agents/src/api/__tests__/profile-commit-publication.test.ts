@@ -1,26 +1,76 @@
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-import { describe, expect, it, vi } from 'bun:test';
-import { fileURLToPath } from 'node:url';
-import { FakeProvider } from '@vybestack/llxprt-code-providers';
-import { fromConfig } from '../fromConfig.js';
-import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
-import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import { ProviderManager } from '@vybestack/llxprt-code-providers';
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
 import {
-  coreEvents,
-  CoreEvent,
-} from '@vybestack/llxprt-code-core/utils/events.js';
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import {
+  Config,
+  ConfigParameters,
+} from '@vybestack/llxprt-code-core/config/config.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { toConfigParameters } from '../agentConfig.adapter.js';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import {
+  ProviderFileLifecycle,
+  FakeProvider,
+  ProviderManager,
+} from '@vybestack/llxprt-code-providers';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
+import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import {
+  acquirePreferredProviderManager,
+  acquirePreferredOAuth,
+  preparePreferredProviderCompletion,
+} from '../preferred-provider-acquisition.js';
+import { releaseAdoptedFileScope } from '../adoption-release.js';
+import { randomUUID } from 'node:crypto';
+import {
+  runCleanupSteps,
+  cleanupAfterFailure,
+} from '../../core/subagent-cleanup.js';
+import { SessionClientOwner } from '../../session/session-client-owner.js';
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
+import { beforeAll, afterAll, describe, expect, it, vi } from 'bun:test';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { fileURLToPath } from 'node:url';
+import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
+import {
+  createAgentRuntimeFactoryBindings,
+  AgentRuntimeFactoryBindings,
+} from '../runtimeFactories.js';
+import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
+import { executeProviderActivation } from '../providerActivationExecutor.js';
+import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
+import { assembleModelSelection } from '../model-selection.js';
+import { buildRuntimeProfileSnapshot } from '../profileSnapshot.js';
+import { AgentConfig, ProviderActivationIntent } from '../config-types.js';
+import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
+import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
+
+import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import { CoreEvent } from '@vybestack/llxprt-code-core/utils/events.js';
 import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import {
   MemoryTokenStore,
   makeToken,
 } from './helpers/provider-auth-fixtures.js';
 
-import { createLoopHolder, rebuildLoop } from '../loop/rebuildLoop.js';
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 function originalCauses(error: unknown): unknown[] {
   return error instanceof AggregateError
@@ -29,43 +79,276 @@ function originalCauses(error: unknown): unknown[] {
 }
 
 describe('profile-commit-publication', () => {
+  let promptDirectory: string;
+  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+  beforeAll(async () => {
+    promptDirectory = await mkdtemp(join(tmpdir(), 'engine-prompts-'));
+    process.env.LLXPRT_PROMPTS_DIR = promptDirectory;
+    await initializePromptSystem();
+  });
+  afterAll(async () => {
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(promptDirectory, { recursive: true, force: true });
+  });
+
+  const builtCredentials = useOwnedCredentials();
+  let builtCallerConfig: Config;
+  let builtCallerSettings: SettingsService;
+  let builtCallerSettingsOwner: SessionSettingsOwner;
+  let builtCallerPolicy: RuntimePolicyOwner;
+  let builtCallerMcp: McpRuntimeOwner;
+  let builtCallerManager: ReturnType<typeof acquirePreferredProviderManager>;
+  let builtCallerOwner: SessionClientOwner;
+  let builtCallerClose: () => Promise<void>;
+  let builtCallerFactories: AgentRuntimeFactoryBindings;
+  let builtCallerRelease: AcquisitionRelease;
+  let builtCallerFiles: ProviderFileLifecycle;
+  let builtCallerRuntimeId: string;
+  let builtCallerOAuth: ReturnType<typeof acquirePreferredOAuth>;
+  let builtCallerTokenizer: ReturnType<typeof configureProviderTokenizer>;
+  let builtCallerContent: ReturnType<
+    typeof createRuntimeContentGeneratorFactory
+  >;
+
+  async function openbuiltCaller(
+    fixture: string,
+    overrides: Readonly<Partial<AgentConfig>> = {},
+    suppliedFactories: Readonly<Partial<AgentRuntimeFactoryBindings>> = {},
+    skillSettings: Pick<
+      ConfigParameters,
+      'enableExtensionReloading' | 'storageRoot'
+    > = {},
+    extensionLoader?: ExtensionLoader,
+    skillOperations?: WorkspaceSkillAssemblyOperations,
+  ): Promise<void> {
+    const previousReplay = process.env.LLXPRT_FAKE_RESPONSES;
+    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+      new URL('./fixtures/' + fixture, import.meta.url),
+    );
+    const directory = await realpath(
+      await mkdtemp(join(tmpdir(), 'builtCaller-adoption-')),
+    );
+    const selection: AgentConfig = {
+      provider: 'fake',
+      model: 'fake-model',
+      sessionId: randomUUID(),
+      ...overrides,
+      workingDir:
+        overrides.workingDir === undefined
+          ? directory
+          : await realpath(overrides.workingDir),
+    };
+    const parameters = { ...toConfigParameters(selection), ...skillSettings };
+    parameters.interactive = true;
+    if (overrides.hooks !== undefined) parameters.enableHooks = true;
+    if (
+      overrides.filesystemOwner === undefined &&
+      (overrides.harness?.includeProcessCwd ?? true)
+    )
+      parameters.includeDirectories = [
+        ...(parameters.includeDirectories ?? []),
+        process.cwd(),
+      ];
+    builtCallerConfig = new Config(parameters);
+    builtCallerFactories = {
+      ...createAgentRuntimeFactoryBindings(),
+      ...suppliedFactories,
+    };
+    builtCallerSettings = new SettingsService();
+    for (const [key, value] of Object.entries(
+      builtCallerConfig.getInitialSettings(),
+    ))
+      builtCallerSettings.set(key, value);
+    builtCallerPolicy = new RuntimePolicyOwner(builtCallerConfig);
+    injectConfirmationForcingPolicy(builtCallerPolicy.session.confirmation);
+    builtCallerMcp = await buildTestMcpRuntime(
+      builtCallerConfig,
+      builtCallerPolicy.session.messageBus,
+      overrides,
+      extensionLoader,
+      builtCallerPolicy,
+      skillOperations,
+    );
+    acquirebuiltCallerProviders();
+    const media = new SessionMediaOwner(
+      builtCallerConfig.projectTempDir,
+      1024 * 1024 * 1024,
+    );
+    builtCallerOwner = await createCapturedSessionOwner(
+      builtCallerConfig,
+      assembleTaskSchemaPolicy(builtCallerSettings),
+      builtCallerManager,
+      builtCallerFactories.agentClientFactory,
+      media.store,
+      builtCallerMcp.readInstructions,
+      builtCallerMcp.workspacePaths,
+      builtCallerSettingsOwner,
+      builtCallerContent,
+      builtCallerTokenizer,
+    );
+    builtCallerOwner.bindMcpRuntime(builtCallerMcp);
+    builtCallerOwner.bindProviderFiles(builtCallerFiles, (provider) =>
+      builtCallerOAuth.composeRetryOperations(provider),
+    );
+    builtCallerOwner.bindHooks();
+    builtCallerClose = settleEngineRelease.bind(
+      undefined,
+      [
+        () => builtCallerOwner.dispose(),
+        () => builtCallerRelease.close(),
+        () => media.dispose(),
+        () => builtCallerMcp.dispose(),
+        () => builtCallerConfig.dispose(),
+        () => rm(directory, { recursive: true, force: true }),
+      ],
+      previousReplay,
+    );
+    try {
+      await preparePreferredProviderCompletion(
+        builtCallerConfig,
+        builtCallerSettings,
+        builtCallerSettingsOwner,
+        builtCallerManager,
+        builtCallerOAuth,
+        builtCallerRuntimeId,
+        builtCallerTokenizer,
+        undefined,
+      );
+      await builtCallerMcp.initialize();
+      await activatebuiltCallerClient(selection.activation);
+    } catch (primary) {
+      await cleanupAfterFailure(primary, builtCallerClose);
+    }
+  }
+  function acquirebuiltCallerProviders(): void {
+    builtCallerRuntimeId = 'builtCaller-' + randomUUID();
+    builtCallerRelease = new AcquisitionRelease();
+    builtCallerSettingsOwner = new SessionSettingsOwner(builtCallerSettings);
+    builtCallerRelease.acquire('settings', () =>
+      builtCallerSettingsOwner.dispose(),
+    );
+    builtCallerSettingsOwner.initializeProviderSelection(
+      builtCallerConfig.getProvider(),
+      builtCallerConfig.getModel(),
+    );
+    builtCallerSettingsOwner.bindTelemetry(builtCallerConfig);
+    builtCallerFiles = new ProviderFileLifecycle({
+      maxFiles: 100,
+      maxBytes: 512 * 1024 * 1024,
+    });
+    for (const scope of [
+      builtCallerRuntimeId,
+      builtCallerConfig.getSessionId(),
+    ])
+      builtCallerRelease.acquire('files', () =>
+        releaseAdoptedFileScope(builtCallerFiles, scope),
+      );
+    builtCallerManager = acquirePreferredProviderManager(
+      builtCallerConfig,
+      builtCallerSettings,
+      builtCallerSettingsOwner,
+      builtCallerFiles,
+      builtCallerRuntimeId,
+      builtCredentials().authority,
+      builtCallerRelease,
+    );
+    const factoriesTokenizer = configureProviderTokenizer(builtCallerManager);
+    const factoriesContent = createRuntimeContentGeneratorFactory();
+    builtCallerTokenizer = factoriesTokenizer;
+    builtCallerContent = factoriesContent;
+    builtCallerOAuth = acquirePreferredOAuth(
+      undefined,
+      builtCallerPolicy.session.messageBus,
+      builtCallerConfig,
+      builtCallerSettings,
+      builtCallerManager,
+      builtCallerRuntimeId,
+      builtCallerMcp.profileDefinitions,
+      builtCredentials().authority,
+      builtCallerRelease,
+      undefined,
+    );
+  }
+  async function activatebuiltCallerClient(
+    intent: ProviderActivationIntent = {
+      provider: builtCallerConfig.getProvider(),
+      model: builtCallerConfig.getModel(),
+    },
+  ): Promise<void> {
+    const activation = await executeProviderActivation(
+      builtCallerConfig,
+      intent,
+      assembleProviderSwitch(
+        builtCallerConfig,
+        builtCallerSettings,
+        builtCallerManager,
+        builtCallerOAuth,
+        () => 'agent',
+        () => builtCallerOwner.refreshAuth(),
+        builtCallerSettingsOwner,
+      ),
+      builtCallerSettings,
+      builtCallerManager,
+      (method) => builtCallerOwner.refreshAuth(method),
+      assembleModelSelection(builtCallerSettingsOwner),
+    );
+    requireCallerActivation(activation);
+    await builtCallerOwner.initializeTools();
+    await capturedSessionClient(builtCallerOwner).startChat();
+  }
+
   it.each([false, true])(
     'retains committed state and retires both old subscriptions (removal throws: %s)',
     async (removalThrows) => {
-      const built = await buildCliStyleConfig('multi-turn-text.jsonl');
-      const ownerModels = coreEvents.listeners(CoreEvent.ModelChanged);
-      const ownerProfiles = coreEvents.listeners(CoreEvent.ModelProfileChanged);
-      const agent = await fromConfig({
-        oauthManager: built.runtime.oauthManager,
-        providerFileLifecycle: built.runtime.providerFileLifecycle,
-        settingsOwner: built.settingsOwner,
-        settingsService: built.settingsService,
-        providerManager: built.providerManager,
-        config: built.config,
-        mcpRuntime: built.mcpRuntime,
-        messageBus: built.messageBus,
-      });
-      const manager = built.providerManager;
+      await openbuiltCaller('multi-turn-text.jsonl');
+      const ownerModels = builtCallerSettingsOwner[
+        'modelNotifications'
+      ].listeners(CoreEvent.ModelChanged);
+      const ownerProfiles = builtCallerSettingsOwner[
+        'modelNotifications'
+      ].listeners(CoreEvent.ModelProfileChanged);
+      const agent = await fromConfig(
+        builtCallerConfig,
+        builtCallerSettings,
+        {},
+        builtCallerSettingsOwner,
+        builtCallerManager,
+        builtCallerOAuth,
+        builtCallerPolicy.session.messageBus,
+        builtCallerMcp,
+        undefined,
+        undefined,
+        builtCallerFiles,
+      );
+      const manager = builtCallerManager;
 
       const alternative = new FakeProvider(
         fileURLToPath(
           new URL('./fixtures/multi-turn-text.jsonl', import.meta.url),
         ),
-        built.config.getTargetDir(),
+        builtCallerConfig.getTargetDir(),
       );
       alternative.name = 'alternative';
       alternative.baseProviderConfig = {
         baseURL: 'https://alternative.invalid',
       };
       manager.registerProvider(alternative);
-      const oldModels = coreEvents
+      const oldModels = builtCallerSettingsOwner['modelNotifications']
         .listeners(CoreEvent.ModelChanged)
         .filter((listener) => !ownerModels.includes(listener));
-      const oldProfiles = coreEvents
+      const oldProfiles = builtCallerSettingsOwner['modelNotifications']
         .listeners(CoreEvent.ModelProfileChanged)
         .filter((listener) => !ownerProfiles.includes(listener));
-      await agent.agentClient.startChat();
-      const { agentClient: priorClient } = agent;
+      const resources = fixtureAgentResources(agent);
+      await resources.publishedClient(agent).startChat();
+      await resources.readObservedHistory(agent);
+      const priorClient = resources.historyReaders
+        .slice(-1)
+        .values()
+        .next().value;
+      if (priorClient === undefined)
+        throw new Error('Expected an actual native history receiver');
       const history = priorClient.getHistoryService();
       const modelError = new Error('model listener failed');
       const profileError = new Error('profile listener failed');
@@ -91,9 +374,18 @@ describe('profile-commit-publication', () => {
           throw removalError;
         }
       };
-      coreEvents.on(CoreEvent.ModelChanged, onModel);
-      coreEvents.on(CoreEvent.ModelProfileChanged, onProfile);
-      coreEvents.addListener('removeListener', onRemove);
+      builtCallerSettingsOwner['modelNotifications'].on(
+        CoreEvent.ModelChanged,
+        onModel,
+      );
+      builtCallerSettingsOwner['modelNotifications'].on(
+        CoreEvent.ModelProfileChanged,
+        onProfile,
+      );
+      builtCallerSettingsOwner['modelNotifications'].addListener(
+        'removeListener',
+        onRemove,
+      );
       try {
         const outcome = await agent.profiles
           .applySnapshot({
@@ -120,20 +412,39 @@ describe('profile-commit-publication', () => {
           removalThrows,
         );
         for (const listener of oldModels)
-          expect(coreEvents.listeners(CoreEvent.ModelChanged)).not.toContain(
-            listener,
-          );
+          expect(
+            builtCallerSettingsOwner['modelNotifications'].listeners(
+              CoreEvent.ModelChanged,
+            ),
+          ).not.toContain(listener);
         for (const listener of oldProfiles)
           expect(
-            coreEvents.listeners(CoreEvent.ModelProfileChanged),
+            builtCallerSettingsOwner['modelNotifications'].listeners(
+              CoreEvent.ModelProfileChanged,
+            ),
           ).not.toContain(listener);
-        expect(agent.agentClient).not.toBe(priorClient);
-        expect(agent.agentClient.getHistoryService()).toBe(history);
+        expect(fixtureAgentResources(agent).publishedClient(agent)).not.toBe(
+          priorClient,
+        );
+        expect(
+          fixtureAgentResources(agent)
+            .publishedClient(agent)
+            .getHistoryService(),
+        ).toBe(history);
         expect(agent.getModel()).toBe('committed-after-listener-error');
         expect(agent.profiles.isApplying()).toBe(false);
-        coreEvents.off(CoreEvent.ModelChanged, onModel);
-        coreEvents.off(CoreEvent.ModelProfileChanged, onProfile);
-        coreEvents.removeListener('removeListener', onRemove);
+        builtCallerSettingsOwner['modelNotifications'].off(
+          CoreEvent.ModelChanged,
+          onModel,
+        );
+        builtCallerSettingsOwner['modelNotifications'].off(
+          CoreEvent.ModelProfileChanged,
+          onProfile,
+        );
+        builtCallerSettingsOwner['modelNotifications'].removeListener(
+          'removeListener',
+          onRemove,
+        );
         await agent.profiles.applySnapshot({
           version: 1,
           provider: 'alternative',
@@ -154,33 +465,61 @@ describe('profile-commit-publication', () => {
           { type: 'done', reason: 'stop' },
         ]);
       } finally {
-        coreEvents.off(CoreEvent.ModelChanged, onModel);
-        coreEvents.off(CoreEvent.ModelProfileChanged, onProfile);
-        coreEvents.removeListener('removeListener', onRemove);
+        builtCallerSettingsOwner['modelNotifications'].off(
+          CoreEvent.ModelChanged,
+          onModel,
+        );
+        builtCallerSettingsOwner['modelNotifications'].off(
+          CoreEvent.ModelProfileChanged,
+          onProfile,
+        );
+        builtCallerSettingsOwner['modelNotifications'].removeListener(
+          'removeListener',
+          onRemove,
+        );
         await agent.dispose();
-        await built.config.dispose();
-        await built.cleanup();
+        await builtCallerConfig.dispose();
+        await builtCallerClose();
       }
     },
     30000,
   );
 
   it('rolls back supported active-provider loss after model selection', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
-    const agent = await fromConfig({
-      settingsOwner: built.settingsOwner,
-      settingsService: built.settingsService,
-      agentClient: built.agentClient,
-      providerManager: built.providerManager,
-      config: built.config,
-      mcpRuntime: built.mcpRuntime,
-      messageBus: built.messageBus,
-    });
-    const settings = built.settingsService;
-    const manager = built.providerManager;
+    await openbuiltCaller('plain-text.jsonl');
+    const agent = await fromConfig(
+      builtCallerConfig,
+      builtCallerSettings,
+      {},
+      builtCallerSettingsOwner,
+      builtCallerManager,
+      undefined,
+      builtCallerPolicy.session.messageBus,
+      builtCallerMcp,
+      undefined,
+      capturedSessionClient(builtCallerOwner),
+    );
+    const settings = builtCallerSettings;
+    const manager = builtCallerManager;
     if (!(manager instanceof ProviderManager))
       throw new Error('Expected real provider manager');
-    const before = agent.captureProfile();
+    const priorProvider = manager.getActiveProviderName();
+    if (priorProvider === undefined)
+      throw new Error('Expected an active caller provider');
+    const priorSettings = structuredClone(
+      settings.getProviderSettings(priorProvider),
+    );
+    const priorModel = priorSettings.model;
+    if (typeof priorModel !== 'string')
+      throw new Error('Expected a configured caller model');
+    const before = buildRuntimeProfileSnapshot({
+      providerName: priorProvider,
+      modelName: priorModel,
+      providerSettings: priorSettings,
+      ephemeralSettings: structuredClone(
+        builtCallerSettingsOwner.captureUserParameters(),
+      ),
+    });
     const interrupt = (event: { key: string; newValue: unknown }): void => {
       if (event.key === 'temperature' && event.newValue === 0.25)
         manager.clearActiveProvider();
@@ -202,40 +541,28 @@ describe('profile-commit-publication', () => {
     } finally {
       settings.off('provider-change', interrupt);
       await agent.dispose();
-      await built.cleanup();
+      await builtCallerClose();
     }
   }, 30000);
 
   it('keeps the previous real loop runnable after replacement construction fails', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
+    await openbuiltCaller('plain-text.jsonl');
     try {
-      const holder = createLoopHolder();
-      const deps = {
-        telemetry: built.settingsOwner.telemetry,
-        loopHolder: holder,
-        resolveClient: () => built.agentClient,
-        toolSelection: built.agentClient.tools,
-        config: built.config,
-        mcpRuntime: built.mcpRuntime,
-        messageBus: built.messageBus,
-        readExecutionPolicy: () =>
-          built.settingsOwner.readToolExecutionPolicy(),
-        getToolGovernance: () =>
-          built.settingsOwner.readToolGovernance(
-            built.config.getExcludeTools() ?? [],
-          ),
-      };
-      const previous = rebuildLoop(deps);
-      const controller = holder.activeRunController;
-      if (!controller) throw new Error('Initial loop controller missing');
+      const previous = builtCallerOwner.initializeExecution(
+        undefined,
+        undefined,
+        undefined,
+      );
+      const rebuild = (): void => builtCallerOwner.rebuildExecution();
+      const controller = new AbortController();
       const failure = new Error('replacement loop configuration failed');
       const interactive = vi
-        .spyOn(built.config, 'isInteractive')
+        .spyOn(builtCallerConfig, 'isInteractive')
         .mockImplementationOnce(() => {
           throw failure;
         });
       try {
-        expect(() => rebuildLoop(deps)).toThrow(failure);
+        expect(rebuild).toThrow(failure);
       } finally {
         interactive.mockRestore();
       }
@@ -247,16 +574,16 @@ describe('profile-commit-publication', () => {
         events.push(event);
       expect(events.some((event) => event.kind === 'stream')).toBe(true);
     } finally {
-      await built.cleanup();
+      await builtCallerClose();
     }
   }, 30000);
 
   it('retains renewal schedules and publishes no profile success when real loop preparation fails', async () => {
-    const built = await buildCliStyleConfig('multi-turn-text.jsonl');
+    await openbuiltCaller('multi-turn-text.jsonl');
     const store = new MemoryTokenStore();
     const oauth = new OAuthManager(store, undefined, {
-      config: built.config,
-      messageBus: built.messageBus,
+      config: builtCallerConfig,
+      messageBus: builtCallerPolicy.session.messageBus,
     });
     oauth.registerProvider({
       name: 'fake',
@@ -271,15 +598,18 @@ describe('profile-commit-publication', () => {
       }),
     });
     await oauth.toggleOAuthEnabled('fake');
-    const agent = await fromConfig({
-      settingsOwner: built.settingsOwner,
-      settingsService: built.settingsService,
-      agentClient: built.agentClient,
-      providerManager: built.providerManager,
-      config: built.config,
-      mcpRuntime: built.mcpRuntime,
-      messageBus: built.messageBus,
-    });
+    const agent = await fromConfig(
+      builtCallerConfig,
+      builtCallerSettings,
+      {},
+      builtCallerSettingsOwner,
+      builtCallerManager,
+      undefined,
+      builtCallerPolicy.session.messageBus,
+      builtCallerMcp,
+      undefined,
+      capturedSessionClient(builtCallerOwner),
+    );
     const models: string[] = [];
     const profiles: unknown[] = [];
     const onModel = (model: string): void => {
@@ -288,15 +618,24 @@ describe('profile-commit-publication', () => {
     const onProfile = (profile: unknown): void => {
       profiles.push(profile);
     };
-    coreEvents.on(CoreEvent.ModelChanged, onModel);
-    coreEvents.on(CoreEvent.ModelProfileChanged, onProfile);
-    const initialModel = agent.getModel();
+    builtCallerSettingsOwner['modelNotifications'].on(
+      CoreEvent.ModelChanged,
+      onModel,
+    );
+    builtCallerSettingsOwner['modelNotifications'].on(
+      CoreEvent.ModelProfileChanged,
+      onProfile,
+    );
+    const initialModel = builtCallerSettings.getProviderSettings('fake').model;
+    if (typeof initialModel !== 'string')
+      throw new Error('Expected the configured caller model');
     try {
       const initialEvents = [];
       for await (const event of agent.stream('remember the prior conversation'))
         initialEvents.push(event);
       expect(initialEvents.some((event) => event.type === 'error')).toBe(false);
-      const priorHistory = await agent.getHistory();
+      const priorNativeClient = capturedSessionClient(builtCallerOwner);
+      const priorHistory = await priorNativeClient.getHistory();
       expect(priorHistory.length).toBeGreaterThan(0);
       vi.useFakeTimers();
       for (const bucket of ['old', 'replacement']) {
@@ -313,7 +652,7 @@ describe('profile-commit-publication', () => {
       oauth.setSessionBucket('fake', 'old');
       const failure = new Error('loop configuration unavailable');
       const interactive = vi
-        .spyOn(built.config, 'isInteractive')
+        .spyOn(builtCallerConfig, 'isInteractive')
         .mockImplementationOnce(() => {
           throw failure;
         });
@@ -369,11 +708,35 @@ describe('profile-commit-publication', () => {
       expect(profiles).toHaveLength(1);
       expect(models).toStrictEqual(['committed-model']);
     } finally {
-      coreEvents.off(CoreEvent.ModelChanged, onModel);
-      coreEvents.off(CoreEvent.ModelProfileChanged, onProfile);
+      builtCallerSettingsOwner['modelNotifications'].off(
+        CoreEvent.ModelChanged,
+        onModel,
+      );
+      builtCallerSettingsOwner['modelNotifications'].off(
+        CoreEvent.ModelProfileChanged,
+        onProfile,
+      );
       vi.useRealTimers();
       await agent.dispose();
-      await built.cleanup();
+      await builtCallerClose();
     }
   }, 30000);
 });
+
+async function settleEngineRelease(
+  steps: ReadonlyArray<() => void | Promise<void>>,
+  previousReplay: string | undefined,
+): Promise<void> {
+  try {
+    await runCleanupSteps(steps);
+  } finally {
+    if (previousReplay === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
+    else process.env.LLXPRT_FAKE_RESPONSES = previousReplay;
+  }
+}
+
+function requireCallerActivation(
+  result: Awaited<ReturnType<typeof executeProviderActivation>>,
+): void {
+  if (result.authFailed) throw result.authError;
+}

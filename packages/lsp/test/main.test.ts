@@ -695,6 +695,35 @@ describe('main channel wiring', () => {
     expect(exitSpy).toHaveBeenCalledWith(0);
   });
 
+  it('MCP channel startup failure rejects main without announcing ready', async () => {
+    process.env.LSP_BOOTSTRAP = JSON.stringify({
+      workspaceRoot: '/tmp/ws',
+      config: {},
+    });
+
+    const orchestratorShutdown = vi.fn().mockResolvedValue(undefined);
+    const rpcDispose = vi.fn();
+    const channelError = new Error('mcp channel failed');
+    const connection = createRpcConnectionDouble(rpcDispose);
+
+    await expect(
+      main({
+        createOrchestrator: createOrchestratorFactory(
+          createOrchestratorDouble(orchestratorShutdown),
+        ),
+        setupRpcChannel: createSetupRpcChannelDouble(),
+        createMcpChannel: vi.fn(async () => {
+          throw channelError;
+        }),
+        createRpcConnection: () => connection,
+      }),
+    ).rejects.toBe(channelError);
+
+    expect(connection.sendNotification).not.toHaveBeenCalledWith('lsp/ready');
+    expect(orchestratorShutdown).toHaveBeenCalledTimes(1);
+    expect(rpcDispose).toHaveBeenCalledTimes(1);
+  });
+
   it('sendNotification failure cleans up resources and rethrows the same error', async () => {
     process.env.LSP_BOOTSTRAP = JSON.stringify({
       workspaceRoot: '/tmp/ws',

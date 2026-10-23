@@ -11,8 +11,6 @@ import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.j
  * Non-streaming scenarios live in chatSession.tokenSync.nonstream.test.ts.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
-import { ChatSession } from './chatSession.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   createAgentRuntimeState,
@@ -24,7 +22,9 @@ import {
   createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { createTokenSyncTestFixture } from './__tests__/helpers/tokenSyncTestFixture.js';
+import { ChatSession } from './chatSession.js';
 
 describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
   let chat: ChatSession;
@@ -106,7 +106,7 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
 
       const view = createAgentRuntimeContext({
         ...createSessionPolicyFixture(
-          providerRuntimeSnapshot.settingsService,
+          runtimeSetup.settingsService,
           providerRuntimeSnapshot.runtimeId,
         ),
         state: runtimeState,
@@ -134,7 +134,19 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
         providerRuntime: providerRuntimeSnapshot,
       });
 
-      chat = new ChatSession(view, mockContentGenerator, {}, []);
+      chat = new ChatSession(
+        view,
+        mockConfig,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockContentGenerator,
+        {},
+        [],
+      );
 
       const stream = await chat.sendMessageStream(
         { message: [{ text: 'What is 2+2?' }] },
@@ -196,7 +208,7 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
 
       const view = createAgentRuntimeContext({
         ...createSessionPolicyFixture(
-          providerRuntimeSnapshot.settingsService,
+          runtimeSetup.settingsService,
           providerRuntimeSnapshot.runtimeId,
         ),
         state: runtimeState,
@@ -224,7 +236,19 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
         providerRuntime: providerRuntimeSnapshot,
       });
 
-      chat = new ChatSession(view, mockContentGenerator, {}, []);
+      chat = new ChatSession(
+        view,
+        mockConfig,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockContentGenerator,
+        {},
+        [],
+      );
 
       const stream = await chat.sendMessageStream(
         { message: [{ text: 'Hi' }] },
@@ -286,7 +310,7 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
 
       const view = createAgentRuntimeContext({
         ...createSessionPolicyFixture(
-          providerRuntimeSnapshot.settingsService,
+          runtimeSetup.settingsService,
           providerRuntimeSnapshot.runtimeId,
         ),
         state: runtimeState,
@@ -314,7 +338,19 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
         providerRuntime: providerRuntimeSnapshot,
       });
 
-      chat = new ChatSession(view, mockContentGenerator, {}, []);
+      chat = new ChatSession(
+        view,
+        mockConfig,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockContentGenerator,
+        {},
+        [],
+      );
 
       const stream = await chat.sendMessageStream(
         { message: [{ text: 'Test' }] },
@@ -383,7 +419,7 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
 
       const view = createAgentRuntimeContext({
         ...createSessionPolicyFixture(
-          providerRuntimeSnapshot.settingsService,
+          runtimeSetup.settingsService,
           providerRuntimeSnapshot.runtimeId,
         ),
         state: runtimeState,
@@ -411,7 +447,19 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
         providerRuntime: providerRuntimeSnapshot,
       });
 
-      chat = new ChatSession(view, mockContentGenerator, {}, []);
+      chat = new ChatSession(
+        view,
+        mockConfig,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockContentGenerator,
+        {},
+        [],
+      );
 
       const stream = await chat.sendMessageStream(
         { message: [{ text: 'What is the weather?' }] },
@@ -440,7 +488,7 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
 
       const view = createAgentRuntimeContext({
         ...createSessionPolicyFixture(
-          providerRuntimeSnapshot.settingsService,
+          runtimeSetup.settingsService,
           providerRuntimeSnapshot.runtimeId,
         ),
         state: runtimeState,
@@ -493,7 +541,19 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
         getActiveProvider: vi.fn(() => mockProvider),
       };
 
-      chat = new ChatSession(view, mockContentGenerator, {}, []);
+      chat = new ChatSession(
+        view,
+        mockConfig,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockContentGenerator,
+        {},
+        [],
+      );
 
       const stream = await chat.sendMessageStream(
         { message: [{ text: '' }] },
@@ -533,7 +593,7 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
 
       const view = createAgentRuntimeContext({
         ...createSessionPolicyFixture(
-          providerRuntimeSnapshot.settingsService,
+          runtimeSetup.settingsService,
           providerRuntimeSnapshot.runtimeId,
         ),
         state: runtimeState,
@@ -576,7 +636,19 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
         getActiveProvider: vi.fn(() => mockProvider),
       };
 
-      chat = new ChatSession(view, mockContentGenerator, {}, []);
+      chat = new ChatSession(
+        view,
+        mockConfig,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockContentGenerator,
+        {},
+        [],
+      );
 
       const stream = await chat.sendMessageStream(
         { message: [{ text: 'Test' }] },

@@ -1,12 +1,9 @@
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-
+import {
+  useRecordingPrompts,
+  withRecordingLifetimeFixture,
+} from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
-
-import { Config } from '@vybestack/llxprt-code-core';
+import { Config, HydratedModel } from '@vybestack/llxprt-code-core';
 import { buildSlashCommandRuntime } from '../cliUiRuntime.js';
 import { DialogManager } from './DialogManager.js';
 import { DialogProvider } from '../stores/dialog/DialogContext.js';
@@ -14,9 +11,7 @@ import { AppCommandsProvider } from '../contexts/AppCommandsContext.js';
 import { createAppCommandBindings } from '../../__tests__/appCommandBindings.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { useTextBuffer } from './shared/text-buffer.js';
-
 import { hasDialogRequest } from '../../__tests__/dialogStore.js';
-
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import {
   renderHook,
@@ -24,24 +19,24 @@ import {
   renderWithProviders,
   createMockSettings,
 } from '../../__tests__/render.js';
-import type { HydratedModel } from '@vybestack/llxprt-code-core';
 import { readFile } from 'node:fs/promises';
-import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
-
-// Mock the providers runtime barrel to avoid the broken dist dependency chain.
-void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
-  parseEphemeralSettingValue: vi.fn(),
-  applyCliSetArguments: vi.fn(() => ({ modelParams: {} })),
-}));
-
-void vi.mock('@vybestack/llxprt-code-providers', () => ({}));
-
 import { useModelDialogHandler } from './modelDialogHandler.js';
+import { bindModelSwitchRecording } from '../utils/recordActiveProviderSwitch.js';
 import {
   createDialogStore,
   type DialogStore,
   type DialogRequest,
 } from '../stores/dialog/dialogStore.js';
+
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+// Mock the providers runtime barrel to avoid the broken dist dependency chain.
+
+void vi.mock('@vybestack/llxprt-code-providers', () => ({}));
 
 // --- Stateful runtime fake ---
 interface FakeRuntimeState {
@@ -101,9 +96,27 @@ let fakeRuntime: ReturnType<typeof createFakeRuntime>;
 let mockAddItem: ReturnType<typeof vi.fn>;
 let callSequence: string[];
 
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  useRuntimeApi: () => fakeRuntime,
-}));
+const selectedRuntimeMock1 = (() =>
+  (() => {
+    const useSelectedTestRuntime = () => fakeRuntime;
+    return {
+      useGetActiveProviderName: () =>
+        useSelectedTestRuntime().getActiveProviderName,
+
+      useProviderStatus: () => useSelectedTestRuntime().providerStatus,
+
+      useSetActiveModel: () => useSelectedTestRuntime().setActiveModel,
+
+      useSetProvider: () => useSelectedTestRuntime().setProvider,
+
+      useRuntimeApi: useSelectedTestRuntime,
+    };
+  })())();
+void vi.mock('../contexts/RuntimeContext.js', () => selectedRuntimeMock1);
+void vi.mock(
+  '../../__tests__/runtime-context-fixture.js',
+  () => selectedRuntimeMock1,
+);
 
 function makeModel(provider: string, id: string): HydratedModel {
   return {
@@ -121,13 +134,14 @@ function createSeededStore(): DialogStore {
 }
 
 describe('useModelDialogHandler', () => {
+  useRecordingPrompts();
   beforeEach(() => {
     mockAddItem = vi.fn();
     callSequence = [];
     fakeRuntime = createFakeRuntime();
   });
   it('persists model selection through the Agent recorder without a raw write', async () => {
-    await withRecordingLifetimeFixture(async ({ agent }) => {
+    await withRecordingLifetimeFixture(async (agent) => {
       await agent.setHistory([
         { speaker: 'human', blocks: [{ type: 'text', text: 'start' }] },
       ]);
@@ -142,11 +156,11 @@ describe('useModelDialogHandler', () => {
           mockAddItem,
           store,
           'openai',
-          {
-            recordingOwner: 'agent',
-            services: { agent },
-            recordingIntegration: { recordProviderSwitch: rawWrite } as never,
-          },
+          bindModelSwitchRecording(
+            'agent',
+            (event) => agent.session.recordRecordingEvent(event),
+            { recordProviderSwitch: rawWrite },
+          ),
         ),
       );
       result.current(makeModel('openai', 'owner-model'));
@@ -164,13 +178,21 @@ describe('useModelDialogHandler', () => {
 
   it('opens config dialog after successful same-provider model switch', async () => {
     const store = createSeededStore();
+    // The success path records the switch, so bind the real unowned,
+    // no-recorder configuration rather than a stand-in callback.
     const { result } = renderHook(() =>
       useModelDialogHandler(
         fakeRuntime as never,
         mockAddItem,
         store,
         'openai',
-        {},
+        bindModelSwitchRecording(
+          undefined,
+          () => {
+            throw new Error('Unexpected owner recording');
+          },
+          undefined,
+        ),
       ),
     );
 
@@ -192,7 +214,7 @@ describe('useModelDialogHandler', () => {
         mockAddItem,
         store,
         'openai',
-        { recordingIntegration: { recordProviderSwitch } },
+        recordProviderSwitch,
       ),
     );
 
@@ -220,7 +242,7 @@ describe('useModelDialogHandler', () => {
         mockAddItem,
         store,
         'openai',
-        {},
+        () => undefined,
       ),
     );
 
@@ -244,7 +266,7 @@ describe('useModelDialogHandler', () => {
         mockAddItem,
         store,
         'openai',
-        {},
+        () => undefined,
       ),
     );
 
@@ -271,7 +293,7 @@ describe('useModelDialogHandler', () => {
         mockAddItem,
         store,
         'openai',
-        {},
+        () => undefined,
       ),
     );
 
@@ -305,7 +327,7 @@ describe('useModelDialogHandler', () => {
         mockAddItem,
         store,
         'openai',
-        { recordingIntegration: { recordProviderSwitch } },
+        recordProviderSwitch,
       ),
     );
 
@@ -329,13 +351,20 @@ const LOAD_PROFILE_MARKER = 'Select Profile (';
 const CREATE_PROFILE_MARKER = 'Create New Profile - Step 1 of 6';
 const TOOLS_MARKER = 'Select a tool to disable:';
 
-function DialogManagerHarness({ store }: { store: DialogStore }) {
+function DialogManagerHarness({
+  store,
+  owner,
+}: {
+  store: DialogStore;
+  owner: Awaited<ReturnType<typeof createUiSessionOwner>>;
+}) {
   const buffer = useTextBuffer({
     viewport: { width: 100, height: 40 },
     isValidPath: () => false,
   });
   const bindings = createAppCommandBindings('DialogManager', {
     buffer,
+    generatePromptContent: null,
     commandContext: createMockCommandContext(),
     inputHistory: [],
   });
@@ -362,49 +391,61 @@ function DialogManagerHarness({ store }: { store: DialogStore }) {
       debugMode: false,
       model: 'test',
     }),
-    createUiSessionOwner(),
+    owner,
   );
   return (
     <AppCommandsProvider value={commands}>
       <DialogProvider store={store}>
-        <DialogManager config={config} settings={createMockSettings({})} />
+        <DialogManager
+          readIdeWorkspaceTrust={() => undefined}
+          subscribeIdeWorkspaceTrust={() => () => {}}
+          config={config}
+          settings={createMockSettings({})}
+        />
       </DialogProvider>
     </AppCommandsProvider>
   );
 }
 
-function renderDialogManager(requests: DialogRequest[]): string {
+async function renderDialogManager(requests: DialogRequest[]): Promise<string> {
+  const owner = await createUiSessionOwner();
   const store = createDialogStore();
   for (const request of requests) store.commands.openDialog(request);
-  const view = renderWithProviders(<DialogManagerHarness store={store} />, {
-    terminal: {
-      terminalWidth: 100,
-      terminalHeight: 40,
-      mainAreaWidth: 100,
-      constrainHeight: false,
+  const view = renderWithProviders(
+    <DialogManagerHarness store={store} owner={owner} />,
+    {
+      terminal: {
+        terminalWidth: 100,
+        terminalHeight: 40,
+        mainAreaWidth: 100,
+        constrainHeight: false,
+      },
+      settingsProfile: {
+        providerOptions: ['ollama'],
+        profiles: ['alpha', 'beta'],
+        toolsDialogTools: [
+          {
+            name: 'shell',
+            displayName: 'Shell',
+            source: 'builtin',
+            enabled: true,
+          },
+        ],
+        toolsDialogDisabledTools: [],
+      },
     },
-    settingsProfile: {
-      providerOptions: ['ollama'],
-      profiles: ['alpha', 'beta'],
-      toolsDialogTools: [
-        {
-          name: 'shell',
-          displayName: 'Shell',
-          source: 'builtin',
-          enabled: true,
-        },
-      ],
-      toolsDialogDisabledTools: [],
-    },
-  });
+  );
   const frame = view.lastFrame() ?? '';
   view.unmount();
   return frame;
 }
 
 describe('DialogManager render dispatch', () => {
-  it('renders the folder-trust dialog when only its request is open', () => {
-    const frame = renderDialogManager([{ kind: 'folderTrust', payload: {} }]);
+  useRecordingPrompts();
+  it('renders the folder-trust dialog when only its request is open', async () => {
+    const frame = await renderDialogManager([
+      { kind: 'folderTrust', payload: {} },
+    ]);
     expect(frame).toContain(FOLDER_TRUST_MARKER);
     expect(frame).not.toContain(PROVIDER_MARKER);
     expect(frame).not.toContain(LOAD_PROFILE_MARKER);
@@ -412,8 +453,10 @@ describe('DialogManager render dispatch', () => {
     expect(frame).not.toContain(TOOLS_MARKER);
   });
 
-  it('renders the provider dialog when only its request is open', () => {
-    const frame = renderDialogManager([{ kind: 'provider', payload: {} }]);
+  it('renders the provider dialog when only its request is open', async () => {
+    const frame = await renderDialogManager([
+      { kind: 'provider', payload: {} },
+    ]);
     expect(frame).toContain(PROVIDER_MARKER);
     expect(frame).not.toContain(FOLDER_TRUST_MARKER);
     expect(frame).not.toContain(LOAD_PROFILE_MARKER);
@@ -421,8 +464,10 @@ describe('DialogManager render dispatch', () => {
     expect(frame).not.toContain(TOOLS_MARKER);
   });
 
-  it('renders the load-profile dialog when only its request is open', () => {
-    const frame = renderDialogManager([{ kind: 'loadProfile', payload: {} }]);
+  it('renders the load-profile dialog when only its request is open', async () => {
+    const frame = await renderDialogManager([
+      { kind: 'loadProfile', payload: {} },
+    ]);
     expect(frame).toContain(LOAD_PROFILE_MARKER);
     expect(frame).not.toContain(FOLDER_TRUST_MARKER);
     expect(frame).not.toContain(PROVIDER_MARKER);
@@ -430,8 +475,10 @@ describe('DialogManager render dispatch', () => {
     expect(frame).not.toContain(TOOLS_MARKER);
   });
 
-  it('renders the profile-create wizard when only its request is open', () => {
-    const frame = renderDialogManager([{ kind: 'createProfile', payload: {} }]);
+  it('renders the profile-create wizard when only its request is open', async () => {
+    const frame = await renderDialogManager([
+      { kind: 'createProfile', payload: {} },
+    ]);
     expect(frame).toContain(CREATE_PROFILE_MARKER);
     expect(frame).not.toContain(FOLDER_TRUST_MARKER);
     expect(frame).not.toContain(PROVIDER_MARKER);
@@ -439,8 +486,8 @@ describe('DialogManager render dispatch', () => {
     expect(frame).not.toContain(TOOLS_MARKER);
   });
 
-  it('renders the tools dialog when only its request is open', () => {
-    const frame = renderDialogManager([
+  it('renders the tools dialog when only its request is open', async () => {
+    const frame = await renderDialogManager([
       { kind: 'tools', payload: { action: 'disable' } },
     ]);
     expect(frame).toContain(TOOLS_MARKER);
@@ -450,10 +497,10 @@ describe('DialogManager render dispatch', () => {
     expect(frame).not.toContain(CREATE_PROFILE_MARKER);
   });
 
-  it('renders exactly the folder-trust dialog when early, first-half, and second-half requests are all open', () => {
+  it('renders exactly the folder-trust dialog when early, first-half, and second-half requests are all open', async () => {
     // Early dialogs win: folder trust beats provider (first half) and tools
     // (second half).
-    const frame = renderDialogManager([
+    const frame = await renderDialogManager([
       { kind: 'folderTrust', payload: {} },
       { kind: 'provider', payload: {} },
       { kind: 'tools', payload: { action: 'disable' } },
@@ -463,9 +510,9 @@ describe('DialogManager render dispatch', () => {
     expect(frame).not.toContain(TOOLS_MARKER);
   });
 
-  it('renders exactly the provider dialog when first-half and second-half requests are both open', () => {
+  it('renders exactly the provider dialog when first-half and second-half requests are both open', async () => {
     // First half beats second half: provider beats tools.
-    const frame = renderDialogManager([
+    const frame = await renderDialogManager([
       { kind: 'provider', payload: {} },
       { kind: 'tools', payload: { action: 'disable' } },
     ]);
@@ -473,9 +520,9 @@ describe('DialogManager render dispatch', () => {
     expect(frame).not.toContain(TOOLS_MARKER);
   });
 
-  it('renders exactly the load-profile dialog when both profile requests are open', () => {
+  it('renders exactly the load-profile dialog when both profile requests are open', async () => {
     // The store priority gives load precedence over create.
-    const frame = renderDialogManager([
+    const frame = await renderDialogManager([
       { kind: 'loadProfile', payload: {} },
       { kind: 'createProfile', payload: {} },
     ]);

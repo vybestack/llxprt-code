@@ -1,3 +1,4 @@
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 /**
  * @license
@@ -34,7 +35,12 @@ import {
 async function captureCompressError(
   ctx: Parameters<MiddleOutStrategy['compress']>[0],
 ): Promise<unknown> {
-  const strategy = new MiddleOutStrategy();
+  const strategy = new MiddleOutStrategy(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+  );
   try {
     await strategy.compress(ctx);
     throw new Error('Expected compress() to throw but it did not');
@@ -51,7 +57,14 @@ describe('MiddleOutStrategy empty summary handling', () => {
       history,
       resolveProvider: () => ({
         invocation: captureProviderInvocation(
-          testProviderRuntime,
+          {
+            runtimeId: testProviderRuntime.runtimeId,
+            metadata: testProviderRuntime.metadata,
+            globalSettings: new SettingsService().getAllGlobalSettings(),
+            providerSettings: new SettingsService().getProviderSettings(
+              emptyProvider.name,
+            ),
+          },
           emptyProvider.name,
         ),
         provider: emptyProvider,
@@ -74,7 +87,14 @@ describe('MiddleOutStrategy empty summary handling', () => {
       history,
       resolveProvider: () => ({
         invocation: captureProviderInvocation(
-          testProviderRuntime,
+          {
+            runtimeId: testProviderRuntime.runtimeId,
+            metadata: testProviderRuntime.metadata,
+            globalSettings: new SettingsService().getAllGlobalSettings(),
+            providerSettings: new SettingsService().getProviderSettings(
+              whitespaceProvider.name,
+            ),
+          },
           whitespaceProvider.name,
         ),
         provider: whitespaceProvider,
@@ -129,7 +149,14 @@ describe('MiddleOutStrategy enriched EmptySummaryError diagnostics (issue #2333)
       history,
       resolveProvider: () => ({
         invocation: captureProviderInvocation(
-          testProviderRuntime,
+          {
+            runtimeId: testProviderRuntime.runtimeId,
+            metadata: testProviderRuntime.metadata,
+            globalSettings: new SettingsService().getAllGlobalSettings(),
+            providerSettings: new SettingsService().getProviderSettings(
+              thinkingOnlyProvider.name,
+            ),
+          },
           thinkingOnlyProvider.name,
         ),
         provider: thinkingOnlyProvider,

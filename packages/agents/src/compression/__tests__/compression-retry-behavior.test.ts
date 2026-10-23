@@ -117,7 +117,6 @@ describe('ChatSession compression retry behavior @plan PLAN-20260218-COMPRESSION
     runtimeSetup = createChatSessionRuntime();
     providerRuntimeSnapshot = {
       ...runtimeSetup.runtime,
-      config: runtimeSetup.config,
     };
   });
 
@@ -303,7 +302,6 @@ describe('ChatSession compression fallback @plan PLAN-20260218-COMPRESSION-RETRY
     runtimeSetup = createChatSessionRuntime();
     providerRuntimeSnapshot = {
       ...runtimeSetup.runtime,
-      config: runtimeSetup.config,
     };
   });
 

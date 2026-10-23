@@ -17,7 +17,8 @@ import {
   waitFor,
 } from '../__tests__/render.js';
 import { createMockCommandContext } from '../__tests__/mockCommandContext.js';
-import { buildAppCommands, useAppStores } from './AppContainerRuntime.js';
+import { useAppStores } from './AppContainerRuntime.js';
+import { buildAppCommands } from './appCommandBindings.js';
 import {
   AppCommandsProvider,
   useAppCommands,
@@ -52,6 +53,22 @@ function dialogCommands(): Parameters<typeof buildAppCommands>[0] {
       dismiss: noop,
     },
     triggerWelcomeAuth: asyncNoop,
+    recordModelSwitch: () => undefined,
+    readPolicyRules: async () => {
+      throw new Error('Queue test must not read policies');
+    },
+    listSubagentDefinitions: async () => [],
+    loadSubagentDefinition: async () => {
+      throw new Error('Queue test must not load definitions');
+    },
+    saveSubagentDefinition: asyncNoop,
+    deleteSubagentDefinition: async () => {
+      throw new Error('Queue test must not delete definitions');
+    },
+    listSubagentProfiles: async () => [],
+    generateSubagentPrompt: async () => {
+      throw new Error('Queue test must not generate prompts');
+    },
     handleThemeSelect: noop,
     handleThemeHighlight: noop,
     handleAuthSelect: asyncNoop,
@@ -90,6 +107,9 @@ function createHarness(initialQueueCommandsAvailable = true) {
     return null;
   });
   CommandConsumer.displayName = 'CommandConsumer';
+  const readBrowserCatalog = async (): Promise<never> => {
+    throw new Error('Queue test must not read browser');
+  };
   let queue: ReturnType<typeof useQueuedSubmissions> | undefined;
   let revision = 0;
   function Harness() {
@@ -109,6 +129,16 @@ function createHarness(initialQueueCommandsAvailable = true) {
       {
         buffer,
         commandContext: createMockCommandContext(),
+        readBrowserCatalog,
+        deleteBrowserTarget: async () => {
+          throw new Error('Queue test must not delete browser');
+        },
+        resumeBrowserTarget: async () => ({ ok: true }),
+        generatePromptContent: async () => {
+          throw new Error(
+            'Queue controls must not generate prompt completions',
+          );
+        },
         inputHistoryStore: { inputHistory: [] },
         handleUserInputSubmit: (text) => {
           submitted.push(`${currentRevision}:${text}`);

@@ -42,7 +42,6 @@ describe('ChatSession compression cooldown @plan PLAN-20260218-COMPRESSION-RETRY
     runtimeSetup = createChatSessionRuntime();
     providerRuntimeSnapshot = {
       ...runtimeSetup.runtime,
-      config: runtimeSetup.config,
     };
   });
 

@@ -1,301 +1,142 @@
-import { resolveShellJobSettings } from '@vybestack/llxprt-code-core/config/asyncTaskServices.js';
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
+import { captureAgentCreation as createAgent } from './helpers/agent-resource-capture.js';
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { ShellJobOwner } from '../../session/shell-job-owner.js';
-import { TaskLaunchOwner } from '../../session/task-launch-owner.js';
-import { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from 'bun:test';
+import fc from 'fast-check';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 
-/**
- * @plan:PLAN-20260621-COREAPIREMED.P13
- * @requirement:REQ-003
- *
- * BEHAVIORAL RED suite for Agent.getCurrentSequenceModel() delegation.
- *
- * The production method today is a hardcoded `return null` stub
- * (agentImpl.ts:692-694). The pseudocode (get-current-sequence-model.md
- * lines 10-15) requires it to resolve the bound client FRESH on every call
- * (R-CLIENT invariant — never cache), null-guard a missing client, and
- * delegate to AgentClientContract.getCurrentSequenceModel().
- *
- * This suite proves the delegation behavior through the blessed dependency-
- * injection seam `AgentDeps.resolveClient` (agentImpl.ts:132) — the SAME seam
- * the sibling method getHistory
- * (agentImpl.ts:759) delegate through. Using this seam is DEPENDENCY
- * INJECTION, not mock theater: the suite assembles a real AgentDeps (built
- * from a real Config via buildCliStyleConfig) and injects a controllable
- * resolveClient that returns a fake AgentClientContract carrying a chosen
- * sequence-model value. Every assertion is on the REAL RETURN VALUE of
- * agent.getCurrentSequenceModel() — there are zero spy-call assertions.
- *
- * At RED (this phase): the positive delegation cases (T9a, T9d, PROP
- * round-trip, PROP consumer-fallback-with-model) FAIL because the stub
- * returns null regardless of what the client reports. The null contract
- * cases (T9b, T9c) PASS because null IS the genuine contract value when
- * the client reports null or is absent — they assert that real value, not
- * an inverted expectation.
- *
- * At GREEN (P14): the one-liner delegation
- *   `return this.deps.resolveClient()?.getCurrentSequenceModel() ?? null`
- * makes every case pass with no rewrite.
- */
+import type { Agent } from '../agent.js';
+import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
+import { projectCurrentSequenceModel } from '../agentStatsProjector.js';
+import { SequenceModelClient } from './helpers/sequence-model-client.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import { runCleanupSteps } from '../../core/subagent-cleanup.js';
 
-import { describe, it, expect } from 'bun:test';
-import * as fc from 'fast-check';
-import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
-import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
-import { buildAgent, type AgentDeps } from '../agentImpl.js';
-import { createLoopHolder } from '../loop/rebuildLoop.js';
-import { recordOwnership } from '../agentBootstrap.js';
-import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
-
-// ─── Fake client carrying a chosen sequence-model value ─────────────────────
-//
-// Mirrors the established single-cast-to-contract idiom (realLoopHarness.ts
-// builds a scripted client object literal with getCurrentSequenceModel: () =>
-// null; rebuildLoopProbe.ts uses the { __tag } cast for value-identity). Only
-// getCurrentSequenceModel is exercised by THIS method, so the object is
-// intentionally minimal. The cast is localized to the injected dependency
-// ONLY; the resolveClient seam itself is a real `() => fakeClient` closure.
-
-/**
- * Builds a minimal fake AgentClientContract that reports the given sequence
- * model. Used as the injected dependency value behind resolveClient.
- */
-function makeSeqClient(sequenceModel: string | null): AgentClientContract {
-  return {
-    getCurrentSequenceModel: () => sequenceModel,
-  } as unknown as AgentClientContract;
-}
-
-/**
- * Assembles a real AgentDeps bundle from a real Config (via buildCliStyleConfig)
- * with a CONTROLLABLE resolveClient seam. The config-derived fields (config,
- * providerManager, messageBus, settingsService, runtimeState) are genuine so
- * the AgentImpl constructor's config reads (getAgentClient, getTargetDir,
- * getMcpRuntimeStatus, getToolRegistry) succeed against real objects. The
- * lightweight structural fields (runtimeId, runtimeHandle, loopHolder,
- * ownership, rebuildLoop) are real-shaped stand-ins for surfaces the
- * getCurrentSequenceModel path never touches.
- */
-function assembleDeps(
-  built: Awaited<ReturnType<typeof buildCliStyleConfig>>,
-  resolveClient: () => AgentClientContract | undefined,
-): AgentDeps {
-  const config = built.config;
-  const runtimeState = createAgentRuntimeState({
-    runtimeId: 'seq-test',
-    provider: config.getProvider() ?? 'fake',
-    model: config.getModel(),
+describe('Agent current sequence model delegation', () => {
+  const credentials = useOwnedCredentials();
+  const releases: Array<() => Promise<void>> = [];
+  const suiteReleases: Array<() => Promise<void>> = [];
+  afterAll(async () => runCleanupSteps(suiteReleases.splice(0).reverse()));
+  beforeAll(async () => {
+    const prompts = await mkdtemp(join(tmpdir(), 'sequence-model-prompts-'));
+    suiteReleases.push(() => rm(prompts, { recursive: true, force: true }));
+    const previous = process.env.LLXPRT_PROMPTS_DIR;
+    suiteReleases.push(async () => {
+      if (previous === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+      else process.env.LLXPRT_PROMPTS_DIR = previous;
+    });
+    process.env.LLXPRT_PROMPTS_DIR = prompts;
+    await initializePromptSystem();
   });
-  const loopHolder = createLoopHolder();
-  const ownership = recordOwnership({
-    runtimeHandle: { cleanup: () => undefined },
-    config,
-    messageBus: built.messageBus,
-    loopHolder,
-    runtimeState,
-    injectedSchedulerHandles: [],
-    configOwnership: 'caller',
-  });
-  return {
-    sessionClient: built.sessionClient,
-    settingsOwner: built.settingsOwner,
-    workspaceSkills: built.mcpRuntime.workspaceSkills.operations,
-    taskLaunchOwner: new TaskLaunchOwner(new AsyncTaskManager()),
-    shellOwner: new ShellJobOwner(() =>
-      resolveShellJobSettings(built.settingsService),
-    ),
-    mediaStore: built.agentClient.mediaStore,
-    config,
-    sessionIdentityOwnership: 'facade',
-    mcpOperations: built.mcpRuntime,
-    switchProvider: async () => {
-      throw new Error('Unexpected provider switch in sequence-model test');
-    },
-    // Config exposes the runtime-adopted ProviderManager (configBaseCore.ts:265).
-    providerManager: built.providerManager,
-    // getCurrentSequenceModel never reads oauthManager; structural stand-in keeps the cast localized.
-    oauthManager: {} as unknown as AgentDeps['oauthManager'],
-    settingsService: built.settingsService,
-    runtimeId: 'seq-test',
-    runtimeHandle: { cleanup: () => undefined },
-    messageBus: built.messageBus,
-    loopHolder,
-    runtimeState,
-    ownership,
-    rebuildLoop: () => undefined,
-    // resolveClient may yield undefined (T9c null-guard case); AgentDeps types it non-optional,
-    // so cast the variance at this single injected seam (runtime null-guard is the behavior under test).
-    resolveClient: resolveClient as AgentDeps['resolveClient'],
-    // getCurrentSequenceModel never touches these holders; minimal stand-ins.
-    displayCallbacks: {},
-    editorCallbacksHolder: { editorCallbacks: {} },
-    displayCallbacksHolder: {},
-  };
-}
-
-describe('getCurrentSequenceModel delegation @plan:PLAN-20260621-COREAPIREMED.P13 @requirement:REQ-003', () => {
-  it('T9a client reports "gpt-4o" → agent.getCurrentSequenceModel() === "gpt-4o" @requirement:REQ-003 @scenario:positive-delegation @given:an agent whose resolveClient returns a client reporting "gpt-4o" @when:agent.getCurrentSequenceModel() @then:returns "gpt-4o"', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
-    try {
-      const fakeClient = makeSeqClient('gpt-4o');
-      const deps = assembleDeps(built, () => fakeClient);
-      const agent: Agent = buildAgent(deps);
-      expect(agent.getCurrentSequenceModel()).toBe('gpt-4o');
-    } finally {
-      await built.cleanup();
-    }
-  });
-
-  it('T9b client reports null → agent.getCurrentSequenceModel() === null (genuine contract value, stable across repeated calls) @requirement:REQ-003 @scenario:null-contract @scenario:property @given:an agent whose resolveClient returns a client reporting null @when:agent.getCurrentSequenceModel() is called repeatedly @then:returns null on every call (null-stability property)', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
-    try {
-      const fakeClient = makeSeqClient(null);
-      const deps = assembleDeps(built, () => fakeClient);
-      const agent: Agent = buildAgent(deps);
-      // Property: null-stability — repeated calls always return null (never
-      // drift to undefined or a string). fc.integer drives the repetition count.
-      await fc.assert(
-        fc.asyncProperty(fc.integer({ min: 1, max: 25 }), async (n) => {
-          for (let i = 0; i < n; i++) {
-            expect(agent.getCurrentSequenceModel()).toBeNull();
-          }
-        }),
-      );
-    } finally {
-      await built.cleanup();
-    }
-  });
-
-  it('T9c resolveClient returns undefined (no client yet) → agent.getCurrentSequenceModel() returns null and does NOT throw @requirement:REQ-003 @scenario:null-guard @given:an agent whose resolveClient returns undefined @when:agent.getCurrentSequenceModel() @then:returns null without throwing', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
-    try {
-      const deps = assembleDeps(built, () => undefined);
-      const agent: Agent = buildAgent(deps);
-      expect(agent.getCurrentSequenceModel()).toBeNull();
-    } finally {
-      await built.cleanup();
-    }
-  });
-
-  it('T9d after rebind (resolveClient now returns a new client reporting "claude-x") → the SAME agent returns "claude-x" (no caching — R-CLIENT fresh-resolve) @requirement:REQ-003 @scenario:no-caching @given:an agent whose resolveClient closure captures a mutable client reporting "gpt-4o" @when:the captured client is reassigned to one reporting "claude-x" and getCurrentSequenceModel() is called again @then:returns "claude-x" on the SAME agent (proves fresh re-resolve, never cached)', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
-    try {
-      let current: AgentClientContract | undefined = makeSeqClient('gpt-4o');
-      const deps = assembleDeps(built, () => current);
-      const agent: Agent = buildAgent(deps);
-      // First call resolves the initial client.
-      expect(agent.getCurrentSequenceModel()).toBe('gpt-4o');
-      // Rebind: the closure now returns a DIFFERENT client on the SAME agent.
-      current = makeSeqClient('claude-x');
-      expect(agent.getCurrentSequenceModel()).toBe('claude-x');
-    } finally {
-      await built.cleanup();
-    }
-  });
-
-  it('PROP round-trip: for any model string s, when the injected client reports s, agent.getCurrentSequenceModel() === s @requirement:REQ-003 @scenario:property-round-trip @given:a random non-empty model string s and an agent whose client reports s @when:agent.getCurrentSequenceModel() @then:returns s (round-trip equality)', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
-    try {
-      await fc.assert(
-        fc.asyncProperty(fc.string({ minLength: 1 }), async (s) => {
-          const fakeClient = makeSeqClient(s);
-          const deps = assembleDeps(built, () => fakeClient);
-          const agent: Agent = buildAgent(deps);
-          expect(agent.getCurrentSequenceModel()).toBe(s);
-        }),
-      );
-    } finally {
-      await built.cleanup();
-    }
-  });
-
-  it('PROP consumer fallback: (agent.getCurrentSequenceModel() ?? agent.getModel()) equals the client reported sequence model when present, else equals agent.getModel() @requirement:REQ-003 @scenario:property-consumer-fallback @given:a random model string and an agent whose client reports it @when:a consumer computes seq ?? agent.getModel() @then:the result equals the reported model; and when the client reports null the result equals agent.getModel()', async () => {
-    const { fallbackProperty, observations, cleanup } =
-      await observeConsumerFallbacks();
-    try {
-      await fc.assert(fallbackProperty);
-    } finally {
-      await cleanup();
-    }
-    expect(
-      observations.map(({ presentResult }) => presentResult),
-    ).toStrictEqual(observations.map(({ reportedModel }) => reportedModel));
-    expect(observations.map(({ absentResult }) => absentResult)).toStrictEqual(
-      observations.map(({ absentModel }) => absentModel),
+  let agent: Agent;
+  let sequenceForNextClient: string | null;
+  const clients: SequenceModelClient[] = [];
+  afterEach(async () => runCleanupSteps(releases.splice(0).reverse()));
+  beforeEach(async () => {
+    const temporary = await mkdtemp(join(tmpdir(), 'sequence-model-'));
+    releases.push(() => rm(temporary, { recursive: true, force: true }));
+    const directory = await realpath(temporary);
+    const oldReplay = process.env.LLXPRT_FAKE_RESPONSES;
+    releases.push(async () => {
+      if (oldReplay === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
+      else process.env.LLXPRT_FAKE_RESPONSES = oldReplay;
+    });
+    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+      new URL('./fixtures/multi-turn-text.jsonl', import.meta.url),
     );
-    expect(observations.map(({ absentModel }) => absentModel)).toStrictEqual(
-      observations.map(({ fallbackModel }) => fallbackModel),
-    );
-  });
-
-  const observeConsumerFallbacks = async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
-    const fallbackModel = built.config.getModel();
-    const observations: Array<{
-      reportedModel: string;
-      presentResult: string;
-      absentResult: string;
-      absentModel: string;
-      fallbackModel: string;
-    }> = [];
-    const fallbackProperty = fc.asyncProperty(
-      fc.string({ minLength: 1 }),
-      (reportedModel) => {
-        const presentAgent: Agent = buildAgent(
-          assembleDeps(built, () => makeSeqClient(reportedModel)),
-        );
-        const absentAgent: Agent = buildAgent(
-          assembleDeps(built, () => makeSeqClient(null)),
-        );
-        const presentResult =
-          presentAgent.getCurrentSequenceModel() ?? presentAgent.getModel();
-        const absentResult =
-          absentAgent.getCurrentSequenceModel() ?? absentAgent.getModel();
-        const absentModel = absentAgent.getModel();
-        observations.push({
-          reportedModel,
-          presentResult,
-          absentResult,
-          absentModel,
-          fallbackModel,
-        });
-        return Promise.resolve(
-          presentResult === reportedModel &&
-            absentResult === absentModel &&
-            absentModel === fallbackModel,
-        );
+    sequenceForNextClient = null;
+    clients.length = 0;
+    agent = await createAgent({
+      provider: 'fake',
+      model: 'fallback-model',
+      workingDir: directory,
+      credentialAuthority: credentials().authority,
+      harness: { includeProcessCwd: false },
+      runtimeFactoryBindings: {
+        ...createAgentRuntimeFactoryBindings(),
+        agentClientFactory: (
+          config,
+          state,
+          instructions,
+          store,
+          paths,
+          reads,
+        ) => {
+          if (
+            instructions === undefined ||
+            store === undefined ||
+            paths === undefined
+          )
+            throw new Error('Missing real sequence client construction inputs');
+          const client = new SequenceModelClient(
+            config,
+            state,
+            instructions,
+            store,
+            paths,
+            undefined,
+            undefined,
+            reads,
+          );
+          client.sequenceModel = sequenceForNextClient;
+          clients.push(client);
+          return client;
+        },
       },
+    });
+    releases.push(() => agent.dispose());
+  });
+  it('T9a client reports gpt-4o and the public Agent delegates to that real client', () => {
+    for (const client of clients) client.sequenceModel = 'gpt-4o';
+    expect(agent.getCurrentSequenceModel()).toBe('gpt-4o');
+  });
+  it('T9b null remains a genuine public contract value across repeated calls', async () => {
+    await fc.assert(
+      fc.asyncProperty(fc.integer({ min: 1, max: 25 }), async (count) => {
+        for (let index = 0; index < count; index++)
+          expect(agent.getCurrentSequenceModel()).toBeNull();
+      }),
     );
-    return { fallbackProperty, observations, cleanup: built.cleanup };
-  };
-
-  // ─── Genuine null contract via the REAL path (distinct from T9b's injected
-  // seam): proves the real fake-provider client reports null sequence model
-  // (no load-balancer sticky model under the fake seam) and that the public
-  // fromConfig-built agent surfaces that genuine null. This is NOT a reverse
-  // test — null IS the real contract value here.
-  it('T9b-real fromConfig-built agent over the fake seam returns null (genuine null contract, real client) @requirement:REQ-003 @scenario:null-contract-real @given:a real agent built via fromConfig over the fake-provider seam @when:agent.getCurrentSequenceModel() @then:returns null (the real fake-provider client reports no sequence model)', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
-    try {
-      const agent: Agent = await fromConfig({
-        settingsOwner: built.settingsOwner,
-        settingsService: built.settingsService,
-        providerManager: built.providerManager,
-        config: built.config,
-        mcpRuntime: built.mcpRuntime,
-      });
-      try {
-        expect(agent.getCurrentSequenceModel()).toBeNull();
-      } finally {
-        await agent.dispose();
-      }
-    } finally {
-      await built.cleanup();
-    }
+  });
+  it('T9c the actual projection used by Agent guards an absent pre-initialization client', () => {
+    expect(projectCurrentSequenceModel(undefined)).toBeNull();
+  });
+  it('T9d resolves a genuinely replaced session client fresh on the same public Agent', async () => {
+    for (const client of clients) client.sequenceModel = 'gpt-4o';
+    expect(agent.getCurrentSequenceModel()).toBe('gpt-4o');
+    const previous = clients.slice(-1).pop();
+    if (previous === undefined)
+      throw new Error('Missing originally acquired client');
+    sequenceForNextClient = 'claude-x';
+    await agent.session.startNewSession();
+    expect(fixtureAgentResources(agent).publishedClient(agent)).not.toBe(
+      previous,
+    );
+    previous.sequenceModel = 'retired-client-model';
+    expect(agent.getCurrentSequenceModel()).toBe('claude-x');
+  });
+  it('PROP every nonempty scalar model reported by the real selected client reaches the public Agent', async () => {
+    await fc.assert(
+      fc.asyncProperty(fc.string({ minLength: 1 }), async (model) => {
+        for (const client of clients) client.sequenceModel = model;
+        expect(agent.getCurrentSequenceModel()).toBe(model);
+      }),
+    );
   });
 });

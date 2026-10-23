@@ -1,3 +1,4 @@
+import { scopeInputs } from './__tests__/subagent-test-helpers.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -15,24 +16,17 @@ import type { PromptConfig } from '@vybestack/llxprt-code-core/core/subagentType
 import type { AgentRuntimeProviderAdapter } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import {
-  createMockConfig,
+  installSubagentCleanup,
+  seedSubagentSettings,
+  createSubagentConfig,
+  acquireSubagentSettings,
+  acquireSubagentWorkspace,
   defaultModelConfig,
   defaultRunConfig,
   createStatelessRuntimeBundle,
   createRuntimeOverrides,
 } from './__tests__/subagent-test-helpers.js';
 
-const actual = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
-void vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
-  ...actual,
-  IdeClient: {
-    getInstance: vi.fn().mockResolvedValue({
-      getConnectionStatus: vi.fn(),
-      initialize: vi.fn(),
-      shutdown: vi.fn(),
-    }),
-  },
-}));
 const actual2 = {
   ...(await import('@vybestack/llxprt-code-core/core/prompts.js')),
 };
@@ -42,6 +36,8 @@ void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
 }));
 
 describe('subagent.ts', () => {
+  const retainSubagentCleanup = installSubagentCleanup();
+
   describe('ContextState', () => {
     it('should set and get values correctly', () => {
       const context = new ContextState();
@@ -61,7 +57,20 @@ describe('subagent.ts', () => {
   describe('SubAgentScope', () => {
     describe('Stateless compliance (STATELESS7)', () => {
       it('should not read provider manager directly from Config', async () => {
-        const { config, mcpRuntime } = await createMockConfig();
+        const configSettings = seedSubagentSettings();
+        const config = createSubagentConfig(
+          configSettings,
+          retainSubagentCleanup,
+        );
+        await acquireSubagentSettings(
+          config,
+          configSettings,
+          retainSubagentCleanup,
+        );
+        const mcpRuntime = await acquireSubagentWorkspace(
+          config,
+          retainSubagentCleanup,
+        );
         const promptConfig: PromptConfig = { systemPrompt: 'Stateless' };
         const getProviderManagerSpy = vi.fn(() => {
           throw new Error('Forbidden Config manager discovery');
@@ -101,7 +110,7 @@ describe('subagent.ts', () => {
           defaultRunConfig,
           undefined,
           undefined,
-          overrides,
+          ...scopeInputs(overrides),
         );
 
         expect(getProviderManagerSpy).not.toHaveBeenCalled();

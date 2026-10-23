@@ -4,62 +4,66 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  SessionEndReason,
-  SessionStartSource,
-} from '@vybestack/llxprt-code-core';
+import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 import { AgentBusyError } from '@vybestack/llxprt-code-agents';
-import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 import { CommandKind, type SlashCommand } from './types.js';
-export const clearCommand: SlashCommand = {
-  name: 'clear',
-  description: 'clear the screen and conversation history',
-  kind: CommandKind.BUILT_IN,
-  autoExecute: true,
-  action: async (context, _args) => {
-    const agent = context.services.agent;
+export interface ClearSessionOperations {
+  readonly endSession: () => Promise<void>;
+  readonly startNewSession: () => Promise<void>;
+  readonly startSession: () => Promise<{ readonly systemMessage?: string }>;
+}
+export function createClearCommand(
+  session: ClearSessionOperations | null,
+  setDebugMessage: (message: string) => void,
+  addItem: UseHistoryManagerReturn['addItem'],
+  updateHistoryTokenCount: (count: number) => void,
+  clear: () => void,
+): SlashCommand {
+  return {
+    name: 'clear',
+    description: 'clear the screen and conversation history',
+    kind: CommandKind.BUILT_IN,
+    autoExecute: true,
+    action: async () => {
+      if (session) {
+        setDebugMessage('Clearing terminal and resetting chat.');
 
-    if (agent) {
-      context.ui.setDebugMessage('Clearing terminal and resetting chat.');
+        // Trigger SessionEnd hook before clearing (fail-open)
+        await session.endSession();
 
-      // Trigger SessionEnd hook before clearing (fail-open)
-      await agent.hooks.triggerSessionEnd(SessionEndReason.Clear);
+        try {
+          await session.startNewSession();
+        } catch (error) {
+          if (!(error instanceof AgentBusyError)) throw error;
+          return {
+            type: 'message',
+            messageType: 'error',
+            content: error.message,
+          };
+        }
 
-      try {
-        await agent.session.startNewSession();
-      } catch (error) {
-        if (!(error instanceof AgentBusyError)) throw error;
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: error.message,
-        };
+        // Trigger SessionStart hook after clearing (fail-open)
+        const sessionStartOutput = await session.startSession();
+
+        // Display system message if provided
+        if (sessionStartOutput.systemMessage) {
+          addItem(
+            {
+              type: 'info',
+              text: sessionStartOutput.systemMessage,
+            },
+            Date.now(),
+          );
+        }
+        // Note: Additional context is NOT injected after clear - clear means fresh start
+        // Only the system message is displayed
+      } else {
+        setDebugMessage('Clearing terminal.');
       }
 
-      // Trigger SessionStart hook after clearing (fail-open)
-      const sessionStartOutput = await agent.hooks.triggerSessionStart(
-        SessionStartSource.Clear,
-      );
-
-      // Display system message if provided
-      if (sessionStartOutput.systemMessage) {
-        context.ui.addItem(
-          {
-            type: 'info',
-            text: sessionStartOutput.systemMessage,
-          },
-          Date.now(),
-        );
-      }
-      // Note: Additional context is NOT injected after clear - clear means fresh start
-      // Only the system message is displayed
-    } else {
-      context.ui.setDebugMessage('Clearing terminal.');
-    }
-
-    uiTelemetryService.reset();
-    context.ui.updateHistoryTokenCount(0);
-    context.ui.clear();
-    return undefined;
-  },
-};
+      updateHistoryTokenCount(0);
+      clear();
+      return undefined;
+    },
+  };
+}

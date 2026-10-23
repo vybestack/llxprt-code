@@ -4,31 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { requireSessionAgent } from '../commands/historyServiceAccess.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
-import type { CliSessionPersistencePort } from '../../cliSessionPersistence.js';
 import type {
   RecordingIntegration,
   ToolCallConfirmationDetails,
   AgentRequestInput,
-  LocalMediaStore,
+  IContent,
 } from '@vybestack/llxprt-code-core';
 import type { DebugLogger } from '@vybestack/llxprt-code-telemetry';
-import {
-  getProjectHash,
-  importSessionMediaPackage,
-  ToolConfirmationOutcome,
-} from '@vybestack/llxprt-code-core';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-core';
 import { SlashCommandEvent } from '@vybestack/llxprt-code-telemetry';
-import { join } from 'node:path';
 import { parseSlashCommand } from '../../utils/commands.js';
 import { secureInputHandler } from '../utils/secureInputHandler.js';
-import {
-  createEmojiFilter,
-  filterHistoryItems,
-  iContentToHistoryItems,
-  resolveEmojiFilterMode,
-} from '../utils/iContentToHistoryItems.js';
 import type {
   CommandContext,
   ModelsDialogData,
@@ -36,16 +23,8 @@ import type {
   SlashCommand,
   SubagentDialogData,
 } from '../commands/types.js';
-import { performResume } from '../../services/performResume.js';
-import type {
-  PerformResumeResult,
-  RecordingSwapCallbacks,
-  ResumeContext,
-} from '../../services/performResume.js';
-import {
-  importOwnerSession,
-  resumeOwnerSession,
-} from '../utils/ownerSessionUi.js';
+import type { PerformResumeResult } from '../../services/performResume.js';
+
 import type {
   HistoryItemWithoutId,
   IndividualToolCallDisplay,
@@ -61,18 +40,24 @@ export interface SlashCommandHandlerDeps {
   commands: readonly SlashCommand[] | undefined;
   config: CliUiRuntime | null;
   commandContext: CommandContext;
+  resumeOwnedSession:
+    | ((action: PerformResumeActionReturn) => Promise<readonly string[]>)
+    | null;
+  resumeRawSession:
+    | ((action: PerformResumeActionReturn) => Promise<PerformResumeResult>)
+    | null;
+  replayResumedHistory: (history: readonly IContent[]) => void;
+  recordCommandError: (message: string) => Promise<void>;
+  isMcpDiscoveryPending: () => boolean;
+  loadCommandHistory: (
+    result: Extract<ActionResult, { type: 'load_history' }>,
+  ) => Promise<void>;
   actions: SlashCommandProcessorActions;
   addItem: (item: HistoryItemWithoutId, timestamp: number) => void;
   addMessage: (message: Message) => void;
   setIsProcessing: (isProcessing: boolean) => void;
   setLocalIsProcessing: (isProcessing: boolean) => void;
   setPendingItem: (item: HistoryItemWithoutId | null) => void;
-  /**
-   * Test seam for performSessionResume: bun's vi.mock is not scoped per
-   * test file, so tests inject a stub here instead of mocking the module
-   * (which would leak into unrelated suites).
-   */
-  performResumeFn?: typeof performResume;
   setSessionShellAllowlist: (
     updater: (prev: Set<string>) => Set<string>,
   ) => void;
@@ -80,8 +65,6 @@ export interface SlashCommandHandlerDeps {
     request: Extract<DialogRequest, { kind: 'confirmation' }> | null,
   ) => void;
   recordingIntegration?: RecordingIntegration;
-  recordingSwapCallbacks?: RecordingSwapCallbacks;
-  sessionPersistence?: CliSessionPersistencePort;
   confirmationLogger: DebugLogger;
   slashCommandLogger: DebugLogger;
   /** Registers the action about to be awaited and returns its controller. */
@@ -309,11 +292,11 @@ async function handleActionResult(
         toolArgs: result.toolArgs,
       };
     case 'message':
-      return handleMessageResult(deps, context, result);
+      return handleMessageResult(deps, result);
     case 'dialog':
       return handleDialogResult(deps, result);
     case 'load_history':
-      return handleLoadHistoryResult(context, result);
+      return handleLoadHistoryResult(deps, result);
     case 'quit':
       deps.actions.quit(result.messages);
       return { type: 'handled' };
@@ -327,7 +310,7 @@ async function handleActionResult(
     case 'confirm_action':
       return confirmAction(deps, result);
     case 'perform_resume':
-      return performSessionResume(deps, context, result);
+      return performSessionResume(deps, result);
     default: {
       const unhandled: never = result;
       throw new Error(`Unhandled slash command result: ${unhandled}`);
@@ -337,7 +320,6 @@ async function handleActionResult(
 
 async function handleMessageResult(
   deps: SlashCommandHandlerDeps,
-  context: CommandContext,
   result: Extract<ActionResult, { type: 'message' }>,
 ): Promise<SlashCommandProcessorResult> {
   deps.addItem(
@@ -349,17 +331,7 @@ async function handleMessageResult(
     Date.now(),
   );
   if (result.messageType === 'error') {
-    if (context.recordingOwner === 'agent') {
-      const agent = context.services.agent;
-      if (!agent) throw new Error('Session agent is unavailable');
-      await agent.session.recordRecordingEvent({
-        type: 'session_event',
-        severity: 'error',
-        message: result.content,
-      });
-    } else {
-      deps.recordingIntegration?.recordSessionEvent('error', result.content);
-    }
+    await deps.recordCommandError(result.content);
   }
   return { type: 'handled' };
 }
@@ -475,21 +447,10 @@ function openSubagentDialog(
 }
 
 async function handleLoadHistoryResult(
-  context: CommandContext,
+  deps: SlashCommandHandlerDeps,
   result: Extract<ActionResult, { type: 'load_history' }>,
 ): Promise<SlashCommandProcessorResult> {
-  const agent = context.services.agent;
-  if (!agent) throw new Error('Session agent is unavailable');
-  await agent.setHistory(result.clientHistory);
-  // Display-only: replayed model text passes the same emoji filter as live
-  // output (issue #2888); clientHistory keeps the recorded text verbatim.
-  const emojiFilter = createEmojiFilter(
-    resolveEmojiFilterMode(context.services.config),
-  );
-  context.ui.clear();
-  filterHistoryItems(result.history, emojiFilter).forEach((item, index) => {
-    context.ui.addItem(item, index);
-  });
+  await deps.loadCommandHistory(result);
   return { type: 'handled' };
 }
 
@@ -646,26 +607,12 @@ async function confirmAction(
 
 async function performOwnerSessionResume(
   deps: SlashCommandHandlerDeps,
-  context: CommandContext,
   action: PerformResumeActionReturn,
+  resume: NonNullable<SlashCommandHandlerDeps['resumeOwnedSession']>,
 ): Promise<SlashCommandProcessorResult> {
-  const agent = context.services.agent;
-  if (agent === null) throw new Error('Session agent is unavailable');
+  const replay = resume(action);
   try {
-    const replay =
-      action.sessionPackage === undefined
-        ? await resumeOwnerSession(
-            agent,
-            action.sessionRef,
-            resolveEmojiFilterMode(deps.config),
-          )
-        : await importOwnerSession(
-            agent,
-            action.sessionPackage.packageDirectory,
-            resolveEmojiFilterMode(deps.config),
-          );
-    context.ui.loadHistory([...replay.uiHistory]);
-    addResumeWarnings(deps.addMessage, replay.warnings);
+    addResumeWarnings(deps.addMessage, await replay);
   } catch (error) {
     deps.addMessage({
       type: MessageType.ERROR,
@@ -678,7 +625,6 @@ async function performOwnerSessionResume(
 
 async function performSessionResume(
   deps: SlashCommandHandlerDeps,
-  context: CommandContext,
   action: PerformResumeActionReturn,
 ): Promise<SlashCommandProcessorResult> {
   if (!deps.config) {
@@ -689,10 +635,10 @@ async function performSessionResume(
     });
     return { type: 'handled' };
   }
-  if (context.recordingOwner === 'agent') {
-    return performOwnerSessionResume(deps, context, action);
+  if (deps.resumeOwnedSession !== null) {
+    return performOwnerSessionResume(deps, action, deps.resumeOwnedSession);
   }
-  if (!deps.recordingSwapCallbacks) {
+  if (deps.resumeRawSession === null) {
     deps.addMessage({
       type: MessageType.ERROR,
       content: 'Cannot resume session: recording infrastructure not available.',
@@ -701,24 +647,10 @@ async function performSessionResume(
     return { type: 'handled' };
   }
 
-  const { mediaStore, resumeContext } = rawResumeContext(deps, deps.config);
-  const resume = deps.performResumeFn ?? performResume;
+  const pendingResume = deps.resumeRawSession(action);
   let resumeResult: PerformResumeResult;
   try {
-    resumeResult =
-      action.sessionPackage === undefined
-        ? await resume(action.sessionRef, resumeContext)
-        : await importSessionMediaPackage(
-            action.sessionPackage,
-            resumeContext.chatsDir,
-            resumeContext.projectHash,
-            mediaStore,
-            async (imported) => {
-              const result = await resume(imported.sessionId, resumeContext);
-              if (!result.ok) throw new Error(result.error);
-              return result;
-            },
-          );
+    resumeResult = await pendingResume;
   } catch (error: unknown) {
     deps.addMessage({
       type: MessageType.ERROR,
@@ -736,55 +668,9 @@ async function performSessionResume(
     return { type: 'handled' };
   }
 
-  const uiHistory = iContentToHistoryItems(
-    resumeResult.history,
-    resolveEmojiFilterMode(deps.config),
-  );
-  context.ui.clear();
-  uiHistory.forEach((item, index) => {
-    context.ui.addItem(item, index);
-  });
+  deps.replayResumedHistory(resumeResult.history);
   addResumeWarnings(deps.addMessage, resumeResult.warnings);
   return { type: 'handled' };
-}
-
-function rawResumeContext(
-  deps: SlashCommandHandlerDeps,
-  config: CliUiRuntime,
-): { mediaStore: LocalMediaStore; resumeContext: ResumeContext } {
-  const persistence = deps.sessionPersistence;
-  if (!persistence) throw new Error('CLI session persistence is unavailable');
-  const mediaStore = persistence.mediaStore;
-  if (!mediaStore) throw new Error('CLI session media store is unavailable');
-  return {
-    mediaStore,
-    resumeContext: buildResumeContext(deps, config, persistence, mediaStore),
-  };
-}
-
-function buildResumeContext(
-  deps: SlashCommandHandlerDeps,
-  config: CliUiRuntime,
-  persistence: CliSessionPersistencePort,
-  mediaStore: LocalMediaStore,
-): ResumeContext {
-  return {
-    chatsDir: join(config.projectTempDir, 'chats'),
-    projectHash: getProjectHash(config.getProjectRoot()),
-    currentSessionId: config.getSessionId(),
-    currentProvider: config.getProvider() ?? 'unknown',
-    currentModel: config.getModel(),
-    workspaceDirs: [...config.directories()],
-    mediaStore,
-    maxQueueBytes: config.getSessionRecordingQueueByteLimit(),
-    persistenceFactory: (sessionId) => persistence.forRecording(sessionId),
-    recordingCallbacks: deps.recordingSwapCallbacks!,
-    historyService: requireSessionAgent(
-      deps.commandContext,
-    ).agentClient.getHistoryService(),
-    adoptSessionId: (sessionId) => config.adoptSessionId(sessionId),
-    logger: deps.slashCommandLogger,
-  };
 }
 
 function addSubcommandHelp(
@@ -805,8 +691,7 @@ function addUnknownCommandMessage(
   deps: SlashCommandHandlerDeps,
   trimmed: string,
 ): void {
-  const isMcpLoading =
-    deps.commandContext.services.agent?.mcp.discoveryState() === 'pending';
+  const isMcpLoading = deps.isMcpDiscoveryPending();
   deps.addMessage({
     type: MessageType.ERROR,
     content: isMcpLoading
@@ -826,20 +711,7 @@ async function handleCommandError(
   }
   const errorText = error instanceof Error ? error.message : String(error);
   deps.addItem({ type: MessageType.ERROR, text: errorText }, Date.now());
-  if (
-    Object.getOwnPropertyDescriptor(deps.commandContext, 'recordingOwner')
-      ?.value === 'agent'
-  ) {
-    const agent = deps.commandContext.services.agent;
-    if (!agent) throw new Error('Session agent is unavailable');
-    await agent.session.recordRecordingEvent({
-      type: 'session_event',
-      severity: 'error',
-      message: errorText,
-    });
-  } else {
-    deps.recordingIntegration?.recordSessionEvent('error', errorText);
-  }
+  await deps.recordCommandError(errorText);
 }
 
 function finalizeCommand(

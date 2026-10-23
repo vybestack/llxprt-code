@@ -1,11 +1,14 @@
+import {
+  jsonlHookCommand,
+  removeJsonlHook,
+} from './helpers/jsonl-hook-command.js';
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
+import {
+  useRecordingPrompts,
+  withRecordingLifetimeFixture,
+} from './helpers/recording-owner-lifetime-fixture.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
 import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
-
 import { HookControl } from '../control/hooks.js';
 import {
   readHookDefinitions,
@@ -13,13 +16,13 @@ import {
 } from '@vybestack/llxprt-code-core/hooks/hook-configuration.js';
 import { describe, expect, it, spyOn } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { readFile, rm } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import type { Agent } from '@vybestack/llxprt-code-agents';
-import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
-import type { CompressionStrategy } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import { Agent } from '@vybestack/llxprt-code-agents';
+import { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
+import { CompressionStrategy } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import {
   MessageBusType,
   type HookExecutionRequest,
@@ -29,11 +32,16 @@ import {
   HookEventName,
   HookType,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
-import * as compressionFactory from '../../compression/compressionStrategyFactory.js';
 import { createRecordingExecution } from '../recordingExecution.js';
 import { SessionControl } from '../control/sessionControl.js';
-import { withRecordingLifetimeFixture } from './helpers/recording-owner-lifetime-fixture.js';
-import type { BuiltCliConfig } from './helpers/buildCliStyleConfig.js';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import * as compressionFactory from '../../compression/compressionStrategyFactory.js';
+
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 interface CommandInput {
   hook_event_name: string;
@@ -91,7 +99,7 @@ const strategy: CompressionStrategy = {
 
 async function exerciseFacades(
   event: HookEventName,
-  drive: (agent: Agent, config: BuiltCliConfig['config']) => Promise<void>,
+  drive: (agent: Agent, config: Config) => Promise<void>,
 ): Promise<number> {
   let observedCount = 0;
   const output = join(
@@ -100,11 +108,20 @@ async function exerciseFacades(
   );
   try {
     await withRecordingLifetimeFixture(
-      async ({ agent: a, config, borrow }) => {
+      async (
+        a,
+        config,
+        _settingsOwner,
+        _settingsService,
+        _oauthManager,
+        borrow,
+      ) => {
         const b = await borrow();
-        expect(a.getMessageBus()).toBe(b.getMessageBus());
-        expect(a.agentClient).toBeDefined();
-        await a.agentClient.startChat();
+        expect(fixtureAgentResources(a).messageBus).toBe(
+          fixtureAgentResources(b).messageBus,
+        );
+        expect(fixtureAgentResources(a).publishedClient(a)).toBeDefined();
+        await fixtureAgentResources(a).publishedClient(a).startChat();
         await a.setHistory([
           { speaker: 'human', blocks: [{ type: 'text', text: 'seed' }] },
         ]);
@@ -141,7 +158,7 @@ async function exerciseFacades(
               hooks: [
                 {
                   type: HookType.Command,
-                  command: `cat >> '${output}'; printf '\\n' >> '${output}'`,
+                  command: jsonlHookCommand(output),
                 },
               ],
             },
@@ -152,17 +169,18 @@ async function exerciseFacades(
     );
     return observedCount;
   } finally {
-    await rm(output, { force: true });
+    await removeJsonlHook(output);
   }
 }
 
 describe('shared client non-stream and context-size 413 hook owner', () => {
+  useRecordingPrompts();
   it('routes non-stream tool selection through the invoking facade without a shared owner slot', async () => {
     expect(
       await exerciseFacades(
         HookEventName.BeforeToolSelection,
         async (agent) => {
-          const client = agent.agentClient;
+          const client = fixtureAgentResources(agent).publishedClient(agent);
           await client
             .getChat()
             .sendMessage(
@@ -190,7 +208,8 @@ describe('shared client non-stream and context-size 413 hook owner', () => {
               blocks: [{ type: 'text', text: 'history '.repeat(9000) }],
             },
           ]);
-          await agent.agentClient
+          await fixtureAgentResources(agent)
+            .publishedClient(agent)
             .getChat()
             .sendMessage(
               { message: 'short prompt' },
@@ -218,7 +237,7 @@ describe('shared client non-stream and context-size 413 hook owner', () => {
         HookEventName.PreCompress,
         async (agent, config) => {
           agent.setEphemeralSetting('context-limit', 200000);
-          const manager = agent.providerManager;
+          const manager = fixtureAgentResources(agent).manager;
 
           const provider = manager.getActiveProvider();
           if (!provider) throw new Error('Missing active fixture provider');
@@ -278,14 +297,21 @@ describe('shared client non-stream and context-size 413 hook owner', () => {
     );
     try {
       await withRecordingLifetimeFixture(
-        async ({ agent, config, borrow }) => {
+        async (
+          agent,
+          config,
+          _settingsOwner,
+          _settingsService,
+          _oauthManager,
+          borrow,
+        ) => {
           const sibling = await borrow();
           await agent.setHistory([
             { speaker: 'human', blocks: [{ type: 'text', text: 'seed' }] },
           ]);
           await agent.session.setRecording({ enabled: true });
           await sibling.session.setRecording({ enabled: true });
-          const bus = agent.getMessageBus();
+          const bus = fixtureAgentResources(agent).messageBus;
           const mediated = new HookSystem(
             readHookDefinitions(config),
             hookSessionRuntime(
@@ -344,7 +370,7 @@ describe('shared client non-stream and context-size 413 hook owner', () => {
                 hooks: [
                   {
                     type: HookType.Command,
-                    command: `cat >> '${output}'; printf '\\n' >> '${output}'`,
+                    command: jsonlHookCommand(output),
                   },
                 ],
               },
@@ -353,7 +379,7 @@ describe('shared client non-stream and context-size 413 hook owner', () => {
         },
       );
     } finally {
-      await rm(output, { force: true });
+      await removeJsonlHook(output);
     }
   }, 30000);
 });

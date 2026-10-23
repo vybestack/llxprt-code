@@ -104,6 +104,7 @@ function buildFallbackCompression(
     const context = await buildCompressionContext(
       promptId,
       runtimeContext,
+      undefined,
       historyService,
       () =>
         Promise.resolve({

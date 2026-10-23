@@ -115,7 +115,6 @@ function buildRuntimeContext(
       getToolMetadata: vi.fn(() => undefined),
     },
     providerRuntime: createProviderRuntimeContext({
-      settingsService,
       runtimeId: runtimeState.runtimeId,
     }),
   });
@@ -156,13 +155,25 @@ describe('Factory @plan PLAN-20260211-HIGHDENSITY.P16', () => {
 
   /** @requirement REQ-HD-004.2 */
   it("getCompressionStrategy('high-density') returns HighDensityStrategy", () => {
-    const strategy = getCompressionStrategy('high-density');
+    const strategy = getCompressionStrategy(
+      'high-density',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
     expect(strategy.name).toBe('high-density');
   });
 
   /** @requirement REQ-HD-004.3 */
   it('HighDensityStrategy from factory has correct properties', () => {
-    const strategy = getCompressionStrategy('high-density');
+    const strategy = getCompressionStrategy(
+      'high-density',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
     expect(strategy.name).toBe('high-density');
     expect(strategy.requiresLLM).toBe(false);
     expect(strategy.trigger.mode).toBe('continuous');
@@ -171,13 +182,25 @@ describe('Factory @plan PLAN-20260211-HIGHDENSITY.P16', () => {
 
   /** @requirement REQ-HD-004.2 */
   it('HighDensityStrategy from factory has optimize method', () => {
-    const strategy = getCompressionStrategy('high-density');
+    const strategy = getCompressionStrategy(
+      'high-density',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
     expect(typeof strategy.optimize).toBe('function');
   });
 
   /** @requirement REQ-HD-004.2 */
   it('HighDensityStrategy from factory has compress method', () => {
-    const strategy = getCompressionStrategy('high-density');
+    const strategy = getCompressionStrategy(
+      'high-density',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
     expect(typeof strategy.compress).toBe('function');
   });
 });
@@ -443,7 +466,13 @@ describe('Property-based tests @plan PLAN-20260211-HIGHDENSITY.P16', () => {
       fc.property(
         fc.constantFrom(...COMPRESSION_STRATEGIES),
         (name: CompressionStrategyName) => {
-          const strategy = getCompressionStrategy(name);
+          const strategy = getCompressionStrategy(
+            name,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+          );
           expect(strategy.name).toBe(name);
         },
       ),

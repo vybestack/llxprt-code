@@ -19,7 +19,6 @@ import {
   createRuntimeInvocationContext,
   type RuntimeInvocationContext,
 } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { createRuntimeConfigStub } from './runtime.js';
 
 const DEFAULT_RUNTIME_SOURCE = 'test-utils#createProviderCallOptions';
 
@@ -92,43 +91,8 @@ function buildEphemeralsSnapshot(
   return snapshot;
 }
 
-function ensureConfig(
-  providerName: string,
-  settings: SettingsService,
-  explicitConfig?: Config,
-  overrides?: Partial<Record<string, unknown>>,
-): Config {
-  if (explicitConfig) {
-    return explicitConfig;
-  }
-
-  const defaultOverrides: Partial<Record<string, unknown>> = {
-    getProvider: () => providerName,
-    getProviderSettings: () => settings.getProviderSettings(providerName),
-    getEphemeralSettings: () => ({
-      ...settings.getAllGlobalSettings(),
-      ...settings.getProviderSettings(providerName),
-    }),
-    getEphemeralSetting: (key: string) => {
-      const providerSettings = settings.getProviderSettings(providerName);
-      if (key in providerSettings) {
-        return providerSettings[key];
-      }
-      return settings.get(key);
-    },
-    getSettingsService: () => settings,
-  };
-
-  return createRuntimeConfigStub(settings, {
-    ...defaultOverrides,
-    ...(overrides ?? {}),
-  });
-}
-
 function ensureRuntime(
   providerName: string,
-  settings: SettingsService,
-  config: Config,
   init: ProviderCallOptionsInit,
 ): ProviderRuntimeContext {
   const resolvedRuntimeId =
@@ -146,16 +110,13 @@ function ensureRuntime(
   if (init.runtime) {
     return {
       ...init.runtime,
-      settingsService: settings,
-      config: init.runtime.config ?? config,
+
       runtimeId: resolvedRuntimeId,
       metadata: runtimeMetadata,
     };
   }
 
   return createProviderRuntimeContext({
-    settingsService: settings,
-    config,
     runtimeId: resolvedRuntimeId,
     metadata: runtimeMetadata,
   });
@@ -218,14 +179,7 @@ export function createProviderCallOptions(
   const settings = init.settings ?? new SettingsService();
   applySettingsOverrides(init.providerName, settings, init.settingsOverrides);
 
-  const config = ensureConfig(
-    init.providerName,
-    settings,
-    init.config,
-    init.configOverrides,
-  );
-
-  const runtime = ensureRuntime(init.providerName, settings, config, init);
+  const runtime = ensureRuntime(init.providerName, init);
 
   const mergedMetadata: Record<string, unknown> = {
     ...(runtime.metadata ?? {}),

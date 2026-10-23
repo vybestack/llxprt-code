@@ -1,3 +1,6 @@
+import type { SessionSettingsOwner } from '../../session/session-settings-owner.js';
+import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
+import type { ModelRegistry } from '../../models/registry.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -20,7 +23,10 @@ import type { RuntimeTokenizerFactory } from './RuntimeTokenizerFactory.js';
 import type { RuntimeProvider } from './RuntimeProvider.js';
 import type { RuntimeModel } from './RuntimeModel.js';
 import type { Config } from '../../config/config.js';
-import type { ProviderRuntimeContext } from '../providerRuntimeContext.js';
+import type {
+  ProviderRuntimeContext,
+  RuntimeSettingsState,
+} from '../providerRuntimeContext.js';
 
 export interface RuntimeProviderMetrics {
   [key: string]: unknown;
@@ -51,6 +57,7 @@ export interface RuntimeSessionTokenUsage {
  * @pseudocode component-boundaries.md C-CB-05, lines 50-54
  */
 export interface RuntimeProviderManager {
+  getProviderKeys?(): ProviderKeyStorageLike;
   getTokenizerFactory?(): RuntimeTokenizerFactory | undefined;
   setTokenizerFactory?(factory: RuntimeTokenizerFactory | undefined): void;
   dispose?(): void;
@@ -69,11 +76,27 @@ export interface RuntimeProviderManager {
   getProviderByName(name: string): RuntimeProvider | undefined;
   registerProvider(provider: RuntimeProvider): void;
   checkpointProviderRegistry(): () => void;
-  prepareStatelessProviderInvocation?(runtimeContext?: unknown): unknown;
+  prepareStatelessProviderInvocation?(): unknown;
   getProviderMetrics(): RuntimeProviderMetrics;
   getSessionTokenUsage(): RuntimeSessionTokenUsage;
   setConfig(config: Config): void;
-  setRuntimeContext(runtimeContext: ProviderRuntimeContext): void;
+  setRuntimeContext(
+    runtimeContext: ProviderRuntimeContext,
+    sessionSettings: SessionSettingsOwner | undefined,
+    settingsService: RuntimeSettingsState,
+    config: Config | undefined,
+  ): void;
+  fetchNetwork?(
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ): Promise<Response>;
+  bindModelRegistry?(registry: ModelRegistry): void;
+  bindNetworkFetch?(
+    requestFetch: (
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => Promise<Response>,
+  ): void;
   hasActiveProvider(): boolean;
   accumulateSessionTokens(providerName: string, usage: unknown): void;
 }

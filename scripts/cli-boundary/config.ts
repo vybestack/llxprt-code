@@ -96,26 +96,22 @@ export const PUBLIC_SUBPATHS_BY_PACKAGE: {
   // package.json `exports` entry with its own barrel index.ts and a documented
   // public API (#2204). They are NOT deep/internal imports.
   '@vybestack/llxprt-code-providers': [
-    'runtime.js',
     'auth.js',
     'composition.js',
-    'runtime/assembleCliProviderRuntime.js',
-    'runtime/cliForegroundRuntime.js',
-    'runtime/cliEphemeralSettings.js',
-    'runtime/ephemeralSettings.js',
     'runtime/ownerSettingsOperations.js',
-    'runtime/profileSnapshot.js',
     'runtime/providerModelParameters.js',
     'runtime/providerMutations.js',
     'runtime/providerReadOperations.js',
     'runtime/providerStatus.js',
     'runtime/providerSwitch.js',
-    'runtime/runtimeActivationBindings.js',
     'runtime/settingsResolver.js',
   ],
   '@vybestack/llxprt-code-core': [],
   '@vybestack/llxprt-code-agents': [],
-  '@vybestack/llxprt-code-settings': [],
+  '@vybestack/llxprt-code-settings': [
+    'settings/ephemeral-settings.js',
+    'settings/cli-ephemeral-settings.js',
+  ],
   '@vybestack/llxprt-code-mcp': [
     'host/hostServices.js',
     'auth/mcp-auth-factory.js',

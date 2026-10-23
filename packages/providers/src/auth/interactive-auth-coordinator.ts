@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { oauthUIBridge, type OAuthUIEvent } from '@vybestack/llxprt-code-auth';
+import { type OAuthUIEvent } from '@vybestack/llxprt-code-auth';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { RuntimeKind } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
@@ -171,10 +171,19 @@ function createAbortReason(message: string): DOMException {
  * @plan PLAN-20260827-ISSUE2562.P01
  * @requirement REQ-2562-1
  */
+export type InteractiveAuthRequestPort = Pick<
+  InteractiveAuthCoordinator,
+  'requestAuth' | 'hasHost'
+>;
+
 export class InteractiveAuthCoordinator {
   private hostHandler: InteractiveAuthHostHandler | undefined;
   private readonly sessions = new Map<string, InteractiveAuthSession>();
   private readonly listeners = new Set<InteractiveAuthStateChangeListener>();
+
+  constructor(
+    private readonly publishUIEvent: (event: OAuthUIEvent) => void = () => {},
+  ) {}
 
   bindHost(handler: InteractiveAuthHostHandler): void {
     this.hostHandler = handler;
@@ -498,7 +507,7 @@ export class InteractiveAuthCoordinator {
    */
   private emitOAuthUIEvent(event: OAuthUIEvent): void {
     try {
-      oauthUIBridge.emit(event);
+      this.publishUIEvent(event);
     } catch (error) {
       logger.debug(
         () =>
@@ -517,5 +526,3 @@ export class InteractiveAuthCoordinator {
     }
   }
 }
-
-export const interactiveAuthCoordinator = new InteractiveAuthCoordinator();

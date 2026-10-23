@@ -1,3 +1,5 @@
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -5,7 +7,6 @@
  */
 
 import { installZedFilesystemFixture } from './__tests__/zed-filesystem-fixture.js';
-import { projectZedSessionSettings } from './zed-session-ports.js';
 const fixtureFilesystem = installZedFilesystemFixture();
 
 import { afterEach, describe, expect, it } from 'bun:test';
@@ -21,7 +22,7 @@ import {
   DEFAULT_ACQUISITION_BUDGET_BYTES,
 } from '@vybestack/llxprt-code-tools/acquisition.js';
 
-import { Session } from './zedIntegration.js';
+import { Session } from './zed-session.js';
 import { TerminalManager } from './zed-terminal-manager.js';
 import { TERMINAL_DISCONTINUITY_NOTICE } from './terminalOutputDelta.js';
 import {
@@ -391,15 +392,49 @@ describe('Zed terminal execution', () => {
       ],
       { run_shell_command: 'execute' },
     );
+    const config = buildMinimalConfig();
+    const filesystem = fixtureFilesystem();
     const session = new Session(
       'test-session-id',
-      agent,
-      projectZedSessionSettings(
-        buildMinimalConfig(),
-        agent,
-        fixtureFilesystem().files,
-        fixtureFilesystem().ignore,
-      ),
+      (input, options) => agent.stream(input, options),
+      () => agent.getModel(),
+      (model) => agent.setModel(model),
+      () => agent.listAvailableModels(),
+      () => agent.getProviderContextLimit(),
+      () => agent.getApprovalMode(),
+      (mode) => agent.setApprovalMode(mode),
+      () => agent.getHistory(),
+      (options) => agent.compress(options),
+      () => agent.dispose(),
+      (name) => agent.tools.get(name),
+      () => agent.tools.list(),
+      (id, decision, payload, requiresConfirmation) =>
+        agent.tools.respondToConfirmation(
+          id,
+          decision,
+          payload,
+          requiresConfirmation,
+        ),
+      () => agent.session.getRecordingTitle(),
+      (title) => agent.session.recordRecordingTitle(title),
+      () => agent.memory.getFilePaths(),
+      () => agent.profiles.list(),
+      () => agent.tasks.list(),
+      config.getProjectRoot.bind(config),
+      config.getMaxSessionTurns.bind(config),
+      config.getDebugMode.bind(config),
+      config.getFileFilteringOptions.bind(config),
+      config.getTargetDir.bind(config),
+      config.getEnableRecursiveFileSearch.bind(config),
+      filesystem.files.readTextFile.bind(filesystem.files),
+      filesystem.ignore.shouldIgnoreFile.bind(filesystem.ignore),
+      filesystem.ignore.getCoreIgnorePatterns.bind(filesystem.ignore),
+      agent.getEphemeralSetting.bind(agent),
+      agent.setEphemeralSetting.bind(agent),
+      (listener) =>
+        new SessionSettingsOwner(new SettingsService()).subscribeModelChanges(
+          listener,
+        ),
       connection as unknown as acp.AgentSideConnection,
       false,
       terminals,
@@ -473,15 +508,49 @@ describe('Zed terminal execution', () => {
       ],
       { run_shell_command: 'execute' },
     );
+    const config = buildMinimalConfig();
+    const filesystem = fixtureFilesystem();
     const session = new Session(
       'test-session-id',
-      agent,
-      projectZedSessionSettings(
-        buildMinimalConfig(),
-        agent,
-        fixtureFilesystem().files,
-        fixtureFilesystem().ignore,
-      ),
+      (input, options) => agent.stream(input, options),
+      () => agent.getModel(),
+      (model) => agent.setModel(model),
+      () => agent.listAvailableModels(),
+      () => agent.getProviderContextLimit(),
+      () => agent.getApprovalMode(),
+      (mode) => agent.setApprovalMode(mode),
+      () => agent.getHistory(),
+      (options) => agent.compress(options),
+      () => agent.dispose(),
+      (name) => agent.tools.get(name),
+      () => agent.tools.list(),
+      (id, decision, payload, requiresConfirmation) =>
+        agent.tools.respondToConfirmation(
+          id,
+          decision,
+          payload,
+          requiresConfirmation,
+        ),
+      () => agent.session.getRecordingTitle(),
+      (title) => agent.session.recordRecordingTitle(title),
+      () => agent.memory.getFilePaths(),
+      () => agent.profiles.list(),
+      () => agent.tasks.list(),
+      config.getProjectRoot.bind(config),
+      config.getMaxSessionTurns.bind(config),
+      config.getDebugMode.bind(config),
+      config.getFileFilteringOptions.bind(config),
+      config.getTargetDir.bind(config),
+      config.getEnableRecursiveFileSearch.bind(config),
+      filesystem.files.readTextFile.bind(filesystem.files),
+      filesystem.ignore.shouldIgnoreFile.bind(filesystem.ignore),
+      filesystem.ignore.getCoreIgnorePatterns.bind(filesystem.ignore),
+      agent.getEphemeralSetting.bind(agent),
+      agent.setEphemeralSetting.bind(agent),
+      (listener) =>
+        new SessionSettingsOwner(new SettingsService()).subscribeModelChanges(
+          listener,
+        ),
       connection as unknown as acp.AgentSideConnection,
     );
     createdSessions.push(session);

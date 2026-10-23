@@ -27,7 +27,10 @@ import { type IProviderConfig } from '../types/IProviderConfig.js';
 import type { OAuthManager } from '../auth/index.js';
 import type { OAuthManager as OAuthManagerContract } from '@vybestack/llxprt-code-auth';
 import type { IModel } from '../IModel.js';
-import { type ProviderAliasEntry } from './providerAliases.js';
+import {
+  loadProviderAliasEntries,
+  type ProviderAliasEntry,
+} from './providerAliases.js';
 import { createBuiltinProviderContributionRegistry } from './runtimePlugins/registry.js';
 import type {
   ProviderAliasFactory,
@@ -542,6 +545,21 @@ function resolveAliasFactory(
     );
   }
   return factory;
+}
+
+export function listProviderAliasNames(
+  aliasEntries: readonly ProviderAliasEntry[] = loadProviderAliasEntries(),
+  contributions: ProviderContributionRegistry = createBuiltinProviderContributionRegistry(),
+): readonly string[] {
+  const entries = [
+    ...aliasEntries,
+    ...contributedAliasEntries(contributions, aliasEntries),
+  ];
+  const names = entries.map((entry) => {
+    resolveAliasFactory(contributions, entry);
+    return entry.alias.trim();
+  });
+  return Object.freeze([...new Set(names)]);
 }
 
 export function registerAliasProviders(

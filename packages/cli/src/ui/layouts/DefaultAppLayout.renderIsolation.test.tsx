@@ -3,10 +3,14 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import {
+  createConsentOwner,
+  createHookControlDeps,
+} from '../../__tests__/ui-consent-hook-owners.js';
 import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
 
 import { act, cloneElement, useState } from 'react';
-import { describe, expect, it, vi } from 'bun:test';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { setEnv, restoreEnv } from '@vybestack/llxprt-code-test-utils';
 
 interface Fiber {
@@ -71,7 +75,16 @@ const { createTerminalStore } = await import(
 const { createTurnStore } = await import('../stores/turn/turnStore.js');
 const { createDialogStore } = await import('../stores/dialog/dialogStore.js');
 
-function mountLayout(runtimeMessageBus?: InstanceType<typeof MessageBus>) {
+const consentHookCleanups: Array<() => void> = [];
+
+async function mountLayout(borrowedBus?: InstanceType<typeof MessageBus>) {
+  const auth =
+    borrowedBus === undefined ? undefined : createConsentOwner(borrowedBus);
+  const hooks =
+    borrowedBus === undefined
+      ? undefined
+      : createHookControlDeps({ messageBus: borrowedBus }).control;
+  if (hooks) consentHookCleanups.push(() => hooks.detach());
   const terminal = createTerminalStore();
   const turn = createTurnStore({
     history: [{ id: 1, type: 'user', text: 'committed transcript' }],
@@ -91,13 +104,29 @@ function mountLayout(runtimeMessageBus?: InstanceType<typeof MessageBus>) {
     debugMode: false,
     model: 'test-model',
   });
+  const uiRuntime = buildUiRuntimeFromSource(
+    config,
+    await createUiSessionOwner(),
+  );
   const layout = (
     <DefaultAppLayout
-      runtimeMessageBus={runtimeMessageBus}
-      uiRuntime={buildUiRuntimeFromSource(config, createUiSessionOwner())}
+      readIdeMode={() => false}
+      readIdeDiffingEnabled={() => false}
+      subscribeIdeDiffing={() => () => {}}
+      resolveIdeDiff={async () => {}}
+      readIdeWorkspaceTrust={() => undefined}
+      subscribeIdeWorkspaceTrust={() => () => {}}
+      subscribeBucketConsent={auth?.subscribeBucketConsent.bind(auth)}
+      respondToBucketConsent={auth?.respondToBucketConsent.bind(auth)}
+      subscribeHookPhase={hooks?.subscribeExecutionPhase.bind(hooks)}
+      screenReaderEnabled={uiRuntime.app.getScreenReader()}
+      disableLoadingPhrases={
+        uiRuntime.app.getAccessibility().disableLoadingPhrases === true
+      }
+      debugMode={uiRuntime.app.getDebugMode()}
       slashCommandRuntime={buildSlashCommandRuntime(
         config,
-        createUiSessionOwner(),
+        await createUiSessionOwner(),
       )}
       settings={settings}
       startupWarnings={[]}
@@ -130,10 +159,14 @@ function mountLayout(runtimeMessageBus?: InstanceType<typeof MessageBus>) {
 }
 
 describe('production layout render isolation', () => {
+  afterEach(() => {
+    for (const cleanup of consentHookCleanups.splice(0)) cleanup();
+  });
   it('keeps the transcript and static parent idle on dialog, clock, and geometry updates', async () => {
     renders.clear();
     setEnv('DEV', 'true');
-    const { terminal, turn, dialog, view, invalidateParent } = mountLayout();
+    const { terminal, turn, dialog, view, invalidateParent } =
+      await mountLayout();
     try {
       expect(view.lastFrame()).toContain('committed transcript');
       const initial = renders.get('DefaultAppLayout') ?? 0;
@@ -187,11 +220,14 @@ describe('production layout render isolation', () => {
 });
 
 describe('store migration regressions', () => {
+  afterEach(() => {
+    for (const cleanup of consentHookCleanups.splice(0)) cleanup();
+  });
   it.each([true, false])(
     'shows bucket authentication requests only when the layout receives the bus (provided: %s)',
     async (provided) => {
       const bus = new MessageBus(new PolicyEngine(), false);
-      const { view } = mountLayout(provided ? bus : undefined);
+      const { view } = await mountLayout(provided ? bus : undefined);
       try {
         expect(view.lastFrame()).not.toContain('OAuth Bucket Authentication');
         await act(async () => {
@@ -216,7 +252,7 @@ describe('store migration regressions', () => {
 
   it('renders runtime hook activity and clears it after completion', async () => {
     const bus = new MessageBus(new PolicyEngine(), false);
-    const { view } = mountLayout(bus);
+    const { view } = await mountLayout(bus);
     try {
       await act(async () => {
         bus.publish({

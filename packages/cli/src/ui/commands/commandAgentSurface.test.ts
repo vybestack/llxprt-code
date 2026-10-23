@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { describe, it, expect, vi } from 'bun:test';
 import type {
@@ -12,18 +13,24 @@ import type {
   AgentHookControl,
   AgentAuthControl,
 } from '@vybestack/llxprt-code-agents';
-import { compressCommand } from './compressCommand.js';
-import { policiesCommand } from './policiesCommand.js';
-import { taskCommand } from './tasksCommand.js';
-import { baseurlCommand } from './baseurlCommand.js';
-import { logoutCommand } from './logoutCommand.js';
-import { hooksCommand } from './hooksCommand.js';
+import { createCompressCommand } from './compressCommand.js';
+import { bindCompressCommand } from './compressCommandHost.js';
+import { createPoliciesCommand } from './policiesCommand.js';
+import { bindPoliciesCommand } from './policiesCommandHost.js';
+import {
+  registerTaskCommand,
+  registerHooksCommand,
+} from '../../__tests__/hook-task-command-test-owner.js';
+import {
+  registerBaseurlCommand,
+  registerLogoutCommand,
+} from '../../__tests__/credential-command-test-owner.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core';
 import { MessageType } from '../types.js';
-import type { CommandContext } from './types.js';
+
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 
-function buildContextWithAgent(agent: Partial<Agent>): CommandContext {
+function buildContextWithAgent(agent: Partial<Agent>): CommandOwnerFixture {
   return createMockCommandContext({
     services: { agent: agent as Agent },
   });
@@ -40,7 +47,8 @@ describe('compressCommand — agent surface', () => {
       compress: compressMock,
     });
 
-    await compressCommand.action!(context, '');
+    const command = createCompressCommand(bindCompressCommand(compressMock));
+    await command.action!(context, '');
 
     expect(compressMock).toHaveBeenCalledTimes(1);
     expect(compressMock).toHaveBeenCalledWith(
@@ -67,11 +75,12 @@ describe('compressCommand — agent surface', () => {
         agent: { compress: compressMock } as unknown as Agent,
         config: {
           getAgentClient,
-        } as unknown as CommandContext['services']['config'],
+        } as unknown as CommandOwnerFixture['services']['config'],
       },
     });
 
-    await compressCommand.action!(context, '');
+    const command = createCompressCommand(bindCompressCommand(compressMock));
+    await command.action!(context, '');
 
     expect(compressMock).toHaveBeenCalledTimes(1);
     expect(getAgentClient).not.toHaveBeenCalled();
@@ -89,7 +98,22 @@ describe('policiesCommand — agent surface', () => {
       } as unknown as AgentPolicyControl,
     });
 
-    const result = policiesCommand.action!(context, '') as {
+    const command = createPoliciesCommand(
+      bindPoliciesCommand(
+        () => context.services.agent?.policy.getRules() ?? null,
+        () => {
+          const policy = context.services.agent?.policy;
+          if (policy === undefined) throw new Error('Policy owner unavailable');
+          return policy.getDefaultDecision();
+        },
+        () => {
+          const policy = context.services.agent?.policy;
+          if (policy === undefined) throw new Error('Policy owner unavailable');
+          return policy.isNonInteractive();
+        },
+      ),
+    );
+    const result = command.action!(context, '') as {
       type: string;
       messageType: string;
     };
@@ -108,7 +132,22 @@ describe('policiesCommand — agent surface', () => {
       } as unknown as AgentPolicyControl,
     });
 
-    const result = policiesCommand.action!(context, 'menu') as {
+    const command = createPoliciesCommand(
+      bindPoliciesCommand(
+        () => context.services.agent?.policy.getRules() ?? null,
+        () => {
+          const policy = context.services.agent?.policy;
+          if (policy === undefined) throw new Error('Policy owner unavailable');
+          return policy.getDefaultDecision();
+        },
+        () => {
+          const policy = context.services.agent?.policy;
+          if (policy === undefined) throw new Error('Policy owner unavailable');
+          return policy.isNonInteractive();
+        },
+      ),
+    );
+    const result = command.action!(context, 'menu') as {
       type: string;
       dialog: string;
     };
@@ -135,7 +174,9 @@ describe('tasksCommand — agent surface', () => {
       tasks: { list: listMock } as unknown as AgentTasksControl,
     });
 
-    const listSub = taskCommand.subCommands?.find((c) => c.name === 'list');
+    const listSub = registerTaskCommand(context).subCommands?.find(
+      (c) => c.name === 'list',
+    );
     expect(listSub).toBeDefined();
     await listSub!.action!(context, '');
 
@@ -163,7 +204,9 @@ describe('tasksCommand — agent surface', () => {
       } as unknown as AgentTasksControl,
     });
 
-    const endSub = taskCommand.subCommands?.find((c) => c.name === 'end');
+    const endSub = registerTaskCommand(context).subCommands?.find(
+      (c) => c.name === 'end',
+    );
     expect(endSub).toBeDefined();
     await endSub!.action!(context, 'coder-abc123');
 
@@ -183,7 +226,7 @@ describe('baseurlCommand — agent surface', () => {
       auth: { setBaseUrl } as unknown as AgentAuthControl,
     });
 
-    const result = (await baseurlCommand.action!(
+    const result = (await registerBaseurlCommand(context).action!(
       context,
       'https://api.example.com',
     )) as {
@@ -203,7 +246,10 @@ describe('baseurlCommand — agent surface', () => {
       auth: { setBaseUrl } as unknown as AgentAuthControl,
     });
 
-    const result = (await baseurlCommand.action!(context, '')) as {
+    const result = (await registerBaseurlCommand(context).action!(
+      context,
+      '',
+    )) as {
       messageType: string;
       content: string;
     };
@@ -222,7 +268,10 @@ describe('logoutCommand — agent surface', () => {
       listProviders: vi.fn().mockReturnValue([{ name: 'qwen' }]),
     });
 
-    const result = (await logoutCommand.action!(context, 'qwen')) as {
+    const result = (await registerLogoutCommand(context).action!(
+      context,
+      'qwen',
+    )) as {
       messageType: string;
       content: string;
     };
@@ -241,7 +290,10 @@ describe('logoutCommand — agent surface', () => {
       listProviders: vi.fn().mockReturnValue([{ name: 'gemini' }]),
     });
 
-    const result = (await logoutCommand.action!(context, 'gemini')) as {
+    const result = (await registerLogoutCommand(context).action!(
+      context,
+      'gemini',
+    )) as {
       messageType: string;
       content: string;
     };
@@ -262,7 +314,7 @@ describe('hooksCommand — agent surface', () => {
       hooks: { listHooks, enable } as unknown as AgentHookControl,
     });
 
-    const enableSub = hooksCommand.subCommands?.find(
+    const enableSub = registerHooksCommand(context).subCommands?.find(
       (c) => c.name === 'enable',
     );
     expect(enableSub).toBeDefined();
@@ -285,7 +337,7 @@ describe('hooksCommand — agent surface', () => {
       hooks: { listHooks, disable } as unknown as AgentHookControl,
     });
 
-    const disableSub = hooksCommand.subCommands?.find(
+    const disableSub = registerHooksCommand(context).subCommands?.find(
       (c) => c.name === 'disable',
     );
     expect(disableSub).toBeDefined();
@@ -307,7 +359,7 @@ describe('hooksCommand — agent surface', () => {
       hooks: { listHooks, setDisabledHooks } as unknown as AgentHookControl,
     });
 
-    const disableAllSub = hooksCommand.subCommands?.find(
+    const disableAllSub = registerHooksCommand(context).subCommands?.find(
       (c) => c.name === 'disable-all',
     );
     expect(disableAllSub).toBeDefined();
@@ -332,7 +384,7 @@ describe('hooksCommand — agent surface', () => {
       hooks: { listHooks, setDisabledHooks } as unknown as AgentHookControl,
     });
 
-    const enableAllSub = hooksCommand.subCommands?.find(
+    const enableAllSub = registerHooksCommand(context).subCommands?.find(
       (c) => c.name === 'enable-all',
     );
     expect(enableAllSub).toBeDefined();
@@ -357,10 +409,10 @@ describe('error paths — agent surface rejections', () => {
       compress: compressMock,
     });
 
-    await compressCommand.action!(context, '');
+    const command = createCompressCommand(bindCompressCommand(compressMock));
+    await command.action!(context, '');
 
-    // Agent rejection triggers fallback to Config path, which also fails
-    // (no real chat in mock context), resulting in an error message.
+    // The owner operation surfaces the rejected compression as an error.
     const addItem = context.ui.addItem as ReturnType<typeof vi.fn>;
     const errorCall = addItem.mock.calls.find(
       (call) => call[0]?.type === MessageType.ERROR,
@@ -377,7 +429,7 @@ describe('error paths — agent surface rejections', () => {
       auth: { setBaseUrl } as unknown as AgentAuthControl,
     });
 
-    const result = (await baseurlCommand.action!(
+    const result = (await registerBaseurlCommand(context).action!(
       context,
       'https://bad.example.com',
     )) as {
@@ -398,7 +450,10 @@ describe('error paths — agent surface rejections', () => {
       listProviders: vi.fn().mockReturnValue([{ name: 'qwen' }]),
     });
 
-    const result = (await logoutCommand.action!(context, 'qwen')) as {
+    const result = (await registerLogoutCommand(context).action!(
+      context,
+      'qwen',
+    )) as {
       messageType: string;
       content: string;
     };

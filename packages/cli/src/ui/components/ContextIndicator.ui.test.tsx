@@ -21,11 +21,22 @@ void vi.mock('../hooks/useResponsive.js', () => ({
 
 // Footer reads the runtime bridge, which is infrastructure this test does not
 // exercise. Supplying it here keeps the subject the context indicator itself.
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  useRuntimeApi: () => ({
-    providerStatus: () => ({ providerName: 'openai' }),
-  }),
-}));
+const selectedRuntimeMock1 = (() =>
+  (() => {
+    const useSelectedTestRuntime = () => ({
+      providerStatus: () => ({ providerName: 'openai' }),
+    });
+    return {
+      useProviderStatus: () => useSelectedTestRuntime().providerStatus,
+
+      useRuntimeApi: useSelectedTestRuntime,
+    };
+  })())();
+void vi.mock('../contexts/RuntimeContext.js', () => selectedRuntimeMock1);
+void vi.mock(
+  '../../__tests__/runtime-context-fixture.js',
+  () => selectedRuntimeMock1,
+);
 
 describe('ContextIndicator UI', () => {
   it('should display context percentage without remote tokens', () => {

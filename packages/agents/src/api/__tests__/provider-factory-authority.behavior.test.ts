@@ -1,3 +1,7 @@
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import { useConsumerPromptDirectory } from './helpers/consumer-owner-primitives.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
+
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -22,7 +26,17 @@ import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-ow
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import { ProviderContentGenerator } from '@vybestack/llxprt-code-providers/ProviderContentGenerator.js';
-import { fromConfig } from '../fromConfig.js';
+import {
+  captureAgentAdoption,
+  fixtureAgentResources,
+} from './helpers/agent-resource-capture.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import {
+  ProviderManager,
+  OpenAIProvider,
+} from '@vybestack/llxprt-code-providers';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
 import type { Agent } from '../agent.js';
 import { z } from 'zod';
 import {
@@ -119,17 +133,27 @@ async function adoptForBudget(
   const settingsService = new SettingsService();
   settingsService.set('context-limit', 100000);
   settingsService.set('maxOutputTokens', 128);
-  return fromConfig({
+  return fromConfig(
     config,
     settingsService,
-    tokenizerFactory: tokenizerForBudget(scale),
-    sessionId: 'same-factory-label',
-    activation: {
-      provider,
-      model,
-      cliOverrides: { key: 'local-factory-key', baseUrl: endpoint },
+    {
+      sessionId: 'same-factory-label',
+      activation: {
+        provider,
+        model,
+        cliOverrides: { key: 'local-factory-key', baseUrl: endpoint },
+      },
     },
-  });
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    tokenizerForBudget(scale),
+  );
 }
 
 async function withConfig(
@@ -155,6 +179,8 @@ async function withConfig(
 }
 
 describe('public provider factory authority', () => {
+  useConsumerPromptDirectory();
+  const credentials = useOwnedCredentials();
   it('retains only an immutable factory selection declaration in Config', async () => {
     await withConfig(async (config) => {
       config.setContentGeneratorConfig({
@@ -179,18 +205,34 @@ describe('public provider factory authority', () => {
       const wire = await budgetWire();
       let agent: Agent | undefined;
       try {
-        agent = await fromConfig({
+        agent = await captureAgentAdoption(
           config,
-          settingsService: new SettingsService(),
-          policyOwner: policy,
-          messageBus: policy.session.messageBus,
-          activation: {
-            provider: 'openai',
-            model: 'gpt-5.6',
-            cliOverrides: { key: 'local-only', baseUrl: wire.endpoint },
+          new SettingsService(),
+          {
+            activation: {
+              provider: 'openai',
+              model: 'gpt-5.6',
+              cliOverrides: { key: 'local-only', baseUrl: wire.endpoint },
+            },
           },
-        });
-        expect(agent.getMessageBus()).toBe(policy.session.messageBus);
+          undefined,
+          undefined,
+          undefined,
+          policy.session.messageBus,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          policy,
+        );
+        expect(fixtureAgentResources(agent).messageBus).toBe(
+          policy.session.messageBus,
+        );
         successful(await collect(agent.stream('Return one sentence.')));
         let confirmation: ToolConfirmationRequest | undefined;
         const release =
@@ -336,6 +378,11 @@ describe('public provider factory authority', () => {
     await withConfig(async (config) => {
       const wire = await budgetWire();
       const owners: Agent[] = [];
+      const captures: AgentClientContract[][] = [];
+      const releaseProviders: Array<() => Promise<void>> = [];
+      class GeminiTransport extends OpenAIProvider {
+        override readonly name = 'gemini';
+      }
       class SelectedGenerator extends ProviderContentGenerator {
         constructor(private readonly scale: number) {
           super();
@@ -349,24 +396,67 @@ describe('public provider factory authority', () => {
       }
       try {
         for (const scale of [2, 7]) {
+          const settings = new SettingsService();
+          const settingsOwner = new SessionSettingsOwner(settings);
+          settingsOwner.bindTelemetry(config);
+          const manager = new ProviderManager(
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            settings,
+            config,
+            undefined,
+            credentials().authority,
+            settingsOwner,
+          );
+          manager.registerProvider(
+            new GeminiTransport('content-owner-local', wire.endpoint),
+          );
+          manager.setActiveProvider('gemini');
+          const clients: AgentClientContract[] = [];
+          captures.push(clients);
+          releaseProviders.push(async () => {
+            manager.dispose();
+            await settingsOwner.dispose();
+          });
+          const factories = createAgentRuntimeFactoryBindings();
           owners.push(
-            await fromConfig({
+            await captureAgentAdoption(
               config,
-              settingsService: new SettingsService(),
-              sessionId: 'same-factory-label',
-              tokenizerFactory: tokenizerForBudget(1),
-              contentGeneratorFactory: {
-                createContentGenerator: () => new SelectedGenerator(scale),
-              },
-              activation: {
-                provider: 'openai',
-                model: 'gpt-5.6',
-                cliOverrides: {
-                  key: 'content-owner-local',
-                  baseUrl: wire.endpoint,
+              settings,
+              {
+                sessionId: 'same-factory-label',
+                activation: {
+                  provider: 'gemini',
+                  model: 'gpt-5.6',
+                  cliOverrides: {
+                    key: 'content-owner-local',
+                    baseUrl: wire.endpoint,
+                  },
                 },
               },
-            }),
+              settingsOwner,
+              manager,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              undefined,
+              tokenizerForBudget(1),
+              {
+                createContentGenerator: () => new SelectedGenerator(scale),
+              },
+              {
+                ...factories,
+                agentClientFactory: (...args) => {
+                  const client = factories.agentClientFactory(...args);
+                  clients.push(client);
+                  return client;
+                },
+              },
+            ),
           );
         }
         const request = {
@@ -378,20 +468,8 @@ describe('public provider factory authority', () => {
             },
           ],
         };
-        for (const [index, owner] of owners.entries()) {
+        for (const owner of owners) {
           await owner.setModel('gpt-5.5');
-          const detached =
-            await owner.sessionClient.createDetachedAgentClient();
-          await detached.restoreHistory([
-            {
-              speaker: 'human',
-              blocks: [{ type: 'text', text: 'Prepare detached history' }],
-            },
-          ]);
-          const counted = await detached
-            .getContentGenerator()
-            .countTokens(request);
-          expect(counted.totalTokens).toBe(index === 0 ? 8 : 28);
           successful(
             await collect(
               owner.stream({ text: 'Physical generation after replacement' }),
@@ -399,21 +477,49 @@ describe('public provider factory authority', () => {
           );
         }
         expect(wire.models()).toStrictEqual(['gpt-5.5', 'gpt-5.5']);
+        for (const [index, owner] of owners.entries()) {
+          const primary = captures[index].slice(-1).values().next().value;
+          if (primary === undefined)
+            throw new Error('Missing factory-captured primary');
+          await owner.restoreHistory([
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'Prepare detached history' }],
+            },
+          ]);
+          await owner.generate('Physical temporary generation', {
+            readHistory: true,
+          });
+          const detached = captures[index].slice(-1).values().next().value;
+          if (detached === undefined)
+            throw new Error('Missing factory-captured temporary');
+          expect(detached).not.toBe(primary);
+          expect(detached.mediaStore).toBe(primary.mediaStore);
+          const counted = await detached
+            .getContentGenerator()
+            .countTokens(request);
+          expect(counted.totalTokens).toBe(index === 0 ? 8 : 28);
+        }
         await owners[0].dispose();
-        const surviving =
-          await owners[1].sessionClient.createDetachedAgentClient();
-        await surviving.restoreHistory([
+        await owners[1].restoreHistory([
           {
             speaker: 'human',
             blocks: [{ type: 'text', text: 'Prepare surviving history' }],
           },
         ]);
+        await owners[1].generate('Physical surviving temporary', {
+          readHistory: true,
+        });
+        const surviving = captures[1].slice(-1).values().next().value;
+        if (surviving === undefined)
+          throw new Error('Missing surviving factory capture');
         expect(
           (await surviving.getContentGenerator().countTokens(request))
             .totalTokens,
         ).toBe(28);
       } finally {
         await Promise.allSettled(owners.map((owner) => owner.dispose()));
+        await Promise.allSettled(releaseProviders.map((release) => release()));
         wire.close();
       }
     });
@@ -434,17 +540,30 @@ describe('public provider factory authority', () => {
         },
       };
       try {
-        owner = await fromConfig({
+        owner = await captureAgentAdoption(
           config,
-          settingsService: new SettingsService(),
-          sessionId: 'same-factory-label',
-          tokenizerFactory,
-          activation: {
-            provider: 'openai',
-            model: 'gpt-5.6',
-            cliOverrides: { key: 'replacement-local', baseUrl: wire.endpoint },
+          new SettingsService(),
+          {
+            sessionId: 'same-factory-label',
+            activation: {
+              provider: 'openai',
+              model: 'gpt-5.6',
+              cliOverrides: {
+                key: 'replacement-local',
+                baseUrl: wire.endpoint,
+              },
+            },
           },
-        });
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          tokenizerFactory,
+        );
         successful(
           await collect(owner.stream({ text: 'Initial prepared model' })),
         );
@@ -476,15 +595,30 @@ describe('public provider factory authority', () => {
           throw new Error('Owner tokenizer asset unavailable');
         },
       };
-      const options = {
-        config,
-        settingsService: new SettingsService(),
-        sessionId: 'same-factory-label',
-        tokenizerFactory,
-      };
+      const optionsConfig: Parameters<typeof fromConfig>[0] = config;
+      const optionsSettingsService: Parameters<typeof fromConfig>[1] =
+        new SettingsService();
+      const optionsSessionId: NonNullable<
+        Parameters<typeof fromConfig>[2]
+      >['sessionId'] = 'same-factory-label';
+      const optionsTokenizerFactory: Parameters<typeof fromConfig>[11] =
+        tokenizerFactory;
       try {
         await expect(
-          fromConfig(options).then((agent) => {
+          fromConfig(
+            optionsConfig,
+            optionsSettingsService,
+            { sessionId: optionsSessionId },
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            optionsTokenizerFactory,
+          ).then((agent) => {
             admitted = agent;
           }),
         ).rejects.toThrow('Owner tokenizer asset unavailable');

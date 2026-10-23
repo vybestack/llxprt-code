@@ -3,20 +3,22 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../__tests__/mockCommandContext.js';
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { setCommand } from '../ui/commands/setCommand.js';
+import { createSetCommand } from '../ui/commands/setCommand.js';
 import { createMockCommandContext } from '../__tests__/mockCommandContext.js';
-import type { CommandContext } from '../ui/commands/types.js';
+import type { SlashCommand } from '../ui/commands/types.js';
 import { Config } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 
 describe('retry settings integration tests', () => {
-  let context: CommandContext;
+  let context: CommandOwnerFixture;
+  let setCommand: SlashCommand;
   let config: Config;
   let settingsOwner: SessionSettingsOwner;
   let directory: string;
@@ -37,6 +39,19 @@ describe('retry settings integration tests', () => {
           settingsOwner.writeUserParameter(key, value),
       },
       services: { config },
+    });
+    setCommand = createSetCommand({
+      getEphemeralSettings: () => settingsOwner.captureNamedParameters(),
+      setEphemeralSetting: (key, value) =>
+        settingsOwner.writeUserParameter(key, value),
+      getActiveModelParams: () => ({}),
+      setActiveModelParam: () => {
+        throw new Error('Model parameter operations are unused in this test');
+      },
+      clearActiveModelParam: () => {
+        throw new Error('Model parameter operations are unused in this test');
+      },
+      isFuzzyFilteringEnabled: () => true,
     });
   });
 

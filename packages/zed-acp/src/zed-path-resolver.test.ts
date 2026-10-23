@@ -21,6 +21,21 @@ import { ZedPathResolver } from './zed-path-resolver.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core';
 
 describe('ZedPathResolver - recursive glob search', () => {
+  function createResolver(
+    config: ReturnType<typeof buildConfig>,
+    debug: (message: string) => void,
+  ): ZedPathResolver {
+    return new ZedPathResolver(
+      () => config.getFileFilteringOptions(),
+      () => config.getTargetDir(),
+      () => config.getEnableRecursiveFileSearch(),
+      (path) => config.readTextFile(path),
+      (path, options) => config.ignore.shouldIgnoreFile(path, options),
+      () => config.ignore.getCoreIgnorePatterns(),
+      debug,
+    );
+  }
+
   let tmpDir: string;
 
   beforeEach(async () => {
@@ -33,9 +48,7 @@ describe('ZedPathResolver - recursive glob search', () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
-  function buildConfig(
-    targetDir: string,
-  ): ConstructorParameters<typeof ZedPathResolver>[0] {
+  function buildConfig(targetDir: string) {
     const root = createFilesystem({ targetDir, isTrusted: () => true });
     fsSync.writeFileSync(
       path.join(targetDir, '.llxprtignore'),
@@ -60,7 +73,7 @@ describe('ZedPathResolver - recursive glob search', () => {
     const fileName = 'target-file.ts';
     await fs.writeFile(path.join(nestedDir, fileName), 'export const x = 1;');
 
-    const resolver = new ZedPathResolver(buildConfig(tmpDir), () => {});
+    const resolver = createResolver(buildConfig(tmpDir), () => {});
 
     const parts = await resolver.resolvePrompt(
       [
@@ -94,7 +107,7 @@ describe('ZedPathResolver - recursive glob search', () => {
       'ignored',
     );
 
-    const resolver = new ZedPathResolver(buildConfig(tmpDir), () => {});
+    const resolver = createResolver(buildConfig(tmpDir), () => {});
 
     const parts = await resolver.resolvePrompt(
       [
@@ -127,7 +140,7 @@ describe('ZedPathResolver - recursive glob search', () => {
     const config = {
       ...buildConfig(tmpDir),
     };
-    const resolver = new ZedPathResolver(config, () => {});
+    const resolver = createResolver(config, () => {});
 
     const parts = await resolver.resolvePrompt(
       [
@@ -163,7 +176,7 @@ describe('ZedPathResolver - recursive glob search', () => {
       'ignored',
     );
 
-    const resolver = new ZedPathResolver(buildConfig(tmpDir), () => {});
+    const resolver = createResolver(buildConfig(tmpDir), () => {});
 
     const parts = await resolver.resolvePrompt(
       [
@@ -196,7 +209,7 @@ describe('ZedPathResolver - recursive glob search', () => {
     await fs.writeFile(path.join(sourceDir, 'file2.ts'), 'brace-a');
     await fs.writeFile(path.join(sourceDir, 'file3.ts'), 'brace-b');
 
-    const resolver = new ZedPathResolver(buildConfig(tmpDir), () => {});
+    const resolver = createResolver(buildConfig(tmpDir), () => {});
 
     const parts = await resolver.resolvePrompt(
       [

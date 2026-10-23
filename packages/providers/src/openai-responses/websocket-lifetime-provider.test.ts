@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { z } from 'zod';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
@@ -66,16 +66,19 @@ function runTurn(
   settings.setProviderSetting(provider.name, 'model', 'gpt-5.6-sol');
   const config = createRuntimeConfigStub(settings);
   const runtime = createProviderRuntimeContext({
-    settingsService: settings,
     runtimeId: 'lifetime-provider',
-    config,
   });
-  const invocation = createRuntimeInvocationContext({
-    runtimeId: runtime.runtimeId,
-    runtimeMetadata: runtime.metadata,
-    providerName: provider.name,
-    ephemeralsSnapshot: { retries: 0, 'reasoning.includeInResponse': false },
-  });
+  settings.set('retries', 0);
+  settings.set('reasoning.includeInResponse', false);
+  const invocation = captureProviderInvocation(
+    {
+      runtimeId: runtime.runtimeId,
+      metadata: runtime.metadata,
+      globalSettings: settings.getAllGlobalSettings(),
+      providerSettings: settings.getProviderSettings(provider.name),
+    },
+    provider.name,
+  );
   return drain(
     provider.generateChatCompletion(
       createProviderCallOptions({

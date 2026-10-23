@@ -1,3 +1,4 @@
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -35,6 +36,7 @@ const logger = new DebugLogger('llxprt:oauth:provider-usage');
  * @param bucket - Bucket to fetch usage for (required; caller resolves default)
  */
 export async function getAnthropicUsageInfo(
+  requestFetch: NetworkFetch,
   tokenStore: TokenStore,
   bucket?: string,
 ): Promise<Record<string, unknown> | null> {
@@ -49,7 +51,7 @@ export async function getAnthropicUsageInfo(
     const { fetchAnthropicUsage } = await import(
       '@vybestack/llxprt-code-providers'
     );
-    return await fetchAnthropicUsage(token.access_token);
+    return await fetchAnthropicUsage(requestFetch, token.access_token);
   } catch (error) {
     logger.debug(
       `Error fetching Anthropic usage info for bucket ${bucketToUse}:`,
@@ -115,6 +117,7 @@ async function fetchAndStoreCodexUsage(
  * @param tokenStore - Token store to read from
  */
 export async function getAllAnthropicUsageInfo(
+  requestFetch: NetworkFetch,
   tokenStore: TokenStore,
 ): Promise<Map<string, Record<string, unknown>>> {
   const result = new Map<string, Record<string, unknown>>();
@@ -140,7 +143,7 @@ export async function getAllAnthropicUsageInfo(
       await fetchAndStoreAnthropicUsage(
         bucket,
         token.access_token,
-        fetchAnthropicUsage,
+        (token) => fetchAnthropicUsage(requestFetch, token),
         result,
         logger,
       );
@@ -159,6 +162,7 @@ export async function getAllAnthropicUsageInfo(
  * @param config - Optional Config for base-url resolution
  */
 export async function getAllCodexUsageInfo(
+  requestFetch: NetworkFetch,
   tokenStore: TokenStore,
   baseUrl?: string,
 ): Promise<Map<string, Record<string, unknown>>> {
@@ -193,7 +197,8 @@ export async function getAllCodexUsageInfo(
         token.access_token,
         accountId,
         codexBaseUrl,
-        fetchCodexUsage,
+        (token, accountId, baseUrl) =>
+          fetchCodexUsage(requestFetch, token, accountId, baseUrl),
         result,
         logger,
       );
@@ -238,6 +243,7 @@ async function fetchAndStoreCodexResetCredits(
  * @param config - Optional Config for base-url resolution
  */
 export async function getAllCodexRateLimitResetCredits(
+  requestFetch: NetworkFetch,
   tokenStore: TokenStore,
   baseUrl?: string,
 ): Promise<Map<string, CodexRateLimitResetCreditsResponse>> {
@@ -277,7 +283,13 @@ export async function getAllCodexRateLimitResetCredits(
         parsedToken.data.access_token,
         parsedToken.data.account_id,
         codexBaseUrl,
-        fetchCodexRateLimitResetCredits,
+        (token, accountId, baseUrl) =>
+          fetchCodexRateLimitResetCredits(
+            requestFetch,
+            token,
+            accountId,
+            baseUrl,
+          ),
         result,
         logger,
       );

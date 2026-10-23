@@ -1,6 +1,6 @@
 import { captureProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
-import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
-const fixtureOwners = installRuntimeTestOwners();
+import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
+const fixtureOwnersBorrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -122,20 +122,23 @@ function buildManagedWrapper(base: RecordingProvider): {
   const settings = new SettingsService();
   const config = buildConfigStub();
   const runtime: ProviderRuntimeContext = {
-    settingsService: settings,
-    config,
     runtimeId: 'managed-runtime',
     metadata: { source: 'ProviderManager.syncProviderRuntime' },
   };
 
-  const wrapperSettings1 = fixtureOwners.adopt(
+  const wrapperSettings1 = fixtureOwnersBorrowedSettings(
     config,
     new SettingsService(),
-  ).settingsOwner;
+  );
   const wrapper = new LoggingProviderWrapper(base, config, undefined, () =>
     captureProviderRequestDiagnostics(config, wrapperSettings1),
   );
-  wrapper.setRuntimeContextResolver(() => runtime);
+  wrapper.setInvocationDataReader((providerName) => ({
+    runtimeId: runtime.runtimeId,
+    metadata: runtime.metadata,
+    globalSettings: settings.getAllGlobalSettings(),
+    providerSettings: settings.getProviderSettings(providerName),
+  }));
   wrapper.setOptionsNormalizer((options) => ({
     ...options,
     metadata: { ...options.metadata, normalizerApplied: true },
@@ -244,9 +247,9 @@ describe('LoggingProviderWrapper projection normalization parity (issue #2817)',
     const normalize = vi.fn((options: GenerateChatOptions) => options);
     const options = { contents: [makeContent('Hello')] };
     const snapshot = structuredClone(options);
-    wrapper.setRuntimeContextResolver(() => ({
-      settingsService: settings,
-      config: buildConfigStub(),
+    wrapper.setInvocationDataReader(() => ({
+      globalSettings: settings.getAllGlobalSettings(),
+      providerSettings: settings.getProviderSettings(plain.name),
       runtimeId: 'plain-runtime',
       metadata: {},
     }));

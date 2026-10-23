@@ -88,19 +88,16 @@ describe('generateChatCompletion contract', () => {
   });
 
   it('honours provided GenerateChatOptions payload', async () => {
-    const {
-      provider,
-      runtime,
-      settingsService: customSettings,
-    } = createProviderWithRuntime<OptionRecorderProvider>(
-      ({ settingsService: svc }) => {
-        svc.set('auth-key', 'options-token');
-        return new OptionRecorderProvider({ name: 'contract' });
-      },
-      {
-        runtimeId: 'contract.options',
-      },
-    );
+    const { provider, settingsService: customSettings } =
+      createProviderWithRuntime<OptionRecorderProvider>(
+        ({ settingsService: svc }) => {
+          svc.set('auth-key', 'options-token');
+          return new OptionRecorderProvider({ name: 'contract' });
+        },
+        {
+          runtimeId: 'contract.options',
+        },
+      );
     const fakeConfig = {
       getUserMemory: () => 'contract-memory',
       getModel: () => 'contract-model',
@@ -112,13 +109,15 @@ describe('generateChatCompletion contract', () => {
     const options = {
       contents: [asContent('options-call')],
       invocation: captureProviderInvocation(
-        { settingsService: customSettings, runtimeId: 'options-test' },
+        {
+          runtimeId: 'options-test',
+          globalSettings: customSettings.getAllGlobalSettings(),
+          providerSettings: customSettings.getProviderSettings('contract'),
+        },
         'contract',
       ),
       metadata: { requestId: 'options-test' },
     } satisfies Parameters<OptionRecorderProvider['generateChatCompletion']>[0];
-
-    runtime.config ??= fakeConfig;
 
     await provider.generateChatCompletion(options).next();
 

@@ -40,6 +40,7 @@
       "policy",
       "providers",
       "settings",
+      "storage",
       "telemetry",
       "tools"
     ],
@@ -71,16 +72,7 @@
     "lsp": [],
     "mcp": ["auth", "settings", "storage", "telemetry", "tools"],
     "policy": [],
-    "providers": [
-      "auth",
-      "core",
-      "mcp",
-      "settings",
-      "storage",
-      "telemetry",
-      "test-utils",
-      "tools"
-    ],
+    "providers": ["auth", "core", "mcp", "settings", "storage", "tools"],
     "settings": ["storage"],
     "storage": [],
     "telemetry": ["storage"],
@@ -89,6 +81,7 @@
     "vscode-ide-companion": ["ide-integration"],
     "zed-acp": [
       "agents",
+      "auth",
       "core",
       "providers",
       "settings",
@@ -99,7 +92,7 @@
   },
   "testOnlyEdges": {
     "a2a-server": [],
-    "agents": ["storage", "test-utils"],
+    "agents": ["test-utils"],
     "auth": ["test-utils"],
     "cli": ["policy", "test-utils"],
     "core": ["agents", "providers", "test-utils"],
@@ -107,7 +100,7 @@
     "lsp": [],
     "mcp": ["test-utils"],
     "policy": [],
-    "providers": ["policy"],
+    "providers": ["policy", "telemetry", "test-utils"],
     "settings": [],
     "storage": [],
     "telemetry": [],

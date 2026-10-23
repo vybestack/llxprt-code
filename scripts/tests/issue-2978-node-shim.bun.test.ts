@@ -44,9 +44,11 @@ import {
   cliManifestPath,
   defaultEntryBody,
   hostOvenVariants,
+  isNativeExecutable,
   isWin,
   makeLayout,
   parseEntryOutput,
+  removeProfileFixture,
   placeBundledBun,
   placeOvenBun,
   placePlaceholder,
@@ -189,14 +191,13 @@ describe('packages/cli/bin/llxprt.mjs node-shebang shim (issue #2978)', () => {
   it('retains materialized Bun precedence and does not retry a failed application', () => {
     const layout = makeLayout(tempDir);
     const native = placeBundledBun(layout.nodeModules);
-    for (const variant of hostOvenVariants())
-      placeOvenBun(layout.nodeModules, variant);
+    hostOvenVariants().forEach(placeOvenBun.bind(null, layout.nodeModules));
     writeSourceEntry(layout.pkgRoot, defaultEntryBody);
 
     const result = runShim(layout, [], { LLXPRT_TEST_EXIT: '17' });
 
     expect(result.status).toBe(17);
-    expect(parseEntryOutput(result.stdout)?.exe).toBe(native);
+    expect(isNativeExecutable(result.stdout, native)).toBe(true);
     expect(result.stdout.trim().split('\n')).toHaveLength(1);
   });
 
@@ -232,9 +233,7 @@ describe('packages/cli/bin/llxprt.mjs memory-profile dispatch (issue #3386)', ()
     tempDir = mkdtempSync(path.join(tmpdir(), 'llxprt-shim-profile-'));
   });
 
-  afterEach(() => {
-    rmSync(tempDir, { recursive: true, force: true });
-  });
+  afterEach(() => removeProfileFixture(tempDir));
 
   it('uses the same numeric limits as the memory probe', () => {
     const shim = readFileSync(shimSrc, 'utf8');

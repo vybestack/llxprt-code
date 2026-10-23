@@ -28,6 +28,36 @@ describe('compression history invariant', () => {
 });
 
 describe('compression result token accounting', () => {
+  it('retains actual token inflation and pre-command recency without changing the monotonic public counts', async () => {
+    let compressed = false;
+    let prepared = false;
+    const result = await executeCompression(
+      'inflation',
+      async () => {
+        prepared = true;
+      },
+      async () => {
+        expect(prepared).toBe(true);
+        compressed = true;
+        return PerformCompressionResult.COMPRESSED;
+      },
+      () => (compressed ? 53 : 41),
+      () => !compressed,
+    );
+    expect(result).toStrictEqual({
+      status: 'compressed',
+      promptId: 'inflation',
+      originalTokenCount: 53,
+      newTokenCount: 53,
+      detail: {
+        result: PerformCompressionResult.COMPRESSED,
+        originalTokenCount: 41,
+        newTokenCount: 53,
+        wasRecentlyCompressed: true,
+      },
+    });
+  });
+
   for (const outcome of [
     PerformCompressionResult.NOOP,
     PerformCompressionResult.SKIPPED_EMPTY,
@@ -47,7 +77,14 @@ describe('compression result token accounting', () => {
           if (retired) throw new Error('History retired without a replacement');
           return 41;
         },
+        () => true,
       );
+      expect(result.detail).toStrictEqual({
+        result: outcome,
+        originalTokenCount: 41,
+        newTokenCount: 41,
+        wasRecentlyCompressed: true,
+      });
       let expected: 'noop' | 'failed' | 'skipped' = 'skipped';
       if (outcome === PerformCompressionResult.NOOP) expected = 'noop';
       if (outcome === PerformCompressionResult.FAILED) expected = 'failed';
@@ -64,12 +101,19 @@ describe('compression result token accounting', () => {
         return PerformCompressionResult.COMPRESSED;
       },
       () => (compressed ? 19 : 41),
+      () => false,
     );
     expect(result).toStrictEqual({
       status: 'compressed',
       promptId: 'compression',
       originalTokenCount: 41,
       newTokenCount: 19,
+      detail: {
+        result: PerformCompressionResult.COMPRESSED,
+        originalTokenCount: 41,
+        newTokenCount: 19,
+        wasRecentlyCompressed: false,
+      },
     });
   });
 });

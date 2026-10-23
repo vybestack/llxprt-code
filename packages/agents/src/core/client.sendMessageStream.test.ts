@@ -198,12 +198,6 @@ void vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
     ),
   };
 });
-void vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
-  uiTelemetryService: {
-    setLastPromptTokenCount: vi.fn(),
-    getLastPromptTokenCount: vi.fn(),
-  },
-}));
 
 // --- Typed inspection helpers for the requests forwarded to Turn.run ---
 // After reminder injection the orchestrator forwards an `IContent[]` turn

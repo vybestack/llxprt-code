@@ -9,8 +9,7 @@ import * as path from 'node:path';
 import { homedir } from 'node:os';
 import * as dotenv from 'dotenv';
 
-import type { Agent, AgentConfig } from '@vybestack/llxprt-code-agents';
-import { createAgent } from '@vybestack/llxprt-code-agents';
+import type { AgentConfig } from '@vybestack/llxprt-code-agents';
 import { debugLogger } from '@vybestack/llxprt-code-core';
 import {
   LLXPRT_CONFIG_DIR,
@@ -26,10 +25,10 @@ import { type AgentSettings, CoderAgentEvent } from '../types.js';
 import { logger } from '../utils/logger.js';
 
 /**
- * Builds the A2A task Agent through the public Agent API (#3221).
+ * Builds declarative A2A task input for the acquiring host (#3221).
  *
  * Converts the A2A env/settings/extensions host input into a declarative
- * {@link AgentConfig} and constructs the Agent via {@link createAgent}. This
+ * {@link AgentConfig}. The acquiring task or startup host constructs the Agent. This
  * replaces the legacy hand-wired runtime assembly (`new Config`,
  * `new MessageBus`, `config.initialize`/`refreshAuth` orchestration): A2A owns
  * interface-input parsing only, and runtime transitions belong to the Agent.
@@ -45,11 +44,11 @@ import { logger } from '../utils/logger.js';
  * the legacy `loadConfig` path never injected confirmation forcing, and the
  * Task surfaces confirmations to the client instead of auto-confirming.
  */
-export async function createTaskAgent(
+export function createTaskAgentConfig(
   settings: Settings,
   extensions: LlxprtExtension[],
   taskId: string,
-): Promise<Agent> {
+): AgentConfig {
   const workspaceDir = process.cwd();
   const agentConfig: AgentConfig = {
     provider: resolveProviderFromEnv(),
@@ -78,7 +77,7 @@ export async function createTaskAgent(
       showMemoryUsage: settings.showMemoryUsage ?? false,
     },
   };
-  return createAgent(agentConfig);
+  return agentConfig;
 }
 
 function getApprovalMode(): ApprovalMode {

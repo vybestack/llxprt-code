@@ -41,6 +41,7 @@ const ENGINE_ENV_KEYS = [
   'LLXPRT_TEST_REMOVE_FAILURE_ID',
   'LLXPRT_TEST_LIST_HANG',
   'LLXPRT_TEST_REMOVE_HANG_ID',
+  'LLXPRT_TEST_HANG_GATE',
   'LLXPRT_TEST_PROCESS_STARTS',
   'LLXPRT_TEST_PS_HANG',
   'LLXPRT_TEST_PS_OUTPUT',
@@ -116,7 +117,7 @@ function engineLogPath(): string {
 
 function engineExecutableSource(command: SandboxConfig['command']): string {
   return `#!/usr/bin/env bun
-import { appendFileSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 
 const engine = ${JSON.stringify(command)};
 const stateKey = engine === 'docker'
@@ -126,11 +127,19 @@ const statePath = process.env[stateKey];
 const logPath = process.env.LLXPRT_TEST_ENGINE_LOG;
 if (statePath === undefined || logPath === undefined) process.exit(46);
 
+async function holdUntilGateReleased() {
+  const gatePath = process.env.LLXPRT_TEST_HANG_GATE;
+  if (gatePath === undefined) process.exit(46);
+  appendFileSync(gatePath + '.pids', process.pid + '\\n');
+  while (!existsSync(gatePath)) await new Promise((r) => setTimeout(r, 50));
+  process.exit(47);
+}
+
 const args = process.argv.slice(2);
 appendFileSync(logPath, engine + ':' + args.join(' ') + '\\n');
 if (args[0] === 'ps') {
   if (process.env.LLXPRT_TEST_LIST_HANG === '1') {
-    await new Promise((resolve) => setTimeout(resolve, 7000));
+    await holdUntilGateReleased();
   }
   if (process.env.LLXPRT_TEST_LIST_FAILURE === '1') process.exit(42);
   if (args.includes('--filter') &&
@@ -170,7 +179,7 @@ if (args[0] === 'rm' && args[1] === '-f') {
   const containerId = args[2];
   if (containerId === undefined) process.exit(45);
   if (process.env.LLXPRT_TEST_REMOVE_HANG_ID === containerId) {
-    await new Promise((resolve) => setTimeout(resolve, 7000));
+    await holdUntilGateReleased();
   }
   if (process.env.LLXPRT_TEST_REMOVE_FAILURE_ID === containerId) process.exit(44);
   const remainingRows = readFileSync(statePath, 'utf8')
@@ -237,6 +246,33 @@ function stopChild(child: ChildProcess): Promise<void> {
     child.once('close', () => resolve());
     child.kill('SIGKILL');
   });
+}
+
+// Engine calls selected to hang wait on a gate file that this helper creates
+// only after asserting every one was terminated, so only the per-operation
+// deadline can have ended them. Releasing the gate afterwards stops late
+// wake-ups from touching the engine state.
+async function runStartupWithGatedEngine(
+  gatePath: string,
+  statePath: string,
+): Promise<{ startupResult: string; state: string }> {
+  process.env.LLXPRT_TEST_HANG_GATE = gatePath;
+  try {
+    const startupResult = await runRecoveryStartup('docker');
+    const pids = fs
+      .readFileSync(`${gatePath}.pids`, 'utf8')
+      .split('\n')
+      .filter((line) => line !== '')
+      .map(Number);
+    expect(pids.length).toBeGreaterThan(0);
+    for (const pid of pids) {
+      expect(() => process.kill(pid, 0)).toThrow('ESRCH');
+    }
+    expect(fs.existsSync(gatePath)).toBe(false);
+    return { startupResult, state: fs.readFileSync(statePath, 'utf8') };
+  } finally {
+    fs.writeFileSync(gatePath, '');
+  }
 }
 
 function rerunInNonUtcTimezone(testName: string): void {
@@ -759,21 +795,18 @@ describe('sandbox orphan recovery startup', () => {
     process.env.LLXPRT_TEST_LIST_HANG = '1';
     const statePath = engineStatePath('docker');
     fs.writeFileSync(statePath, 'unread-container\tignored\n');
-    const startedAt = Date.now();
 
-    const startupResult = await runRecoveryStartup('docker');
+    const result = await runStartupWithGatedEngine(
+      path.join(fixtureDir, 'hung-listing.gate'),
+      statePath,
+    );
 
-    const elapsedMs = Date.now() - startedAt;
-    expect({
-      startupResult,
-      state: fs.readFileSync(statePath, 'utf8'),
-    }).toStrictEqual({
+    expect(result).toStrictEqual({
       startupResult: expect.stringContaining(
         `Sandbox image '${TEST_IMAGE}' is missing`,
       ),
       state: 'unread-container\tignored\n',
     });
-    expect(elapsedMs).toBeLessThan(6_500);
   }, 10_000);
 
   it('bounds a hung removal and continues processing other orphans', async () => {
@@ -790,21 +823,18 @@ describe('sandbox orphan recovery startup', () => {
       statePath,
       [hungRow, row('later-removal', metadata), ''].join('\n'),
     );
-    const startedAt = Date.now();
 
-    const startupResult = await runRecoveryStartup('docker');
+    const result = await runStartupWithGatedEngine(
+      path.join(fixtureDir, 'hung-removal.gate'),
+      statePath,
+    );
 
-    const elapsedMs = Date.now() - startedAt;
-    expect({
-      startupResult,
-      state: fs.readFileSync(statePath, 'utf8'),
-    }).toStrictEqual({
+    expect(result).toStrictEqual({
       startupResult: expect.stringContaining(
         `Sandbox image '${TEST_IMAGE}' is missing`,
       ),
       state: `${hungRow}\n`,
     });
-    expect(elapsedMs).toBeLessThan(6_500);
   }, 10_000);
 
   it('retains a live owner when the process start probe exceeds 250 ms', async () => {

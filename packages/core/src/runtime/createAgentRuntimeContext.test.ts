@@ -92,7 +92,6 @@ describe('createAgentRuntimeContext', () => {
         readRuntimeSettings: () => owner.readRuntimePolicy(),
         providerRuntime: {
           ...mockProviderRuntime,
-          settingsService: liveSettings,
         },
       });
 
@@ -118,7 +117,6 @@ describe('createAgentRuntimeContext', () => {
           readRuntimeSettings: () => owner.readRuntimePolicy(),
           providerRuntime: {
             ...mockProviderRuntime,
-            settingsService: liveSettings,
           },
         });
       }).toThrow(

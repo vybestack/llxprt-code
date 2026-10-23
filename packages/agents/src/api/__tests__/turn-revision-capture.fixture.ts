@@ -4,18 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterAll, expect } from 'bun:test';
+import { expect } from 'bun:test';
 import { once } from 'node:events';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { createServer, type ServerResponse } from 'node:http';
 import { join } from 'node:path';
 import { json } from 'node:stream/consumers';
 import { tmpdir } from 'node:os';
-import {
-  createAgent,
-  type Agent,
-  type AgentEvent,
-} from '@vybestack/llxprt-code-agents';
+import type { Agent, AgentEvent } from '@vybestack/llxprt-code-agents';
+import { captureAgentCreation as createAgent } from './helpers/agent-resource-capture.js';
 
 function barrier(): { readonly promise: Promise<void>; release(): void } {
   let release = (): void => {
@@ -58,7 +55,11 @@ function wireRequest(value: unknown): WireRequest {
   };
 }
 
-function sseChunk(captured: WireRequest, callTool: boolean): object {
+function sseChunk(
+  captured: WireRequest,
+  callTool: boolean,
+  responseText: string,
+): object {
   return {
     id: 'same-completion',
     object: 'chat.completion.chunk',
@@ -84,7 +85,7 @@ function sseChunk(captured: WireRequest, callTool: boolean): object {
                 },
               ],
             }
-          : { role: 'assistant', content: 'Transport completed.' },
+          : { role: 'assistant', content: responseText },
         finish_reason: callTool ? 'tool_calls' : 'stop',
       },
     ],
@@ -101,12 +102,25 @@ function respondWithFailure(reply: ServerResponse, status: number): void {
   );
 }
 
+function respondWithCompletion(
+  reply: ServerResponse,
+  captured: WireRequest,
+  callTool: boolean,
+  responseText: string,
+): void {
+  const chunk = sseChunk(captured, callTool, responseText);
+  reply
+    .writeHead(200, { 'content-type': 'text/event-stream' })
+    .end(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`);
+}
+
 async function transport(
   holdRequest: number,
   failFirst = false,
   toolFirst = false,
   failRequest = 0,
   failStatus = 413,
+  responseText = 'Transport completed.',
 ): Promise<{
   readonly url: string;
   readonly entered: Promise<void>;
@@ -145,10 +159,12 @@ async function transport(
             .end(JSON.stringify({ error: { message: 'Unavailable member' } }));
           return;
         }
-        const chunk = sseChunk(captured, toolFirst && requests.length === 1);
-        reply
-          .writeHead(200, { 'content-type': 'text/event-stream' })
-          .end(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`);
+        respondWithCompletion(
+          reply,
+          captured,
+          toolFirst && requests.length === 1,
+          responseText,
+        );
       })
       .catch((cause: unknown) => {
         reply.destroy(new Error('Invalid loopback chat request', { cause }));
@@ -245,15 +261,6 @@ async function createOwner(
   return agent;
 }
 
-const promptRoot = await mkdtemp(join(tmpdir(), 'turn-prompts-'));
-const fixturePrompts = join(promptRoot, 'prompts');
-await mkdir(join(fixturePrompts, 'core'), { recursive: true });
-await writeFile(
-  join(fixturePrompts, 'core', 'default.md'),
-  'Test core prompt.',
-);
-afterAll(() => rm(promptRoot, { recursive: true, force: true }));
-
 export async function withOwners(
   run: (
     a: Agent,
@@ -268,20 +275,16 @@ export async function withOwners(
   failRequest = 0,
   continueOnFailedApiCall = failRequest > 0,
   failStatus = 413,
+  responseText = 'Transport completed.',
 ): Promise<void> {
   const directory = await mkdtemp(join(tmpdir(), 'turn-capture-'));
-  const prompts = fixturePrompts;
   const environment = Object.fromEntries(
-    [
-      'LLXPRT_CONFIG_HOME',
-      'LLXPRT_DATA_HOME',
-      'LLXPRT_FAKE_RESPONSES',
-      'LLXPRT_PROMPTS_DIR',
-    ].map((key) => [key, process.env[key]]),
+    ['LLXPRT_CONFIG_HOME', 'LLXPRT_DATA_HOME', 'LLXPRT_FAKE_RESPONSES'].map(
+      (key) => [key, process.env[key]],
+    ),
   );
   process.env.LLXPRT_CONFIG_HOME = join(directory, 'home');
   process.env.LLXPRT_DATA_HOME = join(directory, 'data');
-  process.env.LLXPRT_PROMPTS_DIR = prompts;
   delete process.env.LLXPRT_FAKE_RESPONSES;
   const endpointA = await transport(
     holdRequest,
@@ -289,6 +292,7 @@ export async function withOwners(
     toolFirst,
     failRequest,
     failStatus,
+    responseText,
   );
   const endpointB = await transport(0);
   let agents: readonly Agent[] = [];

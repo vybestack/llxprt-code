@@ -45,10 +45,19 @@ describe('prepareTurnForQuery', () => {
 
     await prepareTurnForQuery(
       false,
-      createStreamRuntimeForTest(config),
+      () => createStreamRuntimeForTest(config).bucketFailover.resetBuckets?.(),
       startNewPrompt,
       setThought,
       thinkingBlocksRef,
+      () =>
+        createStreamRuntimeForTest(
+          config,
+        ).bucketFailover.resetBucketSession?.(),
+      async () => {
+        await createStreamRuntimeForTest(
+          config,
+        ).bucketFailover.ensureBucketsAuthenticated?.();
+      },
     );
 
     expect(callOrder).toStrictEqual([
@@ -89,10 +98,19 @@ describe('prepareTurnForQuery', () => {
 
     await prepareTurnForQuery(
       true,
-      createStreamRuntimeForTest(config),
+      () => createStreamRuntimeForTest(config).bucketFailover.resetBuckets?.(),
       startNewPrompt,
       setThought,
       thinkingBlocksRef,
+      () =>
+        createStreamRuntimeForTest(
+          config,
+        ).bucketFailover.resetBucketSession?.(),
+      async () => {
+        await createStreamRuntimeForTest(
+          config,
+        ).bucketFailover.ensureBucketsAuthenticated?.();
+      },
     );
 
     expect(callOrder).toStrictEqual(['resetSession', 'ensure']);
@@ -127,12 +145,21 @@ describe('prepareTurnForQuery', () => {
 
     await prepareTurnForQuery(
       false,
-      createStreamRuntimeForTest(config),
+      () => createStreamRuntimeForTest(config).bucketFailover.resetBuckets?.(),
       vi.fn(),
       vi.fn(),
       {
         current: [existingThinkingBlock],
       } as { current: ThinkingBlock[] },
+      () =>
+        createStreamRuntimeForTest(
+          config,
+        ).bucketFailover.resetBucketSession?.(),
+      async () => {
+        await createStreamRuntimeForTest(
+          config,
+        ).bucketFailover.ensureBucketsAuthenticated?.();
+      },
     );
 
     expect(callOrder).toStrictEqual(['reset', 'ensure']);

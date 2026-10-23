@@ -1,4 +1,7 @@
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
+import type { TestChildLaunchOptions } from './child-launch-fixture.js';
+import { createTestChildOrchestrator } from './child-launch-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -8,54 +11,46 @@ import { createSessionSettingsFixture } from '../../api/__tests__/helpers/sessio
 import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
 import { fixtureToolSelection } from './subagentOrchestrator-test-helpers.js';
 
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { createAgentRuntimeFactoryBindings } from '../../api/runtimeFactories.js';
 const fixturePaths = installTestWorkspacePaths({
   targetDir: process.cwd(),
   isTrusted: () => true,
 });
-import { createAgentRuntimeFactoryBindings } from '../../api/runtimeFactories.js';
-import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 
 /**
- * Issue #3222 follow-up: the orchestrator constructs the isolated subagent
- * Config (buildIsolatedAgentConfig) and hands it to the isolated runtime
- * factory, which treats that Config as CALLER-OWNED — the handle cleanup
- * never disposes it, and SubAgentScope.dispose does not touch it either.
- * These tests pin the disposal contract on every teardown path (success,
- * scope-creation failure, runtime-loader failure) through REAL
- * collaborators: provider activation's refreshAuth constructs a real
- * AgentClient on that Config, whose constructor subscribes to the
- * model-event emitter; Config.dispose() -> client.dispose()
- * releases those listeners. The tests compare live event listener counts
- * before activation, while active, and after disposal.
+ * The isolated runtime owns its session clients and settings independently
+ * of the foreground Config. Each teardown path must close the real clients'
+ * auxiliary admission; successful disposal must also close runtime policy reads.
  */
 
 import { describe, expect, it, vi } from 'bun:test';
-import {
-  coreEvents,
-  CoreEvent,
-} from '@vybestack/llxprt-code-core/utils/events.js';
+
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
+import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
-import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
-import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 
 import type { SubAgentScope } from '../subagent.js';
 import { SubagentOrchestrator } from '../subagentOrchestrator.js';
-import type { SubagentOrchestratorOptions } from '../subagentOrchestrator.js';
 import {
-  makeForegroundConfig,
   createRuntimeBundle,
+  makeForegroundConfig,
 } from './subagentOrchestrator-test-helpers.js';
 
-function modelListenerCounts(): readonly number[] {
-  return [CoreEvent.ModelChanged, CoreEvent.ModelProfileChanged].map((event) =>
-    coreEvents.listenerCount(event),
-  );
+async function expectClientsClosed(
+  clients: readonly AgentClientContract[],
+): Promise<void> {
+  for (const client of clients) {
+    await expect(client.generateEmbedding(['after teardown'])).rejects.toThrow(
+      'Auxiliary generation is closed',
+    );
+  }
 }
 
 /** Fail-fast read of the client activation constructed on the Config. */
@@ -114,12 +109,8 @@ describe('SubagentOrchestrator - isolated Config disposal', () => {
     ephemeralSettings: { 'auth-key': 'test-api-key' },
   };
 
-  type TestRuntimeLoader = NonNullable<
-    SubagentOrchestratorOptions['runtimeLoader']
-  >;
-  type TestScopeFactory = NonNullable<
-    SubagentOrchestratorOptions['scopeFactory']
-  >;
+  type TestRuntimeLoader = NonNullable<TestChildLaunchOptions['runtimeLoader']>;
+  type TestScopeFactory = NonNullable<TestChildLaunchOptions['scopeFactory']>;
 
   function buildOrchestrator(options: {
     runtimeLoader: TestRuntimeLoader;
@@ -134,7 +125,8 @@ describe('SubagentOrchestrator - isolated Config disposal', () => {
     const loadProfile = vi.fn().mockResolvedValue(profile);
     const foregroundConfig1 = makeForegroundConfig();
     const foregroundSettings1 = createSessionSettingsFixture(foregroundConfig1);
-    const orchestrator = new SubagentOrchestrator({
+    const orchestrator = createTestChildOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       workspaceTrust: foregroundSettings1.workspaceTrust,
       createChildSettings: () =>
         foregroundSettings1.settingsOwner.createChildStore(),
@@ -165,10 +157,10 @@ describe('SubagentOrchestrator - isolated Config disposal', () => {
 
   it('disposes the orchestrator-constructed isolated Config on the success path (result.dispose)', async () => {
     await withIsolatedConfigHome(async () => {
-      const listenerBaseline = modelListenerCounts();
       const runtimeBundle = createRuntimeBundle('dispose-success');
       const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
       const scope = {
+        dispose: async () => {},
         runtimeContext: runtimeBundle.runtimeContext,
         getAgentId: () => 'planner-dispose-success',
       } as unknown as SubAgentScope;
@@ -188,26 +180,20 @@ describe('SubagentOrchestrator - isolated Config disposal', () => {
       const isolatedConfig = isolatedConfigFromLoaderCalls(
         runtimeLoader.mock.calls,
       );
-      // Activation's refreshAuth constructed a real, subscribed client on the
-      // isolated Config.
+      // Activation replaces the bootstrap client with a provider-bound client.
       expect(clients).toHaveLength(2);
       expect(() => clients[0]?.assertConfig(isolatedConfig)).not.toThrow();
-      expect(
-        modelListenerCounts().map(
-          (count, index) => count - listenerBaseline[index],
-        ),
-      ).toStrictEqual([1, 1]);
+      const readRuntimeSettings =
+        runtimeLoader.mock.calls[0][0].profile.readRuntimeSettings;
+      if (readRuntimeSettings === undefined)
+        throw new Error('Missing isolated runtime policy');
+      expect(() => readRuntimeSettings()).not.toThrow();
 
       await result.dispose();
 
-      // Config.dispose() released the client's model-event listeners: the
-      // success path previously never disposed this Config, leaving the
-      // constructed client (and its subscription) alive.
-      expect(
-        modelListenerCounts().map(
-          (count, index) => count - listenerBaseline[index],
-        ),
-      ).toStrictEqual([0, 0]);
+      // Client admission must be closed before the isolated runtime is released.
+      await expectClientsClosed(clients);
+      expect(() => readRuntimeSettings()).toThrow('closed');
 
       // Double dispose is safe (Config.dispose is idempotent here).
       await expect(result.dispose()).resolves.toBeUndefined();
@@ -216,7 +202,6 @@ describe('SubagentOrchestrator - isolated Config disposal', () => {
 
   it('disposes the isolated Config when scope creation fails after runtime assembly', async () => {
     await withIsolatedConfigHome(async () => {
-      const listenerBaseline = modelListenerCounts();
       const runtimeBundle = createRuntimeBundle('dispose-scope-failure');
       const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
       const scopeFactory = vi
@@ -241,17 +226,12 @@ describe('SubagentOrchestrator - isolated Config disposal', () => {
           isolatedConfigFromLoaderCalls(runtimeLoader.mock.calls),
         ),
       ).not.toThrow();
-      expect(
-        modelListenerCounts().map(
-          (count, index) => count - listenerBaseline[index],
-        ),
-      ).toStrictEqual([0, 0]);
+      await expectClientsClosed(clients);
     });
   });
 
   it('disposes the isolated Config when the runtime loader fails after activation', async () => {
     await withIsolatedConfigHome(async () => {
-      const listenerBaseline = modelListenerCounts();
       const runtimeLoader = vi
         .fn()
         .mockRejectedValue(new Error('runtime loader failed'));
@@ -277,11 +257,7 @@ describe('SubagentOrchestrator - isolated Config disposal', () => {
           isolatedConfigFromLoaderCalls(runtimeLoader.mock.calls),
         ),
       ).not.toThrow();
-      expect(
-        modelListenerCounts().map(
-          (count, index) => count - listenerBaseline[index],
-        ),
-      ).toStrictEqual([0, 0]);
+      await expectClientsClosed(clients);
     });
   });
 });

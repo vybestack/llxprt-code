@@ -3,15 +3,34 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import {
+  type GetActiveModelNameOperation,
+  type GetActiveProfileNameOperation,
+  type GetActiveProviderNameOperation,
+  type GetLoadBalancerStatsOperation,
+  type ListAvailableModelsOperation,
+  type ListProvidersOperation,
+  type ListSavedProfilesOperation,
+  type LoadProfileByNameOperation,
+  type ProviderStatusOperation,
+  type SaveProfileSnapshotOperation,
+  type SetActiveModelOperation,
+  type SetDefaultProfileNameOperation,
+  type SetProviderOperation,
+  type UpdateActiveProviderApiKeyOperation,
+} from '../../../contexts/RuntimeContext.js';
 
 import { selectDialogOpen } from '../../../stores/dialog/dialogStore.js';
 import type { SlashCommandRuntime } from '../../../cliUiRuntime.js';
 import type React from 'react';
 import type { AppAction } from '../../../reducers/appReducer.js';
 import { useCallback, useEffect, useMemo } from 'react';
+import type { bindPolicyRulesReader } from '../../../hooks/policyRulesReaderHost.js';
+import { useSubagentDialogCommands } from '../../../hooks/useSubagentDialogCommands.js';
 import { useThemeCommand } from '../../../hooks/useThemeCommand.js';
 import { useAuthCommand } from '../../../hooks/useAuthCommand.js';
 import { useFolderTrust } from '../../../hooks/useFolderTrust.js';
+import { useOAuthControl } from '../../../contexts/OAuthControlContext.js';
 import { useWelcomeOnboarding } from '../../../hooks/useWelcomeOnboarding.js';
 import type { UseWelcomeOnboardingReturn } from '../../../hooks/useWelcomeOnboarding.js';
 import { useEditorSettings } from '../../../hooks/useEditorSettings.js';
@@ -22,6 +41,7 @@ import { useLoadProfileDialog } from '../../../hooks/useLoadProfileDialog.js';
 import { useCreateProfileDialog } from '../../../hooks/useCreateProfileDialog.js';
 import { useProfileManagement } from '../../../hooks/useProfileManagement.js';
 import {
+  bindModelSwitchRecording,
   dialogProviderSwitchRecorder,
   type ProviderSwitchRecorder,
 } from '../../../utils/recordActiveProviderSwitch.js';
@@ -34,12 +54,10 @@ import { useQueueErrorTimeout } from './useQueueErrorTimeout.js';
 import { useModelRuntimeSync } from './useModelRuntimeSync.js';
 import { useAppEventHandlers } from './useAppEventHandlers.js';
 import { resolveModelIdentity } from '../../../utils/modelIdentity.js';
-import type { useRuntimeApi } from '../../../contexts/RuntimeContext.js';
 import type {
   IdeInfo,
   RecordingIntegration,
 } from '@vybestack/llxprt-code-core';
-import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { LoadedSettings } from '../../../../config/settings.js';
 import type { ConsoleMessageItem } from '../../../types.js';
 import type { DialogStore } from '../../../stores/dialog/dialogStore.js';
@@ -55,8 +73,23 @@ import { useStoreSelector } from '../../../stores/useStoreSelector.js';
 const QUEUE_ERROR_DISPLAY_DURATION_MS = 3000;
 
 export interface AppDialogsParams {
+  readIdeContext: Parameters<typeof useIdeContextBridge>[0]['readIdeContext'];
+  subscribeIdeContext: Parameters<
+    typeof useIdeContextBridge
+  >[0]['subscribeIdeContext'];
   config: SlashCommandRuntime;
-  agent: Agent;
+  recordRecordingEvent: NonNullable<
+    Parameters<typeof bindModelSwitchRecording>[1]
+  >;
+  switchProviderAfterAuth: Parameters<
+    typeof useWelcomeOnboarding
+  >[0]['switchProviderAfterAuth'];
+  listTools: Parameters<typeof useToolsDialog>[0]['listTools'];
+  generatePrompt: (description: string) => Promise<string>;
+  readPolicyRules: ReturnType<typeof bindPolicyRulesReader>;
+  subagentDefinitions: Parameters<typeof useSubagentDialogCommands>[0];
+  subagentWrites: Parameters<typeof useSubagentDialogCommands>[1];
+  profileDefinitions: Parameters<typeof useSubagentDialogCommands>[2];
   settings: LoadedSettings;
   store: DialogStore;
   dialogs: DialogOpeners;
@@ -78,7 +111,20 @@ export interface AppDialogsParams {
   recordingIntegration?: RecordingIntegration;
   recordingOwner?: 'agent' | 'raw';
   recordingIntegrationRef?: React.MutableRefObject<RecordingIntegration | null>;
-  runtime: ReturnType<typeof useRuntimeApi>;
+  getActiveModelName: GetActiveModelNameOperation;
+  getActiveProfileName: GetActiveProfileNameOperation;
+  getActiveProviderName: GetActiveProviderNameOperation;
+  getLoadBalancerStats: GetLoadBalancerStatsOperation;
+  listAvailableModels: ListAvailableModelsOperation;
+  listProviders: ListProvidersOperation;
+  listSavedProfiles: ListSavedProfilesOperation;
+  loadProfileByName: LoadProfileByNameOperation;
+  providerStatus: ProviderStatusOperation;
+  saveProfileSnapshot: SaveProfileSnapshotOperation;
+  setActiveModel: SetActiveModelOperation;
+  setDefaultProfileName: SetDefaultProfileNameOperation;
+  setProvider: SetProviderOperation;
+  updateActiveProviderApiKey: UpdateActiveProviderApiKeyOperation;
   suppressStartupWelcome?: boolean;
   /** IDE nudge visibility + identity from bootstrap; open state lives in DialogStore. */
   shouldShowIdePrompt: boolean | null | undefined;
@@ -127,7 +173,8 @@ function useDialogsCore(
   const displayPrefs = useDisplayPreferences(p.terminalStore, settingsStore);
   const workspace = useWorkspaceMigration(settings, dialogs);
   useIdeContextBridge({
-    ide: config,
+    readIdeContext: p.readIdeContext,
+    subscribeIdeContext: p.subscribeIdeContext,
     setIdeContextState: st.setIdeContextState,
   });
   const errorCount = useMemo(
@@ -160,6 +207,22 @@ function useQueueErrorTimeoutWiring(
   });
 }
 
+function useProviderDialogRecording(
+  recordRecordingEvent: AppDialogsParams['recordRecordingEvent'],
+  recordingOwner: 'agent' | 'raw' | undefined,
+  recordingIntegration: RecordingIntegration | undefined,
+) {
+  return useMemo(
+    () =>
+      bindModelSwitchRecording(
+        recordingOwner,
+        recordRecordingEvent,
+        recordingIntegration,
+      ),
+    [recordRecordingEvent, recordingOwner, recordingIntegration],
+  );
+}
+
 function useDialogsAuthProviders(
   p: AppDialogsParams,
   st: ReturnType<typeof useDialogsStoreState>,
@@ -170,15 +233,8 @@ function useDialogsAuthProviders(
   contextLimit: number | undefined,
   setContextLimit: (limit: number | undefined) => void,
 ) {
-  const {
-    config,
-    settings,
-    handleNewMessage,
-    recordingIntegration,
-    runtime,
-    store,
-    dialogs,
-  } = p;
+  const { getActiveProviderName, listProviders, setProvider, store, dialogs } =
+    p;
   const { addItem } = p.turnStore.commands;
   const auth = useAuthCommand(dialogs, st.setAuthError);
   const isOAuthCodeDialogOpen = useStoreSelector(store.store, (state) =>
@@ -188,37 +244,45 @@ function useDialogsAuthProviders(
     appDispatch: p.appDispatch,
     dialogs,
     isOAuthCodeDialogOpen,
-    getActiveProviderName: runtime.getActiveProviderName,
+    getActiveProviderName,
     setAuthError: st.setAuthError,
   });
   const editor = useEditorSettings(
-    settings,
+    p.settings,
     dialogs,
     addItem,
     p.settingsStore.commands.setEditorError,
   );
-  const addMessage = useDialogHistoryMessage(p.turnStore);
   const provider = useProviderDialog({
-    addMessage,
-    dialogs,
-    recordingIntegration,
-    recordingOwner: p.recordingOwner,
-    agent: p.agent,
+    addMessage: useDialogHistoryMessage(p.turnStore),
+    listProviders,
+    getActiveProviderName,
+    setProvider,
+    getActiveModelName: p.getActiveModelName,
+    recordProviderSwitch: useProviderDialogRecording(
+      p.recordRecordingEvent,
+      p.recordingOwner,
+      p.recordingIntegration,
+    ),
+    openProviderDialog: useCallback(() => dialogs.provider.open({}), [dialogs]),
+    closeProviderDialog: dialogs.provider.close,
   });
-  useModelRuntimeSync({
-    config,
+  useDialogModelSync(
+    p.config,
     currentModel,
     setCurrentModel,
     currentModelLabel,
     setCurrentModelLabel,
-    getActiveModelName: runtime.getActiveModelName,
-    getActiveProviderName: runtime.getActiveProviderName,
-    resolveModelDisplayLabel: () => resolveModelIdentity(runtime),
+    p.getActiveModelName,
+    getActiveProviderName,
+    p.providerStatus,
+    p.getActiveProfileName,
+    p.getLoadBalancerStats,
     contextLimit,
     setContextLimit,
-  });
+  );
   useAppEventHandlers({
-    handleNewMessage,
+    handleNewMessage: p.handleNewMessage,
     setShowErrorDetails: p.terminalStore.commands.setShowErrorDetails,
     setConstrainHeight: p.terminalStore.commands.setConstrainHeight,
   });
@@ -235,6 +299,30 @@ function useDialogsAuthProviders(
   };
 }
 
+function useDialogsWelcome(
+  p: AppDialogsParams,
+  isFolderTrustComplete: boolean,
+) {
+  const { settings } = p;
+  const oauthControl = useOAuthControl();
+  return useWelcomeOnboarding({
+    settings,
+    isFolderTrustComplete,
+    listProviders: p.listProviders,
+    listAvailableModels: p.listAvailableModels,
+    setActiveModel: p.setActiveModel,
+    readProviderStatus: p.providerStatus,
+    listSavedProfiles: p.listSavedProfiles,
+    saveProfileSnapshot: p.saveProfileSnapshot,
+    setDefaultProfileName: p.setDefaultProfileName,
+    loadProfileByName: p.loadProfileByName,
+    switchProviderAfterAuth: p.switchProviderAfterAuth,
+    updateActiveProviderApiKey: p.updateActiveProviderApiKey,
+    authenticate: oauthControl.authenticate,
+    suppressStartup: p.suppressStartupWelcome === true,
+  });
+}
+
 function useDialogsAuth(
   p: AppDialogsParams,
   st: ReturnType<typeof useDialogsStoreState>,
@@ -245,28 +333,23 @@ function useDialogsAuth(
   contextLimit: number | undefined,
   setContextLimit: (limit: number | undefined) => void,
 ) {
-  const { config, settings, store, dialogs } = p;
+  const { store, dialogs } = p;
   const { addItem } = p.turnStore.commands;
   const theme = useThemeCommand(
-    settings,
+    p.settings,
     dialogs,
     addItem,
     p.settingsStore.commands.setThemeError,
   );
   const folderTrust = useFolderTrust({
     settingsStore: p.settingsStore,
-    settings,
+    settings: p.settings,
     addItem,
-    config,
+    config: p.config,
     store,
     dialogs,
   });
-  const welcome = useWelcomeOnboarding({
-    settings,
-    isFolderTrustComplete: !folderTrust.isFolderTrustDialogOpen,
-    agent: p.agent,
-    suppressStartup: p.suppressStartupWelcome === true,
-  });
+  const welcome = useDialogsWelcome(p, !folderTrust.isFolderTrustDialogOpen);
   // The welcome dialog mirrors welcome.showWelcome in the DialogStore;
   // dismiss/resetAndReopen flip showWelcome and this effect follows.
   useEffect(() => {
@@ -335,17 +418,17 @@ function useDialogHistoryMessage(turnStore: TurnStore) {
 }
 
 function useDialogsProfiles(p: AppDialogsParams) {
-  const { config, agent, dialogs } = p;
+  const { config, recordRecordingEvent, dialogs } = p;
   const addMessage = useDialogHistoryMessage(p.turnStore);
   const { recordingOwner, recordingIntegrationRef } = p;
   const recorder = useMemo<ProviderSwitchRecorder>(
     () =>
       dialogProviderSwitchRecorder(
         recordingOwner,
-        (event) => agent.session.recordRecordingEvent(event),
+        recordRecordingEvent,
         recordingIntegrationRef,
       ),
-    [agent, recordingOwner, recordingIntegrationRef],
+    [recordRecordingEvent, recordingOwner, recordingIntegrationRef],
   );
   const loadProfile = useLoadProfileDialog({
     addMessage,
@@ -360,9 +443,22 @@ function useDialogsProfiles(p: AppDialogsParams) {
   });
   const toolsRaw = useToolsDialog({
     addMessage,
-    dialogs,
-    config,
-    agent,
+    listTools: p.listTools,
+    readDisabledTools: useCallback(
+      () => config.getEphemeralSettings()['tools.disabled'],
+      [config],
+    ),
+    writeDisabledTools: useCallback(
+      (names: string[]) => {
+        config.setEphemeralSetting('tools.disabled', names);
+      },
+      [config],
+    ),
+    openToolsDialog: useCallback(
+      (action: 'enable' | 'disable') => dialogs.tools.open({ action }),
+      [dialogs],
+    ),
+    closeToolsDialog: dialogs.tools.close,
   });
   const data: ProfileDialogsData = {
     profiles: loadProfile.profiles,
@@ -536,6 +632,28 @@ export function useAppDialogs(params: AppDialogsParams) {
     core.setContextLimit,
   );
   const profiles = useDialogsProfiles(params);
+  const {
+    recordRecordingEvent,
+    recordingOwner,
+    recordingIntegration,
+    generatePrompt,
+    readPolicyRules,
+  } = params;
+  const subagents = useSubagentDialogCommands(
+    params.subagentDefinitions,
+    params.subagentWrites,
+    params.profileDefinitions,
+    generatePrompt,
+  );
+  const recordModelSwitch = useMemo(
+    () =>
+      bindModelSwitchRecording(
+        recordingOwner,
+        recordRecordingEvent,
+        recordingIntegration,
+      ),
+    [recordRecordingEvent, recordingOwner, recordingIntegration],
+  );
   useDialogDataSync(
     params.settingsStore,
     auth.welcome,
@@ -548,6 +666,9 @@ export function useAppDialogs(params: AppDialogsParams) {
     // Input-surface commands (cross-hook command arguments)
     welcomeActions: auth.welcome.actions,
     triggerWelcomeAuth: auth.triggerWelcomeAuth,
+    recordModelSwitch,
+    ...subagents,
+    readPolicyRules,
     onWorkspaceMigrationDialogOpen: core.onWorkspaceMigrationDialogOpen,
     // Dialog domain handlers for the view command surface
     openThemeDialog: auth.openThemeDialog,
@@ -576,3 +697,36 @@ export function useAppDialogs(params: AppDialogsParams) {
 }
 
 export type AppDialogsResult = ReturnType<typeof useAppDialogs>;
+
+function useDialogModelSync(
+  config: AppDialogsParams['config'],
+  currentModel: string,
+  setCurrentModel: (model: string) => void,
+  currentModelLabel: string | undefined,
+  setCurrentModelLabel: (label: string | undefined) => void,
+  getActiveModelName: GetActiveModelNameOperation,
+  getActiveProviderName: GetActiveProviderNameOperation,
+  providerStatus: ProviderStatusOperation,
+  getActiveProfileName: GetActiveProfileNameOperation,
+  getLoadBalancerStats: GetLoadBalancerStatsOperation,
+  contextLimit: number | undefined,
+  setContextLimit: (limit: number | undefined) => void,
+) {
+  useModelRuntimeSync({
+    config,
+    currentModel,
+    setCurrentModel,
+    currentModelLabel,
+    setCurrentModelLabel,
+    getActiveModelName,
+    getActiveProviderName,
+    resolveModelDisplayLabel: () =>
+      resolveModelIdentity({
+        providerStatus,
+        getActiveProfileName,
+        getLoadBalancerStats,
+      }),
+    contextLimit,
+    setContextLimit,
+  });
+}

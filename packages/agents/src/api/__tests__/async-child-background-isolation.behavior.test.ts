@@ -1,3 +1,4 @@
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -24,7 +25,6 @@ import {
 import { z } from 'zod';
 import {
   ApprovalMode,
-  fromConfig,
   toConfigParameters,
   type Agent,
   type AgentEvent,
@@ -145,18 +145,39 @@ export async function withAsyncChildFixture(
     config = await createChildConfig(directory, baseUrl);
     const manager = new AsyncTaskManager(5);
     const settings = createSessionSettingsFixture(config);
-    agent = await fromConfig({
-      ...settings,
-      trustPort: settings.workspaceTrust,
-      runtimeFactoryBindings: createAgentRuntimeFactoryBindings(),
+    agent = await fromConfig(
       config,
-      asyncTaskManager: manager,
-      activation: {
-        provider: 'openai',
-        model: 'parent-model',
-        cliOverrides: { key: 'local-test-key', baseUrl },
+      settings.settingsService,
+      {
+        activation: {
+          provider: 'openai',
+          model: 'parent-model',
+          cliOverrides: { key: 'local-test-key', baseUrl },
+        },
       },
-    });
+      settings.settingsOwner,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      createAgentRuntimeFactoryBindings(),
+      undefined,
+      undefined,
+      undefined,
+      settings.workspaceTrust,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      manager,
+    );
     const childStatus = new Promise<{ status: string; error?: string }>(
       (resolve) => {
         const terminal = (task: { status: string; error?: string }): void => {

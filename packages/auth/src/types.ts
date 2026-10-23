@@ -6,6 +6,10 @@
 
 import { z } from 'zod';
 
+export interface OAuthFetch {
+  (input: string | URL | Request, init?: RequestInit): Promise<Response>;
+}
+
 /**
  * OAuth token storage schema
  */

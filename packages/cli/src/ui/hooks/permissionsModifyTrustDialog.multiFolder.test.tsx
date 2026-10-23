@@ -119,7 +119,7 @@ describe('permissions dialog multi-folder flow', () => {
       setTrustedFolderLive,
       getWorkingDir: () => cwd,
       getFolderTrust: () => true,
-      getIdeClient: () => undefined,
+
       isTrustedFolder: () => false,
     };
   });
@@ -129,7 +129,15 @@ describe('permissions dialog multi-folder flow', () => {
   });
 
   const renderFlow = () =>
-    renderHook(() => usePermissionsTrustDialogFlow(onExit, addItem, config));
+    renderHook(() =>
+      usePermissionsTrustDialogFlow(
+        onExit,
+        addItem,
+        config,
+        () => undefined,
+        () => () => {},
+      ),
+    );
 
   const labelsOf = (options: Array<{ label: string }>): string[] =>
     options.map((option) => option.label);

@@ -3,12 +3,11 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { assembleModelSelection } from '../providerMutations.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { assembleModelSelection } from '../../../../agents/src/api/model-selection.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 import { describe, expect, it, vi } from 'bun:test';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { createProviderKeyStorage } from '@vybestack/llxprt-code-providers/auth.js';
 import { writeProviderAliasConfig } from '@vybestack/llxprt-code-providers/composition.js';
 import {
   standardProfile,
@@ -16,7 +15,7 @@ import {
   workflowApplication,
 } from './profile-workflow-owner-fixture.js';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
-import { applyProfileCascade } from '@vybestack/llxprt-code-providers/runtime/profileApplication.js';
+import { applyProfileCascade } from '../../../../agents/src/api/profileApplication.js';
 
 describe('Profile cascade workflow at the owner', () => {
   const owner = useProfileOwner();
@@ -59,7 +58,7 @@ describe('Profile cascade workflow at the owner', () => {
 
   it('resolves auth-key-name from secure storage and preserves the reference', async () => {
     const storage = vi
-      .spyOn(createProviderKeyStorage(), 'getKey')
+      .spyOn(owner().manager.getProviderKeys(), 'getKey')
       .mockResolvedValue(' named-credential ');
     try {
       await owner().application.applySnapshot(
@@ -81,7 +80,7 @@ describe('Profile cascade workflow at the owner', () => {
 
   it('applies the issue 2477 Z.ai profile without Gemini fallback', async () => {
     const storage = vi
-      .spyOn(createProviderKeyStorage(), 'getKey')
+      .spyOn(owner().manager.getProviderKeys(), 'getKey')
       .mockResolvedValue(' zai-key ');
     try {
       const result = await owner().application.applySnapshot({
@@ -112,7 +111,7 @@ describe('Profile cascade workflow at the owner', () => {
     }
   });
 
-  it('sets GCP project and location as ephemerals and environment variables', async () => {
+  it('sets GCP project and location as owner ephemerals without changing the environment', async () => {
     await owner().application.applySnapshot(
       standardProfile({
         GOOGLE_CLOUD_PROJECT: 'my-project',
@@ -124,7 +123,7 @@ describe('Profile cascade workflow at the owner', () => {
       GOOGLE_CLOUD_LOCATION: 'us-central1',
     })) {
       expect(owner().settingsOwner.readNamedParameter(key)).toBe(value);
-      expect(process.env[key]).toBe(value);
+      expect(process.env[key]).not.toBe(value);
     }
   });
 
@@ -204,8 +203,12 @@ describe('Profile cascade workflow at the owner', () => {
     expect(owner().settingsOwner.readNamedParameter('base-url')).toBe(
       'https://example.invalid',
     );
-    expect(process.env.GOOGLE_CLOUD_PROJECT).toBe('project');
-    expect(process.env.GOOGLE_CLOUD_LOCATION).toBe('location');
+    expect(
+      owner().settingsOwner.readNamedParameter('GOOGLE_CLOUD_PROJECT'),
+    ).toBe('project');
+    expect(
+      owner().settingsOwner.readNamedParameter('GOOGLE_CLOUD_LOCATION'),
+    ).toBe('location');
   });
 
   it('clears old ephemerals omitted from the next profile', async () => {
@@ -272,22 +275,27 @@ describe('Profile cascade workflow at the owner', () => {
   });
 
   it('rejects a missing model when neither the provider nor config supplies a default', async () => {
-    const { config, settings, store, providers } = owner();
+    const { settings, store, providers } = owner();
     const provider = providers.get('anthropic');
     if (!provider) throw new Error('Missing fixture provider');
     provider.name = 'no-default';
     provider.getDefaultModel = () => '';
-    const manager = new ProviderManager({ settingsService: owner().settings });
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      owner().settings,
+    );
     manager.registerProvider(provider);
     manager.setActiveProvider('no-default');
-    configureProviderRuntimeFactories(config, manager);
+    configureProviderTokenizer(manager);
     settings.set('activeProvider', 'no-default');
     owner().settingsOwner.chooseModel('');
     await expect(
       applyProfileCascade(
         { ...standardProfile(), provider: 'no-default', model: '' },
         {},
-        config,
         settings,
         manager,
         store,
@@ -303,12 +311,19 @@ describe('Profile cascade workflow at the owner', () => {
           applyParameter: (key, value) =>
             owner().settingsOwner.writeUserParameter(key, value),
         },
+        (name) => owner().manager.getProviderKeys().getKey(name),
       ),
     ).rejects.toThrow('does not specify a model');
   });
 
   it('rejects an unregistered active provider at the explicit manager boundary', async () => {
-    const manager = new ProviderManager({ settingsService: owner().settings });
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      owner().settings,
+    );
     expect(() => manager.setActiveProvider('unregistered')).toThrow(
       "Provider 'unregistered' not found",
     );

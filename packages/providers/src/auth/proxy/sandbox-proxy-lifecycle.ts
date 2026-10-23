@@ -1,3 +1,4 @@
+import type { OAuthFetch } from '@vybestack/llxprt-code-auth/types.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -67,8 +68,8 @@ let actualCapabilityToken: string | undefined;
 class CodexFlowAdapter implements OAuthFlowInterface {
   private flow: CodexDeviceFlow;
 
-  constructor() {
-    this.flow = new CodexDeviceFlow();
+  constructor(requestFetch: OAuthFetch) {
+    this.flow = new CodexDeviceFlow(requestFetch);
   }
 
   /**
@@ -136,10 +137,15 @@ class CodexFlowAdapter implements OAuthFlowInterface {
  *
  * @plan PLAN-20250217-CREDPROXY-REMEDIATION.P08
  */
-function buildDefaultFlowFactories(): Map<string, () => OAuthFlowInterface> {
+function buildDefaultFlowFactories(
+  requestFetch: OAuthFetch,
+): Map<string, () => OAuthFlowInterface> {
   return new Map([
-    ['anthropic', () => new AnthropicDeviceFlow() as OAuthFlowInterface],
-    ['codex', () => new CodexFlowAdapter()],
+    [
+      'anthropic',
+      () => new AnthropicDeviceFlow(requestFetch) as OAuthFlowInterface,
+    ],
+    ['codex', () => new CodexFlowAdapter(requestFetch)],
   ]);
 }
 
@@ -154,6 +160,7 @@ function buildDefaultFlowFactories(): Map<string, () => OAuthFlowInterface> {
  */
 export async function createAndStartProxy(
   config: SandboxProxyConfig,
+  requestFetch: OAuthFetch,
 ): Promise<SandboxProxyHandle> {
   if (serverInstance) {
     return {
@@ -167,7 +174,7 @@ export async function createAndStartProxy(
   const providerKeyStorage = getProviderKeyStorage();
 
   // Build flow factories for OAuth initiation
-  const flowFactories = buildDefaultFlowFactories();
+  const flowFactories = buildDefaultFlowFactories(requestFetch);
 
   // Create RefreshCoordinator for rate-limited, deduplicated refresh
   const refreshCoordinator = new RefreshCoordinator({

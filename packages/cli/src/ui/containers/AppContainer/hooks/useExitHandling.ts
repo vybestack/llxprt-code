@@ -12,7 +12,7 @@ import type {
 
 import { SessionEndReason } from '@vybestack/llxprt-code-core';
 import { restoreTerminalProtocolsSync } from '../../../utils/terminalProtocolCleanup.js';
-import type { HookSkillState } from '../../../cliUiRuntime.js';
+type EndHookSession = (reason: SessionEndReason) => Promise<void>;
 
 /**
  * Duration in milliseconds to wait for a second Ctrl+C/D press before showing exit prompt.
@@ -22,7 +22,7 @@ const CTRL_EXIT_PROMPT_DURATION_MS = 1000;
 /**
  * @hook useExitHandling
  * @description Exit/quit lifecycle with double-press detection
- * @inputs handleSlashCommand, config
+ * @inputs handleSlashCommand, endHookSession
  * @outputs ExitState
  * @sideEffects Timer creation, exit effect
  * @cleanup Clears timers on unmount
@@ -52,13 +52,13 @@ export interface UseExitHandlingParams {
   handleSlashCommand: (
     command: string,
   ) => Promise<SlashCommandProcessorResult | false>;
-  config: HookSkillState;
+  endHookSession: EndHookSession;
   onBeforeExit?: () => Promise<void>;
 }
 
 function useQuitEffect(
   quittingMessages: HistoryItem[] | null,
-  config: HookSkillState,
+  endHookSession: EndHookSession,
   onBeforeExit: (() => Promise<void>) | undefined,
 ): void {
   useEffect(() => {
@@ -66,8 +66,7 @@ function useQuitEffect(
       // Allow UI to render the quit message briefly before exiting
       const timer = setTimeout(() => {
         // Fire SessionEnd hook before exiting
-        config
-          .endHookSession(SessionEndReason.Exit)
+        endHookSession(SessionEndReason.Exit)
           .catch(() => {
             // Hook failures must not block exit
           })
@@ -88,12 +87,12 @@ function useQuitEffect(
       return () => clearTimeout(timer);
     }
     return undefined;
-  }, [quittingMessages, config, onBeforeExit]);
+  }, [quittingMessages, endHookSession, onBeforeExit]);
 }
 
 export function useExitHandling({
   handleSlashCommand,
-  config,
+  endHookSession,
   onBeforeExit,
 }: UseExitHandlingParams): UseExitHandlingResult {
   const [ctrlCPressedOnce, setCtrlCPressedOnce] = useState(false);
@@ -145,7 +144,7 @@ export function useExitHandling({
     handleExit(ctrlDPressedOnce, setCtrlDPressedOnce, ctrlDTimerRef);
   }, [ctrlDPressedOnce, handleExit]);
 
-  useQuitEffect(quittingMessages, config, onBeforeExit);
+  useQuitEffect(quittingMessages, endHookSession, onBeforeExit);
 
   // Cleanup timers on unmount
   useEffect(

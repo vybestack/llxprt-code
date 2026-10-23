@@ -4,13 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
-import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
-const fixturePaths = installTestWorkspacePaths({
-  targetDir: process.cwd(),
-  isTrusted: () => true,
-});
-
 /**
  * Issue #3031 — `task` tool `timeout_seconds` parameter description.
  *
@@ -32,9 +25,10 @@ function getTimeoutDescription(): string {
   const fixture = makeConfig();
   const tool = new TaskTool(fixture.config, {
     ...fixture.policies,
-    workspacePaths: fixturePaths(),
-    readMcpInstructions: () => undefined,
-    instructions: emptyInstructionReads,
+    launchChild: async () => {
+      throw new Error('Description-only scenario');
+    },
+
     messageBus: new MessageBus(),
   });
   const parameters = (

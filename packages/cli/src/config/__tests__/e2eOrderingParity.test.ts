@@ -1,9 +1,20 @@
+import { observeActivationPreparation } from '../../../../agents/src/api/__tests__/helpers/activation-acquisition-capture.js';
+
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
+/**
+ * @license
+ * Copyright 2025 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import type {
+  Config,
+  RuntimeProviderManager,
+} from '@vybestack/llxprt-code-core';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 const retainedActivationOperations: Array<{ dispose(): void | Promise<void> }> =
@@ -24,6 +35,17 @@ const retainedSettingsOwners: SessionSettingsOwner[] = [];
  * checks that post-Config runtime assembly binds its manager and bus to Config.
  */
 
+/**
+ * @plan:PLAN-20260603-ISSUE1584.P13
+ * @requirement:REQ-API-001
+ * @pseudocode consumer-migration.md lines 10-18
+ */
+/**
+ * Task 1.7 – End-to-end provider/profile/override ordering parity test
+ *
+ * Verifies provider/profile/override ordering through loadCliConfig and
+ * checks that post-Config runtime assembly binds its manager and bus to Config.
+ */
 import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
@@ -36,31 +58,17 @@ import {
 } from 'bun:test';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import * as ServerConfig from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  ProviderManager,
-  type IProvider,
-} from '@vybestack/llxprt-code-providers';
 import { loadCliConfig } from '../config.js';
 import { parseArguments } from '../cliArgParser.js';
 import type { Settings } from '../settings.js';
 import { ExtensionStorage } from '../extension.js';
 import { ExtensionEnablementManager } from '../extensions/extensionEnablement.js';
-import {
-  loadPrecedenceProviderContributions,
-  registerPrecedenceProviders,
-} from './precedenceProviderContributions.js';
+import { loadPrecedenceProviderContributions } from './precedenceProviderContributions.js';
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
 const realTrustedFoldersModule = { ...(await import('../trustedFolders.js')) };
-const realProfileBootstrapModule = {
-  ...(await import('../profileBootstrap.js')),
-};
-const realLlxprtCodeSettingsModule = {
-  ...(await import('@vybestack/llxprt-code-settings')),
-};
 const realLlxprtCodeCoreModule = {
   ...(await import('@vybestack/llxprt-code-core')),
 };
@@ -107,206 +115,6 @@ void vi.mock('read-package-up', () => ({
   ),
 }));
 
-void vi.mock('../profileBootstrap.js', () => {
-  const actual = realProfileBootstrapModule;
-  const { SettingsService: RealSettingsService } = realLlxprtCodeSettingsModule;
-  return {
-    ...actual,
-    prepareRuntimeForProfile: vi.fn(async () => {
-      const settingsService = new RealSettingsService();
-      const providerManager = new ProviderManager({ settingsService });
-      const provider: IProvider = {
-        name: 'openai',
-        getDefaultModel: () => 'mock-default-model',
-        getModels: async () => [],
-        async *generateChatCompletion() {
-          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ready' }] };
-        },
-      };
-      providerManager.registerProvider(provider);
-      runtimeSettingsState.providerManager = providerManager;
-      return {
-        runtime: {
-          settingsService,
-          config: null,
-          runtimeId: 'mock-runtime',
-          metadata: {},
-        },
-        runtimeMessageBus: undefined,
-        providerManager,
-        oauthManager: null,
-      };
-    }),
-  };
-});
-
-/**
- * Shared call log — populated by mock implementations below.
- * Used to assert temporal ordering between critical lifecycle steps.
- */
-const callLog = { entries: [] as string[] };
-
-const runtimeSettingsState = {
-  context: null as {
-    settingsService: SettingsService;
-    config: ServerConfig.Config | null;
-    runtimeId: string;
-    metadata?: Record<string, unknown>;
-  } | null,
-  providerManager: null as ProviderManager | null,
-  oauthManager: null as unknown,
-};
-
-// Mock applyProfileSnapshot (static import in config.ts from profileSnapshot.js)
-void vi.mock(
-  '@vybestack/llxprt-code-providers/runtime/profileSnapshot.js',
-  () => ({
-    applyProfileSnapshot: vi.fn(
-      async (profile: { provider?: string; model?: string }) => {
-        callLog.entries.push('applyProfileSnapshot');
-        return {
-          providerName: profile.provider ?? '',
-          modelName: profile.model ?? '',
-          warnings: [],
-        };
-      },
-    ),
-  }),
-);
-
-// Mock switchActiveProvider (static import in config.ts from providerSwitch.js)
-void vi.mock(
-  '@vybestack/llxprt-code-providers/runtime/providerSwitch.js',
-  () => ({
-    switchActiveProvider: vi.fn(async (providerName: string) => {
-      callLog.entries.push(`switchActiveProvider:${providerName}`);
-      return {
-        changed: true,
-        previousProvider: null,
-        nextProvider: providerName,
-        infoMessages: [],
-      };
-    }),
-  }),
-);
-
-void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
-  const getProviderManager = () =>
-    runtimeSettingsState.providerManager ??
-    ({
-      listProviders: vi.fn(() => []),
-      getActiveProviderName: vi.fn(() => null),
-      setActiveProvider: vi.fn(),
-      getActiveProvider: vi.fn(() => undefined),
-      getAvailableModels: vi.fn(async () => []),
-      getProviderByName: vi.fn(() => ({
-        getDefaultModel: () => 'gemini-2.5-pro',
-      })),
-    } as unknown as ProviderManager);
-
-  return {
-    ephemeralSettingHelp: {},
-    parseEphemeralSettingValue: vi.fn((_key: string, rawValue: string) => ({
-      success: true,
-      value: rawValue,
-    })),
-    applyCliSetArguments: vi.fn(() => ({ modelParams: {} })),
-    applyProfileSnapshot: vi.fn(
-      async (profile: { provider?: string; model?: string }) => {
-        callLog.entries.push('applyProfileSnapshot');
-        return {
-          providerName: profile.provider ?? '',
-          modelName: profile.model ?? '',
-          warnings: [],
-        };
-      },
-    ),
-    switchActiveProvider: vi.fn(async (providerName: string) => {
-      callLog.entries.push(`switchActiveProvider:${providerName}`);
-      return {
-        changed: true,
-        previousProvider: null,
-        nextProvider: providerName,
-        infoMessages: [],
-      };
-    }),
-    applyCliArgumentOverrides: vi.fn(async () => {
-      callLog.entries.push('applyCliArgumentOverrides');
-    }),
-    providerManager: vi.fn(() => runtimeSettingsState.providerManager),
-    oauthManager: vi.fn(() => {
-      if (runtimeSettingsState.oauthManager === null) {
-        throw new Error('OAuthManager missing from runtime registration');
-      }
-      return runtimeSettingsState.oauthManager;
-    }),
-    providerStatus: vi.fn(() => ({ name: null })),
-    listProviders: vi.fn(() => []),
-    getActiveProviderName: vi.fn(() => null),
-    setActiveModel: vi.fn(async () => ({
-      changed: false,
-      previousModel: null,
-      nextModel: null,
-      infoMessages: [],
-    })),
-    listAvailableModels: vi.fn(async () => []),
-    getActiveModelName: vi.fn(() => null),
-    getActiveProfileName: vi.fn(() => null),
-    getActiveModelParams: vi.fn(() => ({})),
-    getEphemeralSettings: vi.fn(() => ({})),
-    getEphemeralSetting: vi.fn(() => undefined),
-    setEphemeralSetting: vi.fn(),
-    setActiveModelParam: vi.fn(),
-    clearActiveModelParam: vi.fn(),
-    saveProfileSnapshot: vi.fn(async () => undefined),
-    saveLoadBalancerProfile: vi.fn(async () => undefined),
-    loadProfileByName: vi.fn(async () => undefined),
-    deleteProfileByName: vi.fn(async () => undefined),
-    listSavedProfiles: vi.fn(() => []),
-    getProfileByName: vi.fn(() => undefined),
-    setDefaultProfileName: vi.fn(),
-    updateActiveProviderBaseUrl: vi.fn(async () => ({
-      message: 'Base URL updated',
-    })),
-    updateActiveProviderApiKey: vi.fn(async () => ({ message: 'Key updated' })),
-    getRuntimeDiagnosticsSnapshot: vi.fn(() => ({})),
-    getActiveToolFormatState: vi.fn(() => ({})),
-    setActiveToolFormatOverride: vi.fn(),
-    getActiveProviderMetrics: vi.fn(() => undefined),
-    getSessionTokenUsage: vi.fn(() => undefined),
-    assembleCliProviderRuntime: vi.fn(
-      (input: {
-        settingsService: unknown;
-        config: unknown;
-        runtimeId: string;
-        metadata?: Record<string, unknown>;
-      }) => {
-        callLog.entries.push('assembleCliProviderRuntime');
-        runtimeSettingsState.context = {
-          settingsService: input.settingsService as SettingsService,
-          config: (input.config as ServerConfig.Config | null) ?? null,
-          runtimeId: input.runtimeId,
-          metadata: input.metadata ?? {},
-        };
-        const pm = getProviderManager();
-        runtimeSettingsState.providerManager = pm;
-        runtimeSettingsState.oauthManager = { id: 'oauth-manager' };
-        return {
-          runtime: {
-            settingsService: input.settingsService,
-            config: input.config,
-            runtimeId: input.runtimeId,
-            metadata: input.metadata,
-          },
-          runtimeMessageBus: { kind: 'session-bus' },
-          providerManager: pm,
-          oauthManager: null,
-        };
-      },
-    ),
-  };
-});
-
 void vi.mock('@vybestack/llxprt-code-core', () => {
   const actual = realLlxprtCodeCoreModule;
   return {
@@ -338,20 +146,37 @@ void vi.mock('@vybestack/llxprt-code-core', () => {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function makeExtMgr() {
+function makeExtMgr(): ExtensionEnablementManager {
   return new ExtensionEnablementManager(
     ExtensionStorage.getUserExtensionsDir(),
   );
 }
 
-let publishedManager: RuntimeProviderManager | undefined;
-async function runConfig(settings: Settings, argv: string[] = []) {
+async function runConfig(
+  settings: Settings,
+  argv: string[] = [],
+): Promise<{
+  config: Config;
+  settingsOwner: SessionSettingsOwner;
+  oauthManager: OAuthManager | undefined;
+  providerManager: RuntimeProviderManager;
+  callLog: string[];
+}> {
   process.argv = ['node', 'script.js', ...argv];
   const parsedArgv = await parseArguments(settings);
   const runtimeSettingsService = new SettingsService();
   const settingsOwner = new SessionSettingsOwner(runtimeSettingsService);
   retainedSettingsOwners.push(settingsOwner);
   let oauthManager: OAuthManager | undefined;
+  let providerManager: RuntimeProviderManager | undefined;
+  const callLog: string[] = [];
+  const switchErrors: unknown[] = [];
+
+  const observation = observeActivationPreparation((operation, state) => {
+    providerManager = state.manager;
+    oauthManager = state.oauthManager ?? undefined;
+    callLog.push('manager-ready', 'oauth-ready');
+  });
   const config = await loadCliConfig(
     settings,
     [],
@@ -359,24 +184,33 @@ async function runConfig(settings: Settings, argv: string[] = []) {
     'test-session',
     parsedArgv,
     undefined,
-    {
-      settingsService: runtimeSettingsService,
-      sessionSettingsOwner: settingsOwner,
-      onActivationBootstrapReady: (operation) => {
-        operation.takeSettingsOwner(runtimeSettingsService);
-        retainedActivationOperations.push(operation);
-      },
-      onOAuthManagerReady: (owner) => {
-        oauthManager = owner;
-      },
-      onProviderManagerReady: (manager) => {
-        registerPrecedenceProviders(manager);
-        publishedManager = manager;
-      },
-      providerContributions: await loadPrecedenceProviderContributions(),
+    undefined,
+    runtimeSettingsService,
+    settingsOwner,
+    new CredentialAuthority(),
+    await loadPrecedenceProviderContributions(),
+    (operation) => {
+      retainedActivationOperations.push(operation);
+    },
+    undefined,
+    undefined,
+    (operation) => {
+      const preflight = operation.preflight.bind(operation);
+      operation.preflight = async (intent): ReturnType<typeof preflight> => {
+        callLog.push(`preflight:${intent.provider}`);
+        const result = await preflight(intent);
+        if (result.switchError !== undefined)
+          switchErrors.push(result.switchError);
+        callLog.push(`activated:${settingsOwner.readSelectedProvider()}`);
+        return result;
+      };
     },
   );
-  return { config, settingsOwner, oauthManager };
+  observation.mockRestore();
+  if (providerManager === undefined)
+    throw new Error('CLI startup did not publish its provider manager');
+  expect(switchErrors).toHaveLength(0);
+  return { config, settingsOwner, oauthManager, providerManager, callLog };
 }
 
 // ─── Suite: step ordering ─────────────────────────────────────────────────────
@@ -402,7 +236,6 @@ describe('e2eOrderingParity: step ordering constraints', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    callLog.entries.length = 0;
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
@@ -410,9 +243,6 @@ describe('e2eOrderingParity: step ordering constraints', () => {
     // Provide a fallback model so non-gemini providers don't fail with model.missing
     setEnv('LLXPRT_DEFAULT_MODEL', 'mock-default-model');
     process.argv = ['node', 'script.js'];
-    runtimeSettingsState.context = null;
-    runtimeSettingsState.providerManager = null;
-    runtimeSettingsState.oauthManager = null;
   });
 
   afterEach(() => {
@@ -421,24 +251,35 @@ describe('e2eOrderingParity: step ordering constraints', () => {
     vi.restoreAllMocks();
   });
 
-  it('binds the post-Config manager and message bus before provider selection', async () => {
-    const { config, oauthManager } = await runConfig({}, [
-      '--provider',
-      'gemini',
-    ]);
+  it('binds the post-Config manager and message bus before provider activation', async () => {
+    const { config, oauthManager, providerManager, callLog } = await runConfig(
+      {},
+      ['--provider', 'gemini'],
+    );
     expect('getProviderManager' in config).toBe(false);
-    expect(publishedManager?.getActiveProviderName()).toBe('gemini');
+    expect(providerManager.getActiveProviderName()).toBe('gemini');
     expect(oauthManager?.runtimeMessageBus).toBeDefined();
-    expect(callLog.entries.indexOf('assembleCliProviderRuntime')).toBeLessThan(
-      callLog.entries.indexOf('switchActiveProvider:gemini'),
+    expect(callLog).toStrictEqual([
+      'manager-ready',
+      'oauth-ready',
+      'preflight:gemini',
+      'activated:gemini',
+    ]);
+    expect(callLog.indexOf('manager-ready')).toBeLessThan(
+      callLog.indexOf('preflight:gemini'),
+    );
+    expect(callLog.indexOf('oauth-ready')).toBeLessThan(
+      callLog.indexOf('preflight:gemini'),
     );
   });
 
-  it('switchActiveProvider is called exactly once', async () => {
-    await runConfig({}, ['--provider', 'gemini']);
-    const switchCalls = callLog.entries.filter((c) =>
-      c.startsWith('switchActiveProvider:'),
-    );
+  it('activates the requested provider exactly once through preflight', async () => {
+    const { callLog, settingsOwner } = await runConfig({}, [
+      '--provider',
+      'gemini',
+    ]);
+    const switchCalls = callLog.filter((c) => c.startsWith('preflight:'));
+    expect(settingsOwner.readSelectedProvider()).toBe('gemini');
     expect(switchCalls).toHaveLength(1);
   });
 
@@ -473,7 +314,6 @@ describe('e2eOrderingParity: full precedence chain end-to-end', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    callLog.entries.length = 0;
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
@@ -481,9 +321,6 @@ describe('e2eOrderingParity: full precedence chain end-to-end', () => {
     // Provide a fallback model so non-gemini providers don't fail with model.missing
     setEnv('LLXPRT_DEFAULT_MODEL', 'mock-default-model');
     process.argv = ['node', 'script.js'];
-    runtimeSettingsState.context = null;
-    runtimeSettingsState.providerManager = null;
-    runtimeSettingsState.oauthManager = null;
   });
 
   afterEach(() => {
@@ -494,33 +331,31 @@ describe('e2eOrderingParity: full precedence chain end-to-end', () => {
 
   it('CLI --provider wins over LLXPRT_DEFAULT_PROVIDER env', async () => {
     setEnv('LLXPRT_DEFAULT_PROVIDER', 'anthropic');
-    const { config: config } = await runConfig({}, ['--provider', 'openai']);
+    const { config, settingsOwner } = await runConfig({}, [
+      '--provider',
+      'openai',
+    ]);
     expect(config.getProvider()).toBe('openai');
-    expect(
-      callLog.entries.some((c) => c === 'switchActiveProvider:openai'),
-    ).toBe(true);
+    expect(settingsOwner.readSelectedProvider()).toBe('openai');
   });
 
   it('LLXPRT_DEFAULT_PROVIDER env wins over gemini default', async () => {
     setEnv('LLXPRT_DEFAULT_PROVIDER', 'anthropic');
-    const { config: config } = await runConfig({});
+    const { config, settingsOwner } = await runConfig({});
     expect(config.getProvider()).toBe('anthropic');
-    expect(
-      callLog.entries.some((c) => c === 'switchActiveProvider:anthropic'),
-    ).toBe(true);
+    expect(settingsOwner.readSelectedProvider()).toBe('anthropic');
   });
 
   it('CLI --model is set on config and survives the provider switch', async () => {
-    const { config: config } = await runConfig({}, [
+    const { config, settingsOwner, callLog } = await runConfig({}, [
       '--provider',
       'gemini',
       '--model',
       'cli-override-model',
     ]);
     expect(config.getModel()).toBe('cli-override-model');
-    expect(
-      callLog.entries.some((c) => c.startsWith('switchActiveProvider:')),
-    ).toBe(true);
+    expect(callLog).toContain('activated:gemini');
+    expect(settingsOwner.readSelectedModel()).toBe('cli-override-model');
   });
 
   it('settings.model is used when no CLI --model and no env', async () => {

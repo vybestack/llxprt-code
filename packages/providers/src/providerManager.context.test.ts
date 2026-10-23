@@ -25,15 +25,46 @@ function createStubProvider(name: string): IProvider {
 }
 
 describe('ProviderManager runtime context', () => {
+  it('uses separately selected settings instead of runtime-carried settings at construction', () => {
+    const selected = new SettingsService();
+    const foreign = new SettingsService();
+    const runtime = createProviderRuntimeContext({
+      runtimeId: 'foreign-constructor-settings',
+    });
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      selected,
+      undefined,
+      runtime,
+    );
+    manager.registerProvider(createStubProvider('selected-provider'));
+    manager.setActiveProvider('selected-provider');
+
+    expect(selected.get('activeProvider')).toBe(
+      manager.getActiveProviderName(),
+    );
+    expect(foreign.get('activeProvider')).toBeUndefined();
+  });
+
   it('writes active provider to the injected settings service', async () => {
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({
-      settingsService,
       runtimeId: 'manager-context-test',
       metadata: { source: 'unit-test' },
     });
 
-    const manager = new ProviderManager(runtime);
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settingsService,
+      undefined,
+      runtime,
+    );
     const provider = createStubProvider('stub-provider');
 
     manager.registerProvider(provider);
@@ -47,9 +78,9 @@ describe('ProviderManager runtime context', () => {
   it('requires an explicit runtime and never reads ambient global state (issue #2300)', () => {
     // Even with an ambient context set, the no-arg constructor must refuse to
     // adopt it — identity is supplied explicitly, never inferred.
-    expect(() => new ProviderManager()).toThrow(
-      /does not read ambient global runtime state/,
-    );
+    expect(
+      () => new ProviderManager(undefined, undefined, undefined, undefined),
+    ).toThrow(/does not read ambient global runtime state/);
   });
 
   it('binds to the explicitly provided runtime context, not the ambient one', () => {
@@ -57,12 +88,19 @@ describe('ProviderManager runtime context', () => {
 
     const explicitSettings = new SettingsService();
     const runtime = createProviderRuntimeContext({
-      settingsService: explicitSettings,
       runtimeId: 'explicit-context',
       metadata: { source: 'unit-test-explicit' },
     });
 
-    const manager = new ProviderManager(runtime);
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      explicitSettings,
+      undefined,
+      runtime,
+    );
     manager.registerProvider(createStubProvider('explicit-provider'));
     manager.setActiveProvider('explicit-provider');
 

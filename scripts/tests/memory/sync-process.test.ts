@@ -69,4 +69,34 @@ describe('spawnSyncWithFileCapture', () => {
     const pid = Number(readFileSync(pidPath, 'utf8'));
     await waitForProcessExit(pid);
   });
+
+  it('preserves the nested exit status', () => {
+    root = mkdtempSync(join(tmpdir(), 'sync-process-status-'));
+
+    const result = spawnSyncWithFileCapture(
+      root,
+      'node',
+      ['-e', 'process.exit(3)'],
+      { cwd: root },
+    );
+
+    expect(result.status).toBe(3);
+    expect(result.signal).toBeNull();
+    expect(result.error).toBeUndefined();
+  });
+
+  it('reports a timed-out nested process as a signal with its error, not status 1', () => {
+    root = mkdtempSync(join(tmpdir(), 'sync-process-signal-'));
+
+    const result = spawnSyncWithFileCapture(
+      root,
+      'node',
+      ['-e', 'setInterval(() => {}, 1000)'],
+      { cwd: root, timeout: 300 },
+    );
+
+    expect(result.status).toBeNull();
+    expect(result.signal).toBe('SIGTERM');
+    expect(result.error?.message).toContain('ETIMEDOUT');
+  });
 });

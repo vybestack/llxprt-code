@@ -445,8 +445,12 @@ describe('#3469 launch resource release', () => {
     proxyPort = await allocateEphemeralPort();
     proxyUrl = `http://127.0.0.1:${proxyPort}`;
     environmentSnapshot = { ...process.env };
-    // Unix socket fixtures must fit even with a long session-scoped TMPDIR.
-    const socketTempBase = process.platform === 'win32' ? os.tmpdir() : '/tmp';
+    // Unix socket fixtures must fit even with a long session-scoped TMPDIR,
+    // because the simulated Darwin launch rejects an SSH_AUTH_SOCK over 103
+    // bytes. Windows has no /tmp, and its session TMPDIR alone is longer than
+    // that limit, so the fixture lives directly under the temp drive's root.
+    const socketTempBase =
+      process.platform === 'win32' ? path.parse(os.tmpdir()).root : '/tmp';
     fixturePath = fs.mkdtempSync(path.join(socketTempBase, 'launch-3469-'));
     isolatedCacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'issue3469-uc-'));
     process.env.LLXPRT_CACHE_HOME = isolatedCacheDir;

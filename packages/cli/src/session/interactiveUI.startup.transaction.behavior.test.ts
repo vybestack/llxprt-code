@@ -26,6 +26,8 @@ import { Config } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
+import { useCommandOwners as installCommandOwners } from '../__tests__/command-owner-fixture.js';
+const makeTransactionAgent = installCommandOwners();
 import type { LoadedSettings } from '../config/settings.js';
 import {
   commitInteractiveStartup,
@@ -86,9 +88,9 @@ class CountingScheduler implements PerfScheduler {
 }
 
 let testConfig: Config;
-let runtimeSettings: { owner: SessionSettingsOwner; store: SettingsService };
+let runtimeSettings: SessionSettingsOwner;
 
-const testAgent = {} as unknown as Agent;
+let testAgent: Agent;
 const testSettings = {} as unknown as LoadedSettings;
 
 /**
@@ -160,7 +162,8 @@ function errorMessages(err: unknown): string[] {
 }
 
 describe('Finding B — transactional interactive startup', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    testAgent = await makeTransactionAgent(crypto.randomUUID());
     dir = fs.mkdtempSync(join(tmpdir(), 'perf-tx-startup-'));
     testConfig = new Config({
       sessionId: 'sess-tx',
@@ -170,7 +173,7 @@ describe('Finding B — transactional interactive startup', () => {
       debugMode: false,
     });
     const store = new SettingsService();
-    runtimeSettings = { store, owner: new SessionSettingsOwner(store) };
+    runtimeSettings = new SessionSettingsOwner(store);
     setInteractiveStdoutObserver(null);
     setInteractiveRenderObserver(null);
     setPerfPhaseObserver(null);
@@ -178,7 +181,7 @@ describe('Finding B — transactional interactive startup', () => {
   });
 
   afterEach(async () => {
-    await runtimeSettings.owner.dispose();
+    await runtimeSettings.dispose();
     await testConfig.dispose();
     __resetInteractiveUIStateForTesting();
     setInteractiveStdoutObserver(null);

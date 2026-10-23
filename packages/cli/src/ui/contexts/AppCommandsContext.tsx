@@ -4,16 +4,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type {
+  BrowserCatalogReader,
+  BrowserTargetDeleter,
+} from '../hooks/browserCatalogHost.js';
+
 import { createContext, useContext, useMemo, useRef } from 'react';
 import { createStableAppCommands } from './stableAppCommands.js';
-import type { EditorType } from '@vybestack/llxprt-code-core';
+import type { ContinueTarget, EditorType } from '@vybestack/llxprt-code-core';
+import type { PolicyRulesReader } from '../hooks/policyRulesReaderHost.js';
+import type { SubagentManagerDialogProps } from '../components/SubagentManagement/types.js';
 import type { TextBuffer } from '../components/shared/text-buffer.js';
 import type { CommandContext } from '../commands/types.js';
+import type { ProviderSwitchRecorder } from '../utils/recordActiveProviderSwitch.js';
 import type { FolderTrustChoice } from '../components/FolderTrustDialog.js';
 import type { Key } from '../hooks/useKeypress.js';
 import type { WelcomeActions } from '../hooks/useWelcomeOnboarding.js';
 import type { IdeIntegrationNudgeResult } from '../IdeIntegrationNudge.js';
 import type { SettingScope } from '../../config/settings.js';
+import type { PromptTextGenerator } from '../hooks/usePromptCompletion.js';
 
 /**
  * Changing input snapshots use a separate context from stable view commands.
@@ -21,6 +30,7 @@ import type { SettingScope } from '../../config/settings.js';
  * that only dispatch commands.
  */
 export interface AppCommandData {
+  generatePromptContent: PromptTextGenerator | null;
   buffer: TextBuffer;
   commandContext: CommandContext;
   inputHistory: string[];
@@ -29,6 +39,15 @@ export interface AppCommandData {
 export interface AppCommandBindings extends AppCommands, AppCommandData {}
 
 export interface AppCommands {
+  readBrowserCatalog: BrowserCatalogReader;
+  deleteBrowserTarget: BrowserTargetDeleter;
+  readPolicyRules: PolicyRulesReader;
+  listSubagentDefinitions: SubagentManagerDialogProps['listSubagents'];
+  loadSubagentDefinition: SubagentManagerDialogProps['loadSubagent'];
+  saveSubagentDefinition: SubagentManagerDialogProps['saveSubagent'];
+  deleteSubagentDefinition: SubagentManagerDialogProps['deleteSubagent'];
+  listSubagentProfiles: SubagentManagerDialogProps['listProfiles'];
+  generateSubagentPrompt: SubagentManagerDialogProps['generatePrompt'];
   // Composer input commands
   handleUserInputSubmit: (value: string) => void;
   handleSteer: (text: string) => boolean;
@@ -49,6 +68,10 @@ export interface AppCommands {
   setQueueErrorMessage: (message: string | null) => void;
 
   // Dialog domain handlers
+  resumeBrowserTarget: (
+    target: ContinueTarget,
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
+  recordModelSwitch: ProviderSwitchRecorder['recordProviderSwitch'];
   onWorkspaceMigrationDialogOpen: () => void;
   handleIdePromptComplete: (result: IdeIntegrationNudgeResult) => void;
   handleFolderTrustSelect: (choice: FolderTrustChoice) => Promise<void>;
@@ -106,14 +129,18 @@ export function AppCommandsProvider({
   latest.current = value;
   const canSendQueued = value.sendAllQueuedSubmissions !== undefined;
   const canSteerQueued = value.steerAllQueuedSubmissions !== undefined;
+  const readBrowserCatalog = value.readBrowserCatalog;
   const commands = useMemo(
-    () => createStableAppCommands(latest, { canSendQueued, canSteerQueued }),
-    [latest, canSendQueued, canSteerQueued],
+    () => ({
+      ...createStableAppCommands(latest, { canSendQueued, canSteerQueued }),
+      readBrowserCatalog,
+    }),
+    [latest, canSendQueued, canSteerQueued, readBrowserCatalog],
   );
-  const { buffer, commandContext, inputHistory } = value;
+  const { buffer, commandContext, inputHistory, generatePromptContent } = value;
   const data = useMemo(
-    () => ({ buffer, commandContext, inputHistory }),
-    [buffer, commandContext, inputHistory],
+    () => ({ buffer, commandContext, inputHistory, generatePromptContent }),
+    [buffer, commandContext, inputHistory, generatePromptContent],
   );
   return (
     <AppCommandsContext.Provider value={commands}>

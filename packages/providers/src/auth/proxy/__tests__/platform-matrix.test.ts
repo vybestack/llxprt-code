@@ -430,6 +430,12 @@ describe('Platform Matrix Tests (Phase 38)', () => {
       });
     });
 
+    it('preserves the Windows named-pipe namespace root in the parent fixture', () => {
+      const worstCasePath = '\\\\.\\pipe\\lxcp-99999-AAAAAAAAAAAAAAAAAAAAAA';
+      expect(path.win32.dirname(worstCasePath)).toBe('\\\\.\\pipe\\');
+      expect(path.win32.dirname(worstCasePath)).not.toBe('\\\\.\\pipe');
+    });
+
     /**
      * @requirement R3.1
      * @scenario Worst-case socket path length verification
@@ -445,15 +451,16 @@ describe('Platform Matrix Tests (Phase 38)', () => {
       // 128-bit nonce in base64url = 22 chars
       const nonce = 'AAAAAAAAAAAAAAAAAAAAAA';
 
-      // Use short directory name "lc-" to fit within macOS socket path limits
-      const worstCasePath = path.join(
-        resolvedTmpdir,
-        `lc-${uid}`,
-        `${maxPid}-${nonce}.sock`,
+      const worstCasePath = isWindows
+        ? path.win32.format({
+            dir: '\\\\.\\pipe',
+            base: `lxcp-${maxPid}-${nonce}`,
+          })
+        : path.join(resolvedTmpdir, `lc-${uid}`, `${maxPid}-${nonce}.sock`);
+      expect(path.dirname(worstCasePath)).toBe(
+        isWindows ? '\\\\.\\pipe\\' : path.join(resolvedTmpdir, `lc-${uid}`),
       );
-
-      // Should be at most 104 chars for macOS compatibility
-      expect(worstCasePath.length).toBeLessThanOrEqual(104);
+      expect(worstCasePath.length).toBeLessThanOrEqual(isWindows ? 256 : 104);
     });
   });
 

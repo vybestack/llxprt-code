@@ -153,13 +153,7 @@ describe('OpenAIProvider Kimi media preprocessing', () => {
           },
         },
       }),
-      runtime: {
-        settingsService: settings,
-        providerFileLifecycle: new ProviderFileLifecycle({
-          maxFiles: 10,
-          maxBytes: 1024,
-        }),
-      },
+      runtime: {},
       configOverrides: { getTargetDir: () => '/workspace/kimi-media' },
     });
 

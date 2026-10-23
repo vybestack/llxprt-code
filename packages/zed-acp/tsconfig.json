@@ -18,9 +18,6 @@
       "@vybestack/llxprt-code-providers/composition.js": [
         "../providers/src/composition/index.ts"
       ],
-      "@vybestack/llxprt-code-providers/runtime.js": [
-        "../providers/src/runtime/index.ts"
-      ],
       "@vybestack/llxprt-code-providers/*": ["../providers/src/*"],
       "@vybestack/llxprt-code-storage": ["../storage/index.ts"],
       "@vybestack/llxprt-code-storage/*": ["../storage/src/*"],

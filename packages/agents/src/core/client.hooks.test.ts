@@ -194,12 +194,6 @@ void vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
     ),
   };
 });
-void vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
-  uiTelemetryService: {
-    setLastPromptTokenCount: vi.fn(),
-    getLastPromptTokenCount: vi.fn(),
-  },
-}));
 
 describe('Agent Client (client.ts)', () => {
   let client: AgentClient;

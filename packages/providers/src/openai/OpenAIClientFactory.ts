@@ -175,10 +175,15 @@ export function resolveRuntimeKey(
   return 'openai.runtime.unscoped';
 }
 
-function fetchWithHeadersTimeout(headersTimeoutMs: number): typeof fetch {
+function fetchWithHeadersTimeout(
+  headersTimeoutMs: number,
+  requestFetch?: typeof fetch,
+): typeof fetch {
   if (!Number.isSafeInteger(headersTimeoutMs) || headersTimeoutMs <= 0) {
     throw new Error('openai-headers-timeout-ms must be a positive integer');
   }
+  if (requestFetch !== undefined)
+    return fetchUntilHeaders(requestFetch, headersTimeoutMs);
   return async (input, init) => {
     if (input instanceof Request) {
       throw new Error('Scoped OpenAI transport requires a URL');
@@ -234,7 +239,7 @@ export function instantiateClient(
   transport?: {
     headersTimeoutMs?: number;
     requestTimeoutMs?: number;
-    fetch?: typeof fetch;
+    fetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
   },
 ): OpenAI {
   const clientOptions: Record<string, unknown> = {
@@ -254,7 +259,7 @@ export function instantiateClient(
   const scopedFetch =
     transport?.headersTimeoutMs === undefined
       ? transport?.fetch
-      : fetchWithHeadersTimeout(transport.headersTimeoutMs);
+      : fetchWithHeadersTimeout(transport.headersTimeoutMs, transport.fetch);
   clientOptions.fetch = createReaderBasedStreamFetch(scopedFetch);
 
   if (headers && Object.keys(headers).length > 0) {
@@ -314,4 +319,29 @@ export function mergeInvocationHeaders(
           : {}),
       }
     : undefined;
+}
+
+function fetchUntilHeaders(
+  requestFetch: typeof fetch,
+  timeoutMs: number,
+): typeof fetch {
+  return async (input, init) => {
+    const controller = new AbortController();
+    const timeout = setTimeout(
+      () => controller.abort(new Error('Headers timeout')),
+      timeoutMs,
+    );
+    const inheritedSignal = input instanceof Request ? input.signal : undefined;
+    const requestSignal =
+      init?.signal === undefined ? inheritedSignal : init.signal;
+    const signal =
+      requestSignal === undefined || requestSignal === null
+        ? controller.signal
+        : AbortSignal.any([requestSignal, controller.signal]);
+    try {
+      return await requestFetch(input, { ...init, signal });
+    } finally {
+      clearTimeout(timeout);
+    }
+  };
 }

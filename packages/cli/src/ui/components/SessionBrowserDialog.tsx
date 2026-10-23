@@ -11,14 +11,13 @@ import { Box, Text } from 'ink';
 import type React from 'react';
 import { useCallback } from 'react';
 
-import type {
-  ContinueTarget,
-  LocalMediaStore,
-  SessionRecordingService,
-} from '@vybestack/llxprt-code-core';
+import type { ContinueTarget } from '@vybestack/llxprt-code-core';
 
 import { SemanticColors } from '../colors.js';
-import type { Agent } from '@vybestack/llxprt-code-agents';
+import type {
+  BrowserCatalogReader,
+  BrowserTargetDeleter,
+} from '../hooks/browserCatalogHost.js';
 import { useResponsive } from '../hooks/useResponsive.js';
 import { useKeypress } from '../hooks/useKeypress.js';
 import { useSessionBrowser } from '../hooks/useSessionBrowser.js';
@@ -37,9 +36,8 @@ export interface SessionBrowserDialogProps {
   projectHash: string;
   currentSessionId: string;
   hasActiveConversation: boolean;
-  activeRecording?: SessionRecordingService | null;
-  ownerAgent?: Agent;
-  mediaStore?: LocalMediaStore;
+  readCatalog: BrowserCatalogReader;
+  deleteTarget: BrowserTargetDeleter;
   onSelect: (
     target: ContinueTarget,
   ) => Promise<
@@ -660,9 +658,8 @@ export function SessionBrowserDialog(
     projectHash,
     currentSessionId,
     hasActiveConversation,
-    activeRecording,
-    ownerAgent,
-    mediaStore,
+    readCatalog,
+    deleteTarget,
     onSelect,
     onClose,
   } = props;
@@ -673,9 +670,8 @@ export function SessionBrowserDialog(
     projectHash,
     currentSessionId,
     onSelect,
-    activeRecording,
-    ownerAgent,
-    mediaStore,
+    readCatalog,
+    deleteTarget,
     onClose,
     hasActiveConversation,
   });

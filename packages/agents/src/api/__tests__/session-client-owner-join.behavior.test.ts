@@ -1,3 +1,53 @@
+import { prepareActivationFixture } from './helpers/activation-acquisition-capture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { cleanupProviderScope } from '../../session/session-client-cleanup.js';
+import { gate as createGate } from './helpers/async-child-disposal-join-fixture.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { MCPOAuthTokenStorage } from '@vybestack/llxprt-code-mcp';
+import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { toConfigParameters } from '../agentConfig.adapter.js';
+import { fileURLToPath } from 'node:url';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
+import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import {
+  acquirePreferredProviderManager,
+  acquirePreferredOAuth,
+  preparePreferredProviderCompletion,
+} from '../preferred-provider-acquisition.js';
+import { releaseAdoptedFileScope } from '../adoption-release.js';
+import { buildAgentClientFactory } from '../agentBootstrap.js';
+import { randomUUID } from 'node:crypto';
+import { runCleanupSteps } from '../../core/subagent-cleanup.js';
+import { cleanupAfterFailure } from '../../core/subagent-cleanup.js';
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -8,30 +58,357 @@ import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/wo
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 
 import { describe, expect, it } from 'bun:test';
+import { createServer } from 'node:http';
+import { once } from 'node:events';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import { writeFile, access, unlink, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { AgentClient } from '../../core/client.js';
-import type { ContentGeneratorConfig } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
-import {
-  coreEvents,
-  CoreEvent,
-} from '@vybestack/llxprt-code-core/utils/events.js';
-import {
-  createSessionClientEngineFixture,
-  engineGate,
-} from './helpers/session-client-engine-fixture.js';
-import { fromConfig } from '../fromConfig.js';
-import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
-import { AgentActivationBootstrap } from '../activationPreflightState.js';
 
 describe('Session owner cleanup joining', () => {
+  const credentials = useOwnedCredentials();
+  it('keeps owned fetch open until client cleanup joins and then closes it', async () => {
+    const previousReplay = process.env.LLXPRT_FAKE_RESPONSES;
+    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+      new URL('./fixtures/multi-turn-text.jsonl', import.meta.url),
+    );
+    const builtDirectory = await realpath(
+      await mkdtemp(join(tmpdir(), 'explicit-engine-owner-')),
+    );
+    const builtConfig = new Config(
+      toConfigParameters({
+        provider: 'fake',
+        model: 'fake-model',
+        sessionId: randomUUID(),
+        workingDir: builtDirectory,
+      }),
+    );
+    const builtSettings = new SettingsService();
+    const builtPolicy = new RuntimePolicyOwner(builtConfig);
+    const builtMessageBus = builtPolicy.session.messageBus;
+    const builtMcp = await McpRuntimeOwner.create(
+      {
+        openBrowser: async () => {
+          throw new Error('Unexpected browser request');
+        },
+        tokenStorage: new MCPOAuthTokenStorage({
+          getCredentials: async () => null,
+          setCredentials: async () => {
+            throw new Error('Unexpected token write');
+          },
+          deleteCredentials: async () => {},
+          listServers: async () => [],
+          getAllCredentials: async () => new Map(),
+          clearAll: async () => {},
+        }),
+      },
+      builtConfig,
+      builtMessageBus,
+      undefined,
+      undefined,
+      undefined,
+      builtPolicy,
+      'runtime',
+    );
+
+    const builtRuntimeId = 'engine-' + randomUUID();
+    const builtRelease = new AcquisitionRelease();
+    const builtSettingsOwner = new SessionSettingsOwner(builtSettings);
+    builtRelease.acquire('settings', () => builtSettingsOwner.dispose());
+    builtSettingsOwner.initializeProviderSelection(
+      builtConfig.getProvider(),
+      builtConfig.getModel(),
+    );
+    builtSettingsOwner.bindTelemetry(builtConfig);
+    const builtFiles = new ProviderFileLifecycle({
+      maxFiles: 100,
+      maxBytes: 512 * 1024 * 1024,
+    });
+    for (const scope of [builtRuntimeId, builtConfig.getSessionId()])
+      builtRelease.acquire('files', () =>
+        releaseAdoptedFileScope(builtFiles, scope),
+      );
+    const builtManager = acquirePreferredProviderManager(
+      builtConfig,
+      builtSettings,
+      builtSettingsOwner,
+      builtFiles,
+      builtRuntimeId,
+      credentials().authority,
+      builtRelease,
+    );
+    const builtTokenizer = configureProviderTokenizer(builtManager);
+    const builtContent = createRuntimeContentGeneratorFactory();
+    const builtOAuth = acquirePreferredOAuth(
+      undefined,
+      builtMessageBus,
+      builtConfig,
+      builtSettings,
+      builtManager,
+      builtRuntimeId,
+      builtMcp.profileDefinitions,
+      credentials().authority,
+      builtRelease,
+      undefined,
+    );
+    const builtMedia = new SessionMediaOwner(
+      builtConfig.projectTempDir,
+      1024 * 1024,
+    );
+    const builtOwner = await createCapturedSessionOwner(
+      builtConfig,
+      assembleTaskSchemaPolicy(builtSettings),
+      builtManager,
+      buildAgentClientFactory(),
+      builtMedia.store,
+      builtMcp.readInstructions,
+      builtMcp.workspacePaths,
+      builtSettingsOwner,
+      builtContent,
+      builtTokenizer,
+    );
+    builtOwner.bindMcpRuntime(builtMcp);
+    builtOwner.bindHooks();
+    const closeEngine = settleEngineRelease.bind(
+      undefined,
+      [
+        () => builtOwner.dispose(),
+        () => builtRelease.close(),
+        () => builtMedia.dispose(),
+        () => builtMcp.dispose(),
+        () => builtConfig.dispose(),
+        () => rm(builtDirectory, { recursive: true, force: true }),
+      ],
+      previousReplay,
+    );
+    try {
+      await preparePreferredProviderCompletion(
+        builtConfig,
+        builtSettings,
+        builtSettingsOwner,
+        builtManager,
+        builtOAuth,
+        builtRuntimeId,
+        builtTokenizer,
+        undefined,
+      );
+      await builtMcp.initialize();
+      await builtOwner.initializeTools();
+      await builtOwner.refreshAuth();
+      await capturedSessionClient(builtOwner).startChat();
+    } catch (primary) {
+      await cleanupAfterFailure(primary, closeEngine);
+    }
+
+    const entered = createGate();
+    const released = createGate();
+    const server = createServer((request, response) => {
+      response.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      response.end(request.url);
+    });
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const address = server.address();
+    if (address === null || typeof address === 'string')
+      throw new Error('Expected HTTP address');
+    const url = `http://127.0.0.1:${address.port}/joined`;
+    let requestFetch: NetworkFetch | undefined;
+    const manager = builtManager;
+    const bind = manager.bindNetworkFetch.bind(manager);
+    manager.bindNetworkFetch = (fetch) => {
+      requestFetch = fetch;
+      bind(fetch);
+    };
+    let received: string | undefined;
+    class GatedCleanupClient extends AgentClient {
+      override async dispose(): Promise<void> {
+        entered.release();
+        await released.promise;
+        try {
+          if (requestFetch === undefined) throw new Error('Missing fetch');
+          received = await (await requestFetch(url)).text();
+        } finally {
+          await super.dispose();
+        }
+      }
+    }
+    const owner = await createCapturedSessionOwner(
+      builtConfig,
+      assembleTaskSchemaPolicy(builtSettings),
+      manager,
+      (config, state, instructions, store) => {
+        if (store === undefined) throw new Error('Missing factory store');
+        return new GatedCleanupClient(
+          config,
+          state,
+          instructions ?? (() => undefined),
+          store,
+          builtMcp.workspacePaths,
+        );
+      },
+      builtMedia.store,
+      builtMcp.readInstructions,
+      builtMcp.workspacePaths,
+      builtSettingsOwner,
+      builtContent,
+      builtTokenizer,
+    );
+    const closing = owner.dispose();
+    void closing.catch(() => undefined);
+    try {
+      await entered.promise;
+      expect(new Set([owner.dispose(), closing]).size).toBe(1);
+      released.release();
+      await closing;
+      expect(received).toBe(new URL(url).pathname);
+      if (requestFetch === undefined) throw new Error('Missing fetch');
+      await expect(requestFetch(url)).rejects.toThrow('Root fetch is closed');
+    } finally {
+      released.release();
+      await closing.catch(() => undefined);
+      await closeEngine();
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
+  });
   it('releases retained provider resources when a prepared activation is abandoned', async () => {
-    const built = await createSessionClientEngineFixture();
-    const file = join(built.config.projectTempDir, 'abandoned-provider-file');
-    const lifecycle = built.handle.providerFileLifecycle;
-    const scope = built.config.getSessionId();
-    await mkdir(built.config.projectTempDir, { recursive: true });
+    const previousReplay = process.env.LLXPRT_FAKE_RESPONSES;
+    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+      new URL('./fixtures/multi-turn-text.jsonl', import.meta.url),
+    );
+    const builtDirectory = await realpath(
+      await mkdtemp(join(tmpdir(), 'explicit-engine-owner-')),
+    );
+    const builtConfig = new Config(
+      toConfigParameters({
+        provider: 'fake',
+        model: 'fake-model',
+        sessionId: randomUUID(),
+        workingDir: builtDirectory,
+      }),
+    );
+    const builtSettings = new SettingsService();
+    const builtPolicy = new RuntimePolicyOwner(builtConfig);
+    const builtMessageBus = builtPolicy.session.messageBus;
+    const builtMcp = await McpRuntimeOwner.create(
+      {
+        openBrowser: async () => {
+          throw new Error('Unexpected browser request');
+        },
+        tokenStorage: new MCPOAuthTokenStorage({
+          getCredentials: async () => null,
+          setCredentials: async () => {
+            throw new Error('Unexpected token write');
+          },
+          deleteCredentials: async () => {},
+          listServers: async () => [],
+          getAllCredentials: async () => new Map(),
+          clearAll: async () => {},
+        }),
+      },
+      builtConfig,
+      builtMessageBus,
+      undefined,
+      undefined,
+      undefined,
+      builtPolicy,
+      'runtime',
+    );
+
+    const builtRuntimeId = 'engine-' + randomUUID();
+    const builtRelease = new AcquisitionRelease();
+    const builtSettingsOwner = new SessionSettingsOwner(builtSettings);
+    builtRelease.acquire('settings', () => builtSettingsOwner.dispose());
+    builtSettingsOwner.initializeProviderSelection(
+      builtConfig.getProvider(),
+      builtConfig.getModel(),
+    );
+    builtSettingsOwner.bindTelemetry(builtConfig);
+    const builtFiles = new ProviderFileLifecycle({
+      maxFiles: 100,
+      maxBytes: 512 * 1024 * 1024,
+    });
+    for (const scope of [builtRuntimeId, builtConfig.getSessionId()])
+      builtRelease.acquire('files', () =>
+        releaseAdoptedFileScope(builtFiles, scope),
+      );
+    const builtManager = acquirePreferredProviderManager(
+      builtConfig,
+      builtSettings,
+      builtSettingsOwner,
+      builtFiles,
+      builtRuntimeId,
+      credentials().authority,
+      builtRelease,
+    );
+    const builtTokenizer = configureProviderTokenizer(builtManager);
+    const builtContent = createRuntimeContentGeneratorFactory();
+    const builtOAuth = acquirePreferredOAuth(
+      undefined,
+      builtMessageBus,
+      builtConfig,
+      builtSettings,
+      builtManager,
+      builtRuntimeId,
+      builtMcp.profileDefinitions,
+      credentials().authority,
+      builtRelease,
+      undefined,
+    );
+    const builtMedia = new SessionMediaOwner(
+      builtConfig.projectTempDir,
+      1024 * 1024,
+    );
+    const builtOwner = await createCapturedSessionOwner(
+      builtConfig,
+      assembleTaskSchemaPolicy(builtSettings),
+      builtManager,
+      buildAgentClientFactory(),
+      builtMedia.store,
+      builtMcp.readInstructions,
+      builtMcp.workspacePaths,
+      builtSettingsOwner,
+      builtContent,
+      builtTokenizer,
+    );
+    builtOwner.bindMcpRuntime(builtMcp);
+    builtOwner.bindHooks();
+    const closeEngine = settleEngineRelease.bind(
+      undefined,
+      [
+        () => builtOwner.dispose(),
+        () => builtRelease.close(),
+        () => builtMedia.dispose(),
+        () => builtMcp.dispose(),
+        () => builtConfig.dispose(),
+        () => rm(builtDirectory, { recursive: true, force: true }),
+      ],
+      previousReplay,
+    );
+    try {
+      await preparePreferredProviderCompletion(
+        builtConfig,
+        builtSettings,
+        builtSettingsOwner,
+        builtManager,
+        builtOAuth,
+        builtRuntimeId,
+        builtTokenizer,
+        undefined,
+      );
+      await builtMcp.initialize();
+      await builtOwner.initializeTools();
+      await builtOwner.refreshAuth();
+      await capturedSessionClient(builtOwner).startChat();
+    } catch (primary) {
+      await cleanupAfterFailure(primary, closeEngine);
+    }
+
+    const file = join(builtConfig.projectTempDir, 'abandoned-provider-file');
+    const lifecycle = builtFiles;
+    const scope = builtConfig.getSessionId();
+    await mkdir(builtConfig.projectTempDir, { recursive: true });
     await writeFile(file, 'uploaded bytes');
     let deletions = 0;
     const retained = await lifecycle.retain({
@@ -57,31 +434,34 @@ describe('Session owner cleanup joining', () => {
       },
     });
     await retained.lease.release();
-    built.owner.bindProviderFiles(
+    builtOwner.bindProviderFiles(
       lifecycle,
-      (provider) => built.handle.oauthManager.composeRetryOperations(provider),
-      (id) => SessionClientOwner.cleanupProviderScope(lifecycle, id),
+      (provider) => builtOAuth.composeRetryOperations(provider),
+      (id) => cleanupProviderScope(lifecycle, id),
     );
-    const candidate = await built.owner.prepareProfileClientReplacement();
+    const candidate = await builtOwner.prepareProfileActivation(
+      new AbortController().signal,
+    );
     candidate.publish();
     await candidate.retire();
     await access(file);
     expect(lifecycle.snapshot().retainedFiles).toBe(1);
-    const operation = new AgentActivationBootstrap(
-      built.config,
-      built.handle.providerManager,
+    const operation = prepareActivationFixture(
+      builtConfig,
+      builtManager,
       async () => ({ authFailed: false, infoMessages: [] }),
+      lifecycle,
       undefined,
-      built.owner,
-      built.mcp.workspaceFilesystem,
-      built.mcp.workspaceMemory,
+      builtOwner,
+      builtMcp.workspaceFilesystem,
+      builtMcp.workspaceMemory,
       false,
-      built.handle.settingsOwner,
+      builtSettingsOwner,
       'borrowed',
-      built.mcp.workspaceDefinitions,
+      builtMcp.workspaceDefinitions,
       false,
       new WorkspaceTrustLifecycle({
-        localTrust: built.config.initialWorkspaceTrust,
+        localTrust: builtConfig.initialWorkspaceTrust,
       }),
     );
     try {
@@ -92,216 +472,20 @@ describe('Session owner cleanup joining', () => {
       expect(lifecycle.snapshot().retainedFiles).toBe(0);
       expect(deletions).toBe(1);
     } finally {
-      await SessionClientOwner.cleanupProviderScope(lifecycle, scope);
-      await built.cleanup();
+      await cleanupProviderScope(lifecycle, scope);
+      await closeEngine();
     }
   });
-
-  it('joins the preflight client before media cleanup when adoption runtime construction fails', async () => {
-    const built = await createSessionClientEngineFixture();
-    let cleanupStates: readonly boolean[] = [];
-    class ObservedCleanupClient extends AgentClient {
-      override async dispose(): Promise<void> {
-        const open = await built.media.store.getStoredByteLength().then(
-          () => true,
-          () => false,
-        );
-        cleanupStates = [...cleanupStates, open];
-        await super.dispose();
-      }
-    }
-    const owner = await SessionClientOwner.create(
-      built.config,
-      assembleTaskSchemaPolicy(built.settingsService),
-      built.handle.providerManager,
-      (config, state, instructions, store) => {
-        if (store === undefined) throw new Error('Missing factory store');
-        return new ObservedCleanupClient(
-          config,
-          state,
-          instructions ?? (() => undefined),
-          store,
-          built.mcp.workspacePaths,
-        );
-      },
-      built.media.store,
-      built.mcp.readInstructions,
-      built.mcp.workspacePaths,
-      built.handle.settingsOwner,
-      built.handle.contentGeneratorFactory,
-      built.handle.tokenizerFactory,
-    );
-    const intent = { provider: 'fake', model: 'fake-model' };
-    const operation = new AgentActivationBootstrap(
-      built.config,
-      built.handle.providerManager,
-      async () => {
-        await owner.refreshAuth();
-        return { authFailed: false, infoMessages: [] };
-      },
-      built.media,
-      owner,
-      built.mcp.workspaceFilesystem,
-      built.mcp.workspaceMemory,
-      false,
-      built.handle.settingsOwner,
-      undefined,
-      built.mcp.workspaceDefinitions,
-      false,
-      new WorkspaceTrustLifecycle({
-        localTrust: built.config.initialWorkspaceTrust,
-      }),
-    );
-    try {
-      const receipt = await operation.preflight(intent);
-      if (receipt.token === undefined) throw new Error('Missing receipt');
-      await expect(
-        fromConfig({
-          settingsService: built.settingsService,
-          config: built.config,
-          providerManager: built.handle.providerManager,
-          messageBus: built.messageBus,
-          mcpRuntime: built.mcp,
-          activation: intent,
-          activationPreflight: { operation, token: receipt.token },
-          runtimeFactoryBindings: {
-            ...createAgentRuntimeFactoryBindings(built.media.store),
-            taskToolRegistration: () => {
-              throw new Error('Runtime assembly fault');
-            },
-          },
-        }),
-      ).rejects.toThrow('Runtime assembly fault');
-      expect(cleanupStates).not.toContain(false);
-      await expect(built.media.store.getStoredByteLength()).rejects.toThrow(
-        /closed/i,
-      );
-    } finally {
-      await operation.dispose();
-      await built.cleanup();
-    }
-  }, 30000);
-  it('joins an accepted replacement and closes every owned client before resolving disposal', async () => {
-    const built = await createSessionClientEngineFixture();
-    const entered = engineGate();
-    const released = engineGate();
-    class GatedClient extends AgentClient {
-      override async initialize(
-        content: ContentGeneratorConfig,
-      ): Promise<void> {
-        entered.release();
-        await released.promise;
-        await super.initialize(content);
-      }
-    }
-    const before = coreEvents.listenerCount(CoreEvent.ModelChanged);
-    const owner = await SessionClientOwner.create(
-      built.config,
-      assembleTaskSchemaPolicy(built.settingsService),
-      built.handle.providerManager,
-      (config, state, instructions, store) => {
-        if (store === undefined) throw new Error('Missing factory store');
-        return new GatedClient(
-          config,
-          state,
-          instructions ?? (() => undefined),
-          store,
-          built.mcp.workspacePaths,
-        );
-      },
-      built.media.store,
-      built.mcp.readInstructions,
-      built.mcp.workspacePaths,
-      built.handle.settingsOwner,
-      built.handle.contentGeneratorFactory,
-      built.handle.tokenizerFactory,
-    );
-    const pending = owner.refreshAuth();
-    await entered.promise;
-    let closed = false;
-    const closing = owner.dispose().then(() => {
-      closed = true;
-    });
-    try {
-      await Promise.resolve();
-      await Promise.resolve();
-      expect(closed).toBe(false);
-    } finally {
-      released.release();
-      await pending;
-      await closing;
-      await built.cleanup();
-    }
-    expect(coreEvents.listenerCount(CoreEvent.ModelChanged)).toBe(before - 1);
-  }, 30000);
-  it('still closes separately owned media when client cleanup rejects', async () => {
-    const built = await createSessionClientEngineFixture();
-    const entered = engineGate();
-    const released = engineGate();
-    class FailingCleanupClient extends AgentClient {
-      override async dispose(): Promise<void> {
-        await super.dispose();
-        throw new Error('Client cleanup fault');
-      }
-    }
-    const owner = await SessionClientOwner.create(
-      built.config,
-      assembleTaskSchemaPolicy(built.settingsService),
-      built.handle.providerManager,
-      (config, state, instructions, store) => {
-        if (store === undefined) throw new Error('Missing factory store');
-        return new FailingCleanupClient(
-          config,
-          state,
-          instructions ?? (() => undefined),
-          store,
-          built.mcp.workspacePaths,
-        );
-      },
-      built.media.store,
-      built.mcp.readInstructions,
-      built.mcp.workspacePaths,
-      built.handle.settingsOwner,
-      built.handle.contentGeneratorFactory,
-      built.handle.tokenizerFactory,
-    );
-    const operation = new AgentActivationBootstrap(
-      built.config,
-      built.handle.providerManager,
-      async () => {
-        entered.release();
-        await released.promise;
-        return {
-          authFailed: true,
-          infoMessages: [],
-          authError: new Error('Activation failed'),
-        };
-      },
-      built.media,
-      owner,
-      built.mcp.workspaceFilesystem,
-      built.mcp.workspaceMemory,
-      false,
-      built.handle.settingsOwner,
-      undefined,
-      built.mcp.workspaceDefinitions,
-      false,
-      new WorkspaceTrustLifecycle({
-        localTrust: built.config.initialWorkspaceTrust,
-      }),
-    );
-    const preflight = operation.preflight({ provider: 'fake' });
-    await entered.promise;
-    const closing = operation.dispose();
-    released.release();
-    try {
-      await preflight;
-      await expect(closing).rejects.toThrow(/cleanup/i);
-      await expect(built.media.store.getStoredByteLength()).rejects.toThrow(
-        /closed/i,
-      );
-    } finally {
-      await built.cleanup();
-    }
-  }, 30000);
 });
+
+async function settleEngineRelease(
+  steps: ReadonlyArray<() => void | Promise<void>>,
+  previousReplay: string | undefined,
+): Promise<void> {
+  try {
+    await runCleanupSteps(steps);
+  } finally {
+    if (previousReplay === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
+    else process.env.LLXPRT_FAKE_RESPONSES = previousReplay;
+  }
+}

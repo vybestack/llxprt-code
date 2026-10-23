@@ -1,6 +1,7 @@
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import { afterEach as closeInvocationRoots } from 'bun:test';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { createMediaHistoryChat } from './__tests__/selected-chat-media-fixture.js';
 const retainedInvocationOwners: SessionSettingsOwner[] = [];
 
 /**
@@ -9,32 +10,32 @@ const retainedInvocationOwners: SessionSettingsOwner[] = [];
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { ProviderFileBindingStore } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { assertDefined } from '@vybestack/llxprt-code-test-utils';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { ChatSession } from './chatSession.js';
+import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
+import type { ProviderFileBindingStore } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
   createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
-import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import { MediaAdmissionService } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
+import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import type {
   GenerateChatOptions,
   IProvider,
 } from '@vybestack/llxprt-code-providers/IProvider.js';
-import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
-import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import { assertDefined } from '@vybestack/llxprt-code-test-utils';
+import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { ChatSession } from './chatSession.js';
 import {
   mediaHistory,
   mediaHistoryShape,
@@ -71,83 +72,74 @@ describe('ChatSession media history boundaries', () => {
   });
 
   function createChat(
-    onRequest?: (
-      request: GenerateChatOptions,
-      bindings: ProviderFileBindingStore | undefined,
-    ) => Promise<void>,
+    onRequest?: Parameters<typeof createMediaHistoryChat>[3],
   ): ChatSession {
-    const provider: IProvider & {
-      requestProviderFileBindings?: ProviderFileBindingStore;
-    } = {
-      requestProviderFileBindings: undefined,
-      name: 'media-history-provider',
-      getDefaultModel: () => 'media-history-model',
-      getModels: () => Promise.resolve([]),
-      async *generateChatCompletion(
-        request: GenerateChatOptions | IContent[],
-      ): AsyncIterableIterator<IContent> {
-        if (!Array.isArray(request))
-          await onRequest?.(request, this.requestProviderFileBindings);
-        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unused' }] };
-      },
-    };
-    const setup = createChatSessionRuntime({ provider });
-    const history = new HistoryService();
-    const store = new LocalMediaStore({
-      rootDirectory: join(directory, 'media'),
-      quotaBytes: 1024 * 1024,
-    });
-    const state = createAgentRuntimeState({
-      runtimeId: 'media-history-runtime',
-      provider: provider.name,
-      model: 'test-model',
-      sessionId: 'media-history-session',
-    });
-    const invocationOwner = new SessionSettingsOwner(setup.settingsService);
-    retainedInvocationOwners.push(invocationOwner);
-    const runtime = createAgentRuntimeContext({
-      prepareProviderInvocation: (name, parameters, signal) =>
-        invocationOwner.prepareProviderInvocation(
-          state.runtimeId,
-          name,
-          parameters,
-          signal,
-        ),
-      state,
-      history,
-      settings: {
-        compressionThreshold: 0.8,
-        contextLimit: 100_000,
-        preserveThreshold: 0.2,
-        telemetry: { enabled: false, target: null },
-      },
-      provider: createProviderAdapterFromManager(setup.providerManager),
-      telemetry: createTelemetryAdapter(
-        setup.config,
-        RootTelemetry.prepare({
-          enabled: false,
-          sessionId: 'isolated-adapter-fixture',
-          maxBytes: 1024,
-          maxFiles: 1,
-        }),
-      ),
-      tools: createToolRegistryViewFromRegistry(),
-      providerRuntime: {
-        ...setup.runtime,
-        config: setup.config,
-        providerFileLifecycle: lifecycle,
-      },
-      mediaStore: store,
-      mediaAdmission: new MediaAdmissionService(store),
-    });
-    const contentGenerator = {
-      generateContent: vi.fn(),
-      generateContentStream: vi.fn(),
-      countTokens: vi.fn().mockReturnValue(1),
-      embedContent: vi.fn(),
-    };
-    return new ChatSession(runtime, contentGenerator, {}, []);
+    return createMediaHistoryChat(
+      directory,
+      lifecycle,
+      retainedInvocationOwners,
+      onRequest,
+    );
   }
+
+  it('materializes selected local media across non-streaming, streaming and direct requests', async () => {
+    const encodings: string[] = [];
+    const workspaces: Array<string | undefined> = [];
+    const chat = createChat(
+      async (_request, _bindings, contents, workspace) => {
+        encodings.push(...mediaEncodings(contents));
+        workspaces.push(workspace);
+      },
+    );
+    await chat.setHistory(mediaHistory());
+    await chat.sendMessage({ message: 'inspect image' }, 'selected-nonstream');
+    for await (const event of await chat.sendMessageStream(
+      { message: 'inspect again' },
+      'selected-stream',
+    )) {
+      expect(event).toBeDefined();
+    }
+    await chat.generateDirectMessage(
+      { message: mediaHistory()[0] },
+      'selected-direct',
+    );
+    expect(encodings.filter((encoding) => encoding === 'base64')).toHaveLength(
+      3,
+    );
+    const selectedConfig = chat.getConfig();
+    assertDefined(selectedConfig);
+    expect(workspaces).toStrictEqual(
+      Array(3).fill(selectedConfig.getTargetDir()),
+    );
+    await chat.clearHistory();
+  });
+
+  it('clears the selected file lifecycle instead of the runtime lifecycle', async () => {
+    const chat = createChat();
+    const identity = {
+      provider: 'media-history-provider',
+      baseURL: 'https://provider.test',
+      credentialHash: 'selected-owner',
+    };
+    const retained = await lifecycle.retain({
+      cacheKey: 'selected-file-owner',
+      fileId: 'selected-file',
+      bytes: 1,
+      identity,
+      policy: {
+        mode: 'enabled',
+        scope: 'session',
+        retentionMs: 60_000,
+        deletion: 'delete',
+        zeroDataRetention: 'incompatible-while-retained',
+      },
+      scopeId: 'media-history-runtime',
+      deleteRemote: async () => undefined,
+    });
+    await retained.lease.release();
+    await chat.clearHistory();
+    expect(lifecycle.snapshot().retainedFiles).toBe(0);
+  });
 
   it('rebinds prepared chat history without recreating media admission and retires the old graph separately', async () => {
     const oldChat = createChat();
@@ -470,7 +462,7 @@ describe('ChatSession media history boundaries', () => {
         }),
       ),
       tools: createToolRegistryViewFromRegistry(),
-      providerRuntime: { ...setup.runtime, config: setup.config },
+      providerRuntime: { ...setup.runtime },
       mediaStore: store,
       mediaAdmission: new MediaAdmissionService(store),
     });
@@ -481,7 +473,19 @@ describe('ChatSession media history boundaries', () => {
       embedContent: vi.fn(),
     };
     return {
-      chat: new ChatSession(runtime, contentGenerator, {}, []),
+      chat: new ChatSession(
+        runtime,
+        setup.config,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        contentGenerator,
+        {},
+        [],
+      ),
       recording,
       execution: {
         transcriptPath: () => recording.getFilePath() ?? undefined,

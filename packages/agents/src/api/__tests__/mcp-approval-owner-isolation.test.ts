@@ -1,50 +1,75 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
+import {
+  RuntimePolicyOwner,
+  SessionPolicyOwner,
+} from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { toConfigParameters } from '../agentConfig.adapter.js';
+import {
+  mkdtemp,
+  realpath,
+  rm,
+  mkdir,
+  readFile,
+  writeFile,
+} from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
+import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import {
+  acquirePreferredProviderManager,
+  acquirePreferredOAuth,
+  preparePreferredProviderCompletion,
+} from '../preferred-provider-acquisition.js';
+import { releaseAdoptedFileScope } from '../adoption-release.js';
+import { randomUUID } from 'node:crypto';
+import {
+  runCleanupSteps,
+  cleanupAfterFailure,
+} from '../../core/subagent-cleanup.js';
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
+import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { fileURLToPath } from 'node:url';
+import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
+import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
+import {
+  injectConfirmationForcingPolicy,
+  CONFIRMATION_FORCING_SOURCE,
+} from '../confirmationForcing.js';
+import { executeProviderActivation } from '../providerActivationExecutor.js';
+import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
+import { assembleModelSelection } from '../model-selection.js';
+import { AgentConfig } from '../config-types.js';
+import { PolicyDecision } from '@vybestack/llxprt-code-policy';
+import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+import { Agent, AgentToolHandle } from '../agent.js';
+
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { SessionPolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-
-import { describe, expect, it, spyOn } from 'bun:test';
-import fs from 'node:fs/promises';
-import { Storage } from '@vybestack/llxprt-code-settings';
-import { randomUUID } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { PolicyDecision } from '@vybestack/llxprt-code-policy';
-import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
-import type { Agent, AgentToolHandle } from '../agent.js';
-import { fromConfig } from '../fromConfig.js';
-import { CONFIRMATION_FORCING_SOURCE } from '../confirmationForcing.js';
-import {
-  buildCliStyleConfig,
-  type BuiltCliConfig,
-} from './helpers/buildCliStyleConfig.js';
 
 const evidence = join(tmpdir(), 'llxprt-mcp-approval-isolation-repro');
+
 const fixture = fileURLToPath(
   new URL('./helpers/mcp-approval-stdio-fixture.ts', import.meta.url),
 );
-
-function buildOwner(cwd: string, server: string): Promise<BuiltCliConfig> {
-  return buildCliStyleConfig('plain-text.jsonl', {
-    workingDir: cwd,
-    folderTrust: true,
-    coreTools: [],
-    policy: { defaultDecision: PolicyDecision.ASK_USER },
-    telemetry: { enabled: false },
-    recording: { enabled: false },
-    mcpServers: {
-      [server]: {
-        command: process.execPath,
-        args: [fixture, join(cwd, 'server.pid')],
-        trust: false,
-      },
-    },
-  });
-}
 
 function tool(agent: Agent, server: string, name: string): AgentToolHandle {
   const info = agent.tools
@@ -83,7 +108,39 @@ function isAlive(pid: number): boolean {
   }
 }
 
+async function settleEngineRelease(
+  steps: ReadonlyArray<() => void | Promise<void>>,
+  previousReplay: string | undefined,
+): Promise<void> {
+  try {
+    await runCleanupSteps(steps);
+  } finally {
+    if (previousReplay === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
+    else process.env.LLXPRT_FAKE_RESPONSES = previousReplay;
+  }
+}
+
+function requireCallerActivation(
+  result: Awaited<ReturnType<typeof executeProviderActivation>>,
+): void {
+  if (result.authFailed) throw result.authError;
+}
 describe('MCP public tool approval owner isolation', () => {
+  let promptDirectory: string;
+  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+  beforeAll(async () => {
+    promptDirectory = await mkdtemp(join(tmpdir(), 'engine-prompts-'));
+    process.env.LLXPRT_PROMPTS_DIR = promptDirectory;
+    await initializePromptSystem();
+  });
+  afterAll(async () => {
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(promptDirectory, { recursive: true, force: true });
+  });
+  const builtCredentials = useOwnedCredentials();
+  const ownerCCredentials = useOwnedCredentials();
+
   for (const outcome of [
     ToolConfirmationOutcome.ProceedAlwaysTool,
     ToolConfirmationOutcome.ProceedAlwaysServer,
@@ -92,61 +149,252 @@ describe('MCP public tool approval owner isolation', () => {
       await mkdir(evidence, { recursive: true });
       const directory = await mkdtemp(join(evidence, 'runtime-'));
       const server = `approval_${randomUUID().replaceAll('-', '')}`;
-      const builtOwners: BuiltCliConfig[] = [];
+      const ownerCloses: Array<() => Promise<void>> = [];
+      const workspaceOwners: McpRuntimeOwner[] = [];
+      const callerConfigs: Config[] = [];
+      const callerPolicies: RuntimePolicyOwner[] = [];
       const agents: Agent[] = [];
       const pids: number[] = [];
       const signal = new AbortController().signal;
-      try {
-        for (const name of ['A', 'B']) {
-          const cwd = join(directory, name);
-          await mkdir(cwd);
-          const built = await buildOwner(cwd, server);
-          builtOwners.push(built);
-          expect(
-            Array.from(await built.mcpRuntime.awaitDiscovery()),
-          ).toStrictEqual([]);
-          pids.push(Number(await readFile(join(cwd, 'server.pid'), 'utf8')));
-          built.mcpRuntime.policyOwner.session.confirmation.removeRulesBySource(
-            CONFIRMATION_FORCING_SOURCE,
-          );
-          const agent = await fromConfig({
-            settingsOwner: built.settingsOwner,
-            settingsService: built.settingsService,
-            agentClient: built.agentClient,
-            providerManager: built.providerManager,
-            runtimeFactoryBindings: built.runtimeFactoryBindings,
-            config: built.config,
-            mcpRuntime: built.mcpRuntime,
-            mcpOwnership: 'caller',
-            messageBus: built.messageBus,
-          });
+      async function openCaller(name: string): Promise<void> {
+        const cwd = join(directory, name);
+        await mkdir(cwd);
 
-          agents.push(agent);
-          expect(agent.policy.getDefaultDecision()).toBe(
-            PolicyDecision.ASK_USER,
-          );
-          const discovered = agent.tools
-            .list()
-            .filter((entry) => entry.server === server);
-          expect(
-            discovered.map((entry) => entry.serverToolName).sort(),
-          ).toStrictEqual(['increment', 'other']);
-          const decisions = discovered.map((entry) => {
-            const qualifiedName = `${entry.server}__${entry.serverToolName}`;
-            const decision =
-              built.mcpRuntime.policyOwner.session.decisions.evaluate(
-                qualifiedName,
-                {},
-                entry.server,
-              );
-            expect(decision).toBe(PolicyDecision.ASK_USER);
-            return { qualifiedName, decision };
-          });
-          await writeFile(
-            join(evidence, `${outcome}-${name}-policy-baseline.json`),
-            JSON.stringify(decisions, null, 2),
-          );
-        }
+        const builtCallerPreviousReplay = process.env.LLXPRT_FAKE_RESPONSES;
+        process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+          new URL('fixtures/' + 'plain-text.jsonl', import.meta.url),
+        );
+        const builtCallerDirectory = await realpath(
+          await mkdtemp(join(tmpdir(), 'explicit-caller-')),
+        );
+        const builtCallerOverrides: Readonly<Partial<AgentConfig>> = {
+          workingDir: cwd,
+          folderTrust: true,
+          coreTools: [],
+          policy: { defaultDecision: PolicyDecision.ASK_USER },
+          telemetry: { enabled: false },
+          recording: { enabled: false },
+          mcpServers: {
+            [server]: {
+              command: process.execPath,
+              args: [fixture, join(cwd, 'server.pid')],
+              trust: false,
+            },
+          },
+        };
+        const builtCallerSelection: AgentConfig = {
+          provider: 'fake',
+          model: 'fake-model',
+          sessionId: randomUUID(),
+          ...builtCallerOverrides,
+          workingDir: await callerWorkingDirectory(
+            builtCallerOverrides.workingDir,
+            builtCallerDirectory,
+          ),
+        };
+        const builtCallerParameters = {
+          ...toConfigParameters(builtCallerSelection),
+          ...{},
+        };
+        builtCallerParameters.interactive = true;
+
+        builtCallerParameters.includeDirectories = includeCallerCwd(
+          builtCallerParameters.includeDirectories,
+        );
+        const builtCallerConfig = new Config(builtCallerParameters);
+        const builtCallerFactories = {
+          ...createAgentRuntimeFactoryBindings(),
+          ...{},
+        };
+        const builtCallerSettings = new SettingsService();
+        seedCallerSettings(builtCallerConfig, builtCallerSettings);
+        const builtCallerPolicy = new RuntimePolicyOwner(builtCallerConfig);
+        injectConfirmationForcingPolicy(builtCallerPolicy.session.confirmation);
+        const builtCallerMcp = await buildTestMcpRuntime(
+          builtCallerConfig,
+          builtCallerPolicy.session.messageBus,
+          builtCallerOverrides,
+          undefined,
+          builtCallerPolicy,
+          undefined,
+        );
+        const builtCallerRuntimeId = 'caller-' + randomUUID();
+        const builtCallerRelease = new AcquisitionRelease();
+        const builtCallerSettingsOwner = new SessionSettingsOwner(
+          builtCallerSettings,
+        );
+        builtCallerRelease.acquire('settings', () =>
+          builtCallerSettingsOwner.dispose(),
+        );
+        builtCallerSettingsOwner.initializeProviderSelection(
+          builtCallerConfig.getProvider(),
+          builtCallerConfig.getModel(),
+        );
+        builtCallerSettingsOwner.bindTelemetry(builtCallerConfig);
+        const builtCallerFiles = new ProviderFileLifecycle({
+          maxFiles: 100,
+          maxBytes: 512 * 1024 * 1024,
+        });
+        acquireCallerFileScopes(
+          builtCallerRelease,
+          builtCallerFiles,
+          builtCallerRuntimeId,
+          builtCallerConfig.getSessionId(),
+        );
+        const builtCallerManager = acquirePreferredProviderManager(
+          builtCallerConfig,
+          builtCallerSettings,
+          builtCallerSettingsOwner,
+          builtCallerFiles,
+          builtCallerRuntimeId,
+          builtCredentials().authority,
+          builtCallerRelease,
+        );
+        const builtCallerTokenizer =
+          configureProviderTokenizer(builtCallerManager);
+        const builtCallerContent = createRuntimeContentGeneratorFactory();
+        const builtCallerOAuth = acquirePreferredOAuth(
+          undefined,
+          builtCallerPolicy.session.messageBus,
+          builtCallerConfig,
+          builtCallerSettings,
+          builtCallerManager,
+          builtCallerRuntimeId,
+          builtCallerMcp.profileDefinitions,
+          builtCredentials().authority,
+          builtCallerRelease,
+          undefined,
+        );
+        const builtCallerMedia = new SessionMediaOwner(
+          builtCallerConfig.projectTempDir,
+          1024 * 1024 * 1024,
+        );
+        const builtCallerOwner = await createCapturedSessionOwner(
+          builtCallerConfig,
+          assembleTaskSchemaPolicy(builtCallerSettings),
+          builtCallerManager,
+          builtCallerFactories.agentClientFactory,
+          builtCallerMedia.store,
+          builtCallerMcp.readInstructions,
+          builtCallerMcp.workspacePaths,
+          builtCallerSettingsOwner,
+          builtCallerContent,
+          builtCallerTokenizer,
+        );
+        builtCallerOwner.bindMcpRuntime(builtCallerMcp);
+        builtCallerOwner.bindProviderFiles(
+          builtCallerFiles,
+          builtCallerOAuth.composeRetryOperations.bind(builtCallerOAuth),
+        );
+        builtCallerOwner.bindHooks();
+        const builtCallerClose = settleEngineRelease.bind(
+          undefined,
+          [
+            () => builtCallerOwner.dispose(),
+            () => builtCallerRelease.close(),
+            () => builtCallerMedia.dispose(),
+            () => builtCallerMcp.dispose(),
+            () => builtCallerConfig.dispose(),
+            () => rm(builtCallerDirectory, { recursive: true, force: true }),
+          ],
+          builtCallerPreviousReplay,
+        );
+        const initializeBuiltCaller = async (): Promise<void> => {
+          try {
+            await preparePreferredProviderCompletion(
+              builtCallerConfig,
+              builtCallerSettings,
+              builtCallerSettingsOwner,
+              builtCallerManager,
+              builtCallerOAuth,
+              builtCallerRuntimeId,
+              builtCallerTokenizer,
+              undefined,
+            );
+            await builtCallerMcp.initialize();
+            const activation = await executeProviderActivation(
+              builtCallerConfig,
+              builtCallerSelection.activation ?? {
+                provider: builtCallerConfig.getProvider(),
+                model: builtCallerConfig.getModel(),
+              },
+              assembleProviderSwitch(
+                builtCallerConfig,
+                builtCallerSettings,
+                builtCallerManager,
+                builtCallerOAuth,
+                () => 'agent',
+                () => builtCallerOwner.refreshAuth(),
+                builtCallerSettingsOwner,
+              ),
+              builtCallerSettings,
+              builtCallerManager,
+              (method) => builtCallerOwner.refreshAuth(method),
+              assembleModelSelection(builtCallerSettingsOwner),
+            );
+            requireCallerActivation(activation);
+            await builtCallerOwner.initializeTools();
+            await capturedSessionClient(builtCallerOwner).startChat();
+          } catch (primary) {
+            await cleanupAfterFailure(primary, builtCallerClose);
+          }
+        };
+        await initializeBuiltCaller();
+
+        ownerCloses.push(builtCallerClose);
+        workspaceOwners.push(builtCallerMcp);
+        callerConfigs.push(builtCallerConfig);
+        callerPolicies.push(builtCallerPolicy);
+        expect(Array.from(await builtCallerMcp.awaitDiscovery())).toStrictEqual(
+          [],
+        );
+        pids.push(Number(await readFile(join(cwd, 'server.pid'), 'utf8')));
+        builtCallerMcp.policyOwner.session.confirmation.removeRulesBySource(
+          CONFIRMATION_FORCING_SOURCE,
+        );
+        const agent = await fromConfig(
+          builtCallerConfig,
+          builtCallerSettings,
+          { mcpOwnership: 'caller' },
+          builtCallerSettingsOwner,
+          builtCallerManager,
+          undefined,
+          builtCallerPolicy.session.messageBus,
+          builtCallerMcp,
+          undefined,
+          capturedSessionClient(builtCallerOwner),
+          undefined,
+          undefined,
+          undefined,
+          builtCallerFactories,
+        );
+
+        agents.push(agent);
+        expect(agent.policy.getDefaultDecision()).toBe(PolicyDecision.ASK_USER);
+        const discovered = agent.tools
+          .list()
+          .filter((entry) => entry.server === server);
+        expect(
+          discovered.map((entry) => entry.serverToolName).sort(),
+        ).toStrictEqual(['increment', 'other']);
+        const decisions = discovered.map((entry) => {
+          const qualifiedName = `${entry.server}__${entry.serverToolName}`;
+          const decision =
+            builtCallerMcp.policyOwner.session.decisions.evaluate(
+              qualifiedName,
+              {},
+              entry.server,
+            );
+          expect(decision).toBe(PolicyDecision.ASK_USER);
+          return { qualifiedName, decision };
+        });
+        await writeFile(
+          join(evidence, `${outcome}-${name}-policy-baseline.json`),
+          JSON.stringify(decisions, null, 2),
+        );
+      }
+      try {
+        for (const name of ['A', 'B']) await openCaller(name);
         const [agentA, agentB] = agents;
         const a = tool(agentA, server, 'increment');
         const b = tool(agentB, server, 'increment');
@@ -187,16 +435,16 @@ describe('MCP public tool approval owner isolation', () => {
           JSON.stringify({ b: afterB, sameOwnerOther }, null, 2),
         );
         expect(afterB).toMatchObject(expected);
-        const ownerA = builtOwners[0];
+        const ownerA = workspaceOwners[0];
         expect(
-          ownerA.mcpRuntime.policyOwner.session.decisions.evaluate(
+          ownerA.policyOwner.session.decisions.evaluate(
             `${server}__increment`,
             {},
             server,
           ),
         ).toBe(PolicyDecision.ALLOW);
-        await ownerA.mcpRuntime.refresh(server);
-        await ownerA.mcpRuntime.awaitDiscovery();
+        await ownerA.refresh(server);
+        await ownerA.awaitDiscovery();
         pids.push(
           Number(await readFile(join(directory, 'A', 'server.pid'), 'utf8')),
         );
@@ -224,16 +472,16 @@ describe('MCP public tool approval owner isolation', () => {
             .shouldConfirmExecute(signal),
         ).toMatchObject(expected);
         expect(
-          ownerA.mcpRuntime.policyOwner.session.decisions.evaluate(
+          ownerA.policyOwner.session.decisions.evaluate(
             `${server}__increment`,
             {},
             server,
           ),
         ).toBe(PolicyDecision.ALLOW);
-        await ownerA.mcpRuntime.dispose();
+        await ownerA.dispose();
         const fresh = new SessionPolicyOwner(
-          builtOwners[1].policyOwner.workspace,
-          ownerA.config,
+          callerPolicies[1].workspace,
+          callerConfigs[0],
         );
         try {
           expect(
@@ -243,7 +491,7 @@ describe('MCP public tool approval owner isolation', () => {
           await fresh.dispose();
         }
         expect(() =>
-          ownerA.mcpRuntime.policyOwner.session.decisions.evaluate(
+          ownerA.policyOwner.session.decisions.evaluate(
             `${server}__increment`,
             {},
             server,
@@ -253,7 +501,7 @@ describe('MCP public tool approval owner isolation', () => {
           /Tool dispatch admission is closed/,
         );
         expect(() =>
-          ownerA.mcpRuntime.policyOwner.session.decisions.evaluate(
+          ownerA.policyOwner.session.decisions.evaluate(
             `${server}__increment`,
             {},
             server,
@@ -261,24 +509,208 @@ describe('MCP public tool approval owner isolation', () => {
         ).toThrow('Session policy is disposed');
         const cwd = join(directory, 'C');
         await mkdir(cwd);
-        const ownerC = await buildOwner(cwd, server);
-        builtOwners.push(ownerC);
+
+        const ownerCCallerPreviousReplay = process.env.LLXPRT_FAKE_RESPONSES;
+        process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+          new URL('fixtures/' + 'plain-text.jsonl', import.meta.url),
+        );
+        const ownerCCallerDirectory = await realpath(
+          await mkdtemp(join(tmpdir(), 'explicit-caller-')),
+        );
+        const ownerCCallerOverrides: Readonly<Partial<AgentConfig>> = {
+          workingDir: cwd,
+          folderTrust: true,
+          coreTools: [],
+          policy: { defaultDecision: PolicyDecision.ASK_USER },
+          telemetry: { enabled: false },
+          recording: { enabled: false },
+          mcpServers: {
+            [server]: {
+              command: process.execPath,
+              args: [fixture, join(cwd, 'server.pid')],
+              trust: false,
+            },
+          },
+        };
+        const ownerCCallerSelection: AgentConfig = {
+          provider: 'fake',
+          model: 'fake-model',
+          sessionId: randomUUID(),
+          ...ownerCCallerOverrides,
+          workingDir: await callerWorkingDirectory(
+            ownerCCallerOverrides.workingDir,
+            ownerCCallerDirectory,
+          ),
+        };
+        const ownerCCallerParameters = {
+          ...toConfigParameters(ownerCCallerSelection),
+          ...{},
+        };
+        ownerCCallerParameters.interactive = true;
+
+        ownerCCallerParameters.includeDirectories = includeCallerCwd(
+          ownerCCallerParameters.includeDirectories,
+        );
+        const ownerCCallerConfig = new Config(ownerCCallerParameters);
+        const ownerCCallerFactories = {
+          ...createAgentRuntimeFactoryBindings(),
+          ...{},
+        };
+        const ownerCCallerSettings = new SettingsService();
+        seedCallerSettings(ownerCCallerConfig, ownerCCallerSettings);
+        const ownerCCallerPolicy = new RuntimePolicyOwner(ownerCCallerConfig);
+        injectConfirmationForcingPolicy(
+          ownerCCallerPolicy.session.confirmation,
+        );
+        const ownerCCallerMcp = await buildTestMcpRuntime(
+          ownerCCallerConfig,
+          ownerCCallerPolicy.session.messageBus,
+          ownerCCallerOverrides,
+          undefined,
+          ownerCCallerPolicy,
+          undefined,
+        );
+        const ownerCCallerRuntimeId = 'caller-' + randomUUID();
+        const ownerCCallerRelease = new AcquisitionRelease();
+        const ownerCCallerSettingsOwner = new SessionSettingsOwner(
+          ownerCCallerSettings,
+        );
+        ownerCCallerRelease.acquire('settings', () =>
+          ownerCCallerSettingsOwner.dispose(),
+        );
+        ownerCCallerSettingsOwner.initializeProviderSelection(
+          ownerCCallerConfig.getProvider(),
+          ownerCCallerConfig.getModel(),
+        );
+        ownerCCallerSettingsOwner.bindTelemetry(ownerCCallerConfig);
+        const ownerCCallerFiles = new ProviderFileLifecycle({
+          maxFiles: 100,
+          maxBytes: 512 * 1024 * 1024,
+        });
+        acquireCallerFileScopes(
+          ownerCCallerRelease,
+          ownerCCallerFiles,
+          ownerCCallerRuntimeId,
+          ownerCCallerConfig.getSessionId(),
+        );
+        const ownerCCallerManager = acquirePreferredProviderManager(
+          ownerCCallerConfig,
+          ownerCCallerSettings,
+          ownerCCallerSettingsOwner,
+          ownerCCallerFiles,
+          ownerCCallerRuntimeId,
+          ownerCCredentials().authority,
+          ownerCCallerRelease,
+        );
+        const ownerCCallerTokenizer =
+          configureProviderTokenizer(ownerCCallerManager);
+        const ownerCCallerContent = createRuntimeContentGeneratorFactory();
+        const ownerCCallerOAuth = acquirePreferredOAuth(
+          undefined,
+          ownerCCallerPolicy.session.messageBus,
+          ownerCCallerConfig,
+          ownerCCallerSettings,
+          ownerCCallerManager,
+          ownerCCallerRuntimeId,
+          ownerCCallerMcp.profileDefinitions,
+          ownerCCredentials().authority,
+          ownerCCallerRelease,
+          undefined,
+        );
+        const ownerCCallerMedia = new SessionMediaOwner(
+          ownerCCallerConfig.projectTempDir,
+          1024 * 1024 * 1024,
+        );
+        const ownerCCallerOwner = await createCapturedSessionOwner(
+          ownerCCallerConfig,
+          assembleTaskSchemaPolicy(ownerCCallerSettings),
+          ownerCCallerManager,
+          ownerCCallerFactories.agentClientFactory,
+          ownerCCallerMedia.store,
+          ownerCCallerMcp.readInstructions,
+          ownerCCallerMcp.workspacePaths,
+          ownerCCallerSettingsOwner,
+          ownerCCallerContent,
+          ownerCCallerTokenizer,
+        );
+        ownerCCallerOwner.bindMcpRuntime(ownerCCallerMcp);
+        ownerCCallerOwner.bindProviderFiles(
+          ownerCCallerFiles,
+          ownerCCallerOAuth.composeRetryOperations.bind(ownerCCallerOAuth),
+        );
+        ownerCCallerOwner.bindHooks();
+        const ownerCCallerClose = settleEngineRelease.bind(
+          undefined,
+          [
+            () => ownerCCallerOwner.dispose(),
+            () => ownerCCallerRelease.close(),
+            () => ownerCCallerMedia.dispose(),
+            () => ownerCCallerMcp.dispose(),
+            () => ownerCCallerConfig.dispose(),
+            () => rm(ownerCCallerDirectory, { recursive: true, force: true }),
+          ],
+          ownerCCallerPreviousReplay,
+        );
+        async function initializeOwnerCCaller(): Promise<void> {
+          try {
+            await preparePreferredProviderCompletion(
+              ownerCCallerConfig,
+              ownerCCallerSettings,
+              ownerCCallerSettingsOwner,
+              ownerCCallerManager,
+              ownerCCallerOAuth,
+              ownerCCallerRuntimeId,
+              ownerCCallerTokenizer,
+              undefined,
+            );
+            await ownerCCallerMcp.initialize();
+            const activation = await executeProviderActivation(
+              ownerCCallerConfig,
+              ownerCCallerSelection.activation ?? {
+                provider: ownerCCallerConfig.getProvider(),
+                model: ownerCCallerConfig.getModel(),
+              },
+              assembleProviderSwitch(
+                ownerCCallerConfig,
+                ownerCCallerSettings,
+                ownerCCallerManager,
+                ownerCCallerOAuth,
+                () => 'agent',
+                () => ownerCCallerOwner.refreshAuth(),
+                ownerCCallerSettingsOwner,
+              ),
+              ownerCCallerSettings,
+              ownerCCallerManager,
+              (method) => ownerCCallerOwner.refreshAuth(method),
+              assembleModelSelection(ownerCCallerSettingsOwner),
+            );
+            requireCallerActivation(activation);
+            await ownerCCallerOwner.initializeTools();
+            await capturedSessionClient(ownerCCallerOwner).startChat();
+          } catch (primary) {
+            await cleanupAfterFailure(primary, ownerCCallerClose);
+          }
+        }
+        await initializeOwnerCCaller();
+
+        ownerCloses.push(ownerCCallerClose);
         expect(
-          Array.from(await ownerC.mcpRuntime.awaitDiscovery()),
+          Array.from(await ownerCCallerMcp.awaitDiscovery()),
         ).toStrictEqual([]);
         pids.push(Number(await readFile(join(cwd, 'server.pid'), 'utf8')));
-        ownerC.mcpRuntime.policyOwner.session.confirmation.removeRulesBySource(
+        ownerCCallerMcp.policyOwner.session.confirmation.removeRulesBySource(
           CONFIRMATION_FORCING_SOURCE,
         );
-        const agentC = await fromConfig({
-          settingsOwner: ownerC.settingsOwner,
-          settingsService: ownerC.settingsService,
-          providerManager: ownerC.providerManager,
-          config: ownerC.config,
-          mcpRuntime: ownerC.mcpRuntime,
-          mcpOwnership: 'caller',
-          messageBus: ownerC.messageBus,
-        });
+        const agentC = await fromConfig(
+          ownerCCallerConfig,
+          ownerCCallerSettings,
+          { mcpOwnership: 'caller' },
+          ownerCCallerSettingsOwner,
+          ownerCCallerManager,
+          undefined,
+          ownerCCallerPolicy.session.messageBus,
+          ownerCCallerMcp,
+        );
         try {
           agents.push(agentC);
           expect(
@@ -293,13 +725,11 @@ describe('MCP public tool approval owner isolation', () => {
         const results = await Promise.allSettled(
           agents.map((a) => a.dispose()),
         );
-        for (const built of [...builtOwners].reverse()) {
-          results.push(
-            ...(await Promise.allSettled([built.mcpRuntime.dispose()])),
-          );
-          results.push(...(await Promise.allSettled([built.config.dispose()])));
-          results.push(...(await Promise.allSettled([built.cleanup()])));
-        }
+        results.push(
+          ...(await Promise.allSettled(
+            [...ownerCloses].reverse().map((close) => close()),
+          )),
+        );
         const alive = pids.filter(isAlive);
         await writeFile(
           join(evidence, `${outcome}-cleanup.json`),
@@ -325,104 +755,30 @@ describe('MCP public tool approval owner isolation', () => {
   }
 });
 
-describe('MCP saved approval lifetime', () => {
-  it('joins an admitted saved approval at owner disposal without restoring session approval', async () => {
-    await mkdir(evidence, { recursive: true });
-    const directory = await mkdtemp(join(evidence, 'save-runtime-'));
-    const server = `save_${randomUUID().replaceAll('-', '')}`;
-    const built = await buildOwner(directory, server);
-    const policies = join(directory, 'policies');
-    const storage = spyOn(Storage, 'getUserPoliciesDir').mockReturnValue(
-      policies,
-    );
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    let entered!: () => void;
-    const admitted = new Promise<void>((resolve) => {
-      entered = resolve;
-    });
-    const rename = fs.rename;
-    const saving = spyOn(fs, 'rename').mockImplementation(async (from, to) => {
-      if (to === join(policies, 'auto-saved.toml')) {
-        entered();
-        await gate;
-      }
-      await rename(from, to);
-    });
-    let agent: Agent | undefined;
-    let approval: Promise<void> | undefined;
-    let disposal: Promise<void> | undefined;
-    try {
-      expect(Array.from(await built.mcpRuntime.awaitDiscovery())).toStrictEqual(
-        [],
-      );
-      built.mcpRuntime.policyOwner.session.confirmation.removeRulesBySource(
-        CONFIRMATION_FORCING_SOURCE,
-      );
-      agent = await fromConfig({
-        settingsOwner: built.settingsOwner,
-        settingsService: built.settingsService,
-        agentClient: built.agentClient,
-        providerManager: built.providerManager,
-        runtimeFactoryBindings: built.runtimeFactoryBindings,
-        config: built.config,
-        mcpRuntime: built.mcpRuntime,
-        mcpOwnership: 'caller',
-        messageBus: built.messageBus,
-      });
-      const details = await tool(agent, server, 'increment')
-        .build({})
-        .shouldConfirmExecute(new AbortController().signal);
-      approval = confirm(details, ToolConfirmationOutcome.ProceedAlwaysAndSave);
-      await admitted;
-      expect(
-        built.mcpRuntime.policyOwner.session.decisions.evaluate(
-          `${server}__increment`,
-          {},
-          server,
-        ),
-      ).toBe(PolicyDecision.ALLOW);
-      let disposed = false;
-      disposal = built.mcpRuntime.dispose().then(() => {
-        disposed = true;
-      });
-      expect(() =>
-        built.mcpRuntime.policyOwner.session.decisions.evaluate(
-          `${server}__increment`,
-          {},
-          server,
-        ),
-      ).toThrow('Session policy is disposed');
-      await expect(
-        confirm(details, ToolConfirmationOutcome.ProceedAlwaysAndSave),
-      ).rejects.toThrow(/Tool dispatch admission is closed/);
-      expect(disposed).toBe(false);
-      release();
-      await approval;
-      await disposal;
-      expect(disposed).toBe(true);
-      expect(
-        await readFile(join(policies, 'auto-saved.toml'), 'utf8'),
-      ).toContain('toolName = "increment"');
-      expect(() =>
-        built.mcpRuntime.policyOwner.session.decisions.evaluate(
-          `${server}__increment`,
-          {},
-          server,
-        ),
-      ).toThrow('Session policy is disposed');
-    } finally {
-      release();
-      await Promise.allSettled([approval, disposal]);
-      saving.mockRestore();
-      storage.mockRestore();
-      await agent?.dispose();
-      await built.mcpRuntime.dispose();
-      await built.config.dispose();
-      await built.cleanup();
-      await rm(directory, { recursive: true, force: true });
-    }
-  });
-});
+function seedCallerSettings(config: Config, settings: SettingsService): void {
+  for (const [key, value] of Object.entries(config.getInitialSettings()))
+    settings.set(key, value);
+}
+
+function acquireCallerFileScopes(
+  release: AcquisitionRelease,
+  files: ProviderFileLifecycle,
+  runtimeId: string,
+  sessionId: string,
+): void {
+  for (const scope of [runtimeId, sessionId])
+    release.acquire('files', () => releaseAdoptedFileScope(files, scope));
+}
+
+async function callerWorkingDirectory(
+  directory: string | undefined,
+  fallback: string,
+): Promise<string> {
+  return directory === undefined ? fallback : realpath(directory);
+}
+
+function includeCallerCwd(
+  directories: readonly string[] | undefined,
+): string[] {
+  return [...(directories ?? []), process.cwd()];
+}

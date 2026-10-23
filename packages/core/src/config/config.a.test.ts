@@ -3,175 +3,37 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
-import { waitFor } from '@vybestack/llxprt-code-test-utils';
-import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
-import { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { Config } from './config.js';
 import { GitService } from '../services/gitService.js';
 import { WorkspaceCheckpointOwner } from '../services/workspace-checkpoint-owner.js';
+import { WorkspaceMcpCatalogOwner } from '../services/workspace-mcp-catalog-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { initializeTestConfig } from '../__tests__/config-test-helpers.js';
 import {
-  buildFsMockBody,
-  buildToolsMockBody,
-  buildContentGeneratorMockBody,
-  buildTelemetryMockBody,
-  buildGitServiceMockBody,
-  buildIdeIntegrationMockBody,
-  buildMemoryDiscoveryMockBody,
-  buildEventsMockBody,
-  buildFetchMockBody,
   createBaseParams,
-  resetAgentClientMock,
-  type HoistedConfigMocks,
+  buildGitServiceMockBody,
 } from './__tests__/configTestHarness.js';
-
-// Hoisted mocks referenced by mock factories below (vitest hoist-safe).
-const hoistedConfigMocks = {
-  loadJitSubdirectoryMemory: vi.fn(),
-  coreEvents: {
-    emitFeedback: vi.fn(),
-    emitModelChanged: vi.fn(),
-    emitConsoleLog: vi.fn(),
-  },
-  setGlobalProxy: vi.fn(),
-} as HoistedConfigMocks;
-
-const initializeShellParser = vi.fn(() => Promise.resolve(true));
-
-void vi.mock('../utils/shell-parser.js', () => ({
-  initializeParser: initializeShellParser,
-  isParserAvailable: () => true,
-  parseShellCommand: () => null,
-  extractCommandNames: () => [],
-  hasCommandSubstitution: () => false,
-  splitCommandsWithTree: () => [],
-  parseCommandDetails: () => null,
-  hasPromptCommandTransform: () => false,
-}));
-
-const __actual = { ...(await import('fs')) };
-void vi.mock('fs', () => buildFsMockBody(__actual));
-
-// Mock dependencies that might be called during Config construction or createServerConfig.
-const __actual2 = { ...(await import('@vybestack/llxprt-code-tools')) };
-void vi.mock('@vybestack/llxprt-code-tools', () =>
-  buildToolsMockBody(__actual2),
-);
-
-// Mock individual tools if their constructors are complex or have side effects
-
-const __actual3 = { ...(await import('../core/contentGenerator.js')) };
-void vi.mock('../core/contentGenerator.js', () =>
-  buildContentGeneratorMockBody(__actual3),
-);
-
-void vi.mock('../telemetry/index.js', () => buildTelemetryMockBody());
-
 void vi.mock('../services/gitService.js', () => buildGitServiceMockBody());
-
-const __actual4 = {
-  ...(await import('@vybestack/llxprt-code-ide-integration')),
-};
-void vi.mock('@vybestack/llxprt-code-ide-integration', () =>
-  buildIdeIntegrationMockBody(__actual4),
-);
-
-void vi.mock('../utils/memoryDiscovery.js', () =>
-  buildMemoryDiscoveryMockBody(hoistedConfigMocks),
-);
-
-const __actual5 = { ...(await import('../utils/events.js')) };
-void vi.mock('../utils/events.js', () =>
-  buildEventsMockBody(__actual5, hoistedConfigMocks),
-);
-
-void vi.mock('../utils/fetch.js', () => buildFetchMockBody(hoistedConfigMocks));
-
 describe('Server Config (config.ts)', () => {
+  const owners: Array<{ dispose(): void | Promise<void> }> = [];
   const baseParams = createBaseParams(new SettingsService());
-
-  beforeEach(() => {
-    resetAgentClientMock();
-    initializeShellParser.mockClear();
-    (
-      ToolRegistry as unknown as Mock<(...args: never[]) => unknown>
-    ).mockClear();
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(async () => {
+    const failures: unknown[] = [];
+    for (const owner of owners.splice(0).reverse()) {
+      try {
+        await owner.dispose();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length > 0)
+      throw new AggregateError(
+        failures,
+        'Workspace startup fixture cleanup failed',
+      );
   });
-
   describe('initialize', () => {
-    it('initializes the shell parser before creating the tool registry', async () => {
-      const parserInitialization = Promise.withResolvers<boolean>();
-      initializeShellParser.mockReturnValueOnce(parserInitialization.promise);
-      const config = new Config({
-        ...baseParams,
-        checkpointing: false,
-      });
-
-      const initialization = initializeTestConfig(config);
-      await waitFor(() => {
-        expect(initializeShellParser).toHaveBeenCalledOnce();
-      });
-
-      expect(ToolRegistry).not.toHaveBeenCalled();
-
-      parserInitialization.resolve(true);
-      await initialization;
-
-      expect(ToolRegistry).toHaveBeenCalledOnce();
-      expect(initializeShellParser.mock.invocationCallOrder[0]).toBeLessThan(
-        (ToolRegistry as unknown as Mock<(...args: never[]) => unknown>).mock
-          .invocationCallOrder[0],
-      );
-    });
-
-    it('waits for shared parser initialization across concurrent configs', async () => {
-      const parserInitialization = Promise.withResolvers<boolean>();
-      initializeShellParser
-        .mockReturnValueOnce(parserInitialization.promise)
-        .mockReturnValueOnce(parserInitialization.promise);
-      const firstConfig = new Config({
-        ...baseParams,
-        checkpointing: false,
-      });
-      const secondConfig = new Config({
-        ...baseParams,
-        checkpointing: false,
-      });
-
-      const initializations = [
-        initializeTestConfig(firstConfig),
-        initializeTestConfig(secondConfig),
-      ];
-      await waitFor(() => {
-        expect(initializeShellParser).toHaveBeenCalledTimes(2);
-      });
-
-      expect(initializeShellParser.mock.results[0].value).toBe(
-        initializeShellParser.mock.results[1].value,
-      );
-      expect(ToolRegistry).not.toHaveBeenCalled();
-
-      parserInitialization.resolve(true);
-      await Promise.all(initializations);
-
-      expect(ToolRegistry).toHaveBeenCalledTimes(2);
-    });
-
-    it('continues startup when the shell parser cannot load', async () => {
-      initializeShellParser.mockResolvedValueOnce(false);
-      const config = new Config({
-        ...baseParams,
-        checkpointing: false,
-      });
-
-      const runtime = await initializeTestConfig(config);
-      expect(runtime.messageBus).toBe(runtime.policyOwner.session.messageBus);
-
-      expect(ToolRegistry).toHaveBeenCalledOnce();
-    });
-
     it('should throw an error if checkpointing is enabled and GitService fails', async () => {
       const gitError = new Error('Git is not installed');
       vi.spyOn(GitService.prototype, 'initialize').mockRejectedValue(gitError);
@@ -186,47 +48,26 @@ describe('Server Config (config.ts)', () => {
         config.projectHistoryDir,
         config.getCheckpointingEnabled(),
       );
-      await expect(checkpoints.initialize()).rejects.toThrow(gitError);
-      await expect(checkpoints.dispose()).rejects.toThrow(gitError);
-    });
-
-    it('should not throw an error if checkpointing is disabled and GitService fails', async () => {
-      const gitError = new Error('Git is not installed');
-      vi.spyOn(GitService.prototype, 'initialize').mockRejectedValue(gitError);
-
-      const config = new Config({
-        ...baseParams,
-        checkpointing: false,
-      });
-
-      const runtime = await initializeTestConfig(config);
-      expect(runtime.messageBus).toBe(runtime.policyOwner.session.messageBus);
-    });
-
-    it('should throw an error if initialized more than once', async () => {
-      const config = new Config({
-        ...baseParams,
-        checkpointing: false,
-      });
-
-      const runtime = await initializeTestConfig(config);
-      expect(runtime.messageBus).toBe(runtime.policyOwner.session.messageBus);
-      expect(() => config.initialize()).toThrow(
-        'Config was already initialized',
-      );
+      const initialization = checkpoints.initialize();
+      const disposal = checkpoints.dispose();
+      await expect(initialization).rejects.toThrow(gitError);
+      await expect(disposal).rejects.toThrow(gitError);
     });
 
     it('returns an independently owned workspace catalog without storing registries on Config', async () => {
       const config = new Config({ ...baseParams, checkpointing: false });
-      const runtime = await initializeTestConfig(config);
-      runtime.catalogOwner.resourcePublication.setResourcesForServer(
-        'fixture',
-        [{ name: 'entry', uri: 'fixture:///entry' }],
+      const catalog = new WorkspaceMcpCatalogOwner(
+        () => true,
+        async () => {
+          throw new Error('No resource transport selected');
+        },
       );
+      owners.push(catalog);
+      catalog.resourcePublication.setResourcesForServer('fixture', [
+        { name: 'entry', uri: 'fixture:///entry' },
+      ]);
       expect(
-        runtime.catalogOwner.resourceSelection.findResource(
-          'fixture:fixture:///entry',
-        ),
+        catalog.resourceSelection.findResource('fixture:fixture:///entry'),
       ).toMatchObject({
         serverName: 'fixture',
         name: 'entry',
@@ -234,10 +75,10 @@ describe('Server Config (config.ts)', () => {
       });
       expect('getResourceRegistry' in config).toBe(false);
       expect('getPromptRegistry' in config).toBe(false);
-      await runtime.dispose();
-      expect(() =>
-        runtime.catalogOwner.resourceSelection.listResources(),
-      ).toThrow('stopped');
+      await catalog.dispose();
+      expect(() => catalog.resourceSelection.listResources()).toThrow(
+        'stopped',
+      );
     });
   });
 });

@@ -1,3 +1,4 @@
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 /**
  * @license
@@ -35,12 +36,22 @@ describe('MiddleOutStrategy core', () => {
 
   describe('interface contract', () => {
     it('has name "middle-out"', () => {
-      const strategy = new MiddleOutStrategy();
+      const strategy = new MiddleOutStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       expect(strategy.name).toBe('middle-out');
     });
 
     it('reports requiresLLM as true', () => {
-      const strategy = new MiddleOutStrategy();
+      const strategy = new MiddleOutStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       expect(strategy.requiresLLM).toBe(true);
     });
   });
@@ -53,7 +64,12 @@ describe('MiddleOutStrategy core', () => {
     it('produces correct top/middle/bottom counts for 20 messages with default thresholds', async () => {
       const history = generateHistory(20);
       const ctx = buildContext({ history });
-      const strategy = new MiddleOutStrategy();
+      const strategy = new MiddleOutStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
 
       const result = await strategy.compress(ctx);
 
@@ -71,7 +87,12 @@ describe('MiddleOutStrategy core', () => {
         topPreserveThreshold: 0.1,
         preserveThreshold: 0.3,
       });
-      const strategy = new MiddleOutStrategy();
+      const strategy = new MiddleOutStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
 
       const result = await strategy.compress(ctx);
 
@@ -118,7 +139,12 @@ describe('MiddleOutStrategy core', () => {
       ];
 
       const ctx = buildContext({ history });
-      const strategy = new MiddleOutStrategy();
+      const strategy = new MiddleOutStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       const result = await strategy.compress(ctx);
 
       const topMessages = result.newHistory.slice(
@@ -178,14 +204,26 @@ describe('MiddleOutStrategy core', () => {
         history,
         resolveProvider: () => ({
           invocation: captureProviderInvocation(
-            testProviderRuntime,
+            {
+              runtimeId: testProviderRuntime.runtimeId,
+              metadata: testProviderRuntime.metadata,
+              globalSettings: new SettingsService().getAllGlobalSettings(),
+              providerSettings: new SettingsService().getProviderSettings(
+                fakeProvider.name,
+              ),
+            },
             fakeProvider.name,
           ),
           provider: fakeProvider,
           runtime: testProviderRuntime,
         }),
       });
-      const strategy = new MiddleOutStrategy();
+      const strategy = new MiddleOutStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
 
       const result = await strategy.compress(ctx);
 
@@ -229,7 +267,12 @@ describe('MiddleOutStrategy core', () => {
         );
 
         const history = generateHistory(20);
-        const strategy = new MiddleOutStrategy();
+        const strategy = new MiddleOutStrategy(
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+        );
 
         const ctxWithProfile = buildContext({
           history,
@@ -238,7 +281,15 @@ describe('MiddleOutStrategy core', () => {
             if (profileName === 'compression-profile') {
               return {
                 invocation: captureProviderInvocation(
-                  testProviderRuntime,
+                  {
+                    runtimeId: testProviderRuntime.runtimeId,
+                    metadata: testProviderRuntime.metadata,
+                    globalSettings:
+                      new SettingsService().getAllGlobalSettings(),
+                    providerSettings: new SettingsService().getProviderSettings(
+                      profileProvider.name,
+                    ),
+                  },
                   profileProvider.name,
                 ),
                 provider: profileProvider,
@@ -247,7 +298,14 @@ describe('MiddleOutStrategy core', () => {
             }
             return {
               invocation: captureProviderInvocation(
-                testProviderRuntime,
+                {
+                  runtimeId: testProviderRuntime.runtimeId,
+                  metadata: testProviderRuntime.metadata,
+                  globalSettings: new SettingsService().getAllGlobalSettings(),
+                  providerSettings: new SettingsService().getProviderSettings(
+                    defaultProvider.name,
+                  ),
+                },
                 defaultProvider.name,
               ),
               provider: defaultProvider,
@@ -280,7 +338,14 @@ describe('MiddleOutStrategy core', () => {
           resolvedWithProfileName = profileName;
           return {
             invocation: captureProviderInvocation(
-              testProviderRuntime,
+              {
+                runtimeId: testProviderRuntime.runtimeId,
+                metadata: testProviderRuntime.metadata,
+                globalSettings: new SettingsService().getAllGlobalSettings(),
+                providerSettings: new SettingsService().getProviderSettings(
+                  defaultProvider.name,
+                ),
+              },
               defaultProvider.name,
             ),
             provider: defaultProvider,
@@ -289,7 +354,12 @@ describe('MiddleOutStrategy core', () => {
         },
       });
 
-      const strategy = new MiddleOutStrategy();
+      const strategy = new MiddleOutStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       const result = await strategy.compress(ctx);
 
       const topCount = result.metadata.topPreserved!;
@@ -311,7 +381,12 @@ describe('MiddleOutStrategy core', () => {
     it('produces newHistory of [...top, humanSummary, aiAck, ...bottom]', async () => {
       const history = generateHistory(20);
       const ctx = buildContext({ history });
-      const strategy = new MiddleOutStrategy();
+      const strategy = new MiddleOutStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
 
       const result = await strategy.compress(ctx);
 
@@ -345,7 +420,12 @@ describe('MiddleOutStrategy core', () => {
     it('AI acknowledgment message has the expected text', async () => {
       const history = generateHistory(20);
       const ctx = buildContext({ history });
-      const strategy = new MiddleOutStrategy();
+      const strategy = new MiddleOutStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
 
       const result = await strategy.compress(ctx);
       const topCount = result.metadata.topPreserved!;
@@ -368,7 +448,12 @@ describe('MiddleOutStrategy core', () => {
     it('populates all required metadata fields', async () => {
       const history = generateHistory(20);
       const ctx = buildContext({ history });
-      const strategy = new MiddleOutStrategy();
+      const strategy = new MiddleOutStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
 
       const result = await strategy.compress(ctx);
       const meta = result.metadata;
@@ -392,7 +477,12 @@ describe('MiddleOutStrategy core', () => {
     it('sets llmCallMade to true when compression occurs', async () => {
       const history = generateHistory(20);
       const ctx = buildContext({ history });
-      const strategy = new MiddleOutStrategy();
+      const strategy = new MiddleOutStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
 
       const result = await strategy.compress(ctx);
       expect(result.metadata.llmCallMade).toBe(true);

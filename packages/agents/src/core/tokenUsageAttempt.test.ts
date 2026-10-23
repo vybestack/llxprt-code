@@ -1,9 +1,9 @@
-import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
-import { afterEach as closeInvocationRoots } from 'bun:test';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { afterEach as closeInvocationRoots } from 'bun:test';
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 const retainedInvocationOwners: SessionSettingsOwner[] = [];
 
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -23,33 +23,33 @@ import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-provid
  * classifier so the behavior is end-to-end and faithful to production.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'bun:test';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-import * as os from 'node:os';
-import { ChatSession } from './chatSession.js';
-import type { StreamEvent } from './chatSession.js';
-import { TokenUsageLogger } from './TokenUsageLogger.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
+import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
+import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderRuntimeContext,
   type ProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
   createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
-import { createConfigParams } from './chatSession-runtime-helpers.js';
-import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
+import { createConfigParams } from './chatSession-runtime-helpers.js';
+import type { StreamEvent } from './chatSession.js';
+import { ChatSession } from './chatSession.js';
+import { TokenUsageLogger } from './TokenUsageLogger.js';
 
 function makeTempLogPath(): string {
   return path.join(
@@ -94,15 +94,13 @@ describe('Issue #3130 slice 3b — attempt-level token-usage records', () => {
     settingsService.set('providers.stub.model', 'stub-model');
 
     providerRuntime = createProviderRuntimeContext({
-      settingsService,
-      config,
       runtimeId: 'test.runtime',
       metadata: { source: 'tokenUsageAttempt.test' },
     });
 
     manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    configureProviderRuntimeFactories(config, manager);
+    configureProviderTokenizer(manager);
   });
 
   function buildChatSession(
@@ -148,6 +146,13 @@ describe('Issue #3130 slice 3b — attempt-level token-usage records', () => {
 
     const chat = new ChatSession(
       view,
+      config,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       {} as unknown as ContentGenerator,
       {},
       [],

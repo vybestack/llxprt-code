@@ -5,7 +5,10 @@
  */
 
 import React from 'react';
-import type { MessageBus } from '@vybestack/llxprt-code-core';
+import type {
+  AgentAuthControl,
+  AgentHookControl,
+} from '@vybestack/llxprt-code-agents';
 import { Box, type DOMElement, Static, Text } from 'ink';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { UpdateObject } from '../utils/updateCheck.js';
@@ -35,13 +38,29 @@ import {
   DialogRegion,
   PanelsRegion,
 } from './DefaultAppLayoutRegions.js';
-import type { SlashCommandRuntime, UiRuntime } from '../cliUiRuntime.js';
+import type { SlashCommandRuntime } from '../cliUiRuntime.js';
 import type { HistoryItem, HistoryItemWithoutId } from '../types.js';
 import { themeManager } from '../themes/theme-manager.js';
 
 export interface DefaultAppLayoutProps {
-  runtimeMessageBus?: MessageBus;
-  uiRuntime: UiRuntime;
+  readIdeMode: () => boolean;
+  readIdeDiffingEnabled: () => boolean | null;
+  subscribeIdeDiffing: (listener: () => void) => () => void;
+  resolveIdeDiff: (
+    filePath: string,
+    outcome: 'accepted' | 'rejected',
+  ) => Promise<void>;
+  readIdeWorkspaceTrust: () => boolean | undefined;
+  subscribeIdeWorkspaceTrust: (
+    listener: (trusted: boolean | undefined) => void,
+  ) => () => void;
+
+  subscribeBucketConsent?: AgentAuthControl['subscribeBucketConsent'];
+  respondToBucketConsent?: AgentAuthControl['respondToBucketConsent'];
+  subscribeHookPhase?: AgentHookControl['subscribeExecutionPhase'];
+  screenReaderEnabled: boolean;
+  disableLoadingPhrases: boolean;
+  debugMode: boolean;
   slashCommandRuntime: SlashCommandRuntime;
   settings: LoadedSettings;
   startupWarnings: string[];
@@ -57,7 +76,7 @@ export interface DefaultAppLayoutProps {
 function usesAlternateBuffer(props: DefaultAppLayoutProps): boolean {
   return (
     props.settings.merged.ui.useAlternateBuffer === true &&
-    !props.uiRuntime.app.getScreenReader()
+    !props.screenReaderEnabled
   );
 }
 
@@ -102,6 +121,10 @@ function QuittingRegion(props: DefaultAppLayoutProps) {
       effectiveAvailableHeight={height}
       constrainHeight={constrain}
       config={props.slashCommandRuntime}
+      readIdeMode={props.readIdeMode}
+      readIdeDiffingEnabled={props.readIdeDiffingEnabled}
+      subscribeIdeDiffing={props.subscribeIdeDiffing}
+      resolveIdeDiff={props.resolveIdeDiff}
       slashCommands={slashCommands}
       showTodoPanelSetting={props.settings.merged.ui.showTodoPanel ?? true}
     />
@@ -250,6 +273,10 @@ function AlternateTranscript(props: TranscriptProps) {
     slashCommands,
   } = useTranscriptGeometry();
   const content = useScrollableContent(
+    props.readIdeMode,
+    props.readIdeDiffingEnabled,
+    props.subscribeIdeDiffing,
+    props.resolveIdeDiff,
     props.slashCommandRuntime,
     props.settings,
     props.version,
@@ -282,6 +309,10 @@ function TranscriptViewport(props: TranscriptProps) {
   const pending = usePendingElement(
     props.pendingHistoryItems,
     props.pendingHistoryItemRef,
+    props.readIdeMode,
+    props.readIdeDiffingEnabled,
+    props.subscribeIdeDiffing,
+    props.resolveIdeDiff,
     props.slashCommandRuntime,
     mainAreaWidth,
     constrainHeight,
@@ -353,12 +384,9 @@ function StandardStatic(props: TranscriptProps) {
   const items: React.ReactElement[] = [];
   if (replay && process.env.LLXPRT_CODE_SUPPRESS_STATIC_HEADER !== 'true') {
     items.push(
-      <AppHeader
+      <StaticHeader
         key="header"
-        config={props.slashCommandRuntime}
-        settings={props.settings}
-        version={props.version}
-        nightly={props.nightly}
+        props={props}
         terminalWidth={geometry.terminalWidth}
       />,
     );
@@ -381,6 +409,10 @@ function StandardStatic(props: TranscriptProps) {
         item={item}
         isPending={false}
         config={props.slashCommandRuntime}
+        readIdeMode={props.readIdeMode}
+        readIdeDiffingEnabled={props.readIdeDiffingEnabled}
+        subscribeIdeDiffing={props.subscribeIdeDiffing}
+        resolveIdeDiff={props.resolveIdeDiff}
         terminalWidth={geometry.mainAreaWidth}
         availableTerminalHeight={Math.max(geometry.terminalHeight * 4, 100)}
         slashCommands={settings.store.getState().slashCommands}
@@ -420,6 +452,24 @@ function TranscriptScroll({ data }: { data: ScrollableMainContentItem[] }) {
       estimatedItemHeight={estimateScrollableMainContentItemHeight}
       initialScrollIndex={SCROLL_TO_ITEM_END}
       initialScrollOffsetInIndex={SCROLL_TO_ITEM_END}
+    />
+  );
+}
+
+function StaticHeader({
+  props: { slashCommandRuntime, settings, version, nightly },
+  terminalWidth,
+}: {
+  props: TranscriptProps;
+  terminalWidth: number;
+}): React.ReactNode {
+  return (
+    <AppHeader
+      config={slashCommandRuntime}
+      settings={settings}
+      version={version}
+      nightly={nightly}
+      terminalWidth={terminalWidth}
     />
   );
 }

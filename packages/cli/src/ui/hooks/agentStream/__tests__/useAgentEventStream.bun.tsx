@@ -28,6 +28,7 @@ import type { AgentEvent, Agent } from '@vybestack/llxprt-code-agents';
 import type { AgentEventRouter } from '../useAgentEventStream.js';
 import { useAgentEventStream } from '../useAgentEventStream.js';
 import { createFakeAgent } from './helpers/createFakeAgent.js';
+import { agentStreamOperations } from './helpers/agentStreamOperations.js';
 
 function setupHook(agent: Agent) {
   const routedEvents: AgentEvent[] = [];
@@ -45,9 +46,10 @@ function setupHook(agent: Agent) {
   const onEditorOpen = vi.fn();
   const onEditorClose = vi.fn();
 
+  const operations = agentStreamOperations(agent);
   const { result, unmount } = renderHook(() =>
     useAgentEventStream({
-      agent,
+      ...operations,
       addItem,
       processAgentEventRef,
       flushPendingHistoryItem,
@@ -129,9 +131,10 @@ describe('useAgentEventStream', () => {
     };
 
     const routed: AgentEvent[] = [];
+    const operations = agentStreamOperations(agent);
     const { result, unmount } = renderHook(() =>
       useAgentEventStream({
-        agent,
+        ...operations,
         addItem: vi.fn(),
         processAgentEventRef: {
           current: (e: AgentEvent, _ts: number) => routed.push(e),
@@ -184,9 +187,10 @@ describe('useAgentEventStream', () => {
     };
 
     const routed: AgentEvent[] = [];
+    const operations = agentStreamOperations(agent);
     const { result, unmount } = renderHook(() =>
       useAgentEventStream({
-        agent,
+        ...operations,
         addItem: vi.fn(),
         processAgentEventRef: {
           current: (e: AgentEvent, _ts: number) => routed.push(e),
@@ -244,9 +248,10 @@ describe('useAgentEventStream', () => {
     agent.tools.setEditorCallbacks = setEditorCallbacksSpy;
 
     const onToolCallsUpdate = vi.fn();
+    const operations = agentStreamOperations(agent);
     const { unmount } = renderHook(() =>
       useAgentEventStream({
-        agent,
+        ...operations,
         addItem: vi.fn(),
         processAgentEventRef: {
           current: null,

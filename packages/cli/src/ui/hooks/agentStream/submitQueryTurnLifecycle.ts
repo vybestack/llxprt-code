@@ -175,7 +175,9 @@ function handleProviderError(
     handleSubmissionError(
       error,
       cbd.addItem,
-      cbd.runtime,
+      cbd.getProvider,
+      cbd.readSelectedProvider,
+      cbd.getModel,
       cbd.onAuthError,
       turn.userMessageTimestamp,
     );
@@ -257,10 +259,12 @@ async function prepareAndCheckProceed(
   try {
     await prepareTurnForQuery(
       false,
-      cbd.runtime,
+      cbd.resetBuckets,
       cbd.startNewPrompt,
       cbd.setThought,
       cbd.thinkingBlocksRef,
+      cbd.resetBucketSession,
+      cbd.ensureBucketsAuthenticated,
     );
   } catch (prepError) {
     if (isCancellation(prepError, turn.abortSignal)) {
@@ -321,18 +325,6 @@ async function executeStream(
     handleLoopDetectedEvent();
   }
   return outcome;
-}
-
-async function flushTurnRecording(cbd: SubmitQueryCallbackDeps): Promise<void> {
-  if (cbd.recordingOwner === 'agent') {
-    await cbd.agent.session.flushRecording();
-    return;
-  }
-  try {
-    await cbd.recordingIntegration?.flushAtTurnBoundary();
-  } catch {
-    /* non-fatal */
-  }
 }
 
 async function finaliseStreamOutcome(
@@ -405,7 +397,7 @@ async function streamAndFinalise(
       cbd.setIsResponding(false);
     }
     if (isCurrentTurn(cbd, turn.abortSignal)) {
-      await flushTurnRecording(cbd);
+      await cbd.flushRecording();
     }
   }
 }

@@ -1,3 +1,5 @@
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
+import { scopeInputs } from '../../core/__tests__/subagent-test-helpers.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -26,7 +28,9 @@ import type { Agent } from '../agent.js';
 import { createRuntimeTokenizerFactory } from '@vybestack/llxprt-code-providers/composition/runtimeTokenizerFactory.js';
 import { ProviderContentGenerator } from '@vybestack/llxprt-code-providers';
 import { ContextState } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import { fromConfig } from '../fromConfig.js';
+import { AgentResourceCapture } from './helpers/agent-resource-capture.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+
 import { toConfigParameters } from '../agentConfig.adapter.js';
 
 import { resolveRepositoryFixture } from './helpers/fixtureRoot.js';
@@ -125,6 +129,8 @@ describe('MCP instruction ownership', () => {
       config: Config;
       mcp: McpRuntimeOwner;
       agent: Agent;
+      client: AgentClientContract;
+      capture: AgentResourceCapture;
       instructionPath: string;
       tokenizerFactory: RuntimeTokenizerFactory;
     }
@@ -165,23 +171,36 @@ describe('MCP instruction ownership', () => {
       );
       const settingsRoot = createSessionSettingsFixture(config);
       const tokenizerFactory = createRuntimeTokenizerFactory();
-      const agent = await fromConfig({
+      const capture = new AgentResourceCapture();
+      const agent = await fromConfig(
+        config,
+        settingsRoot.settingsService,
+        {
+          sessionId: 'same-instruction-session',
+          activation: {
+            provider: 'openai',
+            model: 'instruction-model',
+            cliOverrides: { key: 'local-only', baseUrl: endpoint.url },
+          },
+        },
+        settingsRoot.settingsOwner,
+        undefined,
+        undefined,
+        undefined,
+        mcp,
+        undefined,
+        undefined,
+        undefined,
         tokenizerFactory,
-        contentGeneratorFactory: {
+        {
           createContentGenerator: () =>
             auxiliaryTransport ?? new ProviderContentGenerator(),
         },
-        settingsOwner: settingsRoot.settingsOwner,
-        settingsService: settingsRoot.settingsService,
-        config,
-        mcpRuntime: mcp,
-        sessionId: 'same-instruction-session',
-        activation: {
-          provider: 'openai',
-          model: 'instruction-model',
-          cliOverrides: { key: 'local-only', baseUrl: endpoint.url },
-        },
-      });
+        capture.factories(undefined),
+      );
+      const client = capture.clients.slice(-1).values().next().value;
+      if (client === undefined)
+        throw new Error('MCP fixture did not acquire a client');
 
       Object.defineProperty(config, 'getMcpInstructions', {
         value: () => {
@@ -193,6 +212,8 @@ describe('MCP instruction ownership', () => {
         config,
         mcp,
         agent,
+        client,
+        capture,
         instructionPath,
         tokenizerFactory,
       };
@@ -246,7 +267,7 @@ describe('MCP instruction ownership', () => {
         model: 'instruction-model',
       });
       const runtimeBundle = await loadAgentRuntime({
-        mediaStore: requireMediaStore(candidate.agent.agentClient),
+        mediaStore: requireMediaStore(candidate.client),
         profile: {
           config,
           telemetry: candidate.settingsOwner.telemetry,
@@ -265,14 +286,11 @@ describe('MCP instruction ownership', () => {
               config.getExcludeTools() ?? [],
             ),
           providerRuntime: createProviderRuntimeContext({
-            config,
-            settingsService: candidate.settingsService,
             runtimeId: state.runtimeId,
           }),
-          contentGeneratorConfig:
-            candidate.agent.agentClient.getContentGeneratorConfig(),
-          toolRegistry: candidate.agent.agentClient.tools,
-          providerManager: candidate.agent.providerManager,
+          contentGeneratorConfig: candidate.client.getContentGeneratorConfig(),
+          toolRegistry: candidate.client.tools,
+          providerManager: candidate.capture.manager,
         },
       });
       const scope = await SubAgentScope.create(
@@ -283,19 +301,19 @@ describe('MCP instruction ownership', () => {
         { max_turns: 1, max_time_minutes: 1 },
         undefined,
         undefined,
-        {
+        ...scopeInputs({
           instructions: emptyInstructionReads,
           workspacePaths: candidate.mcp.workspacePaths,
           runtimeBundle,
           messageBus: candidate.mcp.messageBus,
           readMcpInstructions: candidate.mcp.readInstructions,
           environmentContextLoader: async () => [],
-        },
+        }),
       );
       try {
         await scope.runNonInteractive(new ContextState());
       } finally {
-        scope.dispose();
+        await scope.dispose();
       }
     }
     try {
@@ -303,7 +321,7 @@ describe('MCP instruction ownership', () => {
       const b = await owner('B');
       expect(a.agent.getRuntimeId()).toBe(b.agent.getRuntimeId());
       expect(a.mcp.messageBus).not.toBe(b.mcp.messageBus);
-      expect(a.agent.agentClient.tools).not.toBe(b.agent.agentClient.tools);
+      expect(a.client.tools).not.toBe(b.client.tools);
       await observed(
         () => turn(a),
         'INSTRUCTION_OWNER_A',
@@ -316,7 +334,7 @@ describe('MCP instruction ownership', () => {
       );
       await observed(
         () =>
-          a.agent.agentClient.generateDirectMessage(
+          a.client.generateDirectMessage(
             { message: 'Direct request.' },
             'same-direct',
           ),
@@ -358,6 +376,7 @@ describe('MCP instruction ownership', () => {
       };
       for (const candidate of [a, b]) {
         await candidate.agent.sessionClient.refreshAuth();
+        candidate.client = candidate.capture.publishedClient(candidate.agent);
       }
       await observed(
         () => a.agent.generateJson(messages, { type: 'object' }),
@@ -366,12 +385,7 @@ describe('MCP instruction ownership', () => {
       );
       await observed(
         () =>
-          b.agent.agentClient.generateContent(
-            messages,
-            {},
-            signal,
-            'instruction-model',
-          ),
+          b.client.generateContent(messages, {}, signal, 'instruction-model'),
         'INSTRUCTION_OWNER_B',
         'INSTRUCTION_OWNER_A',
       );

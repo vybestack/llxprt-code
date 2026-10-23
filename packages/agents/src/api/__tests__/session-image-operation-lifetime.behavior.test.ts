@@ -1,3 +1,4 @@
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -24,7 +25,7 @@ import { runImageOperation } from '@vybestack/llxprt-code-core/services/image/im
 import { validatePngStructure } from '@vybestack/llxprt-code-core/services/image/ImageGenerationService.js';
 import { CodexImageBackend } from '@vybestack/llxprt-code-providers/openai/codexImageBackend.js';
 import { createAgent } from '../createAgent.js';
-import { fromConfig } from '../fromConfig.js';
+
 import type { ImageOperationRunner } from '@vybestack/llxprt-code-core/services/image/imageCapability.js';
 import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import {
@@ -179,13 +180,38 @@ async function withImageSession(
       workspaceRoot: directory,
       resolveBackend: () => wire.backend,
     });
-  const agent = await fromConfig({
+  const agent = await fromConfig(
     config,
-    settingsService: new SettingsService(),
-    sessionId: 'same-image-label',
-    activation: { authMode: 'none' },
-    imageOperation: { run: runner },
-  });
+    new SettingsService(),
+    { sessionId: 'same-image-label', activation: { authMode: 'none' } },
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    { run: runner },
+  );
   try {
     await run({ config, directory, wire, agent, runner });
   } finally {
@@ -215,7 +241,7 @@ describe('image operation authority and session lifetime', () => {
           outputPath: 'closed.png',
           prompt: 'local protocol fixture',
         }),
-      ).rejects.toThrow('abort');
+      ).rejects.toThrow('Session client owner is disposed');
       expect(wire.requests()).toBe(0);
       expect(await readdir(directory)).not.toContain('closed.png');
     });
@@ -262,13 +288,38 @@ describe('public image ownership and wire protocol', () => {
       await withImageSession(
         false,
         async ({ config, runner, agent, directory, wire }) => {
-          const peer = await fromConfig({
+          const peer = await fromConfig(
             config,
-            settingsService: new SettingsService(),
-            sessionId: 'same-image-label',
-            activation: { authMode: 'none' },
-            imageOperation: { run: runner },
-          });
+            new SettingsService(),
+            { sessionId: 'same-image-label', activation: { authMode: 'none' } },
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            { run: runner },
+          );
           try {
             const closing = order === 'first' ? agent : peer;
             const surviving = order === 'first' ? peer : agent;
@@ -382,19 +433,44 @@ describe('selected image operation roots', () => {
       async ({ config, agent, directory, wire }) => {
         const other = await imageWire(false);
         const peerDirectory = await mkdtemp(join(directory, 'peer-'));
-        const peer = await fromConfig({
+        const peer = await fromConfig(
           config,
-          settingsService: new SettingsService(),
-          sessionId: 'same-image-label',
-          activation: { authMode: 'none' },
-          imageOperation: {
+          new SettingsService(),
+          { sessionId: 'same-image-label', activation: { authMode: 'none' } },
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          {
             run: (input) =>
               runImageOperation(input, {
                 workspaceRoot: peerDirectory,
                 resolveBackend: () => other.backend,
               }),
           },
-        });
+        );
         try {
           await agent.sessionClient.runImageOperation({
             prompt: 'first endpoint',
@@ -454,16 +530,42 @@ describe('selected image operation roots', () => {
   it('releases a transferred physical resource once after normal facade teardown', async () => {
     await withImageSession(false, async ({ config, runner, directory }) => {
       const file = await open(join(directory, 'owned-lifetime'), 'w');
-      const peer = await fromConfig({
+      const peer = await fromConfig(
         config,
-        settingsService: new SettingsService(),
-        activation: { authMode: 'none' },
-        imageOperation: {
+        new SettingsService(),
+        { activation: { authMode: 'none' } },
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
           run: runner,
           ownership: 'agent',
           dispose: () => file.close(),
         },
-      });
+      );
       try {
         await peer.sessionClient.runImageOperation({
           prompt: 'owned image',
@@ -508,16 +610,20 @@ describe('default root image composition', () => {
       );
       const selectedSettings = new SettingsService();
       selectedSettings.setProviderSetting('openai', 'base-url', wire.endpoint);
-      const peer = await fromConfig({
+      const peer = await fromConfig(
         config,
-        settingsService: selectedSettings,
-        oauthManager: oauth,
-        activation: {
-          provider: 'openai',
-          authMode: 'none',
-          cliOverrides: { baseUrl: wire.endpoint },
+        selectedSettings,
+        {
+          activation: {
+            provider: 'openai',
+            authMode: 'none',
+            cliOverrides: { baseUrl: wire.endpoint },
+          },
         },
-      });
+        undefined,
+        undefined,
+        oauth,
+      );
       try {
         await peer.sessionClient.runImageOperation({
           prompt: 'root endpoint protocol',

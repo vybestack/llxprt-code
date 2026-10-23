@@ -90,6 +90,7 @@ export async function projectNextSubProfilePromptEnvelope(input: {
   const authenticatedSubProfile = await resolveMemberAuthentication(
     subProfile,
     projectionLogger,
+    input.providerManager.peekProviderKeyStorage(),
   );
   const resolvedOptions = input.buildDelegateResolvedOptions(
     authenticatedSubProfile,

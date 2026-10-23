@@ -1,44 +1,108 @@
+import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
+import { AgentResourceCapture } from '../../agents/src/api/__tests__/helpers/agent-resource-capture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from '../../agents/src/api/__tests__/helpers/session-client-capture.js';
+import { internalConfig } from '../../agents/src/api/__tests__/helpers/agentHarness.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import {
+  Config,
+  ConfigParameters,
+} from '@vybestack/llxprt-code-core/config/config.js';
+import {
+  SettingsService,
+  ProfileManager,
+} from '@vybestack/llxprt-code-settings';
+import { McpRuntimeOwner } from '../../agents/src/api/mcpRuntimeAssembly.js';
+import { toConfigParameters } from '../../agents/src/api/agentConfig.adapter.js';
+import { mkdtemp, realpath, rm, mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
+import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import { useOwnedCredentials } from '../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import {
+  acquirePreferredProviderManager,
+  acquirePreferredOAuth,
+  preparePreferredProviderCompletion,
+} from '../../agents/src/api/preferred-provider-acquisition.js';
+import { releaseAdoptedFileScope } from '../../agents/src/api/adoption-release.js';
+import { randomUUID } from 'node:crypto';
+import {
+  runCleanupSteps,
+  cleanupAfterFailure,
+} from '../../agents/src/core/subagent-cleanup.js';
+import { SessionClientOwner } from '../../agents/src/session/session-client-owner.js';
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
+import {
+  beforeAll,
+  afterAll,
+  describe,
+  expect,
+  it,
+  afterEach,
+  beforeEach,
+  vi,
+} from 'bun:test';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { fileURLToPath } from 'node:url';
+import { buildTestMcpRuntime } from '../../agents/src/api/__tests__/helpers/mcp-owner-fixture.js';
+import {
+  createAgentRuntimeFactoryBindings,
+  AgentRuntimeFactoryBindings,
+} from '../../agents/src/api/runtimeFactories.js';
+import { injectConfirmationForcingPolicy } from '../../agents/src/api/confirmationForcing.js';
+import { executeProviderActivation } from '../../agents/src/api/providerActivationExecutor.js';
+import { assembleProviderSwitch } from '../../agents/src/api/providerSwitchAssembly.js';
+import { assembleModelSelection } from '../../agents/src/api/model-selection.js';
+import {
+  AgentConfig,
+  ProviderActivationIntent,
+} from '../../agents/src/api/config-types.js';
+import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
+import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
+import { CredentialAuthority } from '../../providers/src/auth/proxy/credential-store-factory.js';
+import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import {
+  captureZedHostInputs,
+  captureZedSessionParameters,
+} from './zed-session-agent.js';
+import { unusedProfileApplication } from './test-profile-application.js';
+import {
+  ZedAgent as ZedAgentType,
+  parseZedAuthMethodId,
+} from './zedIntegration.js';
+import { installZedDefinitionFixture } from './__tests__/definition-fixture.js';
+import { ApprovalMode } from '@vybestack/llxprt-code-core';
+import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
+import { MCP_SESSION_APPROVAL_SOURCE } from '@vybestack/llxprt-code-core/policy/mcp-approval.js';
+
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
-import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
-import { captureZedHostInputs } from './zed-session-agent.js';
 const createFilesystem = installTestWorkspaceFilesystem();
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 
-import { ProviderManager } from '@vybestack/llxprt-code-providers';
-import { unusedProfileApplication } from './test-profile-application.js';
-
-import type { ZedAgent as ZedAgentType } from './zedIntegration.js';
-
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
-import { mkdtemp, rm, mkdir } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { installZedDefinitionFixture } from './__tests__/definition-fixture.js';
 const definitionFixture = installZedDefinitionFixture();
-import { ProfileManager } from '@vybestack/llxprt-code-settings';
-import { createZedSessionConfig } from './zed-session-agent.js';
-import {
-  buildCliStyleConfig,
-  type BuiltCliConfig,
-} from '../../agents/src/api/__tests__/helpers/buildCliStyleConfig.js';
-import { parseZedAuthMethodId } from './zedIntegration.js';
-import { ApprovalMode, Config } from '@vybestack/llxprt-code-core';
-import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
-import { MCP_SESSION_APPROVAL_SOURCE } from '@vybestack/llxprt-code-core/policy/mcp-approval.js';
 
-const mockFromConfig = vi.fn();
+const mockCreateAgent = vi.fn();
 
 const actual = { ...(await import('@vybestack/llxprt-code-agents')) };
 void vi.mock('@vybestack/llxprt-code-agents', () => ({
   ...actual,
-  fromConfig: (...args: unknown[]) => mockFromConfig(...args),
+  createAgentFromSettingsSnapshot: (
+    ...args: Parameters<typeof actual.createAgentFromSettingsSnapshot>
+  ) => mockCreateAgent(...args),
 }));
 
 describe('zedIntegration auth method validation', () => {
@@ -108,11 +172,13 @@ describe('Zed session composition', () => {
       decision: PolicyDecision.ALLOW,
       source: MCP_SESSION_APPROVAL_SOURCE,
     });
-    const first = createZedSessionConfig(
-      base,
-      'first-session',
-      join(projectRoot, 'first'),
-      captureZedHostInputs(base),
+    const first = new Config(
+      captureZedSessionParameters(
+        base,
+        'first-session',
+        join(projectRoot, 'first'),
+        captureZedHostInputs(base),
+      ),
     );
     const firstRoot = createFilesystem({
       targetDir: first.getTargetDir(),
@@ -125,11 +191,13 @@ describe('Zed session composition', () => {
       baseSettings.exportForStateSnapshot(),
     );
     baseSettings.set('fixture-marker', 'after');
-    const second = createZedSessionConfig(
-      base,
-      'second-session',
-      join(projectRoot, 'second'),
-      captureZedHostInputs(base),
+    const second = new Config(
+      captureZedSessionParameters(
+        base,
+        'second-session',
+        join(projectRoot, 'second'),
+        captureZedHostInputs(base),
+      ),
     );
     const secondRoot = createFilesystem({
       targetDir: second.getTargetDir(),
@@ -188,44 +256,34 @@ describe('ZedAgent.newSession', () => {
     await rm(projectRoot, { recursive: true, force: true });
   });
   afterEach(() => {
-    mockFromConfig.mockImplementation(actual.fromConfig);
+    mockCreateAgent.mockImplementation(actual.createAgentFromSettingsSnapshot);
   });
 
   it('creates independent Agent sessions with session-scoped configs', async () => {
     const capturedConfigs: Config[] = [];
-    const capturedManagers: ProviderManager[] = [];
-    const capturedOptions: Array<{
-      config: Config;
-      settingsService: SettingsService;
-      sessionId?: string;
-      filesystemOwner: WorkspaceFilesystemOwner;
-    }> = [];
-    mockFromConfig.mockImplementation(
-      async (options: {
-        config: Config;
-        settingsService: SettingsService;
-        sessionId?: string;
-        filesystemOwner: WorkspaceFilesystemOwner;
-      }) => {
-        capturedOptions.push(options);
-        capturedConfigs.push(options.config);
-        const providerManager = new ProviderManager({
-          config: options.config,
-          settingsService: options.settingsService,
-        });
-        capturedManagers.push(providerManager);
-        return {
-          providerManager,
-          getApprovalMode: () => 'default',
-          setApprovalMode: vi.fn(),
-          dispose: vi.fn().mockResolvedValue(undefined),
-          async *stream() {},
-          session: {
-            getRecordingTitle: () => undefined,
-            recordRecordingTitle: async () => undefined,
-          },
-          tools: { respondToConfirmation: vi.fn() },
-        };
+    const capturedManagers: RuntimeProviderManager[] = [];
+    const capturedAgents: Agent[] = [];
+    mockCreateAgent.mockImplementation(
+      async (
+        ...args: Parameters<typeof actual.createAgentFromSettingsSnapshot>
+      ) => {
+        const capture = new AgentResourceCapture();
+        const agent = await capture.construct(() =>
+          actual.createAgentFromSettingsSnapshot(
+            {
+              ...args[0],
+              runtimeFactoryBindings: capture.factories(
+                args[0].runtimeFactoryBindings,
+              ),
+            },
+            args[1],
+          ),
+        );
+        capture.bindAgent(agent);
+        capturedAgents.push(agent);
+        capturedConfigs.push(internalConfig(agent));
+        capturedManagers.push(capture.manager);
+        return agent;
       },
     );
     const baseConfig = new Config({
@@ -233,6 +291,7 @@ describe('ZedAgent.newSession', () => {
       targetDir: projectRoot,
       cwd: projectRoot,
       model: 'test-model',
+      provider: 'openai',
       debugMode: false,
     });
     const settingsService = new SettingsService();
@@ -248,13 +307,11 @@ describe('ZedAgent.newSession', () => {
       baseConfig,
       connection as never,
       unusedProfileApplication,
-      new ProviderManager({
-        config: baseConfig,
-        settingsService,
-      }),
       () => new SettingsService({ sessionSource: settingsService }),
       undefined,
       definitionFixture(),
+      undefined,
+      { credentialAuthority: new CredentialAuthority() },
     );
 
     await zedAgent.initialize({
@@ -269,10 +326,12 @@ describe('ZedAgent.newSession', () => {
     const secondSession = await zedAgent.newSession({
       cwd: join(projectRoot, 'second'),
     } as never);
-    expect(capturedOptions).toHaveLength(2);
-    expect(capturedOptions[0].sessionId).toBe(firstSession.sessionId);
-    expect(capturedOptions[1].sessionId).toBe(secondSession.sessionId);
-    expect(capturedOptions[0].sessionId).not.toBe(capturedOptions[1].sessionId);
+    expect(capturedAgents).toHaveLength(2);
+    expect(capturedConfigs[0].getSessionId()).toBe(firstSession.sessionId);
+    expect(capturedConfigs[1].getSessionId()).toBe(secondSession.sessionId);
+    expect(capturedConfigs[0].getSessionId()).not.toBe(
+      capturedConfigs[1].getSessionId(),
+    );
     expect('providerManager' in capturedConfigs[0]).toBe(false);
     expect('providerManager' in capturedConfigs[1]).toBe(false);
 
@@ -282,20 +341,18 @@ describe('ZedAgent.newSession', () => {
     expect(capturedConfigs[1].getTargetDir()).toBe(join(projectRoot, 'second'));
     expect(capturedManagers).toHaveLength(2);
     expect(capturedManagers[0]).not.toBe(capturedManagers[1]);
-    capturedOptions[0].settingsService.set('activeProvider', 'session-first');
-    expect(capturedManagers[0].getActiveProviderName()).toBe('session-first');
-    expect(capturedManagers[1].getActiveProviderName()).not.toBe(
-      'session-first',
-    );
-    expect(capturedOptions[0].config).not.toBe(capturedOptions[1].config);
+    await capturedAgents[0].setProvider('anthropic', 'session-first-model');
+    expect(capturedManagers[0].getActiveProviderName()).toBe('anthropic');
+    expect(capturedManagers[1].getActiveProviderName()).not.toBe('anthropic');
+    expect(capturedConfigs[0]).not.toBe(capturedConfigs[1]);
     expect('providerManager' in baseConfig).toBe(false);
     expect(
-      await capturedOptions[0].filesystemOwner.files.readTextFile(
+      await capturedAgents[0].workspace.readTextFile(
         join(projectRoot, 'first', 'x'),
       ),
     ).toBe('client');
     expect(
-      await capturedOptions[1].filesystemOwner.files.readTextFile(
+      await capturedAgents[1].workspace.readTextFile(
         join(projectRoot, 'second', 'x'),
       ),
     ).toBe('client');
@@ -308,17 +365,241 @@ describe('ZedAgent.newSession', () => {
 });
 
 describe('ZedAgent.authenticate credential cache', () => {
-  let built: BuiltCliConfig;
+  let promptDirectory: string;
+  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+  beforeAll(async () => {
+    promptDirectory = await mkdtemp(join(tmpdir(), 'engine-prompts-'));
+    process.env.LLXPRT_PROMPTS_DIR = promptDirectory;
+    await initializePromptSystem();
+  });
+  afterAll(async () => {
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(promptDirectory, { recursive: true, force: true });
+  });
+
+  const builtCredentials = useOwnedCredentials();
+
+  let builtCallerConfig: Config;
+  let builtCallerSettings: SettingsService;
+  let builtCallerSettingsOwner: SessionSettingsOwner;
+  let builtCallerPolicy: RuntimePolicyOwner;
+  let builtCallerMcp: McpRuntimeOwner;
+  let builtCallerManager: ReturnType<typeof acquirePreferredProviderManager>;
+  let builtCallerOwner: SessionClientOwner;
+  let builtCallerClose: () => Promise<void>;
+  let builtCallerFactories: AgentRuntimeFactoryBindings;
+  let builtCallerRelease: AcquisitionRelease;
+  let builtCallerFiles: ProviderFileLifecycle;
+  let builtCallerRuntimeId: string;
+  let builtCallerOAuth: ReturnType<typeof acquirePreferredOAuth>;
+  let builtCallerTokenizer: ReturnType<typeof configureProviderTokenizer>;
+  let builtCallerContent: ReturnType<
+    typeof createRuntimeContentGeneratorFactory
+  >;
+
+  async function openbuiltCaller(
+    fixture: string,
+    overrides: Readonly<Partial<AgentConfig>> = {},
+    suppliedFactories: Readonly<Partial<AgentRuntimeFactoryBindings>> = {},
+    skillSettings: Pick<
+      ConfigParameters,
+      'enableExtensionReloading' | 'storageRoot'
+    > = {},
+    extensionLoader?: ExtensionLoader,
+    skillOperations?: WorkspaceSkillAssemblyOperations,
+  ): Promise<void> {
+    const previousReplay = process.env.LLXPRT_FAKE_RESPONSES;
+    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+      new URL(
+        '../../agents/src/api/__tests__/fixtures/' + fixture,
+        import.meta.url,
+      ),
+    );
+    const directory = await realpath(
+      await mkdtemp(join(tmpdir(), 'builtCaller-adoption-')),
+    );
+    const selection: AgentConfig = {
+      provider: 'fake',
+      model: 'fake-model',
+      sessionId: randomUUID(),
+      ...overrides,
+      workingDir:
+        overrides.workingDir === undefined
+          ? directory
+          : await realpath(overrides.workingDir),
+    };
+    const parameters = { ...toConfigParameters(selection), ...skillSettings };
+    parameters.interactive = true;
+    if (overrides.hooks !== undefined) parameters.enableHooks = true;
+    if (
+      overrides.filesystemOwner === undefined &&
+      (overrides.harness?.includeProcessCwd ?? true)
+    )
+      parameters.includeDirectories = [
+        ...(parameters.includeDirectories ?? []),
+        process.cwd(),
+      ];
+    builtCallerConfig = new Config(parameters);
+    builtCallerFactories = {
+      ...createAgentRuntimeFactoryBindings(),
+      ...suppliedFactories,
+    };
+    builtCallerSettings = new SettingsService();
+    for (const [key, value] of Object.entries(
+      builtCallerConfig.getInitialSettings(),
+    ))
+      builtCallerSettings.set(key, value);
+    builtCallerPolicy = new RuntimePolicyOwner(builtCallerConfig);
+    injectConfirmationForcingPolicy(builtCallerPolicy.session.confirmation);
+    builtCallerMcp = await buildTestMcpRuntime(
+      builtCallerConfig,
+      builtCallerPolicy.session.messageBus,
+      overrides,
+      extensionLoader,
+      builtCallerPolicy,
+      skillOperations,
+    );
+    acquirebuiltCallerProviders();
+    const media = new SessionMediaOwner(
+      builtCallerConfig.projectTempDir,
+      1024 * 1024 * 1024,
+    );
+    builtCallerOwner = await createCapturedSessionOwner(
+      builtCallerConfig,
+      assembleTaskSchemaPolicy(builtCallerSettings),
+      builtCallerManager,
+      builtCallerFactories.agentClientFactory,
+      media.store,
+      builtCallerMcp.readInstructions,
+      builtCallerMcp.workspacePaths,
+      builtCallerSettingsOwner,
+      builtCallerContent,
+      builtCallerTokenizer,
+    );
+    builtCallerOwner.bindMcpRuntime(builtCallerMcp);
+    builtCallerOwner.bindProviderFiles(builtCallerFiles, (provider) =>
+      builtCallerOAuth.composeRetryOperations(provider),
+    );
+    builtCallerOwner.bindHooks();
+    builtCallerClose = settleEngineRelease.bind(
+      undefined,
+      [
+        () => builtCallerOwner.dispose(),
+        () => builtCallerRelease.close(),
+        () => media.dispose(),
+        () => builtCallerMcp.dispose(),
+        () => builtCallerConfig.dispose(),
+        () => rm(directory, { recursive: true, force: true }),
+      ],
+      previousReplay,
+    );
+    try {
+      await preparePreferredProviderCompletion(
+        builtCallerConfig,
+        builtCallerSettings,
+        builtCallerSettingsOwner,
+        builtCallerManager,
+        builtCallerOAuth,
+        builtCallerRuntimeId,
+        builtCallerTokenizer,
+        undefined,
+      );
+      await builtCallerMcp.initialize();
+      await activatebuiltCallerClient(selection.activation);
+    } catch (primary) {
+      await cleanupAfterFailure(primary, builtCallerClose);
+    }
+  }
+  function acquirebuiltCallerProviders(): void {
+    builtCallerRuntimeId = 'builtCaller-' + randomUUID();
+    builtCallerRelease = new AcquisitionRelease();
+    builtCallerSettingsOwner = new SessionSettingsOwner(builtCallerSettings);
+    builtCallerRelease.acquire('settings', () =>
+      builtCallerSettingsOwner.dispose(),
+    );
+    builtCallerSettingsOwner.initializeProviderSelection(
+      builtCallerConfig.getProvider(),
+      builtCallerConfig.getModel(),
+    );
+    builtCallerSettingsOwner.bindTelemetry(builtCallerConfig);
+    builtCallerFiles = new ProviderFileLifecycle({
+      maxFiles: 100,
+      maxBytes: 512 * 1024 * 1024,
+    });
+    for (const scope of [
+      builtCallerRuntimeId,
+      builtCallerConfig.getSessionId(),
+    ])
+      builtCallerRelease.acquire('files', () =>
+        releaseAdoptedFileScope(builtCallerFiles, scope),
+      );
+    builtCallerManager = acquirePreferredProviderManager(
+      builtCallerConfig,
+      builtCallerSettings,
+      builtCallerSettingsOwner,
+      builtCallerFiles,
+      builtCallerRuntimeId,
+      builtCredentials().authority,
+      builtCallerRelease,
+    );
+    const factoriesTokenizer = configureProviderTokenizer(builtCallerManager);
+    const factoriesContent = createRuntimeContentGeneratorFactory();
+    builtCallerTokenizer = factoriesTokenizer;
+    builtCallerContent = factoriesContent;
+    builtCallerOAuth = acquirePreferredOAuth(
+      undefined,
+      builtCallerPolicy.session.messageBus,
+      builtCallerConfig,
+      builtCallerSettings,
+      builtCallerManager,
+      builtCallerRuntimeId,
+      builtCallerMcp.profileDefinitions,
+      builtCredentials().authority,
+      builtCallerRelease,
+      undefined,
+    );
+  }
+  async function activatebuiltCallerClient(
+    intent: ProviderActivationIntent = {
+      provider: builtCallerConfig.getProvider(),
+      model: builtCallerConfig.getModel(),
+    },
+  ): Promise<void> {
+    const activation = await executeProviderActivation(
+      builtCallerConfig,
+      intent,
+      assembleProviderSwitch(
+        builtCallerConfig,
+        builtCallerSettings,
+        builtCallerManager,
+        builtCallerOAuth,
+        () => 'agent',
+        () => builtCallerOwner.refreshAuth(),
+        builtCallerSettingsOwner,
+      ),
+      builtCallerSettings,
+      builtCallerManager,
+      (method) => builtCallerOwner.refreshAuth(method),
+      assembleModelSelection(builtCallerSettingsOwner),
+    );
+    requireCallerActivation(activation);
+    await builtCallerOwner.initializeTools();
+    await capturedSessionClient(builtCallerOwner).startChat();
+  }
+
+  const builtReleases: Array<() => Promise<void>> = [];
   let profiles: ProfileManager;
   let root: string;
   let agent: ZedAgentType;
 
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), 'llxprt-zed-profile-owner-'));
-    built = await buildCliStyleConfig('plain-text.jsonl', {
+    await openbuiltCaller('plain-text.jsonl', {
       workingDir: root,
       settings: { profileDirectory: join(root, 'profiles') },
     });
+    builtReleases.push(builtCallerClose);
     profiles = new ProfileManager(join(root, 'profiles'));
     for (const name of ['alpha', 'beta']) {
       await profiles.saveProfile(name, {
@@ -329,24 +610,23 @@ describe('ZedAgent.authenticate credential cache', () => {
         ephemeralSettings: {},
       });
     }
-    const config = built.config;
-    const manager = built.providerManager;
+    const config = builtCallerConfig;
+    const manager = builtCallerManager;
 
     const application = actual.assembleProfileApplication(
-      config,
-      built.settingsService,
+      builtCallerSettings,
       manager,
       null,
       actual.assembleProviderSwitch(
         config,
-        built.settingsService,
+        builtCallerSettings,
         manager,
         null,
         () => undefined,
-        () => built.sessionClient.refreshAuth(),
-        built.settingsOwner,
+        () => builtCallerOwner.refreshAuth(),
+        builtCallerSettingsOwner,
       ),
-      built.settingsOwner,
+      builtCallerSettingsOwner,
       profiles,
     );
     const { ZedAgent } = await import('./zedIntegration.js');
@@ -354,15 +634,14 @@ describe('ZedAgent.authenticate credential cache', () => {
       config,
       undefined as never,
       application,
-      manager,
-      () => built.settingsOwner.createChildStore(),
+      () => builtCallerSettingsOwner.createChildStore(),
       undefined,
-      built.mcpRuntime.profileDefinitions,
+      builtCallerMcp.profileDefinitions,
     );
   });
 
   afterEach(async () => {
-    await built.cleanup();
+    await builtCallerClose();
     await rm(root, { recursive: true, force: true });
   });
 
@@ -370,8 +649,8 @@ describe('ZedAgent.authenticate credential cache', () => {
     await agent.authenticate({ methodId: 'alpha' });
     await agent.authenticate({ methodId: 'beta' });
 
-    expect(built.settingsService.getCurrentProfileName()).toBe('beta');
-    expect(built.settingsOwner.readSelectedModel()).toBe('beta-model');
+    expect(builtCallerSettings.getCurrentProfileName()).toBe('beta');
+    expect(builtCallerSettingsOwner.readSelectedModel()).toBe('beta-model');
   });
 
   it('loads profile when re-authenticating same profile', async () => {
@@ -385,15 +664,33 @@ describe('ZedAgent.authenticate credential cache', () => {
     });
     await agent.authenticate({ methodId: 'alpha' });
 
-    expect(built.settingsService.getCurrentProfileName()).toBe('alpha');
-    expect(built.settingsOwner.readSelectedModel()).toBe('updated-model');
+    expect(builtCallerSettings.getCurrentProfileName()).toBe('alpha');
+    expect(builtCallerSettingsOwner.readSelectedModel()).toBe('updated-model');
   });
 
   it('loads profile when no active profile exists', async () => {
-    expect(built.settingsService.getCurrentProfileName()).toBeNull();
+    expect(builtCallerSettings.getCurrentProfileName()).toBeNull();
     await agent.authenticate({ methodId: 'alpha' });
 
-    expect(built.settingsService.getCurrentProfileName()).toBe('alpha');
-    expect(built.settingsOwner.readSelectedModel()).toBe('alpha-model');
+    expect(builtCallerSettings.getCurrentProfileName()).toBe('alpha');
+    expect(builtCallerSettingsOwner.readSelectedModel()).toBe('alpha-model');
   });
 });
+
+async function settleEngineRelease(
+  steps: ReadonlyArray<() => void | Promise<void>>,
+  previousReplay: string | undefined,
+): Promise<void> {
+  try {
+    await runCleanupSteps(steps);
+  } finally {
+    if (previousReplay === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
+    else process.env.LLXPRT_FAKE_RESPONSES = previousReplay;
+  }
+}
+
+function requireCallerActivation(
+  result: Awaited<ReturnType<typeof executeProviderActivation>>,
+): void {
+  if (result.authFailed) throw result.authError;
+}

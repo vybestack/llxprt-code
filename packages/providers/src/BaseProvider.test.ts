@@ -79,20 +79,24 @@ const getContentText = (content: IContent | undefined): string => {
 function createOptionsWithRuntime(
   contents: IContent[],
   settingsService?: SettingsService,
-  config?: Config,
 ) {
   const settings = settingsService ?? testSettingsService;
-  const runtimeConfig =
-    config ?? createRuntimeConfigStub(settings, { getModel: () => '' });
+
   const runtime = createProviderRuntimeContext({
     runtimeId: `base-provider.${Math.random().toString(36).slice(2, 10)}`,
-    settingsService: settings,
-    config: runtimeConfig,
   });
 
   return {
     contents,
-    invocation: captureProviderInvocation(runtime, 'test'),
+    invocation: captureProviderInvocation(
+      {
+        runtimeId: runtime.runtimeId,
+        metadata: runtime.metadata,
+        globalSettings: settings.getAllGlobalSettings(),
+        providerSettings: settings.getProviderSettings('test'),
+      },
+      'test',
+    ),
   };
 }
 
@@ -385,7 +389,11 @@ describe('BaseProvider', () => {
       const options = {
         contents: [userMessage('options signature test')],
         invocation: captureProviderInvocation(
-          { settingsService: customSettings, runtimeId: 'req-123' },
+          {
+            runtimeId: 'req-123',
+            globalSettings: customSettings.getAllGlobalSettings(),
+            providerSettings: customSettings.getProviderSettings('test'),
+          },
           'test',
         ),
         metadata: { requestId: 'req-123' },
@@ -529,8 +537,6 @@ describe('BaseProvider', () => {
       const runtimeConfig = createRuntimeConfigStub(settings);
       const runtime = createProviderRuntimeContext({
         runtimeId: 'oauth-cache',
-        settingsService: settings,
-        config: runtimeConfig,
       });
 
       // When: Make multiple API calls

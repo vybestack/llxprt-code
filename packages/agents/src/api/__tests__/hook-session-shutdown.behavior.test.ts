@@ -1,9 +1,8 @@
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
+import {
+  useRecordingPrompts,
+  withRecordingLifetimeFixture,
+} from './helpers/recording-owner-lifetime-fixture.js';
 import { describe, expect, it } from 'bun:test';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -11,13 +10,21 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { setTimeout as sleep } from 'node:timers/promises';
-import type { Agent } from '../agent.js';
+import { Agent } from '../agent.js';
 import {
   HookEventName,
   HookType,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
-import { escapeShellArg } from '@vybestack/llxprt-code-core/utils/shell-utils.js';
-import { withRecordingLifetimeFixture } from './helpers/recording-owner-lifetime-fixture.js';
+import {
+  nativeHookCommand,
+  nativeHookInputCommand,
+} from './helpers/native-hook-command.js';
+
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 async function waitForMarker(
   path: string,
@@ -75,8 +82,9 @@ async function withUnrelatedProcess(
     process.execPath,
     [
       '-e',
-      `import { writeFileSync } from 'node:fs';
-writeFileSync(${JSON.stringify(marker)}, String(process.pid));
+      `import { renameSync, writeFileSync } from 'node:fs';
+writeFileSync(${JSON.stringify(marker + '.tmp')}, String(process.pid));
+renameSync(${JSON.stringify(marker + '.tmp')}, ${JSON.stringify(marker)});
 setInterval(() => {}, 1000);`,
     ],
     { detached: true, stdio: 'ignore' },
@@ -108,9 +116,10 @@ async function createPhysicalHooks(directory: string): Promise<string> {
   const child = join(directory, 'descendant.ts');
   await writeFile(
     child,
-    `import { writeFileSync } from 'node:fs';
+    `import { renameSync, writeFileSync } from 'node:fs';
 process.on('SIGTERM', () => {});
-writeFileSync(${JSON.stringify(join(directory, 'child.pid'))}, String(process.pid));
+writeFileSync(${JSON.stringify(join(directory, 'child.pid.tmp'))}, String(process.pid));
+renameSync(${JSON.stringify(join(directory, 'child.pid.tmp'))}, ${JSON.stringify(join(directory, 'child.pid'))});
 await Bun.sleep(1500);
 writeFileSync(${JSON.stringify(join(directory, 'late'))}, 'privileged');
 `,
@@ -129,16 +138,17 @@ if (input.hook_event_name === 'BeforeAgent') {
 }
 `,
   );
-  return `exec ${escapeShellArg(process.execPath, 'bash')} ${escapeShellArg(script, 'bash')}`;
+  return nativeHookCommand(script);
 }
 
 describe('public Agent hook shutdown', () => {
+  useRecordingPrompts();
   it('delivers the public final event to an actual pipe consumer', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'public-hook-input-'));
     const input = join(directory, 'input');
     try {
       await withRecordingLifetimeFixture(
-        async ({ agent }) => {
+        async (agent) => {
           await agent.hooks.triggerSessionEnd();
           const data: unknown = JSON.parse(await readFile(input, 'utf8'));
           expect(data).toMatchObject({
@@ -154,7 +164,70 @@ describe('public Agent hook shutdown', () => {
                 hooks: [
                   {
                     type: HookType.Command,
-                    command: `cat > ${escapeShellArg(input, 'bash')}`,
+                    command: nativeHookInputCommand(input, 'write'),
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      );
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('retains the physical final hook in its facade when the client owner closes first, once and without retiring its peer', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'owner-first-hook-'));
+    const output = join(directory, 'events.jsonl');
+    try {
+      await withRecordingLifetimeFixture(
+        async (agent, _config, _settingsOwner, _settings, _oauth, borrow) => {
+          const peer = await borrow();
+          const owner = fixtureAgentResources(agent)
+            .sessionOwners.values()
+            .next().value;
+          if (owner === undefined)
+            throw new Error('Missing real session client owner');
+          const observed: string[] = [];
+          const unsubscribe = agent.hooks.onHookExecution((request) => {
+            if (request.event === HookEventName.SessionEnd)
+              observed.push(request.event);
+          });
+          try {
+            await owner.dispose();
+            await agent.dispose();
+            await agent.dispose();
+            const first: unknown[] = (await readFile(output, 'utf8'))
+              .trim()
+              .split('\n')
+              .map((line) => JSON.parse(line));
+            expect(first).toHaveLength(1);
+            expect(first[0]).toMatchObject({
+              hook_event_name: 'SessionEnd',
+              session_id: agent.getRuntimeId(),
+            });
+            expect(observed).toStrictEqual([HookEventName.SessionEnd]);
+            await peer.hooks.triggerSessionEnd();
+            const both: unknown[] = (await readFile(output, 'utf8'))
+              .trim()
+              .split('\n')
+              .map((line) => JSON.parse(line));
+            expect(both).toHaveLength(2);
+            expect(both[1]).toMatchObject({ session_id: peer.getRuntimeId() });
+          } finally {
+            unsubscribe();
+          }
+        },
+        undefined,
+        {
+          hooks: {
+            SessionEnd: [
+              {
+                hooks: [
+                  {
+                    type: HookType.Command,
+                    command: nativeHookInputCommand(output, 'append'),
                   },
                 ],
               },
@@ -177,16 +250,24 @@ describe('public Agent hook shutdown', () => {
       try {
         await writeFile(
           script,
-          `import { appendFileSync, writeFileSync, existsSync } from 'node:fs';
+          `import { appendFileSync, writeFileSync, existsSync, renameSync } from 'node:fs';
 const input = JSON.parse(await Bun.stdin.text());
 appendFileSync(${JSON.stringify(join(evidence, 'events'))}, input.session_id + '\\n');
-writeFileSync(${JSON.stringify(join(evidence, 'entered'))}, input.session_id);
+writeFileSync(${JSON.stringify(join(evidence, 'entered.tmp'))}, input.session_id);
+renameSync(${JSON.stringify(join(evidence, 'entered.tmp'))}, ${JSON.stringify(join(evidence, 'entered'))});
 while (!existsSync(${JSON.stringify(released)})) await Bun.sleep(10);
 console.log(JSON.stringify({systemMessage: 'final process joined'}));
 `,
         );
         await withRecordingLifetimeFixture(
-          async ({ agent, borrow, settingsService }) => {
+          async (
+            agent,
+            _config,
+            _settingsOwner,
+            settingsService,
+            _oauthManager,
+            borrow,
+          ) => {
             const peer = await borrow();
             const observed: string[] = [];
             const startup: unknown[] = [];
@@ -249,7 +330,7 @@ console.log(JSON.stringify({systemMessage: 'final process joined'}));
                   hooks: [
                     {
                       type: HookType.Command,
-                      command: `exec ${escapeShellArg(process.execPath, 'bash')} ${escapeShellArg(script, 'bash')}`,
+                      command: nativeHookCommand(script),
                     },
                   ],
                 },
@@ -291,7 +372,14 @@ console.log(JSON.stringify({systemMessage: 'final process joined'}));
         };
         await withUnrelatedProcess(evidence, () =>
           withRecordingLifetimeFixture(
-            async ({ agent, borrow, settingsService }) => {
+            async (
+              agent,
+              _config,
+              _settingsOwner,
+              settingsService,
+              _oauthManager,
+              borrow,
+            ) => {
               const second = await borrow();
               const retiring = order === 'first' ? agent : second;
               const peer = order === 'first' ? second : agent;
@@ -355,7 +443,9 @@ console.log(JSON.stringify({systemMessage: 'final process joined'}));
                 expect(await readFile(join(evidence, 'peer'), 'utf8')).toBe(
                   peer.getRuntimeId(),
                 );
-                expect(peer.getMessageBus()).toBe(retiring.getMessageBus());
+                expect(fixtureAgentResources(peer).messageBus).toBe(
+                  fixtureAgentResources(retiring).messageBus,
+                );
                 expect(settingsService.getAllGlobalSettings()).toBeDefined();
               } catch (error) {
                 bodyFailures.push(error);

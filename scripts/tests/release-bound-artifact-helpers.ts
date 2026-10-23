@@ -7,6 +7,8 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
+  accessSync,
+  constants,
   closeSync,
   cpSync,
   copyFileSync,
@@ -15,6 +17,7 @@ import {
   openSync,
   readFileSync,
   realpathSync,
+  symlinkSync,
   writeFileSync,
   writeSync,
 } from 'node:fs';
@@ -38,6 +41,21 @@ const {
 const nodeExecutable = spawnSync('node', ['-p', 'process.execPath'], {
   encoding: 'utf8',
 }).stdout.trim();
+
+export function prepareNodeOnlyRuntime(directory: string): void {
+  mkdirSync(directory, { recursive: true });
+  if (process.platform === 'win32') {
+    copyFileSync(nodeExecutable, join(directory, 'node.exe'));
+  } else {
+    // Keep loader-relative libraries beside the physical host executable.
+    symlinkSync(nodeExecutable, join(directory, 'node'));
+  }
+  if (process.platform === 'darwin') {
+    // Packaged dependencies use sysctl for Rosetta detection; host Bun stays hidden.
+    accessSync('/usr/sbin/sysctl', constants.X_OK);
+    symlinkSync('/usr/sbin/sysctl', join(directory, 'sysctl'));
+  }
+}
 
 const manifestSchema = z
   .object({
@@ -163,6 +181,7 @@ export async function packReleaseArtifacts(
     'README.md',
     'LICENSE',
     'scripts/bind-release-deps.ts',
+    'scripts/lib/npm-command.cjs',
     'scripts/utils/error-guards.ts',
     'scripts/utils/release-packages.ts',
   ]) {
@@ -380,11 +399,7 @@ export async function installReleaseArtifacts(
     );
   }
   const nodeOnly = join(evidence, 'node-only');
-  mkdirSync(nodeOnly, { recursive: true });
-  copyFileSync(
-    nodeExecutable,
-    join(nodeOnly, process.platform === 'win32' ? 'node.exe' : 'node'),
-  );
+  prepareNodeOnlyRuntime(nodeOnly);
   const launchEnv = {
     ...env,
     PATH:
@@ -614,12 +629,13 @@ function installedPackageRoot(name: string, cliRoot: string): string {
   throw new Error(`Missing installed package ${name}`);
 }
 
-async function verifyInstalledGraph(
+export async function verifyInstalledGraph(
   artifacts: readonly ReleaseArtifact[],
   consumer: string,
   evidence: string,
   env: NodeJS.ProcessEnv,
 ): Promise<void> {
+  const consumerRoot = realpathSync(consumer);
   const workspaceNames = new Set(artifacts.map((pkg) => pkg.manifest.name));
   const cliRoot = join(consumer, 'node_modules', '@vybestack/llxprt-code');
   const roots = new Map(
@@ -638,7 +654,7 @@ async function verifyInstalledGraph(
       throw new Error(
         `Wrong installed version for ${actual.name}: ${actual.version}`,
       );
-    if (relative(consumer, realpathSync(path)).startsWith('..'))
+    if (relative(consumerRoot, realpathSync(path)).startsWith('..'))
       throw new Error(`Package escaped consumer: ${path}`);
     return actual;
   });

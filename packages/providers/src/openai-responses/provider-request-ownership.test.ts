@@ -79,15 +79,6 @@ describe('provider request ownership', () => {
     });
     const runtime = createProviderRuntimeContext({
       runtimeId: 'same-label',
-      settingsService: settings,
-      config,
-      mediaResolver: {
-        resolve: async (input) => {
-          entered.open();
-          await resume.promise;
-          return resolver.resolve(input);
-        },
-      },
     });
     if (
       !(provider instanceof OpenAIProvider) &&
@@ -139,8 +130,14 @@ describe('provider request ownership', () => {
       resolver,
       provider: bindProviderMedia(
         provider,
-        runtime.mediaResolver,
-        runtime.requestMediaBudgetBytes,
+        {
+          resolve: async (input) => {
+            entered.open();
+            await resume.promise;
+            return resolver.resolve(input);
+          },
+        },
+        undefined,
       ),
     };
   }

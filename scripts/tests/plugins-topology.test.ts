@@ -60,6 +60,8 @@ const EXPECTED_RUNTIME_DEPENDENCIES: Readonly<
 > = {
   '@vybestack/llxprt-plugin-google-gemini': {
     '@ai-sdk/google': '4.0.56',
+    '@ai-sdk/google-vertex': '5.0.68',
+    'google-auth-library': '10.6.2',
   },
   '@vybestack/llxprt-plugin-google-mcp-auth': {
     'google-auth-library': '^9.11.0',

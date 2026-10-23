@@ -150,7 +150,6 @@ const noopLogger = {
 
 function createStubProviderRuntime(): ProviderRuntimeContext {
   return {
-    settingsService: new SettingsService(),
     config: undefined,
     runtimeId: 'test-provider-runtime',
     metadata: { source: 'test' },
@@ -166,9 +165,15 @@ function buildCompressionContext(
 ): CompressionContext {
   const provider =
     overrides.provider ?? createOptionsCapturingProvider([], VALID_SNAPSHOT);
+  const settingsService = new SettingsService();
   const resolveProvider = (): CompressionProviderResult => ({
     invocation: captureProviderInvocation(
-      createStubProviderRuntime(),
+      {
+        runtimeId: createStubProviderRuntime().runtimeId,
+        metadata: createStubProviderRuntime().metadata,
+        globalSettings: settingsService.getAllGlobalSettings(),
+        providerSettings: settingsService.getProviderSettings(provider.name),
+      },
       provider.name,
     ),
     provider,
@@ -315,7 +320,12 @@ describe('Compression memory exclusion (issue #3174)', () => {
         provider,
       });
 
-      const strategy = new OneShotStrategy();
+      const strategy = new OneShotStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       const result = await strategy.compress(context);
 
       const request = captured[0];

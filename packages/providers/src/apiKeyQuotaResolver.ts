@@ -1,3 +1,4 @@
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -122,6 +123,7 @@ export interface ApiKeyQuotaResult {
  * @returns Formatted lines, or null if the fetch failed
  */
 export async function fetchApiKeyQuota(
+  requestFetch: NetworkFetch,
   provider: ApiKeyQuotaProvider,
   apiKey: string,
   baseUrl?: string,
@@ -134,25 +136,25 @@ export async function fetchApiKeyQuota(
   try {
     switch (provider) {
       case 'zai': {
-        const usage = await fetchZaiUsage(apiKey, baseUrl);
+        const usage = await fetchZaiUsage(requestFetch, apiKey, baseUrl);
         if (!usage) return null;
         return { provider: 'Z.ai', lines: formatZaiUsage(usage) };
       }
 
       case 'synthetic': {
-        const usage = await fetchSyntheticUsage(apiKey);
+        const usage = await fetchSyntheticUsage(requestFetch, apiKey);
         if (!usage) return null;
         return { provider: 'Synthetic', lines: formatSyntheticUsage(usage) };
       }
 
       case 'chutes': {
-        const usage = await fetchChutesUsage(apiKey);
+        const usage = await fetchChutesUsage(requestFetch, apiKey);
         if (!usage) return null;
         return { provider: 'Chutes', lines: formatChutesUsage(usage) };
       }
 
       case 'kimi':
-        return await fetchKimiQuota(apiKey, baseUrl);
+        return await fetchKimiQuota(requestFetch, apiKey, baseUrl);
 
       default:
         logger.debug(() => `Unknown API key provider: ${provider}`);
@@ -174,16 +176,17 @@ export async function fetchApiKeyQuota(
  * Handles the distinction between Kimi Code and regular Kimi API keys.
  */
 async function fetchKimiQuota(
+  requestFetch: NetworkFetch,
   apiKey: string,
   baseUrl?: string,
 ): Promise<ApiKeyQuotaResult | null> {
   if (apiKey.startsWith('sk-kimi-')) {
-    const usage = await fetchKimiCodeUsage(apiKey, baseUrl);
+    const usage = await fetchKimiCodeUsage(requestFetch, apiKey, baseUrl);
     if (!usage) return null;
     return { provider: 'Kimi Code', lines: formatKimiCodeUsage(usage) };
   }
 
-  const usage = await fetchKimiUsage(apiKey, baseUrl);
+  const usage = await fetchKimiUsage(requestFetch, apiKey, baseUrl);
   if (!usage) return null;
   return { provider: 'Kimi', lines: formatKimiUsage(usage) };
 }

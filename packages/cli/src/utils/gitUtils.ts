@@ -6,17 +6,18 @@
 
 import { execSync } from 'child_process';
 import * as path from 'path';
-import { ProxyAgent, setGlobalDispatcher } from 'undici';
+import { ProxyAgent } from 'undici';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 
 /**
  * Checks if a directory is within a git repository hosted on GitHub.
  * @returns true if the directory is in a git repository with a github.com remote, false otherwise
  */
-export const isGitHubRepository = (): boolean => {
+export const isGitHubRepository = (workingDirectory: string): boolean => {
   try {
     const gitRemoteOutput = execSync('git remote -v', {
       encoding: 'utf-8',
+      cwd: workingDirectory,
     });
     const remotes = (gitRemoteOutput || '').trim();
 
@@ -35,9 +36,10 @@ export const isGitHubRepository = (): boolean => {
  * @returns the path to the root of the git repo.
  * @throws error if the exec command fails.
  */
-export const getGitRepoRoot = (): string => {
+export const getGitRepoRoot = (workingDirectory: string): string => {
   const gitRepoRootOutput = execSync('git rev-parse --show-toplevel', {
     encoding: 'utf-8',
+    cwd: workingDirectory,
   });
   const gitRepoRoot = (gitRepoRootOutput || '').trim();
 
@@ -53,25 +55,24 @@ export const getGitRepoRoot = (): string => {
  * @returns string of the release tag (e.g. "v1.2.3").
  */
 export const getLatestGitHubRelease = async (
-  proxy?: string,
+  proxy: string | undefined,
+  signal: AbortSignal,
 ): Promise<string> => {
+  const dispatcher = proxy ? new ProxyAgent(proxy) : undefined;
   try {
-    const controller = new AbortController();
-    if (proxy) {
-      setGlobalDispatcher(new ProxyAgent(proxy));
-    }
-
     const endpoint = `https://api.github.com/repos/acoliver/run-llxprt-code/releases/latest`;
 
-    const response = await fetch(endpoint, {
+    const options = {
       method: 'GET',
       headers: {
         Accept: 'application/vnd.github+json',
         'Content-Type': 'application/json',
         'X-GitHub-Api-Version': '2022-11-28',
       },
-      signal: controller.signal,
-    });
+      signal,
+      dispatcher,
+    };
+    const response = await fetch(endpoint, options);
 
     if (!response.ok) {
       throw new Error(
@@ -92,6 +93,8 @@ export const getLatestGitHubRelease = async (
     throw new Error(
       `Unable to determine the latest run-llxprt-code release on GitHub.`,
     );
+  } finally {
+    await dispatcher?.close();
   }
 };
 
@@ -100,9 +103,13 @@ export const getLatestGitHubRelease = async (
  * @returns the owner and repository of the github repo.
  * @throws error if the exec command fails.
  */
-export function getGitHubRepoInfo(): { owner: string; repo: string } {
+export function getGitHubRepoInfo(workingDirectory: string): {
+  owner: string;
+  repo: string;
+} {
   const remoteUrl = execSync('git remote get-url origin', {
     encoding: 'utf-8',
+    cwd: workingDirectory,
   }).trim();
 
   // Matches either https://github.com/owner/repo.git or git@github.com:owner/repo.git.

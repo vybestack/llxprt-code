@@ -6,26 +6,27 @@ import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-s
  */
 import { instructionFixture } from './__tests__/instruction-fixture.js';
 
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
 const fixturePaths = installTestWorkspacePaths({
   targetDir: process.cwd(),
   isTrusted: () => true,
 });
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 
-import { afterAll, beforeAll, describe, expect, it, vi } from 'bun:test';
-import * as fs from 'node:fs';
-import * as os from 'node:os';
-import * as path from 'node:path';
-import process from 'node:process';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import {
   getCoreSystemPromptAsync,
   initializePromptSystem,
 } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { ContextState } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import {
+  AfterModelHookOutput,
+  BeforeModelHookOutput,
+} from '@vybestack/llxprt-code-core/hooks/types.js';
+import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
-import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import {
@@ -35,13 +36,12 @@ import {
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { ContextState } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  AfterModelHookOutput,
-  BeforeModelHookOutput,
-} from '@vybestack/llxprt-code-core/hooks/types.js';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'bun:test';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import process from 'node:process';
 import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
 import { createChatObject } from './subagentRuntimeSetup.js';
@@ -122,8 +122,6 @@ describe('System prompt provider — non-foreground subagent (issue #3176, D5)',
     const config = new Config(createConfigParams(settings));
     const capturedCalls: GenerateChatOptions[] = [];
     const providerRuntime = createProviderRuntimeContext({
-      settingsService: settings,
-      config,
       runtimeId: 'test.subagent.nonforeground',
     });
     const provider: IProvider = {
@@ -147,7 +145,7 @@ describe('System prompt provider — non-foreground subagent (issue #3176, D5)',
     const manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
     manager.registerProvider(provider);
-    configureProviderRuntimeFactories(config, manager);
+    configureProviderTokenizer(manager);
     Object.defineProperties(config, {
       getModel: { value: () => SUBAGENT_MODEL },
       getConversationLoggingEnabled: { value: () => false },
@@ -193,18 +191,23 @@ describe('System prompt provider — non-foreground subagent (issue #3176, D5)',
       tools: createToolRegistryViewFromRegistry(undefined),
       providerRuntime,
     });
-    const chat = await createChatObject({
-      instructions: instructionFixture(config.getProvidedInstructions()),
-      workspaceDirectories: () => fixturePaths().directories(),
-      readMcpInstructions: () => undefined,
-      promptConfig: { systemPrompt: 'You are a subagent.' },
-      modelConfig: { model: SUBAGENT_MODEL, temp: 0, top_p: 1 },
-      runtimeContext,
-      contentGenerator: {} as ContentGenerator,
-      environmentContextLoader: async () => [],
-      foregroundConfig: config,
-      context: new ContextState(),
-    });
+    const chat = await createChatObject(
+      {
+        instructions: instructionFixture(config.getProvidedInstructions()),
+        workspaceDirectories: () => fixturePaths().directories(),
+        readMcpInstructions: () => undefined,
+        promptConfig: { systemPrompt: 'You are a subagent.' },
+        modelConfig: { model: SUBAGENT_MODEL, temp: 0, top_p: 1 },
+        runtimeContext,
+        contentGenerator: {} as ContentGenerator,
+        environmentContextLoader: async () => [],
+        foregroundConfig: config,
+        context: new ContextState(),
+      },
+      undefined,
+      undefined,
+      undefined,
+    );
 
     expect(chat).not.toBeNull();
     await chat?.sendMessage({ message: 'do the task' }, 'prompt-1');

@@ -55,7 +55,7 @@ describe('CodexOAuthProvider fallback behavior', () => {
       releaseAuthLock: vi.fn(async () => undefined),
     };
 
-    provider = new CodexOAuthProvider(mockTokenStore);
+    provider = new CodexOAuthProvider(globalThis.fetch, mockTokenStore);
 
     // Mock shouldLaunchBrowser to return true (interactive mode)
     vi.spyOn(secureBrowserModule, 'shouldLaunchBrowser').mockReturnValue(true);

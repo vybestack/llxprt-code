@@ -13,7 +13,8 @@ import { fileURLToPath } from 'node:url';
 import { Config } from '@vybestack/llxprt-code-core';
 import { WorkspaceLspOwner } from '@vybestack/llxprt-code-core/lsp/workspace-lsp-owner.js';
 import { MCPOAuthTokenStorage } from '@vybestack/llxprt-code-mcp';
-import { McpRuntimeOwner, toConfigParameters } from '../../index.js';
+import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { toConfigParameters } from '../../index.js';
 
 const fixture = fileURLToPath(
   new URL('../../../../lsp/test/fixtures/fake-lsp-server.ts', import.meta.url),

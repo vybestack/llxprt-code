@@ -37,6 +37,13 @@ import { SkillsList } from './views/SkillsList.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 
 interface HistoryItemDisplayProps {
+  readIdeMode: () => boolean;
+  readIdeDiffingEnabled: () => boolean | null;
+  subscribeIdeDiffing: (listener: () => void) => () => void;
+  resolveIdeDiff: (
+    filePath: string,
+    outcome: 'accepted' | 'rejected',
+  ) => Promise<void>;
   item: HistoryItem;
   availableTerminalHeight?: number;
   terminalWidth: number;
@@ -226,6 +233,13 @@ function renderToolGroupMessage(
   showTodoPanel: boolean,
   _activeShellPtyId: number | null | undefined,
   _embeddedShellFocused: boolean | undefined,
+  readIdeMode: () => boolean,
+  readIdeDiffingEnabled: () => boolean | null,
+  subscribeIdeDiffing: (listener: () => void) => () => void,
+  resolveIdeDiff: (
+    filePath: string,
+    outcome: 'accepted' | 'rejected',
+  ) => Promise<void>,
 ) {
   if (itemForDisplay.type !== 'tool_group') return null;
   return (
@@ -236,6 +250,10 @@ function renderToolGroupMessage(
       availableTerminalHeight={availableTerminalHeight}
       terminalWidth={terminalWidth}
       config={config}
+      readIdeMode={readIdeMode}
+      readIdeDiffingEnabled={readIdeDiffingEnabled}
+      subscribeIdeDiffing={subscribeIdeDiffing}
+      resolveIdeDiff={resolveIdeDiff}
       isFocused={isFocused}
       showTodoPanel={showTodoPanel}
       activeShellPtyId={_activeShellPtyId}
@@ -245,6 +263,10 @@ function renderToolGroupMessage(
 }
 
 export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
+  readIdeMode,
+  readIdeDiffingEnabled,
+  subscribeIdeDiffing,
+  resolveIdeDiff,
   item,
   availableTerminalHeight,
   terminalWidth,
@@ -280,6 +302,10 @@ export const HistoryItemDisplay: React.FC<HistoryItemDisplayProps> = ({
         showTodoPanel,
         _activeShellPtyId,
         _embeddedShellFocused,
+        readIdeMode,
+        readIdeDiffingEnabled,
+        subscribeIdeDiffing,
+        resolveIdeDiff,
       )}
     </Box>
   );

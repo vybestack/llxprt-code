@@ -19,7 +19,7 @@ import {
 } from './hook-configuration.js';
 import { HookSystem } from './hookSystem.js';
 import { HookEventName, HookType } from './types.js';
-import { escapeShellArg } from '../utils/shell-utils.js';
+import { physicalHookCommand } from './__tests__/physical-hook-command.js';
 
 async function waitForFile(path: string): Promise<void> {
   const deadline = Date.now() + 5000;
@@ -33,7 +33,7 @@ describe('physical hook ownership', () => {
   function useProject(): () => string {
     let directory = '';
     beforeEach(async () => {
-      directory = await mkdtemp(join(tmpdir(), 'llxprt-hook-owner-'));
+      directory = await mkdtemp(join(tmpdir(), "llxprt hook owner's-"));
     });
     afterEach(async () => {
       await rm(directory, { recursive: true, force: true });
@@ -41,7 +41,7 @@ describe('physical hook ownership', () => {
     return () => directory;
   }
 
-  describe.skipIf(process.platform === 'win32')('hook session shutdown', () => {
+  describe('hook session shutdown', () => {
     const project = useProject();
 
     it('joins an admitted hook and denies subsequent execution before its resources retire', async () => {
@@ -68,7 +68,7 @@ setTimeout(() => { writeFileSync('late-privileged', 'ran'); process.exit(0); }, 
               hooks: [
                 {
                   type: HookType.Command,
-                  command: `exec node ${escapeShellArg(script, 'bash')}`,
+                  command: physicalHookCommand(script),
                 },
               ],
             },

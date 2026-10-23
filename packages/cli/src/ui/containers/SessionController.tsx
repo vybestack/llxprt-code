@@ -3,6 +3,14 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import {
+  type GetActiveProfileNameOperation,
+  type GetLoadBalancerStatsOperation,
+  type ProviderStatusOperation,
+  useGetActiveProfileName,
+  useGetLoadBalancerStats,
+  useProviderStatus,
+} from '../contexts/RuntimeContext.js';
 
 import type React from 'react';
 import {
@@ -16,7 +24,6 @@ import {
 import type { HistoryItem } from '../types.js';
 import { MessageType } from '../types.js';
 import { useHistory } from '../hooks/useHistoryManager.js';
-import { useRuntimeApi, type RuntimeApi } from '../contexts/RuntimeContext.js';
 
 import {
   getErrorMessage,
@@ -82,11 +89,20 @@ export const SessionController: React.FC<SessionControllerProps> = ({
   config,
   turnStore,
 }) => {
-  const runtime = useRuntimeApi();
-  const statusSnapshot = runtime.providerStatus();
+  const runtimeGetActiveProfileName = useGetActiveProfileName();
+  const runtimeGetLoadBalancerStats = useGetLoadBalancerStats();
+  const runtimeProviderStatus = useProviderStatus();
+  const statusSnapshot = runtimeProviderStatus();
 
   const initialState: SessionState = {
-    currentModel: resolveModelIdentity(runtime, config.getModel()),
+    currentModel: resolveModelIdentity(
+      {
+        providerStatus: runtimeProviderStatus,
+        getActiveProfileName: runtimeGetActiveProfileName,
+        getLoadBalancerStats: runtimeGetLoadBalancerStats,
+      },
+      config.getModel(),
+    ),
     isPaidMode: statusSnapshot.isPaidMode,
     lastProvider: statusSnapshot.providerName ?? undefined,
     transientWarnings: [],
@@ -111,7 +127,7 @@ function scheduleWarningClear(
 }
 
 function useCheckPaymentModeChange(
-  runtime: RuntimeApi,
+  runtimeProviderStatus: ProviderStatusOperation,
   sessionState: SessionState,
   historyLength: number,
   dispatch: React.Dispatch<SessionAction>,
@@ -119,7 +135,7 @@ function useCheckPaymentModeChange(
 ): (forcePreviousProvider?: string) => void {
   return useCallback(
     (forcePreviousProvider?: string) => {
-      const status = runtime.providerStatus();
+      const status = runtimeProviderStatus();
       const newPaymentMode = status.isPaidMode;
       const currentProviderName = status.providerName ?? undefined;
       const previousProvider =
@@ -156,7 +172,7 @@ function useCheckPaymentModeChange(
       }
     },
     [
-      runtime,
+      runtimeProviderStatus,
       sessionState.isPaidMode,
       sessionState.lastProvider,
       historyLength,
@@ -215,7 +231,9 @@ function usePerformMemoryRefresh(
 }
 
 function useModelChangeWatcher(
-  runtime: RuntimeApi,
+  runtimeGetActiveProfileName: GetActiveProfileNameOperation,
+  runtimeGetLoadBalancerStats: GetLoadBalancerStatsOperation,
+  runtimeProviderStatus: ProviderStatusOperation,
   config: CliUiRuntime,
   sessionState: SessionState,
   historyLength: number,
@@ -225,8 +243,15 @@ function useModelChangeWatcher(
   useEffect(() => {
     const currentTimerRef = warningTimerRef;
     const checkModelChange = () => {
-      const status = runtime.providerStatus();
-      const displayModel = resolveModelIdentity(runtime, config.getModel());
+      const status = runtimeProviderStatus();
+      const displayModel = resolveModelIdentity(
+        {
+          providerStatus: runtimeProviderStatus,
+          getActiveProfileName: runtimeGetActiveProfileName,
+          getLoadBalancerStats: runtimeGetLoadBalancerStats,
+        },
+        config.getModel(),
+      );
       if (displayModel !== sessionState.currentModel) {
         dispatch({ type: 'SET_CURRENT_MODEL', payload: displayModel });
       }
@@ -252,18 +277,18 @@ function useModelChangeWatcher(
     // Event-driven updates replace the former 1-second setInterval polling.
     // These coreEvents fire on model/profile/provider/settings changes.
     const handleChange = () => checkModelChange();
-    coreEvents.on(CoreEvent.ModelChanged, handleChange);
-    coreEvents.on(CoreEvent.ModelProfileChanged, handleChange);
+    const releaseModel = config.subscribeModelSelection(handleChange);
     coreEvents.on(CoreEvent.SettingsChanged, handleChange);
 
     return () => {
-      coreEvents.off(CoreEvent.ModelChanged, handleChange);
-      coreEvents.off(CoreEvent.ModelProfileChanged, handleChange);
+      releaseModel();
       coreEvents.off(CoreEvent.SettingsChanged, handleChange);
       if (currentTimerRef.current) clearTimeout(currentTimerRef.current);
     };
   }, [
-    runtime,
+    runtimeGetActiveProfileName,
+    runtimeGetLoadBalancerStats,
+    runtimeProviderStatus,
     config,
     sessionState.currentModel,
     sessionState.isPaidMode,
@@ -279,7 +304,9 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
   turnStore: turnStoreProp,
 }) => {
   const [sessionState, dispatch] = useSessionState();
-  const runtime = useRuntimeApi();
+  const runtimeGetActiveProfileName = useGetActiveProfileName();
+  const runtimeGetLoadBalancerStats = useGetLoadBalancerStats();
+  const runtimeProviderStatus = useProviderStatus();
   const [appState, appDispatch] = useReducer(appReducer, initialAppState);
   const turnStoreRef = useRef<TurnStore | null>(null);
   const turnStore =
@@ -294,7 +321,7 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
   const warningTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const checkPaymentModeChange = useCheckPaymentModeChange(
-    runtime,
+    runtimeProviderStatus,
     sessionState,
     history.length,
     dispatch,
@@ -302,7 +329,9 @@ const SessionControllerInner: React.FC<SessionControllerProps> = ({
   );
   const performMemoryRefresh = usePerformMemoryRefresh(config, addItem);
   useModelChangeWatcher(
-    runtime,
+    runtimeGetActiveProfileName,
+    runtimeGetLoadBalancerStats,
+    runtimeProviderStatus,
     config,
     sessionState,
     history.length,

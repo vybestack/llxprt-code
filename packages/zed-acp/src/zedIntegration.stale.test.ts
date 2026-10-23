@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import type { AgentEvent } from '@vybestack/llxprt-code-agents';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 
-import { Session } from './zedIntegration.js';
+import { Session } from './zed-session.js';
 import {
   buildFakeAgent,
   buildScriptedAgent,

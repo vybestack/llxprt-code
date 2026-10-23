@@ -17,10 +17,12 @@ import {
 import type { Diagnostic, LspConfig, ServerStatus } from './types.js';
 import { normalizeServerStatus } from './lsp-status-normalizer.js';
 import { resolveLspEntry } from './lsp-entry-resolver.js';
+import { createMcpClientTunnel, type McpClientTunnel } from './mcp-tunnel.js';
 
 const READY_TIMEOUT_MS = 10_000;
 const SHUTDOWN_TIMEOUT_MS = 3_000;
 const SIGKILL_GRACE_MS = 2_000;
+const STDERR_TAIL_CHARS = 2_000;
 
 export { normalizeServerStatus };
 
@@ -47,6 +49,12 @@ export class LspServiceClient {
   private process: ChildProcessWithoutNullStreams | null = null;
 
   private connection: MessageConnection | null = null;
+
+  private mcpTunnel: McpClientTunnel | null = null;
+
+  private processClose: Promise<void> | null = null;
+
+  private stderrTail = '';
 
   constructor(
     private readonly config: LspConfig,
@@ -173,8 +181,9 @@ export class LspServiceClient {
   async shutdown(): Promise<void> {
     const child = this.process;
     const connection = this.connection;
+    const processClose = this.processClose;
 
-    if (child === null || connection === null) {
+    if (child === null || connection === null || processClose === null) {
       this.cleanupProcessState();
       this.alive = false;
       return;
@@ -190,31 +199,20 @@ export class LspServiceClient {
       // best-effort shutdown
     }
 
+    let closeFailure: Error | undefined;
     try {
-      let exited = false;
-      const onExit = once(child, 'exit').then(() => {
-        exited = true;
-      });
-
+      // 'close' follows 'exit' once stdio has drained, so the process no longer
+      // holds its working directory or pipes when shutdown resolves.
       if (!child.killed) {
         child.kill('SIGTERM');
       }
 
-      await Promise.race([
-        onExit,
-        new Promise<void>((resolve) => {
-          setTimeout(() => {
-            if (!exited) {
-              try {
-                child.kill('SIGKILL');
-              } catch {
-                // already dead
-              }
-            }
-            resolve();
-          }, SIGKILL_GRACE_MS);
-        }),
-      ]);
+      if (!(await this.closesWithin(processClose, SIGKILL_GRACE_MS))) {
+        child.kill('SIGKILL');
+        if (!(await this.closesWithin(processClose, SIGKILL_GRACE_MS))) {
+          closeFailure = new Error('LSP service did not close after SIGKILL');
+        }
+      }
     } catch {
       // best-effort process termination
     }
@@ -223,22 +221,19 @@ export class LspServiceClient {
     this.cleanupProcessState();
     this.alive = false;
     this.publishUnavailable();
+    if (closeFailure !== undefined) {
+      throw closeFailure;
+    }
   }
 
   getMcpTransportStreams(): { readable: Readable; writable: Writable } | null {
-    if (!this.alive || this.process === null) {
-      return null;
-    }
-
-    const readable = this.process.stdio[4];
-    const writable = this.process.stdio[3];
-    if (readable === null || writable === null) {
+    if (!this.alive || this.mcpTunnel === null) {
       return null;
     }
 
     return {
-      readable: readable as Readable,
-      writable: writable as Writable,
+      readable: this.mcpTunnel.readable,
+      writable: this.mcpTunnel.writable,
     };
   }
 
@@ -266,7 +261,7 @@ export class LspServiceClient {
   ): { child: ChildProcessWithoutNullStreams; connection: MessageConnection } {
     const child = spawn(bunPath, [lspEntry], {
       cwd: this.workspaceRoot,
-      stdio: ['pipe', 'pipe', 'pipe', 'pipe', 'pipe'],
+      stdio: ['pipe', 'pipe', 'pipe'],
       env: {
         ...process.env,
         LSP_BOOTSTRAP: JSON.stringify({
@@ -285,6 +280,11 @@ export class LspServiceClient {
 
     this.process = child;
     this.connection = this.createConnection(child);
+    this.mcpTunnel = createMcpClientTunnel(this.connection);
+    this.processClose = new Promise<void>((resolve) => {
+      child.once('close', () => resolve());
+    });
+    this.captureStderrTail(child);
     this.attachProcessLifecycleHandlers(child);
 
     return { child, connection: this.connection };
@@ -299,6 +299,14 @@ export class LspServiceClient {
     );
     this.connection = connection;
     return connection;
+  }
+
+  private captureStderrTail(child: ChildProcessWithoutNullStreams): void {
+    this.stderrTail = '';
+    child.stderr.setEncoding('utf8');
+    child.stderr.on('data', (chunk: string) => {
+      this.stderrTail = (this.stderrTail + chunk).slice(-STDERR_TAIL_CHARS);
+    });
   }
 
   private attachProcessLifecycleHandlers(
@@ -381,9 +389,17 @@ export class LspServiceClient {
           resolve();
         });
 
-        child.once('exit', () => {
+        // 'close' (not 'exit') so the child's final stderr is already captured.
+        child.once('close', () => {
           disposer.dispose();
-          reject(new Error('LSP service exited before ready'));
+          const detail = this.stderrTail.trim();
+          reject(
+            new Error(
+              detail === ''
+                ? 'LSP service exited before ready'
+                : `LSP service exited before ready: ${detail}`,
+            ),
+          );
         });
 
         child.once('error', (error) => {
@@ -419,6 +435,21 @@ export class LspServiceClient {
     ]);
   }
 
+  private async closesWithin(
+    processClose: Promise<void>,
+    timeoutMs: number,
+  ): Promise<boolean> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const expired = new Promise<boolean>((resolve) => {
+      timer = setTimeout(() => resolve(false), timeoutMs);
+    });
+    try {
+      return await Promise.race([processClose.then(() => true), expired]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   private async withTimeout<T>(
     promise: Promise<T>,
     timeoutMs: number,
@@ -441,6 +472,9 @@ export class LspServiceClient {
   }
 
   private cleanupProcessState(): void {
+    this.mcpTunnel?.close();
+    this.mcpTunnel = null;
+
     if (this.connection !== null) {
       this.connection.dispose();
     }

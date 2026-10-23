@@ -6,6 +6,9 @@ import type { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/poli
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+
+import type { FileSystemService } from '@vybestack/llxprt-code-core/services/fileSystemService.js';
+
 import {
   assembleWorkspaceMemory,
   WorkspaceToolCatalogOwner,
@@ -191,6 +194,7 @@ export function retainWorkspaceEnvironment(
   messageBus: MessageBus | undefined,
   policyOwner: RuntimePolicyOwner | undefined,
   policyOwnership: 'runtime' | 'caller',
+  filesystemService: FileSystemService | undefined,
 ): [
   WorkspaceFilesystemOwner,
   WorkspaceMemoryOwner,
@@ -204,6 +208,7 @@ export function retainWorkspaceEnvironment(
     filesystemOwnership,
     resources,
     trust,
+    filesystemService,
   );
   const memory = retainWorkspaceMemory(
     resources,

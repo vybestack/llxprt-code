@@ -4,12 +4,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { expect, describe, it, beforeEach, afterEach, vi } from 'bun:test';
+import {
+  expect,
+  describe,
+  it,
+  beforeEach,
+  afterEach,
+  afterAll,
+  vi,
+} from 'bun:test';
 import { checkCommandPermissions, isCommandAllowed } from './shell-utils.js';
 import {
   initializeParser,
   isParserAvailable,
   parseCommandDetailsForLanguage,
+  resetParser,
 } from './shell-parser.js';
 import type { Config } from '../config/config.js';
 import { resolvePwshTestPolicyFromEnv } from '@vybestack/llxprt-code-test-utils/core/pwsh-test-policy.js';
@@ -57,6 +66,12 @@ function makeConfig(
 }
 
 describe('PowerShell AST security', () => {
+  // This file initialised the parsers above, so it releases them: the WASM
+  // parser instances are disposed when the file ends instead of being left for
+  // process teardown, which on Windows CI did not complete after the tests had
+  // passed.
+  afterAll(resetParser);
+
   describePwsh(
     'PowerShell security: -Command abbreviation payload extraction (#4)',
     () => {

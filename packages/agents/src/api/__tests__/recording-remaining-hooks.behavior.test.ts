@@ -1,22 +1,29 @@
+import {
+  jsonlHookCommand,
+  removeJsonlHook,
+} from './helpers/jsonl-hook-command.js';
+import {
+  useRecordingPrompts,
+  withRecordingLifetimeFixture,
+} from './helpers/recording-owner-lifetime-fixture.js';
+import { describe, expect, it, spyOn } from 'bun:test';
+import { randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { Agent } from '@vybestack/llxprt-code-agents';
+import { CompressionStrategy } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import {
+  HookEventName,
+  HookType,
+} from '@vybestack/llxprt-code-core/hooks/types.js';
+import * as compressionFactory from '../../compression/compressionStrategyFactory.js';
+
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
-import { describe, expect, it, spyOn } from 'bun:test';
-import { randomUUID } from 'node:crypto';
-import { readFile, rm } from 'node:fs/promises';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
-import type { Agent } from '@vybestack/llxprt-code-agents';
-import type { CompressionStrategy } from '@vybestack/llxprt-code-core/core/compression/types.js';
-import * as compressionFactory from '../../compression/compressionStrategyFactory.js';
-import {
-  HookEventName,
-  HookType,
-} from '@vybestack/llxprt-code-core/hooks/types.js';
-import { withRecordingLifetimeFixture } from './helpers/recording-owner-lifetime-fixture.js';
 
 type HookInput = {
   hook_event_name: string;
@@ -47,7 +54,14 @@ async function verifyFacades(
   );
   try {
     await withRecordingLifetimeFixture(
-      async ({ agent, borrow }) => {
+      async (
+        agent,
+        _config,
+        _settingsOwner,
+        _settingsService,
+        _oauthManager,
+        borrow,
+      ) => {
         const sibling = await borrow();
         await agent.setHistory([
           { speaker: 'human', blocks: [{ type: 'text', text: 'seed' }] },
@@ -81,7 +95,7 @@ async function verifyFacades(
                 hooks: [
                   {
                     type: HookType.Command,
-                    command: `cat >> '${output}'; printf '\\n' >> '${output}'`,
+                    command: jsonlHookCommand(output),
                   },
                 ],
               },
@@ -92,11 +106,12 @@ async function verifyFacades(
       'recording-remaining-hooks.jsonl',
     );
   } finally {
-    await rm(output, { force: true });
+    await removeJsonlHook(output);
   }
 }
 
 describe('borrowed facade remaining hook producers', () => {
+  useRecordingPrompts();
   it('attributes detached direct generation selection and model hooks to each executing facade', async () => {
     await verifyFacades(
       [
@@ -169,7 +184,14 @@ describe('borrowed facade remaining hook producers', () => {
     ).mockReturnValue(strategy);
     try {
       await withRecordingLifetimeFixture(
-        async ({ agent, borrow }) => {
+        async (
+          agent,
+          _config,
+          _settingsOwner,
+          _settingsService,
+          _oauthManager,
+          borrow,
+        ) => {
           const sibling = await borrow();
           agent.setEphemeralSetting('context-limit', 4096);
           await agent.setHistory([
@@ -217,7 +239,7 @@ describe('borrowed facade remaining hook producers', () => {
                 hooks: [
                   {
                     type: HookType.Command,
-                    command: `cat >> '${output}'; printf '\\n' >> '${output}'`,
+                    command: jsonlHookCommand(output),
                   },
                 ],
               },
@@ -228,7 +250,7 @@ describe('borrowed facade remaining hook producers', () => {
       );
     } finally {
       strategySpy.mockRestore();
-      await rm(output, { force: true });
+      await removeJsonlHook(output);
     }
   }, 30000);
 });

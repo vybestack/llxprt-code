@@ -65,7 +65,12 @@ function buildFakeRealEnv(fakeRealHome: string): NodeJS.ProcessEnv {
     delete env[key];
   }
   env.HOME = fakeRealHome;
+  env.USERPROFILE = fakeRealHome;
   env.TMPDIR = join(fakeRealHome, 'tmp');
+  env.TEMP = env.TMPDIR;
+  env.TMP = env.TMPDIR;
+  env.APPDATA = join(fakeRealHome, 'AppData', 'Roaming');
+  env.LOCALAPPDATA = join(fakeRealHome, 'AppData', 'Local');
   mkdirSync(env.TMPDIR, { recursive: true });
   env.LLXPRT_CONFIG_HOME = join(fakeRealHome, 'platform-config');
   env.LLXPRT_LOG_HOME = join(fakeRealHome, 'platform-log');
@@ -122,7 +127,9 @@ describe('real-home sentinel guard end-to-end demo (issue #3622)', () => {
       const leak = await runSharedRunner(repoRoot, leakEnv);
       expect(leak.exitCode).toBe(1);
       expect(leak.stderr).toContain('Real-home sentinel violation');
-      expect(leak.stderr).toContain('fixtures/sentinel-leak-fixture.test.ts');
+      expect(leak.stderr).toContain(
+        join('fixtures', 'sentinel-leak-fixture.test.ts'),
+      );
       const leakSentinels = sentinelFiles(legacyDir);
 
       // Control: same runner over the same file, fixture unarmed.
@@ -164,6 +171,26 @@ describe('real-home sentinel guard end-to-end demo (issue #3622)', () => {
   }, 180_000);
 });
 
+/**
+ * Copies a workspace runner together with its sibling runner-*.ts modules so
+ * the relocated entrypoint can resolve its relative imports.
+ */
+function copyRunner(
+  repoRoot: string,
+  workspace: string,
+  destination: string,
+): void {
+  const source = join(repoRoot, 'packages', workspace);
+  const files = ['run-bun-tests.ts'].concat(
+    readdirSync(source).filter(
+      (name) => name.startsWith('runner-') && name.endsWith('.ts'),
+    ),
+  );
+  for (const file of files) {
+    copyFileSync(join(source, file), join(destination, file));
+  }
+}
+
 function sentinelFiles(directory: string): readonly string[] {
   return readdirSync(directory).filter((name) =>
     name.startsWith('.llxprt-sentinel-'),
@@ -195,10 +222,7 @@ describe('every runner entrypoint forwards the session environment', () => {
             join(root, 'scripts'),
             process.platform === 'win32' ? 'junction' : 'dir',
           );
-          copyFileSync(
-            join(repoRoot, 'packages', workspace, 'run-bun-tests.ts'),
-            join(cwd, 'run-bun-tests.ts'),
-          );
+          copyRunner(repoRoot, workspace, cwd);
           copyFileSync(
             join(repoRoot, 'scripts/tests/test-session-probe.test.ts'),
             join(cwd, 'src/probe.test.ts'),
@@ -258,10 +282,7 @@ describe('bespoke runner report failure cleanup', () => {
           join(root, 'scripts'),
           process.platform === 'win32' ? 'junction' : 'dir',
         );
-        copyFileSync(
-          join(repoRoot, 'packages', workspace, 'run-bun-tests.ts'),
-          join(runnerRoot, 'run-bun-tests.ts'),
-        );
+        copyRunner(repoRoot, workspace, runnerRoot);
         writeFileSync(join(runnerRoot, 'bun-preload.ts'), '');
         writeFileSync(
           join(runnerRoot, 'src', 'probe.test.ts'),
@@ -365,10 +386,7 @@ describe('runner SIGTERM cleanup', () => {
             join(root, 'scripts'),
             process.platform === 'win32' ? 'junction' : 'dir',
           );
-          copyFileSync(
-            join(repoRoot, 'packages', workspace, 'run-bun-tests.ts'),
-            join(runnerRoot, 'run-bun-tests.ts'),
-          );
+          copyRunner(repoRoot, workspace, runnerRoot);
           copyFileSync(fixture, join(runnerRoot, 'src/probe.test.ts'));
           writeFileSync(join(runnerRoot, 'bun-preload.ts'), '');
           command = [join(runnerRoot, 'run-bun-tests.ts')];

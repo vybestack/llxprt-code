@@ -59,7 +59,14 @@ describe('LoadBalancingProvider', () => {
   beforeEach(() => {
     settingsService = new SettingsService();
     config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager({ settingsService, config });
+    providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settingsService,
+      config,
+    );
   });
 
   afterEach(() => {
@@ -323,7 +330,7 @@ describe('LoadBalancingProvider', () => {
             contents: [{ role: 'user', parts: [{ text: 'test' }] }],
             settings: settingsService,
             config,
-            runtime: { settingsService, config },
+            runtime: {},
           });
           for await (const _chunk of iterator) {
             // Consume
@@ -412,7 +419,7 @@ describe('LoadBalancingProvider', () => {
             contents: [{ role: 'user', parts: [{ text: 'test' }] }],
             settings: settingsService,
             config,
-            runtime: { settingsService, config },
+            runtime: {},
           });
           for await (const _chunk of iterator) {
             // Consume
@@ -479,7 +486,7 @@ describe('LoadBalancingProvider', () => {
               contents: [{ role: 'user', parts: [{ text: 'test' }] }],
               settings: settingsService,
               config,
-              runtime: { settingsService, config },
+              runtime: {},
               metadata: { abortSignal: controller.signal },
             })) {
               void _chunk;

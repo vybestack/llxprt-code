@@ -4,16 +4,49 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { IdeClient } from '@vybestack/llxprt-code-ide-integration';
+import {
+  IdeClient,
+  type DiffUpdateResult,
+  type IdeContext,
+  type IDEConnectionStatus,
+  type IdeInfo,
+} from '@vybestack/llxprt-code-ide-integration';
 import type { Config } from '../config/config.js';
 import type { WorkspaceTrustReader } from './workspace-trust-reader.js';
 import type { WorkspaceTrustWritePort } from './workspace-trust-mutation.js';
 import type { WorkspaceTrustSettlementPort } from './workspace-trust-transition.js';
 
+export interface WorkspaceIdeConnection {
+  readonly available: boolean;
+  readonly status?: IDEConnectionStatus;
+  readonly details?: string;
+  readonly currentIde?: Readonly<IdeInfo>;
+  readonly detectedIdeDisplayName?: string;
+  readonly diffingEnabled: boolean;
+}
+
 export interface WorkspaceIdePort {
-  getClient(): IdeClient | undefined;
   isEnabled(): boolean;
   setEnabled(enabled: boolean): void;
+  readConnection(): WorkspaceIdeConnection;
+  readContext(): IdeContext | undefined;
+  subscribeContext(
+    listener: (context: IdeContext | undefined) => void,
+  ): () => void;
+  readWorkspaceTrust(): boolean | undefined;
+  subscribeWorkspaceTrust(
+    listener: (trusted: boolean | undefined) => void,
+  ): () => void;
+  subscribeConnection(
+    listener: (connection: WorkspaceIdeConnection) => void,
+  ): () => void;
+  connect(): Promise<void>;
+  disconnect(): Promise<void>;
+  openDiff(filePath: string, newContent?: string): Promise<DiffUpdateResult>;
+  resolveDiff(
+    filePath: string,
+    outcome: 'accepted' | 'rejected',
+  ): Promise<void>;
 }
 
 export class WorkspaceIdeOwner implements WorkspaceIdePort {
@@ -27,6 +60,23 @@ export class WorkspaceIdeOwner implements WorkspaceIdePort {
   );
   private readonly trustOperations = new Set<Promise<void>>();
   private readonly trustFailures: unknown[] = [];
+  private readonly contextListeners = new Set<
+    (context: IdeContext | undefined) => void
+  >();
+  private readonly trustListeners = new Set<
+    (trusted: boolean | undefined) => void
+  >();
+  private readonly connectionListeners = new Set<
+    (connection: WorkspaceIdeConnection) => void
+  >();
+  private readonly onContext = (context: IdeContext | undefined): void => {
+    for (const listener of this.contextListeners) listener(context);
+  };
+  private readonly onConnection = (): void => {
+    if (this.closing) return;
+    const connection = this.readConnection();
+    for (const listener of this.connectionListeners) listener(connection);
+  };
   private readonly onTrust = (trusted: boolean | undefined): void => {
     if (this.closing) return;
     const operation = this.trustWriter.setIdeTrustLive(trusted).then(
@@ -37,6 +87,7 @@ export class WorkspaceIdeOwner implements WorkspaceIdePort {
     );
     this.trustOperations.add(operation);
     void operation.then(() => this.trustOperations.delete(operation));
+    for (const listener of this.trustListeners) listener(trusted);
   };
 
   constructor(
@@ -76,6 +127,8 @@ export class WorkspaceIdeOwner implements WorkspaceIdePort {
     this.client = client;
     this.assertConfig(this.configIdentity);
     client.addTrustChangeListener(this.onTrust);
+    client.addContextChangeListener(this.onContext);
+    client.addStatusChangeListener(this.onConnection);
     await this.trustWriter.setIdeTrustLive(client.getWorkspaceTrust());
     this.assertConfig(this.configIdentity);
   }
@@ -90,9 +143,87 @@ export class WorkspaceIdeOwner implements WorkspaceIdePort {
     this.enabled = enabled;
   }
 
-  getClient(): IdeClient | undefined {
+  readConnection(): WorkspaceIdeConnection {
     this.assertConfig(this.configIdentity);
-    return this.client;
+    const client = this.client;
+    if (client === undefined)
+      return { available: false, diffingEnabled: false };
+    const currentIde = client.getCurrentIde();
+    return {
+      available: true,
+      ...client.getConnectionStatus(),
+      currentIde: currentIde === undefined ? undefined : { ...currentIde },
+      detectedIdeDisplayName: client.getDetectedIdeDisplayName(),
+      diffingEnabled: client.isDiffingEnabled(),
+    };
+  }
+
+  readContext(): IdeContext | undefined {
+    this.assertConfig(this.configIdentity);
+    return this.client?.getIdeContext();
+  }
+
+  readWorkspaceTrust(): boolean | undefined {
+    this.assertConfig(this.configIdentity);
+    return this.client?.getWorkspaceTrust();
+  }
+
+  subscribeContext(
+    listener: (context: IdeContext | undefined) => void,
+  ): () => void {
+    return this.subscribe(this.contextListeners, listener);
+  }
+
+  subscribeWorkspaceTrust(
+    listener: (trusted: boolean | undefined) => void,
+  ): () => void {
+    return this.subscribe(this.trustListeners, listener);
+  }
+
+  subscribeConnection(
+    listener: (connection: WorkspaceIdeConnection) => void,
+  ): () => void {
+    return this.subscribe(this.connectionListeners, listener);
+  }
+
+  private subscribe<T>(
+    listeners: Set<(value: T) => void>,
+    listener: (value: T) => void,
+  ): () => void {
+    this.assertConfig(this.configIdentity);
+    const notify = (value: T): void => listener(value);
+    listeners.add(notify);
+    return () => {
+      listeners.delete(notify);
+    };
+  }
+
+  async connect(): Promise<void> {
+    this.assertConfig(this.configIdentity);
+    await this.client?.connect();
+  }
+
+  async disconnect(): Promise<void> {
+    this.assertConfig(this.configIdentity);
+    await this.client?.disconnect();
+  }
+
+  async openDiff(
+    filePath: string,
+    newContent?: string,
+  ): Promise<DiffUpdateResult> {
+    this.assertConfig(this.configIdentity);
+    if (this.client === undefined)
+      throw new Error('IDE client is not available');
+    return this.client.openDiff(filePath, newContent);
+  }
+
+  async resolveDiff(
+    filePath: string,
+    outcome: 'accepted' | 'rejected',
+  ): Promise<void> {
+    this.assertConfig(this.configIdentity);
+    await this.client?.resolveDiffFromCli(filePath, outcome);
   }
 
   whenSettled(): Promise<void> {
@@ -101,6 +232,9 @@ export class WorkspaceIdeOwner implements WorkspaceIdePort {
 
   closeAdmission(): void {
     this.closing = true;
+    this.contextListeners.clear();
+    this.trustListeners.clear();
+    this.connectionListeners.clear();
   }
 
   dispose(): Promise<void> {
@@ -119,15 +253,14 @@ export class WorkspaceIdeOwner implements WorkspaceIdePort {
       return;
     }
     const client = result.value;
-    try {
-      client.removeTrustChangeListener(this.onTrust);
-    } catch (error) {
-      failures.push(error);
-    }
-    for (const release of [
+    const releases: ReadonlyArray<() => void | Promise<void>> = [
+      () => client.removeTrustChangeListener(this.onTrust),
+      () => client.removeContextChangeListener(this.onContext),
+      () => client.removeStatusChangeListener(this.onConnection),
       () => client.disconnect(),
       () => this.whenSettled(),
-    ]) {
+    ];
+    for (const release of releases) {
       try {
         await release();
       } catch (error) {

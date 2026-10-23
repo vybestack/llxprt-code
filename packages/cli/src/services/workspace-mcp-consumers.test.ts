@@ -1,17 +1,50 @@
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-
-import { Config } from '@vybestack/llxprt-code-core';
-import { initializeTestConfig } from '@vybestack/llxprt-code-test-utils/core/config.js';
-import { describe, expect, it } from 'bun:test';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from '../../../agents/src/api/__tests__/helpers/session-client-capture.js';
+import { adoptFixture as fromConfig } from '../../../agents/src/api/__tests__/helpers/adoption-fixture.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { toConfigParameters } from '../../../agents/src/api/agentConfig.adapter.js';
+import { mkdtemp, realpath, rm, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { fromConfig } from '@vybestack/llxprt-code-agents';
-import { buildCliStyleConfig } from '../../../agents/src/api/__tests__/helpers/buildCliStyleConfig.js';
+import { tmpdir } from 'node:os';
+import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
+import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import {
+  acquirePreferredProviderManager,
+  acquirePreferredOAuth,
+  preparePreferredProviderCompletion,
+} from '../../../agents/src/api/preferred-provider-acquisition.js';
+import { releaseAdoptedFileScope } from '../../../agents/src/api/adoption-release.js';
+import { randomUUID } from 'node:crypto';
+import {
+  runCleanupSteps,
+  cleanupAfterFailure,
+} from '../../../agents/src/core/subagent-cleanup.js';
+
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
+import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { fileURLToPath } from 'node:url';
+import { buildTestMcpRuntime } from '../../../agents/src/api/__tests__/helpers/mcp-owner-fixture.js';
+import { createAgentRuntimeFactoryBindings } from '../../../agents/src/api/runtimeFactories.js';
+import { injectConfirmationForcingPolicy } from '../../../agents/src/api/confirmationForcing.js';
+import { executeProviderActivation } from '../../../agents/src/api/providerActivationExecutor.js';
+import { assembleProviderSwitch } from '../../../agents/src/api/providerSwitchAssembly.js';
+import { assembleModelSelection } from '../../../agents/src/api/model-selection.js';
+import { AgentConfig } from '../../../agents/src/api/config-types.js';
+import { createTestOAuthBinding } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { McpRuntimeOwner } from '../../../agents/src/api/mcpRuntimeAssembly.js';
+import { type Agent } from '@vybestack/llxprt-code-agents';
 import {
   startCatalogFixture,
   waitForFixtureFile,
@@ -22,47 +55,254 @@ import { renderHook, waitFor } from '../__tests__/render.js';
 import { useTestHarnessForAtCompletion } from '../ui/hooks/__tests__/useAtCompletion-test-helpers.js';
 import { McpPromptLoader } from './McpPromptLoader.js';
 
-async function openWorkspace() {
-  const directory = await mkdtemp(join(tmpdir(), 'cli-mcp-catalog-'));
-  const server = await startCatalogFixture(directory);
-  const built = await buildCliStyleConfig('plain-text.jsonl', {
-    workingDir: directory,
-    folderTrust: true,
-    mcpServers: { physical: { httpUrl: server.url, trust: true } },
-    telemetry: { enabled: false },
-    recording: { enabled: false },
-  });
-  await built.mcpRuntime.awaitDiscovery();
-  const agent = await fromConfig({
-    settingsService: built.settingsService,
-    config: built.config,
-    agentClient: built.agentClient,
-    providerManager: built.providerManager,
-    mcpRuntime: built.mcpRuntime,
-  });
-  return {
-    directory,
-    built,
-    agent,
-    runtime: buildSlashCommandRuntime(built.config, agent),
-    close: async (): Promise<void> => {
-      server.release();
-      await agent.dispose();
-      await built.cleanup();
-      await server.stop();
-      await rm(directory, { recursive: true, force: true });
-    },
-  };
-}
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 describe('production CLI workspace MCP consumers', () => {
-  it('loads and invokes physical prompts through the same root as public Agent details', async () => {
-    const fixture = await openWorkspace();
-    try {
-      const details = await fixture.agent.mcp.details({ includePrompts: true });
-      const commands = await new McpPromptLoader(fixture.runtime).loadCommands(
-        new AbortController().signal,
+  let promptDirectory: string;
+  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+  beforeAll(async () => {
+    promptDirectory = await mkdtemp(join(tmpdir(), 'engine-prompts-'));
+    process.env.LLXPRT_PROMPTS_DIR = promptDirectory;
+    await initializePromptSystem();
+  });
+  afterAll(async () => {
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(promptDirectory, { recursive: true, force: true });
+  });
+  const builtCredentials = useOwnedCredentials();
+  let workspaceDirectory: string;
+  let workspaceAgent: Agent;
+  let workspaceCommands: ReturnType<typeof buildSlashCommandRuntime>;
+  let setWorkspaceTrustedFolder: (trusted: boolean) => Promise<void>;
+  let closeWorkspaceRoot: () => Promise<void>;
+  let closeWorkspace: () => Promise<void>;
+  async function openWorkspace(): Promise<void> {
+    const directory = await mkdtemp(join(tmpdir(), 'cli-mcp-catalog-'));
+    const server = await startCatalogFixture(directory);
+
+    const builtCallerPreviousReplay = process.env.LLXPRT_FAKE_RESPONSES;
+    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+      new URL(
+        '../../../agents/src/api/__tests__/fixtures/' + 'plain-text.jsonl',
+        import.meta.url,
+      ),
+    );
+    const builtCallerDirectory = await realpath(
+      await mkdtemp(join(tmpdir(), 'explicit-caller-')),
+    );
+    const builtCallerOverrides: Readonly<Partial<AgentConfig>> = {
+      workingDir: directory,
+      folderTrust: true,
+      mcpServers: { physical: { httpUrl: server.url, trust: true } },
+      telemetry: { enabled: false },
+      recording: { enabled: false },
+    };
+    const builtCallerSelection: AgentConfig = {
+      provider: 'fake',
+      model: 'fake-model',
+      sessionId: randomUUID(),
+      ...builtCallerOverrides,
+      workingDir:
+        builtCallerOverrides.workingDir === undefined
+          ? builtCallerDirectory
+          : await realpath(builtCallerOverrides.workingDir),
+    };
+    const builtCallerParameters = {
+      ...toConfigParameters(builtCallerSelection),
+      ...{},
+    };
+    builtCallerParameters.interactive = true;
+
+    builtCallerParameters.includeDirectories = [
+      ...(builtCallerParameters.includeDirectories ?? []),
+      process.cwd(),
+    ];
+    const builtCallerConfig = new Config(builtCallerParameters);
+    const builtCallerFactories = {
+      ...createAgentRuntimeFactoryBindings(),
+      ...{},
+    };
+    const builtCallerSettings = new SettingsService();
+    for (const [key, value] of Object.entries(
+      builtCallerConfig.getInitialSettings(),
+    ))
+      builtCallerSettings.set(key, value);
+    const builtCallerPolicy = new RuntimePolicyOwner(builtCallerConfig);
+    injectConfirmationForcingPolicy(builtCallerPolicy.session.confirmation);
+    const builtCallerMcp = await buildTestMcpRuntime(
+      builtCallerConfig,
+      builtCallerPolicy.session.messageBus,
+      builtCallerOverrides,
+      undefined,
+      builtCallerPolicy,
+      undefined,
+    );
+    const builtCallerRuntimeId = 'caller-' + randomUUID();
+    const builtCallerRelease = new AcquisitionRelease();
+    const builtCallerSettingsOwner = new SessionSettingsOwner(
+      builtCallerSettings,
+    );
+    builtCallerRelease.acquire('settings', () =>
+      builtCallerSettingsOwner.dispose(),
+    );
+    builtCallerSettingsOwner.initializeProviderSelection(
+      builtCallerConfig.getProvider(),
+      builtCallerConfig.getModel(),
+    );
+    builtCallerSettingsOwner.bindTelemetry(builtCallerConfig);
+    const builtCallerFiles = new ProviderFileLifecycle({
+      maxFiles: 100,
+      maxBytes: 512 * 1024 * 1024,
+    });
+    for (const scope of [
+      builtCallerRuntimeId,
+      builtCallerConfig.getSessionId(),
+    ])
+      builtCallerRelease.acquire('files', () =>
+        releaseAdoptedFileScope(builtCallerFiles, scope),
       );
+    const builtCallerManager = acquirePreferredProviderManager(
+      builtCallerConfig,
+      builtCallerSettings,
+      builtCallerSettingsOwner,
+      builtCallerFiles,
+      builtCallerRuntimeId,
+      builtCredentials().authority,
+      builtCallerRelease,
+    );
+    const builtCallerTokenizer = configureProviderTokenizer(builtCallerManager);
+    const builtCallerContent = createRuntimeContentGeneratorFactory();
+    const builtCallerOAuth = acquirePreferredOAuth(
+      undefined,
+      builtCallerPolicy.session.messageBus,
+      builtCallerConfig,
+      builtCallerSettings,
+      builtCallerManager,
+      builtCallerRuntimeId,
+      builtCallerMcp.profileDefinitions,
+      builtCredentials().authority,
+      builtCallerRelease,
+      undefined,
+    );
+    const builtCallerMedia = new SessionMediaOwner(
+      builtCallerConfig.projectTempDir,
+      1024 * 1024 * 1024,
+    );
+    const builtCallerOwner = await createCapturedSessionOwner(
+      builtCallerConfig,
+      assembleTaskSchemaPolicy(builtCallerSettings),
+      builtCallerManager,
+      builtCallerFactories.agentClientFactory,
+      builtCallerMedia.store,
+      builtCallerMcp.readInstructions,
+      builtCallerMcp.workspacePaths,
+      builtCallerSettingsOwner,
+      builtCallerContent,
+      builtCallerTokenizer,
+    );
+    builtCallerOwner.bindMcpRuntime(builtCallerMcp);
+    builtCallerOwner.bindProviderFiles(builtCallerFiles, (provider) =>
+      builtCallerOAuth.composeRetryOperations(provider),
+    );
+    builtCallerOwner.bindHooks();
+    const builtCallerClose = settleEngineRelease.bind(
+      undefined,
+      [
+        () => builtCallerOwner.dispose(),
+        () => builtCallerRelease.close(),
+        () => builtCallerMedia.dispose(),
+        () => builtCallerMcp.dispose(),
+        () => builtCallerConfig.dispose(),
+        () => rm(builtCallerDirectory, { recursive: true, force: true }),
+      ],
+      builtCallerPreviousReplay,
+    );
+    try {
+      await preparePreferredProviderCompletion(
+        builtCallerConfig,
+        builtCallerSettings,
+        builtCallerSettingsOwner,
+        builtCallerManager,
+        builtCallerOAuth,
+        builtCallerRuntimeId,
+        builtCallerTokenizer,
+        undefined,
+      );
+      await builtCallerMcp.initialize();
+      const activation = await executeProviderActivation(
+        builtCallerConfig,
+        builtCallerSelection.activation ?? {
+          provider: builtCallerConfig.getProvider(),
+          model: builtCallerConfig.getModel(),
+        },
+        assembleProviderSwitch(
+          builtCallerConfig,
+          builtCallerSettings,
+          builtCallerManager,
+          builtCallerOAuth,
+          () => 'agent',
+          () => builtCallerOwner.refreshAuth(),
+          builtCallerSettingsOwner,
+        ),
+        builtCallerSettings,
+        builtCallerManager,
+        (method) => builtCallerOwner.refreshAuth(method),
+        assembleModelSelection(builtCallerSettingsOwner),
+      );
+      requireCallerActivation(activation);
+      await builtCallerOwner.initializeTools();
+      await capturedSessionClient(builtCallerOwner).startChat();
+    } catch (primary) {
+      await cleanupAfterFailure(primary, builtCallerClose);
+    }
+
+    await builtCallerMcp.awaitDiscovery();
+    const agent = await fromConfig(
+      builtCallerConfig,
+      builtCallerSettings,
+      {},
+      undefined,
+      builtCallerManager,
+      undefined,
+      undefined,
+      builtCallerMcp,
+      undefined,
+      capturedSessionClient(builtCallerOwner),
+    );
+    // The Config's workspace root is the canonical (native realpath) spelling.
+    // On Windows the temp dir is an 8.3 short name, and completion rejects a cwd
+    // that is not spelled like a live workspace root.
+    workspaceDirectory = await realpath(directory);
+    workspaceAgent = agent;
+    workspaceCommands = buildSlashCommandRuntime(builtCallerConfig, agent);
+    setWorkspaceTrustedFolder = (trusted) =>
+      builtCallerMcp.trust.setTrustedFolderLive(trusted);
+    closeWorkspaceRoot = () => builtCallerMcp.dispose();
+    let closing: Promise<void> | undefined;
+    closeWorkspace = () =>
+      (closing ??= runCleanupSteps([
+        () => server.release(),
+        () => agent.dispose(),
+        builtCallerClose,
+        () => server.stop(),
+        () => rm(directory, { recursive: true, force: true }),
+      ]));
+  }
+
+  it('loads and invokes physical prompts through the same root as public Agent details', async () => {
+    await openWorkspace();
+    try {
+      const details = await workspaceAgent.mcp.details({
+        includePrompts: true,
+      });
+      const commands = await new McpPromptLoader(
+        workspaceCommands,
+      ).loadCommands(new AbortController().signal);
       expect(commands.map((command) => command.name)).toStrictEqual(
         details.servers
           .flatMap((server) => server.prompts ?? [])
@@ -72,14 +312,14 @@ describe('production CLI workspace MCP consumers', () => {
         (candidate) => candidate.name === 'quantity',
       );
       if (!command?.action) throw new Error('Missing physical CLI prompt');
-      await writeFile(join(fixture.directory, 'quantity'), '13');
+      await writeFile(join(workspaceDirectory, 'quantity'), '13');
       expect(
         await command.action(createMockCommandContext(), ''),
       ).toMatchObject({
         type: 'submit_prompt',
         content: JSON.stringify('Quantity squared is 169'),
       });
-      await fixture.agent.mcp.refresh('physical');
+      await workspaceAgent.mcp.refresh('physical');
       expect(
         await command.action(createMockCommandContext(), ''),
       ).toMatchObject({
@@ -87,29 +327,29 @@ describe('production CLI workspace MCP consumers', () => {
         messageType: 'error',
         content: expect.stringContaining('withdrawn'),
       });
-      const refreshed = await new McpPromptLoader(fixture.runtime).loadCommands(
-        new AbortController().signal,
-      );
+      const refreshed = await new McpPromptLoader(
+        workspaceCommands,
+      ).loadCommands(new AbortController().signal);
       expect(refreshed.map((candidate) => candidate.name)).toContain(
         'quantity',
       );
-      await fixture.built.mcpRuntime.trust.setTrustedFolderLive(false);
+      await setWorkspaceTrustedFolder(false);
       expect(
-        await new McpPromptLoader(fixture.runtime).loadCommands(
+        await new McpPromptLoader(workspaceCommands).loadCommands(
           new AbortController().signal,
         ),
       ).toStrictEqual([]);
     } finally {
-      await fixture.close();
+      await closeWorkspace();
     }
   }, 30000);
 
   it('forwards command cancellation to the physical prompt transport', async () => {
-    const fixture = await openWorkspace();
+    await openWorkspace();
     try {
-      const commands = await new McpPromptLoader(fixture.runtime).loadCommands(
-        new AbortController().signal,
-      );
+      const commands = await new McpPromptLoader(
+        workspaceCommands,
+      ).loadCommands(new AbortController().signal);
       const command = commands.find(
         (candidate) => candidate.name === 'quantity',
       );
@@ -119,9 +359,9 @@ describe('production CLI workspace MCP consumers', () => {
         createMockCommandContext({ signal: controller.signal }),
         '--hold=yes',
       );
-      expect(await waitForFixtureFile(join(fixture.directory, 'entered'))).toBe(
-        'prompts/get',
-      );
+      expect(
+        await waitForFixtureFile(join(workspaceDirectory, 'entered')),
+      ).toBe('prompts/get');
       controller.abort(new Error('CLI command cancelled'));
       expect(await pending).toMatchObject({
         type: 'message',
@@ -130,45 +370,48 @@ describe('production CLI workspace MCP consumers', () => {
       });
       await waitFor(async () =>
         expect(
-          await readFile(join(fixture.directory, 'requests'), 'utf8'),
+          await readFile(join(workspaceDirectory, 'requests'), 'utf8'),
         ).toContain('notifications/cancelled'),
       );
     } finally {
-      await fixture.close();
+      await closeWorkspace();
     }
   }, 30000);
 
   it('keeps same-label CLI roots independent across sibling facade disposal', async () => {
-    const first = await openWorkspace();
-    const second = await openWorkspace();
+    await openWorkspace();
+    const firstAgent = workspaceAgent;
+    const closeFirstRoot = closeWorkspaceRoot;
+    const closeFirst = closeWorkspace;
+    await openWorkspace();
     try {
-      await writeFile(join(second.directory, 'quantity'), '23');
-      const commands = await new McpPromptLoader(second.runtime).loadCommands(
-        new AbortController().signal,
-      );
+      await writeFile(join(workspaceDirectory, 'quantity'), '23');
+      const commands = await new McpPromptLoader(
+        workspaceCommands,
+      ).loadCommands(new AbortController().signal);
       const command = commands.find(
         (candidate) => candidate.name === 'quantity',
       );
       if (!command?.action) throw new Error('Missing sibling CLI prompt');
-      await first.agent.dispose();
-      await first.built.mcpRuntime.dispose();
+      await firstAgent.dispose();
+      await closeFirstRoot();
       expect(
         await command.action(createMockCommandContext(), ''),
       ).toMatchObject({
         type: 'submit_prompt',
         content: JSON.stringify('Quantity squared is 529'),
       });
-      const identity = second.agent.mcp.findResource(
+      const identity = workspaceAgent.mcp.findResource(
         'physical:fixture:///quantity',
       );
       expect(
-        second.runtime
+        workspaceCommands
           .listResources()
           .find((resource) => resource.uri === identity?.uri),
       ).toBe(identity);
     } finally {
-      await first.close();
-      await second.close();
+      await closeFirst();
+      await closeWorkspace();
     }
   }, 30000);
 
@@ -185,23 +428,19 @@ describe('production CLI workspace MCP consumers', () => {
       mcpServers: { physical: { httpUrl: server.url, trust: true } },
       telemetry: { enabled: false },
     });
-    const root = await initializeTestConfig(config);
+    const root = await McpRuntimeOwner.create(createTestOAuthBinding(), config);
     try {
+      await root.initialize();
       await waitFor(() =>
-        expect(
-          root.catalogOwner.resourceSelection
-            .listResources()
-            .map((resource) => resource.uri),
-        ).toContain('fixture:///quantity'),
+        expect(root.listResources().map((resource) => resource.uri)).toContain(
+          'fixture:///quantity',
+        ),
       );
       await writeFile(join(directory, 'quantity'), '29');
       expect(
-        await root.catalogOwner.resourceSelection.readResource(
-          'physical',
-          'fixture:///quantity',
-        ),
+        await root.readResource('physical', 'fixture:///quantity'),
       ).toMatchObject({ contents: [{ text: '29' }] });
-      const prompt = root.catalogOwner.promptSelection
+      const prompt = root
         .listPrompts('physical')
         .find((candidate) => candidate.name === 'quantity');
       if (!prompt) throw new Error('Fixture manager did not publish a prompt');
@@ -220,13 +459,13 @@ describe('production CLI workspace MCP consumers', () => {
   }, 30000);
 
   it('completes physical resource identities and reads through the public Agent workspace', async () => {
-    const fixture = await openWorkspace();
+    await openWorkspace();
     const view = renderHook(() =>
       useTestHarnessForAtCompletion(
         true,
         'physical:fixture',
-        fixture.runtime,
-        fixture.directory,
+        workspaceCommands,
+        workspaceDirectory,
       ),
     );
     try {
@@ -235,17 +474,38 @@ describe('production CLI workspace MCP consumers', () => {
           view.result.current.suggestions.map((suggestion) => suggestion.value),
         ).toContain('physical:fixture:///quantity'),
       );
-      const resource = fixture.agent.mcp.findResource(
+      const resource = workspaceAgent.mcp.findResource(
         'physical:fixture:///quantity',
       );
       if (!resource) throw new Error('Missing public resource identity');
-      await writeFile(join(fixture.directory, 'quantity'), '19');
+      await writeFile(join(workspaceDirectory, 'quantity'), '19');
       expect(
-        await fixture.agent.mcp.readResource(resource.serverName, resource.uri),
+        await workspaceAgent.mcp.readResource(
+          resource.serverName,
+          resource.uri,
+        ),
       ).toMatchObject({ contents: [{ text: '19' }] });
     } finally {
       view.unmount();
-      await fixture.close();
+      await closeWorkspace();
     }
   }, 30000);
 });
+
+async function settleEngineRelease(
+  steps: ReadonlyArray<() => void | Promise<void>>,
+  previousReplay: string | undefined,
+): Promise<void> {
+  try {
+    await runCleanupSteps(steps);
+  } finally {
+    if (previousReplay === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
+    else process.env.LLXPRT_FAKE_RESPONSES = previousReplay;
+  }
+}
+
+function requireCallerActivation(
+  result: Awaited<ReturnType<typeof executeProviderActivation>>,
+): void {
+  if (result.authFailed) throw result.authError;
+}

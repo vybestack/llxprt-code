@@ -28,6 +28,8 @@ import {
 import {
   cleanupCredentialSocketRuntime,
   createCredentialSocketRuntime,
+  removeCredentialSessionTmpdir,
+  type CredentialSocketRuntime,
 } from './sandbox-credential-runtime.js';
 
 /** Composes cleanup callbacks and surfaces failures after attempting each one. */
@@ -262,21 +264,18 @@ function composeArmableBridgeCleanup(
 }
 
 async function startCredentialProxyForSandbox(
-  config: SandboxConfig,
   socketRuntimePath: string,
   sessionTmpdirCleanup: () => void,
   onSandboxHandshake: () => void,
 ): Promise<string> {
   try {
-    assertSupportedCredentialNetwork(config);
-  } catch (error) {
-    throwCredentialProxySetupError(error, sessionTmpdirCleanup);
-  }
-  try {
-    await createAndStartProxy({
-      socketPath: socketRuntimePath,
-      onSandboxHandshake,
-    });
+    await createAndStartProxy(
+      {
+        socketPath: socketRuntimePath,
+        onSandboxHandshake,
+      },
+      globalThis.fetch,
+    );
   } catch (error) {
     throwCredentialProxySetupError(
       new FatalSandboxError(
@@ -292,6 +291,20 @@ async function startCredentialProxyForSandbox(
   return socketPath;
 }
 
+function prepareCredentialSocketRuntime(
+  config: SandboxConfig,
+  sessionTmpdir: string,
+): CredentialSocketRuntime {
+  try {
+    assertSupportedCredentialNetwork(config);
+    return createCredentialSocketRuntime(config, sessionTmpdir);
+  } catch (error) {
+    return throwCredentialProxySetupError(error, () =>
+      removeCredentialSessionTmpdir(sessionTmpdir),
+    );
+  }
+}
+
 export async function setupCredentialProxy(
   args: string[],
   config: SandboxConfig,
@@ -302,7 +315,11 @@ export async function setupCredentialProxy(
   credentialProxyBridgeResult: CredentialProxyBridgeResult | undefined;
   credentialProxyBridgeCleanup: CredentialProxyBridgeCleanup | undefined;
 }> {
-  const socketRuntime = createCredentialSocketRuntime(config, sessionTmpdir);
+  // The session directory is owned by this setup from the first line: every
+  // failure below, including network-policy validation and runtime
+  // allocation, removes it. Policy is validated first so a rejected launch
+  // allocates no runtime resources.
+  const socketRuntime = prepareCredentialSocketRuntime(config, sessionTmpdir);
   const sessionTmpdirCleanup = (): void =>
     cleanupCredentialSocketRuntime(socketRuntime, sessionTmpdir);
   const envFileRelease = createCapabilityEnvFileRelease();
@@ -311,7 +328,6 @@ export async function setupCredentialProxy(
   let socketPath: string;
   try {
     socketPath = await startCredentialProxyForSandbox(
-      config,
       socketRuntime.path,
       sessionTmpdirCleanup,
       // bestEffort: the handshake fires on the proxy's frame-processing path,

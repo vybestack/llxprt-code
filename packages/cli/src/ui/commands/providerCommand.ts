@@ -10,7 +10,6 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-import type { RuntimeApi } from '../contexts/RuntimeContext.js';
 import { firstNonEmptyString } from '../../utils/coalesce.js';
 import type {
   SlashCommand,
@@ -20,12 +19,38 @@ import type {
 } from './types.js';
 import { CommandKind } from './types.js';
 import { MessageType } from '../types.js';
-import { writeProviderAliasConfig } from '@vybestack/llxprt-code-providers/composition.js';
+import type { ProviderAliasConfig } from '@vybestack/llxprt-code-providers/composition.js';
 import type {
+  SessionProviderReads,
   AgentOAuthUIEvent,
+  AgentProviderSwitchOptions,
   AgentProviderSwitchResult,
 } from '@vybestack/llxprt-code-agents';
+type AliasResolveResult = ReturnType<
+  SessionProviderReads['inspection']['getActiveProviderAliasConfig']
+>;
 import { UNCONFIGURED_PROVIDER } from '@vybestack/llxprt-code-core';
+
+/**
+ * Operations bound by the application host that registers /provider. The
+ * command never selects an owner from its invocation.
+ */
+export interface ProviderCommandOperations {
+  /** Name of the active provider, or null when none can be determined. */
+  getActiveProviderName: () => string | null;
+  getActiveModelName: () => string;
+  switchProvider: (
+    providerName: string,
+    options: AgentProviderSwitchOptions,
+  ) => Promise<AgentProviderSwitchResult>;
+  recordProviderSwitch: (provider: string, model: string) => Promise<void>;
+  resolveActiveProviderAliasConfig: () => AliasResolveResult;
+  writeProviderAlias: (alias: string, config: ProviderAliasConfig) => void;
+  refreshProviderAliases: () => Promise<void>;
+}
+
+/** The UI publication surface a /provider invocation needs. */
+type ProviderInvocation = Pick<CommandContext, 'ui'>;
 
 /**
  * Translates the agent's OAuthUIEvent type into a UI MessageType. The agent
@@ -96,7 +121,7 @@ function validateAliasName(alias: string): string | null {
 }
 
 async function handleSaveAlias(
-  context: CommandContext,
+  operations: ProviderCommandOperations,
   rawArgs: string,
 ): Promise<MessageActionReturn> {
   const alias = rawArgs.replace(/^save\b\s*/i, '').trim();
@@ -106,16 +131,7 @@ async function handleSaveAlias(
     return { type: 'message', messageType: 'error', content: validationError };
   }
 
-  const config = context.services.config;
-  if (!config) {
-    return {
-      type: 'message',
-      messageType: 'error',
-      content: 'Unable to access configuration to save provider alias.',
-    };
-  }
-
-  const resolveResult = context.runtimeApi.getActiveProviderAliasConfig();
+  const resolveResult = operations.resolveActiveProviderAliasConfig();
   if (!resolveResult.ok) {
     return {
       type: 'message',
@@ -135,8 +151,8 @@ async function handleSaveAlias(
   }
 
   try {
-    writeProviderAliasConfig(alias, aliasConfig);
-    await context.refreshProviderAliases();
+    operations.writeProviderAlias(alias, aliasConfig);
+    await operations.refreshProviderAliases();
   } catch (error) {
     return {
       type: 'message',
@@ -154,25 +170,12 @@ async function handleSaveAlias(
   };
 }
 
-function resolveCurrentProvider(runtime: RuntimeApi): string | null {
-  try {
-    return runtime.getActiveProviderName();
-  } catch {
-    try {
-      return runtime.providerStatus().providerName ?? null;
-    } catch {
-      return null;
-    }
-  }
-}
-
 async function switchProvider(
-  context: CommandContext,
+  operations: ProviderCommandOperations,
+  invocation: ProviderInvocation,
   providerName: string,
 ): Promise<MessageActionReturn> {
-  const runtime = context.runtimeApi;
-  const currentProvider = resolveCurrentProvider(runtime);
-  const agent = context.services.agent;
+  const currentProvider = operations.getActiveProviderName();
 
   if (providerName === currentProvider) {
     return {
@@ -182,22 +185,13 @@ async function switchProvider(
     };
   }
 
-  if (!agent) {
-    return {
-      type: 'message',
-      messageType: 'error',
-      content:
-        'Cannot switch provider: the interactive Agent is not available. Restart the session.',
-    };
-  }
-
   const fromProvider = firstNonEmptyString(currentProvider, 'none');
 
   let switchResult: AgentProviderSwitchResult;
   try {
-    switchResult = await agent.setProvider(providerName, undefined, {
+    switchResult = await operations.switchProvider(providerName, {
       addItem: (event, timestamp) =>
-        context.ui.addItem(
+        invocation.ui.addItem(
           { type: mapOAuthEventType(event.type), text: formatOAuthText(event) },
           timestamp ?? Date.now(),
         ),
@@ -215,32 +209,11 @@ async function switchProvider(
     if (!info) {
       continue;
     }
-    context.ui.addItem({ type: MessageType.INFO, text: info }, Date.now());
+    invocation.ui.addItem({ type: MessageType.INFO, text: info }, Date.now());
   }
 
-  const model = switchResult.defaultModel ?? runtime.getActiveModelName();
-  if (context.recordingOwner === 'agent') {
-    await agent.session.recordRecordingEvent({
-      type: 'provider_switch',
-      provider: switchResult.nextProvider,
-      model,
-    });
-  } else {
-    context.recordingIntegration?.recordProviderSwitch(
-      switchResult.nextProvider,
-      model,
-    );
-  }
-
-  const extendedContext = context as CommandContext & {
-    checkPaymentModeChange?: (forcePreviousProvider?: string) => void;
-  };
-  if (extendedContext.checkPaymentModeChange) {
-    setTimeout(
-      () => extendedContext.checkPaymentModeChange!(fromProvider),
-      100,
-    );
-  }
+  const model = switchResult.defaultModel ?? operations.getActiveModelName();
+  await operations.recordProviderSwitch(switchResult.nextProvider, model);
 
   return {
     type: 'message',
@@ -249,33 +222,37 @@ async function switchProvider(
   };
 }
 
-export const providerCommand: SlashCommand = {
-  name: 'provider',
-  description:
-    'switch between different AI providers (openai, anthropic, etc.)',
-  kind: CommandKind.BUILT_IN,
-  action: async (
-    context: CommandContext,
-    args: string,
-  ): Promise<OpenDialogActionReturn | MessageActionReturn | void> => {
-    const trimmedArgs = args.trim();
+export function createProviderCommand(
+  operations: ProviderCommandOperations,
+): SlashCommand {
+  return {
+    name: 'provider',
+    description:
+      'switch between different AI providers (openai, anthropic, etc.)',
+    kind: CommandKind.BUILT_IN,
+    action: async (
+      invocation: ProviderInvocation,
+      args: string,
+    ): Promise<OpenDialogActionReturn | MessageActionReturn | void> => {
+      const trimmedArgs = args.trim();
 
-    if (!trimmedArgs) {
-      return { type: 'dialog', dialog: 'provider' };
-    }
+      if (!trimmedArgs) {
+        return { type: 'dialog', dialog: 'provider' };
+      }
 
-    if (/^save\b/i.test(trimmedArgs)) {
-      return handleSaveAlias(context, trimmedArgs);
-    }
+      if (/^save\b/i.test(trimmedArgs)) {
+        return handleSaveAlias(operations, trimmedArgs);
+      }
 
-    try {
-      return await switchProvider(context, trimmedArgs);
-    } catch (error) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: `Failed to switch provider: ${error instanceof Error ? error.message : String(error)}`,
-      };
-    }
-  },
-};
+      try {
+        return await switchProvider(operations, invocation, trimmedArgs);
+      } catch (error) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `Failed to switch provider: ${error instanceof Error ? error.message : String(error)}`,
+        };
+      }
+    },
+  };
+}

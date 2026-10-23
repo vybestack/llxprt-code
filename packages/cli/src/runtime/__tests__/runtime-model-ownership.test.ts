@@ -1,17 +1,59 @@
+import { adoptFixture as fromConfig } from '../../../../agents/src/api/__tests__/helpers/adoption-fixture.js';
+import { ProviderReadFixture } from '../../../../agents/src/api/__tests__/helpers/provider-read-fixture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from '../../../../agents/src/api/__tests__/helpers/session-client-capture.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { McpRuntimeOwner } from '../../../../agents/src/api/mcpRuntimeAssembly.js';
+import { toConfigParameters } from '../../../../agents/src/api/agentConfig.adapter.js';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
+import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import { useOwnedCredentials } from '../../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import {
+  acquirePreferredProviderManager,
+  acquirePreferredOAuth,
+  preparePreferredProviderCompletion,
+} from '../../../../agents/src/api/preferred-provider-acquisition.js';
+import { releaseAdoptedFileScope } from '../../../../agents/src/api/adoption-release.js';
+import { randomUUID } from 'node:crypto';
+import {
+  runCleanupSteps,
+  cleanupAfterFailure,
+} from '../../../../agents/src/core/subagent-cleanup.js';
+import { SessionClientOwner } from '../../../../agents/src/session/session-client-owner.js';
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
+import { beforeAll, afterAll, describe, expect, it, afterEach } from 'bun:test';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { fileURLToPath } from 'node:url';
+import { buildTestMcpRuntime } from '../../../../agents/src/api/__tests__/helpers/mcp-owner-fixture.js';
+import { createAgentRuntimeFactoryBindings } from '../../../../agents/src/api/runtimeFactories.js';
+import { injectConfirmationForcingPolicy } from '../../../../agents/src/api/confirmationForcing.js';
+import { executeProviderActivation } from '../../../../agents/src/api/providerActivationExecutor.js';
+import { assembleProviderSwitch } from '../../../../agents/src/api/providerSwitchAssembly.js';
+import { assembleModelSelection } from '../../../../agents/src/api/model-selection.js';
+import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
+
+import { createRuntimeApi } from '../../__tests__/runtime-context-fixture.js';
+import { createRuntimeOwnerFeatures } from '../../__tests__/runtime-owner-features-fixture.js';
+import { createSessionModelCommand } from '../session-model-command.js';
+
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { afterEach, describe, expect, it } from 'bun:test';
-import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
-import { fromConfig } from '@vybestack/llxprt-code-agents';
-import { listProviders } from '@vybestack/llxprt-code-providers/runtime.js';
-import { readActiveProviderName } from '@vybestack/llxprt-code-providers/runtime/providerReadOperations.js';
-import { createRuntimeApi } from '../../ui/contexts/RuntimeContext.js';
-import { createRuntimeOwnerFeatures } from '../createRuntimeOwnerFeatures.js';
-import { createSessionModelCommand } from '../session-model-command.js';
-import { buildCliStyleConfig } from '../../../../agents/src/api/__tests__/helpers/buildCliStyleConfig.js';
 
 const makeFilesystem = installTestWorkspaceFilesystem();
 let filesystem: ReturnType<typeof makeFilesystem> | undefined;
@@ -24,91 +66,496 @@ function fixturePaths() {
 }
 
 describe('CLI retained session model commands', () => {
+  let promptDirectory: string;
+  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+  beforeAll(async () => {
+    promptDirectory = await mkdtemp(join(tmpdir(), 'engine-prompts-'));
+    process.env.LLXPRT_PROMPTS_DIR = promptDirectory;
+    await initializePromptSystem();
+  });
+  afterAll(async () => {
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(promptDirectory, { recursive: true, force: true });
+  });
+
+  const firstCredentials = useOwnedCredentials();
+  let firstCallerConfig: Config;
+  let firstCallerSettings: SettingsService;
+  let firstCallerSettingsOwner: SessionSettingsOwner;
+  let firstCallerPolicy: RuntimePolicyOwner;
+  let firstCallerMcp: McpRuntimeOwner;
+  let firstCallerManager: ReturnType<typeof acquirePreferredProviderManager>;
+  let firstCallerOwner: SessionClientOwner;
+  let firstCallerClose: () => Promise<void>;
+  const firstCallerFactories = createAgentRuntimeFactoryBindings();
+  let firstCallerRelease: AcquisitionRelease;
+  let firstCallerFiles: ProviderFileLifecycle;
+  let firstCallerRuntimeId: string;
+  let firstCallerOAuth: ReturnType<typeof acquirePreferredOAuth>;
+  let firstCallerTokenizer: ReturnType<typeof configureProviderTokenizer>;
+  let firstCallerContent: ReturnType<
+    typeof createRuntimeContentGeneratorFactory
+  >;
+
+  async function openfirstCaller(fixture: string): Promise<void> {
+    const previousReplay = process.env.LLXPRT_FAKE_RESPONSES;
+    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+      new URL(
+        '../../../../agents/src/api/__tests__/fixtures/' + fixture,
+        import.meta.url,
+      ),
+    );
+    const directory = await realpath(
+      await mkdtemp(join(tmpdir(), 'firstCaller-adoption-')),
+    );
+    firstCallerConfig = new Config({
+      ...toConfigParameters({
+        provider: 'fake',
+        model: 'fake-model',
+        sessionId: randomUUID(),
+        workingDir: directory,
+      }),
+      interactive: true,
+      includeDirectories: [process.cwd()],
+    });
+    firstCallerSettings = new SettingsService();
+    firstCallerPolicy = new RuntimePolicyOwner(firstCallerConfig);
+    injectConfirmationForcingPolicy(firstCallerPolicy.session.confirmation);
+    firstCallerMcp = await buildTestMcpRuntime(
+      firstCallerConfig,
+      firstCallerPolicy.session.messageBus,
+      {},
+      undefined,
+      firstCallerPolicy,
+    );
+    acquirefirstCallerProviders();
+    const media = new SessionMediaOwner(
+      firstCallerConfig.projectTempDir,
+      1024 * 1024 * 1024,
+    );
+    firstCallerOwner = await createCapturedSessionOwner(
+      firstCallerConfig,
+      assembleTaskSchemaPolicy(firstCallerSettings),
+      firstCallerManager,
+      firstCallerFactories.agentClientFactory,
+      media.store,
+      firstCallerMcp.readInstructions,
+      firstCallerMcp.workspacePaths,
+      firstCallerSettingsOwner,
+      firstCallerContent,
+      firstCallerTokenizer,
+    );
+    firstCallerOwner.bindMcpRuntime(firstCallerMcp);
+    firstCallerOwner.bindProviderFiles(firstCallerFiles, (provider) =>
+      firstCallerOAuth.composeRetryOperations(provider),
+    );
+    firstCallerOwner.bindHooks();
+    firstCallerClose = settleEngineRelease.bind(
+      undefined,
+      [
+        () => firstCallerOwner.dispose(),
+        () => firstCallerRelease.close(),
+        () => media.dispose(),
+        () => firstCallerMcp.dispose(),
+        () => firstCallerConfig.dispose(),
+        () => rm(directory, { recursive: true, force: true }),
+      ],
+      previousReplay,
+    );
+    try {
+      await preparePreferredProviderCompletion(
+        firstCallerConfig,
+        firstCallerSettings,
+        firstCallerSettingsOwner,
+        firstCallerManager,
+        firstCallerOAuth,
+        firstCallerRuntimeId,
+        firstCallerTokenizer,
+        undefined,
+      );
+      await firstCallerMcp.initialize();
+      await activatefirstCallerClient();
+    } catch (primary) {
+      await cleanupAfterFailure(primary, firstCallerClose);
+    }
+  }
+  function acquirefirstCallerProviders(): void {
+    firstCallerRuntimeId = 'firstCaller-' + randomUUID();
+    firstCallerRelease = new AcquisitionRelease();
+    firstCallerSettingsOwner = new SessionSettingsOwner(firstCallerSettings);
+    firstCallerRelease.acquire('settings', () =>
+      firstCallerSettingsOwner.dispose(),
+    );
+    firstCallerSettingsOwner.initializeProviderSelection(
+      firstCallerConfig.getProvider(),
+      firstCallerConfig.getModel(),
+    );
+    firstCallerSettingsOwner.bindTelemetry(firstCallerConfig);
+    firstCallerFiles = new ProviderFileLifecycle({
+      maxFiles: 100,
+      maxBytes: 512 * 1024 * 1024,
+    });
+    for (const scope of [
+      firstCallerRuntimeId,
+      firstCallerConfig.getSessionId(),
+    ])
+      firstCallerRelease.acquire('files', () =>
+        releaseAdoptedFileScope(firstCallerFiles, scope),
+      );
+    firstCallerManager = acquirePreferredProviderManager(
+      firstCallerConfig,
+      firstCallerSettings,
+      firstCallerSettingsOwner,
+      firstCallerFiles,
+      firstCallerRuntimeId,
+      firstCredentials().authority,
+      firstCallerRelease,
+    );
+    const factoriesTokenizer = configureProviderTokenizer(firstCallerManager);
+    const factoriesContent = createRuntimeContentGeneratorFactory();
+    firstCallerTokenizer = factoriesTokenizer;
+    firstCallerContent = factoriesContent;
+    firstCallerOAuth = acquirePreferredOAuth(
+      undefined,
+      firstCallerPolicy.session.messageBus,
+      firstCallerConfig,
+      firstCallerSettings,
+      firstCallerManager,
+      firstCallerRuntimeId,
+      firstCallerMcp.profileDefinitions,
+      firstCredentials().authority,
+      firstCallerRelease,
+      undefined,
+    );
+  }
+  async function activatefirstCallerClient(): Promise<void> {
+    const activation = await executeProviderActivation(
+      firstCallerConfig,
+      {
+        provider: firstCallerConfig.getProvider(),
+        model: firstCallerConfig.getModel(),
+      },
+      assembleProviderSwitch(
+        firstCallerConfig,
+        firstCallerSettings,
+        firstCallerManager,
+        firstCallerOAuth,
+        () => 'agent',
+        () => firstCallerOwner.refreshAuth(),
+        firstCallerSettingsOwner,
+      ),
+      firstCallerSettings,
+      firstCallerManager,
+      (method) => firstCallerOwner.refreshAuth(method),
+      assembleModelSelection(firstCallerSettingsOwner),
+    );
+    requireCallerActivation(activation);
+    await firstCallerOwner.initializeTools();
+    await capturedSessionClient(firstCallerOwner).startChat();
+  }
+
+  const secondCredentials = useOwnedCredentials();
+  let secondCallerConfig: Config;
+  let secondCallerSettings: SettingsService;
+  let secondCallerSettingsOwner: SessionSettingsOwner;
+  let secondCallerPolicy: RuntimePolicyOwner;
+  let secondCallerMcp: McpRuntimeOwner;
+  let secondCallerManager: ReturnType<typeof acquirePreferredProviderManager>;
+  let secondCallerOwner: SessionClientOwner;
+  let secondCallerClose: () => Promise<void>;
+  const secondCallerFactories = createAgentRuntimeFactoryBindings();
+  let secondCallerRelease: AcquisitionRelease;
+  let secondCallerFiles: ProviderFileLifecycle;
+  let secondCallerRuntimeId: string;
+  let secondCallerOAuth: ReturnType<typeof acquirePreferredOAuth>;
+  let secondCallerTokenizer: ReturnType<typeof configureProviderTokenizer>;
+  let secondCallerContent: ReturnType<
+    typeof createRuntimeContentGeneratorFactory
+  >;
+
+  async function opensecondCaller(fixture: string): Promise<void> {
+    const previousReplay = process.env.LLXPRT_FAKE_RESPONSES;
+    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+      new URL(
+        '../../../../agents/src/api/__tests__/fixtures/' + fixture,
+        import.meta.url,
+      ),
+    );
+    const directory = await realpath(
+      await mkdtemp(join(tmpdir(), 'secondCaller-adoption-')),
+    );
+    secondCallerConfig = new Config({
+      ...toConfigParameters({
+        provider: 'fake',
+        model: 'fake-model',
+        sessionId: randomUUID(),
+        workingDir: directory,
+      }),
+      interactive: true,
+      includeDirectories: [process.cwd()],
+    });
+    secondCallerSettings = new SettingsService();
+    secondCallerPolicy = new RuntimePolicyOwner(secondCallerConfig);
+    injectConfirmationForcingPolicy(secondCallerPolicy.session.confirmation);
+    secondCallerMcp = await buildTestMcpRuntime(
+      secondCallerConfig,
+      secondCallerPolicy.session.messageBus,
+      {},
+      undefined,
+      secondCallerPolicy,
+    );
+    acquiresecondCallerProviders();
+    const media = new SessionMediaOwner(
+      secondCallerConfig.projectTempDir,
+      1024 * 1024 * 1024,
+    );
+    secondCallerOwner = await createCapturedSessionOwner(
+      secondCallerConfig,
+      assembleTaskSchemaPolicy(secondCallerSettings),
+      secondCallerManager,
+      secondCallerFactories.agentClientFactory,
+      media.store,
+      secondCallerMcp.readInstructions,
+      secondCallerMcp.workspacePaths,
+      secondCallerSettingsOwner,
+      secondCallerContent,
+      secondCallerTokenizer,
+    );
+    secondCallerOwner.bindMcpRuntime(secondCallerMcp);
+    secondCallerOwner.bindProviderFiles(secondCallerFiles, (provider) =>
+      secondCallerOAuth.composeRetryOperations(provider),
+    );
+    secondCallerOwner.bindHooks();
+    secondCallerClose = settleEngineRelease.bind(
+      undefined,
+      [
+        () => secondCallerOwner.dispose(),
+        () => secondCallerRelease.close(),
+        () => media.dispose(),
+        () => secondCallerMcp.dispose(),
+        () => secondCallerConfig.dispose(),
+        () => rm(directory, { recursive: true, force: true }),
+      ],
+      previousReplay,
+    );
+    try {
+      await preparePreferredProviderCompletion(
+        secondCallerConfig,
+        secondCallerSettings,
+        secondCallerSettingsOwner,
+        secondCallerManager,
+        secondCallerOAuth,
+        secondCallerRuntimeId,
+        secondCallerTokenizer,
+        undefined,
+      );
+      await secondCallerMcp.initialize();
+      await activatesecondCallerClient();
+    } catch (primary) {
+      await cleanupAfterFailure(primary, secondCallerClose);
+    }
+  }
+  function acquiresecondCallerProviders(): void {
+    secondCallerRuntimeId = 'secondCaller-' + randomUUID();
+    secondCallerRelease = new AcquisitionRelease();
+    secondCallerSettingsOwner = new SessionSettingsOwner(secondCallerSettings);
+    secondCallerRelease.acquire('settings', () =>
+      secondCallerSettingsOwner.dispose(),
+    );
+    secondCallerSettingsOwner.initializeProviderSelection(
+      secondCallerConfig.getProvider(),
+      secondCallerConfig.getModel(),
+    );
+    secondCallerSettingsOwner.bindTelemetry(secondCallerConfig);
+    secondCallerFiles = new ProviderFileLifecycle({
+      maxFiles: 100,
+      maxBytes: 512 * 1024 * 1024,
+    });
+    for (const scope of [
+      secondCallerRuntimeId,
+      secondCallerConfig.getSessionId(),
+    ])
+      secondCallerRelease.acquire('files', () =>
+        releaseAdoptedFileScope(secondCallerFiles, scope),
+      );
+    secondCallerManager = acquirePreferredProviderManager(
+      secondCallerConfig,
+      secondCallerSettings,
+      secondCallerSettingsOwner,
+      secondCallerFiles,
+      secondCallerRuntimeId,
+      secondCredentials().authority,
+      secondCallerRelease,
+    );
+    const factoriesTokenizer = configureProviderTokenizer(secondCallerManager);
+    const factoriesContent = createRuntimeContentGeneratorFactory();
+    secondCallerTokenizer = factoriesTokenizer;
+    secondCallerContent = factoriesContent;
+    secondCallerOAuth = acquirePreferredOAuth(
+      undefined,
+      secondCallerPolicy.session.messageBus,
+      secondCallerConfig,
+      secondCallerSettings,
+      secondCallerManager,
+      secondCallerRuntimeId,
+      secondCallerMcp.profileDefinitions,
+      secondCredentials().authority,
+      secondCallerRelease,
+      undefined,
+    );
+  }
+  async function activatesecondCallerClient(): Promise<void> {
+    const activation = await executeProviderActivation(
+      secondCallerConfig,
+      {
+        provider: secondCallerConfig.getProvider(),
+        model: secondCallerConfig.getModel(),
+      },
+      assembleProviderSwitch(
+        secondCallerConfig,
+        secondCallerSettings,
+        secondCallerManager,
+        secondCallerOAuth,
+        () => 'agent',
+        () => secondCallerOwner.refreshAuth(),
+        secondCallerSettingsOwner,
+      ),
+      secondCallerSettings,
+      secondCallerManager,
+      (method) => secondCallerOwner.refreshAuth(method),
+      assembleModelSelection(secondCallerSettingsOwner),
+    );
+    requireCallerActivation(activation);
+    await secondCallerOwner.initializeTools();
+    await capturedSessionClient(secondCallerOwner).startChat();
+  }
+
   afterEach(() => {
     filesystem = undefined;
   });
   it('keeps retained model and credential operations bound to their Agent owners', async () => {
-    const first = await buildCliStyleConfig('multi-turn-text.jsonl');
-    const second = await buildCliStyleConfig('multi-turn-text.jsonl');
-    const agentA = await fromConfig({
-      settingsService: first.settingsService,
-      settingsOwner: first.settingsOwner,
-      providerManager: first.providerManager,
-      config: first.config,
-      messageBus: first.messageBus,
-      mcpRuntime: first.mcpRuntime,
-      sessionId: 'shared-isolation-label',
-    });
-    const agentB = await fromConfig({
-      settingsService: second.settingsService,
-      settingsOwner: second.settingsOwner,
-      providerManager: second.providerManager,
-      config: second.config,
-      messageBus: second.messageBus,
-      mcpRuntime: second.mcpRuntime,
-      sessionId: 'shared-isolation-label',
-    });
+    await openfirstCaller('multi-turn-text.jsonl');
+    await opensecondCaller('multi-turn-text.jsonl');
+    const agentA = await fromConfig(
+      firstCallerConfig,
+      firstCallerSettings,
+      { sessionId: 'shared-isolation-label' },
+      firstCallerSettingsOwner,
+      firstCallerManager,
+      undefined,
+      firstCallerPolicy.session.messageBus,
+      firstCallerMcp,
+    );
+    const agentB = await fromConfig(
+      secondCallerConfig,
+      secondCallerSettings,
+      { sessionId: 'shared-isolation-label' },
+      secondCallerSettingsOwner,
+      secondCallerManager,
+      undefined,
+      secondCallerPolicy.session.messageBus,
+      secondCallerMcp,
+    );
     try {
-      expect(() => Reflect.apply(listProviders, undefined, [])).toThrow(
-        'Provider listing requires an explicit owner',
+      expect(() => Reflect.construct(ProviderReadFixture, [])).toThrow(
+        'Provider reads require an explicit session owner',
       );
-      expect(first.providerManager).not.toBe(second.providerManager);
+      expect(firstCallerManager).not.toBe(secondCallerManager);
       const firstApi = createRuntimeApi(
         agentA,
         createRuntimeOwnerFeatures(
-          first.config,
-          agentA.providerManager,
+          agentA.providerReads.inspection,
           fixturePaths().directories,
           createSessionModelCommand(agentA),
-          first.settingsOwner,
-          first.settingsService,
+          firstCallerSettingsOwner,
           agentA.workspace,
+          agentA.modelParameters,
+          agentA.settings,
+          agentA.toolFormat,
+          agentA.providerReads,
+          agentA.auth.keys,
+          () => agentA.providerReads.readOpenAIInfo(),
         ),
+        agentA.sessionClient.fetch,
       );
       const secondApi = createRuntimeApi(
         agentB,
         createRuntimeOwnerFeatures(
-          second.config,
-          agentB.providerManager,
+          agentB.providerReads.inspection,
           fixturePaths().directories,
           createSessionModelCommand(agentB),
-          second.settingsOwner,
-          second.settingsService,
+          secondCallerSettingsOwner,
           agentB.workspace,
+          agentB.modelParameters,
+          agentB.settings,
+          agentB.toolFormat,
+          agentB.providerReads,
+          agentB.auth.keys,
+          () => agentB.providerReads.readOpenAIInfo(),
         ),
+        agentB.sessionClient.fetch,
       );
-      expect(
-        readActiveProviderName(first.settingsService, first.providerManager),
-      ).toBe(firstApi.getActiveProviderName());
+      expect(agentA.providerReads.readActiveProviderName()).toBe(
+        firstApi.getActiveProviderName(),
+      );
       expect([
         firstApi.getActiveProviderName(),
         secondApi.getActiveProviderName(),
       ]).toStrictEqual([agentA.getProvider(), agentB.getProvider()]);
-      second.settingsService.set('activeProvider', 'second-owner');
+      secondCallerSettings.set('activeProvider', 'second-owner');
       expect(secondApi.getActiveProviderName()).toBe('second-owner');
       expect(firstApi.getActiveProviderName()).toBe(agentA.getProvider());
       expect(agentB.getProvider()).toBe('fake');
-      second.settingsService.set('activeProvider', agentB.getProvider());
+      secondCallerSettings.set('activeProvider', agentB.getProvider());
       await Promise.all([
         firstApi.setActiveModel('first-selected'),
         secondApi.setActiveModel('second-selected'),
       ]);
       firstApi.setActiveModelParam('temperature', 0.2);
       secondApi.setActiveModelParam('temperature', 0.8);
-      await Promise.all([
+      expect(agentA.getModelParams().temperature).toBe(0.2);
+      expect(agentB.getModelParams().temperature).toBe(0.8);
+      const credentialResults = await Promise.all([
         firstApi.updateActiveProviderApiKey('first-key'),
         secondApi.updateActiveProviderApiKey('second-key'),
+      ]);
+      expect(credentialResults.map((result) => result.message)).toStrictEqual([
+        "API key updated for provider 'fake'",
+        "API key updated for provider 'fake'",
+      ]);
+      expect([agentA.auth.status(), agentB.auth.status()]).toStrictEqual([
+        'authenticated',
+        'authenticated',
       ]);
       expect(agentA.getModel()).toBe('first-selected');
       expect(agentB.getModel()).toBe('second-selected');
       expect(firstApi.getActiveModelParams().temperature).toBe(0.2);
       expect(secondApi.getActiveModelParams().temperature).toBe(0.8);
-      expect(first.settingsOwner.readNamedParameter('auth-key')).toBe(
+      expect(firstCallerSettingsOwner.readNamedParameter('auth-key')).toBe(
         'first-key',
       );
-      expect(second.settingsOwner.readNamedParameter('auth-key')).toBe(
+      expect(secondCallerSettingsOwner.readNamedParameter('auth-key')).toBe(
         'second-key',
       );
+      agentA.settings.setEphemeralSetting('context-limit', 4096);
+      agentB.settings.setEphemeralSetting('context-limit', 8192);
+      agentA.settings.setSessionSetting('dumpcontext', 'on');
+      agentB.settings.setSessionSetting('dumpcontext', 'error');
+      agentA.settings.clearSessionSetting('dumpcontext');
+      expect(agentA.settings.getSessionSetting('dumpcontext')).toBeUndefined();
+      expect(agentB.settings.getSessionSetting('dumpcontext')).toBe('error');
+      expect(firstApi.getEphemeralSetting('context-limit')).toBe(4096);
+      expect(secondApi.getEphemeralSetting('context-limit')).toBe(8192);
+      await agentA.toolFormat.setOverride('kimi');
+      await agentB.toolFormat.setOverride('openai');
+      expect((await firstApi.getActiveToolFormatState()).override).toBe('kimi');
+      expect((await secondApi.getActiveToolFormatState()).override).toBe(
+        'openai',
+      );
+      await firstApi.setActiveToolFormatOverride(null);
+      expect((await agentA.toolFormat.getState()).isAutoDetected).toBe(true);
+      expect((await agentB.toolFormat.getState()).override).toBe('openai');
       firstApi.clearActiveModelParam('temperature');
       await firstApi.updateActiveProviderApiKey(null);
       expect(firstApi.getActiveModelParams()).not.toHaveProperty('temperature');
@@ -116,16 +563,46 @@ describe('CLI retained session model commands', () => {
         temperature: 0.8,
       });
       expect([
-        first.settingsOwner.readNamedParameter('auth-key'),
-        second.settingsOwner.readNamedParameter('auth-key'),
+        firstCallerSettingsOwner.readNamedParameter('auth-key'),
+        secondCallerSettingsOwner.readNamedParameter('auth-key'),
       ]).toStrictEqual([undefined, 'second-key']);
+      expect([agentA.auth.status(), agentB.auth.status()]).toStrictEqual([
+        'unauthenticated',
+        'authenticated',
+      ]);
+      await agentA.dispose();
+      await expect(
+        firstApi.updateActiveProviderApiKey('retired-owner-key'),
+      ).rejects.toThrow('Session settings owner is closed');
+      await secondApi.updateActiveProviderApiKey('rotated-second-key');
+      expect(secondCallerSettingsOwner.readNamedParameter('auth-key')).toBe(
+        'rotated-second-key',
+      );
     } finally {
       await agentA.dispose();
       await agentB.dispose();
-      await first.config.dispose();
-      await second.config.dispose();
-      await first.cleanup();
-      await second.cleanup();
+      await firstCallerConfig.dispose();
+      await secondCallerConfig.dispose();
+      await firstCallerClose();
+      await secondCallerClose();
     }
   }, 30000);
 });
+
+async function settleEngineRelease(
+  steps: ReadonlyArray<() => void | Promise<void>>,
+  previousReplay: string | undefined,
+): Promise<void> {
+  try {
+    await runCleanupSteps(steps);
+  } finally {
+    if (previousReplay === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
+    else process.env.LLXPRT_FAKE_RESPONSES = previousReplay;
+  }
+}
+
+function requireCallerActivation(
+  result: Awaited<ReturnType<typeof executeProviderActivation>>,
+): void {
+  if (result.authFailed) throw result.authError;
+}

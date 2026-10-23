@@ -1,3 +1,4 @@
+import { internalConfig } from './helpers/agentHarness.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -5,12 +6,13 @@
  */
 
 import { describe, expect, it, vi } from 'bun:test';
+import { AgentBusyError } from '@vybestack/llxprt-code-agents';
 import {
   ProfileManager,
   type LoadBalancerProfile,
 } from '@vybestack/llxprt-code-settings';
-import { createProviderKeyStorage } from '@vybestack/llxprt-code-providers/auth.js';
 import { successful, withOwners } from './turn-revision-capture.fixture.js';
+import { usePromptFixture } from './helpers/prompt-fixture.js';
 
 function barrier(): {
   entered: Promise<void>;
@@ -54,8 +56,10 @@ const lb = (policy: 'roundrobin' | 'failover'): LoadBalancerProfile => ({
 });
 
 describe('Final LB delegate authorization after asynchronous member authentication', () => {
+  usePromptFixture();
+
   for (const policy of ['roundrobin', 'failover'] as const) {
-    it(`blocks the ${policy} stale member HTTP request and admits its replacement independently of a same-label sibling`, async () => {
+    it(`rejects active ${policy} replacement and preserves admitted members independently of a same-label sibling`, async () => {
       await withOwners(async (a, b, oldEndpoint, newEndpoint, start) => {
         const profiles = new ProfileManager();
         await profiles.saveProfile('same-label-held-member', {
@@ -84,7 +88,7 @@ describe('Final LB delegate authorization after asynchronous member authenticati
         const held = barrier();
         let reads = 0;
         const storage = vi
-          .spyOn(createProviderKeyStorage(), 'getKey')
+          .spyOn(internalConfig(a).getProviderKeys(), 'getKey')
           .mockImplementation(async () => {
             reads++;
             if (reads === 2) await held.wait();
@@ -115,15 +119,18 @@ describe('Final LB delegate authorization after asynchronous member authenticati
               },
             });
           }
-          await a.profiles.applySnapshot(lb(policy));
+          await expect(
+            a.profiles.applySnapshot(lb(policy)),
+          ).rejects.toBeInstanceOf(AgentBusyError);
           const sibling = start(b, 'Same-label independent sibling');
           held.release();
           oldEndpoint.release();
           successful(await sibling);
+          successful(await admission);
           expect(
-            (await admission).events.some((event) => event.type === 'error'),
-          ).toBe(true);
-          expect(oldEndpoint.requests()).toHaveLength(0);
+            oldEndpoint.requests().map(({ model }) => model),
+          ).toStrictEqual(['held-original']);
+          await a.profiles.applySnapshot(lb(policy));
           successful(await start(a, 'New LB member admission'));
           expect(
             newEndpoint.requests().map(({ model }) => model),
@@ -153,7 +160,7 @@ describe('Final LB delegate authorization after asynchronous member authenticati
       const held = barrier();
       let reads = 0;
       const storage = vi
-        .spyOn(createProviderKeyStorage(), 'getKey')
+        .spyOn(internalConfig(a).getProviderKeys(), 'getKey')
         .mockImplementation(async () => {
           reads++;
           if (reads === 2) await held.wait();

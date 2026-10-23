@@ -20,6 +20,7 @@ import {
   oauthUIBridge,
   type OAuthTokenRequestMetadata,
   type OAuthTokenWithExtras,
+  type OAuthUICallback,
 } from '@vybestack/llxprt-code-auth';
 import { mergeRefreshedToken } from '@vybestack/llxprt-code-auth/token-merge.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
@@ -34,6 +35,8 @@ import type {
   TokenStore,
 } from './types.js';
 
+import type { MultiBucketAuthResult } from './MultiBucketAuthenticator.js';
+import { buildLockRecoveryHint } from './auth-lock-recovery-hint.js';
 import type { ProviderRegistry } from './provider-registry.js';
 
 const logger = new DebugLogger('llxprt:oauth:auth-flow');
@@ -59,12 +62,6 @@ function ensureOAuthEnabled(
 /** Maximum time to wait for an auth lock before timing out and surfacing
  * a recovery hint to the user. Matches the interactive login window. */
 const AUTH_LOCK_WAIT_MS = 60_000;
-
-type MultiBucketAuthResult = {
-  cancelled: boolean;
-  authenticatedBuckets: string[];
-  failedBuckets: string[];
-};
 
 type AuthLockWaitOutcome = 'acquired' | 'token-found' | 'timed-out';
 
@@ -130,6 +127,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
       readonly prompt?: unknown;
       readonly delay?: unknown;
     } = () => ({}),
+    private readonly emitMessage: OAuthUICallback = () => undefined,
   ) {}
 
   /**
@@ -320,7 +318,8 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
       .then(
         () => oauthUIBridge.settleDialog(flight.attemptId),
         (error: unknown) => {
-          oauthUIBridge.settleDialog(flight.attemptId, error);
+          const failure = oauthUIBridge.settleDialog(flight.attemptId, error);
+          if (failure !== undefined) this.emitMessage(failure);
           if (flight.signalAuthCompletion) {
             Object.assign(globalThis, {
               __oauth_auth_error:
@@ -548,95 +547,12 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
       return;
     }
 
-    const recoveryHint = await this.buildLockRecoveryHint(providerName, bucket);
+    const recoveryHint = await buildLockRecoveryHint(
+      this.tokenStore,
+      providerName,
+      bucket,
+    );
     throw new Error(recoveryHint);
-  }
-
-  private buildAuthCommand(
-    providerName: string,
-    action: 'lock status' | 'unlock',
-    bucket: string | undefined,
-    flags: string = '',
-  ): string {
-    const bucketArgument = bucket === undefined ? '' : ` ${bucket}`;
-    const flagArguments = flags === '' ? '' : ` ${flags}`;
-    return `/auth ${providerName} ${action}${bucketArgument}${flagArguments}`;
-  }
-
-  private async buildLockRecoveryHint(
-    providerName: string,
-    bucket: string | undefined,
-  ): Promise<string> {
-    const bucketLabel = bucket ? `/${bucket}` : '';
-    const base = `Failed to acquire auth lock for ${providerName}${bucketLabel}`;
-
-    if (typeof this.tokenStore.inspectAuthLock !== 'function') {
-      return `${base}. Run ${this.buildAuthCommand(providerName, 'lock status', bucket)} for details.`;
-    }
-
-    try {
-      const status = await this.tokenStore.inspectAuthLock(
-        providerName,
-        bucket,
-      );
-      const parts: string[] = [base];
-
-      if (!status.exists) {
-        // Absent lock: no recovery action needed. Do not suggest force
-        // just because liveness defaults to 'unverifiable' for absent
-        // locks.
-        parts.push(`Lock file not found at ${status.canonicalPath}`);
-        return parts.join('. ') + '.';
-      }
-
-      const ownerInfo: string[] = [];
-      if (status.classification !== 'absent') {
-        ownerInfo.push(`schema: ${status.classification}`);
-      }
-      if (status.ownerPid !== null) {
-        ownerInfo.push(`PID: ${status.ownerPid}`);
-      }
-      if (status.ownerHostname !== null) {
-        ownerInfo.push(`host: ${status.ownerHostname}`);
-      }
-      ownerInfo.push(`liveness: ${status.liveness.status}`);
-      if (status.ageMs !== null) {
-        ownerInfo.push(`age: ${Math.floor(status.ageMs / 1000)}s`);
-      }
-      parts.push(`Lock owner: ${ownerInfo.join(', ')}`);
-      parts.push(`Lock path: ${status.canonicalPath}`);
-
-      if (status.liveness.status === 'dead') {
-        parts.push(
-          `Recover with: ${this.buildAuthCommand(providerName, 'unlock', bucket)}`,
-        );
-      } else if (
-        status.classification === 'legacy' ||
-        status.classification === 'malformed' ||
-        status.liveness.status === 'unverifiable'
-      ) {
-        parts.push(
-          `Inspect with: ${this.buildAuthCommand(providerName, 'lock status', bucket)}`,
-        );
-        parts.push(
-          `Force-remove with: ${this.buildAuthCommand(providerName, 'unlock', bucket, '--force --i-have-stopped-all-processes')}`,
-        );
-      } else {
-        parts.push(
-          `Inspect with: ${this.buildAuthCommand(providerName, 'lock status', bucket)}`,
-        );
-      }
-
-      return parts.join('. ') + '.';
-    } catch (error) {
-      // Preserve useful error details instead of only directing the user
-      // to repeat the same failing command.
-      const detail = error instanceof Error ? error.message : String(error);
-      return (
-        `${base}. Lock inspection failed: ${detail}. ` +
-        `Check permissions on the lock directory or run ${this.buildAuthCommand(providerName, 'lock status', bucket)} manually.`
-      );
-    }
   }
 
   /**

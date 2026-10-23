@@ -24,7 +24,7 @@
  * touches disk.
  */
 
-import type { AuthBucket } from '../agent.js';
+import type { AuthBucket, AuthStatus } from '../agent.js';
 
 /**
  * The REQ-008 precedence winner. Determines which auth source surfaces in
@@ -120,4 +120,45 @@ export function computeAuthWinner(
     return 'oauth';
   }
   return 'none';
+}
+
+export function seedAgentAuthState(
+  initialAuth:
+    | {
+        readonly apiKey?: string;
+        readonly apiKeyFile?: string;
+        readonly baseUrl?: string;
+        readonly oauth?: boolean;
+        readonly keyName?: string;
+      }
+    | undefined,
+  state: AgentAuthState,
+  selection: { keyName?: string },
+  provider: string,
+): void {
+  if (initialAuth === undefined) {
+    return;
+  }
+  state.inlineKeyPresent = initialAuth.apiKey !== undefined;
+  state.keyFile = initialAuth.apiKeyFile;
+  state.baseUrl = initialAuth.baseUrl;
+  if (initialAuth.oauth === true) {
+    state.oauthEnabled.add(provider);
+  }
+  if (initialAuth.keyName !== undefined) {
+    selection.keyName = initialAuth.keyName;
+  }
+}
+
+export function authStatusForWinner(winner: AuthWinner): AuthStatus {
+  return winner !== 'none' ? 'authenticated' : 'unauthenticated';
+}
+
+export interface AgentProviderState {
+  provider: string;
+  model: string;
+  modelParams: Record<string, unknown>;
+  baseUrl?: string;
+  keyName?: string;
+  isLoadBalancer?: boolean;
 }

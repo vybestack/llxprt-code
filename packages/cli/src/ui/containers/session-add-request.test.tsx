@@ -23,10 +23,25 @@ const runtime = {
   getActiveProfileName: () => undefined,
   providerManager: () => undefined,
 };
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  useRuntimeApi: () => runtime,
-  getRuntimeApi: () => runtime,
-}));
+const selectedRuntimeMock1 = (() =>
+  (() => {
+    const useSelectedTestRuntime = () => runtime;
+    return {
+      useGetLoadBalancerStats: () => () => undefined,
+      useProviderStatus: () => useSelectedTestRuntime().providerStatus,
+
+      useGetActiveProfileName: () =>
+        useSelectedTestRuntime().getActiveProfileName,
+
+      useRuntimeApi: useSelectedTestRuntime,
+      getRuntimeApi: () => runtime,
+    };
+  })())();
+void vi.mock('../contexts/RuntimeContext.js', () => selectedRuntimeMock1);
+void vi.mock(
+  '../../__tests__/runtime-context-fixture.js',
+  () => selectedRuntimeMock1,
+);
 const { SessionController } = await import('./SessionController.js');
 
 describe('session add request delivery', () => {

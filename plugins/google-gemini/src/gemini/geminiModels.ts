@@ -65,6 +65,7 @@ export async function fetchModelsFromApi(
   providerName: string,
   getAuthToken: () => Promise<string>,
   getBaseURL: () => string | undefined,
+  requestFetch: typeof fetch = globalThis.fetch,
 ): Promise<IModel[] | undefined> {
   const apiKey = (await getAuthToken()) || process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -77,7 +78,7 @@ export async function fetchModelsFromApi(
       ? `${baseURL.replace(/\/$/, '')}/v1beta/models?key=${apiKey}`
       : `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
 
-    const response = await fetch(url, {
+    const response = await requestFetch(url, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
       signal: AbortSignal.timeout(MODEL_LIST_TIMEOUT_MS),
@@ -111,6 +112,7 @@ export async function resolveModelList(
   authMode: GeminiAuthMode,
   getAuthToken: () => Promise<string>,
   getBaseURL: () => string | undefined,
+  requestFetch: typeof fetch = globalThis.fetch,
 ): Promise<IModel[]> {
   const defaultModels = getDefaultModelList(providerName);
   if (authMode === 'gemini-api-key' || authMode === 'vertex-ai') {
@@ -118,6 +120,7 @@ export async function resolveModelList(
       providerName,
       getAuthToken,
       getBaseURL,
+      requestFetch,
     );
     if (fetched !== undefined) {
       return fetched;

@@ -58,7 +58,7 @@ import type {
   ExtensionEnableEvent,
   ExtensionDisableEvent,
 } from './types.js';
-import { uiTelemetryService, type UiEvent } from './uiTelemetry.js';
+import type { SessionMetricEventSink, UiEvent } from './uiTelemetry.js';
 import { safeJsonStringify } from '../utils/safeJsonStringify.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import { getPerfPhaseObserver } from '../perf/perfPhaseObserver.js';
@@ -67,22 +67,8 @@ type Config = TelemetryConfig;
 type SessionConfig = Pick<TelemetryConfig, 'getSessionId'>;
 type ToolLoggingConfig = SessionConfig & TelemetryPromptConfig;
 
-/**
- * Fail-open wrapper for local aggregation. Errors in the telemetry
- * service must never break the calling stream/tool/api path.
- */
-function aggregateLocally(event: UiEvent): void {
-  try {
-    uiTelemetryService.addEvent(event);
-  } catch (err) {
-    try {
-      debugLogger.error(
-        `[TELEMETRY] Local aggregation failed (fail-open): ${err instanceof Error ? err.message : String(err)}`,
-      );
-    } catch {
-      // Secondary logger failure must not escape the fail-open wrapper
-    }
-  }
+function aggregateLocally(sink: SessionMetricEventSink, event: UiEvent): void {
+  sink.addEvent(event);
 }
 
 /**
@@ -191,7 +177,7 @@ export function logToolCall(
     'event.name': EVENT_TOOL_CALL,
     'event.timestamp': new Date().toISOString(),
   } as UiEvent;
-  aggregateLocally(uiEvent);
+  aggregateLocally(telemetry.metricEvents, uiEvent);
 
   if (!telemetry.isEnabled()) {
     if (process.env.VERBOSE === 'true') {
@@ -393,7 +379,7 @@ export function logApiError(
     'event.name': EVENT_API_ERROR,
     'event.timestamp': new Date().toISOString(),
   } as UiEvent;
-  aggregateLocally(uiEvent);
+  aggregateLocally(telemetry.metricEvents, uiEvent);
 
   if (!telemetry.isEnabled()) return;
 
@@ -438,7 +424,7 @@ export function logApiResponse(
     'event.name': EVENT_API_RESPONSE,
     'event.timestamp': new Date().toISOString(),
   } as UiEvent;
-  aggregateLocally(uiEvent);
+  aggregateLocally(telemetry.metricEvents, uiEvent);
 
   if (!telemetry.isEnabled()) return;
 

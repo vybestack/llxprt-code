@@ -4,9 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import {
-  initializeTestMcpRuntime,
-  type TestMcpRuntime,
-} from '@vybestack/llxprt-code-test-utils/core/config.js';
+  assembleWorkspaceMemory,
+  WorkspaceFilesystemOwner,
+  WorkspaceTrustLifecycle,
+  type WorkspaceMemoryOwner,
+} from '@vybestack/llxprt-code-core';
 import { afterEach } from 'bun:test';
 
 /**
@@ -77,17 +79,22 @@ describe('Auxiliary core-memory snapshot cache (issue #3176, D7)', () => {
   let originalPromptsDir: string | undefined;
   let coreMemoryPath: string;
 
-  const roots: TestMcpRuntime[] = [];
+  const roots: Array<() => void | Promise<void>> = [];
   let owners: readonly SessionSettingsOwner[] = [];
   afterEach(async () => {
-    for (const owner of owners) await owner.dispose();
+    const failures: unknown[] = [];
+    const resources = [
+      ...owners.map((owner) => () => owner.dispose()),
+      ...roots.splice(0).reverse(),
+    ];
     owners = [];
-    const results = await Promise.allSettled(
-      roots.splice(0).map((root) => root.dispose()),
-    );
-    const failures = results.flatMap((result) =>
-      result.status === 'rejected' ? [result.reason] : [],
-    );
+    for (const close of resources) {
+      try {
+        await close();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
     if (failures.length > 0)
       throw new AggregateError(failures, 'Instruction fixture cleanup failed');
   });
@@ -125,6 +132,24 @@ describe('Auxiliary core-memory snapshot cache (issue #3176, D7)', () => {
     }
   });
 
+  async function acquireMemory(config: Config): Promise<WorkspaceMemoryOwner> {
+    roots.push(() => config.dispose());
+    const trust = new WorkspaceTrustLifecycle({
+      localTrust: config.initialWorkspaceTrust,
+    });
+    roots.push(() => trust.dispose());
+    const filesystem = new WorkspaceFilesystemOwner({
+      targetDir: config.getTargetDir(),
+      includeDirectories: config.getConfiguredIncludeDirectories(),
+      isTrusted: () => trust.isTrustedFolder(),
+    });
+    roots.push(() => filesystem.dispose());
+    const memory = assembleWorkspaceMemory(config, filesystem, trust);
+    roots.push(() => memory.dispose());
+    await memory.operations.refresh();
+    return memory;
+  }
+
   it('retains the workspace snapshot until explicit refresh', async () => {
     const settings = new SettingsService();
     settings.set('model', TEST_MODEL);
@@ -140,8 +165,7 @@ describe('Auxiliary core-memory snapshot cache (issue #3176, D7)', () => {
 
     // With JIT disabled, getCoreMemory() returns undefined, so the
     // auxiliary path must fall back to the disk snapshot cache.
-    const root = await initializeTestMcpRuntime(config);
-    roots.push(root);
+    const memory = await acquireMemory(config);
 
     const captured: string[] = [];
     const baseLlmClient = createCapturingBaseLlmClient(captured);
@@ -160,7 +184,7 @@ describe('Auxiliary core-memory snapshot cache (issue #3176, D7)', () => {
       'core-memory-cache-test',
       undefined,
       [],
-      root.workspaceMemory.operations,
+      memory.operations,
       promptPolicy,
     );
     expect(captured).toHaveLength(1);
@@ -184,7 +208,7 @@ describe('Auxiliary core-memory snapshot cache (issue #3176, D7)', () => {
       'core-memory-cache-test',
       undefined,
       [],
-      root.workspaceMemory.operations,
+      memory.operations,
       promptPolicy,
     );
     expect(captured).toHaveLength(2);
@@ -207,8 +231,7 @@ describe('Auxiliary core-memory snapshot cache (issue #3176, D7)', () => {
       ...createConfigParams(settings),
       targetDir: tempCwd,
     });
-    const root = await initializeTestMcpRuntime(config);
-    roots.push(root);
+    const memory = await acquireMemory(config);
 
     const captured: string[] = [];
     const baseLlmClient = createCapturingBaseLlmClient(captured);
@@ -227,7 +250,7 @@ describe('Auxiliary core-memory snapshot cache (issue #3176, D7)', () => {
       'core-memory-cache-test',
       undefined,
       [],
-      root.workspaceMemory.operations,
+      memory.operations,
       promptPolicy,
     );
     expect(captured).toHaveLength(1);
@@ -250,7 +273,7 @@ describe('Auxiliary core-memory snapshot cache (issue #3176, D7)', () => {
       'core-memory-cache-test',
       undefined,
       [],
-      root.workspaceMemory.operations,
+      memory.operations,
       promptPolicy,
     );
     expect(captured).toHaveLength(2);

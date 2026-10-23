@@ -1,11 +1,12 @@
+import { CredentialAuthority } from '../../auth/proxy/credential-store-factory.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { assembleModelSelection } from '../providerMutations.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { assembleModelSelection } from '../../../../agents/src/api/model-selection.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 import { afterEach, beforeEach } from 'bun:test';
 import {
   Config,
@@ -24,11 +25,9 @@ import { ProviderManager } from '../../ProviderManager.js';
 import {
   applyProfileCascade,
   type ProfileApplicationResult,
-} from '../profileApplication.js';
-import {
-  switchActiveProvider,
-  type ProviderSwitcher,
-} from '../providerSwitch.js';
+} from '../../../../agents/src/api/profileApplication.js';
+import { switchActiveProvider } from '../../../../agents/src/api/provider-switch/provider-switch.js';
+import type { ProviderSwitcher } from '@vybestack/llxprt-code-core';
 
 export function standardProfile(
   ephemeralSettings: Record<string, unknown> = {},
@@ -65,7 +64,6 @@ export function workflowApplication(
       applyProfileCascade(
         profile,
         {},
-        owner.config,
         owner.settings,
         owner.manager,
         owner.store,
@@ -76,6 +74,7 @@ export function workflowApplication(
           applyParameter: (key, value) =>
             owner.settingsOwner.writeUserParameter(key, value),
         },
+        (name) => owner.manager.getProviderKeys().getKey(name),
       ),
   };
 }
@@ -94,13 +93,19 @@ function createWorkflowOwner(
     debugMode: false,
   });
   const manager = new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    settings,
+    config,
     createProviderRuntimeContext({
-      config,
-      settingsService: settings,
       runtimeId: 'workflow-owner',
       runtimeKind: 'agent',
     }),
   );
+  const storage = new CredentialAuthority().createProviderKeyStorage();
+  manager.bindProviderKeyStorage(storage, () => storage.close());
   const providers = new Map<string, FakeProvider>();
   for (const name of ['openai', 'anthropic', 'gemini']) {
     const provider = new FakeProvider(fixture, directory);
@@ -110,7 +115,7 @@ function createWorkflowOwner(
     providers.set(name, provider);
   }
   const store = new ProfileManager(join(directory, 'profiles'));
-  configureProviderRuntimeFactories(config, manager);
+  configureProviderTokenizer(manager);
   const switchProvider: ProviderSwitcher = (name, options = {}) =>
     switchActiveProvider(
       name,

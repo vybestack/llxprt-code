@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
 const composeFixtureRuntime = installWorkspaceRuntimeFixture();
@@ -19,7 +20,7 @@ import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import * as path from 'node:path';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import type { CommandContext, SlashCommand } from '../commands/types.js';
+import type { SlashCommand } from '../commands/types.js';
 import { CommandKind } from '../commands/types.js';
 import {
   describe,
@@ -129,7 +130,7 @@ describe('InputPrompt', () => {
   let mockInputHistory: UseInputHistoryReturn;
   let mockReverseSearchCompletion: UseReverseSearchCompletionReturn;
   let mockBuffer: TextBuffer;
-  let mockCommandContext: CommandContext;
+  let mockCommandContext: CommandOwnerFixture;
 
   const mockedUseShellHistory = useShellHistory as Mock<typeof useShellHistory>;
   const mockedUseCommandCompletion = useCommandCompletion as Mock<
@@ -253,6 +254,7 @@ describe('InputPrompt', () => {
     );
 
     props = {
+      enableFuzzyFiltering: true,
       buffer: mockBuffer,
       onSubmit: vi.fn(),
       userMessages: [],
@@ -265,6 +267,7 @@ describe('InputPrompt', () => {
       } as unknown as Config),
       slashCommands: mockSlashCommands,
       commandContext: mockCommandContext,
+      generatePromptContent: null,
       shellModeActive: false,
       setShellModeActive: vi.fn(),
       approvalMode: ApprovalMode.DEFAULT,

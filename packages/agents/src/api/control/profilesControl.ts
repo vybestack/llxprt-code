@@ -30,8 +30,8 @@ import type {
 } from '../agent.js';
 
 import { parseProfileJson } from '@vybestack/llxprt-code-settings';
-import type { AgentProviderState } from '../agentImpl.js';
 import type { AgentProfileApplication } from '../profileApplicationAssembly.js';
+import type { AgentProviderState } from './authState.js';
 
 /**
  * Reads a directory's entry names, returning an empty array when the directory
@@ -52,15 +52,6 @@ function safeReadDir(dir: string): readonly string[] {
  * @plan:PLAN-20260617-COREAPI.P16
  * @requirement:REQ-009
  */
-export interface ProfilesControlDeps {
-  /** Reads the mutable per-agent provider/model/param state. */
-  readonly getState: () => AgentProviderState;
-  readonly application: AgentProfileApplication;
-  readonly captureEphemerals: () => Record<string, unknown>;
-  /** The agent's working directory (config.getTargetDir()). */
-  readonly workingDir: string;
-}
-
 /** A parsed public-shape profile candidate (loosely validated). */
 interface PublicProfileCandidate {
   readonly name: string;
@@ -106,16 +97,20 @@ export class ProfilesControl implements AgentProfileControl {
    */
   private defaultName: string | undefined;
 
-  constructor(private readonly deps: ProfilesControlDeps) {}
+  constructor(
+    private readonly getState: () => AgentProviderState,
+    private readonly application: AgentProfileApplication,
+    private readonly captureEphemerals: () => Record<string, unknown>,
+    private readonly workingDir: string,
+  ) {}
 
-  load: AgentProfileApplication['load'] = (name) =>
-    this.deps.application.load(name);
+  load: AgentProfileApplication['load'] = (name) => this.application.load(name);
   applySnapshot: AgentProfileApplication['applySnapshot'] = (
     profile,
     options,
-  ) => this.deps.application.applySnapshot(profile, options);
-  isApplying = (): boolean => this.deps.application.isApplying();
-  cancelAndJoin = (): Promise<void> => this.deps.application.cancelAndJoin();
+  ) => this.application.applySnapshot(profile, options);
+  isApplying = (): boolean => this.application.isApplying();
+  cancelAndJoin = (): Promise<void> => this.application.cancelAndJoin();
 
   /**
    * Returns resolvable profile summaries, merging in-memory saved profiles
@@ -215,7 +210,7 @@ export class ProfilesControl implements AgentProfileControl {
    * @requirement:REQ-008
    */
   async saveCurrent(name: string): Promise<void> {
-    const s = this.deps.getState();
+    const s = this.getState();
     const detail: ProfileDetail = {
       name,
       provider: s.provider,
@@ -277,14 +272,14 @@ export class ProfilesControl implements AgentProfileControl {
     }
     const detail: ProfileDetail =
       saved ?? (candidate as PublicProfileCandidate).detail;
-    await this.deps.application.applySnapshot(
+    await this.application.applySnapshot(
       {
         version: 1,
         provider: detail.provider,
         model: detail.model,
         modelParams: structuredClone(detail.modelParams ?? {}),
         ephemeralSettings: {
-          ...this.deps.captureEphemerals(),
+          ...this.captureEphemerals(),
           ...(detail.baseUrl !== undefined
             ? { 'base-url': detail.baseUrl }
             : {}),
@@ -396,7 +391,7 @@ export class ProfilesControl implements AgentProfileControl {
    * @requirement:REQ-009
    */
   private scanPublicProfiles(): readonly PublicProfileCandidate[] {
-    const dirs = [join(this.deps.workingDir, 'fixtures'), this.deps.workingDir];
+    const dirs = [join(this.workingDir, 'fixtures'), this.workingDir];
     const candidates: PublicProfileCandidate[] = [];
     const seenPaths = new Set<string>();
     const seenNames = new Set<string>();

@@ -7,14 +7,10 @@
 import { describe, expect, it } from 'bun:test';
 import { createRuntimeInvocationContext } from './RuntimeInvocationContext.js';
 import { createProviderRuntimeContext } from './providerRuntimeContext.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 describe('RuntimeInvocationContext fail-fast requirements', () => {
   it('throws when runtimeId is missing', () => {
-    const settings = new SettingsService();
-    const runtime = createProviderRuntimeContext({
-      settingsService: settings,
-    });
+    const runtime = createProviderRuntimeContext({});
 
     expect(() =>
       createRuntimeInvocationContext({
@@ -27,9 +23,7 @@ describe('RuntimeInvocationContext fail-fast requirements', () => {
   });
 
   it('throws when provider ephemerals are not available', () => {
-    const settings = new SettingsService();
     const runtime = createProviderRuntimeContext({
-      settingsService: settings,
       runtimeId: 'runtime-missing-ephemerals',
     });
 

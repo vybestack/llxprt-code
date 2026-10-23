@@ -1,11 +1,11 @@
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-
+import { jsonlHookCommand } from './helpers/jsonl-hook-command.js';
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
+import {
+  useRecordingPrompts,
+  withRecordingLifetimeFixture,
+} from './helpers/recording-owner-lifetime-fixture.js';
 import { describe, expect, it } from 'bun:test';
-import { readFile, rm, writeFile } from 'node:fs/promises';
+import { readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import type { Agent, AgentEvent } from '@vybestack/llxprt-code-agents';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
@@ -13,8 +13,13 @@ import {
   HookEventName,
   HookType,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
-import { withRecordingLifetimeFixture } from './helpers/recording-owner-lifetime-fixture.js';
 import { makeScratchDir } from './helpers/scratch-dir.js';
+
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 type ToolConfirmation = Extract<AgentEvent, { type: 'tool-confirmation' }>;
 
@@ -53,8 +58,11 @@ interface CommandInput {
 }
 
 describe('borrowed facade tool hook owner routing', () => {
+  useRecordingPrompts();
   it('retains A and B at deferred confirmation and reads the current recording path when each tool executes', async () => {
-    const evidenceDir = await makeScratchDir('recording-tool-hook-owner-');
+    const evidenceDir = await realpath(
+      await makeScratchDir('recording-tool-hook-owner-'),
+    );
     const output = join(evidenceDir, 'hooks.jsonl');
     const fixture = join(evidenceDir, 'responses.jsonl');
     try {
@@ -71,10 +79,19 @@ describe('borrowed facade tool hook owner routing', () => {
         ),
       );
       await withRecordingLifetimeFixture(
-        async ({ agent: a, borrow }) => {
+        async (
+          a,
+          _config,
+          _settingsOwner,
+          _settingsService,
+          _oauthManager,
+          borrow,
+        ) => {
           const b = await borrow();
-          expect(a.getMessageBus()).toBe(b.getMessageBus());
-          expect(a.agentClient).toBeDefined();
+          expect(fixtureAgentResources(a).messageBus).toBe(
+            fixtureAgentResources(b).messageBus,
+          );
+          expect(fixtureAgentResources(a).publishedClient(a)).toBeDefined();
           await a.setHistory([
             {
               speaker: 'human',
@@ -169,7 +186,7 @@ describe('borrowed facade tool hook owner routing', () => {
                   hooks: [
                     {
                       type: HookType.Command,
-                      command: `node -e 'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>require("fs").appendFileSync(process.argv[1],JSON.stringify(JSON.parse(s))+"\\n"))' '${output}'`,
+                      command: jsonlHookCommand(output),
                     },
                   ],
                 },

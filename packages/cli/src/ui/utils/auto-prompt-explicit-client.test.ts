@@ -1,3 +1,7 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from '../../../../agents/src/api/__tests__/helpers/session-client-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -26,37 +30,48 @@ import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { SessionClientOwner } from '../../../../agents/src/session/session-client-owner.js';
 import { buildAgentClientFactory } from '../../../../agents/src/api/agentBootstrap.js';
-import { afterEach, describe, expect, it } from 'bun:test';
+import {
+  afterEach,
+  afterAll,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  spyOn,
+} from 'bun:test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { TestRuntimeProviderManager } from '../../../../agents/src/test-utils/runtimeProviderManager.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import {
-  coreEvents,
-  CoreEvent,
-} from '@vybestack/llxprt-code-core/utils/events.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
-import { beginCliRuntimeRegistration } from '@vybestack/llxprt-code-providers/runtime/cliForegroundRuntime.js';
 import {
-  generateAutoPrompt,
-  type AutoPromptRuntime,
-} from './autoPromptGenerator.js';
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
+import { prepareAgentPreflight } from '@vybestack/llxprt-code-agents';
+import { useOwnedCredentials } from '../../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import { generateAutoPrompt } from './autoPromptGenerator.js';
+import { generationRecording } from '../../../../agents/src/api/__tests__/helpers/generation-owner-fixture.js';
 
 const cleanups: Array<() => Promise<void>> = [];
 
 async function owner(
   name: string,
   failure?: Error,
+  providerName = name,
 ): Promise<{
   client: AgentClientContract;
   config: Config;
   settings: SettingsService;
   requests: unknown[];
   sessionClient: SessionClientOwner;
+  readModelListenerCount: () => number;
 }> {
   const settings = new SettingsService();
   const config = new Config({
@@ -68,7 +83,7 @@ async function owner(
   });
   const requests: unknown[] = [];
   const provider: RuntimeProvider = {
-    name,
+    name: providerName,
     getModels: async () => [],
     getDefaultModel: () => 'test-model',
     async *generateChatCompletion(options): AsyncIterableIterator<IContent> {
@@ -83,18 +98,32 @@ async function owner(
   };
   const manager = new TestRuntimeProviderManager(
     createProviderRuntimeContext({
-      settingsService: settings,
-      config,
       runtimeId: name,
     }),
   );
   manager.registerProvider(provider);
-  const factories = configureProviderRuntimeFactories(config, manager);
+  const factoriesTokenizer = configureProviderTokenizer(manager);
+  const factoriesContent = createRuntimeContentGeneratorFactory();
   const media = new SessionMediaOwner(config.projectTempDir, 1024 * 1024);
   const settingsOwner = new SessionSettingsOwner(settings);
   settingsOwner.bindTelemetry(config);
-  settingsOwner.initializeProviderSelection(name, 'test-model');
-  const sessionClient = await SessionClientOwner.create(
+  settingsOwner.initializeProviderSelection(providerName, 'test-model');
+  const listeners = new Set<
+    Parameters<SessionSettingsOwner['subscribeModelChanges']>[0]
+  >();
+  const subscribe = settingsOwner.subscribeModelChanges.bind(settingsOwner);
+  const subscriptionSpy = spyOn(
+    settingsOwner,
+    'subscribeModelChanges',
+  ).mockImplementation((listener) => {
+    const unsubscribe = subscribe(listener);
+    listeners.add(listener);
+    return () => {
+      unsubscribe();
+      listeners.delete(listener);
+    };
+  });
+  const sessionClient = await createCapturedSessionOwner(
     config,
     assembleTaskSchemaPolicy(settings),
     manager,
@@ -103,8 +132,8 @@ async function owner(
     () => undefined,
     fixturePaths(),
     settingsOwner,
-    factories.contentGeneratorFactory,
-    factories.tokenizerFactory,
+    factoriesContent,
+    factoriesTokenizer,
   );
   if (fixtureFilesystem === undefined)
     throw new Error('Missing fixture filesystem');
@@ -126,29 +155,37 @@ async function owner(
   cleanups.push(async () => {
     await sessionClient.dispose();
     await settingsOwner.dispose();
+    subscriptionSpy.mockRestore();
     await memory.dispose();
     await tools.dispose();
     await media.dispose();
     await config.dispose();
   });
   await sessionClient.refreshAuth();
-  const client = sessionClient.getAgentClient();
-  return { client, config, settings, requests, sessionClient };
-}
-
-function liveRuntime(source: {
-  sessionClient: SessionClientOwner;
-}): AutoPromptRuntime {
+  const client = capturedSessionClient(sessionClient);
   return {
-    getProvider: () => 'anthropic',
-    get agentClient() {
-      return source.sessionClient.getAgentClient();
-    },
-    sessionClient: source.sessionClient,
+    client,
+    config,
+    settings,
+    requests,
+    sessionClient,
+    readModelListenerCount: () => listeners.size,
   };
 }
 
 describe('auto prompt explicit client ownership', () => {
+  const credentials = useOwnedCredentials();
+  let prompts: string;
+  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+  beforeAll(async () => {
+    prompts = await mkdtemp(join(tmpdir(), 'auto-prompt-fixture-'));
+    process.env.LLXPRT_PROMPTS_DIR = prompts;
+  });
+  afterAll(async () => {
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(prompts, { recursive: true, force: true });
+  });
   afterEach(() => {
     fixtureFilesystem = undefined;
   });
@@ -162,15 +199,15 @@ describe('auto prompt explicit client ownership', () => {
       new Error('provider denied generation'),
     );
     const b = await owner('failure-scope');
-    const unrelated = beginCliRuntimeRegistration(b.settings, b.config, {
-      runtimeId: 'failure-scope',
-    });
-    const result = await generateAutoPrompt(
-      liveRuntime(a),
-      'Review code',
-      a.config.getContentGeneratorConfig(),
+    const unrelated = await prepareAgentPreflight(
+      { runtimeId: b.config.getSessionId() },
+      credentials().authority,
+    );
+    cleanups.push(() => unrelated.dispose());
+    const result = await generateAutoPrompt('Review code', (input, options) =>
+      a.sessionClient.generateText(input, options, generationRecording),
     ).catch((error: unknown) => error);
-    unrelated.dispose();
+    await unrelated.dispose();
     expect(a.requests).toHaveLength(1);
     expect(result).toBeInstanceOf(Error);
     expect(result instanceof Error && result.message).toContain(
@@ -181,15 +218,15 @@ describe('auto prompt explicit client ownership', () => {
   it('uses owner A while an unrelated B runtime scope exists and preserves response whitespace', async () => {
     const a = await owner('owner-a');
     const b = await owner('owner-b');
-    const unrelated = beginCliRuntimeRegistration(b.settings, b.config, {
-      runtimeId: 'owner-b',
-    });
-    const result = await generateAutoPrompt(
-      liveRuntime(a),
-      'Review code',
-      a.config.getContentGeneratorConfig(),
+    const unrelated = await prepareAgentPreflight(
+      { runtimeId: b.config.getSessionId() },
+      credentials().authority,
     );
-    unrelated.dispose();
+    cleanups.push(() => unrelated.dispose());
+    const result = await generateAutoPrompt('Review code', (input, options) =>
+      a.sessionClient.generateText(input, options, generationRecording),
+    );
+    await unrelated.dispose();
     expect(result).toBe('  owner-a: expanded prompt\n');
     expect(a.requests).toHaveLength(1);
     expect(b.requests).toHaveLength(0);
@@ -197,20 +234,14 @@ describe('auto prompt explicit client ownership', () => {
 
   for (const failure of [undefined, new Error('detached generation denied')]) {
     it(`releases detached client event subscriptions after ${failure ? 'failure' : 'success'}`, async () => {
-      const before = coreEvents.listenerCount(CoreEvent.ModelChanged);
-      const detached = await owner('detached-owner', failure);
-      expect(coreEvents.listenerCount(CoreEvent.ModelChanged)).toBe(before + 1);
-      const runtime: AutoPromptRuntime = {
-        getProvider: () => 'gemini',
-        get agentClient() {
-          return detached.sessionClient.getAgentClient();
-        },
-        sessionClient: detached.sessionClient,
-      };
-      const result = await generateAutoPrompt(
-        runtime,
-        'Review code',
-        detached.client.getContentGeneratorConfig(),
+      const detached = await owner('detached-owner', failure, 'gemini');
+      expect(detached.readModelListenerCount()).toBe(1);
+      const result = await generateAutoPrompt('Review code', (input, options) =>
+        detached.sessionClient.generateText(
+          input,
+          options,
+          generationRecording,
+        ),
       ).then(
         (text) => ({ text }),
         (error: unknown) => ({ error }),
@@ -221,7 +252,9 @@ describe('auto prompt explicit client ownership', () => {
           : { text: '  detached-owner: expanded prompt\n' },
       );
       expect(detached.requests).toHaveLength(1);
-      expect(coreEvents.listenerCount(CoreEvent.ModelChanged)).toBe(before + 1);
+      expect(detached.readModelListenerCount()).toBe(1);
+      await detached.sessionClient.dispose();
+      expect(detached.readModelListenerCount()).toBe(0);
     });
   }
 });

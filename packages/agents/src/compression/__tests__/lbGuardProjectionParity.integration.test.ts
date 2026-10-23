@@ -28,14 +28,11 @@ import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/sessio
  *   BEFORE the provider call, so the LB guard callback is never invoked.
  */
 
-import { afterEach, describe, it, expect, beforeEach, vi } from 'bun:test';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   LoadBalancerContextLimitError,
   LoadBalancingProvider,
@@ -48,13 +45,16 @@ import type {
   IProvider,
   ProviderToolset,
 } from '@vybestack/llxprt-code-providers/IProvider.js';
-import { computeMarginAdjustedLimit } from '../contextLimitPolicy.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import {
   buildMockContentGenerator,
   buildRuntimeContext,
 } from '../../core/__tests__/chatSession-density-helpers.js';
 import { ChatSession } from '../../core/chatSession.js';
 import { preparePromptEnvelopeAfterEnforcement } from '../../core/promptEnvelopeSendSeam.js';
+import { computeMarginAdjustedLimit } from '../contextLimitPolicy.js';
 
 const MODEL = 'test-model';
 const HISTORY_MESSAGES = 14;
@@ -213,11 +213,17 @@ function createLoadBalancer(options: {
   const config = createRuntimeConfigStub(settingsService);
   const settingsOwner = new SessionSettingsOwner(settingsService);
   settingsOwner.bindTelemetry(config);
-  const providerManager = new ProviderManager({
+  const providerManager = new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     settingsService,
     config,
-    sessionSettings: settingsOwner,
-  });
+    undefined,
+    undefined,
+    settingsOwner,
+  );
   ownedReleases.push(
     () => providerManager.dispose(),
     () => settingsOwner.dispose(),
@@ -292,6 +298,13 @@ function createEnforcementSession(options: {
   });
   const chat = new ChatSession(
     runtimeContext,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     buildMockContentGenerator(),
     {},
     [],

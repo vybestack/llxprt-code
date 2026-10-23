@@ -1,3 +1,23 @@
+import { capturedSessionClient } from './helpers/session-client-capture.js';
+import {
+  captureAgentAdoption as fromConfig,
+  fixtureAgentResources,
+} from './helpers/agent-resource-capture.js';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import {
+  openCaller,
+  useFakeResponsesReplay,
+} from './helpers/caller-fixture.js';
+import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
+import { nonBlankStringArbitrary } from './helpers/fastCheckArbitraries.js';
+import { type Agent } from '@vybestack/llxprt-code-agents';
+import * as fc from 'fast-check';
+
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -25,12 +45,6 @@
  * mock theater.
  */
 
-import { describe, it, expect } from 'bun:test';
-import * as fc from 'fast-check';
-import { nonBlankStringArbitrary } from './helpers/fastCheckArbitraries.js';
-import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
-import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
-
 // ─── Structural identity probe (cast-free, mirrors fromConfig.behavior idiom) ─
 //
 // The public Agent surface is opaque (no raw manager accessor). The
@@ -40,22 +54,8 @@ import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
 // and probe a documented internal field. This is observation of the real
 // provider seam, not a spy on a mock.
 
-interface RecordLike {
-  readonly [key: string]: unknown;
-}
-
-function asRecord(v: unknown): RecordLike | null {
-  return typeof v === 'object' && v !== null ? (v as RecordLike) : null;
-}
-
-/** Reaches the AgentImpl providerManager field (agentImpl.ts AgentDeps). */
 function captureProviderManager(agent: Agent): unknown {
-  const impl = asRecord(agent);
-  if (impl === null) {
-    return undefined;
-  }
-  const pm = impl['providerManager'] ?? impl['manager'];
-  return pm ?? undefined;
+  return fixtureAgentResources(agent).manager;
 }
 
 // The no-2nd-manager identity (T6c / PROP-B) compares against the manager on
@@ -76,71 +76,108 @@ function asWithRuntimeId(agent: Agent): WithRuntimeId {
 }
 
 describe('runtime-seam behavior @plan:PLAN-20260621-COREAPIREMED.P17 @requirement:REQ-005,REQ-001', () => {
+  let promptDirectory: string;
+  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+  beforeAll(async () => {
+    promptDirectory = await mkdtemp(join(tmpdir(), 'engine-prompts-'));
+    process.env.LLXPRT_PROMPTS_DIR = promptDirectory;
+    await initializePromptSystem();
+  });
+  afterAll(async () => {
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(promptDirectory, { recursive: true, force: true });
+  });
+
+  const credentials = useOwnedCredentials();
+  const callerFactories = createAgentRuntimeFactoryBindings();
+
+  useFakeResponsesReplay('plain-text.jsonl');
+
   it('T6a fromConfig with a known sessionId yields agent.getRuntimeId() === that sessionId @requirement:REQ-005.1 @scenario:runtime-id @given:a real CLI-style Config and sessionId "known-runtime-id-T6a" @when:fromConfig({ config, sessionId }) @then:agent.getRuntimeId() === "known-runtime-id-T6a"', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
+    const caller = await openCaller(credentials().authority, callerFactories);
     let agent: Agent | undefined;
     try {
-      agent = await fromConfig({
-        settingsOwner: built.settingsOwner,
-        settingsService: built.settingsService,
-        agentClient: built.agentClient,
-        providerManager: built.providerManager,
-        config: built.config,
-        mcpRuntime: built.mcpRuntime,
-        sessionId: 'known-runtime-id-T6a',
-      });
+      agent = await fromConfig(
+        caller.config,
+        caller.settings,
+        { sessionId: 'known-runtime-id-T6a' },
+        caller.settingsOwner,
+        caller.manager,
+        undefined,
+        undefined,
+        caller.mcp,
+        undefined,
+        capturedSessionClient(caller.owner),
+      );
       expect(asWithRuntimeId(agent).getRuntimeId()).toBe(
         'known-runtime-id-T6a',
       );
     } finally {
-      await agent?.dispose();
-      await built.cleanup();
+      try {
+        await agent?.dispose();
+      } finally {
+        await caller.close();
+      }
     }
   });
 
   it('T6b the adopted Config active provider/model are reflected on the agent (forward adopt-path guard) @requirement:REQ-005 @scenario:adopted-runtime @given:a real Config whose active provider=fake and model=fake-model @when:fromConfig({ config }) @then:agent.getProvider() === "fake" and agent.getModel() === "fake-model"', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
+    const caller = await openCaller(credentials().authority, callerFactories);
     let agent: Agent | undefined;
     try {
-      agent = await fromConfig({
-        settingsOwner: built.settingsOwner,
-        settingsService: built.settingsService,
-        agentClient: built.agentClient,
-        providerManager: built.providerManager,
-        config: built.config,
-        mcpRuntime: built.mcpRuntime,
-      });
+      agent = await fromConfig(
+        caller.config,
+        caller.settings,
+        {},
+        caller.settingsOwner,
+        caller.manager,
+        undefined,
+        undefined,
+        caller.mcp,
+        undefined,
+        capturedSessionClient(caller.owner),
+      );
       expect(agent.getProvider()).toBe('fake');
       expect(agent.getModel()).toBe('fake-model');
     } finally {
-      await agent?.dispose();
-      await built.cleanup();
+      try {
+        await agent?.dispose();
+      } finally {
+        await caller.close();
+      }
     }
   });
 
   it('T6c no second ProviderManager: the runtime manager reachable post-build IS the SAME instance as the manager on the supplied Config (identity, observed via the real providers seam) @requirement:REQ-001 @scenario:no-double-manager @given:a Config whose manager accessor returns a real manager @when:fromConfig({ config }) @then:captureProviderManager(agent) === the Config manager (no second manager constructed)', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
+    const caller = await openCaller(credentials().authority, callerFactories);
     let agent: Agent | undefined;
     try {
-      const config = built.config;
+      const config = caller.config;
       // The invariant is instance identity, observed via the real providers
       // seam: the manager reachable from the agent IS the SAME instance as the
       // one on the supplied Config (no second manager constructed). Mirrors the
       // sibling fromConfig.behavior T6 plain idiom (NOT a mock, NOT an
       // agent-root accessor).
-      const callerManager = built.providerManager;
-      agent = await fromConfig({
-        settingsOwner: built.settingsOwner,
-        settingsService: built.settingsService,
-        agentClient: built.agentClient,
-        providerManager: built.providerManager,
+      agent = await fromConfig(
         config,
-        mcpRuntime: built.mcpRuntime,
-      });
-      expect(captureProviderManager(agent)).toBe(callerManager);
+        caller.settings,
+        {},
+        caller.settingsOwner,
+        caller.manager,
+        undefined,
+        undefined,
+        caller.mcp,
+        undefined,
+        capturedSessionClient(caller.owner),
+      );
+      expect(captureProviderManager(agent)).toBe(caller.manager);
     } finally {
-      await agent?.dispose();
-      await built.cleanup();
+      try {
+        await agent?.dispose();
+      } finally {
+        await caller.close();
+      }
     }
   });
 
@@ -149,22 +186,31 @@ describe('runtime-seam behavior @plan:PLAN-20260621-COREAPIREMED.P17 @requiremen
   it('PROP-A for any valid non-empty sessionId R, fromConfig({ config, sessionId: R }) yields agent.getRuntimeId() === R @requirement:REQ-005.1 @scenario:property-runtime-id @given:any non-empty sessionId string R @when:fromConfig({ config, sessionId: R }) @then:agent.getRuntimeId() === R for every generated R', async () => {
     await fc.assert(
       fc.asyncProperty(nonBlankStringArbitrary, async (runtimeId) => {
-        const built = await buildCliStyleConfig('plain-text.jsonl');
+        const caller = await openCaller(
+          credentials().authority,
+          callerFactories,
+        );
         let agent: Agent | undefined;
         try {
-          agent = await fromConfig({
-            settingsOwner: built.settingsOwner,
-            settingsService: built.settingsService,
-            agentClient: built.agentClient,
-            providerManager: built.providerManager,
-            config: built.config,
-            mcpRuntime: built.mcpRuntime,
-            sessionId: runtimeId,
-          });
+          agent = await fromConfig(
+            caller.config,
+            caller.settings,
+            { sessionId: runtimeId },
+            caller.settingsOwner,
+            caller.manager,
+            undefined,
+            undefined,
+            caller.mcp,
+            undefined,
+            capturedSessionClient(caller.owner),
+          );
           expect(asWithRuntimeId(agent).getRuntimeId()).toBe(runtimeId);
         } finally {
-          await agent?.dispose();
-          await built.cleanup();
+          try {
+            await agent?.dispose();
+          } finally {
+            await caller.close();
+          }
         }
       }),
     );
@@ -173,23 +219,31 @@ describe('runtime-seam behavior @plan:PLAN-20260621-COREAPIREMED.P17 @requiremen
   it('PROP-B for any valid non-empty sessionId R, the no-2nd-manager identity holds: captureProviderManager(agent) === the Config manager @requirement:REQ-001 @scenario:property-no-double-manager @given:any non-empty sessionId string R @when:fromConfig({ config, sessionId: R }) @then:captureProviderManager(agent) === the Config manager for every generated R', async () => {
     await fc.assert(
       fc.asyncProperty(nonBlankStringArbitrary, async (runtimeId) => {
-        const built = await buildCliStyleConfig('plain-text.jsonl');
+        const caller = await openCaller(
+          credentials().authority,
+          callerFactories,
+        );
         let agent: Agent | undefined;
         try {
-          agent = await fromConfig({
-            settingsOwner: built.settingsOwner,
-            settingsService: built.settingsService,
-            agentClient: built.agentClient,
-            providerManager: built.providerManager,
-            config: built.config,
-            mcpRuntime: built.mcpRuntime,
-            sessionId: runtimeId,
-          });
-          const callerManager = built.providerManager;
-          expect(captureProviderManager(agent)).toBe(callerManager);
+          agent = await fromConfig(
+            caller.config,
+            caller.settings,
+            { sessionId: runtimeId },
+            caller.settingsOwner,
+            caller.manager,
+            undefined,
+            undefined,
+            caller.mcp,
+            undefined,
+            capturedSessionClient(caller.owner),
+          );
+          expect(captureProviderManager(agent)).toBe(caller.manager);
         } finally {
-          await agent?.dispose();
-          await built.cleanup();
+          try {
+            await agent?.dispose();
+          } finally {
+            await caller.close();
+          }
         }
       }),
     );

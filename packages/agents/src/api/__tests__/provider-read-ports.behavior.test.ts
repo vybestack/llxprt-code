@@ -1,3 +1,4 @@
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -11,8 +12,9 @@ describe('public Agent live provider reads', () => {
   it('reads current active state, model catalogue and changing provider limits without returning runtime services', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
-      const provider = agent.providerManager.getActiveProvider();
-      if (!provider) throw new Error('Expected activated fixture provider');
+      const provider = fixtureAgentResources(agent).manager.getActiveProvider();
+      if (provider === undefined)
+        throw new Error('Expected activated fixture provider');
       let limit = 8192;
       provider.getContextLimit = () => limit;
       const reads = {

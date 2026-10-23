@@ -1,3 +1,5 @@
+import { bindTurnModel } from '../../../session/bind-turn-model.js';
+import { TurnToolExecutionOwner } from '../../../session/turn-tool-execution-owner.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import { CoreToolScheduler } from '../../coreToolScheduler.js';
 /**
@@ -48,28 +50,31 @@ describe('AgenticLoop promptId correlation', () => {
     ]);
 
     const loop = new AgenticLoop({
-      createSchedulerOwner: bindSchedulerOwner(
-        config,
-        messageBus,
-        config.isInteractive(),
-        toolRegistry,
-        (options) => new CoreToolScheduler(options),
-        () => configSettingsOwner.readToolExecutionPolicy(),
-        () =>
-          configSettingsOwner.readToolGovernance(
-            config.getExcludeTools() ?? [],
-          ),
-        undefined,
-        RootTelemetry.prepare({
-          enabled: false,
-          sessionId: 'isolated-caller-fixture',
-          maxBytes: 1024,
-          maxFiles: 1,
-        }),
-      ),
-      agentClient: client,
       config,
-      messageBus,
+      ...bindTurnModel(client),
+      tools: new TurnToolExecutionOwner(
+        messageBus,
+        undefined,
+        bindSchedulerOwner(
+          config,
+          messageBus,
+          config.isInteractive(),
+          toolRegistry,
+          (options) => new CoreToolScheduler(options),
+          () => configSettingsOwner.readToolExecutionPolicy(),
+          () =>
+            configSettingsOwner.readToolGovernance(
+              config.getExcludeTools() ?? [],
+            ),
+          undefined,
+          RootTelemetry.prepare({
+            enabled: false,
+            sessionId: 'isolated-caller-fixture',
+            maxBytes: 1024,
+            maxFiles: 1,
+          }),
+        ),
+      ),
     });
 
     const callerPromptId = 'caller-supplied-prompt-id';
@@ -102,28 +107,31 @@ describe('AgenticLoop promptId correlation', () => {
     ]);
 
     const loop = new AgenticLoop({
-      createSchedulerOwner: bindSchedulerOwner(
-        config,
-        messageBus,
-        config.isInteractive(),
-        toolRegistry,
-        (options) => new CoreToolScheduler(options),
-        () => configSettingsOwner.readToolExecutionPolicy(),
-        () =>
-          configSettingsOwner.readToolGovernance(
-            config.getExcludeTools() ?? [],
-          ),
-        undefined,
-        RootTelemetry.prepare({
-          enabled: false,
-          sessionId: 'isolated-caller-fixture',
-          maxBytes: 1024,
-          maxFiles: 1,
-        }),
-      ),
-      agentClient: client,
       config,
-      messageBus,
+      ...bindTurnModel(client),
+      tools: new TurnToolExecutionOwner(
+        messageBus,
+        undefined,
+        bindSchedulerOwner(
+          config,
+          messageBus,
+          config.isInteractive(),
+          toolRegistry,
+          (options) => new CoreToolScheduler(options),
+          () => configSettingsOwner.readToolExecutionPolicy(),
+          () =>
+            configSettingsOwner.readToolGovernance(
+              config.getExcludeTools() ?? [],
+            ),
+          undefined,
+          RootTelemetry.prepare({
+            enabled: false,
+            sessionId: 'isolated-caller-fixture',
+            maxBytes: 1024,
+            maxFiles: 1,
+          }),
+        ),
+      ),
     });
 
     for await (const _event of loop.run('go', new AbortController().signal)) {
@@ -156,28 +164,31 @@ describe('AgenticLoop promptId correlation', () => {
       [contentEvent('done'), finishedEvent()],
     ]);
     const loop = new AgenticLoop({
-      createSchedulerOwner: bindSchedulerOwner(
-        config,
-        messageBus,
-        config.isInteractive(),
-        toolRegistry,
-        (options) => new CoreToolScheduler(options),
-        () => configSettingsOwner.readToolExecutionPolicy(),
-        () =>
-          configSettingsOwner.readToolGovernance(
-            config.getExcludeTools() ?? [],
-          ),
-        undefined,
-        RootTelemetry.prepare({
-          enabled: false,
-          sessionId: 'isolated-caller-fixture',
-          maxBytes: 1024,
-          maxFiles: 1,
-        }),
-      ),
-      agentClient: client,
       config,
-      messageBus,
+      ...bindTurnModel(client),
+      tools: new TurnToolExecutionOwner(
+        messageBus,
+        undefined,
+        bindSchedulerOwner(
+          config,
+          messageBus,
+          config.isInteractive(),
+          toolRegistry,
+          (options) => new CoreToolScheduler(options),
+          () => configSettingsOwner.readToolExecutionPolicy(),
+          () =>
+            configSettingsOwner.readToolGovernance(
+              config.getExcludeTools() ?? [],
+            ),
+          undefined,
+          RootTelemetry.prepare({
+            enabled: false,
+            sessionId: 'isolated-caller-fixture',
+            maxBytes: 1024,
+            maxFiles: 1,
+          }),
+        ),
+      ),
     });
 
     await collectEvents(
@@ -209,28 +220,31 @@ describe('AgenticLoop promptId correlation', () => {
       [contentEvent('second run'), finishedEvent()],
     ]);
     const loop = new AgenticLoop({
-      createSchedulerOwner: bindSchedulerOwner(
-        config,
-        messageBus,
-        config.isInteractive(),
-        toolRegistry,
-        (options) => new CoreToolScheduler(options),
-        () => configSettingsOwner.readToolExecutionPolicy(),
-        () =>
-          configSettingsOwner.readToolGovernance(
-            config.getExcludeTools() ?? [],
-          ),
-        undefined,
-        RootTelemetry.prepare({
-          enabled: false,
-          sessionId: 'isolated-caller-fixture',
-          maxBytes: 1024,
-          maxFiles: 1,
-        }),
-      ),
-      agentClient: client,
       config,
-      messageBus,
+      ...bindTurnModel(client),
+      tools: new TurnToolExecutionOwner(
+        messageBus,
+        undefined,
+        bindSchedulerOwner(
+          config,
+          messageBus,
+          config.isInteractive(),
+          toolRegistry,
+          (options) => new CoreToolScheduler(options),
+          () => configSettingsOwner.readToolExecutionPolicy(),
+          () =>
+            configSettingsOwner.readToolGovernance(
+              config.getExcludeTools() ?? [],
+            ),
+          undefined,
+          RootTelemetry.prepare({
+            enabled: false,
+            sessionId: 'isolated-caller-fixture',
+            maxBytes: 1024,
+            maxFiles: 1,
+          }),
+        ),
+      ),
     });
     const firstRun = loop.run('first', new AbortController().signal);
 

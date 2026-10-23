@@ -1,9 +1,7 @@
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-
+import {
+  useRecordingPrompts,
+  withRecordingLifetimeFixture,
+} from './helpers/recording-owner-lifetime-fixture.js';
 import { describe, it, expect, spyOn } from 'bun:test';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -28,27 +26,21 @@ import {
   buildAgent,
   drain,
   isDoneEvent,
-  internalSettingsOwner,
+  fixtureAgentResources,
 } from './helpers/agentHarness.js';
-import { TaskLaunchOwner } from '../../session/task-launch-owner.js';
-import { ShellJobOwner } from '../../session/shell-job-owner.js';
-import { withRecordingLifetimeFixture } from './helpers/recording-owner-lifetime-fixture.js';
+
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 function clientOwner(agent: Agent): SessionClientOwner {
-  if (
-    !('deps' in agent) ||
-    typeof agent.deps !== 'object' ||
-    agent.deps === null
-  ) {
-    throw new Error('Expected an owned session client');
-  }
-  if (
-    !('sessionClient' in agent.deps) ||
-    !(agent.deps.sessionClient instanceof SessionClientOwner)
-  ) {
-    throw new Error('Expected an owned session client');
-  }
-  return agent.deps.sessionClient;
+  const owner = fixtureAgentResources(agent)
+    .sessionOwners.values()
+    .next().value;
+  if (owner === undefined) throw new Error('Expected an owned session client');
+  return owner;
 }
 
 function deferred(): { promise: Promise<void>; resolve: () => void } {
@@ -109,6 +101,7 @@ async function withRecordedConversation<T>(
 }
 
 describe('starting a new conversation session', () => {
+  useRecordingPrompts();
   it('rejects foreground turns and settings while recording retirement is paused', async () => {
     await withRecordedConversation(async (agent, oldPath) => {
       const entered = deferred();
@@ -125,23 +118,12 @@ describe('starting a new conversation session', () => {
       const switching = agent.session.startNewSession();
       try {
         await entered.promise;
-        if (
-          !('deps' in agent) ||
-          typeof agent.deps !== 'object' ||
-          agent.deps === null
-        )
-          throw new Error('Expected agent dependencies');
-        if (
-          !('taskLaunchOwner' in agent.deps) ||
-          !(agent.deps.taskLaunchOwner instanceof TaskLaunchOwner)
-        )
+
+        const { taskOwner: taskLaunchOwner, shellOwner } =
+          fixtureAgentResources(agent);
+        if (taskLaunchOwner === undefined)
           throw new Error('Expected task owner');
-        if (
-          !('shellOwner' in agent.deps) ||
-          !(agent.deps.shellOwner instanceof ShellJobOwner)
-        )
-          throw new Error('Expected shell owner');
-        const { taskLaunchOwner, shellOwner } = agent.deps;
+        if (shellOwner === undefined) throw new Error('Expected shell owner');
         expect(() => taskLaunchOwner.start(async () => {})).toThrow(
           AgentBusyError,
         );
@@ -318,12 +300,13 @@ describe('starting a new conversation session', () => {
         const injectFailure = (): { mockRestore: () => void } => {
           if (stage === 'telemetry') {
             return spyOn(
-              internalSettingsOwner(agent).telemetry,
+              fixtureAgentResources(agent).telemetry,
               'setEnabled',
             ).mockRejectedValueOnce(new Error('retirement failed'));
           }
           if (stage === 'client') {
-            const previous = clientOwner(agent).getAgentClient();
+            const previous =
+              fixtureAgentResources(agent).publishedClient(agent);
             const original = previous.dispose.bind(previous);
             return spyOn(previous, 'dispose').mockImplementationOnce(
               async () => {
@@ -378,7 +361,7 @@ describe('starting a new conversation session', () => {
       telemetry: { enabled: true, outfile },
     });
     try {
-      const telemetry = internalSettingsOwner(agent).telemetry;
+      const telemetry = fixtureAgentResources(agent).telemetry;
       const oldId = agent.session.getSessionId();
       telemetry.events.record(() => ({ body: 'before clear' }));
       await agent.session.startNewSession();
@@ -616,22 +599,31 @@ describe('starting a new conversation session', () => {
   });
 
   it('does not clear a sibling conversation or change shared Config identity', async () => {
-    await withRecordingLifetimeFixture(async ({ agent, borrow, config }) => {
-      await agent.setHistory([textItem('human', 'shared conversation')]);
-      const sibling = await borrow();
-      const prior = await sibling.getHistory();
-      const configId = config.getSessionId();
-      await agent.session.setRecording({ enabled: true });
-      await agent.session.startNewSession();
-      expect(await agent.getHistory()).toStrictEqual([]);
-      expect(await sibling.getHistory()).toStrictEqual(prior);
-      expect(config.getSessionId()).toBe(configId);
-      await agent.session.setRecording({ enabled: false });
-      await agent.session.resume('latest');
-      expect((await agent.getHistory()).map(itemText)).toStrictEqual([
-        'shared conversation',
-      ]);
-    });
+    await withRecordingLifetimeFixture(
+      async (
+        agent,
+        config,
+        _settingsOwner,
+        _settingsService,
+        _oauthManager,
+        borrow,
+      ) => {
+        await agent.setHistory([textItem('human', 'shared conversation')]);
+        const sibling = await borrow();
+        const prior = await sibling.getHistory();
+        const configId = config.getSessionId();
+        await agent.session.setRecording({ enabled: true });
+        await agent.session.startNewSession();
+        expect(await agent.getHistory()).toStrictEqual([]);
+        expect(await sibling.getHistory()).toStrictEqual(prior);
+        expect(config.getSessionId()).toBe(configId);
+        await agent.session.setRecording({ enabled: false });
+        await agent.session.resume('latest');
+        expect((await agent.getHistory()).map(itemText)).toStrictEqual([
+          'shared conversation',
+        ]);
+      },
+    );
   });
 
   it('keeps the new facade session identity on model requests after a model switch', async () => {
@@ -639,13 +631,13 @@ describe('starting a new conversation session', () => {
     const outfile = join(directory, 'telemetry.jsonl');
     try {
       await withRecordingLifetimeFixture(
-        async ({ agent, config }) => {
+        async (agent, config) => {
           const sharedId = config.getSessionId();
           await agent.session.startNewSession();
           const nextId = agent.session.getSessionId();
           await agent.setModel('fresh-model');
           await drain(agent.stream('new request'));
-          await internalSettingsOwner(agent).telemetry.flush();
+          await fixtureAgentResources(agent).telemetry.flush();
           const spans = readFileSync(outfile, 'utf8')
             .trim()
             .split('\n')

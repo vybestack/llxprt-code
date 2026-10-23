@@ -1,3 +1,51 @@
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { toConfigParameters } from '../agentConfig.adapter.js';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
+import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import {
+  acquirePreferredProviderManager,
+  acquirePreferredOAuth,
+  preparePreferredProviderCompletion,
+} from '../preferred-provider-acquisition.js';
+import { releaseAdoptedFileScope } from '../adoption-release.js';
+import { randomUUID } from 'node:crypto';
+import {
+  runCleanupSteps,
+  cleanupAfterFailure,
+} from '../../core/subagent-cleanup.js';
+import { SessionClientOwner } from '../../session/session-client-owner.js';
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
+import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { fileURLToPath } from 'node:url';
+import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
+import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
+import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
+import { executeProviderActivation } from '../providerActivationExecutor.js';
+import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
+import { assembleModelSelection } from '../model-selection.js';
+import { type Agent } from '@vybestack/llxprt-code-agents';
+import { internalConfig } from './helpers/agentHarness.js';
+import * as fc from 'fast-check';
+
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -22,12 +70,6 @@
  * against the bound Config directly.
  */
 
-import { describe, it, expect } from 'bun:test';
-import * as fc from 'fast-check';
-import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
-import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
-import { internalConfig } from './helpers/agentHarness.js';
-
 const dangerousPathSegments = new Set([
   '__proto__',
   'constructor',
@@ -42,237 +84,457 @@ function isInertSettingKey(key: string): boolean {
 }
 
 describe('agent settings surface @plan:PLAN-20260621-COREAPIREMED.P11 @requirement:REQ-002 @requirement:REQ-INT-003', () => {
-  it('T3 internalConfig(agent) returns the SAME caller-supplied Config instance (identity) @requirement:REQ-002 @scenario:identity @given:a real CLI-style Config wrapped by fromConfig @when:internalConfig(agent) @then:the returned Config is the SAME instance supplied to fromConfig', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
+  let promptDirectory: string;
+  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+  beforeAll(async () => {
+    promptDirectory = await mkdtemp(join(tmpdir(), 'engine-prompts-'));
+    process.env.LLXPRT_PROMPTS_DIR = promptDirectory;
+    await initializePromptSystem();
+  });
+  afterAll(async () => {
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(promptDirectory, { recursive: true, force: true });
+  });
+
+  const credentials = useOwnedCredentials();
+  let callerConfig: Config;
+  let callerSettings: SettingsService;
+  let callerSettingsOwner: SessionSettingsOwner;
+  let callerPolicy: RuntimePolicyOwner;
+  let callerMcp: McpRuntimeOwner;
+  let callerManager: ReturnType<typeof acquirePreferredProviderManager>;
+  let callerOwner: SessionClientOwner;
+  let callerClose: () => Promise<void>;
+  const callerFactories = createAgentRuntimeFactoryBindings();
+  let callerRelease: AcquisitionRelease;
+  let callerFiles: ProviderFileLifecycle;
+  let callerRuntimeId: string;
+  let callerOAuth: ReturnType<typeof acquirePreferredOAuth>;
+  let callerTokenizer: ReturnType<typeof configureProviderTokenizer>;
+  let callerContent: ReturnType<typeof createRuntimeContentGeneratorFactory>;
+
+  async function openCaller(fixture: string): Promise<void> {
+    const previousReplay = process.env.LLXPRT_FAKE_RESPONSES;
+    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+      new URL('./fixtures/' + fixture, import.meta.url),
+    );
+    const directory = await realpath(
+      await mkdtemp(join(tmpdir(), 'caller-adoption-')),
+    );
+    callerConfig = new Config({
+      ...toConfigParameters({
+        provider: 'fake',
+        model: 'fake-model',
+        sessionId: randomUUID(),
+        workingDir: directory,
+      }),
+      interactive: true,
+      includeDirectories: [process.cwd()],
+    });
+    callerSettings = new SettingsService();
+    callerPolicy = new RuntimePolicyOwner(callerConfig);
+    injectConfirmationForcingPolicy(callerPolicy.session.confirmation);
+    callerMcp = await buildTestMcpRuntime(
+      callerConfig,
+      callerPolicy.session.messageBus,
+      {},
+      undefined,
+      callerPolicy,
+    );
+    acquireCallerProviders();
+    const media = new SessionMediaOwner(
+      callerConfig.projectTempDir,
+      1024 * 1024 * 1024,
+    );
+    callerOwner = await createCapturedSessionOwner(
+      callerConfig,
+      assembleTaskSchemaPolicy(callerSettings),
+      callerManager,
+      callerFactories.agentClientFactory,
+      media.store,
+      callerMcp.readInstructions,
+      callerMcp.workspacePaths,
+      callerSettingsOwner,
+      callerContent,
+      callerTokenizer,
+    );
+    callerOwner.bindMcpRuntime(callerMcp);
+    callerOwner.bindProviderFiles(callerFiles, (provider) =>
+      callerOAuth.composeRetryOperations(provider),
+    );
+    callerOwner.bindHooks();
+    callerClose = settleEngineRelease.bind(
+      undefined,
+      [
+        () => callerOwner.dispose(),
+        () => callerRelease.close(),
+        () => media.dispose(),
+        () => callerMcp.dispose(),
+        () => callerConfig.dispose(),
+        () => rm(directory, { recursive: true, force: true }),
+      ],
+      previousReplay,
+    );
     try {
-      const agent: Agent = await fromConfig({
-        settingsOwner: built.settingsOwner,
-        settingsService: built.settingsService,
-        agentClient: built.agentClient,
-        providerManager: built.providerManager,
-        config: built.config,
-        mcpRuntime: built.mcpRuntime,
-      });
-      expect(internalConfig(agent)).toBe(built.config);
+      await preparePreferredProviderCompletion(
+        callerConfig,
+        callerSettings,
+        callerSettingsOwner,
+        callerManager,
+        callerOAuth,
+        callerRuntimeId,
+        callerTokenizer,
+        undefined,
+      );
+      await callerMcp.initialize();
+      await activateCallerClient();
+    } catch (primary) {
+      await cleanupAfterFailure(primary, callerClose);
+    }
+  }
+  function acquireCallerProviders(): void {
+    callerRuntimeId = 'caller-' + randomUUID();
+    callerRelease = new AcquisitionRelease();
+    callerSettingsOwner = new SessionSettingsOwner(callerSettings);
+    callerRelease.acquire('settings', () => callerSettingsOwner.dispose());
+    callerSettingsOwner.initializeProviderSelection(
+      callerConfig.getProvider(),
+      callerConfig.getModel(),
+    );
+    callerSettingsOwner.bindTelemetry(callerConfig);
+    callerFiles = new ProviderFileLifecycle({
+      maxFiles: 100,
+      maxBytes: 512 * 1024 * 1024,
+    });
+    for (const scope of [callerRuntimeId, callerConfig.getSessionId()])
+      callerRelease.acquire('files', () =>
+        releaseAdoptedFileScope(callerFiles, scope),
+      );
+    callerManager = acquirePreferredProviderManager(
+      callerConfig,
+      callerSettings,
+      callerSettingsOwner,
+      callerFiles,
+      callerRuntimeId,
+      credentials().authority,
+      callerRelease,
+    );
+    const factoriesTokenizer = configureProviderTokenizer(callerManager);
+    const factoriesContent = createRuntimeContentGeneratorFactory();
+    callerTokenizer = factoriesTokenizer;
+    callerContent = factoriesContent;
+    callerOAuth = acquirePreferredOAuth(
+      undefined,
+      callerPolicy.session.messageBus,
+      callerConfig,
+      callerSettings,
+      callerManager,
+      callerRuntimeId,
+      callerMcp.profileDefinitions,
+      credentials().authority,
+      callerRelease,
+      undefined,
+    );
+  }
+  async function activateCallerClient(): Promise<void> {
+    const activation = await executeProviderActivation(
+      callerConfig,
+      { provider: callerConfig.getProvider(), model: callerConfig.getModel() },
+      assembleProviderSwitch(
+        callerConfig,
+        callerSettings,
+        callerManager,
+        callerOAuth,
+        () => 'agent',
+        () => callerOwner.refreshAuth(),
+        callerSettingsOwner,
+      ),
+      callerSettings,
+      callerManager,
+      (method) => callerOwner.refreshAuth(method),
+      assembleModelSelection(callerSettingsOwner),
+    );
+    requireCallerActivation(activation);
+    await callerOwner.initializeTools();
+    await capturedSessionClient(callerOwner).startChat();
+  }
+
+  it('T3 internalConfig(agent) returns the SAME caller-supplied Config instance (identity) @requirement:REQ-002 @scenario:identity @given:a real CLI-style Config wrapped by fromConfig @when:internalConfig(agent) @then:the returned Config is the SAME instance supplied to fromConfig', async () => {
+    await openCaller('plain-text.jsonl');
+    try {
+      const agent: Agent = await fromConfig(
+        callerConfig,
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        undefined,
+        callerMcp,
+        undefined,
+        capturedSessionClient(callerOwner),
+      );
+      expect(internalConfig(agent)).toBe(callerConfig);
       await agent.dispose();
     } finally {
-      await built.cleanup();
+      await callerClose();
     }
   });
 
   it('T3b get/set round-trip for context-limit returns the Config-normalized value @requirement:REQ-002 @scenario:round-trip-context-limit @given:a fromConfig agent over a real Config @when:setEphemeralSetting("context-limit", 100000) then getEphemeralSetting("context-limit") @then:the returned value equals built.config.getEphemeralSetting("context-limit") after the same set on the Config', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
+    await openCaller('plain-text.jsonl');
     try {
-      const agent: Agent = await fromConfig({
-        settingsOwner: built.settingsOwner,
-        settingsService: built.settingsService,
-        agentClient: built.agentClient,
-        providerManager: built.providerManager,
-        config: built.config,
-        mcpRuntime: built.mcpRuntime,
-      });
+      const agent: Agent = await fromConfig(
+        callerConfig,
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        undefined,
+        callerMcp,
+        undefined,
+        capturedSessionClient(callerOwner),
+      );
       agent.setEphemeralSetting('context-limit', 100000);
       const viaAgent = agent.getEphemeralSetting('context-limit');
-      built.settingsOwner.writeUserParameter('context-limit', 100000);
-      const viaConfig = built.settingsOwner.readNamedParameter('context-limit');
+      callerSettingsOwner.writeUserParameter('context-limit', 100000);
+      const viaConfig = callerSettingsOwner.readNamedParameter('context-limit');
       expect(viaAgent).toStrictEqual(viaConfig);
       await agent.dispose();
     } finally {
-      await built.cleanup();
+      await callerClose();
     }
   });
 
   it('T3b-numeric-string get/set round-trip applies Config normalization (numeric string persists as a number) @requirement:REQ-002 @scenario:round-trip-normalization @given:a fromConfig agent over a real Config @when:setEphemeralSetting("context-limit", "8000") then getEphemeralSetting("context-limit") @then:the returned value is the Config-normalized value (identical to built.config.getEphemeralSetting on the same input)', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
+    await openCaller('plain-text.jsonl');
     try {
-      const agent: Agent = await fromConfig({
-        settingsOwner: built.settingsOwner,
-        settingsService: built.settingsService,
-        agentClient: built.agentClient,
-        providerManager: built.providerManager,
-        config: built.config,
-        mcpRuntime: built.mcpRuntime,
-      });
+      const agent: Agent = await fromConfig(
+        callerConfig,
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        undefined,
+        callerMcp,
+        undefined,
+        capturedSessionClient(callerOwner),
+      );
       agent.setEphemeralSetting('context-limit', '8000');
       const viaAgent = agent.getEphemeralSetting('context-limit');
-      built.settingsOwner.writeUserParameter('context-limit', '8000');
-      const viaConfig = built.settingsOwner.readNamedParameter('context-limit');
+      callerSettingsOwner.writeUserParameter('context-limit', '8000');
+      const viaConfig = callerSettingsOwner.readNamedParameter('context-limit');
       expect(viaAgent).toStrictEqual(viaConfig);
       await agent.dispose();
     } finally {
-      await built.cleanup();
+      await callerClose();
     }
   });
 
   it('T3b-streaming get/set round-trip for streaming="disabled" returns the Config-normalized value @requirement:REQ-002 @scenario:round-trip-streaming @given:a fromConfig agent over a real Config @when:setEphemeralSetting("streaming", "disabled") then getEphemeralSetting("streaming") @then:the returned value equals built.config.getEphemeralSetting("streaming") after the same set on the Config', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
+    await openCaller('plain-text.jsonl');
     try {
-      const agent: Agent = await fromConfig({
-        settingsOwner: built.settingsOwner,
-        settingsService: built.settingsService,
-        agentClient: built.agentClient,
-        providerManager: built.providerManager,
-        config: built.config,
-        mcpRuntime: built.mcpRuntime,
-      });
+      const agent: Agent = await fromConfig(
+        callerConfig,
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        undefined,
+        callerMcp,
+        undefined,
+        capturedSessionClient(callerOwner),
+      );
       agent.setEphemeralSetting('streaming', 'disabled');
       const viaAgent = agent.getEphemeralSetting('streaming');
-      built.settingsOwner.writeUserParameter('streaming', 'disabled');
-      const viaConfig = built.settingsOwner.readNamedParameter('streaming');
+      callerSettingsOwner.writeUserParameter('streaming', 'disabled');
+      const viaConfig = callerSettingsOwner.readNamedParameter('streaming');
       expect(viaAgent).toStrictEqual(viaConfig);
       await agent.dispose();
     } finally {
-      await built.cleanup();
+      await callerClose();
     }
   });
 
   it('T3b-custom get/set round-trip for a plain custom key returns the stored value (parity with Config) @requirement:REQ-002 @scenario:round-trip-custom @given:a fromConfig agent over a real Config @when:setEphemeralSetting("my-custom-key", "v") then getEphemeralSetting("my-custom-key") @then:the returned value equals built.config.getEphemeralSetting("my-custom-key") after the same set on the Config', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
+    await openCaller('plain-text.jsonl');
     try {
-      const agent: Agent = await fromConfig({
-        settingsOwner: built.settingsOwner,
-        settingsService: built.settingsService,
-        agentClient: built.agentClient,
-        providerManager: built.providerManager,
-        config: built.config,
-        mcpRuntime: built.mcpRuntime,
-      });
+      const agent: Agent = await fromConfig(
+        callerConfig,
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        undefined,
+        callerMcp,
+        undefined,
+        capturedSessionClient(callerOwner),
+      );
       agent.setEphemeralSetting('my-custom-key', 'v');
       const viaAgent = agent.getEphemeralSetting('my-custom-key');
-      built.settingsOwner.writeUserParameter('my-custom-key', 'v');
-      const viaConfig = built.settingsOwner.readNamedParameter('my-custom-key');
+      callerSettingsOwner.writeUserParameter('my-custom-key', 'v');
+      const viaConfig = callerSettingsOwner.readNamedParameter('my-custom-key');
       expect(viaAgent).toStrictEqual(viaConfig);
       await agent.dispose();
     } finally {
-      await built.cleanup();
+      await callerClose();
     }
   });
 
   it('T3c getEphemeralSettings() deep-equals built.config.getEphemeralSettings() (same normalized global map) @requirement:REQ-002 @scenario:settings-map @given:a fromConfig agent over a real Config @when:agent.getEphemeralSettings() @then:the returned map deep-equals built.config.getEphemeralSettings()', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
+    await openCaller('plain-text.jsonl');
     try {
-      const agent: Agent = await fromConfig({
-        settingsOwner: built.settingsOwner,
-        settingsService: built.settingsService,
-        agentClient: built.agentClient,
-        providerManager: built.providerManager,
-        config: built.config,
-        mcpRuntime: built.mcpRuntime,
-      });
+      const agent: Agent = await fromConfig(
+        callerConfig,
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        undefined,
+        callerMcp,
+        undefined,
+        capturedSessionClient(callerOwner),
+      );
       agent.setEphemeralSetting('context-limit', 50000);
       agent.setEphemeralSetting('my-custom-key', 'abc');
       const viaAgent = agent.getEphemeralSettings();
-      built.settingsOwner.writeUserParameter('context-limit', 50000);
-      built.settingsOwner.writeUserParameter('my-custom-key', 'abc');
-      const viaConfig = built.settingsOwner.captureNamedParameters();
+      callerSettingsOwner.writeUserParameter('context-limit', 50000);
+      callerSettingsOwner.writeUserParameter('my-custom-key', 'abc');
+      const viaConfig = callerSettingsOwner.captureNamedParameters();
       expect(viaAgent).toStrictEqual(viaConfig);
       await agent.dispose();
     } finally {
-      await built.cleanup();
+      await callerClose();
     }
   });
 
   it('T3d setEphemeralSetting("streaming", 123) propagates the Config error (message names "must resolve"), never swallowed @requirement:REQ-002 @scenario:error-propagation @given:a fromConfig agent over a real Config @when:setEphemeralSetting("streaming", 123) @then:the call throws an Error whose message contains "must resolve" (the propagated Config normalization error)', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
+    await openCaller('plain-text.jsonl');
     try {
-      const agent: Agent = await fromConfig({
-        settingsOwner: built.settingsOwner,
-        settingsService: built.settingsService,
-        agentClient: built.agentClient,
-        providerManager: built.providerManager,
-        config: built.config,
-        mcpRuntime: built.mcpRuntime,
-      });
+      const agent: Agent = await fromConfig(
+        callerConfig,
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        undefined,
+        callerMcp,
+        undefined,
+        capturedSessionClient(callerOwner),
+      );
       expect(() => agent.setEphemeralSetting('streaming', 123)).toThrow(
         /must resolve/,
       );
       await agent.dispose();
     } finally {
-      await built.cleanup();
+      await callerClose();
     }
   });
 
   it('T3d-object setEphemeralSetting("streaming", <object>) propagates the Config error (message names "must resolve") @requirement:REQ-002 @scenario:error-propagation-object @given:a fromConfig agent over a real Config @when:setEphemeralSetting("streaming", { x: 1 }) @then:the call throws an Error whose message contains "must resolve"', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
+    await openCaller('plain-text.jsonl');
     try {
-      const agent: Agent = await fromConfig({
-        settingsOwner: built.settingsOwner,
-        settingsService: built.settingsService,
-        agentClient: built.agentClient,
-        providerManager: built.providerManager,
-        config: built.config,
-        mcpRuntime: built.mcpRuntime,
-      });
+      const agent: Agent = await fromConfig(
+        callerConfig,
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        undefined,
+        callerMcp,
+        undefined,
+        capturedSessionClient(callerOwner),
+      );
       expect(() => agent.setEphemeralSetting('streaming', { x: 1 })).toThrow(
         /must resolve/,
       );
       await agent.dispose();
     } finally {
-      await built.cleanup();
+      await callerClose();
     }
   });
 
   it('T3e-forward a value set directly on the Config is visible via agent.getEphemeralSetting (delegation, not a local cache) @requirement:REQ-002 @scenario:delegation-config-to-agent @given:a fromConfig agent over a real Config @when:built.config.setEphemeralSetting("delegated-key", 42) @then:agent.getEphemeralSetting("delegated-key") equals built.config.getEphemeralSetting("delegated-key")', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
+    await openCaller('plain-text.jsonl');
     try {
-      const agent: Agent = await fromConfig({
-        settingsOwner: built.settingsOwner,
-        settingsService: built.settingsService,
-        agentClient: built.agentClient,
-        providerManager: built.providerManager,
-        config: built.config,
-        mcpRuntime: built.mcpRuntime,
-      });
-      built.settingsOwner.writeUserParameter('delegated-key', 42);
+      const agent: Agent = await fromConfig(
+        callerConfig,
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        undefined,
+        callerMcp,
+        undefined,
+        capturedSessionClient(callerOwner),
+      );
+      callerSettingsOwner.writeUserParameter('delegated-key', 42);
       expect(agent.getEphemeralSetting('delegated-key')).toStrictEqual(
-        built.settingsOwner.readNamedParameter('delegated-key'),
+        callerSettingsOwner.readNamedParameter('delegated-key'),
       );
       await agent.dispose();
     } finally {
-      await built.cleanup();
+      await callerClose();
     }
   });
 
   it('T3e-reverse a value set via the agent is visible on built.config.getEphemeralSetting (delegation both directions) @requirement:REQ-002 @scenario:delegation-agent-to-config @given:a fromConfig agent over a real Config @when:agent.setEphemeralSetting("reverse-key", "hello") @then:built.config.getEphemeralSetting("reverse-key") equals the value the agent wrote', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
+    await openCaller('plain-text.jsonl');
     try {
-      const agent: Agent = await fromConfig({
-        settingsOwner: built.settingsOwner,
-        settingsService: built.settingsService,
-        agentClient: built.agentClient,
-        providerManager: built.providerManager,
-        config: built.config,
-        mcpRuntime: built.mcpRuntime,
-      });
+      const agent: Agent = await fromConfig(
+        callerConfig,
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        undefined,
+        callerMcp,
+        undefined,
+        capturedSessionClient(callerOwner),
+      );
       agent.setEphemeralSetting('reverse-key', 'hello');
       expect(
-        built.settingsOwner.readNamedParameter('reverse-key'),
+        callerSettingsOwner.readNamedParameter('reverse-key'),
       ).toStrictEqual('hello');
       await agent.dispose();
     } finally {
-      await built.cleanup();
+      await callerClose();
     }
   });
 
   it('T8 normalization parity: agent.getEphemeralSetting("context-limit") equals built.config.getEphemeralSetting("context-limit") for representative inputs @requirement:REQ-002 @scenario:normalization-parity @given:a fromConfig agent over a real Config @when:both have context-limit set to 250000 @then:agent.getEphemeralSetting("context-limit") strictly equals built.config.getEphemeralSetting("context-limit")', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
+    await openCaller('plain-text.jsonl');
     try {
-      const agent: Agent = await fromConfig({
-        settingsOwner: built.settingsOwner,
-        settingsService: built.settingsService,
-        agentClient: built.agentClient,
-        providerManager: built.providerManager,
-        config: built.config,
-        mcpRuntime: built.mcpRuntime,
-      });
+      const agent: Agent = await fromConfig(
+        callerConfig,
+        callerSettings,
+        {},
+        callerSettingsOwner,
+        callerManager,
+        undefined,
+        undefined,
+        callerMcp,
+        undefined,
+        capturedSessionClient(callerOwner),
+      );
       agent.setEphemeralSetting('context-limit', 250000);
-      built.settingsOwner.writeUserParameter('context-limit', 250000);
+      callerSettingsOwner.writeUserParameter('context-limit', 250000);
       expect(agent.getEphemeralSetting('context-limit')).toBe(
-        built.settingsOwner.readNamedParameter('context-limit'),
+        callerSettingsOwner.readNamedParameter('context-limit'),
       );
       await agent.dispose();
     } finally {
-      await built.cleanup();
+      await callerClose();
     }
   });
 
@@ -284,24 +546,28 @@ describe('agent settings surface @plan:PLAN-20260621-COREAPIREMED.P11 @requireme
         fc.string({ minLength: 1, maxLength: 20 }).filter(isInertSettingKey),
         fc.json(),
         async (key, jsonValue) => {
-          const built = await buildCliStyleConfig('plain-text.jsonl');
+          await openCaller('plain-text.jsonl');
           try {
-            const agent: Agent = await fromConfig({
-              settingsOwner: built.settingsOwner,
-              settingsService: built.settingsService,
-              agentClient: built.agentClient,
-              providerManager: built.providerManager,
-              config: built.config,
-              mcpRuntime: built.mcpRuntime,
-            });
+            const agent: Agent = await fromConfig(
+              callerConfig,
+              callerSettings,
+              {},
+              callerSettingsOwner,
+              callerManager,
+              undefined,
+              undefined,
+              callerMcp,
+              undefined,
+              capturedSessionClient(callerOwner),
+            );
             const value = JSON.parse(jsonValue);
             agent.setEphemeralSetting(key, value);
             const viaAgent = agent.getEphemeralSetting(key);
-            const viaConfig = built.settingsOwner.readNamedParameter(key);
+            const viaConfig = callerSettingsOwner.readNamedParameter(key);
             await agent.dispose();
             return viaAgent === viaConfig;
           } finally {
-            await built.cleanup();
+            await callerClose();
           }
         },
       ),
@@ -314,24 +580,28 @@ describe('agent settings surface @plan:PLAN-20260621-COREAPIREMED.P11 @requireme
         fc.string({ minLength: 1, maxLength: 20 }).filter(isInertSettingKey),
         fc.json(),
         async (key, jsonValue) => {
-          const built = await buildCliStyleConfig('plain-text.jsonl');
+          await openCaller('plain-text.jsonl');
           try {
-            const agent: Agent = await fromConfig({
-              settingsOwner: built.settingsOwner,
-              settingsService: built.settingsService,
-              agentClient: built.agentClient,
-              providerManager: built.providerManager,
-              config: built.config,
-              mcpRuntime: built.mcpRuntime,
-            });
+            const agent: Agent = await fromConfig(
+              callerConfig,
+              callerSettings,
+              {},
+              callerSettingsOwner,
+              callerManager,
+              undefined,
+              undefined,
+              callerMcp,
+              undefined,
+              capturedSessionClient(callerOwner),
+            );
             const value = JSON.parse(jsonValue);
             agent.setEphemeralSetting(key, value);
             const agentMap = agent.getEphemeralSettings();
-            const configMap = built.settingsOwner.captureNamedParameters();
+            const configMap = callerSettingsOwner.captureNamedParameters();
             await agent.dispose();
             return agentMap[key] === configMap[key];
           } finally {
-            await built.cleanup();
+            await callerClose();
           }
         },
       ),
@@ -341,25 +611,29 @@ describe('agent settings surface @plan:PLAN-20260621-COREAPIREMED.P11 @requireme
   it('PROP-3 for any numeric context-limit value, agent.getEphemeralSetting("context-limit") equals built.config.getEphemeralSetting("context-limit") (normalization parity) @requirement:REQ-002 @scenario:property-context-limit @given:any finite numeric context-limit value @when:set via the agent then read from both surfaces @then:agent.getEphemeralSetting("context-limit") equals built.config.getEphemeralSetting("context-limit") for every generated value', async () => {
     await fc.assert(
       fc.asyncProperty(fc.nat(), async (limit) => {
-        const built = await buildCliStyleConfig('plain-text.jsonl');
+        await openCaller('plain-text.jsonl');
         try {
-          const agent: Agent = await fromConfig({
-            settingsOwner: built.settingsOwner,
-            settingsService: built.settingsService,
-            agentClient: built.agentClient,
-            providerManager: built.providerManager,
-            config: built.config,
-            mcpRuntime: built.mcpRuntime,
-          });
+          const agent: Agent = await fromConfig(
+            callerConfig,
+            callerSettings,
+            {},
+            callerSettingsOwner,
+            callerManager,
+            undefined,
+            undefined,
+            callerMcp,
+            undefined,
+            capturedSessionClient(callerOwner),
+          );
           agent.setEphemeralSetting('context-limit', limit);
-          built.settingsOwner.writeUserParameter('context-limit', limit);
+          callerSettingsOwner.writeUserParameter('context-limit', limit);
           const viaAgent = agent.getEphemeralSetting('context-limit');
           const viaConfig =
-            built.settingsOwner.readNamedParameter('context-limit');
+            callerSettingsOwner.readNamedParameter('context-limit');
           await agent.dispose();
           return viaAgent === viaConfig;
         } finally {
-          await built.cleanup();
+          await callerClose();
         }
       }),
     );
@@ -368,24 +642,28 @@ describe('agent settings surface @plan:PLAN-20260621-COREAPIREMED.P11 @requireme
   it('PROP-4 for streaming="enabled", agent.getEphemeralSetting("streaming") equals built.config.getEphemeralSetting("streaming") (both normalize to the same string) @requirement:REQ-002 @scenario:property-streaming-enabled @given:a fromConfig agent over a real Config @when:both set streaming="enabled" @then:agent.getEphemeralSetting("streaming") strictly equals built.config.getEphemeralSetting("streaming") for every generated scenario', async () => {
     await fc.assert(
       fc.asyncProperty(fc.constantFrom('enabled', 'disabled'), async (mode) => {
-        const built = await buildCliStyleConfig('plain-text.jsonl');
+        await openCaller('plain-text.jsonl');
         try {
-          const agent: Agent = await fromConfig({
-            settingsOwner: built.settingsOwner,
-            settingsService: built.settingsService,
-            agentClient: built.agentClient,
-            providerManager: built.providerManager,
-            config: built.config,
-            mcpRuntime: built.mcpRuntime,
-          });
+          const agent: Agent = await fromConfig(
+            callerConfig,
+            callerSettings,
+            {},
+            callerSettingsOwner,
+            callerManager,
+            undefined,
+            undefined,
+            callerMcp,
+            undefined,
+            capturedSessionClient(callerOwner),
+          );
           agent.setEphemeralSetting('streaming', mode);
-          built.settingsOwner.writeUserParameter('streaming', mode);
+          callerSettingsOwner.writeUserParameter('streaming', mode);
           const viaAgent = agent.getEphemeralSetting('streaming');
-          const viaConfig = built.settingsOwner.readNamedParameter('streaming');
+          const viaConfig = callerSettingsOwner.readNamedParameter('streaming');
           await agent.dispose();
           return viaAgent === viaConfig;
         } finally {
-          await built.cleanup();
+          await callerClose();
         }
       }),
     );
@@ -397,27 +675,49 @@ describe('agent settings surface @plan:PLAN-20260621-COREAPIREMED.P11 @requireme
         fc.string({ minLength: 1, maxLength: 20 }).filter(isInertSettingKey),
         fc.json(),
         async (key, jsonValue) => {
-          const built = await buildCliStyleConfig('plain-text.jsonl');
+          await openCaller('plain-text.jsonl');
           try {
-            const agent: Agent = await fromConfig({
-              settingsOwner: built.settingsOwner,
-              settingsService: built.settingsService,
-              agentClient: built.agentClient,
-              providerManager: built.providerManager,
-              config: built.config,
-              mcpRuntime: built.mcpRuntime,
-            });
+            const agent: Agent = await fromConfig(
+              callerConfig,
+              callerSettings,
+              {},
+              callerSettingsOwner,
+              callerManager,
+              undefined,
+              undefined,
+              callerMcp,
+              undefined,
+              capturedSessionClient(callerOwner),
+            );
             const value = JSON.parse(jsonValue);
-            built.settingsOwner.writeUserParameter(key, value);
+            callerSettingsOwner.writeUserParameter(key, value);
             const viaAgent = agent.getEphemeralSetting(key);
-            const viaConfig = built.settingsOwner.readNamedParameter(key);
+            const viaConfig = callerSettingsOwner.readNamedParameter(key);
             await agent.dispose();
             return viaAgent === viaConfig;
           } finally {
-            await built.cleanup();
+            await callerClose();
           }
         },
       ),
     );
   });
 });
+
+async function settleEngineRelease(
+  steps: ReadonlyArray<() => void | Promise<void>>,
+  previousReplay: string | undefined,
+): Promise<void> {
+  try {
+    await runCleanupSteps(steps);
+  } finally {
+    if (previousReplay === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
+    else process.env.LLXPRT_FAKE_RESPONSES = previousReplay;
+  }
+}
+
+function requireCallerActivation(
+  result: Awaited<ReturnType<typeof executeProviderActivation>>,
+): void {
+  if (result.authFailed) throw result.authError;
+}

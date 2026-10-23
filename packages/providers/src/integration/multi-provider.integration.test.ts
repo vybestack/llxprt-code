@@ -214,7 +214,15 @@ describe('Multi-Provider Integration Tests', () => {
     settingsService = runtime.settingsService;
     runtimeConfig = runtime.config;
     settingsService.set('activeProvider', '');
-    manager = new ProviderManager(runtime);
+    manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      runtime.settingsService,
+      runtime.config,
+      runtime,
+    );
   });
 
   const createOpenAIProvider = (): OpenAIProvider => {

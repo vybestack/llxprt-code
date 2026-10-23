@@ -1,3 +1,5 @@
+import { afterAll } from 'bun:test';
+import { scopeInputs } from './__tests__/subagent-test-helpers.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -9,34 +11,28 @@
  * and scheduling-timeout coverage lives in subagent.runInteractive-term.test.ts.
  */
 
-import { automock } from '@vybestack/llxprt-code-test-utils';
-import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
-import type { Mock } from 'bun:test';
 import {
-  vi,
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-  type Mock,
-} from 'bun:test';
-import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import { SubAgentScope } from './subagent.js';
+  createContentGenerator,
+  type ContentGenerator,
+} from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import {
   ContextState,
   SubagentTerminateMode,
   type PromptConfig,
   type RunConfig,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import { ChatSession, StreamEventType } from './chatSession.js';
-import { mockChunk } from './__tests__/turn-test-helpers.js';
-import {
-  createContentGenerator,
-  type ContentGenerator,
-} from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
+import {
+  advanceTimersByTimeAsync,
+  automock,
+} from '@vybestack/llxprt-code-test-utils';
+import type { Mock } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { mockChunk } from './__tests__/turn-test-helpers.js';
+import { ChatSession, StreamEventType } from './chatSession.js';
+import { SubAgentScope } from './subagent.js';
 const realEnvironmentContextModule = {
   ...(await import('@vybestack/llxprt-code-core/utils/environmentContext.js')),
 };
@@ -82,17 +78,7 @@ void vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js', () =>
 void vi.mock('./nonInteractiveToolExecutor.js', () =>
   automock(realNonInteractiveToolExecutorModule),
 );
-const actual4 = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
-void vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
-  ...actual4,
-  IdeClient: {
-    getInstance: vi.fn().mockResolvedValue({
-      getConnectionStatus: vi.fn(),
-      initialize: vi.fn(),
-      shutdown: vi.fn(),
-    }),
-  },
-}));
+
 const actual5 = {
   ...(await import('@vybestack/llxprt-code-core/core/prompts.js')),
 };
@@ -101,15 +87,19 @@ void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('Core Prompt'),
 }));
 
+import { waitForCondition } from '../test-utils/eventLoop.js';
 import {
-  createMockConfig,
+  acquireSubagentSettings,
+  acquireSubagentWorkspace,
   createMockStream,
+  createRuntimeOverrides,
+  createStatelessRuntimeBundle,
+  createSubagentConfig,
   defaultModelConfig,
   defaultRunConfig,
-  createStatelessRuntimeBundle,
-  createRuntimeOverrides,
+  installSubagentCleanup,
+  seedSubagentSettings,
 } from './__tests__/subagent-test-helpers.js';
-import { waitForCondition } from '../test-utils/eventLoop.js';
 
 /**
  * Turn budget for condition waits that gate fake-time advancement or run-entry
@@ -121,6 +111,8 @@ import { waitForCondition } from '../test-utils/eventLoop.js';
 const CONDITION_WAIT_TURNS = 200_000;
 
 describe('subagent.ts', () => {
+  const retainCleanup = installSubagentCleanup();
+
   let mockSendMessageStream: Mock;
 
   beforeEach(() => {
@@ -180,7 +172,10 @@ describe('subagent.ts', () => {
     const promptConfig: PromptConfig = { systemPrompt: 'Execute task.' };
 
     it('should terminate with MAX_TURNS if the limit is reached', async () => {
-      const { config, mcpRuntime, settingsService } = await createMockConfig();
+      const settings = seedSubagentSettings();
+      const config = createSubagentConfig(settings, retainCleanup);
+      await acquireSubagentSettings(config, settings, retainCleanup);
+      const mcpRuntime = await acquireSubagentWorkspace(config, retainCleanup);
       const runConfig: RunConfig = { ...defaultRunConfig, max_turns: 2 };
 
       // Model keeps looping by calling emitvalue repeatedly
@@ -210,7 +205,7 @@ describe('subagent.ts', () => {
 
       const { overrides: maxTurnOverrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
-        { settings: settingsService },
+        { settings },
       );
       const scope = await SubAgentScope.create(
         'test-agent',
@@ -220,7 +215,7 @@ describe('subagent.ts', () => {
         runConfig,
         undefined,
         undefined,
-        maxTurnOverrides,
+        ...scopeInputs(maxTurnOverrides),
       );
 
       await scope.runNonInteractive(new ContextState());
@@ -232,7 +227,10 @@ describe('subagent.ts', () => {
     });
 
     it('should terminate with TIMEOUT if the time limit is reached during an LLM call', async () => {
-      const { config, mcpRuntime, settingsService } = await createMockConfig();
+      const settings = seedSubagentSettings();
+      const config = createSubagentConfig(settings, retainCleanup);
+      await acquireSubagentSettings(config, settings, retainCleanup);
+      const mcpRuntime = await acquireSubagentWorkspace(config, retainCleanup);
       // Install fake timers after config creation so config/auth setup runs on
       // real timers; fake timers freeze Date.now/performance.now/hrtime and
       // stop Bun's per-test timeout from firing.
@@ -260,7 +258,7 @@ describe('subagent.ts', () => {
       try {
         const { overrides: timeoutOverrides } = createRuntimeOverrides(
           mcpRuntime.workspaceFilesystem.paths,
-          { settings: settingsService },
+          { settings },
         );
         scope = await SubAgentScope.create(
           'test-agent',
@@ -270,7 +268,7 @@ describe('subagent.ts', () => {
           runConfig,
           undefined,
           undefined,
-          timeoutOverrides,
+          ...scopeInputs(timeoutOverrides),
         );
 
         runPromise = scope.runNonInteractive(new ContextState());
@@ -309,7 +307,7 @@ describe('subagent.ts', () => {
         }
         if (!streamResolved) {
           resolveStream!(createMockStream(['stop'])());
-          scope?.dispose();
+          await scope?.dispose();
         }
       }
     });
@@ -326,8 +324,17 @@ describe('subagent.ts', () => {
 
     const observeActivelyAbortAStalledNonInteractiveResponseStreamBeforeTheOverallRun =
       async () => {
-        const { config, mcpRuntime, settingsOwner, settingsService } =
-          await createMockConfig();
+        const settings = seedSubagentSettings();
+        const config = createSubagentConfig(settings, retainCleanup);
+        const settingsOwner = await acquireSubagentSettings(
+          config,
+          settings,
+          retainCleanup,
+        );
+        const mcpRuntime = await acquireSubagentWorkspace(
+          config,
+          retainCleanup,
+        );
         const testTimeoutMs = 30_000; // 30 second timeout for this test
         settingsOwner.writeUserParameter(
           'stream-idle-timeout-ms',
@@ -372,7 +379,7 @@ describe('subagent.ts', () => {
 
         const { overrides } = createRuntimeOverrides(
           mcpRuntime.workspaceFilesystem.paths,
-          { settings: settingsService },
+          { settings },
         );
         const scope = await SubAgentScope.create(
           'test-agent',
@@ -382,7 +389,7 @@ describe('subagent.ts', () => {
           runConfig,
           undefined,
           undefined,
-          overrides,
+          ...scopeInputs(overrides),
         );
 
         const runPromise = scope.runNonInteractive(new ContextState());
@@ -414,17 +421,20 @@ describe('subagent.ts', () => {
           // rejection so nothing leaks into the next test. Do not await.
           runPromise.catch(() => {});
           runRejection.catch(() => {});
-          scope.dispose();
+          await scope.dispose();
         }
       };
 
     it('should terminate with ERROR if the model call throws', async () => {
-      const { config, mcpRuntime, settingsService } = await createMockConfig();
+      const settings = seedSubagentSettings();
+      const config = createSubagentConfig(settings, retainCleanup);
+      await acquireSubagentSettings(config, settings, retainCleanup);
+      const mcpRuntime = await acquireSubagentWorkspace(config, retainCleanup);
       mockSendMessageStream.mockRejectedValue(new Error('API Failure'));
 
       const { overrides: errorOverrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
-        { settings: settingsService },
+        { settings },
       );
       const scope = await SubAgentScope.create(
         'test-agent',
@@ -434,7 +444,7 @@ describe('subagent.ts', () => {
         defaultRunConfig,
         undefined,
         undefined,
-        errorOverrides,
+        ...scopeInputs(errorOverrides),
       );
 
       await expect(scope.runNonInteractive(new ContextState())).rejects.toThrow(
@@ -454,8 +464,13 @@ describe('subagent.ts', () => {
 
     const observeActivelyAbortAHungNonInteractiveModelCallWhenTheTimeLimit =
       async () => {
-        const { config, mcpRuntime, settingsService } =
-          await createMockConfig();
+        const settings = seedSubagentSettings();
+        const config = createSubagentConfig(settings, retainCleanup);
+        await acquireSubagentSettings(config, settings, retainCleanup);
+        const mcpRuntime = await acquireSubagentWorkspace(
+          config,
+          retainCleanup,
+        );
         const runConfig: RunConfig = {
           max_time_minutes: 0.001,
           max_turns: 100,
@@ -494,7 +509,7 @@ describe('subagent.ts', () => {
 
         const { overrides } = createRuntimeOverrides(
           mcpRuntime.workspaceFilesystem.paths,
-          { settings: settingsService },
+          { settings },
         );
         const scope = await SubAgentScope.create(
           'test-agent',
@@ -504,7 +519,7 @@ describe('subagent.ts', () => {
           runConfig,
           undefined,
           undefined,
-          overrides,
+          ...scopeInputs(overrides),
         );
 
         const runPromise = scope.runNonInteractive(new ContextState());
@@ -533,14 +548,17 @@ describe('subagent.ts', () => {
           // rejection so nothing leaks into the next test. Do not await.
           runPromise.catch(() => {});
           runRejection.catch(() => {});
-          scope.dispose();
+          await scope.dispose();
         }
       };
   });
 
   it('treats eager completed-tool persistence as best-effort during interactive runs', async () => {
     const promptConfig: PromptConfig = { systemPrompt: 'Execute task.' };
-    const { config, mcpRuntime, settingsService } = await createMockConfig();
+    const settings = seedSubagentSettings();
+    const config = createSubagentConfig(settings, retainCleanup);
+    await acquireSubagentSettings(config, settings, retainCleanup);
+    const mcpRuntime = await acquireSubagentWorkspace(config, retainCleanup);
     const runConfig: RunConfig = { ...defaultRunConfig, max_turns: 1 };
     const recordCompletedToolCalls = vi.fn(() => {
       throw new Error('history write failed');
@@ -578,7 +596,7 @@ describe('subagent.ts', () => {
     });
     const { overrides } = createRuntimeOverrides(
       mcpRuntime.workspaceFilesystem.paths,
-      { settings: settingsService },
+      { settings },
       { runtimeBundle },
     );
 
@@ -590,7 +608,7 @@ describe('subagent.ts', () => {
       runConfig,
       { tools: ['external_tool'] },
       undefined,
-      overrides,
+      ...scopeInputs(overrides),
     );
 
     mockSendMessageStream.mockImplementation(
@@ -647,12 +665,15 @@ describe('subagent.ts', () => {
 
   describe('dispose', () => {
     it('should abort active operations when dispose is called', async () => {
-      const { config, mcpRuntime, settingsService } = await createMockConfig();
+      const settings = seedSubagentSettings();
+      const config = createSubagentConfig(settings, retainCleanup);
+      await acquireSubagentSettings(config, settings, retainCleanup);
+      const mcpRuntime = await acquireSubagentWorkspace(config, retainCleanup);
 
       const runtimeBundle = createStatelessRuntimeBundle();
       const { overrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
-        { settings: settingsService },
+        { settings },
         { runtimeBundle },
       );
 
@@ -664,7 +685,7 @@ describe('subagent.ts', () => {
         defaultRunConfig,
         undefined,
         undefined,
-        overrides,
+        ...scopeInputs(overrides),
       );
 
       // Model returns stop immediately to complete normally
@@ -672,14 +693,17 @@ describe('subagent.ts', () => {
       await scope.runNonInteractive(new ContextState());
 
       // Now call dispose - it should clean up
-      scope.dispose();
+      await scope.dispose();
 
       // Verify disposal was successful by checking cancel is safe
       expect(() => scope.cancel('test')).not.toThrow();
     });
 
     it('should clean up parent abort signal listener when dispose is called', async () => {
-      const { config, mcpRuntime, settingsService } = await createMockConfig();
+      const settings = seedSubagentSettings();
+      const config = createSubagentConfig(settings, retainCleanup);
+      await acquireSubagentSettings(config, settings, retainCleanup);
+      const mcpRuntime = await acquireSubagentWorkspace(config, retainCleanup);
 
       const parentAbortController = new AbortController();
       const removeEventListenerSpy = vi.spyOn(
@@ -690,7 +714,7 @@ describe('subagent.ts', () => {
       const runtimeBundle = createStatelessRuntimeBundle();
       const { overrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
-        { settings: settingsService },
+        { settings },
         { runtimeBundle },
       );
 
@@ -702,7 +726,7 @@ describe('subagent.ts', () => {
         defaultRunConfig,
         undefined,
         undefined,
-        overrides,
+        ...scopeInputs(overrides),
         parentAbortController.signal,
       );
 
@@ -711,19 +735,22 @@ describe('subagent.ts', () => {
       await scope.runNonInteractive(new ContextState());
 
       // Now dispose should clean up listeners
-      scope.dispose();
+      await scope.dispose();
 
       // Verify removeEventListener was called
       expect(removeEventListenerSpy).toHaveBeenCalled();
     });
 
     it('should be safe to call dispose multiple times', async () => {
-      const { config, mcpRuntime, settingsService } = await createMockConfig();
+      const settings = seedSubagentSettings();
+      const config = createSubagentConfig(settings, retainCleanup);
+      await acquireSubagentSettings(config, settings, retainCleanup);
+      const mcpRuntime = await acquireSubagentWorkspace(config, retainCleanup);
 
       const runtimeBundle = createStatelessRuntimeBundle();
       const { overrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
-        { settings: settingsService },
+        { settings },
         { runtimeBundle },
       );
 
@@ -735,24 +762,27 @@ describe('subagent.ts', () => {
         defaultRunConfig,
         undefined,
         undefined,
-        overrides,
+        ...scopeInputs(overrides),
       );
 
       // Should not throw
+      const closing: Array<Promise<void>> = [];
       expect(() => {
-        scope.dispose();
-        scope.dispose();
-        scope.dispose();
+        closing.push(scope.dispose(), scope.dispose(), scope.dispose());
       }).not.toThrow();
+      await Promise.all(closing);
     });
 
     it('should nullify active abort controller reference', async () => {
-      const { config, mcpRuntime, settingsService } = await createMockConfig();
+      const settings = seedSubagentSettings();
+      const config = createSubagentConfig(settings, retainCleanup);
+      await acquireSubagentSettings(config, settings, retainCleanup);
+      const mcpRuntime = await acquireSubagentWorkspace(config, retainCleanup);
 
       const runtimeBundle = createStatelessRuntimeBundle();
       const { overrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
-        { settings: settingsService },
+        { settings },
         { runtimeBundle },
       );
 
@@ -764,7 +794,7 @@ describe('subagent.ts', () => {
         defaultRunConfig,
         undefined,
         undefined,
-        overrides,
+        ...scopeInputs(overrides),
       );
 
       // Start an operation to create an abort controller
@@ -772,7 +802,7 @@ describe('subagent.ts', () => {
       await scope.runNonInteractive(new ContextState());
 
       // Dispose
-      scope.dispose();
+      await scope.dispose();
 
       // Try to access the private activeAbortController through cancel method
       // If it's null, cancel should be safe
@@ -780,8 +810,14 @@ describe('subagent.ts', () => {
     });
 
     it('unblocks a stalled non-interactive run so no async work leaks between tests', async () => {
-      const { config, mcpRuntime, settingsOwner, settingsService } =
-        await createMockConfig();
+      const settings = seedSubagentSettings();
+      const config = createSubagentConfig(settings, retainCleanup);
+      const settingsOwner = await acquireSubagentSettings(
+        config,
+        settings,
+        retainCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(config, retainCleanup);
       // Install fake timers after config creation so config/auth setup runs on
       // real timers; fake timers freeze Date.now/performance.now/hrtime and
       // stop Bun's per-test timeout from firing.
@@ -812,7 +848,7 @@ describe('subagent.ts', () => {
         const runtimeBundle = createStatelessRuntimeBundle();
         const { overrides } = createRuntimeOverrides(
           mcpRuntime.workspaceFilesystem.paths,
-          { settings: settingsService },
+          { settings },
           { runtimeBundle },
         );
 
@@ -824,7 +860,7 @@ describe('subagent.ts', () => {
           runConfig,
           undefined,
           undefined,
-          overrides,
+          ...scopeInputs(overrides),
         );
 
         runPromise = scope.runNonInteractive(new ContextState());
@@ -854,7 +890,7 @@ describe('subagent.ts', () => {
           },
         );
 
-        scope.dispose();
+        await scope.dispose();
 
         // The stream is stalled after its first chunk and the idle watchdog is
         // too far out to fire; dispose must abort so the run settles within a
@@ -873,8 +909,28 @@ describe('subagent.ts', () => {
         // Do not await — a stalled chain under fake timers must not hang cleanup.
         runPromise?.catch(() => {});
         runRejection?.catch(() => {});
-        scope?.dispose();
+        await scope?.dispose();
       }
     });
+  });
+});
+
+describe('module isolation', () => {
+  afterAll(() => {
+    void vi.mock('./chatSession.js', () => __actual);
+    void vi.mock('@vybestack/llxprt-code-tools', () => actual);
+    void vi.mock(
+      '@vybestack/llxprt-code-core/core/contentGenerator.js',
+      () => actual3,
+    );
+    void vi.mock(
+      '@vybestack/llxprt-code-core/utils/environmentContext.js',
+      () => realEnvironmentContextModule,
+    );
+    void vi.mock(
+      './nonInteractiveToolExecutor.js',
+      () => realNonInteractiveToolExecutorModule,
+    );
+    void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => actual5);
   });
 });

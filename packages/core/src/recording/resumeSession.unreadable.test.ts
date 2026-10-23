@@ -8,16 +8,19 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { chmodSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { SessionRecordingService } from './SessionRecordingService.js';
+import { SessionDiscovery } from './SessionDiscovery.js';
 import { SessionLockManager } from './SessionLockManager.js';
 import {
   resumeSession,
   CONTINUE_LATEST,
   type ResumeResult,
 } from './resumeSession.js';
+import { denyWindowsAccess } from '@vybestack/llxprt-code-test-utils/windows-filesystem-denial.js';
 import {
   writeCorruptHeaderSession,
   writeLegacyUnknownProviderSession,
@@ -46,6 +49,79 @@ async function createHealthySession(
   const filePath = recording.getFilePath()!;
   await recording.dispose();
   return filePath;
+}
+
+interface NewEntryDenial {
+  readonly restore: () => void;
+  /** Lifts the denial, then rethrows `failure` (with token and ACL details on Windows). */
+  readonly abort: (failure: unknown) => never;
+}
+
+/**
+ * Makes `directory` refuse new entries for the current user. chmod(0500) does
+ * nothing on Windows, where access is decided by the ACL, so Windows gets a
+ * real deny entry instead, with the token's backup/restore privileges
+ * switched off for as long as it is in place: an open that holds them skips
+ * the directory checks that the lock path depends on.
+ *
+ * WD/AD are "add file" / "add subdirectory" on a directory, applied to this
+ * directory only so the existing recording stays readable. FILE_ADD_FILE on
+ * the directory is the right the lock path needs for both of its creating
+ * operations: a CREATE_NEW open of the temp file (MS-FSA 2.1.5.1.1,
+ * "Creation of a New File") and the hard link that publishes it (MS-FSA
+ * FileLinkInformation, which opens the destination directory with
+ * FILE_ADD_FILE). Callers verify the denial with those same operations
+ * instead of assuming it.
+ */
+function denyNewEntries(directory: string): NewEntryDenial {
+  if (process.platform === 'win32') {
+    return denyWindowsAccess([{ target: directory, rights: 'WD,AD' }]);
+  }
+  chmodSync(directory, 0o500);
+  const restore = (): void => chmodSync(directory, 0o700);
+  return {
+    restore,
+    abort: (failure) => {
+      restore();
+      throw failure;
+    },
+  };
+}
+
+// libuv reports ERROR_ACCESS_DENIED as EPERM, POSIX reports EACCES.
+const DENIED_CODE = process.platform === 'win32' ? 'EPERM' : 'EACCES';
+
+/**
+ * Proves `directory` refuses the two operations SessionLockManager uses to
+ * publish a lock: an exclusive create of a temp file and a hard link of an
+ * existing file into the directory. A plain writeFile denial is not enough,
+ * because the lock path never calls writeFile.
+ */
+async function expectLockPublicationDenied(
+  directory: string,
+  existingFile: string,
+): Promise<void> {
+  const exclusive = await settle(
+    fs.open(path.join(directory, 'probe-exclusive'), 'wx'),
+  );
+  if ('resolved' in exclusive) await exclusive.resolved.close();
+  expect(exclusive).toMatchObject({ rejected: { code: DENIED_CODE } });
+  expect(
+    await settle(fs.link(existingFile, path.join(directory, 'probe-link'))),
+  ).toMatchObject({ rejected: { code: DENIED_CODE } });
+  expect(
+    await settle(fs.mkdir(path.join(directory, 'probe-directory'))),
+  ).toMatchObject({ rejected: { code: DENIED_CODE } });
+}
+
+async function settle<T>(
+  promise: Promise<T>,
+): Promise<{ resolved: T } | { rejected: unknown }> {
+  try {
+    return { resolved: await promise };
+  } catch (error: unknown) {
+    return { rejected: error };
+  }
 }
 
 async function setModifiedTime(filePath: string, iso: string): Promise<void> {
@@ -313,19 +389,49 @@ describe('resumeSession with legacy and unreadable recordings (issue #3732)', ()
   });
 
   describe('when the chats directory cannot be written', () => {
-    afterEach(async () => {
-      await fs.chmod(chatsDir, 0o700);
+    let restoreAccess: (() => void) | undefined;
+
+    afterEach(() => {
+      restoreAccess?.();
+      restoreAccess = undefined;
     });
 
     it('propagates the permission error instead of reporting lock contention', async () => {
-      await createHealthySession(chatsDir, 'locked-out-0010');
-      await fs.chmod(chatsDir, 0o500);
+      const recordingPath = await createHealthySession(
+        chatsDir,
+        'locked-out-0010',
+      );
+      const denial = denyNewEntries(chatsDir);
+      restoreAccess = denial.restore;
+      try {
+        await expect(
+          fs.writeFile(path.join(chatsDir, 'probe'), ''),
+        ).rejects.toMatchObject({ code: DENIED_CODE });
+        await expectLockPublicationDenied(chatsDir, recordingPath);
+      } catch (error: unknown) {
+        denial.abort(error);
+      }
 
-      await expect(resume(CONTINUE_LATEST)).rejects.toMatchObject({
-        code: 'EACCES',
+      // The denial covers new entries only, so the healthy recording stays
+      // discoverable and the lock file is what cannot be created.
+      const discovered = await SessionDiscovery.listSessionsDetailed(
+        chatsDir,
+        PROJECT_HASH,
+      );
+      expect({
+        sessions: discovered.sessions.map((session) => session.sessionId),
+        unreadable: discovered.unreadableRecordings,
+      }).toStrictEqual({ sessions: ['locked-out-0010'], unreadable: [] });
+      await expect(
+        SessionLockManager.acquire(chatsDir, 'locked-out-0010'),
+      ).rejects.toMatchObject({ code: DENIED_CODE });
+
+      // Settling keeps a wrongly resolved result in the failure output.
+      expect(await settle(resume(CONTINUE_LATEST))).toMatchObject({
+        rejected: { code: DENIED_CODE },
       });
-      await expect(resume('locked-out-0010')).rejects.toMatchObject({
-        code: 'EACCES',
+      expect(await settle(resume('locked-out-0010'))).toMatchObject({
+        rejected: { code: DENIED_CODE },
       });
     });
   });

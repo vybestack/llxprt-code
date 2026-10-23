@@ -34,9 +34,6 @@
       "@vybestack/llxprt-code-providers/composition.js": [
         "../providers/src/composition/index.ts"
       ],
-      "@vybestack/llxprt-code-providers/runtime.js": [
-        "../providers/src/runtime/index.ts"
-      ],
       "@vybestack/llxprt-code-providers/*": ["../providers/src/*"],
       "@vybestack/llxprt-code-settings": ["../settings/index.ts"],
       "@vybestack/llxprt-code-settings/*": ["../settings/src/*"],
@@ -285,7 +282,6 @@
     "../providers/src/runtime/__tests__/profileApplication.unavailableProvider.test.ts",
     "../providers/src/runtime/__tests__/providerManagerAdoption.behavior.test.ts",
     "../providers/src/runtime/assembleCliProviderRuntime.test.ts",
-    "../providers/src/runtime/ephemeralSettings.mediaPdf.test.ts",
     "../providers/src/runtime/isolatedRuntimeDefaultPointer.behavior.test.ts",
     "../providers/src/runtime/profileSnapshot.test.ts",
     "../providers/src/runtime/providerSwitch.spec.ts",

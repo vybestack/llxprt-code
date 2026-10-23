@@ -1,0 +1,230 @@
+import { openSkillsCaller } from './helpers/skills-fixture-caller.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'bun:test';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { registerActivateSkillTool } from '../../skill-tool-registrar.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
+import {
+  buildAgent,
+  internalConfig,
+  type Agent,
+} from './helpers/agentHarness.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import {
+  modelVisibleSkillNames,
+  observedSkillClient,
+} from './helpers/skills-fixture-declarations.js';
+
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
+ * End-to-end coverage for issue #3379.
+ *
+ * `/skills reload` used to refresh SkillManager and stop there, so a skill
+ * added on disk never reached the model. The model learns which skills exist
+ * from exactly one place: the `activate_skill` declaration carried in the tool
+ * list that ChatSession hands to the provider on every request. These tests
+ * therefore assert on that declaration rather than on which functions were
+ * called.
+ *
+ * The whole production chain runs for real, with nothing supplied by the test:
+ * skill files on disk, the real SkillManager, the registrar `createAgent`
+ * installs, the real ActivateSkillTool, a real ToolRegistry, the real
+ * AgentClient.setTools(), and the real ChatSession.
+ *
+ * This file used to install the registrar itself, because `createAgent` did not
+ * (issue #3382). Now that it does, these cases also cover that wiring: removing
+ * it from `createAgent` fails every test here.
+ */
+
+function writeSkill(workspace: string, name: string): void {
+  const skillDir = join(workspace, '.llxprt', 'skills', name);
+  mkdirSync(skillDir, { recursive: true });
+  writeFileSync(
+    join(skillDir, 'SKILL.md'),
+    `---\nname: ${name}\ndescription: The ${name} skill\n---\n\n${name} instructions\n`,
+    'utf-8',
+  );
+}
+
+/**
+ * Drives one turn so a live chat session exists with a tool list, which is the
+ * state a reload has to update. The registrar is already installed by
+ * `createAgent`; nothing here supplies it.
+ */
+async function settle(agent: Agent): Promise<Config> {
+  for await (const _event of agent.stream('hello')) {
+    // Drain the turn so the chat session and its tool list exist.
+  }
+  return internalConfig(agent);
+}
+
+describe('workspace skill publication compensation', () => {
+  let promptDirectory: string;
+  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+  beforeAll(async () => {
+    promptDirectory = await mkdtemp(join(tmpdir(), 'engine-prompts-'));
+    process.env.LLXPRT_PROMPTS_DIR = promptDirectory;
+    await initializePromptSystem();
+  });
+  afterAll(async () => {
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(promptDirectory, { recursive: true, force: true });
+  });
+  const callerCredentials = useOwnedCredentials();
+  async function withWorkspace(
+    initialSkills: string[],
+    run: (ctx: {
+      agent: Agent;
+      config: Config;
+      workspace: string;
+    }) => Promise<void>,
+    operations?: WorkspaceSkillAssemblyOperations,
+  ): Promise<void> {
+    const workspace = mkdtempSync(join(tmpdir(), 'llxprt-skill-reload-'));
+    for (const name of initialSkills) {
+      writeSkill(workspace, name);
+    }
+    // The storage-isolation preload points LLXPRT_AGENTS_HOME at a temp root,
+    // so discovery never reads the real ~/.agents/skills here; the strict set
+    // assertions only ever see this workspace's skills.
+    let agent: Agent;
+    let cleanup: () => Promise<void>;
+    if (operations === undefined) {
+      const owned = await buildAgent('plain-text.jsonl', {
+        skillsSupport: true,
+        workingDir: workspace,
+      });
+      agent = owned.agent;
+      cleanup = owned.cleanup;
+    } else {
+      const {
+        config: callerCallerConfig,
+        settings: callerCallerSettings,
+        settingsOwner: callerCallerSettingsOwner,
+        manager: callerCallerManager,
+        mcp: callerCallerMcp,
+        close: callerCallerClose,
+        client: callerCallerClient,
+      } = await openSkillsCaller({
+        fixture: new URL('./fixtures/plain-text.jsonl', import.meta.url),
+        authority: callerCredentials().authority,
+        overrides: {
+          skillsSupport: true,
+          workingDir: workspace,
+        },
+        operations,
+      });
+
+      agent = await fromConfig(
+        callerCallerConfig,
+        callerCallerSettings,
+        {},
+        callerCallerSettingsOwner,
+        callerCallerManager,
+        undefined,
+        undefined,
+        callerCallerMcp,
+        undefined,
+        callerCallerClient,
+      );
+      cleanup = callerCallerClose;
+    }
+    try {
+      const config = await settle(agent);
+      await run({ agent, config, workspace });
+    } finally {
+      await agent.dispose();
+      await cleanup();
+      rmSync(workspace, { recursive: true, force: true });
+    }
+  }
+
+  useOwnedCredentials();
+
+  it('restores actual provider declarations and registration after publication mutates then rejects', async () => {
+    await withWorkspace(
+      ['alpha'],
+      async ({ agent, config, workspace }) => {
+        expect(modelVisibleSkillNames(agent)).toStrictEqual(['alpha']);
+        const publish = observedSkillClient(agent).setTools.bind(
+          observedSkillClient(agent),
+        );
+        const fault = vi
+          .spyOn(observedSkillClient(agent), 'setTools')
+          .mockImplementationOnce(async () => {
+            await publish();
+            expect(modelVisibleSkillNames(agent).sort()).toStrictEqual([
+              'beta',
+            ]);
+            throw new Error('publication failed after mutation');
+          });
+        writeSkill(workspace, 'beta');
+        try {
+          await expect(agent.skills.reload()).rejects.toThrow(
+            'publication failed after mutation',
+          );
+          expect(config.getDisabledSkills()).toStrictEqual([]);
+          expect(agent.skills.list().map((skill) => skill.name)).toStrictEqual([
+            'alpha',
+          ]);
+          expect(modelVisibleSkillNames(agent)).toStrictEqual(['alpha']);
+        } finally {
+          fault.mockRestore();
+        }
+      },
+      {
+        reloadPolicy: async () => ({ disabledSkills: ['alpha'] }),
+        registerTools: registerActivateSkillTool,
+      },
+    );
+  });
+
+  it('reports the publication and compensation failures after restoring the real registration', async () => {
+    await withWorkspace(['alpha'], async ({ agent, workspace }) => {
+      expect(modelVisibleSkillNames(agent)).toStrictEqual(['alpha']);
+      const publish = observedSkillClient(agent).setTools.bind(
+        observedSkillClient(agent),
+      );
+      const failed = new Error('candidate publication failed');
+      const compensation = new Error('compensation publication failed');
+      const fault = vi
+        .spyOn(observedSkillClient(agent), 'setTools')
+        .mockImplementationOnce(async () => {
+          await publish();
+          throw failed;
+        })
+        .mockImplementationOnce(async () => {
+          await publish();
+          throw compensation;
+        });
+      writeSkill(workspace, 'beta');
+      try {
+        const error: unknown = await agent.skills
+          .reload()
+          .catch((reason: unknown) => reason);
+        if (!(error instanceof Error) || !('cause' in error))
+          throw new Error(
+            'Expected a control error with its publication cause',
+          );
+        expect(error.cause).toBeInstanceOf(AggregateError);
+        if (!(error.cause instanceof AggregateError))
+          throw new Error('Expected aggregated publication errors');
+        expect(error.cause.errors).toStrictEqual([failed, compensation]);
+        expect(modelVisibleSkillNames(agent)).toStrictEqual(['alpha']);
+      } finally {
+        fault.mockRestore();
+      }
+    });
+  });
+});

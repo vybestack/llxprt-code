@@ -17,20 +17,20 @@ import { createSessionPolicyFixture } from './session-policy-fixture.js';
  * performCompression() to use the strategy pattern via the factory.
  */
 
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
-import { ChatSession } from '../chatSession.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { CompressionContext } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import { triggerPreCompressHook } from '@vybestack/llxprt-code-core/core/lifecycleHookTriggers.js';
+import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
+import { PreCompressTrigger } from '@vybestack/llxprt-code-core/hooks/types.js';
+import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import type { CompressionContext } from '@vybestack/llxprt-code-core/core/compression/types.js';
-import { triggerPreCompressHook } from '@vybestack/llxprt-code-core/core/lifecycleHookTriggers.js';
-import { PreCompressTrigger } from '@vybestack/llxprt-code-core/hooks/types.js';
-import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { beforeEach, describe, expect, it, vi, type Mock } from 'bun:test';
+import { ChatSession } from '../chatSession.js';
 
 // Mock the lifecycle hook triggers
 void vi.mock(
@@ -108,7 +108,6 @@ function buildRuntimeContext(
     tools: mockToolsView,
     providerRuntime: createProviderRuntimeContext({
       runtimeId: runtimeState.runtimeId,
-      settingsService,
     }),
   });
 }
@@ -187,6 +186,13 @@ describe('Compression Dispatcher Integration (P13)', () => {
 
         const chat = new ChatSession(
           runtimeContext,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
           mockContentGenerator,
           {},
           [],
@@ -245,6 +251,13 @@ describe('Compression Dispatcher Integration (P13)', () => {
 
         const chat = new ChatSession(
           runtimeContext,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
           mockContentGenerator,
           {},
           [],
@@ -296,6 +309,13 @@ describe('Compression Dispatcher Integration (P13)', () => {
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -343,6 +363,13 @@ describe('Compression Dispatcher Integration (P13)', () => {
 
         const chat = new ChatSession(
           runtimeContext,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
           mockContentGenerator,
           {},
           [],
@@ -391,6 +418,13 @@ describe('Compression Dispatcher Integration (P13)', () => {
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -434,6 +468,13 @@ describe('Compression Dispatcher Integration (P13)', () => {
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -477,6 +518,13 @@ describe('Compression Dispatcher Integration (P13)', () => {
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -554,6 +602,13 @@ describe('Compression Dispatcher Integration (P13)', () => {
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -588,6 +643,13 @@ describe('Compression Dispatcher Integration (P13)', () => {
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         localContentGenerator,
         {},
         [],
@@ -625,6 +687,13 @@ describe('Compression Dispatcher Integration (P13)', () => {
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],

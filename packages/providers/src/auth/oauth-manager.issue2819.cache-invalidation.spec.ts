@@ -7,12 +7,22 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import type { OAuthProvider } from './types.js';
 import {
-  createIssue1468Fixture,
   mockLoadProfile,
   clearIssue1468Fixture,
-  type MockTokenStore,
+  MockTokenStore,
+  createFakeOAuthSettings,
+  resetIssue1468Mocks,
 } from './__tests__/oauth-manager.issue1468.test-helpers.js';
-import type { OAuthManager } from './oauth-manager.js';
+import { OAuthManager } from './oauth-manager.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { readFixtureSessionAuthPolicy } from './__tests__/session-auth-policy-fixture.js';
+import {
+  installOwnedConfig,
+  installBorrowedConfigSettings,
+} from '../__tests__/helpers/session-settings-owner-fixture.js';
+const acquireIssueSettings = installBorrowedConfigSettings();
+const acquireIssueConfig = installOwnedConfig();
+
 import type { OAuthToken } from './types.js';
 
 function registerProvider(manager: OAuthManager, name = 'codex'): void {
@@ -36,15 +46,25 @@ function validToken(accessToken: string): OAuthToken {
 describe('activateNamedLoginBucket token resolution (issue #2819)', () => {
   let tokenStore: MockTokenStore;
   let manager: OAuthManager;
-  let settingsService: ReturnType<
-    typeof createIssue1468Fixture
-  >['settingsService'];
+  let settingsService: SettingsService;
 
   beforeEach(() => {
-    const fixture = createIssue1468Fixture();
-    tokenStore = fixture.tokenStore;
-    manager = fixture.manager;
-    settingsService = fixture.settingsService;
+    settingsService = new SettingsService();
+    const config = acquireIssueConfig({
+      sessionId: 'issue1468',
+      targetDir: process.cwd(),
+      cwd: process.cwd(),
+      debugMode: false,
+      model: 'gpt-5',
+    });
+    acquireIssueSettings(config, settingsService);
+    tokenStore = new MockTokenStore();
+    manager = new OAuthManager(tokenStore, createFakeOAuthSettings(), {
+      config,
+      readSessionAuthPolicy: readFixtureSessionAuthPolicy(settingsService),
+    });
+    resetIssue1468Mocks();
+
     registerProvider(manager);
   });
 

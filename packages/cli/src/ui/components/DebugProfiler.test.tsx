@@ -257,7 +257,7 @@ describe('DebugProfiler Component', () => {
     const { unmount } = renderProfiler();
 
     act(() => {
-      coreEvents.emitModelChanged('new-model');
+      coreEvents.emitSettingsChanged();
     });
 
     expect(reportActionSpy).toHaveBeenCalled();

@@ -1,3 +1,5 @@
+import type { RuntimeInvocationContext } from '../runtime/RuntimeInvocationContext.js';
+import type { SubscribeModelChanges } from '../utils/events.js';
 import type { ProviderRequestDiagnostics } from '../runtime/providerRequestDiagnostics.js';
 import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
@@ -81,6 +83,9 @@ export type AgentRequestInput = AgentMessageInput;
  * accepts AgentRequestInput (neutral AgentMessageInput).
  */
 export interface AgentClientMessageParams {
+  readonly modelParameters?: AdmittedModelParameters;
+  readonly invocation?: RuntimeInvocationContext;
+  readonly historyPrefix?: readonly IContent[];
   readonly hookOwner?: HookExecutionOwner;
   message: AgentRequestInput;
   config?: AgentClientGenerateConfig;
@@ -120,6 +125,13 @@ export interface AgentHistoryAdmission {
 }
 
 export interface AgentChatContract {
+  appendGeneration(
+    input: readonly IContent[],
+    response: ModelOutput,
+    model: string,
+    signal: AbortSignal,
+    historyOrigin?: object,
+  ): Promise<void>;
   takeHistoryAdmissions(): readonly AgentHistoryAdmission[];
   sendMessage(
     params: AgentClientMessageParams,
@@ -159,6 +171,7 @@ export interface AgentChatContract {
  * Core-owned; the concrete AgentClient class implements this.
  */
 export interface AgentClientContract {
+  bindModelNotifications?(subscribe: SubscribeModelChanges): void;
   readonly tools: ToolSelection;
   bindToolSelection(selection: ToolSelection): void;
   assertConfig(config: Config): void;
@@ -247,7 +260,7 @@ export interface AgentClientContract {
     abortSignal: AbortSignal,
     model: string,
   ): Promise<ModelOutput>;
-  generateEmbedding(texts: string[]): Promise<number[][]>;
+  generateEmbedding(texts: string[], signal?: AbortSignal): Promise<number[][]>;
   sendMessageStream(
     initialRequest: AgentRequestInput,
     signal: AbortSignal,
@@ -283,5 +296,7 @@ export type AgentClientFactory = (
  */
 export interface AgentRuntimeFactoryBindings {
   agentClientFactory: AgentClientFactory;
-  taskToolRegistration: () => TaskToolRegistration;
+  taskToolRegistration: (
+    defaultRegistration: TaskToolRegistration,
+  ) => TaskToolRegistration;
 }

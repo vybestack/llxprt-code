@@ -5,24 +5,24 @@ import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
-import { ChatSession } from './chatSession.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { DEFAULT_TOKEN_LIMIT } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 import * as tokenLimitsModule from '@vybestack/llxprt-code-core/core/tokenLimits.js';
-import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { DEFAULT_TOKEN_LIMIT } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 import {
   createAgentRuntimeState,
   type AgentRuntimeState,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
+import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
   createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import { ChatSession } from './chatSession.js';
 
 describe('ChatSession Context Limit Enforcement', () => {
   let chat: ChatSession;
@@ -86,7 +86,6 @@ describe('ChatSession Context Limit Enforcement', () => {
     // Set up provider runtime context
     providerRuntimeSnapshot = {
       ...runtimeSetup.runtime,
-      config: mockConfig,
     };
 
     // Create mock ContentGenerator
@@ -149,7 +148,19 @@ describe('ChatSession Context Limit Enforcement', () => {
       providerRuntime: providerRuntimeSnapshot,
     });
 
-    chat = new ChatSession(view, mockContentGenerator, {}, []);
+    chat = new ChatSession(
+      view,
+      mockConfig,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockContentGenerator,
+      {},
+      [],
+    );
 
     // Mock large pending tokens that would exceed the context-limit but not the default
     // Total projection: 40000 (history) + 50000 (pending) + 65536 (budget) = 155536
@@ -210,7 +221,19 @@ describe('ChatSession Context Limit Enforcement', () => {
       providerRuntime: providerRuntimeSnapshot,
     });
 
-    chat = new ChatSession(view, mockContentGenerator, {}, []);
+    chat = new ChatSession(
+      view,
+      mockConfig,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockContentGenerator,
+      {},
+      [],
+    );
     const pendingTokens = 5000; // This should be within the limit
 
     // Act: Should not trigger compression
@@ -275,6 +298,13 @@ describe('ChatSession Context Limit Enforcement', () => {
 
     chat = new ChatSession(
       view,
+      mockConfig,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       contentGeneratorWithSmallBudget,
       { maxOutputTokens: 4096 }, // Smaller budget instead of default 65536
       [],

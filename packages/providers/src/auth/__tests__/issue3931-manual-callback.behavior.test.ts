@@ -83,13 +83,17 @@ function harness(persistence?: {
   const manager = new OAuthManager(store);
   const warnings: string[] = [];
   const warningReceived = deferred<void>();
-  const provider = new AnthropicOAuthProvider(store, (event) => {
-    if (event.type === 'warning') {
-      warnings.push(event.text);
-      warningReceived.resolve();
-    }
-    return undefined;
-  });
+  const provider = new AnthropicOAuthProvider(
+    (input, init) => globalThis.fetch(input, init),
+    store,
+    (event) => {
+      if (event.type === 'warning') {
+        warnings.push(event.text);
+        warningReceived.resolve();
+      }
+      return undefined;
+    },
+  );
   manager.registerProvider(provider);
   const callback = deferred<{ code: string; state: string }>();
   vi.spyOn(callbackModule, 'startLocalOAuthCallback').mockResolvedValue({

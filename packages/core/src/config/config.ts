@@ -4,9 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
 import process from 'node:process';
 import path from 'node:path';
-import { initializeParser } from '../utils/shell-parser.js';
 
 import * as configConstructor from './configConstructor.js';
 import { ConfigBase } from './configBase.js';
@@ -14,7 +14,6 @@ import { ConfigBase } from './configBase.js';
 import type {
   MemorySettings,
   ConfigParameters,
-  ConfigInitializationDependencies,
   RedactionConfig,
   ApprovalMode,
   TelemetrySettings,
@@ -64,6 +63,24 @@ export {
 import type { ShellExecutionConfig } from '../services/shellExecutionService.js';
 
 export class Config extends ConfigBase {
+  #providerKeyStorage: ProviderKeyStorageLike | undefined;
+
+  bindProviderKeyStorage(storage: ProviderKeyStorageLike): void {
+    this.#providerKeyStorage = storage;
+  }
+
+  peekProviderKeyStorage(): ProviderKeyStorageLike | undefined {
+    return this.#providerKeyStorage;
+  }
+
+  getProviderKeys(): ProviderKeyStorageLike {
+    if (!this.#providerKeyStorage)
+      throw new Error(
+        'Provider key storage requires an explicit credential owner',
+      );
+    return this.#providerKeyStorage;
+  }
+
   readonly profileDirectory: string | undefined;
   readonly subagentDirectory: string | undefined;
   readonly initialWorkspaceTrust: boolean | undefined;
@@ -77,72 +94,6 @@ export class Config extends ConfigBase {
       this as unknown as configConstructor.ConfigConstructorTarget,
       params,
     );
-  }
-
-  private initializationPromise: Promise<void> | undefined;
-
-  hasInitializationStarted(): boolean {
-    return this.initializationPromise !== undefined;
-  }
-
-  /** Must only be called once; use ensureInitialized for idempotent adoption. */
-  initialize(dependencies?: ConfigInitializationDependencies): Promise<void> {
-    if (this.initializationPromise !== undefined) {
-      throw Error('Config was already initialized');
-    }
-    this.initializationPromise = this.performInitialization(dependencies);
-    // Return the exact stored promise so callers (ensureInitialized) that
-    // observe this.initializationPromise see the SAME object identity. A
-    // plain `return` (not async) preserves referential identity.
-    return this.initializationPromise;
-  }
-
-  /**
-   * Initializes once and shares the original result with adopting callers.
-   * A failed initialization remains failed rather than exposing partial state.
-   */
-  ensureInitialized(
-    dependencies?:
-      | ConfigInitializationDependencies
-      | (() => ConfigInitializationDependencies),
-  ): Promise<void> {
-    if (this.initializationPromise === undefined) {
-      const resolvedDependencies =
-        typeof dependencies === 'function' ? dependencies() : dependencies;
-      this.initializationPromise =
-        this.performInitialization(resolvedDependencies);
-    }
-    return this.initializationPromise;
-  }
-
-  private async performInitialization(
-    dependencies?: ConfigInitializationDependencies,
-  ): Promise<void> {
-    const initializationMessageBus = dependencies?.messageBus;
-    if (!initializationMessageBus) {
-      throw new Error(
-        'Config.initialize requires an explicit session/runtime MessageBus dependency.',
-      );
-    }
-    await dependencies.initializeIde?.();
-    await initializeParser();
-    await dependencies.initializeTools();
-    if (!dependencies.startMcp) {
-      throw new Error(
-        'Config initialization requires an explicit MCP runtime handoff',
-      );
-    }
-    await dependencies.startMcp();
-    this.initialized = true;
-    dependencies.startMcpDiscovery();
-    await dependencies.startExtensions?.();
-
-    await dependencies.startLsp?.();
-
-    await dependencies.initializeMemory?.();
-
-    // Reserved for future model switching tracking
-    void this._modelSwitchedDuringSession;
   }
 
   getModel(): string {

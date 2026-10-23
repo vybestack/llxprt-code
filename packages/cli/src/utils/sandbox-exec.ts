@@ -604,14 +604,18 @@ function buildSandboxImage(
     image,
   );
   try {
-    execFileSync('bun', buildArgsArray, {
-      cwd: gcRoot,
-      stdio: 'inherit',
-      env: {
-        ...process.env,
-        LLXPRT_SANDBOX: config.command,
+    execFileSync(
+      process.versions.bun ? process.execPath : 'bun',
+      buildArgsArray,
+      {
+        cwd: gcRoot,
+        stdio: 'inherit',
+        env: {
+          ...process.env,
+          LLXPRT_SANDBOX: config.command,
+        },
       },
-    });
+    );
   } catch (error) {
     if (
       isNodeError(error) &&

@@ -3,6 +3,8 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
+
 import {
   WorkspaceFilesystemOwner,
   assembleWorkspaceMemory,
@@ -22,8 +24,9 @@ import {
   afterEach,
   type Mock,
 } from 'bun:test';
-import { memoryCommand } from './memoryCommand.js';
-import type { SlashCommand, CommandContext } from './types.js';
+import { createMemoryCommand } from './memoryCommand.js';
+import { bindMemoryCommand } from './memoryCommandHost.js';
+import type { SlashCommand } from './types.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { MessageType } from '../types.js';
 import { loadHierarchicalLlxprtMemory } from '../../config/environmentLoader.js';
@@ -57,11 +60,19 @@ void vi.mock('../../config/environmentLoader.js', () => ({
 }));
 
 describe('memoryCommand', () => {
-  let mockContext: CommandContext;
+  let mockContext: CommandOwnerFixture;
 
   const getSubCommand = (
     name: 'show' | 'add' | 'refresh' | 'list',
+    context: CommandOwnerFixture = mockContext,
   ): SlashCommand => {
+    const memoryCommand = createMemoryCommand(
+      bindMemoryCommand(
+        context.services.config ?? null,
+        context.ui.addItem,
+        context.ui.setLlxprtMdFileCount,
+      ),
+    );
     const subCommand = memoryCommand.subCommands?.find(
       (cmd) => cmd.name === name,
     );
@@ -75,8 +86,6 @@ describe('memoryCommand', () => {
     let mockGetLlxprtMdFileCount: Mock<(...args: never[]) => unknown>;
 
     beforeEach(() => {
-      showCommand = getSubCommand('show');
-
       mockGetUserMemory = vi.fn();
       mockGetLlxprtMdFileCount = vi.fn();
 
@@ -88,6 +97,7 @@ describe('memoryCommand', () => {
           },
         },
       });
+      showCommand = getSubCommand('show');
     });
 
     it('should display a message if memory is empty', async () => {
@@ -127,8 +137,8 @@ describe('memoryCommand', () => {
     let addCommand: SlashCommand;
 
     beforeEach(() => {
-      addCommand = getSubCommand('add');
       mockContext = createMockCommandContext();
+      addCommand = getSubCommand('add');
     });
 
     it('should return an error message if no arguments are provided', () => {
@@ -460,7 +470,7 @@ describe('memoryCommand', () => {
     it('does not throw when the config service is unavailable', async () => {
       const context = createMockCommandContext({ services: { config: null } });
       await expect(
-        getSubCommand('refresh').action!(context, ''),
+        getSubCommand('refresh', context).action!(context, ''),
       ).resolves.toBeUndefined();
       expect(context.ui.addItem).toHaveBeenCalledWith(
         {
@@ -493,7 +503,6 @@ describe('memoryCommand', () => {
     let mockGetLlxprtMdFilePaths: Mock<(...args: never[]) => unknown>;
 
     beforeEach(() => {
-      listCommand = getSubCommand('list');
       mockGetLlxprtMdFilePaths = vi.fn();
       mockContext = createMockCommandContext({
         services: {
@@ -502,6 +511,7 @@ describe('memoryCommand', () => {
           },
         },
       });
+      listCommand = getSubCommand('list');
     });
 
     it('should display a message if no LLXPRT.md files are found', async () => {

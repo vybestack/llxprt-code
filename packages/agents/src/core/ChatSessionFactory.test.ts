@@ -279,6 +279,13 @@ describe('buildSystemInstruction', () => {
   });
 });
 
+/** The generation config is the tenth ChatSession constructor argument. */
+function chatSessionGenerationConfig(): unknown {
+  const call = (ChatSession as unknown as Mock<(...args: unknown[]) => unknown>)
+    .mock.calls[0];
+  return call[9];
+}
+
 describe('createChatSession', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -586,16 +593,9 @@ describe('createChatSession', () => {
       todoContinuationService,
     });
 
-    expect(ChatSession).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.anything(),
-      expect.objectContaining({
-        reasoning: { includeInOutput: true },
-      }),
-      [],
-      expect.anything(),
-      expect.anything(),
-    );
+    expect(chatSessionGenerationConfig()).toMatchObject({
+      reasoning: { includeInOutput: true },
+    });
   });
 
   it('disables thinking config for gemini-2.0 models', async () => {
@@ -617,14 +617,7 @@ describe('createChatSession', () => {
       todoContinuationService,
     });
 
-    expect(ChatSession).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.anything(),
-      expect.not.objectContaining({ reasoning: expect.anything() }),
-      [],
-      expect.anything(),
-      expect.anything(),
-    );
+    expect(chatSessionGenerationConfig()).not.toHaveProperty('reasoning');
   });
 
   it('sets active todos provider on the created chat', async () => {

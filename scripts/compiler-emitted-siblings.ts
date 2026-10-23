@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 import ts from 'typescript';
 
 function declaredPaths(value: unknown): string[] {
@@ -47,7 +47,7 @@ function matchesDeclaration(source: string, declaration: string): boolean {
 function matchesJavaScript(source: string, output: string): boolean {
   const map = `${output}.map`;
   if (!existsSync(source) || !existsSync(map)) return false;
-  const file = output.slice(output.lastIndexOf('/') + 1);
+  const file = basename(output);
   if (
     !readFileSync(output, 'utf8').includes(`//# sourceMappingURL=${file}.map`)
   ) {

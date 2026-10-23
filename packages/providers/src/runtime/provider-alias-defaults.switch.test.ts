@@ -1,7 +1,7 @@
 import { Config as RealConfig } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService as RealSettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { assembleModelSelection } from './providerMutations.js';
+import { assembleModelSelection } from '../../../agents/src/api/model-selection.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -121,8 +121,12 @@ void vi.mock('@vybestack/llxprt-code-core', () => {
   };
 });
 
-const { switchActiveProvider, setActiveModel, setEphemeralSetting } =
-  await import('./index.js');
+const { switchActiveProvider } = await import(
+  '../../../agents/src/api/provider-switch/provider-switch.js'
+);
+const { setActiveModel } = await import(
+  '../../../agents/src/api/providerMutations.js'
+);
 
 const mockOAuthManager = {
   clearRetryHandlers: () => {},
@@ -653,7 +657,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
 
       // Explicit session write carrying the same value as the provider
       // default: the session owns the key from here on, regardless of value.
-      setEphemeralSetting('reasoning.effort', 'medium', settingsOwner);
+      settingsOwner.writeUserParameter('reasoning.effort', 'medium');
 
       await setActiveModel('claude-opus-4-6', ...stubOverrideInputs());
 

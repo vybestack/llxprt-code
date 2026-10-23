@@ -1,3 +1,21 @@
+import { observeActivationPreparation } from '../../../agents/src/api/__tests__/helpers/activation-acquisition-capture.js';
+
+import { afterEach, describe, expect, it } from 'bun:test';
+import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import {
+  prepareAgentPreflight,
+  type AgentProfilePreflight,
+} from '@vybestack/llxprt-code-agents';
+import {
+  Config,
+  WorkspaceTrustLifecycle,
+  WorkspaceFilesystemOwner,
+  assembleWorkspaceMemory,
+  type RuntimeProviderManager,
+} from '@vybestack/llxprt-code-core';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, parse } from 'node:path';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -7,12 +25,12 @@
 /**
  * Behavioral coverage for issue #2758: an installed plugin package is
  * discovered, loaded once, and the resulting registry actually reaches
- * provider composition through the same `assembleCliProviderRuntime` seam the
- * CLI uses for both its pre-Config and post-Config assemblies.
+ * provider composition through the same `prepareAgentPreflight` seam the
+ * CLI uses for its pre-Config acquisition and post-Config attachment.
  *
  * Without this, the `providerContributions` threading through
  * cliSessionBootstrap -> loadCliConfig -> profileBootstrap /
- * postConfigRuntime -> assembleCliProviderRuntime could be deleted and every
+ * postConfigRuntime -> prepareAgentPreflight could be deleted and every
  * other runtime-plugin test would still pass.
  *
  * The only stubbed boundaries are the filesystem (discovery) and module
@@ -20,7 +38,26 @@
  * helper, and ProviderManager are all real.
  */
 
-import { afterEach, describe, expect, it } from 'bun:test';
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+/**
+ * Behavioral coverage for issue #2758: an installed plugin package is
+ * discovered, loaded once, and the resulting registry actually reaches
+ * provider composition through the same `prepareAgentPreflight` seam the
+ * CLI uses for its pre-Config acquisition and post-Config attachment.
+ *
+ * Without this, the `providerContributions` threading through
+ * cliSessionBootstrap -> loadCliConfig -> profileBootstrap /
+ * postConfigRuntime -> prepareAgentPreflight could be deleted and every
+ * other runtime-plugin test would still pass.
+ *
+ * The only stubbed boundaries are the filesystem (discovery) and module
+ * resolution (loading). The discovery logic, loader, registry, assembly
+ * helper, and ProviderManager are all real.
+ */
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   discoverRuntimePluginPackages,
@@ -30,15 +67,27 @@ import type {
   ProviderContributionRegistry,
   RuntimePluginDiscoveryDeps,
 } from '@vybestack/llxprt-code-providers/composition.js';
-import { assembleCliProviderRuntime } from '@vybestack/llxprt-code-providers/runtime.js';
 
 const PLUGIN_PACKAGE = 'llxprt-wiring-provider';
 const PLUGIN_PROVIDER_ID = 'wiring-provider';
 const CONTRIBUTED_ALIAS = 'wiring-alias';
 const RUNTIME_ID = 'issue2758-wiring-test';
 
-const NODE_MODULES = '/g/lib/node_modules';
-const HOST_FILE = `${NODE_MODULES}/@vybestack/llxprt-code-providers/dist/x.js`;
+// Discovery walks these paths with the native path module, so every key is
+// built with it too: a hard-coded POSIX spelling never matches on Windows.
+const NODE_MODULES = join(
+  parse(process.cwd()).root,
+  'g',
+  'lib',
+  'node_modules',
+);
+const HOST_FILE = join(
+  NODE_MODULES,
+  '@vybestack',
+  'llxprt-code-providers',
+  'dist',
+  'x.js',
+);
 
 /**
  * A node_modules layout containing the CLI's own package plus one installed
@@ -47,17 +96,17 @@ const HOST_FILE = `${NODE_MODULES}/@vybestack/llxprt-code-providers/dist/x.js`;
 function discoveryDeps(): RuntimePluginDiscoveryDeps {
   const dirs: Record<string, string[]> = {
     [NODE_MODULES]: ['@vybestack', PLUGIN_PACKAGE, 'unrelated-package'],
-    [`${NODE_MODULES}/@vybestack`]: ['llxprt-code-providers'],
+    [join(NODE_MODULES, '@vybestack')]: ['llxprt-code-providers'],
   };
   const files: Record<string, string> = {
-    [`${NODE_MODULES}/${PLUGIN_PACKAGE}/package.json`]: JSON.stringify({
+    [join(NODE_MODULES, PLUGIN_PACKAGE, 'package.json')]: JSON.stringify({
       name: PLUGIN_PACKAGE,
       llxprt: { runtimePlugin: true },
     }),
-    [`${NODE_MODULES}/unrelated-package/package.json`]: JSON.stringify({
+    [join(NODE_MODULES, 'unrelated-package', 'package.json')]: JSON.stringify({
       name: 'unrelated-package',
     }),
-    [`${NODE_MODULES}/@vybestack/llxprt-code-providers/package.json`]:
+    [join(NODE_MODULES, '@vybestack', 'llxprt-code-providers', 'package.json')]:
       JSON.stringify({ name: '@vybestack/llxprt-code-providers' }),
   };
   return {
@@ -116,33 +165,74 @@ async function loadRegistry(
   });
 }
 
-function assemble(
-  providerContributions: ProviderContributionRegistry | undefined,
-  runtimeId: string,
-): ReturnType<typeof assembleCliProviderRuntime> {
-  return assembleCliProviderRuntime({
-    settingsService: new SettingsService(),
-    config: undefined,
-    runtimeId,
-    oauthSettings: null,
-    ...(providerContributions === undefined ? {} : { providerContributions }),
-  });
-}
-
 describe('runtime plugin startup wiring', () => {
-  const assembled: Array<ReturnType<typeof assembleCliProviderRuntime>> = [];
-
-  afterEach(() => {
-    for (const runtime of assembled.splice(0)) runtime.registration.dispose();
+  const credentials = useOwnedCredentials();
+  const cleanups: Array<() => Promise<void>> = [];
+  afterEach(async () => {
+    for (const close of cleanups.splice(0).reverse()) await close();
   });
 
-  function assembleTracked(
+  async function assembleTracked(
     registry: ProviderContributionRegistry | undefined,
     suffix: string,
-  ): ReturnType<typeof assembleCliProviderRuntime> {
-    const runtime = assemble(registry, `${RUNTIME_ID}-${suffix}`);
-    assembled.push(runtime);
-    return runtime;
+  ): Promise<AgentProfilePreflight> {
+    const operation = await prepareAgentPreflight(
+      { runtimeId: RUNTIME_ID + '-' + suffix },
+      credentials().authority,
+      new SettingsService(),
+      undefined,
+      registry,
+    );
+    cleanups.push(() => operation.dispose());
+    return operation;
+  }
+
+  async function attach(
+    operation: AgentProfilePreflight,
+    inspect: (manager: RuntimeProviderManager) => void | Promise<void>,
+  ): Promise<void> {
+    const root = await mkdtemp(join(tmpdir(), 'plugin-preflight-'));
+    const config = new Config({
+      sessionId: 'plugin-config',
+      cwd: root,
+      targetDir: root,
+      debugMode: false,
+      model: 'test-model',
+      provider: 'openai',
+      mcpEnabled: false,
+      skillsSupport: false,
+    });
+    const trust = new WorkspaceTrustLifecycle({ localTrust: true });
+    const filesystem = new WorkspaceFilesystemOwner({
+      targetDir: root,
+      isTrusted: () => true,
+    });
+    const memory = assembleWorkspaceMemory(config, filesystem, trust);
+    cleanups.unshift(async () => {
+      await config.dispose();
+      await trust.dispose();
+      await filesystem.dispose();
+      await memory.dispose();
+      await rm(root, { recursive: true, force: true });
+    });
+    let manager: RuntimeProviderManager | undefined;
+
+    const observation = observeActivationPreparation((activation, state) => {
+      manager = state.manager;
+    });
+    try {
+      await operation.preparePostConfiguration(
+        config,
+        filesystem,
+        memory,
+        trust,
+        undefined,
+      );
+    } finally {
+      observation.mockRestore();
+    }
+    if (manager === undefined) throw new Error('Missing assembled manager');
+    await inspect(manager);
   }
 
   it('discovers only the installed package that declares the plugin marker', () => {
@@ -165,23 +255,25 @@ describe('runtime plugin startup wiring', () => {
       discoverRuntimePluginPackages(discoveryDeps()),
     );
 
-    const { providerManager } = assembleTracked(registry, 'with-plugins');
-
-    expect(providerManager.listProviders()).toContain(CONTRIBUTED_ALIAS);
-    const provider = providerManager.getProviderByName(CONTRIBUTED_ALIAS);
-    if (!provider) {
-      throw new Error(`expected '${CONTRIBUTED_ALIAS}' to be registered`);
-    }
-    const models = await provider.getModels();
-    expect(models.map((model) => model.id)).toStrictEqual([
-      `${PLUGIN_PROVIDER_ID}:${CONTRIBUTED_ALIAS}`,
-    ]);
+    const operation = await assembleTracked(registry, 'with-plugins');
+    await attach(operation, async (providerManager) => {
+      expect(providerManager.listProviders()).toContain(CONTRIBUTED_ALIAS);
+      const provider = providerManager.getProviderByName(CONTRIBUTED_ALIAS);
+      if (!provider) {
+        throw new Error(`expected '${CONTRIBUTED_ALIAS}' to be registered`);
+      }
+      const models = await provider.getModels();
+      expect(models.map((model) => model.id)).toStrictEqual([
+        `${PLUGIN_PROVIDER_ID}:${CONTRIBUTED_ALIAS}`,
+      ]);
+    });
   });
 
-  it('does not expose the plugin alias when no registry is threaded through', () => {
-    const { providerManager } = assembleTracked(undefined, 'without-plugins');
-
-    expect(providerManager.listProviders()).not.toContain(CONTRIBUTED_ALIAS);
+  it('does not expose the plugin alias when no registry is threaded through', async () => {
+    const operation = await assembleTracked(undefined, 'without-plugins');
+    await attach(operation, (providerManager) => {
+      expect(providerManager.listProviders()).not.toContain(CONTRIBUTED_ALIAS);
+    });
   });
 
   it('re-assembling with the same registry keeps the plugin alias, matching the post-Config recomposition', async () => {
@@ -195,11 +287,15 @@ describe('runtime plugin startup wiring', () => {
 
     // The CLI recomposes under the SAME foreground runtime id (issue #2300),
     // so both assemblies use one id here as well.
-    const first = assembleTracked(registry, 'recomposition');
-    const second = assembleTracked(registry, 'recomposition');
+    const first = await assembleTracked(registry, 'recomposition');
+    const second = await assembleTracked(registry, 'recomposition');
 
-    expect(first.providerManager.listProviders()).toContain(CONTRIBUTED_ALIAS);
-    expect(second.providerManager.listProviders()).toContain(CONTRIBUTED_ALIAS);
+    await attach(first, (manager) => {
+      expect(manager.listProviders()).toContain(CONTRIBUTED_ALIAS);
+    });
+    await attach(second, (manager) => {
+      expect(manager.listProviders()).toContain(CONTRIBUTED_ALIAS);
+    });
     expect(imported).toStrictEqual([PLUGIN_PACKAGE]);
   });
 });

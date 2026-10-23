@@ -1,3 +1,15 @@
+import {
+  captureActivationConstruction,
+  capturedActivation,
+} from '../../agents/src/api/__tests__/helpers/activation-acquisition-capture.js';
+import { capturedSessionClient } from '../../agents/src/api/__tests__/helpers/session-client-capture.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import {
+  parseBootstrapArgs,
+  prepareRuntimeForProfile,
+} from './config/profileBootstrap.js';
+import type { AgentActivationOperation } from '@vybestack/llxprt-code-agents';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -27,13 +39,14 @@ import {
 } from 'node:http';
 import {
   bootstrapRuntimeAndConfig,
-  setupSessionRecording,
+  setupOwnerSessionRecording,
 } from './cliSessionBootstrap.js';
 import { activateConfiguredProvider } from './cliProviderInit.js';
 import { loadSettings } from './config/settings.js';
 import { parseArguments } from './config/cliArgParser.js';
 import {
   runExitCleanup,
+  registerCleanup,
   __resetCleanupStateForTesting,
 } from './utils/cleanup.js';
 
@@ -135,39 +148,83 @@ describe('CLI session client bootstrap ownership', () => {
   async function bootstrap() {
     const settings = loadSettings(directory);
     const argv = await parseArguments(settings.merged);
-    const boot = await bootstrapRuntimeAndConfig(settings, argv, directory);
+    const credentialAuthority = new CredentialAuthority();
+    const callerSettings = new SettingsService();
+    const parsed = parseBootstrapArgs();
+    const preflight = await prepareRuntimeForProfile(
+      {
+        ...parsed,
+        runtimeMetadata: {
+          ...parsed.runtimeMetadata,
+        },
+      },
+      credentialAuthority,
+      callerSettings,
+      undefined,
+      undefined,
+    );
+    const config = await captureActivationConstruction(() =>
+      bootstrapRuntimeAndConfig(
+        settings,
+        argv,
+        directory,
+        credentialAuthority,
+        preflight,
+      ),
+    );
+    let transferredActivation: AgentActivationOperation | undefined;
+    preflight.transferActivation((operation) => {
+      transferredActivation = operation;
+    });
+    if (transferredActivation === undefined)
+      throw new Error('Missing activation operation');
+    const activationOperation = transferredActivation;
     const activation = await activateConfiguredProvider(
-      boot.config,
-      boot.providerManager,
+      config,
+      preflight,
       argv,
-      boot.activationOperation,
+      activationOperation,
     );
     if (activation.authFailed) throw new Error('Local activation failed');
-    return { boot, activation, argv };
+    return { config, preflight, activationOperation, activation, argv };
   }
 
   it('supplies the pre-Agent owner to raw recording without a Config client lookup', async () => {
-    const { boot, argv } = await bootstrap();
+    const { config, activationOperation, argv } = await bootstrap();
     try {
-      const recording = await setupSessionRecording(
-        boot.config,
+      const owner = capturedActivation(activationOperation).owner;
+      owner.initializeConversation();
+      const session = owner.createSessionControl(
+        'config',
+        () => config.getSessionId(),
+        (operation) => operation(),
+        () => {},
+        () => {},
+        () => config.getProvider() ?? '',
+        () => config.getModel(),
+      );
+      registerCleanup(() => session.dispose());
+      await setupOwnerSessionRecording(
+        config,
+        session,
+        session.listBrowserTargetsDetailed,
         argv,
         null,
-        boot.activationOperation.sessionClient,
       );
-      recording.recordingService.recordContent({
+      const history = capturedSessionClient(owner).getHistoryService();
+      if (history === null) throw new Error('Missing native startup history');
+      history.add({
         speaker: 'human',
         blocks: [{ type: 'text', text: 'pre-agent content' }],
       });
-      await recording.recordingService.flush();
-      const transcript = await readFile(
-        recording.recordingService.getFilePath() ?? '',
-        'utf8',
-      );
+      await session.flushRecording();
+      const path = session.getRecording().path;
+      if (path === undefined) throw new Error('Missing startup recording');
+      const transcript = await readFile(path, 'utf8');
       expect(transcript).toContain('pre-agent content');
     } finally {
       await runExitCleanup();
-      await boot.config.dispose();
+      await config.dispose();
     }
   });
 
@@ -342,8 +399,10 @@ describe('CLI session client bootstrap ownership', () => {
 
   for (const failCleanup of [false, true]) {
     it(`joins pre-Agent client cleanup before closing media after ${failCleanup ? 'failed' : 'successful'} client disposal`, async () => {
-      const { boot } = await bootstrap();
-      const client = boot.activationOperation.sessionClient.getAgentClient();
+      const { config, activationOperation } = await bootstrap();
+      const client = capturedSessionClient(
+        capturedActivation(activationOperation).owner,
+      );
       const store = client.mediaStore;
       if (!store) throw new Error('Missing owner media');
       let release: () => void = () => {};
@@ -363,7 +422,7 @@ describe('CLI session client bootstrap ownership', () => {
           if (failCleanup) throw new Error('client cleanup control');
         },
       );
-      const closing = Promise.resolve(boot.activationOperation.dispose()).then(
+      const closing = Promise.resolve(activationOperation.dispose()).then(
         () => ({ success: true }),
         (error: unknown) => ({ error }),
       );
@@ -378,7 +437,7 @@ describe('CLI session client bootstrap ownership', () => {
         release();
         await closing;
         interception.mockRestore();
-        await boot.config.dispose();
+        await config.dispose();
         __resetCleanupStateForTesting();
       }
     });

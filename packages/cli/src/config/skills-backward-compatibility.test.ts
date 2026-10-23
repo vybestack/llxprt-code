@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import {
   describe,
   it,
@@ -48,6 +49,11 @@ async function buildConfig(
     ),
     'test-session',
     argv,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    new CredentialAuthority(),
   );
 }
 

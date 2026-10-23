@@ -1,9 +1,13 @@
+import type { SessionSettingsOperations } from '../runtime/createRuntimeOwnerFeatures.js';
+
+import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
+import { createKeyCommandReads } from './commands/key-completion-owner.js';
 import type {
   UserPromptEvent,
   SlashCommandEvent,
 } from '@vybestack/llxprt-code-telemetry';
 import { buildSettingsRuntime } from '../runtime/createRuntimeOwnerFeatures.js';
-type SessionSettingsOwner = NonNullable<FromConfigOptions['settingsOwner']>;
+
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -11,6 +15,7 @@ type SessionSettingsOwner = NonNullable<FromConfigOptions['settingsOwner']>;
  */
 import type {
   SessionEndReason,
+  ModelProfileInfoPayload,
   WorkspaceSkillOperations,
   WorkspaceCheckpointOperations,
   WorkspacePromptSelection,
@@ -18,11 +23,8 @@ import type {
   WorkspaceIgnoreOperations,
   WorkspaceSearchOperations,
   AccessibilitySettings,
-  AgentClientContract,
-  ContentGeneratorConfig,
   ApprovalMode,
   FileFilteringOptions,
-  IdeClient,
   LlxprtExtension,
   MCPServerConfig,
   RedactionConfig,
@@ -31,8 +33,7 @@ import type {
   ShellReplacementMode,
   TelemetrySettings,
 } from '@vybestack/llxprt-code-core';
-import type { Agent, FromConfigOptions } from '@vybestack/llxprt-code-agents';
-import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
   readGitHubCompletionReport,
   type GitHubCompletionReads,
@@ -64,23 +65,11 @@ export interface ExtensionEnablementSource {
   isEnabled(extensionName: string, path: string): boolean;
 }
 
-export type UiContentGeneratorConfig = ContentGeneratorConfig;
-
 /**
  * Focused capability read-models. Each exposes only the members a single
  * consumer family needs, so callers depend on the smallest suitable surface
  * rather than the full CliUiRuntime aggregate.
  */
-
-/**
- * Provides the live AgentClient used by the streaming path.
- * Each lookup resolves the current Agent owner after profile replacement;
- * hooks receive this boundary separately from workspace capabilities.
- */
-export interface AgentClientSource {
-  getAgentClient(): AgentClientContract;
-  createDetachedAgentClient?(runtimeId?: string): Promise<AgentClientContract>;
-}
 
 /**
  * Session identity read-model: stable identifiers and directories a UI
@@ -104,7 +93,6 @@ export interface SessionIdentity {
 export interface ModelState {
   getModel(): string;
   getProvider(): string | undefined;
-  getContentGeneratorConfig(): UiContentGeneratorConfig | undefined;
 }
 
 /**
@@ -166,18 +154,6 @@ export interface MemoryState {
 }
 
 /**
- * IDE read-model for IDE client and integration prompt consumers.
- */
-export interface IdeState {
-  getIdeClient(): IdeClient | undefined;
-  getIdeMode(): boolean;
-  setIdeMode(value: boolean): void;
-  setIdeClientConnected(): void | Promise<void>;
-  setIdeClientDisconnected(): void | Promise<void>;
-  getLspConfig(): LspConfig | undefined;
-}
-
-/**
  * Hook/skill read-model for hook display and skill support consumers.
  */
 export interface HookSkillState {
@@ -213,7 +189,9 @@ export interface SettingsTelemetryState {
   readCitations(): unknown;
   readProfileName(): string | null;
   readSelectedProvider(): string | undefined;
-  subscribeModelSelection(listener: () => void): () => void;
+  subscribeModelSelection(
+    listener: (profile?: ModelProfileInfoPayload) => void,
+  ): () => void;
   getProxy(): string | undefined;
   getBugCommand(): UiBugCommandSettings | undefined;
   getTelemetrySettings(): TelemetrySettings;
@@ -234,8 +212,7 @@ export interface UiToolRegistryInfo {
 
 /**
  * Tool-registry SOURCE capability. This is a bare-source read-model (part of
- * {@link StreamRuntimeBareSource}) consumed by the focused MCP/auto-prompt
- * boundaries ({@link McpCommandRuntime}, the auto-prompt runtime) and by the
+ * {@link StreamRuntimeBareSource}) consumed by the auto-prompt runtime and the
  * settings dialog's dynamic tool-settings derivation. It is intentionally NOT
  * re-exposed as a projected `tools` slice on {@link StreamRuntime}: the
  * streaming/UI path lists tools through the public `agent.tools` surface
@@ -371,11 +348,9 @@ export interface AppStateRuntime {
 export interface StreamRuntime {
   session: SessionIdentity;
   model: ModelState;
-  agentClientSource: AgentClientSource;
   shell: ShellState;
   files: FileWorkspaceState;
   memory: MemoryState;
-  ide: IdeState;
   hooks: HookSkillState;
   mcp: McpState;
   settings: SettingsTelemetryState;
@@ -424,7 +399,6 @@ export interface StreamRuntimeBareSource
       | 'initializeSearch'
     >,
     Pick<MemoryState, 'shouldLoadMemoryFromIncludeDirectories'>,
-    IdeState,
     Omit<HookSkillState, 'endHookSession'>,
     Omit<
       McpState,
@@ -453,7 +427,9 @@ export interface UiRuntimeBareSource
   extends StreamRuntimeBareSource,
     ApprovalState,
     ExtensionRuntime,
-    AppStateRuntime {}
+    AppStateRuntime {
+  getProviderKeys?(): ProviderKeyStorageLike;
+}
 
 export type StreamRuntimeDeclarationSource = Omit<
   StreamRuntimeBareSource,
@@ -462,7 +438,6 @@ export type StreamRuntimeDeclarationSource = Omit<
   | 'updateTelemetrySettings'
   | 'getModel'
   | 'getProvider'
-  | 'getContentGeneratorConfig'
   | 'readCitations'
   | 'readProfileName'
   | 'readSelectedProvider'
@@ -470,11 +445,6 @@ export type StreamRuntimeDeclarationSource = Omit<
   | 'getEphemeralSettings'
   | 'setEphemeralSetting'
   | 'getEphemeralSetting'
-  | 'getIdeClient'
-  | 'getIdeMode'
-  | 'setIdeMode'
-  | 'setIdeClientConnected'
-  | 'setIdeClientDisconnected'
 >;
 export type UiRuntimeDeclarationSource = Omit<
   UiRuntimeBareSource,
@@ -486,7 +456,6 @@ export type UiRuntimeDeclarationSource = Omit<
   | 'updateTelemetrySettings'
   | 'getModel'
   | 'getProvider'
-  | 'getContentGeneratorConfig'
   | 'readCitations'
   | 'readProfileName'
   | 'readSelectedProvider'
@@ -494,11 +463,6 @@ export type UiRuntimeDeclarationSource = Omit<
   | 'getEphemeralSettings'
   | 'setEphemeralSetting'
   | 'getEphemeralSetting'
-  | 'getIdeClient'
-  | 'getIdeMode'
-  | 'setIdeMode'
-  | 'setIdeClientConnected'
-  | 'setIdeClientDisconnected'
 >;
 
 function buildSessionRuntime(
@@ -518,42 +482,11 @@ function buildSessionRuntime(
 }
 
 function buildModelRuntime(
-  agent: Pick<Agent, 'getModel' | 'getProvider' | 'agentClient'>,
+  agent: Pick<Agent, 'getModel' | 'getProvider'>,
 ): ModelState {
   return {
     getModel: () => agent.getModel(),
     getProvider: () => agent.getProvider(),
-    getContentGeneratorConfig: () =>
-      agent.agentClient.getContentGeneratorConfig(),
-  };
-}
-
-function buildAgentClientSource(
-  agent: Pick<
-    Agent,
-    | 'agentClient'
-    | 'ide'
-    | 'getApprovalMode'
-    | 'setApprovalMode'
-    | 'sessionClient'
-    | 'hooks'
-    | 'workspace'
-    | 'memory'
-    | 'getModel'
-    | 'getProvider'
-    | 'getEphemeralSetting'
-    | 'getEphemeralSettings'
-    | 'setEphemeralSetting'
-    | 'getActiveProfileName'
-    | 'onStats'
-  > & {
-    mcp: McpUiSelection;
-  },
-): AgentClientSource {
-  return {
-    getAgentClient: () => agent.agentClient,
-    createDetachedAgentClient: (id) =>
-      agent.sessionClient.createDetachedAgentClient(id),
   };
 }
 
@@ -585,8 +518,6 @@ function buildFilesRuntime(
     | 'setEphemeralSetting'
     | 'getActiveProfileName'
     | 'onStats'
-    | 'agentClient'
-    | 'ide'
     | 'getApprovalMode'
     | 'setApprovalMode'
   > & {
@@ -642,8 +573,6 @@ function buildMemoryRuntime(
     | 'setEphemeralSetting'
     | 'getActiveProfileName'
     | 'onStats'
-    | 'agentClient'
-    | 'ide'
     | 'getApprovalMode'
     | 'setApprovalMode'
   > & {
@@ -663,20 +592,6 @@ function buildMemoryRuntime(
     },
     shouldLoadMemoryFromIncludeDirectories: () =>
       source.shouldLoadMemoryFromIncludeDirectories(),
-  };
-}
-
-function buildIdeRuntime(
-  source: StreamRuntimeDeclarationSource,
-  ide: Agent['ide'],
-): IdeState {
-  return {
-    getIdeClient: () => ide.getIdeClient(),
-    getIdeMode: () => ide.getIdeMode(),
-    setIdeMode: (enabled) => ide.setIdeMode(enabled),
-    setIdeClientConnected: () => ide.setIdeClientConnected(),
-    setIdeClientDisconnected: () => ide.setIdeClientDisconnected(),
-    getLspConfig: () => source.getLspConfig(),
   };
 }
 
@@ -742,22 +657,19 @@ function buildStreamWorkspaceRuntime(
     | 'setEphemeralSetting'
     | 'getActiveProfileName'
     | 'onStats'
-    | 'agentClient'
-    | 'ide'
     | 'getApprovalMode'
     | 'setApprovalMode'
   > & {
     mcp: McpUiSelection;
   },
-  telemetrySettings?: SessionSettingsOwner,
-): Omit<StreamRuntime, 'agentClientSource'> {
+  telemetrySettings?: SessionSettingsOperations,
+): StreamRuntime {
   return {
     session: buildSessionRuntime(source),
     model: buildModelRuntime(workspace),
     shell: buildShellRuntime(source),
     files: buildFilesRuntime(source, workspace),
     memory: buildMemoryRuntime(source, workspace),
-    ide: buildIdeRuntime(source, workspace.ide),
     hooks: buildHooksRuntime(source, workspace.hooks),
     mcp: buildMcpRuntime(source, workspace.mcp),
     settings: buildSettingsRuntime(source, workspace, telemetrySettings),
@@ -791,12 +703,12 @@ function buildStreamWorkspaceRuntime(
 function buildUiWorkspaceRuntime(
   source: UiRuntimeDeclarationSource,
   workspace: Parameters<typeof buildStreamWorkspaceRuntime>[1] &
-    Pick<Agent, 'getApprovalMode' | 'setApprovalMode'> & {
+    Pick<Agent, 'getApprovalMode' | 'setApprovalMode' | 'ide'> & {
       tools: Pick<Agent['tools'], 'get'>;
     },
   bucketFailover?: BucketFailoverRuntime,
-  telemetrySettings?: SessionSettingsOwner,
-): Omit<UiRuntime, 'agentClientSource'> {
+  telemetrySettings?: SessionSettingsOperations,
+): UiRuntime {
   return {
     ...buildStreamWorkspaceRuntime(source, workspace, telemetrySettings),
     ...(bucketFailover ? { bucketFailover } : {}),
@@ -850,7 +762,6 @@ export function buildUiRuntimeFromSource(
   source: UiRuntimeDeclarationSource,
   agent: Pick<
     Agent,
-    | 'agentClient'
     | 'ide'
     | 'getApprovalMode'
     | 'setApprovalMode'
@@ -870,7 +781,7 @@ export function buildUiRuntimeFromSource(
     mcp: McpUiSelection;
   },
   bucketFailover?: BucketFailoverRuntime,
-  telemetrySettings?: SessionSettingsOwner,
+  telemetrySettings?: SessionSettingsOperations,
 ): UiRuntime {
   return {
     ...buildUiWorkspaceRuntime(
@@ -879,7 +790,6 @@ export function buildUiRuntimeFromSource(
       bucketFailover,
       telemetrySettings,
     ),
-    agentClientSource: buildAgentClientSource(agent),
   };
 }
 
@@ -913,7 +823,7 @@ export function buildSlashCommandRuntime(
     'list' | 'find' | 'reload' | 'isAdminEnabled'
   >,
   restartExtension?: (extension: LlxprtExtension) => Promise<void>,
-  telemetrySettings?: SessionSettingsOwner,
+  telemetrySettings?: SessionSettingsOperations,
 ): CliUiRuntime {
   // Non-slice members must be destructured out and re-attached explicitly.
   // The spread below only flattens capability SLICE OBJECTS; a member whose
@@ -941,6 +851,7 @@ export function buildSlashCommandRuntime(
       historyFilePath,
       userCommandsDir,
       projectCommandsDir,
+      ...createKeyCommandReads(source.getProviderKeys?.bind(source)),
       describeToolConfiguration: () => agent.tools.describeConfiguration(),
     },
     restartExtension !== undefined ? { restartExtension } : {},
@@ -953,19 +864,6 @@ export function buildSlashCommandRuntime(
 }
 
 /**
- * MCP-command boundary: the focused capability slice that MCP display and
- * auth commands actually need.
- */
-export interface McpCommandRuntime {
-  getMcpServers(): Record<string, MCPServerConfig> | undefined;
-  getBlockedMcpServers():
-    | Array<{ name: string; extensionName: string }>
-    | undefined;
-  listPrompts: WorkspacePromptSelection['listPrompts'];
-  listResources: WorkspaceResourceSelection['listResources'];
-}
-
-/**
  * Structural composition of all focused capability interfaces. This is NOT a
  * flat god-object — it is a type-level intersection of focused read-models.
  * The bootstrap runtime satisfies it structurally at runtime. Used by broader UI
@@ -973,8 +871,11 @@ export interface McpCommandRuntime {
  * been migrated to the nested UiRuntime pattern. The streaming path and
  * AppContainer MUST NOT use this type — they use StreamRuntime/UiRuntime.
  */
-export type CliUiRuntime = UiRuntimeBareSource &
-  CheckpointRuntime &
+export type CliUiRuntime = UiRuntimeBareSource & {
+  getProviderKeys(): ProviderKeyStorageLike;
+  listKeyCompletionNames(): Promise<readonly string[]>;
+  invalidateKeyCompletion(): void;
+} & CheckpointRuntime &
   ToolRuntime &
   McpState &
   FileWorkspaceState &

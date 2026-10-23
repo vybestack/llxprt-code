@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ModelOutput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 
 /** Preserve the first text block's position while replacing streamed fragments. */
@@ -40,4 +41,16 @@ export function extractResponseText(output: ModelOutput): string {
     )
     .map((block) => (block as { text: string }).text)
     .join('');
+}
+
+export function accumulateDirectResponse(
+  previous: IContent | undefined,
+  chunk: IContent,
+): IContent {
+  if (previous === undefined) return chunk;
+  return {
+    ...chunk,
+    blocks: [...previous.blocks, ...chunk.blocks],
+    metadata: { ...previous.metadata, ...chunk.metadata },
+  };
 }

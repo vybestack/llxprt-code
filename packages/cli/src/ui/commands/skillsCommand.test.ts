@@ -3,6 +3,7 @@
  * Copyright 2026 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import {
@@ -16,10 +17,10 @@ import {
 } from 'bun:test';
 import { createMockAgent } from '../../__tests__/mockAgent.js';
 import { Config } from '@vybestack/llxprt-code-core';
-import { skillsCommand } from './skillsCommand.js';
+import { registerSkillsCommand } from '../../__tests__/skills-command-test-owner.js';
 import { MessageType } from '../types.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import type { CommandContext } from './types.js';
+
 import type { SkillDefinition } from '@vybestack/llxprt-code-core';
 import {
   SettingScope,
@@ -35,8 +36,8 @@ void vi.mock('../../config/settings.js', () => ({
 }));
 
 function getConfig(
-  context: CommandContext,
-): NonNullable<CommandContext['services']['config']> {
+  context: CommandOwnerFixture,
+): NonNullable<CommandOwnerFixture['services']['config']> {
   if (context.services.config === null) {
     throw new Error('Expected test config');
   }
@@ -51,9 +52,9 @@ function findSkill(
 }
 
 describe('skillsCommand', () => {
-  let context: CommandContext;
+  let context: CommandOwnerFixture;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.useFakeTimers();
     const skills = [
       {
@@ -71,7 +72,7 @@ describe('skillsCommand', () => {
     ];
     context = createMockCommandContext({
       services: {
-        agent: createMockAgent(
+        agent: await createMockAgent(
           new Config({
             sessionId: crypto.randomUUID(),
             targetDir: process.cwd(),
@@ -107,7 +108,7 @@ describe('skillsCommand', () => {
   });
 
   it('should add a SKILLS_LIST item to UI with descriptions by default', async () => {
-    await skillsCommand.action!(context, '');
+    await registerSkillsCommand(context).action!(context, '');
 
     expect(context.ui.addItem).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -134,7 +135,9 @@ describe('skillsCommand', () => {
   });
 
   it('should list skills when "list" subcommand is used', async () => {
-    const listCmd = skillsCommand.subCommands!.find((s) => s.name === 'list')!;
+    const listCmd = registerSkillsCommand(context).subCommands!.find(
+      (s) => s.name === 'list',
+    )!;
     await listCmd.action!(context, '');
 
     expect(context.ui.addItem).toHaveBeenCalledWith(
@@ -162,7 +165,9 @@ describe('skillsCommand', () => {
   });
 
   it('should disable descriptions if "nodesc" arg is provided to list', async () => {
-    const listCmd = skillsCommand.subCommands!.find((s) => s.name === 'list')!;
+    const listCmd = registerSkillsCommand(context).subCommands!.find(
+      (s) => s.name === 'list',
+    )!;
     await listCmd.action!(context, 'nodesc');
 
     expect(context.ui.addItem).toHaveBeenCalledWith(
@@ -209,7 +214,7 @@ describe('skillsCommand', () => {
     });
 
     it('should disable a skill', async () => {
-      const disableCmd = skillsCommand.subCommands!.find(
+      const disableCmd = registerSkillsCommand(context).subCommands!.find(
         (s) => s.name === 'disable',
       )!;
       await disableCmd.action!(context, 'skill1');
@@ -229,7 +234,7 @@ describe('skillsCommand', () => {
     });
 
     it('should enable a skill', async () => {
-      const enableCmd = skillsCommand.subCommands!.find(
+      const enableCmd = registerSkillsCommand(context).subCommands!.find(
         (s) => s.name === 'enable',
       )!;
       (
@@ -265,7 +270,7 @@ describe('skillsCommand', () => {
     });
 
     it('should enable a skill across multiple scopes', async () => {
-      const enableCmd = skillsCommand.subCommands!.find(
+      const enableCmd = registerSkillsCommand(context).subCommands!.find(
         (s) => s.name === 'enable',
       )!;
       (
@@ -305,7 +310,7 @@ describe('skillsCommand', () => {
     });
 
     it('should show error if skill not found during disable', async () => {
-      const disableCmd = skillsCommand.subCommands!.find(
+      const disableCmd = registerSkillsCommand(context).subCommands!.find(
         (s) => s.name === 'disable',
       )!;
       await disableCmd.action!(context, 'non-existent');
@@ -322,7 +327,7 @@ describe('skillsCommand', () => {
 
   describe('reload', () => {
     it('should reload skills successfully and show success message', async () => {
-      const reloadCmd = skillsCommand.subCommands!.find(
+      const reloadCmd = registerSkillsCommand(context).subCommands!.find(
         (s) => s.name === 'reload',
       )!;
       // Make reload take some time so timer can fire
@@ -365,7 +370,7 @@ describe('skillsCommand', () => {
     });
 
     it('should show new skills count after reload', async () => {
-      const reloadCmd = skillsCommand.subCommands!.find(
+      const reloadCmd = registerSkillsCommand(context).subCommands!.find(
         (s) => s.name === 'reload',
       )!;
       const reloadSkillsMock = vi.fn().mockImplementation(async () => {
@@ -390,7 +395,7 @@ describe('skillsCommand', () => {
     });
 
     it('should show removed skills count after reload', async () => {
-      const reloadCmd = skillsCommand.subCommands!.find(
+      const reloadCmd = registerSkillsCommand(context).subCommands!.find(
         (s) => s.name === 'reload',
       )!;
       const reloadSkillsMock = vi.fn().mockImplementation(async () => {
@@ -413,7 +418,7 @@ describe('skillsCommand', () => {
     });
 
     it('should show both added and removed skills count after reload', async () => {
-      const reloadCmd = skillsCommand.subCommands!.find(
+      const reloadCmd = registerSkillsCommand(context).subCommands!.find(
         (s) => s.name === 'reload',
       )!;
       const reloadSkillsMock = vi.fn().mockImplementation(async () => {
@@ -437,12 +442,12 @@ describe('skillsCommand', () => {
     });
 
     it('should show error if configuration is missing', async () => {
-      const reloadCmd = skillsCommand.subCommands!.find(
-        (s) => s.name === 'reload',
-      )!;
       context.services.config = null;
+      const unavailable = registerSkillsCommand(context).subCommands!.find(
+        (entry) => entry.name === 'reload',
+      )!;
 
-      await reloadCmd.action!(context, '');
+      await unavailable.action!(context, '');
 
       expect(context.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -454,7 +459,7 @@ describe('skillsCommand', () => {
     });
 
     it('should show error if reload fails', async () => {
-      const reloadCmd = skillsCommand.subCommands!.find(
+      const reloadCmd = registerSkillsCommand(context).subCommands!.find(
         (s) => s.name === 'reload',
       )!;
       const error = new Error('Reload failed');
@@ -481,7 +486,7 @@ describe('skillsCommand', () => {
 
   describe('completions', () => {
     it('should provide completions for disable (only enabled skills)', async () => {
-      const disableCmd = skillsCommand.subCommands!.find(
+      const disableCmd = registerSkillsCommand(context).subCommands!.find(
         (s) => s.name === 'disable',
       )!;
       const skillManager = context.services.config!.skillOperations!;
@@ -513,7 +518,7 @@ describe('skillsCommand', () => {
     });
 
     it('should provide completions for enable (only disabled skills)', async () => {
-      const enableCmd = skillsCommand.subCommands!.find(
+      const enableCmd = registerSkillsCommand(context).subCommands!.find(
         (s) => s.name === 'enable',
       )!;
       const skillManager = context.services.config!.skillOperations!;

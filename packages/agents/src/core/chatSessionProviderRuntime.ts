@@ -1,14 +1,19 @@
+import type { ProviderRequestCollaborators } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { splitPartsByRole } from './agenticLoop/loopHelpers.js';
+import type { CompletedToolCall } from './coreToolScheduler.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import {
   ANTHROPIC_DEFAULT_BASE_URL,
   ProviderFileLifecycle,
 } from '@vybestack/llxprt-code-providers';
-import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 
 export function resolveProviderBaseUrl(
   provider: IProvider,
@@ -62,4 +67,98 @@ export async function cleanupChatSessionProviderFiles(
   if (result.deferred > 0) {
     await lifecycle.waitForScopeCleanup('session', runtimeId);
   }
+}
+
+export function completedToolResponses(
+  toolCalls: CompletedToolCall[],
+  logger: DebugLogger,
+): ContentBlock[] {
+  const allBlocks = toolCalls.flatMap((toolCall): ContentBlock[] => {
+    // Defensive for deserialized/test-cast tool responses that bypass the
+    // static ToolCallResponseInfo contract.
+    const response = toolCall.response as
+      | { responseParts?: unknown }
+      | undefined;
+    const responseParts = response?.responseParts;
+    if (!Array.isArray(responseParts)) {
+      logger.warn(
+        () =>
+          `recordCompletedToolCalls: skipping tool call '${toolCall.request.callId}' because responseParts is not an array`,
+      );
+      return [];
+    }
+    return responseParts as ContentBlock[];
+  });
+  const { functionResponses } = splitPartsByRole(allBlocks);
+
+  return functionResponses;
+}
+
+export function logChatInitialization(
+  logger: DebugLogger,
+  model: string,
+  initialHistoryLength: number,
+): void {
+  logger.debug('ChatSession initialized:', {
+    model,
+    initialHistoryLength,
+    hasHistoryService: true,
+    hasRuntimeState: true,
+  });
+}
+
+export function completedToolResponseIds(
+  functionResponses: ContentBlock[],
+): string[] {
+  const responseCallIds = functionResponses
+    .map((response) =>
+      response.type === 'tool_response' ? response.callId : undefined,
+    )
+    .filter((id): id is string => typeof id === 'string' && id.length > 0);
+  return responseCallIds;
+}
+
+export function chatResolvedBaseUrl(
+  resolveProvider: () => IProvider,
+  baseUrl: string | undefined,
+): string | undefined {
+  try {
+    return resolveProviderBaseUrl(resolveProvider(), baseUrl);
+  } catch {
+    return undefined;
+  }
+}
+
+export function tryReadActiveProvider(
+  readActive: () => IProvider,
+): IProvider | undefined {
+  try {
+    return readActive();
+  } catch {
+    return undefined;
+  }
+}
+
+export function supportsChatCompletion(
+  provider: IProvider | undefined,
+): boolean {
+  if (!provider) return false;
+  return typeof provider.generateChatCompletion === 'function';
+}
+
+export function buildChatProviderRuntime(
+  baseRuntime: ProviderRequestCollaborators,
+  selectedRuntimeId: string,
+  source: string,
+  metadata: Record<string, unknown>,
+): ProviderRequestCollaborators {
+  return {
+    ...baseRuntime,
+    runtimeId: baseRuntime.runtimeId ?? selectedRuntimeId,
+    metadata: {
+      ...(baseRuntime.metadata ?? {}),
+      source,
+      ...metadata,
+    },
+  };
 }

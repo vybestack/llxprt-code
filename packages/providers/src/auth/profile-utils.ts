@@ -9,45 +9,6 @@
  * These functions handle loading profiles and extracting OAuth bucket configurations.
  */
 
-import type { ProfileManager as ProfileManagerClass } from '@vybestack/llxprt-code-settings';
-
-/**
- * Type alias for the ProfileManager constructor.
- * The `import type` above is erased at compile time, so it does not pull the
- * core package in at module load.
- */
-type ProfileManagerCtor = typeof ProfileManagerClass;
-
-/**
- * Cached promise for the ProfileManager constructor.
- * This enables lazy loading of the ProfileManager module.
- */
-let profileManagerCtorPromise: Promise<ProfileManagerCtor> | undefined;
-
-/**
- * Gets the ProfileManager constructor via dynamic import.
- * Caches the promise to avoid repeated imports.
- */
-async function getProfileManagerCtor(): Promise<ProfileManagerCtor> {
-  profileManagerCtorPromise ??= import('@vybestack/llxprt-code-settings')
-    .then((mod) => mod.ProfileManager)
-    .catch((error) => {
-      profileManagerCtorPromise = undefined;
-      throw error;
-    });
-  return profileManagerCtorPromise;
-}
-
-/**
- * Creates a new ProfileManager instance.
- */
-export async function createProfileManager(
-  directory?: string,
-): Promise<InstanceType<ProfileManagerCtor>> {
-  const ProfileManager = await getProfileManagerCtor();
-  return new ProfileManager(directory);
-}
-
 /**
  * Type guard to check if a profile is a load balancer configuration.
  */

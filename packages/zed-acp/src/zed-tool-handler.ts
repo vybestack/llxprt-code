@@ -93,7 +93,10 @@ export async function requestToolConfirmation(
   toolCallId: string,
   name: string,
   details: unknown,
-  connection: acp.AgentSideConnection,
+  connection: Pick<
+    acp.AgentSideConnection,
+    'sessionUpdate' | 'requestPermission'
+  >,
   registeredKind?: string,
 ): Promise<PermissionRoundTripResult> {
   const confirmationDetails = coerceConfirmationDetails(details);

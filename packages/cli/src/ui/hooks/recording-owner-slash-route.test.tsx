@@ -1,18 +1,22 @@
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-
+import {
+  createCommandRegistrationFixture,
+  createCommandRegistryFixture,
+} from '../../__tests__/command-registry-fixture.js';
+import {
+  createUnconfiguredCredentialRegistry,
+  createUnconfiguredHistoryReaders,
+} from '../../__tests__/unconfigured-model-command.js';
+const commandRegistry = createCommandRegistryFixture(null);
+import {
+  useRecordingPrompts,
+  withRecordingLifetimeFixture,
+} from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
+import { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 import { describe, expect, it, vi } from 'bun:test';
 import { createMockRuntimeApi } from '../components/__tests__/StatsDisplay.testHelpers.js';
-
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  useRuntimeApi: () => createMockRuntimeApi(),
-}));
 import { readFile } from 'node:fs/promises';
-import React, { act } from 'react';
-import type { Agent } from '@vybestack/llxprt-code-agents';
+import { act } from 'react';
+import { Agent } from '@vybestack/llxprt-code-agents';
 import { SessionStatsProvider } from '../contexts/SessionContext.js';
 import { ProviderAliasRefreshProvider } from '../contexts/ProviderAliasRefreshContext.js';
 import { OAuthControlProvider } from '../contexts/OAuthControlContext.js';
@@ -23,29 +27,128 @@ import {
   createMockSettings,
   waitFor,
 } from '../../__tests__/render.js';
-import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import {
   useSlashCommandProcessorCore,
   type UseSlashCommandProcessorCoreArgs,
 } from './useSlashCommandProcessorCore.js';
 
+const metrics = new UiTelemetryService();
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+const selectedRuntimeMock1 = (() =>
+  (() => {
+    const useSelectedTestRuntime = () => createMockRuntimeApi();
+    return {
+      useGetActiveProviderDetails: () =>
+        useSelectedTestRuntime().getActiveProviderDetails,
+      useGetProviderDumpMetadata: () =>
+        useSelectedTestRuntime().getProviderDumpMetadata,
+      useGetActiveProviderAliasConfig: () =>
+        useSelectedTestRuntime().getActiveProviderAliasConfig,
+      useDetectProviderQuota: () =>
+        useSelectedTestRuntime().detectProviderQuota,
+      useGetLoadBalancerStats: () =>
+        useSelectedTestRuntime().getLoadBalancerStats,
+      useGetLoadBalancerTokenAccounting: () =>
+        useSelectedTestRuntime().getLoadBalancerTokenAccounting,
+      useListSavedProfiles: () => useSelectedTestRuntime().listSavedProfiles,
+      useGetProfileByName: () => useSelectedTestRuntime().getProfileByName,
+      useSaveProfileDefinition: () =>
+        useSelectedTestRuntime().saveProfileDefinition,
+      useSaveLoadBalancerProfile: () =>
+        useSelectedTestRuntime().saveLoadBalancerProfile,
+      useListProviders: () => useSelectedTestRuntime().listProviders,
+      useGetActiveProviderName: () =>
+        useSelectedTestRuntime().getActiveProviderName,
+      useListAvailableModels: () =>
+        useSelectedTestRuntime().listAvailableModels,
+      useGetActiveModelName: () => useSelectedTestRuntime().getActiveModelName,
+      useProviderStatus: () => useSelectedTestRuntime().providerStatus,
+      useGetUnallowedParametersForActiveModel: () =>
+        useSelectedTestRuntime().getUnallowedParametersForActiveModel,
+      useGetActiveProviderMetrics: () =>
+        useSelectedTestRuntime().getActiveProviderMetrics,
+      useGetSessionTokenUsage: () =>
+        useSelectedTestRuntime().getSessionTokenUsage,
+      useGetEphemeralSettings: () =>
+        useSelectedTestRuntime().getEphemeralSettings,
+      useSetEphemeralSetting: () =>
+        useSelectedTestRuntime().setEphemeralSetting,
+      useGetActiveToolFormatState: () =>
+        useSelectedTestRuntime().getActiveToolFormatState,
+      useSetActiveToolFormatOverride: () =>
+        useSelectedTestRuntime().setActiveToolFormatOverride,
+      useGetEphemeralSetting: () =>
+        useSelectedTestRuntime().getEphemeralSetting,
+      useGetSessionSetting: () => useSelectedTestRuntime().getSessionSetting,
+      useSetSessionSetting: () => useSelectedTestRuntime().setSessionSetting,
+      useClearSessionSetting: () =>
+        useSelectedTestRuntime().clearSessionSetting,
+      useSetActiveModel: () => useSelectedTestRuntime().setActiveModel,
+      useGetActiveModelParams: () =>
+        useSelectedTestRuntime().getActiveModelParams,
+      useSetActiveModelParam: () =>
+        useSelectedTestRuntime().setActiveModelParam,
+      useClearActiveModelParam: () =>
+        useSelectedTestRuntime().clearActiveModelParam,
+      useUpdateActiveProviderApiKey: () =>
+        useSelectedTestRuntime().updateActiveProviderApiKey,
+      useGetWorkspaceDirectories: () =>
+        useSelectedTestRuntime().getWorkspaceDirectories,
+      useGetDefaultProfileName: () =>
+        useSelectedTestRuntime().getDefaultProfileName,
+      useGetOpenAIProviderInfo: () =>
+        useSelectedTestRuntime().getOpenAIProviderInfo,
+      useGetActiveProfileName: () =>
+        useSelectedTestRuntime().getActiveProfileName,
+      useSetDefaultProfileName: () =>
+        useSelectedTestRuntime().setDefaultProfileName,
+      useGetRuntimeDiagnosticsSnapshot: () =>
+        useSelectedTestRuntime().getRuntimeDiagnosticsSnapshot,
+      useSaveProfileSnapshot: () =>
+        useSelectedTestRuntime().saveProfileSnapshot,
+      useDeleteProfileByName: () =>
+        useSelectedTestRuntime().deleteProfileByName,
+      useFetch: () => useSelectedTestRuntime().fetch,
+      useSetProvider: () => useSelectedTestRuntime().setProvider,
+      useLoadProfileByName: () => useSelectedTestRuntime().loadProfileByName,
+      useUpdateActiveProviderBaseUrl: () =>
+        useSelectedTestRuntime().updateActiveProviderBaseUrl,
+      useRuntimeApi: useSelectedTestRuntime,
+    };
+  })())();
+void vi.mock('../contexts/RuntimeContext.js', () => selectedRuntimeMock1);
+void vi.mock(
+  '../../__tests__/runtime-context-fixture.js',
+  () => selectedRuntimeMock1,
+);
+
 function wrapper({ children }: { children: React.ReactNode }): React.ReactNode {
   return (
     <ProviderAliasRefreshProvider refresh={async () => {}}>
       <OAuthControlProvider control={createMockCommandContext().oauthControl}>
-        <SessionStatsProvider>{children}</SessionStatsProvider>
+        <SessionStatsProvider metrics={metrics}>
+          {children}
+        </SessionStatsProvider>
       </OAuthControlProvider>
     </ProviderAliasRefreshProvider>
   );
 }
 
 function slashInputs(
-  agent: Agent,
+  _agent: Agent,
   recordingOwner?: 'agent' | 'raw',
 ): UseSlashCommandProcessorCoreArgs {
   return {
+    registerCredentials: () => createUnconfiguredCredentialRegistry(),
+    ...commandRegistry,
+    ...createCommandRegistrationFixture(_agent),
+    ...createUnconfiguredHistoryReaders(),
     config: null,
-    agent,
     settings: createMockSettings({}),
     addItem: () => 0,
     clearItems: () => {},
@@ -88,19 +191,23 @@ function slashInputs(
 }
 
 describe('interactive slash command recording route', () => {
+  useRecordingPrompts();
   it('selects the owner handler through the real processor and command context', async () => {
-    await withRecordingLifetimeFixture(async ({ agent }) => {
+    await withRecordingLifetimeFixture(async (agent) => {
       await agent.setHistory([
         { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
       ]);
       await agent.session.setRecording({ enabled: true });
       const path = agent.session.getRecording().path;
       if (!path) throw new Error('Missing recording path');
+      const inputs = slashInputs(agent, 'agent');
       const { result, unmount } = renderHook(
-        () => useSlashCommandProcessorCore(slashInputs(agent, 'agent')),
+        () => useSlashCommandProcessorCore(inputs),
         { wrapper },
       );
-      expect(result.current.commandContext.recordingOwner).toBe('agent');
+      expect(Reflect.has(result.current.commandContext, 'recordingOwner')).toBe(
+        false,
+      );
       await waitFor(() => {
         expect(
           result.current.slashCommands?.some((cmd) => cmd.name === 'chat'),
@@ -115,15 +222,16 @@ describe('interactive slash command recording route', () => {
   }, 30000);
 
   it('keeps the raw command registry and context when no owner mode is supplied', async () => {
-    await withRecordingLifetimeFixture(async ({ agent }) => {
+    await withRecordingLifetimeFixture(async (agent) => {
       await agent.setHistory([
         { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
       ]);
       await agent.session.setRecording({ enabled: true });
       const path = agent.session.getRecording().path;
       if (!path) throw new Error('Missing recording path');
+      const inputs = slashInputs(agent);
       const { result, unmount } = renderHook(
-        () => useSlashCommandProcessorCore(slashInputs(agent)),
+        () => useSlashCommandProcessorCore(inputs),
         { wrapper },
       );
       await waitFor(() => {
@@ -131,7 +239,9 @@ describe('interactive slash command recording route', () => {
           result.current.slashCommands?.some((cmd) => cmd.name === 'chat'),
         ).toBe(true);
       });
-      expect(result.current.commandContext.recordingOwner).toBeUndefined();
+      expect(Reflect.has(result.current.commandContext, 'recordingOwner')).toBe(
+        false,
+      );
       await act(async () => {
         await result.current.handleSlashCommand('/chat save raw-default');
       });

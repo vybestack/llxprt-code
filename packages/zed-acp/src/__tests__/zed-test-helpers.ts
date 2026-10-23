@@ -5,7 +5,6 @@
  */
 
 import { installZedFilesystemFixture } from './zed-filesystem-fixture.js';
-import { projectZedSessionSettings } from '../zed-session-ports.js';
 const fixtureFilesystem = installZedFilesystemFixture();
 
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -19,7 +18,7 @@ import {
 } from '@vybestack/llxprt-code-tools';
 import type { ApprovalMode, Config } from '@vybestack/llxprt-code-core';
 
-import { Session } from '../zedIntegration.js';
+import { Session } from '../zed-session.js';
 
 export type ConfirmationCapture = {
   confirmationId: string;
@@ -582,15 +581,48 @@ export function createSession(
   connection: RecordingConnection,
   config: Config = buildMinimalConfig(),
 ): Session {
+  const filesystem = fixtureFilesystem();
   return new Session(
     'test-session-id',
-    agent,
-    projectZedSessionSettings(
-      config,
-      agent,
-      fixtureFilesystem().files,
-      fixtureFilesystem().ignore,
-    ),
+    (input, options) => agent.stream(input, options),
+    () => agent.getModel(),
+    (model) => agent.setModel(model),
+    () => agent.listAvailableModels(),
+    () => agent.getProviderContextLimit(),
+    () => agent.getApprovalMode(),
+    (mode) => agent.setApprovalMode(mode),
+    () => agent.getHistory(),
+    (options) => agent.compress(options),
+    () => agent.dispose(),
+    (name) => agent.tools.get(name),
+    () => agent.tools.list(),
+    (id, decision, payload, requiresConfirmation) =>
+      agent.tools.respondToConfirmation(
+        id,
+        decision,
+        payload,
+        requiresConfirmation,
+      ),
+    () => agent.session.getRecordingTitle(),
+    (title) => agent.session.recordRecordingTitle(title),
+    () => agent.memory.getFilePaths(),
+    () => agent.profiles.list(),
+    () => agent.tasks.list(),
+    config.getProjectRoot.bind(config),
+    config.getMaxSessionTurns.bind(config),
+    config.getDebugMode.bind(config),
+    config.getFileFilteringOptions.bind(config),
+    config.getTargetDir.bind(config),
+    config.getEnableRecursiveFileSearch.bind(config),
+    filesystem.files.readTextFile.bind(filesystem.files),
+    filesystem.ignore.shouldIgnoreFile.bind(filesystem.ignore),
+    filesystem.ignore.getCoreIgnorePatterns.bind(filesystem.ignore),
+    agent.getEphemeralSetting.bind(agent),
+    agent.setEphemeralSetting.bind(agent),
+    (listener) =>
+      new SessionSettingsOwner(new SettingsService()).subscribeModelChanges(
+        listener,
+      ),
     connection as unknown as acp.AgentSideConnection,
   );
 }

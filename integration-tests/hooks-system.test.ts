@@ -8,6 +8,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { TestRig, poll } from './test-helper.js';
 import { join } from 'node:path';
 import { existsSync, writeFileSync } from 'node:fs';
+import { scriptHookCommand } from './helpers/hookCommand.js';
 
 describe('Hooks System Integration', () => {
   let rig: TestRig;
@@ -1618,8 +1619,19 @@ console.log(JSON.stringify({
 
   describe('SessionEnd on Exit', () => {
     it('should fire SessionEnd hook on graceful exit in non-interactive mode', async () => {
-      const sessionEndCommand =
-        "node -e \"console.log(JSON.stringify({decision: 'allow', systemMessage: 'SessionEnd hook executed on exit'}))\"";
+      rig.setup('should fire SessionEnd hook on graceful exit', {
+        fakeResponsesPath: join(
+          import.meta.dirname,
+          'hooks-system.session-startup.responses',
+        ),
+      });
+
+      const scriptPath = join(rig.testDir!, 'session_end_hook.cjs');
+      writeFileSync(
+        scriptPath,
+        `console.log(JSON.stringify({decision: 'allow', systemMessage: 'SessionEnd hook executed on exit'}));`,
+      );
+      const sessionEndCommand = scriptHookCommand(scriptPath);
 
       rig.setup('should fire SessionEnd hook on graceful exit', {
         fakeResponsesPath: join(
@@ -1683,8 +1695,14 @@ console.log(JSON.stringify({
 
       expect(sessionEndLog).toBeDefined();
       if (sessionEndLog) {
+        // The full record explains a failed hook (timeout, spawn error,
+        // stderr) that an empty-stdout assertion alone would hide.
+        const record = JSON.stringify(sessionEndLog.hookCall, null, 2);
         expect(sessionEndLog.hookCall.hook_name).toBe(sessionEndCommand);
-        expect(sessionEndLog.hookCall.exit_code).toBe(0);
+        expect(
+          sessionEndLog.hookCall.exit_code,
+          `SessionEnd hook record: ${record}`,
+        ).toBe(0);
         expect(sessionEndLog.hookCall.hook_input).toBeDefined();
 
         const hookInputStr =
@@ -1694,9 +1712,10 @@ console.log(JSON.stringify({
         const hookInput = JSON.parse(hookInputStr) as Record<string, unknown>;
 
         expect(hookInput['reason']).toBe('exit');
-        expect(sessionEndLog.hookCall.stdout).toContain(
-          'SessionEnd hook executed',
-        );
+        expect(
+          sessionEndLog.hookCall.stdout,
+          `SessionEnd hook record: ${record}`,
+        ).toContain('SessionEnd hook executed');
       }
     });
   });

@@ -1,3 +1,4 @@
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -10,17 +11,13 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
-import {
-  fromConfig,
-  toConfigParameters,
-  type Agent,
-} from '@vybestack/llxprt-code-agents';
+import { toConfigParameters, type Agent } from '@vybestack/llxprt-code-agents';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   HookEventName,
   HookType,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
-import { escapeShellArg } from '@vybestack/llxprt-code-core/utils/shell-utils.js';
+import { nativeHookCommand } from './helpers/native-hook-command.js';
 import { createTestOAuthBinding } from '@vybestack/llxprt-code-mcp/test-support/oauth.js';
 import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
 import { createSessionSettingsFixture } from './helpers/session-settings-fixture.js';
@@ -80,7 +77,9 @@ describe('public Agent physical model hooks', () => {
       script,
       `import { writeFileSync } from 'node:fs';
 const input = JSON.parse(await Bun.stdin.text());
-writeFileSync(${JSON.stringify(inputPath)}, JSON.stringify(input));
+const output = process.argv[2];
+if (output === undefined) throw new Error('Missing hook input path');
+writeFileSync(output, JSON.stringify(input), 'utf8');
 console.log(JSON.stringify({ hookSpecificOutput: { llm_request: { contents: [...input.llm_request.contents, { speaker: 'human', blocks: [{ type: 'text', text: input.session_id + ':physical instruction' }] }] } } }));
 `,
     );
@@ -135,7 +134,7 @@ console.log(JSON.stringify({ hookSpecificOutput: { llm_request: { contents: [...
               hooks: [
                 {
                   type: HookType.Command,
-                  command: `exec ${escapeShellArg(process.execPath, 'bash')} ${escapeShellArg(script, 'bash')}`,
+                  command: nativeHookCommand(script, [inputPath]),
                 },
               ],
             },
@@ -143,17 +142,24 @@ console.log(JSON.stringify({ hookSpecificOutput: { llm_request: { contents: [...
         },
       });
       mcp = await McpRuntimeOwner.create(createTestOAuthBinding(), config);
-      agent = await fromConfig({
-        ...createSessionSettingsFixture(config),
+      const adoptedSettings1 = createSessionSettingsFixture(config);
+      agent = await fromConfig(
         config,
-        mcpRuntime: mcp,
-        mcpOwnership: 'caller',
-        activation: {
-          provider: 'openai',
-          model: 'wire-model',
-          cliOverrides: { key: 'local-test-key', baseUrl },
+        adoptedSettings1.settingsService,
+        {
+          activation: {
+            provider: 'openai',
+            model: 'wire-model',
+            cliOverrides: { key: 'local-test-key', baseUrl },
+          },
+          mcpOwnership: 'caller',
         },
-      });
+        adoptedSettings1.settingsOwner,
+        undefined,
+        undefined,
+        undefined,
+        mcp,
+      );
       const runtimeId = agent.getRuntimeId();
       const text: string[] = [];
       for await (const event of agent.stream('initial caller input')) {

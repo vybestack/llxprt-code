@@ -1,7 +1,9 @@
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import type { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { captureProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
-import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
-const fixtureOwners = installRuntimeTestOwners();
+import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
+const fixtureOwnersBorrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -28,7 +30,6 @@ import { RetryOrchestrator } from '../RetryOrchestrator.js';
 import type { IProvider, GenerateChatOptions } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry/telemetry/uiTelemetry.js';
 import * as sdk from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
 
 // --- Mock transport providers ---
@@ -280,26 +281,35 @@ function buildStack(
     maxAttempts?: number;
     initialDelayMs?: number;
   },
-): LoggingProviderWrapper {
+  selectedOwner?: SessionSettingsOwner,
+): LoggingProviderWrapper & {
+  metrics: UiTelemetryService;
+  settingsOwner: SessionSettingsOwner;
+} {
   const retry = new RetryOrchestrator(transport, {
     maxAttempts: retryConfig?.maxAttempts ?? 3,
     initialDelayMs: retryConfig?.initialDelayMs ?? 1,
     maxDelayMs: 10,
   });
-  const wrapperSettings1 = fixtureOwners.adopt(
-    config,
-    new SettingsService(),
-  ).settingsOwner;
-  const wrapper = new LoggingProviderWrapper(retry, config, undefined, () =>
-    captureProviderRequestDiagnostics(config, wrapperSettings1),
+  const wrapperSettings1 =
+    selectedOwner ??
+    fixtureOwnersBorrowedSettings(config, new SettingsService());
+  const wrapper = Object.assign(
+    new LoggingProviderWrapper(retry, config, undefined, () =>
+      captureProviderRequestDiagnostics(config, wrapperSettings1),
+    ),
+    { metrics: wrapperSettings1.telemetry.localMetrics },
   );
-  wrapper.setRuntimeContextResolver(() => ({
+  wrapper.setInvocationDataReader(() => ({
     runtimeId: 'test',
-    settingsService: { getConfig: () => config } as never,
-    config,
+    globalSettings: {},
+    providerSettings: {},
     metadata: {},
   }));
-  return wrapper;
+  return Object.assign(wrapper, {
+    metrics: wrapperSettings1.telemetry.localMetrics,
+    settingsOwner: wrapperSettings1,
+  });
 }
 
 async function consumeStream(
@@ -314,7 +324,6 @@ describe('Attempt lifecycle telemetry (full pipeline)', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.spyOn(sdk, 'isTelemetrySdkInitialized').mockReturnValue(false);
-    uiTelemetryService.reset();
   });
 
   describe('export disabled/enabled parity', () => {
@@ -325,7 +334,7 @@ describe('Attempt lifecycle telemetry (full pipeline)', () => {
       await consumeStream(
         wrapper.generateChatCompletion(makeOptions(config, makeContent())),
       );
-      const metrics = uiTelemetryService.getMetrics();
+      const metrics = wrapper.metrics.getMetrics();
       expect(Object.keys(metrics.models)).toHaveLength(1);
     });
 
@@ -336,7 +345,7 @@ describe('Attempt lifecycle telemetry (full pipeline)', () => {
       await consumeStream(
         wrapper.generateChatCompletion(makeOptions(config, makeContent())),
       );
-      const metrics = uiTelemetryService.getMetrics();
+      const metrics = wrapper.metrics.getMetrics();
       expect(Object.keys(metrics.models)).toHaveLength(1);
     });
   });
@@ -352,7 +361,7 @@ describe('Attempt lifecycle telemetry (full pipeline)', () => {
       await consumeStream(
         wrapper.generateChatCompletion(makeOptions(config, makeContent())),
       );
-      const snap = uiTelemetryService.getSessionSnapshot();
+      const snap = wrapper.metrics.getSessionSnapshot();
       // 2 total attempts: 1 error + 1 success
       expect(snap.totalApiRequests).toBe(2);
       expect(snap.totalApiErrors).toBe(1);
@@ -374,7 +383,7 @@ describe('Attempt lifecycle telemetry (full pipeline)', () => {
       await stream.return?.(undefined);
       // Deterministically wait for the telemetry pipeline to flush
       await waitFor(() => {
-        const snap = uiTelemetryService.getSessionSnapshot();
+        const snap = wrapper.metrics.getSessionSnapshot();
         // At least 1 request recorded (either success from normal completion
         // or the recorder processed the terminal event)
         expect(snap.totalApiRequests).toBeGreaterThanOrEqual(1);
@@ -389,7 +398,7 @@ describe('Attempt lifecycle telemetry (full pipeline)', () => {
       await consumeStream(
         wrapper.generateChatCompletion(makeOptions(config, makeContent())),
       );
-      const metrics = uiTelemetryService.getMetrics();
+      const metrics = wrapper.metrics.getMetrics();
       expect(Object.keys(metrics.models)).toHaveLength(1);
     });
 
@@ -399,7 +408,7 @@ describe('Attempt lifecycle telemetry (full pipeline)', () => {
       await consumeStream(
         wrapper.generateChatCompletion(makeOptions(config, makeContent())),
       );
-      const metrics = uiTelemetryService.getMetrics();
+      const metrics = wrapper.metrics.getMetrics();
       expect(Object.keys(metrics.models)).toHaveLength(1);
     });
   });
@@ -416,7 +425,7 @@ describe('Attempt lifecycle telemetry (full pipeline)', () => {
           wrapper.generateChatCompletion(makeOptions(config, makeContent())),
         ),
       ).rejects.toThrow('Permanent API failure');
-      const snap = uiTelemetryService.getSessionSnapshot();
+      const snap = wrapper.metrics.getSessionSnapshot();
       // Each retry attempt is recorded
       expect(snap.totalApiRequests).toBeGreaterThanOrEqual(1);
       expect(snap.totalApiErrors).toBeGreaterThanOrEqual(1);
@@ -434,7 +443,7 @@ describe('Attempt lifecycle telemetry (full pipeline)', () => {
       await consumeStream(
         wrapper.generateChatCompletion(makeOptions(config, makeContent())),
       );
-      const snap = uiTelemetryService.getSessionSnapshot();
+      const snap = wrapper.metrics.getSessionSnapshot();
       expect(snap.hasReliableCacheData).toBe(false);
       expect(snap.uncachedInputTps).toBeNull();
     });
@@ -445,7 +454,7 @@ describe('Attempt lifecycle telemetry (full pipeline)', () => {
       await consumeStream(
         wrapper.generateChatCompletion(makeOptions(config, makeContent())),
       );
-      const snap = uiTelemetryService.getSessionSnapshot();
+      const snap = wrapper.metrics.getSessionSnapshot();
       expect(snap.hasReliableCacheData).toBe(true);
     });
   });
@@ -461,12 +470,17 @@ describe('Attempt lifecycle telemetry (full pipeline)', () => {
       );
 
       // Simulate "switch" by using a different provider name
-      const wrapper2 = buildStack(new CacheDataProvider(50, 10), config);
+      const wrapper2 = buildStack(
+        new CacheDataProvider(50, 10),
+        config,
+        undefined,
+        wrapper1.settingsOwner,
+      );
       await consumeStream(
         wrapper2.generateChatCompletion(makeOptions(config, makeContent())),
       );
 
-      const snap = uiTelemetryService.getSessionSnapshot();
+      const snap = wrapper1.metrics.getSessionSnapshot();
       // 2 requests across different providers
       expect(snap.totalApiRequests).toBe(2);
     });
@@ -480,15 +494,14 @@ describe('Attempt lifecycle telemetry (full pipeline)', () => {
         wrapper.generateChatCompletion(makeOptions(config, makeContent())),
       );
       expect(
-        Object.keys(uiTelemetryService.getMetrics().models).length,
+        Object.keys(wrapper.metrics.getMetrics().models).length,
       ).toBeGreaterThan(0);
+      wrapper.metrics.reset();
 
-      uiTelemetryService.reset();
-
-      const metrics = uiTelemetryService.getMetrics();
+      const metrics = wrapper.metrics.getMetrics();
       expect(Object.keys(metrics.models)).toHaveLength(0);
       expect(metrics.timing.completeTokensPerMinute).toBe(0);
-      const snap = uiTelemetryService.getSessionSnapshot();
+      const snap = wrapper.metrics.getSessionSnapshot();
       expect(snap.totalApiRequests).toBe(0);
     });
   });
@@ -501,8 +514,8 @@ describe('Attempt lifecycle telemetry (full pipeline)', () => {
         wrapper.generateChatCompletion(makeOptions(config, makeContent())),
       );
 
-      const metrics = uiTelemetryService.getMetrics();
-      const snap = uiTelemetryService.getSessionSnapshot();
+      const metrics = wrapper.metrics.getMetrics();
+      const snap = wrapper.metrics.getSessionSnapshot();
       expect(metrics.timing.completeTokensPerMinute).toBe(
         snap.completeTokensPerMinute,
       );
@@ -519,8 +532,8 @@ describe('Attempt lifecycle telemetry (full pipeline)', () => {
         wrapper.generateChatCompletion(makeOptions(config, makeContent())),
       );
 
-      const metrics = uiTelemetryService.getMetrics();
-      const snap = uiTelemetryService.getSessionSnapshot();
+      const metrics = wrapper.metrics.getMetrics();
+      const snap = wrapper.metrics.getSessionSnapshot();
       expect(metrics.cache.hasReliableCacheData).toBe(
         snap.hasReliableCacheData,
       );
@@ -536,7 +549,7 @@ describe('Attempt lifecycle telemetry (full pipeline)', () => {
       await consumeStream(
         wrapper.generateChatCompletion(makeOptions(config, makeContent())),
       );
-      const snap = uiTelemetryService.getSessionSnapshot();
+      const snap = wrapper.metrics.getSessionSnapshot();
       expect(snap.totalApiRequests).toBe(1);
       expect(snap.totalApiErrors).toBe(0);
     });
@@ -546,14 +559,14 @@ describe('Attempt lifecycle telemetry (full pipeline)', () => {
     it('telemetry errors do not break the stream', async () => {
       const config = createConfig(false);
       // Sabotage the aggregator to throw
-      const original = uiTelemetryService.addEvent;
+      const wrapper = buildStack(new RetryThenSucceedProvider(1), config);
+      const original = wrapper.metrics.addEvent;
       const throwingAddEvent = vi.fn(() => {
         throw new Error('Aggregator internal error');
       });
-      uiTelemetryService.addEvent = throwingAddEvent;
+      wrapper.metrics.addEvent = throwingAddEvent;
 
       try {
-        const wrapper = buildStack(new RetryThenSucceedProvider(1), config);
         // Stream should still complete despite telemetry errors
         await consumeStream(
           wrapper.generateChatCompletion(makeOptions(config, makeContent())),
@@ -562,7 +575,7 @@ describe('Attempt lifecycle telemetry (full pipeline)', () => {
         // Verify the stream ran through the provider path
         expect(throwingAddEvent).toHaveBeenCalled();
       } finally {
-        uiTelemetryService.addEvent = original;
+        wrapper.metrics.addEvent = original;
       }
     });
   });

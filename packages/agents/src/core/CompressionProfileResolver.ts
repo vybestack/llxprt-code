@@ -1,3 +1,5 @@
+import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import type { ProviderFileBindingStore } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { ProfileDefinitionReads } from '@vybestack/llxprt-code-core';
 import { applyProfileSettings } from '@vybestack/llxprt-code-settings';
 import type { PrepareProviderInvocation } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
@@ -17,7 +19,7 @@ import type {
   LoadBalancerProfile,
   StandardProfile,
 } from '@vybestack/llxprt-code-settings';
-import { createProviderKeyStorage } from '@vybestack/llxprt-code-providers/auth.js';
+import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
@@ -37,7 +39,7 @@ import { deriveCompressionInteractionMode } from '../compression/compressionSyst
  */
 export interface CompressionProfileResolverContext {
   readonly profileDefinitions?: Pick<ProfileDefinitionReads, 'loadProfile'>;
-  /** The base provider-runtime snapshot (runtimeId, metadata, config). */
+  /** The base provider-runtime snapshot (runtimeId, metadata). */
   readonly providerRuntime: ProviderRequestCollaborators;
   readonly prepareProviderInvocation: PrepareProviderInvocation;
   /**
@@ -252,6 +254,7 @@ export function buildCompressionProfileEphemeralsSnapshot(
 export async function resolveCompressionProfileAuthToken(
   profileSettings: SettingsService,
   provider: string,
+  storage?: Pick<ProviderKeyStorageLike, 'getKey'>,
 ): Promise<{ authToken: string } | Record<string, never>> {
   const providerSettings = profileSettings.getProviderSettings(provider);
   const directAuth = getStringSettingFromValues([
@@ -267,7 +270,11 @@ export async function resolveCompressionProfileAuthToken(
     profileSettings.get('auth-key-name'),
   ]);
   if (keyName) {
-    const token = await createProviderKeyStorage().getKey(keyName);
+    if (!storage)
+      throw new Error(
+        'Compression key resolution requires an explicit credential owner',
+      );
+    const token = await storage.getKey(keyName);
     if (token) {
       return { authToken: token };
     }
@@ -296,6 +303,7 @@ export async function resolveCompressionProfileAuthToken(
 export async function buildCompressionProfileResolvedOptions(
   profileSettings: SettingsService,
   profile: StandardProfile,
+  storage?: Pick<ProviderKeyStorageLike, 'getKey'>,
 ): Promise<RuntimeGenerateChatOptions['resolved']> {
   const providerSettings = profileSettings.getProviderSettings(
     profile.provider,
@@ -318,6 +326,7 @@ export async function buildCompressionProfileResolvedOptions(
     ...(await resolveCompressionProfileAuthToken(
       profileSettings,
       profile.provider,
+      storage,
     )),
     ...(temperature !== undefined ? { temperature } : {}),
     ...(maxTokens !== undefined ? { maxTokens } : {}),
@@ -365,13 +374,13 @@ export async function resolveStandardCompressionProvider(
     model: profile.model,
   };
   const runtime: ProviderRequestCollaborators = {
-    config,
     runtimeId,
     metadata,
   };
   const resolved = await buildCompressionProfileResolvedOptions(
     profileSettings,
     profile,
+    config?.peekProviderKeyStorage(),
   );
   const invocation = createRuntimeInvocationContext({
     runtimeId: runtime.runtimeId,
@@ -452,6 +461,10 @@ export async function resolveLoadBalancedCompressionProvider(
   profile: LoadBalancerProfile,
   config: Config | undefined,
   profileManager: Pick<ProfileDefinitionReads, 'loadProfile'>,
+  mediaResolver: RequestMediaResolutionService | undefined,
+  requestMediaBudgetBytes: number | undefined,
+  providerFileBindings: ProviderFileBindingStore | undefined,
+  providerFileLifecycle: object | undefined,
 ): Promise<CompressionProviderResult> {
   const candidates = await buildCompressionLoadBalancerCandidates(
     ctx,
@@ -480,17 +493,17 @@ export async function resolveLoadBalancedCompressionProvider(
     candidates,
     initialIndex,
     interactionMode,
+    mediaResolver,
+    requestMediaBudgetBytes,
+    providerFileBindings,
+    providerFileLifecycle,
   );
   const runtimeId = `${ctx.providerRuntime.runtimeId}::compression-profile:${profileName}`;
-  const settings = new SettingsService();
-  settings.setCurrentProfileName(profileName);
-  settings.set('activeProvider', 'load-balancer');
-  settings.set('model', profile.model || provider.getDefaultModel());
-  for (const [key, value] of Object.entries(profile.ephemeralSettings)) {
-    if (value !== undefined) {
-      settings.set(key, value);
-    }
-  }
+  const settings = compressionLoadBalancerSettings(
+    profileName,
+    profile,
+    profile.model || provider.getDefaultModel(),
+  );
   const metadata = {
     ...(ctx.providerRuntime.metadata ?? {}),
     source: 'ChatSession.resolveCompressionProvider',
@@ -501,7 +514,6 @@ export async function resolveLoadBalancedCompressionProvider(
     model: settings.get('model'),
   };
   const runtime: ProviderRequestCollaborators = {
-    config,
     runtimeId,
     metadata,
   };
@@ -536,6 +548,11 @@ export async function resolveCompressionProvider(
   ctx: CompressionProfileResolverContext,
   profileName: string | undefined,
   resolveDefaultProvider: () => IProvider,
+  mediaResolver: RequestMediaResolutionService | undefined,
+  requestMediaBudgetBytes: number | undefined,
+  providerFileBindings: ProviderFileBindingStore | undefined,
+  providerFileLifecycle: object | undefined,
+  config: Config | undefined,
 ): Promise<CompressionProviderResult> {
   if (!profileName) {
     const runtime = ctx.providerRuntime;
@@ -543,12 +560,11 @@ export async function resolveCompressionProvider(
     return {
       provider,
       runtime,
-      config: runtime.config,
+      config,
       invocation: ctx.prepareProviderInvocation(provider.name),
     };
   }
 
-  const config = ctx.providerRuntime.config;
   const profileManager = ctx.profileDefinitions;
   if (!profileManager) {
     throw new CompressionProfileNotFoundError(
@@ -574,6 +590,10 @@ export async function resolveCompressionProvider(
       profile,
       config,
       profileManager,
+      mediaResolver,
+      requestMediaBudgetBytes,
+      providerFileBindings,
+      providerFileLifecycle,
     );
   }
 
@@ -584,4 +604,21 @@ export async function resolveCompressionProvider(
     profileManager,
     config,
   );
+}
+
+function compressionLoadBalancerSettings(
+  profileName: string,
+  profile: LoadBalancerProfile,
+  model: string,
+): SettingsService {
+  const settings = new SettingsService();
+  settings.setCurrentProfileName(profileName);
+  settings.set('activeProvider', 'load-balancer');
+  settings.set('model', model);
+  for (const [key, value] of Object.entries(profile.ephemeralSettings)) {
+    if (value !== undefined) {
+      settings.set(key, value);
+    }
+  }
+  return settings;
 }

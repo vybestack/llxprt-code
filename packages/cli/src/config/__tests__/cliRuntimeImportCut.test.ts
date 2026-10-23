@@ -1,26 +1,40 @@
+import {
+  observeActivationPreparation,
+  capturedActivation,
+} from '../../../../agents/src/api/__tests__/helpers/activation-acquisition-capture.js';
+import { ProviderReadFixture } from '../../../../agents/src/api/__tests__/helpers/provider-read-fixture.js';
+import { createTestMergedSettings } from '../settings.js';
+
+import {
+  afterEach,
+  afterEach as afterFixtureTest,
+  describe,
+  expect,
+  it,
+} from 'bun:test';
+import type { AgentActivationOperation } from '@vybestack/llxprt-code-agents';
+import { createProviderInspection } from '@vybestack/llxprt-code-agents';
+import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import { assembleSettingsControl } from '../../../../agents/src/api/control/settings-control.js';
+import { assembleToolFormatControl } from '../../../../agents/src/api/control/tool-format-control.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 
 import { installDefinitionRuntimeFixture } from '../../__tests__/definition-runtime-fixture.js';
 const definitionFixture = installDefinitionRuntimeFixture();
 
-import {
-  assembleWorkspaceMemory,
-  ApprovalMode,
-} from '@vybestack/llxprt-code-core';
+import { ApprovalMode } from '@vybestack/llxprt-code-core';
 
-import {
-  afterEach as afterFixtureTest,
-  afterEach,
-  describe,
-  expect,
-  it,
-} from 'bun:test';
 import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
 const makeFixtureFilesystem = installTestWorkspaceFilesystem();
 let fixtureFilesystem: ReturnType<typeof makeFixtureFilesystem> | undefined;
@@ -32,19 +46,18 @@ function fixturePaths() {
   return fixtureFilesystem.paths;
 }
 
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { parseArguments } from '../cliArgParser.js';
-import { createTestMergedSettings } from '../settings.js';
 import {
   parseBootstrapArgs,
   prepareRuntimeForProfile,
 } from '../profileBootstrap.js';
 import { finalizeConfig } from '../postConfigRuntime.js';
-import { createRuntimeOwnerFeatures } from '../../runtime/createRuntimeOwnerFeatures.js';
+import { createRuntimeOwnerFeatures } from '../../__tests__/runtime-owner-features-fixture.js';
 
 const originalArgv = process.argv;
 const roots: string[] = [];
@@ -69,10 +82,32 @@ describe('CLI provider bootstrap across owners', () => {
     ];
     for (const file of files) {
       const source = await readFile(new URL(file, import.meta.url), 'utf8');
-      expect(source).not.toContain(
-        '@vybestack/llxprt-code-providers/runtime.js',
-      );
+      expect(source).not.toContain('@vybestack/llxprt-code-providers/runtime');
     }
+  });
+
+  it('consumes provider selection contracts without provider runtime imports', async () => {
+    const files = [
+      '../../cliSessionBootstrap.ts',
+      '../../cliAgentBootstrap.ts',
+      '../profileBootstrap.ts',
+      '../../ui/contexts/RuntimeContext.tsx',
+      '../../ui/hooks/agentStream/__tests__/useSubmitQuery.providerIgnoreCancel.bun.tsx',
+      '../../../../agents/src/api/profile-application/switchProfileProvider.ts',
+      '../../../../agents/src/api/profileApplicationAssembly.ts',
+      '../../../../agents/src/api/agentImpl.ts',
+      '../../../../agents/src/api/__tests__/helpers/profile-owner-fixture.ts',
+    ];
+    for (const file of files) {
+      const source = await readFile(new URL(file, import.meta.url), 'utf8');
+      expect(source).not.toContain('@vybestack/llxprt-code-providers/runtime');
+    }
+    await expect(
+      readFile(
+        new URL('../../../../agents/src/api/agent-deps.ts', import.meta.url),
+        'utf8',
+      ),
+    ).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('keeps same-label pre/post Config handles separate and reapplies CLI overrides after switching', async () => {
@@ -100,10 +135,18 @@ describe('CLI provider bootstrap across owners', () => {
       const runtimeState = await prepareRuntimeForProfile(
         parseBootstrapArgs(args, {
           runtimeId: 'shared-cli-label',
-          settingsService,
         }),
+        new CredentialAuthority(),
+        settingsService,
+        undefined,
+        undefined,
       );
+      const foreground: {
+        manager?: RuntimeProviderManager;
+        activation?: AgentActivationOperation;
+      } = {};
       bootstraps.push({
+        foreground,
         provider,
         model,
         key,
@@ -138,47 +181,47 @@ describe('CLI provider bootstrap across owners', () => {
           targetDir: item.root,
           model: item.model,
         });
-        const trust = new WorkspaceTrustLifecycle({
-          localTrust: config.initialWorkspaceTrust,
+
+        const observation = observeActivationPreparation((operation, state) => {
+          item.foreground.manager = state.manager;
         });
-        const filesystem = makeFixtureFilesystem({
-          targetDir: item.root,
-          isTrusted: () => trust.isTrustedFolder(),
-        });
-        await finalizeConfig({
-          workspaceTrust: trust,
-          trustCleanup: () => trust.dispose(),
-          memory: assembleWorkspaceMemory(config, filesystem, trust),
-          filesystem,
-          config,
-          runtimeState: item.runtimeState,
-          bootstrapArgs: item.args,
-          argv,
-          settings: {},
-          profileSettingsWithTools: {},
-          profileLoadResult: {
-            profileMergedSettings: createTestMergedSettings(),
-            profileModel: undefined,
-            profileProvider: undefined,
-            profileModelParams: undefined,
-            profileBaseUrl: undefined,
-            loadedProfile: null,
-            profileWarnings: [],
-            profileToLoad: undefined,
-          },
-          providerModelResult: { provider: item.provider, model: item.model },
-          defaultDisabledTools: [],
-          runtimeOverrides: {
-            settingsService: item.settingsService,
-            sessionSettingsOwner: item.settingsOwner,
-            onActivationBootstrapReady: (operation) => {
-              operation.takeSettingsOwner(item.settingsService);
+        await finalizeConfig(
+          {
+            config,
+            runtimeState: item.runtimeState,
+            bootstrapArgs: item.args,
+            argv,
+            settings: {},
+            profileSettingsWithTools: {},
+            profileLoadResult: {
+              profileMergedSettings: createTestMergedSettings(),
+              profileModel: undefined,
+              profileProvider: undefined,
+              profileModelParams: undefined,
+              profileBaseUrl: undefined,
+              loadedProfile: null,
+              profileWarnings: [],
+              profileToLoad: undefined,
             },
+            providerModelResult: { provider: item.provider, model: item.model },
+            defaultDisabledTools: [],
+
+            approvalMode: ApprovalMode.YOLO,
+            interactive: true,
           },
-          approvalMode: ApprovalMode.YOLO,
-          interactive: true,
-        });
-        expect(item.runtimeState.registration?.config).toBe(config);
+          item.settingsOwner,
+          (operation) => {
+            item.foreground.activation = operation;
+          },
+          undefined,
+          undefined,
+          true,
+        );
+        observation.mockRestore();
+        const manager = item.foreground.manager;
+        if (manager === undefined)
+          throw new Error('Missing selected foreground manager');
+        expect('registration' in item.runtimeState).toBe(false);
         expect('providerManager' in config).toBe(false);
         expect(item.settingsOwner.readNamedParameter('auth-key')).toBe(
           item.key,
@@ -188,8 +231,10 @@ describe('CLI provider bootstrap across owners', () => {
         );
         expect(
           createRuntimeOwnerFeatures(
-            config,
-            item.runtimeState.providerManager,
+            createProviderInspection(
+              () => item.settingsOwner.readSelectedEndpoint(),
+              manager,
+            ),
             fixturePaths().directories,
             async () => {
               throw new Error(
@@ -197,13 +242,67 @@ describe('CLI provider bootstrap across owners', () => {
               );
             },
             item.settingsOwner,
-            item.settingsService,
             definitionFixture(),
+            {
+              set: () => {
+                throw new Error('Unexpected model parameter mutation');
+              },
+              clear: () => {
+                throw new Error('Unexpected model parameter clear');
+              },
+            },
+            assembleSettingsControl(
+              item.settingsOwner.readNamedParameter.bind(item.settingsOwner),
+              item.settingsOwner.captureNamedParameters.bind(
+                item.settingsOwner,
+              ),
+              item.settingsOwner.writeUserParameter.bind(item.settingsOwner),
+              item.settingsOwner.readSessionOverride.bind(item.settingsOwner),
+              item.settingsOwner.writeSessionOverride.bind(item.settingsOwner),
+              item.settingsOwner.clearSessionOverride.bind(item.settingsOwner),
+              () => {},
+              () => {},
+              item.settingsOwner.subscribeModelChanges.bind(item.settingsOwner),
+            ),
+            assembleToolFormatControl(
+              item.settingsOwner.readToolFormat.bind(item.settingsOwner),
+              item.settingsOwner.writeToolFormat.bind(item.settingsOwner),
+              () => {
+                const provider = manager.getActiveProvider();
+                return provider === undefined
+                  ? undefined
+                  : {
+                      name: provider.name,
+                      toolFormat: provider.getToolFormat?.() ?? null,
+                    };
+              },
+              () => {},
+              () => {},
+            ),
+            new ProviderReadFixture(
+              item.settingsOwner,
+              manager,
+              () => config.getModel(),
+              (provider) => item.settingsService.getProviderSettings(provider),
+            ),
+            {
+              setRaw: async () => {
+                throw new Error('Unexpected credential mutation');
+              },
+            },
+            () =>
+              new ProviderReadFixture(
+                item.settingsOwner,
+                manager,
+                () => config.getModel(),
+                (provider) =>
+                  item.settingsService.getProviderSettings(provider),
+              ).readOpenAIInfo(),
           ).getActiveModelName(),
         ).toBe(item.model);
       }
-      expect(bootstraps[0].runtimeState.providerManager).not.toBe(
-        bootstraps[1].runtimeState.providerManager,
+      expect(bootstraps[0].foreground.manager).not.toBe(
+        bootstraps[1].foreground.manager,
       );
       expect(
         bootstraps[0].settingsService.getProviderSettings('openai')['auth-key'],
@@ -213,12 +312,17 @@ describe('CLI provider bootstrap across owners', () => {
           'auth-key'
         ],
       ).toBe('second-key');
-      expect(bootstraps[0].runtimeState.runtimeMessageBus).not.toBe(
-        bootstraps[1].runtimeState.runtimeMessageBus,
+      const first = bootstraps[0].foreground.activation;
+      const second = bootstraps[1].foreground.activation;
+      if (first === undefined || second === undefined)
+        throw new Error('Expected both actual activation acquisitions');
+      expect(capturedActivation(first).messageBus).not.toBe(
+        capturedActivation(second).messageBus,
       );
     } finally {
       for (const item of bootstraps) {
-        item.runtimeState.registration?.dispose();
+        await item.foreground.activation?.dispose();
+        await item.runtimeState.dispose();
         await item.settingsOwner.dispose();
       }
     }

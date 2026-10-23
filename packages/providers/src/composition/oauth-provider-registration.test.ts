@@ -9,11 +9,13 @@ import {
   registerStandardOAuthProviders,
   isOAuthProviderRegistered,
 } from './oauth-provider-registration.js';
-import { OAuthManager, createTokenStore } from '../auth/index.js';
+import { OAuthManager, HostCredentialOwner } from '../auth/index.js';
 import type { OAuthManager as OAuthManagerType } from '../auth/index.js';
 
 function createFreshManager(): OAuthManagerType {
-  const tokenStore = createTokenStore();
+  const tokenStore = new HostCredentialOwner(
+    process.env,
+  ).authority.createTokenStore();
   return new OAuthManager(tokenStore);
 }
 
@@ -23,7 +25,11 @@ describe('registerStandardOAuthProviders', () => {
 
     expect(oauthManager.getSupportedProviders()).toStrictEqual([]);
 
-    registerStandardOAuthProviders(oauthManager, oauthManager.getTokenStore());
+    registerStandardOAuthProviders(
+      oauthManager,
+      globalThis.fetch,
+      oauthManager.getTokenStore(),
+    );
 
     expect(oauthManager.getSupportedProviders().sort()).toStrictEqual([
       'claudecode',
@@ -34,7 +40,11 @@ describe('registerStandardOAuthProviders', () => {
   it('does not register anthropic as an OAuth identity (@issue:2274 A4)', () => {
     const oauthManager = createFreshManager();
 
-    registerStandardOAuthProviders(oauthManager, oauthManager.getTokenStore());
+    registerStandardOAuthProviders(
+      oauthManager,
+      globalThis.fetch,
+      oauthManager.getTokenStore(),
+    );
 
     expect(oauthManager.getSupportedProviders()).not.toContain('anthropic');
     expect(isOAuthProviderRegistered('anthropic', oauthManager)).toBe(false);
@@ -43,8 +53,16 @@ describe('registerStandardOAuthProviders', () => {
   it('does not duplicate providers when called twice on the same manager', () => {
     const oauthManager = createFreshManager();
 
-    registerStandardOAuthProviders(oauthManager, oauthManager.getTokenStore());
-    registerStandardOAuthProviders(oauthManager, oauthManager.getTokenStore());
+    registerStandardOAuthProviders(
+      oauthManager,
+      globalThis.fetch,
+      oauthManager.getTokenStore(),
+    );
+    registerStandardOAuthProviders(
+      oauthManager,
+      globalThis.fetch,
+      oauthManager.getTokenStore(),
+    );
 
     expect(oauthManager.getSupportedProviders().sort()).toStrictEqual([
       'claudecode',
@@ -54,9 +72,15 @@ describe('registerStandardOAuthProviders', () => {
 
   it('registers providers when tokenStore is passed explicitly', () => {
     const oauthManager = createFreshManager();
-    const explicitTokenStore = createTokenStore();
+    const explicitTokenStore = new HostCredentialOwner(
+      process.env,
+    ).authority.createTokenStore();
 
-    registerStandardOAuthProviders(oauthManager, explicitTokenStore);
+    registerStandardOAuthProviders(
+      oauthManager,
+      globalThis.fetch,
+      explicitTokenStore,
+    );
 
     expect(isOAuthProviderRegistered('claudecode', oauthManager)).toBe(true);
     expect(isOAuthProviderRegistered('codex', oauthManager)).toBe(true);
@@ -65,7 +89,7 @@ describe('registerStandardOAuthProviders', () => {
   it('registers providers using tokenStore from the oauthManager when none is passed', () => {
     const oauthManager = createFreshManager();
 
-    registerStandardOAuthProviders(oauthManager);
+    registerStandardOAuthProviders(oauthManager, globalThis.fetch);
 
     expect(oauthManager.getSupportedProviders().sort()).toStrictEqual([
       'claudecode',

@@ -15,18 +15,27 @@ import type { WorkspaceIdePort } from '../services/workspace-ide-owner.js';
 import { IDEConnectionStatus as CoreIDEConnectionStatus } from '@vybestack/llxprt-code-ide-integration';
 
 export class CoreIdeServiceAdapter implements IIdeService {
-  constructor(private readonly ide: Pick<WorkspaceIdePort, 'getClient'>) {}
+  constructor(
+    private readonly openWorkspaceDiff:
+      | WorkspaceIdePort['openDiff']
+      | undefined,
+    private readonly readConnection:
+      | WorkspaceIdePort['readConnection']
+      | undefined,
+  ) {}
 
   async applyDiff(params: DiffParams): Promise<DiffUpdateResult> {
-    const ideClient = this.ide.getClient();
-    if (ideClient === undefined) {
+    if (
+      this.openWorkspaceDiff === undefined ||
+      this.readConnection?.().available !== true
+    ) {
       return { status: 'rejected', content: undefined };
     }
-    return ideClient.openDiff(params.filePath, params.diff);
+    return this.openWorkspaceDiff(params.filePath, params.diff);
   }
 
   getConnectionStatus(): IDEConnectionStatus {
-    const status = this.ide.getClient()?.getConnectionStatus().status;
+    const status = this.readConnection?.().status;
     if (status === CoreIDEConnectionStatus.Connected) {
       return 'connected';
     }
@@ -37,10 +46,12 @@ export class CoreIdeServiceAdapter implements IIdeService {
   }
 
   async openDiff(params: OpenDiffParams): Promise<void> {
-    const ideClient = this.ide.getClient();
-    if (ideClient === undefined) {
+    if (
+      this.openWorkspaceDiff === undefined ||
+      this.readConnection?.().available !== true
+    ) {
       throw new Error('IDE client is not available');
     }
-    await ideClient.openDiff(params.filePath, params.newContent);
+    await this.openWorkspaceDiff(params.filePath, params.newContent);
   }
 }

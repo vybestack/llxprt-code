@@ -23,9 +23,15 @@ import {
 } from './sessionMetricsAggregator.js';
 
 export type UiEvent =
-  | (ApiResponseEvent & { 'event.name': typeof EVENT_API_RESPONSE })
-  | (ApiErrorEvent & { 'event.name': typeof EVENT_API_ERROR })
-  | (ToolCallEvent & { 'event.name': typeof EVENT_TOOL_CALL });
+  | (Omit<ApiResponseEvent, 'event.name'> & {
+      'event.name': typeof EVENT_API_RESPONSE;
+    })
+  | (Omit<ApiErrorEvent, 'event.name'> & {
+      'event.name': typeof EVENT_API_ERROR;
+    })
+  | (Omit<ToolCallEvent, 'event.name'> & {
+      'event.name': typeof EVENT_TOOL_CALL;
+    });
 
 export interface ToolCallStats {
   count: number;
@@ -135,6 +141,40 @@ export interface SessionMetrics {
   };
 }
 
+export interface SessionMetricReads {
+  getMetrics(): SessionMetrics;
+  getSessionSnapshot(): SessionMetricsSnapshot;
+  getLastPromptTokenCount(): number;
+}
+
+export interface SessionMetricUpdate {
+  readonly metrics: SessionMetrics;
+  readonly lastPromptTokenCount: number;
+}
+
+export interface SessionMetricSubscriptions {
+  subscribe(listener: (update: SessionMetricUpdate) => void): () => void;
+}
+
+export interface SessionMetricReset {
+  reset(): void;
+}
+
+export interface SessionMetricUpdates {
+  setLastPromptTokenCount(count: number): void;
+  setTokenTrackingMetrics(metrics: SessionMetrics['tokenTracking']): void;
+}
+
+export interface SessionMetricEventSink {
+  addEvent(event: UiEvent): void;
+}
+
+export interface SessionMetricOperations
+  extends SessionMetricReads,
+    SessionMetricSubscriptions,
+    SessionMetricReset,
+    SessionMetricUpdates {}
+
 const createInitialTimingMetrics = (): SessionTimingMetrics => ({
   completeTokensPerMinute: 0,
   outputGenerationTps: 0,
@@ -151,7 +191,7 @@ const createInitialTimingMetrics = (): SessionTimingMetrics => ({
   accumulatedWorkMs: 0,
 });
 
-const createInitialMetrics = (): SessionMetrics => ({
+export const createSessionMetrics = (): SessionMetrics => ({
   models: {},
   tools: {
     totalCalls: 0,
@@ -208,12 +248,17 @@ function norm(value: number | undefined | null): number {
   return value;
 }
 
-export class UiTelemetryService extends EventEmitter {
-  #metrics: SessionMetrics = createInitialMetrics();
+export class UiTelemetryService
+  extends EventEmitter
+  implements SessionMetricOperations, SessionMetricEventSink
+{
+  #metrics: SessionMetrics = createSessionMetrics();
   #lastPromptTokenCount = 0;
+  #closed = false;
   #aggregator = new SessionMetricsAggregator();
 
   addEvent(event: UiEvent) {
+    this.assertOpen();
     let changed = true;
     switch (event['event.name']) {
       case EVENT_API_RESPONSE:
@@ -237,6 +282,14 @@ export class UiTelemetryService extends EventEmitter {
     }
   }
 
+  subscribe(listener: (update: SessionMetricUpdate) => void): () => void {
+    this.assertOpen();
+    this.on('update', listener);
+    return () => {
+      this.off('update', listener);
+    };
+  }
+
   getMetrics(): SessionMetrics {
     return this.#metrics;
   }
@@ -255,8 +308,9 @@ export class UiTelemetryService extends EventEmitter {
    * last prompt token count.
    */
   reset(): void {
+    this.assertOpen();
     this.#aggregator.reset();
-    this.#metrics = createInitialMetrics();
+    this.#metrics = createSessionMetrics();
     this.#lastPromptTokenCount = 0;
     this.emit('update', {
       metrics: this.#metrics,
@@ -269,6 +323,7 @@ export class UiTelemetryService extends EventEmitter {
   }
 
   setLastPromptTokenCount(lastPromptTokenCount: number): void {
+    this.assertOpen();
     this.#lastPromptTokenCount = lastPromptTokenCount;
     this.emit('update', {
       metrics: this.#metrics,
@@ -290,6 +345,7 @@ export class UiTelemetryService extends EventEmitter {
       total: number;
     };
   }) {
+    this.assertOpen();
     // Preserve the canonical session TPM from the aggregator — the polling
     // source only provides throttle/timing/session usage data.
     const canonicalTpm = this.#aggregator.getSnapshot().completeTokensPerMinute;
@@ -336,14 +392,25 @@ export class UiTelemetryService extends EventEmitter {
     this.#metrics.models = newModels;
   }
 
-  private processApiResponse(event: ApiResponseEvent): boolean {
+  close(): void {
+    this.#closed = true;
+    this.removeAllListeners();
+  }
+
+  private assertOpen(): void {
+    if (this.#closed) throw new Error('Session metrics are closed');
+  }
+
+  private processApiResponse(
+    event: Omit<ApiResponseEvent, 'event.name'>,
+  ): boolean {
     if (event.provider_owned !== true) {
       return false;
     }
     return this.recordApiEvent(event, event.error !== undefined);
   }
 
-  private processApiError(event: ApiErrorEvent): boolean {
+  private processApiError(event: Omit<ApiErrorEvent, 'event.name'>): boolean {
     if (event.provider_owned !== true) {
       return false;
     }
@@ -356,7 +423,7 @@ export class UiTelemetryService extends EventEmitter {
    * paths emit identical telemetry shapes.
    */
   private recordApiEvent(
-    event: ApiResponseEvent | ApiErrorEvent,
+    event: Omit<ApiResponseEvent | ApiErrorEvent, 'event.name'>,
     isError: boolean,
   ): boolean {
     const durationMs = norm(event.duration_ms);
@@ -427,7 +494,7 @@ export class UiTelemetryService extends EventEmitter {
     this.#metrics.tokenTracking.tokensPerMinute = snap.completeTokensPerMinute;
   }
 
-  private processToolCall(event: ToolCallEvent): boolean {
+  private processToolCall(event: Omit<ToolCallEvent, 'event.name'>): boolean {
     const { tools, files } = this.#metrics;
     const callId = event.call_id;
 
@@ -494,7 +561,7 @@ export class UiTelemetryService extends EventEmitter {
   }
 
   private recordToolDecision(
-    event: ToolCallEvent,
+    event: Omit<ToolCallEvent, 'event.name'>,
     tools: SessionMetrics['tools'],
     toolStats: ToolCallStats,
   ): void {
@@ -509,7 +576,7 @@ export class UiTelemetryService extends EventEmitter {
   }
 
   private recordFileLineCounts(
-    event: ToolCallEvent,
+    event: Omit<ToolCallEvent, 'event.name'>,
     files: SessionMetrics['files'],
   ): void {
     if (!event.metadata) return;
@@ -527,5 +594,3 @@ export class UiTelemetryService extends EventEmitter {
     }
   }
 }
-
-export const uiTelemetryService = new UiTelemetryService();

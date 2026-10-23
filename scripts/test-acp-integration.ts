@@ -22,7 +22,7 @@ if (profileName) {
 const env = { ...process.env, DEBUG: 'llxprt:*' };
 console.log('Spawning with args:', llxprtArgs);
 console.log('DEBUG env set to:', env.DEBUG);
-const llxprt = spawn('bun', llxprtArgs, {
+const llxprt = spawn(process.execPath, llxprtArgs, {
   stdio: ['pipe', 'pipe', 'pipe'],
   cwd: process.cwd(),
   env,

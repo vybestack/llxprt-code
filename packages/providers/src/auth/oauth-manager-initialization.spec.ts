@@ -98,7 +98,10 @@ describe('OAuth Provider Premature Initialization', () => {
      * @and Should not throw initialization errors
      */
     it('should not initialize Codex OAuth when registering provider', async () => {
-      const codexProvider = new CodexOAuthProvider(tokenStore);
+      const codexProvider = new CodexOAuthProvider(
+        globalThis.fetch,
+        tokenStore,
+      );
 
       // This should not trigger any file reads or initialization
       expect(() => {
@@ -118,8 +121,14 @@ describe('OAuth Provider Premature Initialization', () => {
      * @and Should complete registration without errors
      */
     it('should not initialize any OAuth providers when registering multiple providers', async () => {
-      const codexProvider = new CodexOAuthProvider(tokenStore);
-      const anthropicProvider = new AnthropicOAuthProvider(tokenStore);
+      const codexProvider = new CodexOAuthProvider(
+        globalThis.fetch,
+        tokenStore,
+      );
+      const anthropicProvider = new AnthropicOAuthProvider(
+        globalThis.fetch,
+        tokenStore,
+      );
 
       // Register all providers - should not trigger initialization
       expect(() => {
@@ -145,8 +154,14 @@ describe('OAuth Provider Premature Initialization', () => {
      * @and Should not attempt to read OAuth credentials
      */
     it('should not initialize OAuth during MCP operations', async () => {
-      const codexProvider = new CodexOAuthProvider(tokenStore);
-      const anthropicProvider = new AnthropicOAuthProvider(tokenStore);
+      const codexProvider = new CodexOAuthProvider(
+        globalThis.fetch,
+        tokenStore,
+      );
+      const anthropicProvider = new AnthropicOAuthProvider(
+        globalThis.fetch,
+        tokenStore,
+      );
 
       oauthManager.registerProvider(codexProvider);
       oauthManager.registerProvider(anthropicProvider);
@@ -183,8 +198,14 @@ describe('OAuth Provider Premature Initialization', () => {
      * @and Should not attempt to read credentials file
      */
     it('should not initialize OAuth when loading profile without Codex provider', async () => {
-      const codexProvider = new CodexOAuthProvider(tokenStore);
-      const anthropicProvider = new AnthropicOAuthProvider(tokenStore);
+      const codexProvider = new CodexOAuthProvider(
+        globalThis.fetch,
+        tokenStore,
+      );
+      const anthropicProvider = new AnthropicOAuthProvider(
+        globalThis.fetch,
+        tokenStore,
+      );
 
       oauthManager.registerProvider(codexProvider);
       oauthManager.registerProvider(anthropicProvider);
@@ -214,7 +235,10 @@ describe('OAuth Provider Premature Initialization', () => {
      * @and Should return null since OAuth is not enabled
      */
     it('should not access OAuth file when OAuth is not enabled', async () => {
-      const codexProvider = new CodexOAuthProvider(tokenStore);
+      const codexProvider = new CodexOAuthProvider(
+        globalThis.fetch,
+        tokenStore,
+      );
       oauthManager.registerProvider(codexProvider);
 
       // Registration should not trigger initialization
@@ -239,8 +263,14 @@ describe('OAuth Provider Premature Initialization', () => {
      * @and Should return null without file access
      */
     it('should not read OAuth credentials when OAuth is not enabled', async () => {
-      const codexProvider = new CodexOAuthProvider(tokenStore);
-      const anthropicProvider = new AnthropicOAuthProvider(tokenStore);
+      const codexProvider = new CodexOAuthProvider(
+        globalThis.fetch,
+        tokenStore,
+      );
+      const anthropicProvider = new AnthropicOAuthProvider(
+        globalThis.fetch,
+        tokenStore,
+      );
 
       oauthManager.registerProvider(codexProvider);
       oauthManager.registerProvider(anthropicProvider);
@@ -279,7 +309,10 @@ describe('OAuth Provider Premature Initialization', () => {
 
       mockFs.readFile.mockResolvedValue(JSON.stringify(mockCredentials));
 
-      const codexProvider = new CodexOAuthProvider(tokenStore);
+      const codexProvider = new CodexOAuthProvider(
+        globalThis.fetch,
+        tokenStore,
+      );
       oauthManager.registerProvider(codexProvider);
 
       // Request token should NOT trigger file read since OAuth is not enabled

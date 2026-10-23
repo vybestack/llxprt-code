@@ -37,16 +37,30 @@ const runtimeHolder: MockRuntimeApi = {
 // re-run on every render.
 let memoizedRuntimeApi: MockRuntimeApi | undefined;
 
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  useRuntimeApi: () => {
-    memoizedRuntimeApi ??= {
-      listProviders: () => runtimeHolder.listProviders(),
-      listAvailableModels: (providerName: string) =>
-        runtimeHolder.listAvailableModels(providerName),
+const selectedRuntimeMock1 = (() =>
+  (() => {
+    const useSelectedTestRuntime = () => {
+      memoizedRuntimeApi ??= {
+        listProviders: () => runtimeHolder.listProviders(),
+        listAvailableModels: (providerName: string) =>
+          runtimeHolder.listAvailableModels(providerName),
+      };
+      return memoizedRuntimeApi;
     };
-    return memoizedRuntimeApi;
-  },
-}));
+    return {
+      useListProviders: () => useSelectedTestRuntime().listProviders,
+
+      useListAvailableModels: () =>
+        useSelectedTestRuntime().listAvailableModels,
+
+      useRuntimeApi: useSelectedTestRuntime,
+    };
+  })())();
+void vi.mock('../contexts/RuntimeContext.js', () => selectedRuntimeMock1);
+void vi.mock(
+  '../../__tests__/runtime-context-fixture.js',
+  () => selectedRuntimeMock1,
+);
 
 // Pin to a wide terminal so column widths and frames are deterministic.
 void vi.mock('../hooks/useTerminalSize.js', () => ({

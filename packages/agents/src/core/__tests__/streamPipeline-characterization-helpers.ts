@@ -1,11 +1,12 @@
-import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
-import { afterEach as closeInvocationRoots } from 'bun:test';
+import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
+import { afterEach as closeInvocationRoots } from 'bun:test';
+import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
 const retainedInvocationOwners: SessionSettingsOwner[] = [];
 closeInvocationRoots(async () => {
   for (const owner of retainedInvocationOwners.splice(0)) await owner.dispose();
 });
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -25,34 +26,34 @@ import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-provid
  * @plan:PLAN-20260707-AGENTNEUTRAL.P06
  */
 
-import type {
-  ToolDeclaration,
-  CanonicalFinishReason,
-} from '@vybestack/llxprt-code-core/llm-types/index.js';
-import { vi, type Mock } from 'bun:test';
-import { ChatSession } from '../chatSession.js';
-import { Turn, AgentEventType, DEFAULT_AGENT_ID } from '../turn.js';
-import type { ServerAgentStreamEvent, ServerFinishedEvent } from '../turn.js';
-import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import { TestRuntimeProviderManager } from '../../test-utils/runtimeProviderManager.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import type {
+  CanonicalFinishReason,
+  ToolDeclaration,
+} from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
   createTelemetryAdapter,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type {
-  IContent,
   ContentBlock,
+  IContent,
   ThinkingBlock,
   UsageStats,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { vi, type Mock } from 'bun:test';
+import { TestRuntimeProviderManager } from '../../test-utils/runtimeProviderManager.js';
 import { createConfigParams } from '../chatSession-runtime-helpers.js';
+import { ChatSession } from '../chatSession.js';
+import type { ServerAgentStreamEvent, ServerFinishedEvent } from '../turn.js';
+import { AgentEventType, DEFAULT_AGENT_ID, Turn } from '../turn.js';
 
 // ---------------------------------------------------------------------------
 // IContent chunk factories — the ONLY mock boundary
@@ -153,6 +154,8 @@ export function createFullLoopHarness(
     hookConfig?: Config;
     historyService?: HistoryService;
   },
+  tryBucketFailover?: ProviderRetryOperations['tryBucketFailover'],
+  readCurrentBucket?: ProviderRetryOperations['readCurrentBucket'],
 ): FullLoopHarness {
   const settingsService = new SettingsService();
   const config = new Config(createConfigParams(settingsService));
@@ -160,15 +163,13 @@ export function createFullLoopHarness(
   seedStubProviderSettings(settingsService);
 
   const providerRuntime = createProviderRuntimeContext({
-    settingsService,
-    config,
     runtimeId: 'test.runtime',
     metadata: { source: 'p06.characterization' },
   });
 
   const manager = new TestRuntimeProviderManager(providerRuntime);
   manager.setConfig(config);
-  configureProviderRuntimeFactories(config, manager);
+  configureProviderTokenizer(manager);
 
   const provider = scriptedStreamProvider(generateChatCompletionMock);
 
@@ -181,7 +182,6 @@ export function createFullLoopHarness(
     sessionId: config.getSessionId(),
   });
   const historyService = options?.historyService ?? new HistoryService();
-  const effectiveConfig = options?.hookConfig ?? config;
   const invocationOwner = createSessionSettingsFixture(config).settingsOwner;
   retainedInvocationOwners.push(invocationOwner);
   const view = createAgentRuntimeContext({
@@ -207,26 +207,26 @@ export function createFullLoopHarness(
     provider: createProviderAdapterFromManager(manager),
     telemetry: createTelemetryAdapter(config, invocationOwner.telemetry),
     tools: { listToolNames: () => [], getToolMetadata: () => undefined },
-    providerRuntime: { ...providerRuntime, config: effectiveConfig },
+    providerRuntime: { ...providerRuntime },
   });
-
-  const generationConfig: Record<string, unknown> = {};
-  if (options?.tools) {
-    generationConfig['tools'] = options.tools;
-  }
 
   const chat = new ChatSession(
     view,
+    options?.hookConfig ?? config,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    tryBucketFailover,
+    readCurrentBucket,
     {} as unknown as ContentGenerator,
-    generationConfig,
+    fullLoopGenerationConfig(options?.tools),
     [],
   );
 
-  const turn = new Turn(chat, 'prompt-p06', DEFAULT_AGENT_ID, 'stub');
-
   return {
     chat,
-    turn,
+    turn: new Turn(chat, 'prompt-p06', DEFAULT_AGENT_ID, 'stub'),
     historyService,
     provider,
     generateChatCompletionMock,
@@ -340,4 +340,10 @@ function scriptedStreamProvider(
     getDefaultModel: () => 'stub-model',
     generateChatCompletion: generateChatCompletionMock,
   };
+}
+
+function fullLoopGenerationConfig(
+  tools: ToolDeclaration[] | undefined,
+): Record<string, unknown> {
+  return tools === undefined ? {} : { tools };
 }

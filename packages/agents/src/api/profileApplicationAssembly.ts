@@ -4,29 +4,24 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { assembleModelSelection } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
+import { assembleModelSelection } from './model-selection.js';
 
 import type {
-  Config,
+  ProfileDefinitionReads,
+  ProviderSwitcher,
   RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
-import type { Profile, SettingsService } from '@vybestack/llxprt-code-settings';
-import type { ProfileDefinitionReads } from '@vybestack/llxprt-code-core';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import { applyProfileCascade } from '@vybestack/llxprt-code-providers/runtime/profileApplication.js';
+import type { Profile, SettingsService } from '@vybestack/llxprt-code-settings';
+import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
+import { applyProfileCascade } from './profileApplication.js';
 import {
   finishProfileApplication,
   type ProfileLoadOptions,
   type ProfileLoadResult,
-} from '@vybestack/llxprt-code-providers/runtime/profileSnapshot.js';
-import { getActiveModelParams } from '@vybestack/llxprt-code-providers/runtime/providerModelParameters.js';
-import type { ProviderSwitcher } from '@vybestack/llxprt-code-providers/runtime/providerSwitch.js';
+} from './profileSnapshot.js';
 
 import { checkpointProviderTransition } from './providerTransitionCheckpoint.js';
-import type { Agent } from './agent.js';
-import type { AgentProviderState } from './agentImpl.js';
-import type { AgentAuthState } from './control/authState.js';
-import { ProfilesControl } from './control/profilesControl.js';
 
 export interface PreparedProfileFacade {
   publish(): void;
@@ -54,8 +49,19 @@ function assembleProfileParameterCommands(owner: SessionSettingsOwner): {
   };
 }
 
+type PreparedProfile = Awaited<ReturnType<typeof finishProfileApplication>>;
+
+function requireProfileKeyStorage(
+  keys: ProviderKeyStorageLike | undefined,
+): ProviderKeyStorageLike {
+  if (!keys)
+    throw new Error(
+      'Profile key resolution requires an explicit credential owner',
+    );
+  return keys;
+}
+
 export function assembleProfileApplication(
-  config: Config,
   settings: SettingsService,
   manager: RuntimeProviderManager,
   oauth: OAuthManager | null,
@@ -68,9 +74,8 @@ export function assembleProfileApplication(
   ) => Promise<PreparedProfileFacade | void> = async () => {},
   assertAdmission: () => void = () => {},
 ): AgentProfileApplication {
-  let installed:
-    | Awaited<ReturnType<typeof finishProfileApplication>>
-    | undefined;
+  const keys = requireProfileKeyStorage(manager.getProviderKeys?.());
+  let installed: PreparedProfile | undefined;
   return queueProfileApplications(
     profiles,
     async (profile, options, signal) => {
@@ -82,19 +87,19 @@ export function assembleProfileApplication(
         oauth?.checkpointRetryHandlers() ?? (() => {}),
       );
       const modelPublication = settingsOwner.beginModelPublication();
-      let prepared: Awaited<ReturnType<typeof finishProfileApplication>>;
+      let prepared: PreparedProfile;
       let facade: PreparedProfileFacade | void = undefined;
       try {
         const application = await applyProfileCascade(
           profile,
           options,
-          config,
           settings,
           manager,
           profiles,
           switchProvider,
           assembleModelSelection(settingsOwner),
           assembleProfileParameterCommands(settingsOwner),
+          (name) => keys.getKey(name),
         );
         signal.throwIfAborted();
         prepared = await finishProfileApplication(
@@ -104,6 +109,7 @@ export function assembleProfileApplication(
           settings,
           oauth,
           profiles,
+          settingsOwner.publishModelProfile.bind(settingsOwner),
           signal,
         );
         signal.throwIfAborted();
@@ -257,68 +263,4 @@ function queueProfileApplications(
       return enqueue(() => apply(captured, capturedOptions, signal));
     },
   };
-}
-
-export function assembleAgentProfiles(
-  config: Config,
-  settings: SettingsService,
-  manager: RuntimeProviderManager,
-  oauth: OAuthManager | null,
-  switchProvider: ProviderSwitcher,
-  settingsOwner: SessionSettingsOwner,
-  providerState: AgentProviderState,
-  authState: AgentAuthState,
-  captureProfile: Agent['captureProfile'],
-  prepareReplacement: (
-    providerChanged: boolean,
-    signal: AbortSignal,
-  ) => Promise<PreparedProfileFacade>,
-  profiles: ProfileDefinitionReads,
-  assertAdmission: () => void,
-): ProfilesControl {
-  const readString = (key: string): string | undefined => {
-    const value = settingsOwner.readNamedParameter(key);
-    return typeof value === 'string' && value.length > 0 ? value : undefined;
-  };
-  return new ProfilesControl({
-    getState: () => providerState,
-    application: assembleProfileApplication(
-      config,
-      settings,
-      manager,
-      oauth,
-      (name, options) =>
-        switchProvider(name, { ...options, clientReplacement: 'deferred' }),
-      settingsOwner,
-      profiles,
-      async (result, signal) => {
-        const modelParams = getActiveModelParams(settings, result.providerName);
-        const replacement = await prepareReplacement(
-          result.providerChanged,
-          signal,
-        );
-        return {
-          publish: () => {
-            replacement.publish();
-            providerState.provider = result.providerName;
-            providerState.model = result.modelName;
-            providerState.modelParams = modelParams;
-            providerState.baseUrl = result.baseUrl;
-            providerState.keyName = readString('auth-key-name');
-            providerState.isLoadBalancer =
-              result.providerName === 'load-balancer';
-            authState.keyFile = readString('auth-keyfile');
-            authState.rawKeyPresent = readString('auth-key') !== undefined;
-            authState.inlineKeyPresent = false;
-            authState.baseUrl = result.baseUrl;
-          },
-          retire: () => replacement.retire(),
-          discard: () => replacement.discard(),
-        };
-      },
-      assertAdmission,
-    ),
-    captureEphemerals: () => ({ ...settingsOwner.captureUserParameters() }),
-    workingDir: config.getTargetDir(),
-  });
 }

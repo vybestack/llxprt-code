@@ -1,9 +1,7 @@
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
-
+import {
+  useRecordingPrompts,
+  withRecordingLifetimeFixture,
+} from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import { describe, expect, it, vi } from 'bun:test';
 import { act } from 'react';
 import { renderHook } from '../../__tests__/render.js';
@@ -11,14 +9,23 @@ import { hasDialogRequest } from '../../__tests__/dialogStore.js';
 import { createDialogStore } from '../stores/dialog/dialogStore.js';
 import { createDialogOpeners } from '../stores/dialog/dialogOpeners.js';
 import { MessageType } from '../types.js';
+import { bindModelSwitchRecording } from '../utils/recordActiveProviderSwitch.js';
 import { readFile } from 'node:fs/promises';
-import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
+
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 // The provider service is the external boundary; dialog and message delivery stay real.
 const runtime = {
   getActiveProviderName: () => 'old',
   getActiveModelName: () => 'fallback-model',
+  listProviders: () => ['old', 'new'],
   setProvider: async (name: string) => ({
+    changed: true,
+    previousProvider: 'old',
     nextProvider: name.trim(),
     infoMessages: [
       'Endpoint: https://example.test',
@@ -27,12 +34,30 @@ const runtime = {
     ],
   }),
 };
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  useRuntimeApi: () => runtime,
-}));
+const selectedRuntimeMock1 = (() =>
+  (() => {
+    const useSelectedTestRuntime = () => runtime;
+    return {
+      useListProviders: () => useSelectedTestRuntime().listProviders,
+      useGetActiveProviderName: () =>
+        useSelectedTestRuntime().getActiveProviderName,
+
+      useGetActiveModelName: () => useSelectedTestRuntime().getActiveModelName,
+
+      useSetProvider: () => useSelectedTestRuntime().setProvider,
+
+      useRuntimeApi: useSelectedTestRuntime,
+    };
+  })())();
+void vi.mock('../contexts/RuntimeContext.js', () => selectedRuntimeMock1);
+void vi.mock(
+  '../../__tests__/runtime-context-fixture.js',
+  () => selectedRuntimeMock1,
+);
 const { useProviderDialog } = await import('./useProviderDialog.js');
 
 describe('provider switch notices', () => {
+  useRecordingPrompts();
   it('delivers endpoint, model and authentication notices to the message history', async () => {
     const messages: Array<{
       type: MessageType;
@@ -44,7 +69,10 @@ describe('provider switch notices', () => {
     dialogs.provider.open({});
     const { result, unmount } = renderHook(() =>
       useProviderDialog({
-        dialogs,
+        ...runtime,
+        recordProviderSwitch: () => {},
+        openProviderDialog: () => dialogs.provider.open({}),
+        closeProviderDialog: dialogs.provider.close,
         addMessage: (message) => messages.push(message),
       }),
     );
@@ -64,7 +92,7 @@ describe('provider switch notices', () => {
     unmount();
   });
   it('records a provider selection in the Agent session exactly once', async () => {
-    await withRecordingLifetimeFixture(async ({ agent }) => {
+    await withRecordingLifetimeFixture(async (agent) => {
       await agent.setHistory([
         { speaker: 'human', blocks: [{ type: 'text', text: 'start' }] },
       ]);
@@ -73,13 +101,19 @@ describe('provider switch notices', () => {
       if (!path) throw new Error('No recording path');
       const store = createDialogStore();
       const rawWrite = vi.fn();
+      const recordProviderSwitch = bindModelSwitchRecording(
+        'agent',
+        (event) => agent.session.recordRecordingEvent(event),
+        { recordProviderSwitch: rawWrite },
+      );
       const { result, unmount } = renderHook(() =>
         useProviderDialog({
-          dialogs: createDialogOpeners(store),
+          ...runtime,
           addMessage: () => {},
-          recordingOwner: 'agent',
-          agent,
-          recordingIntegration: { recordProviderSwitch: rawWrite } as never,
+          recordProviderSwitch,
+          openProviderDialog: () =>
+            store.commands.openDialog({ kind: 'provider', payload: {} }),
+          closeProviderDialog: () => store.commands.closeDialog('provider'),
         }),
       );
       await act(async () => {

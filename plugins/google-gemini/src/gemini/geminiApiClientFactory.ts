@@ -5,6 +5,7 @@
  */
 
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createVertex } from '@ai-sdk/google-vertex';
 import type {
   LanguageModelV4CallOptions,
   LanguageModelV4Content,
@@ -58,19 +59,38 @@ function toAiSdkBaseUrl(baseUrl: string | undefined): string | undefined {
 export async function createGeminiApiClient(
   options: GeminiApiClientOptions,
 ): Promise<GeminiApiClient> {
+  if (options.vertexai && (!options.project || !options.location)) {
+    throw new Error('Vertex AI requires explicit project and location');
+  }
   const baseURL = toAiSdkBaseUrl(options.httpOptions?.baseUrl);
   const modelFor = (
     params: GenerateContentParameters,
     tools: LanguageModelV4CallOptions['tools'],
-  ) =>
-    createGoogleGenerativeAI({
-      ...(options.apiKey !== undefined ? { apiKey: options.apiKey } : {}),
+  ) => {
+    const transport = createPatternPreservingFetch(tools, options.fetch);
+    if (options.vertexai) {
+      return createVertex({
+        apiKey: '',
+        project: options.project,
+        location: options.location,
+        baseURL: options.httpOptions?.baseUrl,
+        headers: options.httpOptions?.headers,
+        googleAuthOptions: {
+          ...options.googleAuthOptions,
+          keyFilename: options.credentialsFile,
+        },
+        fetch: transport,
+      }).languageModel(params.model);
+    }
+    return createGoogleGenerativeAI({
+      apiKey: options.apiKey ?? '',
       ...(baseURL !== undefined ? { baseURL } : {}),
       ...(options.httpOptions?.headers !== undefined
         ? { headers: options.httpOptions.headers }
         : {}),
-      fetch: createPatternPreservingFetch(tools),
+      fetch: transport,
     }).languageModel(params.model);
+  };
 
   return {
     models: {

@@ -114,13 +114,6 @@ export async function initializeWorkspaceDefinitions(
   await refresh();
 }
 
-export function assertDefinitionBootstrapConfig(started: boolean): void {
-  if (started)
-    throw new Error(
-      'An initialized Config requires its original MCP runtime handoff',
-    );
-}
-
 export function composeDefinitionRoots(
   resources: McpConstructionResources,
   directories: Parameters<typeof composeWorkspaceDefinitions>[1],

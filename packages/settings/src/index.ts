@@ -6,6 +6,11 @@
  */
 
 export { SettingsService } from './settings/SettingsService.js';
+export { captureSettingsSnapshot } from './settings/settings-snapshot-input.js';
+export type {
+  SettingsStateSnapshot,
+  SessionOverrideReads,
+} from './settings/SettingsService.js';
 export type { SettingsServiceInit } from './settings/SettingsService.js';
 // SessionSettingsOverlay is intentionally NOT exported: it is an internal
 // implementation detail owned by SettingsService.

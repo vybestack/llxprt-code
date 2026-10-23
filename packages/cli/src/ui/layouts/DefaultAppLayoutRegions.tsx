@@ -93,8 +93,7 @@ function ComposerContent(props: DefaultAppLayoutProps) {
       contextFileNames={props.contextFileNames}
       hideContextSummary={props.settings.merged.ui.hideContextSummary ?? false}
       disableLoadingPhrases={
-        props.uiRuntime.app.getAccessibility().disableLoadingPhrases === true ||
-        props.uiRuntime.app.getScreenReader()
+        props.disableLoadingPhrases || props.screenReaderEnabled
       }
       onSuggestionsVisibilityChange={setSuggestionsVisible}
     />
@@ -107,11 +106,14 @@ export function DialogRegion(props: DefaultAppLayoutProps): React.ReactNode {
   return (
     <>
       <BucketAuthConfirmation
-        messageBus={props.runtimeMessageBus}
+        subscribeBucketConsent={props.subscribeBucketConsent}
+        respondToBucketConsent={props.respondToBucketConsent}
         isFocused={!dialogsVisible}
       />
       {dialogsVisible ? (
         <DialogManager
+          readIdeWorkspaceTrust={props.readIdeWorkspaceTrust}
+          subscribeIdeWorkspaceTrust={props.subscribeIdeWorkspaceTrust}
           config={props.slashCommandRuntime}
           settings={props.settings}
         />
@@ -125,7 +127,7 @@ export function FooterRegion(props: DefaultAppLayoutProps): React.ReactNode {
   const { store } = useSettingsProfileStore();
   const terminal = useTerminalStore();
   const { vimEnabled, vimMode } = useVimMode();
-  const activeHooks = useHookDisplayState(props.runtimeMessageBus);
+  const activeHooks = useHookDisplayState(props.subscribeHookPhase);
   const fields = {
     isTrustedFolder: useStoreSelector(store, (s) => s.isTrustedFolder),
     currentModel: useStoreSelector(store, (s) => s.currentModel),
@@ -153,8 +155,7 @@ export function FooterRegion(props: DefaultAppLayoutProps): React.ReactNode {
         settings={props.settings}
         hideFooter={props.settings.merged.ui.hideFooter ?? false}
         showMemoryUsage={
-          props.uiRuntime.app.getDebugMode() ||
-          (props.settings.merged.ui.showMemoryUsage ?? false)
+          props.debugMode || (props.settings.merged.ui.showMemoryUsage ?? false)
         }
         currentThemeName={themeManager.getActiveTheme().name}
         nightly={props.nightly}

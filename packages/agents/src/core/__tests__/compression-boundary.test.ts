@@ -17,19 +17,19 @@ import { createSessionPolicyFixture } from './session-policy-fixture.js';
  * through the public performCompression() / middle-out strategy interface.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
-import { ChatSession } from '../chatSession.js';
+import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
+import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { adjustForToolCallBoundary } from '../../compression/utils.js';
+import { ChatSession } from '../chatSession.js';
 
 function createToolCallAiMessage(callIds: string[]): IContent {
   return {
@@ -99,13 +99,9 @@ function buildRuntimeContext(
 
   return createAgentRuntimeContext({
     ...createSessionPolicyFixture(
+      new SettingsService(),
       createProviderRuntimeContext({
         runtimeId: 'test-runtime',
-        settingsService: new SettingsService(),
-      }).settingsService,
-      createProviderRuntimeContext({
-        runtimeId: 'test-runtime',
-        settingsService: new SettingsService(),
       }).runtimeId,
     ),
     state: runtimeState,
@@ -121,7 +117,6 @@ function buildRuntimeContext(
     tools: mockToolsView,
     providerRuntime: createProviderRuntimeContext({
       runtimeId: 'test-runtime',
-      settingsService: new SettingsService(),
     }),
   });
 }
@@ -272,6 +267,13 @@ describe('Compression Boundary Logic (Issue #982)', () => {
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -312,6 +314,13 @@ describe('Compression Boundary Logic (Issue #982)', () => {
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -380,6 +389,13 @@ describe('Compression Boundary Logic (Issue #982)', () => {
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -423,6 +439,13 @@ describe('Compression Boundary Logic (Issue #982)', () => {
 
         const chat = new ChatSession(
           runtimeContext,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
           mockContentGenerator,
           {},
           [],
@@ -463,6 +486,13 @@ describe('Compression Boundary Logic (Issue #982)', () => {
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -493,6 +523,13 @@ describe('Compression Boundary Logic (Issue #982)', () => {
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],

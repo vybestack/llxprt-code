@@ -11,20 +11,20 @@
  * ALREADY_COMPRESSED from NOOP (issue #1792).
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
-import * as compressionFactory from '../compressionStrategyFactory.js';
-import { ChatSession } from '../../core/chatSession.js';
-import { PerformCompressionResult } from '../../core/turn.js';
-import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
+import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
   createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { ChatSession } from '../../core/chatSession.js';
+import { PerformCompressionResult } from '../../core/turn.js';
+import * as compressionFactory from '../compressionStrategyFactory.js';
 
 void vi.mock('@vybestack/llxprt-code-core/utils/delay.js', () => ({
   delay: vi.fn().mockResolvedValue(undefined),
@@ -97,7 +97,19 @@ function makeChatSession(
     embedContent: vi.fn(),
   };
 
-  return new ChatSession(view, mockContentGenerator, {}, []);
+  return new ChatSession(
+    view,
+    runtimeSetup.config,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    mockContentGenerator,
+    {},
+    [],
+  );
 }
 
 describe('CompressionHandler wasRecentlyCompressed (issue #1792)', () => {
@@ -109,7 +121,6 @@ describe('CompressionHandler wasRecentlyCompressed (issue #1792)', () => {
     runtimeSetup = createChatSessionRuntime();
     providerRuntimeSnapshot = {
       ...runtimeSetup.runtime,
-      config: runtimeSetup.config,
     };
   });
 
@@ -258,7 +269,6 @@ describe('CompressionHandler performCompression result (issue #1792)', () => {
     runtimeSetup = createChatSessionRuntime();
     providerRuntimeSnapshot = {
       ...runtimeSetup.runtime,
-      config: runtimeSetup.config,
     };
   });
 

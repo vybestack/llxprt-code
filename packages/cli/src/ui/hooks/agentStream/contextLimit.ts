@@ -9,7 +9,6 @@ import {
   resolveProviderReportedLimit,
   resolveUserContextLimit,
 } from '@vybestack/llxprt-code-core';
-import type { StreamRuntime } from '../../cliUiRuntime.js';
 
 /**
  * Resolve the effective context-window token limit for the overflow-guidance
@@ -18,14 +17,13 @@ import type { StreamRuntime } from '../../cliUiRuntime.js';
  * model-name precedence (issues #2251 / #2815).
  */
 export function getTokenLimitForConfiguredContext(
-  runtime: StreamRuntime,
+  getModel: () => string,
+  readContextLimit: () => unknown,
   providerLimit: number | undefined,
 ): number {
   return resolveEffectiveContextLimit(
-    runtime.model.getModel(),
-    resolveUserContextLimit(
-      runtime.ephemeral.getEphemeralSetting('context-limit'),
-    ),
+    getModel(),
+    resolveUserContextLimit(readContextLimit()),
     resolveProviderReportedLimit(providerLimit),
   );
 }

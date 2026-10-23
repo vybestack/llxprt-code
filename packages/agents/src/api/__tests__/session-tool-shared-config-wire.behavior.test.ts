@@ -1,3 +1,5 @@
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createSessionSettingsFixture } from './helpers/session-settings-fixture.js';
 /**
@@ -17,7 +19,7 @@ import { z } from 'zod';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { MCPOAuthTokenStorage } from '@vybestack/llxprt-code-mcp';
-import { fromConfig } from '../fromConfig.js';
+
 import { toConfigParameters } from '../agentConfig.adapter.js';
 import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
 import { collect, successful } from './turn-revision-capture.fixture.js';
@@ -159,23 +161,37 @@ describe('independent session model routing and schema refresh on a shared Confi
     const { config, workspace } = await startWorkspace(directory);
     const sharedSettings = new SettingsService();
     const adopt = (model: string) =>
-      fromConfig({
-        ...createSessionSettingsFixture(config, sharedSettings),
+      fromConfig(
         config,
-        mcpRuntime: workspace,
-        sessionId: 'shared-model-schema-label',
-        activation: {
-          provider: 'openai',
-          model,
-          cliOverrides: { key: 'local-model-only', baseUrl: endpoint.url },
+        createSessionSettingsFixture(config, sharedSettings).settingsService,
+        {
+          sessionId: 'shared-model-schema-label',
+          activation: {
+            provider: 'openai',
+            model,
+            cliOverrides: { key: 'local-model-only', baseUrl: endpoint.url },
+          },
         },
-      });
+        createSessionSettingsFixture(config, sharedSettings).settingsOwner,
+        undefined,
+        undefined,
+        undefined,
+        workspace,
+      );
     const first = await adopt('schema-alpha');
     const second = await adopt('schema-beta');
     try {
-      expect(new Set([first.agentClient, second.agentClient]).size).toBe(2);
       expect(
-        new Set([first.getMessageBus(), second.getMessageBus()]).size,
+        new Set([
+          fixtureAgentResources(first).publishedClient(first),
+          fixtureAgentResources(second).publishedClient(second),
+        ]).size,
+      ).toBe(2);
+      expect(
+        new Set([
+          fixtureAgentResources(first).messageBus,
+          fixtureAgentResources(second).messageBus,
+        ]).size,
       ).toBe(2);
       successful(await collect(first.stream('First physical schema request')));
       successful(
@@ -233,26 +249,40 @@ describe('independent session model routing and schema refresh on a shared Confi
     const endpointA = await startWire();
     const endpointB = await startWire();
     const { config, workspace } = await startWorkspace(directory);
-    const first = await fromConfig({
-      ...createSessionSettingsFixture(config),
+    const adoptedSettings1 = createSessionSettingsFixture(config);
+    const first = await fromConfig(
       config,
-      mcpRuntime: workspace,
-      activation: {
-        provider: 'openai',
-        model: 'endpoint-alpha',
-        cliOverrides: { key: 'local-model-only', baseUrl: endpointA.url },
+      adoptedSettings1.settingsService,
+      {
+        activation: {
+          provider: 'openai',
+          model: 'endpoint-alpha',
+          cliOverrides: { key: 'local-model-only', baseUrl: endpointA.url },
+        },
       },
-    });
-    const second = await fromConfig({
-      ...createSessionSettingsFixture(config),
+      adoptedSettings1.settingsOwner,
+      undefined,
+      undefined,
+      undefined,
+      workspace,
+    );
+    const adoptedSettings2 = createSessionSettingsFixture(config);
+    const second = await fromConfig(
       config,
-      mcpRuntime: workspace,
-      activation: {
-        provider: 'openai',
-        model: 'endpoint-beta',
-        cliOverrides: { key: 'local-model-only', baseUrl: endpointB.url },
+      adoptedSettings2.settingsService,
+      {
+        activation: {
+          provider: 'openai',
+          model: 'endpoint-beta',
+          cliOverrides: { key: 'local-model-only', baseUrl: endpointB.url },
+        },
       },
-    });
+      adoptedSettings2.settingsOwner,
+      undefined,
+      undefined,
+      undefined,
+      workspace,
+    );
     try {
       successful(await collect(first.stream('Route first endpoint')));
       successful(await collect(second.stream('Route second endpoint')));
@@ -298,18 +328,26 @@ describe('session instruction prompts on an adopted physical workspace', () => {
           directory,
           jitEnabled,
         );
-        const adopt = () =>
-          fromConfig({
-            ...createSessionSettingsFixture(config),
+        const adopt = () => {
+          const adoptedSettings3 = createSessionSettingsFixture(config);
+          return fromConfig(
             config,
-            mcpRuntime: workspace,
-            sessionId: 'shared-memory-label',
-            activation: {
-              provider: 'openai',
-              model: 'memory-model',
-              cliOverrides: { key: 'loopback-only', baseUrl: endpoint.url },
+            adoptedSettings3.settingsService,
+            {
+              sessionId: 'shared-memory-label',
+              activation: {
+                provider: 'openai',
+                model: 'memory-model',
+                cliOverrides: { key: 'loopback-only', baseUrl: endpoint.url },
+              },
             },
-          });
+            adoptedSettings3.settingsOwner,
+            undefined,
+            undefined,
+            undefined,
+            workspace,
+          );
+        };
         const first = await adopt();
         const second = await adopt();
         try {

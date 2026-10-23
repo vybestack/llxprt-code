@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { rawBrowserCatalog } from '../../../__tests__/browser-catalog-fixture.js';
+
 /**
  * Behavioral tests for SessionBrowserDialog component.
  *
@@ -132,6 +134,11 @@ const renderWithProviders = (
     chatsDir: '/test/chats',
     projectHash: 'test-project-hash',
     currentSessionId: 'current-session-id',
+    ...rawBrowserCatalog(
+      '/test/chats',
+      'test-project-hash',
+      'current-session-id',
+    ),
     hasActiveConversation: false,
     onSelect: vi
       .fn()
@@ -498,6 +505,11 @@ describe('SessionBrowserDialog', () => {
             chatsDir="/test/chats"
             projectHash="test-project-hash"
             currentSessionId="current-session-id"
+            {...rawBrowserCatalog(
+              '/test/chats',
+              'test-project-hash',
+              'current-session-id',
+            )}
             hasActiveConversation={false}
             onSelect={vi.fn().mockResolvedValue({
               ok: true,

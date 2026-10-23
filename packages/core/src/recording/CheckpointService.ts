@@ -29,6 +29,7 @@ import {
   type CheckpointMetadataView,
   type ContinueTarget,
   type RecordingCheckpointInfo,
+  type ReplayResult,
   type SessionRecordLine,
 } from './types.js';
 
@@ -155,6 +156,111 @@ async function appendEvent(
 
 export class CheckpointService {
   constructor(private readonly mediaStore?: LocalMediaStore) {}
+
+  async listDiscoveredCheckpoints(
+    targets: readonly ContinueTarget[],
+    projectHash: string,
+  ): Promise<
+    ReadonlyArray<{
+      readonly checkpointId: string;
+      readonly name: string;
+      readonly sessionId: string;
+      readonly sequence: number;
+      readonly createdAt: string;
+    }>
+  > {
+    const checkpoints: Array<{
+      readonly checkpointId: string;
+      readonly name: string;
+      readonly sessionId: string;
+      readonly sequence: number;
+      readonly createdAt: string;
+    }> = [];
+    const replayByFilePath = new Map<string, ReplayResult>();
+    for (const target of targets) {
+      if (target.kind !== 'checkpoint') continue;
+      let replay = replayByFilePath.get(target.source.filePath);
+      if (replay === undefined) {
+        replay = await replaySession(target.source.filePath, projectHash, {
+          mediaStore: this.mediaStore,
+        });
+        replayByFilePath.set(target.source.filePath, replay);
+      }
+      const checkpoint = replay.ok
+        ? replay.checkpoints?.find(
+            (candidate) => candidate.checkpointId === target.checkpointId,
+          )
+        : undefined;
+      if (checkpoint !== undefined && !checkpoint.deleted) {
+        checkpoints.push({
+          checkpointId: checkpoint.checkpointId,
+          name: checkpoint.name,
+          sessionId: target.source.sessionId,
+          sequence: checkpoint.sequence,
+          createdAt: checkpoint.createdAt,
+        });
+      }
+    }
+    return checkpoints;
+  }
+
+  async renameCheckpointTarget(
+    target: Extract<ContinueTarget, { kind: 'checkpoint' }>,
+    recording: SessionRecordingService | null,
+    projectHash: string,
+    chatsDir: string,
+    name: string,
+    options?: { readonly overwrite?: boolean },
+  ): Promise<void> {
+    const trimmedName = name.trim();
+    if (target.checkpointName === trimmedName) return;
+    if (recording?.getSessionId() === target.source.sessionId) {
+      await this.renameCheckpoint(
+        recording,
+        projectHash,
+        target.checkpointId,
+        trimmedName,
+        options?.overwrite === true,
+      );
+      return;
+    }
+    const validatedName =
+      options?.overwrite === true
+        ? trimmedName
+        : await SessionDiscovery.validateAvailableName(
+            trimmedName,
+            chatsDir,
+            projectHash,
+          );
+    await this.renameCheckpointClosed(
+      target.source.filePath,
+      projectHash,
+      chatsDir,
+      target.source.sessionId,
+      target.checkpointId,
+      validatedName,
+      options?.overwrite === true,
+    );
+  }
+
+  async deleteCheckpointTarget(
+    target: Extract<ContinueTarget, { kind: 'checkpoint' }>,
+    recording: SessionRecordingService | null,
+    projectHash: string,
+    chatsDir: string,
+  ): Promise<void> {
+    if (recording?.getSessionId() === target.source.sessionId) {
+      await this.deleteCheckpoint(recording, projectHash, target.checkpointId);
+      return;
+    }
+    await this.deleteCheckpointClosed(
+      target.source.filePath,
+      projectHash,
+      chatsDir,
+      target.source.sessionId,
+      target.checkpointId,
+    );
+  }
 
   async listCheckpoints(
     filePath: string,

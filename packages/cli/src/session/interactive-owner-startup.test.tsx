@@ -1,3 +1,4 @@
+import { adoptFixture as fromConfig } from '../../../agents/src/api/__tests__/helpers/adoption-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -9,7 +10,7 @@ import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
+import { type Agent } from '@vybestack/llxprt-code-agents';
 import {
   Config,
   getProjectHash,
@@ -18,8 +19,8 @@ import {
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { LoadedSettings } from '../config/settings.js';
-import { setupOwnerSessionRecording } from '../cliSessionBootstrap.js';
-import { dispatchInteractiveOrNonInteractive } from './nonInteractiveSession.js';
+import { setupOwnerSessionRecording as setupOwnerSessionRecordingCore } from '../cliSessionBootstrap.js';
+import { dispatchInteractiveOrNonInteractive } from '../__tests__/session-dispatch-fixture.js';
 import {
   __setRenderForTesting,
   __resetInteractiveUIStateForTesting,
@@ -31,7 +32,6 @@ import {
 } from '../utils/cleanup.js';
 import { AppWrapper } from '../ui/App.js';
 import { iContentToHistoryItems } from '../ui/utils/iContentToHistoryItems.js';
-import { listOwnerBrowserTargets } from '../ui/utils/ownerSessionUi.js';
 
 const fixture = fileURLToPath(
   new URL(
@@ -42,6 +42,23 @@ const fixture = fileURLToPath(
 const settings = {
   merged: { ui: { hideWindowTitle: true, unicode: 'auto' } },
 } as LoadedSettings;
+
+function setupOwnerSessionRecording(
+  config: Parameters<typeof setupOwnerSessionRecordingCore>[0],
+  agent: Agent,
+  argv: Parameters<typeof setupOwnerSessionRecordingCore>[3],
+  selection: Parameters<typeof setupOwnerSessionRecordingCore>[4],
+  warnings?: Parameters<typeof setupOwnerSessionRecordingCore>[5],
+) {
+  return setupOwnerSessionRecordingCore(
+    config,
+    agent.session,
+    agent.session.listBrowserTargetsDetailed.bind(agent.session),
+    argv,
+    selection,
+    warnings,
+  );
+}
 
 describe('interactive CLI owner startup', () => {
   const roots: string[] = [];
@@ -69,7 +86,7 @@ describe('interactive CLI owner startup', () => {
     agent: Agent;
     config: Config;
     root: string;
-    runtimeSettings: { owner: SessionSettingsOwner; store: SettingsService };
+    runtimeSettings: SessionSettingsOwner;
   }> {
     const directory =
       root ?? (await mkdtemp(join(tmpdir(), 'interactive-owner-')));
@@ -91,17 +108,17 @@ describe('interactive CLI owner startup', () => {
     });
     const store = new SettingsService();
     const owner = new SessionSettingsOwner(store);
-    const runtimeSettings = { owner, store };
+    const runtimeSettings = owner;
     registerCleanup(async () => {
       await owner.dispose();
       await config.dispose();
     });
-    const agent = await fromConfig({
+    const agent = await fromConfig(
       config,
-      settingsService: store,
-      settingsOwner: owner,
-      activation: { provider: 'fake', model: 'fake-model' },
-    });
+      store,
+      { activation: { provider: 'fake', model: 'fake-model' } },
+      owner,
+    );
     agents.push(agent);
     registerCleanup(() => agent.dispose());
     return { agent, config, root: directory, runtimeSettings };
@@ -111,7 +128,7 @@ describe('interactive CLI owner startup', () => {
     config: Config,
     agent: Agent,
     history: Awaited<ReturnType<typeof setupOwnerSessionRecording>>,
-    runtimeSettings: { owner: SessionSettingsOwner; store: SettingsService },
+    runtimeSettings: SessionSettingsOwner,
   ): Promise<React.ReactElement> {
     let tree: React.ReactElement | undefined;
     __setRenderForTesting((node) => {
@@ -209,7 +226,7 @@ describe('interactive CLI owner startup', () => {
     const recording = source.agent.session.getRecording();
     const path = recording.path;
     await source.agent.session.setRecording({ enabled: false });
-    const targets = await listOwnerBrowserTargets(source.agent);
+    const targets = await source.agent.session.listBrowserTargets();
     const persisted = targets.find(
       (target) => target.kind === 'session' && target.session.filePath === path,
     );
@@ -242,7 +259,7 @@ describe('interactive CLI owner startup', () => {
     ).toBe(true);
     expect(resumed.agent.session.getRecording().path).toBe(path);
     expect(
-      (await listOwnerBrowserTargets(resumed.agent)).some(
+      (await resumed.agent.session.listBrowserTargets()).some(
         (target) =>
           target.kind === 'session' && target.session.filePath === path,
       ),

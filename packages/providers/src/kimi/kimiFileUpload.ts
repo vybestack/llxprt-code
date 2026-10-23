@@ -301,8 +301,8 @@ async function acquireLifecycleReference(
   const restored = await options.lifecycle.restore(
     persisted,
     cacheKey,
-    async (fileId) => {
-      await client.files.delete(fileId);
+    async (fileId, requestFetch) => {
+      await client.withOptions({ fetch: requestFetch }).files.delete(fileId);
     },
     {
       identity: options.identity,
@@ -383,8 +383,8 @@ async function retainUploadedFile(
       identity: options.identity,
       policy: options.policy,
       scopeId: options.scopeId,
-      deleteRemote: async (fileId) => {
-        await client.files.delete(fileId);
+      deleteRemote: async (fileId, requestFetch) => {
+        await client.withOptions({ fetch: requestFetch }).files.delete(fileId);
       },
       removeBinding: createBindingRemoval(block, options),
     })

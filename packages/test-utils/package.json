@@ -53,6 +53,11 @@
       "types": "./dist/src/core/tools.d.ts",
       "bun": "./src/core/tools.ts",
       "import": "./dist/src/core/tools.js"
+    },
+    "./windows-filesystem-denial.js": {
+      "types": "./dist/src/windows-filesystem-denial.d.ts",
+      "bun": "./src/windows-filesystem-denial.ts",
+      "import": "./dist/src/windows-filesystem-denial.js"
     }
   },
   "license": "Apache-2.0",

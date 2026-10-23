@@ -74,7 +74,7 @@ describe('AnthropicOAuthProvider fallback behavior', () => {
       releaseAuthLock: vi.fn(async () => undefined),
     } satisfies TokenStore;
 
-    provider = new AnthropicOAuthProvider(tokenStore);
+    provider = new AnthropicOAuthProvider(globalThis.fetch, tokenStore);
     deviceFlow = (
       provider as unknown as {
         deviceFlow: AnthropicDeviceFlow;

@@ -12,12 +12,24 @@ const ink = await import('../../../test-utils/real-ink.js');
 void vi.mock('ink', () => ink);
 // Provider status is unrelated to trust; keep the real footer and trust lifecycle.
 const runtimeContext = await import('../contexts/RuntimeContext.js');
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  ...runtimeContext,
-  useRuntimeApi: () => ({
-    providerStatus: () => ({ providerName: 'test' }),
-  }),
-}));
+const selectedRuntimeMock1 = (() =>
+  (() => {
+    const useSelectedTestRuntime = () => ({
+      providerStatus: () => ({ providerName: 'test' }),
+    });
+    return {
+      ...runtimeContext,
+
+      useProviderStatus: () => useSelectedTestRuntime().providerStatus,
+
+      useRuntimeApi: useSelectedTestRuntime,
+    };
+  })())();
+void vi.mock('../contexts/RuntimeContext.js', () => selectedRuntimeMock1);
+void vi.mock(
+  '../../__tests__/runtime-context-fixture.js',
+  () => selectedRuntimeMock1,
+);
 const { renderWithProviders, createMockSettings } = await import(
   '../../__tests__/render.js'
 );
@@ -38,7 +50,7 @@ const { createDialogOpeners } = await import(
   '../stores/dialog/dialogOpeners.js'
 );
 
-function mountFooter(trustedFolder = true) {
+async function mountFooter(trustedFolder = true) {
   const settings = createMockSettings({ folderTrust: false });
   const config = new Config({
     sessionId: 'trust-footer',
@@ -51,7 +63,7 @@ function mountFooter(trustedFolder = true) {
   const settingsStore = createSettingsProfileStore();
   const store = createDialogStore();
   const dialogs = createDialogOpeners(store);
-  const owner = createUiSessionOwner(config);
+  const owner = await createUiSessionOwner(config);
   const uiRuntime = buildUiRuntimeFromSource(config, owner);
   const slashCommandRuntime = buildSlashCommandRuntime(config, owner);
   const trustRuntime = {
@@ -72,7 +84,21 @@ function mountFooter(trustedFolder = true) {
     });
     return (
       <FooterRegion
-        uiRuntime={uiRuntime}
+        readIdeMode={owner.ide.getIdeMode.bind(owner.ide)}
+        readIdeDiffingEnabled={() => owner.ide.readConnection().diffingEnabled}
+        subscribeIdeDiffing={(listener) =>
+          owner.ide.subscribeConnection(() => listener())
+        }
+        resolveIdeDiff={owner.ide.resolveDiff.bind(owner.ide)}
+        readIdeWorkspaceTrust={owner.ide.readWorkspaceTrust.bind(owner.ide)}
+        subscribeIdeWorkspaceTrust={owner.ide.subscribeWorkspaceTrust.bind(
+          owner.ide,
+        )}
+        screenReaderEnabled={uiRuntime.app.getScreenReader()}
+        disableLoadingPhrases={
+          uiRuntime.app.getAccessibility().disableLoadingPhrases === true
+        }
+        debugMode={uiRuntime.app.getDebugMode()}
         slashCommandRuntime={slashCommandRuntime}
         settings={settings}
         startupWarnings={[]}
@@ -97,7 +123,7 @@ function mountFooter(trustedFolder = true) {
 
 describe('idle footer trust subscription', () => {
   it('shows initial runtime distrust and skips unchanged trust events', async () => {
-    const { view, settingsStore } = mountFooter(false);
+    const { view, settingsStore } = await mountFooter(false);
     try {
       await act(async () => {});
       expect(view.lastFrame()).toContain('(untrusted)');
@@ -112,7 +138,7 @@ describe('idle footer trust subscription', () => {
   });
 
   it('updates the real warning for trust loss and gain without rerendering the owner', async () => {
-    const { view, settingsStore, getOwnerRenders } = mountFooter();
+    const { view, settingsStore, getOwnerRenders } = await mountFooter();
     try {
       await act(async () => {});
       const renders = getOwnerRenders();

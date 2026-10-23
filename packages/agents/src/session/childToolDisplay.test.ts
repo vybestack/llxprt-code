@@ -13,7 +13,10 @@ import { ChildToolDisplay } from './childToolDisplay.js';
 import { initInteractiveScheduler } from '../core/subagentExecution.js';
 import { bindSchedulerOwner } from './assembleSchedulerOwner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { initializeTestMcpRuntime } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import {
+  WorkspaceToolCatalogOwner,
+  initializeParser,
+} from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-policy';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
@@ -24,9 +27,9 @@ describe('Child execution display subscriptions', () => {
     for (const owner of ownedPolicies.splice(0)) owner.dispose();
   });
 
-  const ownedMcp: Array<{ dispose(): Promise<void> }> = [];
+  const ownedTools: Array<{ dispose(): Promise<void> }> = [];
   afterEach(async () => {
-    for (const owner of ownedMcp.splice(0)) await owner.dispose();
+    for (const owner of ownedTools.splice(0)) await owner.dispose();
   });
 
   it('keeps engine completion and tool execution alive after its observer detaches', async () => {
@@ -40,15 +43,15 @@ describe('Child execution display subscriptions', () => {
     });
     const configPolicy = new RuntimePolicyOwner(config);
     ownedPolicies.push(configPolicy);
-    const mcp = await initializeTestMcpRuntime(
+    const catalog = new WorkspaceToolCatalogOwner(
       config,
-      undefined,
-      undefined,
-      undefined,
-      configPolicy,
+      configPolicy.session.messageBus,
+      configPolicy.trust,
     );
-    ownedMcp.push(mcp);
-    const toolRegistry = mcp.toolSelection;
+    ownedTools.push(catalog);
+    await initializeParser();
+    await catalog.initialize();
+    const toolRegistry = catalog.selection;
     configPolicy.session.confirmation.addRule({
       toolName: '*',
       decision: PolicyDecision.ALLOW,
@@ -64,7 +67,7 @@ describe('Child execution display subscriptions', () => {
       entered = resolve;
     });
     let executions = 0;
-    mcp.toolPublication.registerTool(
+    catalog.publication.registerTool(
       new MockTool({
         name: 'child_record',
         execute: async () => {

@@ -124,6 +124,13 @@ export interface IProviderConfig {
   allowBrowserEnvironment?: boolean;
 
   readConnectionPolicy?: () => ProviderConnectionPolicy;
+  googleAuthDefaults?: Readonly<{
+    GOOGLE_CLOUD_PROJECT?: string;
+    GOOGLE_CLOUD_LOCATION?: string;
+    GOOGLE_GENAI_USE_VERTEXAI?: string;
+    GOOGLE_APPLICATION_CREDENTIALS?: string;
+    GOOGLE_API_KEY?: string;
+  }>;
 }
 
 export interface ProviderConnectionPolicy {

@@ -1,3 +1,4 @@
+import { AgentBootstrapError } from './agentBootstrap.js';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
@@ -37,6 +38,7 @@ export type McpAssemblyOptions = Pick<
   | 'lspOwnership'
   | 'definitionOwner'
   | 'definitionOwnership'
+  | 'filesystemService'
   | 'filesystemOwner'
   | 'filesystemOwnership'
 >;
@@ -109,5 +111,75 @@ export async function assembleMcpRuntime(
     options.trustCleanup,
     undefined,
     settingsOwner?.readMcpSettingsBinding(),
+    options.filesystemService,
   );
+}
+
+export function runtimeOwnership(owned: boolean): 'runtime' | 'caller' {
+  return owned ? 'runtime' : 'caller';
+}
+export function selectedOwnership(
+  explicit: 'agent' | 'caller' | undefined,
+  ownedByDefault: boolean,
+): 'runtime' | 'caller' {
+  return runtimeOwnership(
+    explicit === undefined ? ownedByDefault : explicit === 'agent',
+  );
+}
+
+export function assertMcpHandoff(
+  mcp: McpRuntimeOwner | undefined,
+  ownership: 'agent' | 'caller' | undefined,
+  host: McpAssemblyOptions['mcpHost'],
+  tokens: McpAssemblyOptions['mcpTokenStorage'],
+): void {
+  if (ownership === 'caller' && mcp === undefined) {
+    throw new AgentBootstrapError(
+      'Caller-owned MCP requires an explicit runtime handoff',
+    );
+  }
+  if (mcp !== undefined && (host !== undefined || tokens !== undefined)) {
+    throw new AgentBootstrapError(
+      'MCP runtime handoff must retain its credential and browser capabilities',
+    );
+  }
+}
+
+export function assertAdoptedWorkspaceHandoff(
+  hasMcp: boolean,
+  lsp: AgentConfig['lspOwner'],
+  lspOwnership: AgentConfig['lspOwnership'],
+  filesystem: AgentConfig['filesystemOwner'],
+  filesystemOwnership: AgentConfig['filesystemOwnership'],
+  memory: AgentConfig['memoryOwner'],
+): void {
+  if (
+    hasMcp &&
+    [lsp, lspOwnership, filesystem, filesystemOwnership, memory].some(
+      (value) => value !== undefined,
+    )
+  )
+    throw new AgentBootstrapError(
+      'An existing MCP handoff already owns its LSP lifetime',
+    );
+  if (lspOwnership === 'caller' && lsp === undefined)
+    throw new AgentBootstrapError(
+      'Caller-owned LSP requires an explicit workspace root',
+    );
+}
+
+export function assertAdoptedWorkspaceRoots(
+  filesystemOwnership: 'agent' | 'caller' | undefined,
+  filesystem: AgentConfig['filesystemOwner'],
+  definitionOwnership: 'agent' | 'caller' | undefined,
+  definitions: AgentConfig['definitionOwner'],
+): void {
+  if (filesystemOwnership === 'caller' && filesystem === undefined)
+    throw new Error(
+      'Caller-owned filesystem requires an explicit workspace root',
+    );
+  if (definitionOwnership === 'caller' && definitions === undefined)
+    throw new Error(
+      'Caller-owned definitions require an explicit workspace root',
+    );
 }

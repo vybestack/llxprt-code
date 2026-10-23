@@ -124,7 +124,9 @@ describe('P26: recordCancelledToolHistory characterization', () => {
         toolResponseBlock('call-1', 'search', 'cancelled'),
       ]),
     ];
-    await recordCancelledToolHistory(toolsWithCalls, capturing.client);
+    await recordCancelledToolHistory(toolsWithCalls, (content) =>
+      capturing.client.addHistory(content),
+    );
 
     expect(capturing.addedHistory).toHaveLength(2);
     // First addHistory: tool_call blocks under 'ai'
@@ -160,7 +162,9 @@ describe('P26: recordCancelledToolHistory characterization', () => {
         toolResponseBlock('call-1', 'search', 'done'),
       ]),
     ];
-    await recordCancelledToolHistory(tools, client);
+    await recordCancelledToolHistory(tools, (content) =>
+      client.addHistory(content),
+    );
     // Both writes completed BEFORE the helper returned.
     expect(resolved).toStrictEqual(['ai', 'tool']);
   });
@@ -171,7 +175,9 @@ describe('P26: recordCancelledToolHistory characterization', () => {
         toolResponseBlock('call-1', 'search', 'cancelled'),
       ]),
     ];
-    await recordCancelledToolHistory(tools, capturing.client);
+    await recordCancelledToolHistory(tools, (content) =>
+      capturing.client.addHistory(content),
+    );
     // Only the non-tool_call (response) block is present → one addHistory call
     // under 'tool'; no 'ai' entry.
     expect(capturing.addedHistory).toHaveLength(1);
@@ -184,7 +190,9 @@ describe('P26: recordCancelledToolHistory characterization', () => {
         toolCallBlock('call-1', 'search', {}),
       ]),
     ];
-    await recordCancelledToolHistory(tools, capturing.client);
+    await recordCancelledToolHistory(tools, (content) =>
+      capturing.client.addHistory(content),
+    );
     expect(capturing.addedHistory).toHaveLength(1);
     expect(capturing.addedHistory[0].speaker).toBe('ai');
   });
@@ -200,7 +208,9 @@ describe('P26: recordCancelledToolHistory characterization', () => {
         toolResponseBlock('call-2', 'read_file', 'r2'),
       ]),
     ];
-    await recordCancelledToolHistory(tools, capturing.client);
+    await recordCancelledToolHistory(tools, (content) =>
+      capturing.client.addHistory(content),
+    );
 
     expect(capturing.addedHistory).toHaveLength(2);
     const aiEntry = capturing.addedHistory[0];
@@ -219,7 +229,9 @@ describe('P26: recordCancelledToolHistory characterization', () => {
         toolResponseBlock('call-1', 'search', 'done'),
       ]),
     ];
-    await recordCancelledToolHistory(tools, capturing.client);
+    await recordCancelledToolHistory(tools, (content) =>
+      capturing.client.addHistory(content),
+    );
 
     expect(capturing.addedHistory).toHaveLength(2);
     const toolEntry = capturing.addedHistory[1];
@@ -237,7 +249,9 @@ describe('P26: recordCancelledToolHistory characterization', () => {
         toolResponseBlock('call-xyz', 'search', 'result'),
       ]),
     ];
-    await recordCancelledToolHistory(tools, capturing.client);
+    await recordCancelledToolHistory(tools, (content) =>
+      capturing.client.addHistory(content),
+    );
 
     const aiEntry = capturing.addedHistory[0];
     const callBlock = aiEntry.blocks[0] as ToolCallBlock;
@@ -272,7 +286,9 @@ describe('P26: recordCancelledToolHistory characterization', () => {
               toolResponseBlock(c.id, c.name, 'cancelled'),
             ]),
           );
-          await recordCancelledToolHistory(tools, local.client);
+          await recordCancelledToolHistory(tools, (content) =>
+            local.client.addHistory(content),
+          );
 
           // Every tool_call block across all tools must appear in the 'ai' entry.
           const aiEntry = local.addedHistory.find((e) => e.speaker === 'ai');
@@ -319,7 +335,9 @@ describe('P26: recordCancelledToolHistory characterization', () => {
               toolResponseBlock(callId, toolName, { output: callId }),
             ]),
           ];
-          await recordCancelledToolHistory(tools, local.client);
+          await recordCancelledToolHistory(tools, (content) =>
+            local.client.addHistory(content),
+          );
 
           const aiEntry = local.addedHistory.find((e) => e.speaker === 'ai');
           const toolEntry = local.addedHistory.find(

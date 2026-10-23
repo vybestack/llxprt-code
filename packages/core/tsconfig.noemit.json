@@ -62,7 +62,6 @@
     "src/config/config.approval-mode-sync.test.ts",
     "src/config/config.b.test.ts",
     "src/config/config.b2.test.ts",
-    "src/config/config.folderTrustMcpWiring.test.ts",
     "src/config/config.ideTrustLive.test.ts",
     "src/config/config.mcp-lazy.test.ts",
     "src/config/config.scheduler.test.ts",

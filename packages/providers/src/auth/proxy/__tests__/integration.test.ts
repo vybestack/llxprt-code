@@ -1,4 +1,16 @@
-import { createProviderConfigFixture } from '../../../runtime/__tests__/provider-config-fixture.js';
+import { CredentialAuthority } from '../credential-store-factory.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import { ProviderFileLifecycle } from '../../../providerFilePolicy.js';
+import {
+  acquirePreferredProviderManager,
+  acquirePreferredOAuth,
+} from '../../../../../agents/src/api/preferred-provider-acquisition.js';
+import { releaseAdoptedFileScope } from '../../../../../agents/src/api/adoption-release.js';
+import { cleanupAfterFailure } from '../../../../../agents/src/core/subagent-cleanup.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -19,11 +31,10 @@ import {
 } from '@vybestack/llxprt-code-core';
 import {
   createProviderKeyStorage,
-  createTokenStore,
-  resetFactorySingletons,
+  HostCredentialOwner,
 } from '../credential-store-factory.js';
 import { CredentialProxyServer } from '../credential-proxy-server.js';
-import { createIsolatedRuntimeContext } from '../../../runtime/index.js';
+
 import {
   createAndStartProxy,
   stopProxy,
@@ -173,7 +184,6 @@ describe('proxy integration (phase 31)', () => {
     priorCapabilityFdEnv = process.env.LLXPRT_CAPABILITY_FD;
     delete process.env.LLXPRT_CREDENTIAL_SOCKET;
     delete process.env.LLXPRT_CAPABILITY_FD;
-    resetFactorySingletons();
   });
 
   afterEach(async () => {
@@ -193,8 +203,6 @@ describe('proxy integration (phase 31)', () => {
     } else {
       process.env.LLXPRT_CAPABILITY_FD = priorCapabilityFdEnv;
     }
-
-    resetFactorySingletons();
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
@@ -218,7 +226,9 @@ describe('proxy integration (phase 31)', () => {
       tmpDir,
       'factory-proxy.sock',
     );
-    const store = createTokenStore();
+    const store = new HostCredentialOwner(
+      process.env,
+    ).authority.createTokenStore();
     expect(store).toBeInstanceOf(ProxyTokenStore);
   });
 
@@ -226,55 +236,96 @@ describe('proxy integration (phase 31)', () => {
     // @requirement R2.2
     // @scenario Factory should detect host mode and return direct token store.
     delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-    const store = createTokenStore();
+    const store = new HostCredentialOwner(
+      process.env,
+    ).authority.createTokenStore();
     expect(store).not.toBeInstanceOf(ProxyTokenStore);
   });
 
   it('closes an owner-created proxy token store when its unused runtime is cleaned up', async () => {
     const started = await startServer();
     process.env.LLXPRT_CREDENTIAL_SOCKET = started.socketPath;
-    const { config: config, settingsService: configSettingsService } =
-      createProviderConfigFixture({
-        sessionId: 'proxy-owned-runtime',
-        targetDir: tmpDir,
-        cwd: tmpDir,
-        model: 'test-model',
-        debugMode: false,
+    const runtimeId = 'proxy-owned-runtime';
+    const config = new Config({
+      sessionId: runtimeId,
+      targetDir: tmpDir,
+      cwd: tmpDir,
+      model: 'test-model',
+      debugMode: false,
+    });
+    const release = new AcquisitionRelease();
+    let complete = false;
+    const close = () => (complete ? release.close() : release.rollback());
+    let store: TokenStore | undefined;
+    try {
+      const settings = new SettingsService();
+      const settingsOwner = new SessionSettingsOwner(settings);
+      release.acquire('settings', () => settingsOwner.dispose());
+      settingsOwner.bindTelemetry(config);
+      const policy = new RuntimePolicyOwner(config);
+      release.acquire('policy', () => policy.dispose());
+      const files = new ProviderFileLifecycle({
+        maxFiles: 100,
+        maxBytes: 512 * 1024 * 1024,
       });
-    const owner = createIsolatedRuntimeContext(
-      {
-        runtimeId: 'proxy-owned-runtime',
+      release.acquire('files', () => releaseAdoptedFileScope(files, runtimeId));
+      const authority = new CredentialAuthority(started.socketPath);
+      const manager = acquirePreferredProviderManager(
         config,
-      },
-      configSettingsService,
-    );
-    const store = owner.oauthManager.getTokenStore();
+        settings,
+        settingsOwner,
+        files,
+        runtimeId,
+        authority,
+        release,
+      );
+      const oauth = acquirePreferredOAuth(
+        undefined,
+        policy.session.messageBus,
+        config,
+        settings,
+        manager,
+        runtimeId,
+        undefined,
+        authority,
+        release,
+        undefined,
+      );
+      store = oauth.getTokenStore();
+      complete = true;
+    } catch (primary) {
+      await cleanupAfterFailure(primary, close);
+    }
     if (!(store instanceof ProxyTokenStore)) {
       throw new Error('Expected proxy token store');
     }
     try {
       await store.listProviders();
       expect(isSocketConnected(store)).toBe(true);
-      await owner.cleanup();
+      await close();
       expect(isSocketConnected(store)).toBe(false);
     } finally {
-      await owner.cleanup();
+      await close();
       await config.dispose();
       store.getClient().close();
       await started.server.stop();
     }
   });
 
-  it('returns the same token store instance across repeated factory calls', () => {
+  it('returns independent token stores across repeated authority acquisitions', () => {
     // @requirement R2.4
     // @scenario Token store factory should memoize and reuse singleton instance.
     process.env.LLXPRT_CREDENTIAL_SOCKET = path.join(
       tmpDir,
       'factory-singleton.sock',
     );
-    const first = createTokenStore();
-    const second = createTokenStore();
-    expect(first).toBe(second);
+    const first = new HostCredentialOwner(
+      process.env,
+    ).authority.createTokenStore();
+    const second = new HostCredentialOwner(
+      process.env,
+    ).authority.createTokenStore();
+    expect(first).not.toBe(second);
   });
 
   it('selects ProxyProviderKeyStorage when credential socket env var is present', () => {
@@ -284,34 +335,45 @@ describe('proxy integration (phase 31)', () => {
       tmpDir,
       'factory-keys.sock',
     );
-    const storage = createProviderKeyStorage();
+    const storage = createProviderKeyStorage(
+      new HostCredentialOwner(process.env).authority,
+    );
     expect(storage).toBeInstanceOf(ProxyProviderKeyStorage);
   });
 
   it('returns lifecycle handle with stop function when proxy is started', async () => {
     // @requirement R25.1
     // @scenario Lifecycle helper should create and return a stop-capable proxy handle.
-    const handle = await createAndStartProxy({
-      socketPath: path.join(tmpDir, 'lifecycle.sock'),
-    });
+    const handle = await createAndStartProxy(
+      {
+        socketPath: path.join(tmpDir, 'lifecycle.sock'),
+      },
+      globalThis.fetch,
+    );
     expect(typeof handle.stop).toBe('function');
   });
 
   it('supports create/stop lifecycle sequence through helper API', async () => {
     // @requirement R25.3
     // @scenario Lifecycle helper should start then stop proxy without leaking resources.
-    const handle = await createAndStartProxy({
-      socketPath: path.join(tmpDir, 'lifecycle-stop.sock'),
-    });
+    const handle = await createAndStartProxy(
+      {
+        socketPath: path.join(tmpDir, 'lifecycle-stop.sock'),
+      },
+      globalThis.fetch,
+    );
     await stopProxy();
     await expect(handle.stop()).resolves.toBeUndefined();
   });
 
   it('generates and exposes a capability token after proxy start', async () => {
     // @scenario Lifecycle should generate a per-session capability token.
-    await createAndStartProxy({
-      socketPath: path.join(tmpDir, 'capability-token.sock'),
-    });
+    await createAndStartProxy(
+      {
+        socketPath: path.join(tmpDir, 'capability-token.sock'),
+      },
+      globalThis.fetch,
+    );
     const token = getProxyCapabilityToken();
     expect(typeof token).toBe('string');
     expect(token).toMatch(/^[0-9a-f]{64}$/); // 32 bytes hex-encoded
@@ -342,10 +404,11 @@ describe('proxy integration (phase 31)', () => {
           new URL('../credential-store-factory.ts', import.meta.url),
         );
         const childScript = [
-          `const { createTokenStore, createProviderKeyStorage, resetFactorySingletons } = require(${JSON.stringify(factoryPath)});`,
-          'resetFactorySingletons();',
-          'const tokenStore = createTokenStore();',
-          'const keyStorage = createProviderKeyStorage();',
+          `const { HostCredentialOwner, createProviderKeyStorage } = require(${JSON.stringify(factoryPath)});`,
+
+          'const authority = new HostCredentialOwner(process.env).authority;',
+          'const tokenStore = authority.createTokenStore();',
+          'const keyStorage = createProviderKeyStorage(authority);',
           'Promise.all([tokenStore.getToken("openai"), keyStorage.getKey("openai")])',
           '  .then(([t, k]) => {',
           '    process.stdout.write(JSON.stringify({ token: t?.access_token, key: k, isProxy: tokenStore.constructor.name === "ProxyTokenStore" }));',
@@ -405,9 +468,12 @@ describe('proxy integration (phase 31)', () => {
 
   it('clears capability token after proxy stop', async () => {
     // @scenario Lifecycle should clear the capability token on stop.
-    await createAndStartProxy({
-      socketPath: path.join(tmpDir, 'capability-token-clear.sock'),
-    });
+    await createAndStartProxy(
+      {
+        socketPath: path.join(tmpDir, 'capability-token-clear.sock'),
+      },
+      globalThis.fetch,
+    );
     expect(getProxyCapabilityToken()).toBeDefined();
     await stopProxy();
     expect(getProxyCapabilityToken()).toBeUndefined();
@@ -421,9 +487,12 @@ describe('proxy integration (phase 31)', () => {
       const blockingFile = path.join(tmpDir, 'blocking-file');
       fs.writeFileSync(blockingFile, '');
       await expect(
-        createAndStartProxy({
-          socketPath: path.join(blockingFile, 'subdir', 'fail.sock'),
-        }),
+        createAndStartProxy(
+          {
+            socketPath: path.join(blockingFile, 'subdir', 'fail.sock'),
+          },
+          globalThis.fetch,
+        ),
       ).rejects.toThrow(/ENOTDIR|ENOENT|EACCES|EADDRINUSE|EINVAL/i);
       expect(getProxyCapabilityToken()).toBeUndefined();
     });

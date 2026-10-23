@@ -3,6 +3,20 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import {
+  createCommandRegistrationFixture,
+  createCommandRegistryFixture,
+} from '../../__tests__/command-registry-fixture.js';
+const commandRegistry = {
+  ...createCommandRegistryFixture(null),
+  ...createCommandRegistrationFixture(),
+};
+
+import {
+  createUnconfiguredCredentialRegistry,
+  createUnconfiguredHistoryReaders,
+} from '../../__tests__/unconfigured-model-command.js';
+
 import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
 
 /**
@@ -21,6 +35,7 @@ import { AppContainer } from '../AppContainer.js';
 import { initialAppState } from '../reducers/appReducer.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { createMockAgent } from '../../__tests__/mockAgent.js';
+import { appContainerTestAgentProps } from './app-bootstrap-owner-props.js';
 import {
   buildSlashCommandRuntime,
   buildUiRuntimeFromSource,
@@ -35,7 +50,6 @@ interface MockConfig {
   getSessionId: () => string;
 
   getWorkingDir: () => string;
-  getIdeClient: () => unknown;
   getIdeMode: () => boolean;
   getScreenReader: () => boolean;
   getTerminalBackground: () => string | undefined;
@@ -60,10 +74,6 @@ function createMockConfig(): MockConfig {
     getSessionId: vi.fn(() => 'test-session-id'),
 
     getWorkingDir: vi.fn(() => '/test/dir'),
-    getIdeClient: vi.fn(() => ({
-      getCurrentIde: vi.fn(),
-      disconnect: vi.fn(),
-    })),
     getIdeMode: vi.fn(() => true),
     getScreenReader: vi.fn(() => false),
     getTerminalBackground: vi.fn(() => undefined),
@@ -336,14 +346,30 @@ void vi.mock('../contexts/VimModeContext.js', () => ({
   })),
 }));
 
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  useRuntimeApi: vi.fn(() => ({
-    oauthManager: vi.fn(),
-    getActiveModelName: vi.fn(() => 'test-model'),
-    getActiveProviderMetrics: vi.fn(() => ({})),
-    getSessionTokenUsage: vi.fn(() => ({ inputTokens: 0, outputTokens: 0 })),
-  })),
-}));
+const selectedRuntimeMock1 = (() =>
+  (() => {
+    const useSelectedTestRuntime = vi.fn(() => ({
+      oauthManager: vi.fn(),
+      getActiveModelName: vi.fn(() => 'test-model'),
+      getActiveProviderMetrics: vi.fn(() => ({})),
+      getSessionTokenUsage: vi.fn(() => ({ inputTokens: 0, outputTokens: 0 })),
+    }));
+    return {
+      useGetActiveModelName: () => useSelectedTestRuntime().getActiveModelName,
+
+      useGetActiveProviderMetrics: () =>
+        useSelectedTestRuntime().getActiveProviderMetrics,
+      useGetSessionTokenUsage: () =>
+        useSelectedTestRuntime().getSessionTokenUsage,
+
+      useRuntimeApi: useSelectedTestRuntime,
+    };
+  })())();
+void vi.mock('../contexts/RuntimeContext.js', () => selectedRuntimeMock1);
+void vi.mock(
+  '../../__tests__/runtime-context-fixture.js',
+  () => selectedRuntimeMock1,
+);
 
 void vi.mock('../utils/mouse.js', () => ({
   isMouseEventsActive: vi.fn(() => false),
@@ -397,7 +423,6 @@ void vi.mock('@vybestack/llxprt-code-core', () => ({
     },
   ),
   debugLogger: { debug: vi.fn(), log: vi.fn() },
-  uiTelemetryService: { setTokenTrackingMetrics: vi.fn() },
   ideContext: {
     subscribeToIdeContext: vi.fn(() => vi.fn()),
     getIdeContext: vi.fn(() => undefined),
@@ -433,17 +458,24 @@ describe('AppContainer.render-budget', () => {
   });
 
   describe('callback stability', () => {
-    it('should maintain stable output across re-renders', () => {
+    it('should maintain stable output across re-renders', async () => {
       const props = {
+        registerCredentials: () => createUnconfiguredCredentialRegistry(),
+        ...commandRegistry,
+        historyReads: createUnconfiguredHistoryReaders(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        ...appContainerTestAgentProps(
+          await createMockAgent(mockConfig as unknown as Config),
+        ),
+        readAgentRecordingPath: () => undefined,
+        generateSubagentPrompt: async () => '',
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -472,17 +504,24 @@ describe('AppContainer.render-budget', () => {
       unmount();
     });
 
-    it('should not throw on rapid re-renders', () => {
+    it('should not throw on rapid re-renders', async () => {
       const props = {
+        registerCredentials: () => createUnconfiguredCredentialRegistry(),
+        ...commandRegistry,
+        historyReads: createUnconfiguredHistoryReaders(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        ...appContainerTestAgentProps(
+          await createMockAgent(mockConfig as unknown as Config),
+        ),
+        readAgentRecordingPath: () => undefined,
+        generateSubagentPrompt: async () => '',
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -505,17 +544,24 @@ describe('AppContainer.render-budget', () => {
   });
 
   describe('memoization', () => {
-    it('should use useMemo for computed values', () => {
+    it('should use useMemo for computed values', async () => {
       const props = {
+        registerCredentials: () => createUnconfiguredCredentialRegistry(),
+        ...commandRegistry,
+        historyReads: createUnconfiguredHistoryReaders(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        ...appContainerTestAgentProps(
+          await createMockAgent(mockConfig as unknown as Config),
+        ),
+        readAgentRecordingPath: () => undefined,
+        generateSubagentPrompt: async () => '',
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -532,17 +578,24 @@ describe('AppContainer.render-budget', () => {
       unmount();
     });
 
-    it('should use useCallback for event handlers', () => {
+    it('should use useCallback for event handlers', async () => {
       const props = {
+        registerCredentials: () => createUnconfiguredCredentialRegistry(),
+        ...commandRegistry,
+        historyReads: createUnconfiguredHistoryReaders(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        ...appContainerTestAgentProps(
+          await createMockAgent(mockConfig as unknown as Config),
+        ),
+        readAgentRecordingPath: () => undefined,
+        generateSubagentPrompt: async () => '',
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -563,15 +616,22 @@ describe('AppContainer.render-budget', () => {
   describe('render performance', () => {
     it('should mount within reasonable time', async () => {
       const props = {
+        registerCredentials: () => createUnconfiguredCredentialRegistry(),
+        ...commandRegistry,
+        historyReads: createUnconfiguredHistoryReaders(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        ...appContainerTestAgentProps(
+          await createMockAgent(mockConfig as unknown as Config),
+        ),
+        readAgentRecordingPath: () => undefined,
+        generateSubagentPrompt: async () => '',
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -590,15 +650,22 @@ describe('AppContainer.render-budget', () => {
 
     it('should handle re-renders efficiently', async () => {
       const props = {
+        registerCredentials: () => createUnconfiguredCredentialRegistry(),
+        ...commandRegistry,
+        historyReads: createUnconfiguredHistoryReaders(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        ...appContainerTestAgentProps(
+          await createMockAgent(mockConfig as unknown as Config),
+        ),
+        readAgentRecordingPath: () => undefined,
+        generateSubagentPrompt: async () => '',
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -626,17 +693,24 @@ describe('AppContainer.render-budget', () => {
   });
 
   describe('cleanup smoke test', () => {
-    it('should complete mount/unmount cycles without errors', () => {
+    it('should complete mount/unmount cycles without errors', async () => {
       const props = {
+        registerCredentials: () => createUnconfiguredCredentialRegistry(),
+        ...commandRegistry,
+        historyReads: createUnconfiguredHistoryReaders(),
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        ...appContainerTestAgentProps(
+          await createMockAgent(mockConfig as unknown as Config),
+        ),
+        readAgentRecordingPath: () => undefined,
+        generateSubagentPrompt: async () => '',
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,

@@ -114,7 +114,9 @@ void vi.mock('@vybestack/llxprt-code-core', () => {
   };
 });
 
-const { switchActiveProvider } = await import('./index.js');
+const { switchActiveProvider } = await import(
+  '../../../agents/src/api/provider-switch/provider-switch.js'
+);
 
 const mockOAuthManager = new OAuthManager(new MemoryTokenStore());
 mockOAuthManager.registerProvider(createTestProvider('claudecode'));

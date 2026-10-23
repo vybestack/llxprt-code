@@ -1,3 +1,4 @@
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 import { createTestOAuthBinding } from '@vybestack/llxprt-code-mcp/test-support/oauth.js';
 import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
 import { WorkspaceAuthorityComposition } from '../workspace-authority-composition.js';
@@ -8,7 +9,7 @@ import { WorkspaceAuthorityComposition } from '../workspace-authority-compositio
  */
 
 import { describe, expect, it } from 'bun:test';
-import { fromConfig, toConfigParameters } from '@vybestack/llxprt-code-agents';
+import { toConfigParameters } from '@vybestack/llxprt-code-agents';
 import {
   Config,
   ApprovalMode,
@@ -56,11 +57,27 @@ describe('Production workspace trust authority', () => {
       events.push(trusted);
     };
     coreEvents.on(CoreEvent.FolderTrustChanged, listener);
-    const agent = await fromConfig({
+    const adoptedSettings1 = createSessionSettingsFixture(config);
+    const agent = await fromConfig(
       config,
-      ...createSessionSettingsFixture(config),
-      trustPort: trust,
-    });
+      adoptedSettings1.settingsService,
+      {},
+      adoptedSettings1.settingsOwner,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      trust,
+    );
     let denied: Promise<void> | undefined;
     try {
       expect(agent.getApprovalMode()).toBe(ApprovalMode.AUTO_EDIT);

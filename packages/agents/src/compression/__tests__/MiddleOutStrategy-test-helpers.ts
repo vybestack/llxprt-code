@@ -162,8 +162,6 @@ export const noopLogger = {
 } as unknown as DebugLogger;
 
 export const testProviderRuntime = {
-  settingsService: new SettingsService(),
-  config: undefined,
   runtimeId: 'test-provider-runtime',
   metadata: { source: 'test' },
 };
@@ -174,7 +172,6 @@ export const testProviderRuntime = {
 
 function createStubProviderRuntime(): ProviderRuntimeContext {
   return {
-    settingsService: new SettingsService(),
     config: undefined,
     runtimeId: 'test-provider-runtime',
     metadata: { source: 'test' },
@@ -237,11 +234,22 @@ export function buildContext(
     overrides.resolveProvider ??
     (() => {
       const provider = createFakeProvider('default-provider');
+      const settingsService = new SettingsService();
       const runtime = createStubProviderRuntime();
       return {
         provider,
         runtime,
-        invocation: captureProviderInvocation(runtime, provider.name),
+        invocation: captureProviderInvocation(
+          {
+            runtimeId: runtime.runtimeId,
+            metadata: runtime.metadata,
+            globalSettings: settingsService.getAllGlobalSettings(),
+            providerSettings: settingsService.getProviderSettings(
+              provider.name,
+            ),
+          },
+          provider.name,
+        ),
       };
     });
 

@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import type { IdeClient, IdeContext } from '@vybestack/llxprt-code-core';
+import type { IdeContext } from '@vybestack/llxprt-code-core';
 import { renderHook } from '../../../../__tests__/render.js';
 import { useIdeContextBridge } from './useIdeContextBridge.js';
 
@@ -20,7 +20,7 @@ function createClient(initial: IdeContext | undefined) {
       listeners.add(listener),
     removeContextChangeListener: (listener: ContextListener) =>
       listeners.delete(listener),
-  } as unknown as IdeClient;
+  };
   return {
     client,
     listenerCount: () => listeners.size,
@@ -39,7 +39,13 @@ describe('useIdeContextBridge', () => {
     const seen: Array<IdeContext | undefined> = [];
     const { unmount } = renderHook(() =>
       useIdeContextBridge({
-        ide: { getIdeClient: () => owner.client },
+        readIdeContext: owner.client.getIdeContext,
+        subscribeIdeContext: (listener) => {
+          owner.client.addContextChangeListener(listener);
+          return () => {
+            owner.client.removeContextChangeListener(listener);
+          };
+        },
         setIdeContextState: (value) => seen.push(value),
       }),
     );
@@ -56,7 +62,8 @@ describe('useIdeContextBridge', () => {
     const seen: Array<IdeContext | undefined> = [];
     renderHook(() =>
       useIdeContextBridge({
-        ide: { getIdeClient: () => undefined },
+        readIdeContext: () => undefined,
+        subscribeIdeContext: () => () => {},
         setIdeContextState: (value) => seen.push(value),
       }),
     );

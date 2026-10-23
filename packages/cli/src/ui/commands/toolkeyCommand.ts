@@ -10,15 +10,11 @@
  * @pseudocode lines 259-316
  */
 
-import type {
-  SlashCommand,
-  CommandContext,
-  MessageActionReturn,
-} from './types.js';
+import type { SlashCommand, MessageActionReturn } from './types.js';
 import { CommandKind } from './types.js';
 import type { CommandArgumentSchema } from './schema/types.js';
 import {
-  ToolKeyStorage,
+  type ToolKeyStorage,
   isValidToolKeyName,
   getSupportedToolNames,
   getToolKeyEntry,
@@ -53,77 +49,91 @@ const toolkeySchema: CommandArgumentSchema = [
   },
 ];
 
-export const toolkeyCommand: SlashCommand = {
-  name: 'toolkey',
-  description: 'set, show, or clear API key for a built-in tool',
-  kind: CommandKind.BUILT_IN,
-  schema: toolkeySchema,
-  action: async (
-    context: CommandContext,
-    args: string,
-  ): Promise<MessageActionReturn> => {
-    // @pseudocode lines 276-278: Parse arguments
-    const tokens = args.trim().split(/\s+/, 2);
-    const toolName = tokens[0]?.trim()?.toLowerCase();
+/**
+ * The stored-key operations /toolkey needs. The host binds one storage at
+ * registration; the command never opens its own.
+ */
+export type ToolkeyCommandOperations = Pick<
+  ToolKeyStorage,
+  'getKey' | 'saveKey' | 'deleteKey'
+>;
 
-    // @pseudocode lines 280-282: No arguments — show usage
-    if (!toolName) {
-      return {
-        type: 'message',
-        messageType: 'info',
-        content: `Usage: /toolkey <tool> [<key>|none]\nSupported tools: ${getSupportedToolNames().join(', ')}`,
-      };
-    }
+export function createToolkeyCommand(
+  storage: ToolkeyCommandOperations,
+): SlashCommand {
+  return {
+    name: 'toolkey',
+    description: 'set, show, or clear API key for a built-in tool',
+    kind: CommandKind.BUILT_IN,
+    schema: toolkeySchema,
+    action: (_context, args) => runToolkey(storage, args),
+  };
+}
 
-    // @pseudocode lines 284-287: Validate tool name
-    if (!isValidToolKeyName(toolName)) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: `Unknown tool '${toolName}'. Supported tools: ${getSupportedToolNames().join(', ')}`,
-      };
-    }
+async function runToolkey(
+  storage: ToolkeyCommandOperations,
+  args: string,
+): Promise<MessageActionReturn> {
+  // @pseudocode lines 276-278: Parse arguments
+  const tokens = args.trim().split(/\s+/, 2);
+  const toolName = tokens[0]?.trim()?.toLowerCase();
 
-    // @pseudocode lines 289-291
-    const pat = tokens[1]?.trim();
-    const entry = getToolKeyEntry(toolName)!;
-    const storage = new ToolKeyStorage();
-
-    // @pseudocode lines 294-302: Show status
-    if (!pat) {
-      const existingKey = await storage.getKey(toolName);
-      if (existingKey !== null) {
-        const masked = maskKeyForDisplay(existingKey);
-        return {
-          type: 'message',
-          messageType: 'info',
-          content: `${entry.displayName} API key: ${masked}`,
-        };
-      }
-      return {
-        type: 'message',
-        messageType: 'info',
-        content: `No API key configured for '${entry.displayName}'`,
-      };
-    }
-
-    // @pseudocode lines 305-308: Clear key (case-insensitive "none")
-    if (pat.toLowerCase() === 'none') {
-      await storage.deleteKey(toolName);
-      return {
-        type: 'message',
-        messageType: 'info',
-        content: `Cleared API key for '${entry.displayName}'`,
-      };
-    }
-
-    // @pseudocode lines 310-314: Set key
-    await storage.saveKey(toolName, pat);
-    const masked = maskKeyForDisplay(pat);
+  // @pseudocode lines 280-282: No arguments — show usage
+  if (!toolName) {
     return {
       type: 'message',
       messageType: 'info',
-      content: `API key set for '${entry.displayName}': ${masked}`,
+      content: `Usage: /toolkey <tool> [<key>|none]\nSupported tools: ${getSupportedToolNames().join(', ')}`,
     };
-  },
-};
+  }
+
+  // @pseudocode lines 284-287: Validate tool name
+  if (!isValidToolKeyName(toolName)) {
+    return {
+      type: 'message',
+      messageType: 'error',
+      content: `Unknown tool '${toolName}'. Supported tools: ${getSupportedToolNames().join(', ')}`,
+    };
+  }
+
+  // @pseudocode lines 289-291
+  const pat = tokens[1]?.trim();
+  const entry = getToolKeyEntry(toolName)!;
+
+  // @pseudocode lines 294-302: Show status
+  if (!pat) {
+    const existingKey = await storage.getKey(toolName);
+    if (existingKey !== null) {
+      const masked = maskKeyForDisplay(existingKey);
+      return {
+        type: 'message',
+        messageType: 'info',
+        content: `${entry.displayName} API key: ${masked}`,
+      };
+    }
+    return {
+      type: 'message',
+      messageType: 'info',
+      content: `No API key configured for '${entry.displayName}'`,
+    };
+  }
+
+  // @pseudocode lines 305-308: Clear key (case-insensitive "none")
+  if (pat.toLowerCase() === 'none') {
+    await storage.deleteKey(toolName);
+    return {
+      type: 'message',
+      messageType: 'info',
+      content: `Cleared API key for '${entry.displayName}'`,
+    };
+  }
+
+  // @pseudocode lines 310-314: Set key
+  await storage.saveKey(toolName, pat);
+  const masked = maskKeyForDisplay(pat);
+  return {
+    type: 'message',
+    messageType: 'info',
+    content: `API key set for '${entry.displayName}': ${masked}`,
+  };
+}

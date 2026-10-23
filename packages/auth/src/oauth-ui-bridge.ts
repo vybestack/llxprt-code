@@ -87,21 +87,25 @@ class OAuthUIBridge {
     }
   }
 
-  settleDialog(id: string, error?: unknown): void {
+  /**
+   * Settle the pending dialog attempt. Returns the failure event for the
+   * caller to deliver through its own message owner; this process-wide bridge
+   * has no host callback of its own for a session's messages.
+   */
+  settleDialog(id: string, error?: unknown): OAuthUIEvent | undefined {
     const attempt = this.dialogAttempt;
-    if (attempt?.id !== id || attempt.status !== 'pending') return;
+    if (attempt?.id !== id || attempt.status !== 'pending') return undefined;
     const message = error instanceof Error ? error.message : String(error);
     this.dialogAttempt =
       error === undefined
         ? { ...attempt, status: 'succeeded' }
         : { ...attempt, status: 'failed', error: message };
     this.notifyDialog();
-    if (error !== undefined) {
-      this.emit({
-        type: 'error',
-        text: `${attempt.provider} authentication failed: ${message}`,
-      });
-    }
+    if (error === undefined) return undefined;
+    return {
+      type: 'error',
+      text: `${attempt.provider} authentication failed: ${message}`,
+    };
   }
 
   /**

@@ -1,113 +1,98 @@
-import { createProviderConfigFixture } from '../runtime/__tests__/provider-config-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
-/**
- * BEHAVIORAL coverage for the isolated-runtime OAuthManager construction
- * (issue #2616): the runtime factory must thread the runtime Config into the
- * OAuthManager it builds, so getHigherPriorityAuth consults the authOnly
- * setting through Config.getSettingsService(). A manager built without the
- * config silently skips that check and reports the stored API key even when
- * authOnly forbids it.
- *
- * The test drives the REAL isolated-runtime path (createIsolatedRuntimeContext)
- * and the REAL file-backed OAuth settings provider (seeded through
- * LLXPRT_CONFIG_HOME) — no mocks — and observes the outcome of
- * getHigherPriorityAuth on the manager the runtime built.
- */
-
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import * as fs from 'node:fs';
-import * as os from 'node:os';
-import * as path from 'node:path';
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createIsolatedRuntimeContext } from '../runtime/index.js';
-import type { IsolatedRuntimeContextHandle } from '../runtime/index.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import { ProviderFileLifecycle } from '../providerFilePolicy.js';
+import {
+  acquirePreferredProviderManager,
+  acquirePreferredOAuth,
+} from '../../../agents/src/api/preferred-provider-acquisition.js';
+import { releaseAdoptedFileScope } from '../../../agents/src/api/adoption-release.js';
+import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import { runCleanupSteps } from '../../../agents/src/core/subagent-cleanup.js';
 
 describe('isolated-runtime OAuthManager honors authOnly through the threaded config', () => {
-  let tmpConfigHome: string;
-  let previousConfigHome: string | undefined;
+  const credentials = useOwnedCredentials();
+  const retiring: Array<() => void | Promise<void>> = [];
   let previousAnthropicKey: string | undefined;
-  let handle: IsolatedRuntimeContextHandle | undefined;
-
-  const writeUserSettings = (settings: Record<string, unknown>): void => {
-    fs.writeFileSync(
-      path.join(tmpConfigHome, 'settings.json'),
-      JSON.stringify(settings),
-      'utf-8',
-    );
-  };
-
   beforeEach(() => {
-    previousConfigHome = process.env['LLXPRT_CONFIG_HOME'];
     previousAnthropicKey = process.env.ANTHROPIC_API_KEY;
-    tmpConfigHome = fs.mkdtempSync(path.join(os.tmpdir(), 'oauth-authonly-'));
-    process.env['LLXPRT_CONFIG_HOME'] = tmpConfigHome;
     delete process.env.ANTHROPIC_API_KEY;
   });
-
   afterEach(async () => {
-    await handle?.cleanup();
-    await handle?.config.dispose();
-    handle = undefined;
-    if (previousConfigHome === undefined) {
-      delete process.env['LLXPRT_CONFIG_HOME'];
-    } else {
-      process.env['LLXPRT_CONFIG_HOME'] = previousConfigHome;
+    try {
+      await runCleanupSteps(retiring.splice(0).reverse());
+    } finally {
+      if (previousAnthropicKey === undefined)
+        delete process.env.ANTHROPIC_API_KEY;
+      else process.env.ANTHROPIC_API_KEY = previousAnthropicKey;
     }
-    if (previousAnthropicKey === undefined) {
-      delete process.env.ANTHROPIC_API_KEY;
-    } else {
-      process.env.ANTHROPIC_API_KEY = previousAnthropicKey;
-    }
-    fs.rmSync(tmpConfigHome, { recursive: true, force: true });
   });
 
   it('suppresses a stored API key once authOnly is enabled (check honored, not skipped)', async () => {
-    // The user has an API key in the user-scope settings file, so the
-    // file-backed provider the runtime builds WILL report one.
-    writeUserSettings({ providerApiKeys: { anthropic: 'sk-test-key' } });
-
+    const directory = process.env.LLXPRT_CONFIG_HOME;
+    if (directory === undefined) throw new Error('Missing credential home');
+    writeFileSync(
+      join(directory, 'settings.json'),
+      JSON.stringify({ providerApiKeys: { anthropic: 'sk-test-key' } }),
+    );
     const settingsService = new SettingsService();
-
-    handle = (() => {
-      const {
-        config: capturedConfig4,
-        settingsService: capturedConfig4SettingsService,
-        settingsOwner: capturedConfig4SettingsOwner,
-      } = createProviderConfigFixture({
-        sessionId: 'oauth-authonly-isolated',
-        settingsService,
-        targetDir: tmpConfigHome,
-        cwd: tmpConfigHome,
-        model: 'auth-only-model',
-        debugMode: false,
-      });
-      return createIsolatedRuntimeContext(
-        {
-          settingsOwner: capturedConfig4SettingsOwner,
-          runtimeId: 'oauth-authonly-isolated',
-          config: capturedConfig4,
-          prepare: async () => {},
-        },
-        capturedConfig4SettingsService,
-      );
-    })();
-
-    // Sanity guard against a vacuous pass: with authOnly unset the same
-    // manager must report the stored key, proving the file-backed provider
-    // is live on this manager.
-    const beforeAuthOnly =
-      await handle.oauthManager.getHigherPriorityAuth('anthropic');
+    const config = new Config({
+      sessionId: 'oauth-authonly-isolated',
+      targetDir: directory,
+      cwd: directory,
+      model: 'auth-only-model',
+      debugMode: false,
+    });
+    retiring.push(() => config.dispose());
+    const release = new AcquisitionRelease();
+    retiring.push(() => release.close());
+    const settingsOwner = new SessionSettingsOwner(settingsService);
+    release.acquire('settings', () => settingsOwner.dispose());
+    settingsOwner.bindTelemetry(config);
+    const policy = new RuntimePolicyOwner(config);
+    release.acquire('policy', () => policy.dispose());
+    const files = new ProviderFileLifecycle({
+      maxFiles: 100,
+      maxBytes: 512 * 1024 * 1024,
+    });
+    release.acquire('files', () =>
+      releaseAdoptedFileScope(files, 'oauth-authonly-isolated'),
+    );
+    const manager = acquirePreferredProviderManager(
+      config,
+      settingsService,
+      settingsOwner,
+      files,
+      'oauth-authonly-isolated',
+      credentials().authority,
+      release,
+    );
+    const oauth = acquirePreferredOAuth(
+      undefined,
+      policy.session.messageBus,
+      config,
+      settingsService,
+      manager,
+      'oauth-authonly-isolated',
+      undefined,
+      credentials().authority,
+      release,
+      undefined,
+    );
+    const beforeAuthOnly = await oauth.getHigherPriorityAuth('anthropic');
     expect(beforeAuthOnly).toBe('API Key');
-
     settingsService.set('authOnly', true);
-
-    const afterAuthOnly =
-      await handle.oauthManager.getHigherPriorityAuth('anthropic');
+    const afterAuthOnly = await oauth.getHigherPriorityAuth('anthropic');
     expect(afterAuthOnly).toBeNull();
   });
 });

@@ -1,3 +1,5 @@
+import { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
+let metricSource: UiTelemetryService;
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -15,7 +17,6 @@ import {
   EmojiFilter,
   JsonStreamEventType,
   StreamJsonFormatter,
-  uiTelemetryService,
 } from '@vybestack/llxprt-code-core';
 import type { AgentEvent } from '@vybestack/llxprt-code-agents';
 import {
@@ -52,6 +53,7 @@ describe('processAgentStream attempt boundaries with the default emoji filter (i
   let stdoutChunks: string[];
 
   beforeEach(() => {
+    metricSource = new UiTelemetryService();
     stdoutChunks = [];
     vi.spyOn(process.stdout, 'write').mockImplementation(
       (chunk: string | Uint8Array) => {
@@ -92,7 +94,7 @@ describe('processAgentStream attempt boundaries with the default emoji filter (i
         createProfileNameWriter: () => () => {},
       },
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
   }
 

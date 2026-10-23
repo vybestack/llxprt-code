@@ -25,13 +25,13 @@ describe('codexUsageInfo', () => {
     });
 
     it('should return null for empty access token', async () => {
-      const result = await fetchCodexUsage('', 'account123');
+      const result = await fetchCodexUsage(globalThis.fetch, '', 'account123');
       expect(result).toBeNull();
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
     it('should return null for empty account ID', async () => {
-      const result = await fetchCodexUsage('token123', '');
+      const result = await fetchCodexUsage(globalThis.fetch, 'token123', '');
       expect(result).toBeNull();
       expect(fetchMock).not.toHaveBeenCalled();
     });
@@ -67,7 +67,11 @@ describe('codexUsageInfo', () => {
         json: async () => mockResponse,
       } as Response);
 
-      const result = await fetchCodexUsage('token123', 'account123');
+      const result = await fetchCodexUsage(
+        globalThis.fetch,
+        'token123',
+        'account123',
+      );
 
       expect(fetchMock).toHaveBeenCalledWith(
         'https://chatgpt.com/backend-api/wham/usage',
@@ -91,14 +95,22 @@ describe('codexUsageInfo', () => {
         statusText: 'Unauthorized',
       } as Response);
 
-      const result = await fetchCodexUsage('token123', 'account123');
+      const result = await fetchCodexUsage(
+        globalThis.fetch,
+        'token123',
+        'account123',
+      );
       expect(result).toBeNull();
     });
 
     it('should handle network errors', async () => {
       fetchMock.mockRejectedValueOnce(new Error('Network error'));
 
-      const result = await fetchCodexUsage('token123', 'account123');
+      const result = await fetchCodexUsage(
+        globalThis.fetch,
+        'token123',
+        'account123',
+      );
       expect(result).toBeNull();
     });
 
@@ -118,7 +130,11 @@ describe('codexUsageInfo', () => {
         json: async () => mockResponse,
       } as Response);
 
-      const result = await fetchCodexUsage('token123', 'account123');
+      const result = await fetchCodexUsage(
+        globalThis.fetch,
+        'token123',
+        'account123',
+      );
       expect(result).toStrictEqual(mockResponse);
     });
 
@@ -144,7 +160,11 @@ describe('codexUsageInfo', () => {
         json: async () => mockResponse,
       } as Response);
 
-      const result = await fetchCodexUsage('token123', 'account123');
+      const result = await fetchCodexUsage(
+        globalThis.fetch,
+        'token123',
+        'account123',
+      );
       expect(result).toStrictEqual(mockResponse);
     });
 
@@ -164,7 +184,11 @@ describe('codexUsageInfo', () => {
         json: async () => mockResponse,
       } as Response);
 
-      const result = await fetchCodexUsage('token123', 'account123');
+      const result = await fetchCodexUsage(
+        globalThis.fetch,
+        'token123',
+        'account123',
+      );
       expect(result).toStrictEqual(mockResponse);
     });
 
@@ -190,7 +214,11 @@ describe('codexUsageInfo', () => {
         json: async () => mockResponse,
       } as Response);
 
-      const result = await fetchCodexUsage('token123', 'account123');
+      const result = await fetchCodexUsage(
+        globalThis.fetch,
+        'token123',
+        'account123',
+      );
       expect(result).toStrictEqual(mockResponse);
     });
 
@@ -220,7 +248,11 @@ describe('codexUsageInfo', () => {
         json: async () => mockResponse,
       } as Response);
 
-      const result = await fetchCodexUsage('token123', 'account123');
+      const result = await fetchCodexUsage(
+        globalThis.fetch,
+        'token123',
+        'account123',
+      );
       expect(result).toStrictEqual(mockResponse);
       expect(result?.plan_type).toBe('premium_plus');
     });
@@ -251,7 +283,11 @@ describe('codexUsageInfo', () => {
         json: async () => mockResponse,
       } as Response);
 
-      const result = await fetchCodexUsage('token123', 'account123');
+      const result = await fetchCodexUsage(
+        globalThis.fetch,
+        'token123',
+        'account123',
+      );
 
       expect(result).toStrictEqual(mockResponse);
       expect(result?.rate_limit?.primary_window?.used_percent).toBe(123);
@@ -289,6 +325,7 @@ describe('codexUsageInfo', () => {
       } as Response);
 
       const result = await fetchCodexUsage(
+        globalThis.fetch,
         'token123',
         'account123',
         'https://chatgpt.com/backend-api/codex',
@@ -321,7 +358,7 @@ describe('codexUsageInfo', () => {
         json: async () => mockResponse,
       } as Response);
 
-      await fetchCodexUsage('token123', 'account123');
+      await fetchCodexUsage(globalThis.fetch, 'token123', 'account123');
 
       const secondArg = fetchMock.mock.calls[0]?.[1] as {
         signal?: unknown;
@@ -364,6 +401,7 @@ describe('codexUsageInfo', () => {
         } as Response);
 
       const result = await fetchCodexUsage(
+        globalThis.fetch,
         'token123',
         'account123',
         'https://chatgpt.com/backend-api/codex',
@@ -425,6 +463,7 @@ describe('codexUsageInfo', () => {
       } as Response);
 
       const result = await fetchCodexUsage(
+        globalThis.fetch,
         'token123',
         'account123',
         'https://chatgpt.com/backend-api/codex',

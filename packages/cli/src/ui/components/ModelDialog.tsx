@@ -3,6 +3,12 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import {
+  type ListAvailableModelsOperation,
+  type ListProvidersOperation,
+  useListAvailableModels,
+  useListProviders,
+} from '../contexts/RuntimeContext.js';
 
 import type React from 'react';
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
@@ -10,7 +16,7 @@ import { Box, Text } from 'ink';
 import { SemanticColors } from '../colors.js';
 import { useResponsive } from '../hooks/useResponsive.js';
 import { useKeypress } from '../hooks/useKeypress.js';
-import { useRuntimeApi } from '../contexts/RuntimeContext.js';
+
 import type { HydratedModel } from '@vybestack/llxprt-code-core';
 import { firstNonEmptyString } from '../../utils/coalesce.js';
 import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
@@ -66,16 +72,17 @@ function truncateModelId(id: string, maxLen: number): string {
 }
 
 function useModelsData(
-  runtime: ReturnType<typeof useRuntimeApi>,
+  runtimeListAvailableModels: ListAvailableModelsOperation,
+  runtimeListProviders: ListProvidersOperation,
   providerFilter: string | null,
 ) {
   const supportedProviders = useMemo(() => {
     try {
-      return runtime.listProviders();
+      return runtimeListProviders();
     } catch {
       return [];
     }
-  }, [runtime]);
+  }, [runtimeListProviders]);
 
   const fetchedProvidersRef = useRef<Set<string>>(new Set());
   const [allModels, setAllModels] = useState<HydratedModel[]>([]);
@@ -99,7 +106,7 @@ function useModelsData(
 
       try {
         const results = await Promise.allSettled(
-          newProviders.map((pn) => runtime.listAvailableModels(pn)),
+          newProviders.map((pn) => runtimeListAvailableModels(pn)),
         );
         const newModels: HydratedModel[] = [];
         for (const result of results) {
@@ -128,7 +135,12 @@ function useModelsData(
     return () => {
       cancelled = true;
     };
-  }, [runtime, supportedProviders, providerFilter]);
+  }, [
+    runtimeListAvailableModels,
+    runtimeListProviders,
+    supportedProviders,
+    providerFilter,
+  ]);
 
   return { allModels, isLoading };
 }
@@ -631,11 +643,16 @@ function useDialogState(
 }
 
 function useDerivedModelsData(
-  runtime: ReturnType<typeof useRuntimeApi>,
+  runtimeListAvailableModels: ListAvailableModelsOperation,
+  runtimeListProviders: ListProvidersOperation,
   state: ModelsDialogState,
   includeDeprecated: boolean,
 ) {
-  const { allModels, isLoading } = useModelsData(runtime, state.providerFilter);
+  const { allModels, isLoading } = useModelsData(
+    runtimeListAvailableModels,
+    runtimeListProviders,
+    state.providerFilter,
+  );
   const filteredModels = useFilteredModels(
     allModels,
     state.providerFilter,
@@ -764,7 +781,8 @@ export const ModelsDialog: React.FC<ModelsDialogProps> = ({
   showAllProviders = false,
 }) => {
   const { isNarrow, width } = useResponsive();
-  const runtime = useRuntimeApi();
+  const runtimeListAvailableModels = useListAvailableModels();
+  const runtimeListProviders = useListProviders();
 
   const computedInitialFilter = useMemo(() => {
     if (showAllProviders) return null;
@@ -779,7 +797,8 @@ export const ModelsDialog: React.FC<ModelsDialogProps> = ({
   );
 
   const { filteredModels, baselineCount, isLoading } = useDerivedModelsData(
-    runtime,
+    runtimeListAvailableModels,
+    runtimeListProviders,
     state,
     includeDeprecated,
   );

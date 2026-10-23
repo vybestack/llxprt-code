@@ -1,3 +1,5 @@
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
+import { captureAgentCreation as createAgent } from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -8,7 +10,7 @@ import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { createAgent, type Agent } from '@vybestack/llxprt-code-agents';
+import { type Agent } from '@vybestack/llxprt-code-agents';
 import {
   ApprovalMode,
   PolicyDecision,
@@ -98,12 +100,13 @@ describe('Policy ownership through public tool dispatch', () => {
     try {
       agent = await fixture(directory, 'blocked');
       let asks = 0;
-      agent
-        .getMessageBus()
-        .subscribe(MessageBusType.TOOL_CONFIRMATION_REQUEST, () => {
+      fixtureAgentResources(agent).messageBus.subscribe(
+        MessageBusType.TOOL_CONFIRMATION_REQUEST,
+        () => {
           asks++;
-        });
-      agent.getMessageBus().publish({
+        },
+      );
+      fixtureAgentResources(agent).messageBus.publish({
         type: MessageBusType.UPDATE_POLICY,
         toolName: 'write_file',
       });
@@ -129,19 +132,20 @@ describe('Policy ownership through public tool dispatch', () => {
       agents.push(sibling);
       let asks = 0;
       let outcome = ConfirmationOutcome.Cancel;
-      first
-        .getMessageBus()
-        .subscribe<ToolConfirmationRequest>(
-          MessageBusType.TOOL_CONFIRMATION_REQUEST,
-          (request) => {
-            asks++;
-            queueMicrotask(() =>
-              first
-                .getMessageBus()
-                .respondToConfirmation(request.correlationId, outcome),
-            );
-          },
-        );
+      fixtureAgentResources(
+        first,
+      ).messageBus.subscribe<ToolConfirmationRequest>(
+        MessageBusType.TOOL_CONFIRMATION_REQUEST,
+        (request) => {
+          asks++;
+          queueMicrotask(() =>
+            fixtureAgentResources(first).messageBus.respondToConfirmation(
+              request.correlationId,
+              outcome,
+            ),
+          );
+        },
+      );
       await turn(first);
       expect(existsSync(join(directory, 'first-0.txt'))).toBe(false);
       first.setApprovalMode(ApprovalMode.AUTO_EDIT);
@@ -157,20 +161,18 @@ describe('Policy ownership through public tool dispatch', () => {
         'written 3',
       );
       expect(asks).toBe(2);
-      sibling
-        .getMessageBus()
-        .subscribe<ToolConfirmationRequest>(
-          MessageBusType.TOOL_CONFIRMATION_REQUEST,
-          (request) =>
-            queueMicrotask(() =>
-              sibling
-                .getMessageBus()
-                .respondToConfirmation(
-                  request.correlationId,
-                  ConfirmationOutcome.Cancel,
-                ),
+      fixtureAgentResources(
+        sibling,
+      ).messageBus.subscribe<ToolConfirmationRequest>(
+        MessageBusType.TOOL_CONFIRMATION_REQUEST,
+        (request) =>
+          queueMicrotask(() =>
+            fixtureAgentResources(sibling).messageBus.respondToConfirmation(
+              request.correlationId,
+              ConfirmationOutcome.Cancel,
             ),
-        );
+          ),
+      );
       await turn(sibling);
       expect(existsSync(join(directory, 'sibling-0.txt'))).toBe(false);
       await first.dispose();

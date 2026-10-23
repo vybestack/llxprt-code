@@ -6,7 +6,7 @@
 
 import type { LiveOutputUpdate } from '@vybestack/llxprt-code-tools';
 import { createStreamNormalizer } from '@vybestack/llxprt-code-tools/utils/textDelta.js';
-import type { SubAgentScope } from '../core/subagent.js';
+import type { ChildTaskRun } from '../core/subagentOrchestrator.js';
 import type { startTaskHeartbeat, TaskHeartbeat } from './taskHeartbeat.js';
 
 /**
@@ -21,7 +21,7 @@ export interface TaskStreamingHandle {
 
 /** Installs an output-reset relay while preserving and later restoring its owner. */
 export function installTaskOutputResetRelay(
-  scope: SubAgentScope,
+  scope: ChildTaskRun,
   onReset: () => void,
 ): () => void {
   const existingResetHandler = scope.onOutputReset;
@@ -76,7 +76,7 @@ function escapeXmlAttributeValue(value: string): string {
 export function setupTaskStreaming(
   subagentName: string,
   agentId: string,
-  scope: SubAgentScope,
+  scope: ChildTaskRun,
   updateOutput: ((update: LiveOutputUpdate) => void) | undefined,
   startHeartbeat: typeof startTaskHeartbeat,
 ): TaskStreamingHandle {

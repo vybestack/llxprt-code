@@ -620,13 +620,13 @@ describe('affected-test-shards selector — data graph integrity', () => {
     expect(coreDeps).not.toContain('lsp');
   });
 
-  it('the graph classifies providers settings and telemetry as production', async () => {
+  it('the graph classifies providers settings as production and telemetry as test-only', async () => {
     const { loadData } = await import('../affected-test-shards.ts');
     const data = loadData(DATA_PATH);
     expect(data.importEdges.providers).toContain('settings');
     expect(data.testOnlyEdges.providers).not.toContain('settings');
-    expect(data.testOnlyEdges.providers).not.toContain('telemetry');
-    expect(data.importEdges.providers).toContain('telemetry');
+    expect(data.testOnlyEdges.providers).toContain('telemetry');
+    expect(data.importEdges.providers).not.toContain('telemetry');
   });
 
   it('validates production/test-only classification and selection controls', async () => {

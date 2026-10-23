@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { validateSessionMediaPackage } from '@vybestack/llxprt-code-core';
-import type { CommandContext, SlashCommandActionReturn } from './types.js';
+import type { SlashCommandActionReturn } from './types.js';
+import type { ContinueCommandOperations } from './continueCommand.js';
 
 type PackageAction =
   | { readonly kind: 'import'; readonly packageDirectory: string }
@@ -50,64 +50,48 @@ function errorAction(error: unknown): SlashCommandActionReturn {
   };
 }
 
-async function importPackage(
-  ctx: CommandContext,
-  action: Extract<PackageAction, { kind: 'import' }>,
-  requiresConfirmation: boolean,
-): Promise<SlashCommandActionReturn> {
-  const config = ctx.services.config;
-  if (config === null) throw new Error('Session configuration is unavailable');
-  if (requiresConfirmation && !config.isInteractive()) {
-    throw new Error(
-      'Cannot replace active conversation in non-interactive mode.',
-    );
+function invalidPackageSyntax(
+  args: string,
+): SlashCommandActionReturn | undefined {
+  if (args === 'import' || args.startsWith('import ')) {
+    return errorAction('Usage: /continue import <package-directory>');
   }
-  const sessionPackage = await validateSessionMediaPackage(
-    action.packageDirectory,
-  );
-  return {
-    type: 'perform_resume',
-    sessionPackage,
-    ...(requiresConfirmation ? { requiresConfirmation: true } : {}),
-  };
+  if (args === 'export' || args.startsWith('export ')) {
+    return errorAction('Usage: /continue export <session> <destination>');
+  }
+  return undefined;
 }
 
-async function exportPackage(
-  ctx: CommandContext,
-  action: Extract<PackageAction, { kind: 'export' }>,
-): Promise<SlashCommandActionReturn> {
-  if (ctx.services.config === null)
-    throw new Error('Session configuration is unavailable');
-  const agent = ctx.services.agent;
-  if (agent === null) throw new Error('Session agent is unavailable');
-  await agent.session.exportSession(action.sessionRef, action.destination);
-  return {
-    type: 'message',
-    messageType: 'info',
-    content: `Exported session package to ${action.destination}`,
-  };
-}
-
-export async function handleContinuePackageAction(
-  ctx: CommandContext,
+export async function handleContinuePackageActionForOwner(
+  operations: ContinueCommandOperations,
   args: string,
   requiresConfirmation: boolean,
 ): Promise<SlashCommandActionReturn | undefined> {
   const action = parsePackageAction(args);
-  if (action === undefined) {
-    if (args === 'import' || args.startsWith('import ')) {
-      return errorAction('Usage: /continue import <package-directory>');
-    }
-    if (args === 'export' || args.startsWith('export ')) {
-      return errorAction('Usage: /continue export <session> <destination>');
-    }
-    return undefined;
-  }
+  if (action === undefined) return invalidPackageSyntax(args);
   try {
-    return action.kind === 'import'
-      ? await importPackage(ctx, action, requiresConfirmation)
-      : await exportPackage(ctx, action);
-  } catch (error) {
+    if (action.kind === 'import') {
+      if (requiresConfirmation && !operations.isInteractive()) {
+        throw new Error(
+          'Cannot replace active conversation in non-interactive mode.',
+        );
+      }
+      const sessionPackage = await operations.validateSessionPackage(
+        action.packageDirectory,
+      );
+      return {
+        type: 'perform_resume',
+        sessionPackage,
+        ...(requiresConfirmation ? { requiresConfirmation: true } : {}),
+      };
+    }
+    await operations.exportSession(action.sessionRef, action.destination);
+    return {
+      type: 'message',
+      messageType: 'info',
+      content: `Exported session package to ${action.destination}`,
+    };
+  } catch (error: unknown) {
     return errorAction(error);
   }
 }

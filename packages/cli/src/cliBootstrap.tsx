@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Agent } from '@vybestack/llxprt-code-agents';
 import { parseArguments } from './config/cliArgParser.js';
 import { parseBootstrapArgs } from './config/profileBootstrap.js';
 import { coerceDebugFlag } from './config/yargsOptions.js';
@@ -138,10 +137,14 @@ export async function maybeRelaunchForMemory(
 }
 
 /** Register per-tool dynamic settings once Config is fully initialized. */
-export function registerDynamicToolSettings(tools: Agent['tools']): void {
+export function registerDynamicToolSettings(
+  describeToolConfiguration: NonNullable<
+    Parameters<typeof generateDynamicToolSettings>[0]
+  >['describeToolConfiguration'],
+): void {
   try {
     const dynamicToolSettings = generateDynamicToolSettings({
-      describeToolConfiguration: () => tools.describeConfiguration(),
+      describeToolConfiguration,
     });
     const fullDynamicSettings: Record<string, SettingDefinition> = {};
     for (const [toolName, definition] of Object.entries(dynamicToolSettings)) {

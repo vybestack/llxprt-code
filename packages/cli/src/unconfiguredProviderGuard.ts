@@ -1,5 +1,4 @@
 import {
-  type RuntimeProviderManager,
   type Config,
   ExitCodes,
   OutputFormat,
@@ -24,13 +23,13 @@ export const UNCONFIGURED_PROVIDER_MESSAGE =
 
 /**
  * Pure read: returns true when a provider is actively configured on the
- * provider manager (the single source of truth for active-provider state).
+ * owner whose bound predicate is supplied by the caller.
  * Does NOT call process.exit, mutate state, or consult bare API-key env vars.
  */
 export function isProviderConfigured(
-  manager: Pick<RuntimeProviderManager, 'hasActiveProvider'> | undefined,
+  hasActiveProvider: (() => boolean) | undefined,
 ): boolean {
-  return manager?.hasActiveProvider() ?? false;
+  return hasActiveProvider?.() ?? false;
 }
 
 /**
@@ -75,7 +74,7 @@ export function reportUnconfiguredProviderError(
  * Gate the non-interactive path when no provider is configured.
  *
  * When `config.isInteractive()` is false (non-interactive / piped mode) and
- * the provider manager has no active provider, this reports the actionable
+ * the bound predicate reports no active provider, this reports the actionable
  * shared {@link UNCONFIGURED_PROVIDER_MESSAGE}, runs cleanup, and exits with
  * {@link ExitCodes.FATAL_CONFIG_ERROR} (52).
  *
@@ -90,9 +89,9 @@ export function reportUnconfiguredProviderError(
 export async function guardUnconfiguredProvider(
   config: Pick<Config, 'getOutputFormat' | 'isInteractive'>,
   runCleanup: () => Promise<void>,
-  manager: Pick<RuntimeProviderManager, 'hasActiveProvider'> | undefined,
+  hasActiveProvider: (() => boolean) | undefined,
 ): Promise<void> {
-  if (isProviderConfigured(manager)) {
+  if (isProviderConfigured(hasActiveProvider)) {
     return;
   }
   if (typeof config.isInteractive === 'function' && config.isInteractive()) {

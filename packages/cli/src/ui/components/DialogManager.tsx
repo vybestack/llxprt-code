@@ -3,25 +3,18 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { CommandContext } from '../commands/types.js';
+import {
+  type GetActiveProviderNameOperation,
+  useGetActiveProviderName,
+  useSetProvider,
+  useSetActiveModel,
+  useProviderStatus,
+} from '../contexts/RuntimeContext.js';
 
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { Box } from 'ink';
 import { useCallback, useMemo } from 'react';
-import { useRuntimeApi } from '../contexts/RuntimeContext.js';
-import type { ContinueTarget } from '@vybestack/llxprt-code-core';
-import type { Agent } from '@vybestack/llxprt-code-agents';
-import { getProjectHash } from '@vybestack/llxprt-code-core';
-import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
-import { join } from 'node:path';
-import {
-  performResume,
-  type ResumeContext,
-} from '../../services/performResume.js';
-import {
-  iContentToHistoryItems,
-  resolveEmojiFilterMode,
-} from '../utils/iContentToHistoryItems.js';
+
 // import { LoopDetectionConfirmation } from './LoopDetectionConfirmation.js'; // NOTE: Not yet ported from upstream
 import { SettingsDialog } from './SettingsDialog.js';
 import { PrivacyNotice } from '../privacy/PrivacyNotice.js';
@@ -67,15 +60,17 @@ import {
 } from '../stores/dialog/dialogStore.js';
 import type { LoadedSettings, SettingScope } from '../../config/settings.js';
 import { type UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
-import { resumeOwnerSession } from '../utils/ownerSessionUi.js';
 // import { IdeTrustChangeDialog } from './IdeTrustChangeDialog.js'; // NOTE: Not yet ported from upstream
 
 interface DialogManagerProps {
+  readIdeWorkspaceTrust: () => boolean | undefined;
+  subscribeIdeWorkspaceTrust: (
+    listener: (trusted: boolean | undefined) => void,
+  ) => () => void;
+
   config: CliUiRuntime;
   settings: LoadedSettings;
 }
-
-const dialogManagerLogger = new DebugLogger('llxprt:ui:dialogmanager');
 
 function useDialogData(): DialogData {
   const { store } = useSettingsProfileStore();
@@ -148,139 +143,6 @@ function useDialogData(): DialogData {
   };
 }
 
-/**
- * Handler for SessionBrowserDialog selection - performs real session resume.
- * @plan PLAN-20260214-SESSIONBROWSER.P23
- * @requirement REQ-PR-001, REQ-PR-002
- */
-async function selectOwnerBrowserTarget(
-  agent: Agent,
-  target: ContinueTarget,
-  config: CliUiRuntime,
-  loadHistory: UseHistoryManagerReturn['loadHistory'],
-  addItem: UseHistoryManagerReturn['addItem'],
-  closeDialog: (kind: ListDialogKind) => void,
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  try {
-    const ref =
-      target.kind === 'session'
-        ? target.session.sessionId
-        : target.checkpointId;
-    const replay = await resumeOwnerSession(
-      agent,
-      ref,
-      resolveEmojiFilterMode(config),
-    );
-    loadHistory([...replay.uiHistory]);
-    // After the restore: loading history would erase warnings added before it.
-    for (const warning of replay.warnings) {
-      addItem({ type: 'info', text: `Warning: ${warning}` });
-    }
-    closeDialog('sessionBrowser');
-    return { ok: true };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    addItem({ type: 'error', text: message });
-    return { ok: false, error: message };
-  }
-}
-
-function browserResumeContext(
-  config: CliUiRuntime,
-  agent: NonNullable<CommandContext['services']['agent']>,
-  recordingCallbacks: NonNullable<ResumeContext['recordingCallbacks']>,
-): ResumeContext {
-  return {
-    chatsDir: join(config.getProjectTempDir(), 'chats'),
-    projectHash: getProjectHash(config.getProjectRoot()),
-    currentSessionId: config.getSessionId(),
-    currentProvider: config.getProvider() ?? 'unknown',
-    currentModel: config.getModel(),
-    workspaceDirs: [...config.directories()],
-    recordingCallbacks,
-    historyService: agent.agentClient.getHistoryService(),
-    adoptSessionId: (sessionId) => config.adoptSessionId(sessionId),
-    logger: dialogManagerLogger,
-  };
-}
-
-export function useSessionBrowserHandler(
-  config: CliUiRuntime,
-  commandContext: {
-    ui: {
-      clear: () => void;
-      addItem: UseHistoryManagerReturn['addItem'];
-      pendingItem: unknown;
-      loadHistory: UseHistoryManagerReturn['loadHistory'];
-    };
-    recordingOwner?: 'agent';
-    services: { agent: Agent | null };
-    recordingSwapCallbacks?: unknown;
-  },
-  addItem: UseHistoryManagerReturn['addItem'],
-  closeDialog: (kind: ListDialogKind) => void,
-) {
-  return useCallback(
-    async (
-      target: ContinueTarget,
-    ): Promise<{ ok: true } | { ok: false; error: string }> => {
-      if (commandContext.recordingOwner === 'agent') {
-        const agent = commandContext.services.agent;
-        if (agent === null) throw new Error('Session agent is unavailable');
-        return selectOwnerBrowserTarget(
-          agent,
-          target,
-          config,
-          commandContext.ui.loadHistory,
-          addItem,
-          closeDialog,
-        );
-      }
-      const recordingSwapCallbacks = commandContext.recordingSwapCallbacks;
-      if (recordingSwapCallbacks == null) {
-        dialogManagerLogger.warn(
-          'Cannot resume session: recording infrastructure not available.',
-        );
-        return {
-          ok: false,
-          error: 'Recording infrastructure not available.',
-        };
-      }
-      const resumeContext = browserResumeContext(
-        config,
-        requireBrowserAgent(commandContext.services.agent),
-        recordingSwapCallbacks as NonNullable<
-          ResumeContext['recordingCallbacks']
-        >,
-      );
-      const ref =
-        target.kind === 'session'
-          ? target.session.sessionId
-          : target.checkpointId;
-      const resumeResult = await performResume(ref, resumeContext);
-      if (!resumeResult.ok) {
-        addItem({ type: 'error', text: resumeResult.error });
-        return resumeResult;
-      }
-      const uiHistory = iContentToHistoryItems(
-        resumeResult.history,
-        resolveEmojiFilterMode(config),
-      );
-      commandContext.ui.clear();
-      uiHistory.forEach((item, index) => {
-        commandContext.ui.addItem(item, index);
-      });
-      // After the restore: clearing history would erase warnings added before it.
-      for (const warning of resumeResult.warnings) {
-        addItem({ type: 'info', text: `Warning: ${warning}` });
-      }
-      closeDialog('sessionBrowser');
-      return resumeResult;
-    },
-    [config, commandContext, addItem, closeDialog],
-  );
-}
-
 /** Terminal-plane values via narrow primitive selectors (hook-legal site). */
 function useTerminalDialogValues() {
   const { store } = useTerminalStore();
@@ -295,7 +157,7 @@ function useDialogManagerState(
   addItem: UseHistoryManagerReturn['addItem'],
   config: CliUiRuntime,
   uiActions: AppCommands,
-  runtime: ReturnType<typeof useRuntimeApi>,
+  runtimeGetActiveProviderName: GetActiveProviderNameOperation,
 ) {
   const { commandContext } = useAppCommandData();
   const staticExtraHeight = 0;
@@ -312,11 +174,11 @@ function useDialogManagerState(
 
   const currentProvider = useMemo(() => {
     try {
-      return runtime.getActiveProviderName() || null;
+      return runtimeGetActiveProviderName() || null;
     } catch {
       return null;
     }
-  }, [runtime]);
+  }, [runtimeGetActiveProviderName]);
 
   const handleAuthSelect = useCallback(
     (method: string | undefined, scope: SettingScope) => {
@@ -340,19 +202,18 @@ function useDialogManagerState(
   );
 
   const handleModelsDialogSelect = useModelDialogHandler(
-    runtime,
+    {
+      setProvider: useSetProvider(),
+      setActiveModel: useSetActiveModel(),
+      providerStatus: useProviderStatus(),
+    },
     addItem,
     dialogStore,
     currentProvider,
-    commandContext,
+    uiActions.recordModelSwitch,
   );
 
-  const handleSessionBrowserSelect = useSessionBrowserHandler(
-    config,
-    commandContext,
-    addItem,
-    dialogStore.commands.closeDialog,
-  );
+  const handleSessionBrowserSelect = uiActions.resumeBrowserTarget;
 
   return {
     terminalWidth,
@@ -421,6 +282,8 @@ function renderPayloadStoreDialog(
     case 'permissions':
       return (
         <PermissionsModifyTrustDialog
+          readIdeWorkspaceTrust={ctx.readIdeWorkspaceTrust}
+          subscribeIdeWorkspaceTrust={ctx.subscribeIdeWorkspaceTrust}
           onExit={() => close('permissions')}
           addItem={addItem}
           config={config}
@@ -436,6 +299,12 @@ function renderPayloadStoreDialog(
     case 'subagent':
       return (
         <SubagentManagerDialog
+          listSubagents={ctx.uiActions.listSubagentDefinitions}
+          loadSubagent={ctx.uiActions.loadSubagentDefinition}
+          saveSubagent={ctx.uiActions.saveSubagentDefinition}
+          deleteSubagent={ctx.uiActions.deleteSubagentDefinition}
+          listProfiles={ctx.uiActions.listSubagentProfiles}
+          generatePrompt={ctx.uiActions.generateSubagentPrompt}
           onClose={() => close('subagent')}
           initialView={active.payload.initialView ?? SubagentView.MENU}
           initialSubagentName={active.payload.initialName}
@@ -543,6 +412,8 @@ function renderUtilityStoreDialog(
         state.commandContext,
         state.handleSessionBrowserSelect,
         () => close('sessionBrowser'),
+        ctx.uiActions.readBrowserCatalog,
+        ctx.uiActions.deleteBrowserTarget,
       );
     case 'modelConfig':
       return (
@@ -553,8 +424,7 @@ function renderUtilityStoreDialog(
     case 'policies':
       return (
         <PoliciesDialog
-          config={config}
-          policy={state.commandContext.services.agent?.policy}
+          readPolicyRules={ctx.uiActions.readPolicyRules}
           addItem={addItem}
           onExit={() => close('policies')}
         />
@@ -604,30 +474,54 @@ function renderDialogBody(
   config: CliUiRuntime,
   addItem: UseHistoryManagerReturn['addItem'],
   state: ReturnType<typeof useDialogManagerState>,
+  readIdeWorkspaceTrust: () => boolean | undefined,
+  subscribeIdeWorkspaceTrust: (
+    listener: (trusted: boolean | undefined) => void,
+  ) => () => void,
 ) {
   return renderStoreBackedDialog(
     state.activeStoreDialog,
-    { uiState, uiActions, settings, config, addItem },
+    {
+      uiState,
+      uiActions,
+      settings,
+      config,
+      addItem,
+      readIdeWorkspaceTrust,
+      subscribeIdeWorkspaceTrust,
+    },
     state,
   );
 }
 
 // Props for DialogManager
-export const DialogManager = ({ config, settings }: DialogManagerProps) => {
+export const DialogManager = ({
+  config,
+  settings,
+  readIdeWorkspaceTrust,
+  subscribeIdeWorkspaceTrust,
+}: DialogManagerProps) => {
   const uiState = useDialogData();
   const uiActions = useAppCommands();
-  const runtime = useRuntimeApi();
+  const runtimeGetActiveProviderName = useGetActiveProviderName();
   const { addItem } = useTurnStore().commands;
 
-  const state = useDialogManagerState(addItem, config, uiActions, runtime);
+  const state = useDialogManagerState(
+    addItem,
+    config,
+    uiActions,
+    runtimeGetActiveProviderName,
+  );
 
   // NOTE: IdeTrustChangeDialog not yet ported from upstream
-  return renderDialogBody(uiState, uiActions, settings, config, addItem, state);
+  return renderDialogBody(
+    uiState,
+    uiActions,
+    settings,
+    config,
+    addItem,
+    state,
+    readIdeWorkspaceTrust,
+    subscribeIdeWorkspaceTrust,
+  );
 };
-
-function requireBrowserAgent(
-  agent: CommandContext['services']['agent'],
-): NonNullable<CommandContext['services']['agent']> {
-  if (!agent) throw new Error('Session agent is unavailable');
-  return agent;
-}

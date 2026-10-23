@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../../__tests__/mockCommandContext.js';
 
 /**
  * Provider-to-canonical-observation-seam integration tests for issue #3052.
@@ -18,7 +19,7 @@
  *   - The real `createTodoObservationSubscription` (the exact seam
  *     `JspProducer` subscribes through in jspWiring) is subscribed, so a
  *     passing assertion proves the observation channel is actually reached.
- *   - The real `todoCommand` subcommands are driven with a `CommandContext`
+ *   - The real `todoCommand` subcommands are driven with a `CommandOwnerFixture`
  *     whose `todoContext` is the LIVE provider context.
  *
  * The provider, React, the event emitter, and the observation seam stay real.
@@ -48,9 +49,8 @@ import { renderHook, waitFor } from '../../../__tests__/render.js';
 import { TodoProvider } from '../TodoProvider.js';
 import { useTodoContext } from '../TodoContext.js';
 import { createTodoObservationSubscription } from '../../../observation/jspWiring.js';
-import { todoCommand } from '../../commands/todoCommand.js';
+import { registerTodoCommand } from '../../../__tests__/todo-command-test-owner.js';
 import { shouldClearTodos } from '../../hooks/useTodoPausePreserver.js';
-import type { CommandContext } from '../../commands/types.js';
 
 interface ObservedEvent {
   agentId: string | undefined;
@@ -148,32 +148,32 @@ function mountProvider(sessionId: string, agentId?: string): MountedProvider {
 }
 
 /**
- * Build a `CommandContext` whose `todoContext` is the LIVE provider context,
+ * Build a `CommandOwnerFixture` whose `todoContext` is the LIVE provider context,
  * so task subcommands read and mutate the real provider state. The remaining
  * fields are inert stubs; only `ui.addItem` is observable, to surface errors.
  */
 function commandContextFrom(
   live: TodoContextValue,
   errors: string[],
-): CommandContext {
+): CommandOwnerFixture {
   return {
     runtimeApi: createMockRuntimeApi(),
     refreshProviderAliases: async () => {},
-    oauthControl: {} as CommandContext['oauthControl'],
+    oauthControl: {} as CommandOwnerFixture['oauthControl'],
     signal: new AbortController().signal,
     services: {
       config: null,
       agent: null,
-      settings: {} as unknown as CommandContext['services']['settings'],
+      settings: {} as unknown as CommandOwnerFixture['services']['settings'],
       git: undefined,
       logger: {
         error: (m: string) => errors.push(m),
-      } as unknown as CommandContext['services']['logger'],
+      } as unknown as CommandOwnerFixture['services']['logger'],
     },
     ui: {
       addItem: ((item: { type?: string; text?: string }) => {
         if (item.type === 'error') errors.push(item.text ?? 'error');
-      }) as unknown as CommandContext['ui']['addItem'],
+      }) as unknown as CommandOwnerFixture['ui']['addItem'],
       clear: () => {},
       setDebugMessage: () => {},
       pendingItem: null,
@@ -186,12 +186,12 @@ function commandContextFrom(
       updateHistoryTokenCount: () => {},
       reloadCommands: () => {},
       extensionsUpdateState:
-        new Map() as CommandContext['ui']['extensionsUpdateState'],
+        new Map() as CommandOwnerFixture['ui']['extensionsUpdateState'],
       dispatchExtensionStateUpdate: () => {},
       addConfirmUpdateExtensionRequest: () => {},
     },
     session: {
-      stats: {} as CommandContext['session']['stats'],
+      stats: {} as CommandOwnerFixture['session']['stats'],
       sessionShellAllowlist: new Set<string>(),
     },
     todoContext: {
@@ -209,10 +209,13 @@ async function runSubcommand(
   name: string,
   args: string,
 ): Promise<string[]> {
-  const sub = todoCommand.subCommands?.find((c) => c.name === name);
+  const errors: string[] = [];
+  const context = commandContextFrom(live, errors);
+  const sub = registerTodoCommand(context).subCommands?.find(
+    (c) => c.name === name,
+  );
   const action = sub?.action;
   if (!action) throw new Error(`task subcommand "${name}" has no action`);
-  const errors: string[] = [];
   await act(async () => {
     // The action may be sync (most task operations) or async; normalize so a
     // sync return is awaited without an await-thenable lint violation.

@@ -1,3 +1,5 @@
+import { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
+let metricSource: UiTelemetryService;
 import { createStreamSettingsFixture } from './__tests__/stream-settings-fixture.js';
 /**
  * @license
@@ -5,7 +7,6 @@ import { createStreamSettingsFixture } from './__tests__/stream-settings-fixture
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { uiTelemetryService } from '@vybestack/llxprt-code-core';
 import type { AgentEvent } from '@vybestack/llxprt-code-agents';
 import { processAgentStream } from './nonInteractiveCliSupport.js';
 
@@ -55,6 +56,7 @@ describe('processAgentStream — JSON output mode (issue #3226)', () => {
   let processStdoutSpy: Mock<typeof process.stdout.write>;
 
   beforeEach(() => {
+    metricSource = new UiTelemetryService();
     processStdoutSpy = vi
       .spyOn(process.stdout, 'write')
       .mockImplementation(() => true);
@@ -104,7 +106,7 @@ describe('processAgentStream — JSON output mode (issue #3226)', () => {
       streamFromEvents(events),
       createContext(),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     const result = extractJsonResponse(processStdoutSpy.mock.calls);
@@ -122,7 +124,7 @@ describe('processAgentStream — JSON output mode (issue #3226)', () => {
       streamFromEvents(events),
       createContext(),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     const result = extractJsonResponse(processStdoutSpy.mock.calls);
@@ -167,7 +169,7 @@ describe('processAgentStream — JSON output mode (issue #3226)', () => {
       streamFromEvents(events),
       createContext(),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     const result = extractJsonResponse(processStdoutSpy.mock.calls);
@@ -200,7 +202,7 @@ describe('processAgentStream — JSON output mode (issue #3226)', () => {
       streamFromEvents(events),
       createContext(),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     const result = extractJsonResponse(processStdoutSpy.mock.calls);

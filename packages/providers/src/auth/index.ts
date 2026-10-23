@@ -57,10 +57,10 @@ export {
 
 // ─── Proxy Credential Store Factory ──────────────────────────────────────────
 export {
-  createTokenStore,
+  CredentialAuthority,
+  HostCredentialOwner,
   createProviderKeyStorage,
   createGitHubBrokerSocketClient,
-  resetFactorySingletons,
 } from './proxy/credential-store-factory.js';
 
 // ─── Clipboard Service ───────────────────────────────────────────────────────
@@ -78,7 +78,6 @@ export {
   InteractiveAuthUnavailableError,
   InteractiveAuthHostUnavailableError,
   InteractiveAuthCancelledError,
-  interactiveAuthCoordinator,
 } from './interactive-auth-coordinator.js';
 export type {
   InteractiveAuthChallenge,

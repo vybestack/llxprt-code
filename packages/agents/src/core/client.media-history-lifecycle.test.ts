@@ -7,7 +7,7 @@ import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.j
  */
 
 import { fixturePaths } from './__tests__/client-test-helpers.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
 
 /**
  * AgentClient local-media ownership tests across deferred and active history.
@@ -215,12 +215,6 @@ void vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
     ),
   };
 });
-void vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
-  uiTelemetryService: {
-    setLastPromptTokenCount: vi.fn(),
-    getLastPromptTokenCount: vi.fn(),
-  },
-}));
 
 const PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=';
@@ -290,13 +284,19 @@ describe('AgentClient (client.ts)', () => {
     });
     const selectedOwner = new SessionSettingsOwner(settingsService);
     selectedOwner.bindTelemetry(config);
-    const manager = new ProviderManager({
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       settingsService,
       config,
-      sessionSettings: selectedOwner,
-    });
+      undefined,
+      undefined,
+      selectedOwner,
+    );
     ownerManager = manager;
-    configureProviderRuntimeFactories(config, manager);
+    configureProviderTokenizer(manager);
     settingsService.set('activeProvider', 'gemini');
     const ctx = await setupAgentClient(
       { mockChatCreateFn, mockGenerateContentFn, mockEmbedContentFn },

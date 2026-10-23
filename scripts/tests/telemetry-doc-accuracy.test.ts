@@ -85,16 +85,14 @@ describe('telemetry doc accuracy (doc vs source)', () => {
   it('session assembly selects private telemetry before consumers and Config does not initialize it', () => {
     const configCtor = readSrc('packages/core/src/config/configConstructor.ts');
     const assembly = readSrc(
-      'packages/providers/src/runtime/runtimeContextFactory.ts',
+      'packages/agents/src/api/preferred-provider-acquisition.ts',
     );
     const owner = readSrc(
       'packages/core/src/session/session-settings-owner.ts',
     );
     const doc = readSrc('docs/telemetry.md');
     expect(configCtor).not.toContain('initializeTelemetry');
-    expect(assembly).toContain(
-      'settingsOwner.bindTelemetry(options.config, options.borrowedTelemetry)',
-    );
+    expect(assembly).toContain('owner.bindTelemetry(config, undefined)');
     expect(owner).toContain('RootTelemetry.prepare');
     expect(doc).toMatch(/private.*root|root.*private/i);
     expect(doc).toMatch(/borrow.*child|child.*borrow/i);

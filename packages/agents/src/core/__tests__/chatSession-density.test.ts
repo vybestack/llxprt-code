@@ -18,19 +18,19 @@
  *  - chatSession-density.property.test.ts
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
-import { ChatSession } from '../chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import { ChatSession } from '../chatSession.js';
 import {
-  resetCallIds,
-  makeUserMessage,
+  addPrunableReadWritePair,
+  buildMockContentGenerator,
+  buildRuntimeContext,
+  getInternals,
   makeAiText,
   makeAiToolCall,
   makeToolResponse,
-  addPrunableReadWritePair,
-  buildRuntimeContext,
-  buildMockContentGenerator,
-  getInternals,
+  makeUserMessage,
+  resetCallIds,
 } from './chatSession-density-helpers.js';
 
 describe('Density Optimization Orchestration (P19)', () => {
@@ -72,6 +72,13 @@ describe('Density Optimization Orchestration (P19)', () => {
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -103,6 +110,13 @@ describe('Density Optimization Orchestration (P19)', () => {
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -136,6 +150,13 @@ describe('Density Optimization Orchestration (P19)', () => {
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -169,6 +190,13 @@ describe('Density Optimization Orchestration (P19)', () => {
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -208,6 +236,13 @@ describe('Density Optimization Orchestration (P19)', () => {
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -251,6 +286,13 @@ describe('Density Optimization Orchestration (P19)', () => {
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -282,6 +324,13 @@ describe('Density Optimization Orchestration (P19)', () => {
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -313,6 +362,13 @@ describe('Density Optimization Orchestration (P19)', () => {
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -347,6 +403,13 @@ describe('Density Optimization Orchestration (P19)', () => {
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -385,6 +448,13 @@ describe('Density Optimization Orchestration (P19)', () => {
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -432,6 +502,13 @@ describe('Density Optimization Orchestration (P19)', () => {
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],

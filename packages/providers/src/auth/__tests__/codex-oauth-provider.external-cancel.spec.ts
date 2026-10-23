@@ -61,7 +61,7 @@ const DEVICE_TOKEN: CodexOAuthToken = {
   account_id: 'device-account',
 };
 
-function createTokenStore(): TokenStore {
+function makeTokenStore(): TokenStore {
   return {
     saveToken: async () => {},
     getToken: async () => null,
@@ -154,7 +154,7 @@ describe('CodexOAuthProvider external cancellation', () => {
     openBrowserMock.mockResolvedValue(undefined);
     vi.spyOn(ClipboardService, 'copyToClipboard').mockResolvedValue(undefined);
     vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
-    provider = new CodexOAuthProvider(createTokenStore());
+    provider = new CodexOAuthProvider(globalThis.fetch, makeTokenStore());
     deviceStarts = 0;
     installDeviceFlow(provider, () => {
       deviceStarts += 1;

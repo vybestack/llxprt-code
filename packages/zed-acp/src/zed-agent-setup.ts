@@ -7,11 +7,11 @@
 import type { Agent } from '@vybestack/llxprt-code-agents';
 
 export async function enableZedSessionRecording(
-  agent: Agent,
+  enableRecording: () => ReturnType<Agent['session']['setRecording']>,
   onFailure: (error: unknown) => void,
 ): Promise<void> {
   try {
-    await agent.session.setRecording({ enabled: true });
+    await enableRecording();
   } catch (error) {
     try {
       onFailure(error);
@@ -22,7 +22,7 @@ export async function enableZedSessionRecording(
 }
 
 export async function buildZedSession<T>(
-  agent: Agent,
+  retireAgent: Agent['dispose'],
   build: () => T | Promise<T>,
   onDisposeFailure: (error: unknown) => void,
 ): Promise<T> {
@@ -30,7 +30,7 @@ export async function buildZedSession<T>(
     return await build();
   } catch (error) {
     try {
-      await agent.dispose();
+      await retireAgent();
     } catch (disposeError) {
       try {
         onDisposeFailure(disposeError);

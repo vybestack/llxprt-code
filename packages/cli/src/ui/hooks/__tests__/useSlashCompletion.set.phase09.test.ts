@@ -18,7 +18,9 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { setCommand } from '../../commands/setCommand.js';
+import { createUnconfiguredSetCommand } from '../../../__tests__/unconfigured-model-command.js';
+
+const setCommand = createUnconfiguredSetCommand();
 
 describe('`/set` schema contract for useSlashCompletion @plan:PLAN-20251013-AUTOCOMPLETE.P09 @requirement:REQ-006', () => {
   it('exposes a schema definition (RED until migration)', () => {

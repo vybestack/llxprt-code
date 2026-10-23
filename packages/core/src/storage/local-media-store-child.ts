@@ -6,7 +6,7 @@
 
 import { createHash, randomUUID } from 'node:crypto';
 import { unwatchFile, watchFile } from 'node:fs';
-import { link, mkdir, stat, writeFile } from 'node:fs/promises';
+import { link, mkdir, stat, unlink, writeFile } from 'node:fs/promises';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { LocalMediaStore } from './local-media-store.js';
@@ -168,7 +168,11 @@ async function main(): Promise<void> {
   }
   if (mode !== 'reserve-live') throw new Error(`Unknown mode ${mode}`);
   const readyPath = requiredArgument(6, 'ready path');
-  await writeFile(readyPath, JSON.stringify(reference), { flag: 'wx' });
+  await writeFile(`${readyPath}.tmp`, JSON.stringify(reference), {
+    flag: 'wx',
+  });
+  await link(`${readyPath}.tmp`, readyPath);
+  await unlink(`${readyPath}.tmp`);
   await waitForPath(`${readyPath}.release`);
 }
 

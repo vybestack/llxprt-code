@@ -6,24 +6,29 @@
 import { createUiSessionOwner } from '../../../__tests__/uiSessionOwner.js';
 
 import { installWorkspaceRuntimeFixture } from '../../../__tests__/workspace-runtime-fixture.js';
-const workspaceFixture = installWorkspaceRuntimeFixture();
-function composeFixtureRuntime(
-  source: Parameters<typeof workspaceFixture>[0],
+const _workspaceFixture = installWorkspaceRuntimeFixture();
+async function composeFixtureRuntime(
+  _source: Parameters<typeof _workspaceFixture>[0],
   trusted = true,
-): ReturnType<typeof workspaceFixture> {
-  return workspaceFixture(
-    source,
-    createUiSessionOwner(
-      new Config({
-        sessionId: crypto.randomUUID(),
-        targetDir: process.cwd(),
-        cwd: process.cwd(),
-        model: 'confirmation-fixture',
-        debugMode: false,
-        trustedFolder: trusted,
-      }),
-    ),
+) {
+  const owner = await createUiSessionOwner(
+    new Config({
+      sessionId: crypto.randomUUID(),
+      targetDir: process.cwd(),
+      cwd: process.cwd(),
+      model: 'confirmation-fixture',
+      debugMode: false,
+      trustedFolder: trusted,
+    }),
   );
+  return {
+    isTrustedFolder: owner.ide.isTrustedFolder(),
+    readIdeMode: owner.ide.getIdeMode.bind(owner.ide),
+    readIdeDiffingEnabled: () => owner.ide.readConnection().diffingEnabled,
+    subscribeIdeDiffing: (listener: () => void) =>
+      owner.ide.subscribeConnection(() => listener()),
+    resolveIdeDiff: owner.ide.resolveDiff.bind(owner.ide),
+  };
 }
 
 import { describe, it, expect, vi } from 'bun:test';
@@ -57,7 +62,7 @@ describe('ToolConfirmationMessage', () => {
     getIdeMode: () => false,
   } as unknown as Config;
 
-  it('should not display urls if prompt and url are the same', () => {
+  it('should not display urls if prompt and url are the same', async () => {
     const confirmationDetails: ToolCallConfirmationDetails = {
       type: 'info',
       title: 'Confirm Web Fetch',
@@ -69,7 +74,7 @@ describe('ToolConfirmationMessage', () => {
     const { lastFrame } = renderWithProviders(
       <ToolConfirmationMessage
         confirmationDetails={confirmationDetails}
-        config={composeFixtureRuntime(mockConfig)}
+        {...await composeFixtureRuntime(mockConfig)}
         availableTerminalHeight={30}
         terminalWidth={80}
       />,
@@ -78,7 +83,7 @@ describe('ToolConfirmationMessage', () => {
     expect(lastFrame()).not.toContain('URLs to fetch:');
   });
 
-  it('should display urls if prompt and url are different', () => {
+  it('should display urls if prompt and url are different', async () => {
     const confirmationDetails: ToolCallConfirmationDetails = {
       type: 'info',
       title: 'Confirm Web Fetch',
@@ -93,7 +98,7 @@ describe('ToolConfirmationMessage', () => {
     const { lastFrame } = renderWithProviders(
       <ToolConfirmationMessage
         confirmationDetails={confirmationDetails}
-        config={composeFixtureRuntime(mockConfig)}
+        {...await composeFixtureRuntime(mockConfig)}
         availableTerminalHeight={30}
         terminalWidth={80}
       />,
@@ -168,7 +173,7 @@ describe('ToolConfirmationMessage', () => {
         alwaysAllowText: 'Allow tool for this session',
       },
     ])('$description', ({ details, alwaysAllowText }) => {
-      it('should show "allow always" when folder is trusted', () => {
+      it('should show "allow always" when folder is trusted', async () => {
         const mockConfig = {
           isTrustedFolder: () => true,
           getIdeMode: () => false,
@@ -177,7 +182,7 @@ describe('ToolConfirmationMessage', () => {
         const { lastFrame } = renderWithProviders(
           <ToolConfirmationMessage
             confirmationDetails={details}
-            config={composeFixtureRuntime(mockConfig)}
+            {...await composeFixtureRuntime(mockConfig)}
             availableTerminalHeight={30}
             terminalWidth={80}
           />,
@@ -186,7 +191,7 @@ describe('ToolConfirmationMessage', () => {
         expect(lastFrame()).toContain(alwaysAllowText);
       });
 
-      it('should NOT show "allow always" when folder is untrusted', () => {
+      it('should NOT show "allow always" when folder is untrusted', async () => {
         const mockConfig = {
           isTrustedFolder: () => false,
           getIdeMode: () => false,
@@ -195,7 +200,7 @@ describe('ToolConfirmationMessage', () => {
         const { lastFrame } = renderWithProviders(
           <ToolConfirmationMessage
             confirmationDetails={details}
-            config={composeFixtureRuntime(mockConfig, false)}
+            {...await composeFixtureRuntime(mockConfig, false)}
             availableTerminalHeight={30}
             terminalWidth={80}
           />,
@@ -205,7 +210,7 @@ describe('ToolConfirmationMessage', () => {
       });
     });
 
-    it('should render confirmation question with theme-respecting color', () => {
+    it('should render confirmation question with theme-respecting color', async () => {
       const mockConfig = {
         isTrustedFolder: () => true,
         getIdeMode: () => false,
@@ -214,7 +219,7 @@ describe('ToolConfirmationMessage', () => {
       const { lastFrame } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={execConfirmationDetails}
-          config={composeFixtureRuntime(mockConfig)}
+          {...await composeFixtureRuntime(mockConfig)}
           availableTerminalHeight={30}
           terminalWidth={80}
         />,
@@ -237,7 +242,7 @@ describe('ToolConfirmationMessage', () => {
       onConfirm: vi.fn(),
     };
 
-    it('should NOT show "Allow for all future sessions" when setting is false (default)', () => {
+    it('should NOT show "Allow for all future sessions" when setting is false (default)', async () => {
       const mockConfig = {
         isTrustedFolder: () => true,
         getIdeMode: () => false,
@@ -246,7 +251,7 @@ describe('ToolConfirmationMessage', () => {
       const { lastFrame } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={editConfirmationDetails}
-          config={composeFixtureRuntime(mockConfig)}
+          {...await composeFixtureRuntime(mockConfig)}
           availableTerminalHeight={30}
           terminalWidth={80}
         />,
@@ -260,7 +265,7 @@ describe('ToolConfirmationMessage', () => {
       expect(lastFrame()).not.toContain('Allow for all future sessions');
     });
 
-    it('should show "Allow for all future sessions" when setting is true', () => {
+    it('should show "Allow for all future sessions" when setting is true', async () => {
       const mockConfig = {
         isTrustedFolder: () => true,
         getIdeMode: () => false,
@@ -269,7 +274,7 @@ describe('ToolConfirmationMessage', () => {
       const { lastFrame } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={editConfirmationDetails}
-          config={composeFixtureRuntime(mockConfig)}
+          {...await composeFixtureRuntime(mockConfig)}
           availableTerminalHeight={30}
           terminalWidth={80}
         />,
@@ -285,7 +290,7 @@ describe('ToolConfirmationMessage', () => {
   });
 
   describe('exec confirmation background note', () => {
-    it('renders the background note when isBackground is true (T23 / AC-9)', () => {
+    it('renders the background note when isBackground is true (T23 / AC-9)', async () => {
       const confirmationDetails: ToolCallConfirmationDetails = {
         type: 'exec',
         title: 'Confirm Shell Command',
@@ -299,7 +304,7 @@ describe('ToolConfirmationMessage', () => {
       const { lastFrame } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={confirmationDetails}
-          config={composeFixtureRuntime(mockConfig)}
+          {...await composeFixtureRuntime(mockConfig)}
           availableTerminalHeight={30}
           terminalWidth={80}
         />,
@@ -311,7 +316,7 @@ describe('ToolConfirmationMessage', () => {
       );
     });
 
-    it('renders no background note when the flag is absent (T24 / AC-9)', () => {
+    it('renders no background note when the flag is absent (T24 / AC-9)', async () => {
       const confirmationDetails: ToolCallConfirmationDetails = {
         type: 'exec',
         title: 'Confirm Shell Command',
@@ -324,7 +329,7 @@ describe('ToolConfirmationMessage', () => {
       const { lastFrame } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={confirmationDetails}
-          config={composeFixtureRuntime(mockConfig)}
+          {...await composeFixtureRuntime(mockConfig)}
           availableTerminalHeight={30}
           terminalWidth={80}
         />,
@@ -335,7 +340,7 @@ describe('ToolConfirmationMessage', () => {
       );
     });
 
-    it('renders both notes with one blank line before the block and none between them (G2a)', () => {
+    it('renders both notes with one blank line before the block and none between them (G2a)', async () => {
       const confirmationDetails: ToolCallConfirmationDetails = {
         type: 'exec',
         title: 'Confirm Shell Command',
@@ -349,7 +354,7 @@ describe('ToolConfirmationMessage', () => {
       const { lastFrame } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={confirmationDetails}
-          config={composeFixtureRuntime(mockConfig)}
+          {...await composeFixtureRuntime(mockConfig)}
           availableTerminalHeight={30}
           terminalWidth={80}
         />,
@@ -389,7 +394,7 @@ describe('ToolConfirmationMessage', () => {
       expect(maximumConsecutiveBlankLines(lines)).toBeLessThanOrEqual(1);
     });
 
-    it('renders a background-only note with a single leading blank line (G2b)', () => {
+    it('renders a background-only note with a single leading blank line (G2b)', async () => {
       const confirmationDetails: ToolCallConfirmationDetails = {
         type: 'exec',
         title: 'Confirm Shell Command',
@@ -403,7 +408,7 @@ describe('ToolConfirmationMessage', () => {
       const { lastFrame } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={confirmationDetails}
-          config={composeFixtureRuntime(mockConfig)}
+          {...await composeFixtureRuntime(mockConfig)}
           availableTerminalHeight={30}
           terminalWidth={80}
         />,
@@ -455,7 +460,7 @@ describe('ToolConfirmationMessage', () => {
       const { lastFrame, stdin } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={createExecConfirmationDetails(onConfirm)}
-          config={composeFixtureRuntime(trustedConfig)}
+          {...await composeFixtureRuntime(trustedConfig)}
           availableTerminalHeight={30}
           terminalWidth={80}
         />,
@@ -482,7 +487,7 @@ describe('ToolConfirmationMessage', () => {
       const { lastFrame, stdin } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={createExecConfirmationDetails(onConfirm)}
-          config={composeFixtureRuntime(trustedConfig)}
+          {...await composeFixtureRuntime(trustedConfig)}
           availableTerminalHeight={30}
           terminalWidth={80}
         />,
@@ -512,7 +517,7 @@ describe('ToolConfirmationMessage', () => {
       const { lastFrame, stdin } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={createExecConfirmationDetails(onConfirm)}
-          config={composeFixtureRuntime(trustedConfig)}
+          {...await composeFixtureRuntime(trustedConfig)}
           availableTerminalHeight={30}
           terminalWidth={80}
         />,
@@ -548,7 +553,7 @@ describe('ToolConfirmationMessage', () => {
       const { lastFrame, stdin } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={createExecConfirmationDetails(onConfirm)}
-          config={composeFixtureRuntime(trustedConfig)}
+          {...await composeFixtureRuntime(trustedConfig)}
           availableTerminalHeight={30}
           terminalWidth={80}
         />,
@@ -573,7 +578,7 @@ describe('ToolConfirmationMessage', () => {
       const { lastFrame, stdin } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={createExecConfirmationDetails(onConfirm)}
-          config={composeFixtureRuntime(trustedConfig)}
+          {...await composeFixtureRuntime(trustedConfig)}
           availableTerminalHeight={30}
           terminalWidth={80}
         />,
@@ -601,7 +606,7 @@ describe('ToolConfirmationMessage', () => {
       const { stdin, lastFrame } = renderWithProviders(
         <ToolConfirmationMessage
           confirmationDetails={createExecConfirmationDetails(onConfirm)}
-          config={composeFixtureRuntime(trustedConfig)}
+          {...await composeFixtureRuntime(trustedConfig)}
           availableTerminalHeight={30}
           terminalWidth={80}
           isFocused={false}

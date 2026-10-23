@@ -49,6 +49,7 @@ export interface CountTokensResult {
  */
 export interface EmbedContentRequest {
   texts: string[];
+  abortSignal?: AbortSignal;
 }
 
 /**

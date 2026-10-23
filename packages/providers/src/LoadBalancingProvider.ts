@@ -49,10 +49,7 @@ import {
   buildRoundRobinResolvedOptions as buildRoundRobinResolvedOptionsExternal,
   normalizeLoadBalancerOptions,
 } from './loadBalancing/resolvedOptionsBuilder.js';
-import {
-  assertMemberAuthCurrent,
-  resolveMemberAuthentication,
-} from './loadBalancing/memberAuthentication.js';
+import { MemberAuthenticationOwner } from './loadBalancing/memberAuthentication.js';
 import {
   createAdmittedMemberDispatchGuard,
   resolveAdmittedMemberDelegate,
@@ -144,6 +141,9 @@ export class LoadBalancingProvider
   >;
   private readonly memberIdentities = new WeakMap<object, symbol>();
   private readonly logger = new DebugLogger('llxprt:providers:load-balancer');
+  private readonly memberAuth = new MemberAuthenticationOwner(this.logger, () =>
+    this.providerManager.peekProviderKeyStorage(),
+  );
   private stats: Map<string, number> = new Map();
   private lastSelected: string | null = null;
   private totalRequests = 0;
@@ -280,7 +280,7 @@ export class LoadBalancingProvider
     const model = resolveSubProfileModel(subProfile);
     const resolvedOptions = this.buildRoundRobinResolvedOptions(
       this.config.strategy === 'failover'
-        ? await resolveMemberAuthentication(subProfile, this.logger)
+        ? await this.memberAuth.resolve(subProfile)
         : subProfile,
       options,
       selectedSubProfile,
@@ -358,7 +358,7 @@ export class LoadBalancingProvider
     const authenticatedSubProfile =
       this.config.strategy === 'failover'
         ? subProfile
-        : await resolveMemberAuthentication(subProfile, this.logger);
+        : await this.memberAuth.resolve(subProfile);
     const sharedLimit = this.getEffectiveContextLimit();
     const contextLimit = getTargetContextLimit(subProfile, sharedLimit);
     const delegateProvider = this.bindDelegateProvider(
@@ -459,10 +459,9 @@ export class LoadBalancingProvider
       subProfile,
     );
     requireTransportAttempt(resolvedOptions);
-    await assertMemberAuthCurrent(
+    await this.memberAuth.assertCurrent(
       subProfile,
       preparedTarget.authenticatedSubProfile,
-      this.logger,
     );
     this.assertAdmittedMemberDispatch(options, subProfile);
 
@@ -921,12 +920,13 @@ export class LoadBalancingProvider
         ),
       deps: {
         logger: this.logger,
+        keyStorage: this.providerManager.peekProviderKeyStorage(),
         circuitBreaker: this.circuitBreaker,
         markActiveSelection: (name) => this.markActiveSelection(name),
         buildResolvedOptions: (sp, opt) =>
           this.buildRoundRobinResolvedOptions(sp, opt, subProfile),
         assertDispatch: async (authenticated) => {
-          await assertMemberAuthCurrent(subProfile, authenticated, this.logger);
+          await this.memberAuth.assertCurrent(subProfile, authenticated);
           this.assertAdmittedMemberDispatch(options, subProfile);
         },
         getMetricsHooks: () => this.getMetricsHooks(),

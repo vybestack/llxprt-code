@@ -1,7 +1,7 @@
 import { Config as RealConfig } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService as RealSettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { assembleModelSelection } from './providerMutations.js';
+import { assembleModelSelection } from '../../../agents/src/api/model-selection.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -100,8 +100,12 @@ void vi.mock('@vybestack/llxprt-code-core', () => {
   };
 });
 
-const { switchActiveProvider, setActiveModel, setEphemeralSetting } =
-  await import('./index.js');
+const { switchActiveProvider } = await import(
+  '../../../agents/src/api/provider-switch/provider-switch.js'
+);
+const { setActiveModel } = await import(
+  '../../../agents/src/api/providerMutations.js'
+);
 
 const mockOAuthManager = {
   clearRetryHandlers: () => {},
@@ -415,7 +419,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       await setupAnthropicProvider('claude-opus-4-6');
 
       // User manually overrides reasoning.effort to "low" via the session setter
-      setEphemeralSetting('reasoning.effort', 'low', settingsOwner);
+      settingsOwner.writeUserParameter('reasoning.effort', 'low');
 
       await setActiveModel(
         'claude-sonnet-4-5-20250929',
@@ -430,7 +434,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       await setupAnthropicProvider('claude-sonnet-4-5-20250929');
 
       // User sets a custom value for a key that model defaults would set
-      setEphemeralSetting('reasoning.enabled', false, settingsOwner);
+      settingsOwner.writeUserParameter('reasoning.enabled', false);
 
       await setActiveModel('claude-opus-4-6', ...stubOverrideInputs());
 
@@ -495,7 +499,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       // User explicitly sets reasoning.effort to "high" (same value as the
       // opus default) through the session setter. Explicit ownership, not
       // value equality, decides whether the default application may change it.
-      setEphemeralSetting('reasoning.effort', 'high', settingsOwner);
+      settingsOwner.writeUserParameter('reasoning.effort', 'high');
 
       await setActiveModel(
         'claude-sonnet-4-5-20250929',
@@ -636,7 +640,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       await setupAnthropicProvider('claude-opus-4-6');
 
       // Simulate --set reasoning.effort=low (user explicitly overrides)
-      setEphemeralSetting('reasoning.effort', 'low', settingsOwner);
+      settingsOwner.writeUserParameter('reasoning.effort', 'low');
 
       // setActiveModel for the same model
       await setActiveModel('claude-opus-4-6', ...stubOverrideInputs());
@@ -652,7 +656,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       expect(settingsOwner.readNamedParameter('reasoning.effort')).toBe('high');
 
       // User sets low
-      setEphemeralSetting('reasoning.effort', 'low', settingsOwner);
+      settingsOwner.writeUserParameter('reasoning.effort', 'low');
 
       // /model opus again
       await setActiveModel('claude-opus-4-6', ...stubOverrideInputs());
@@ -670,7 +674,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       ).toBeUndefined();
 
       // User sets reasoning.effort=low
-      setEphemeralSetting('reasoning.effort', 'low', settingsOwner);
+      settingsOwner.writeUserParameter('reasoning.effort', 'low');
 
       // /model opus
       await setActiveModel('claude-opus-4-6', ...stubOverrideInputs());
@@ -689,7 +693,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       activeProviderName = 'anthropic';
 
       // Then --set is applied after profile load
-      setEphemeralSetting('reasoning.effort', 'low', settingsOwner);
+      settingsOwner.writeUserParameter('reasoning.effort', 'low');
       expect(settingsOwner.readNamedParameter('reasoning.effort')).toBe('low');
 
       // Then user changes model via /model
@@ -795,10 +799,9 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       ).toBe('anthropic');
 
       // Session-level set equal to the current default: explicit, user-owned.
-      setEphemeralSetting(
+      settingsOwner.writeUserParameter(
         'reasoning.effortWireFormat',
         'anthropic',
-        settingsOwner,
       );
 
       // glm-5.4 matches only the broad glm-5 rule; no selector default applies.
@@ -818,10 +821,9 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       );
 
       // Session-level set with a fresh object but equal content.
-      setEphemeralSetting(
+      settingsOwner.writeUserParameter(
         'reasoning.effortMap',
         structuredClone(glm52EffortMap),
-        settingsOwner,
       );
 
       await setActiveModel('glm-5.3', ...stubOverrideInputs());

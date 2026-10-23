@@ -5,6 +5,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import {
   existsSync,
   readFileSync,
@@ -16,6 +17,15 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import { isErrnoException, messageOf } from './utils/error-guards.ts';
 import { NON_NPM_RELEASE_PACKAGES } from './utils/release-packages.ts';
+
+const { npmInvocation } = createRequire(import.meta.url)(
+  './lib/npm-command.cjs',
+) as {
+  npmInvocation: (args: readonly string[]) => {
+    command: string;
+    args: string[];
+  };
+};
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_LOCKFILE_TIMEOUT_MS = 600_000;
@@ -474,7 +484,13 @@ function updateLockfileAfterBinding(
 
   console.log('Updating package-lock.json...');
   try {
-    const npmBin = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+    // Windows npm is a .cmd shim that Bun cannot spawn; the resolver runs
+    // npm-cli.js through a native runtime instead.
+    const npm = npmInvocation([
+      'install',
+      '--package-lock-only',
+      '--ignore-scripts',
+    ]);
     const rawTimeout = parseInt(process.env.BIND_LOCKFILE_TIMEOUT_MS ?? '', 10);
     const lockfileTimeout =
       Number.isInteger(rawTimeout) && rawTimeout >= MIN_LOCKFILE_TIMEOUT_MS
@@ -483,17 +499,13 @@ function updateLockfileAfterBinding(
     let attempt = 0;
     while (true) {
       attempt += 1;
-      const result = spawnSync(
-        npmBin,
-        ['install', '--package-lock-only', '--ignore-scripts'],
-        {
-          cwd: ROOT,
-          encoding: 'utf8',
-          stdio: 'pipe',
-          timeout: lockfileTimeout,
-          maxBuffer: 16 * 1024 * 1024,
-        },
-      );
+      const result = spawnSync(npm.command, npm.args, {
+        cwd: ROOT,
+        encoding: 'utf8',
+        stdio: 'pipe',
+        timeout: lockfileTimeout,
+        maxBuffer: 16 * 1024 * 1024,
+      });
       const timedOut =
         result.error !== undefined &&
         isErrnoException(result.error, 'ETIMEDOUT');
@@ -510,7 +522,7 @@ function updateLockfileAfterBinding(
       }
       if (result.error !== undefined) {
         throw new Error(
-          `Failed to execute ${npmBin}: ${messageOf(result.error)}. Ensure npm is installed and available on PATH.`,
+          `Failed to execute ${npm.command}: ${messageOf(result.error)}. Ensure npm is installed and available on PATH.`,
         );
       }
       if (result.signal !== null) {

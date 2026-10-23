@@ -1,4 +1,10 @@
-import { createProviderConfigFixture } from '../runtime/__tests__/provider-config-fixture.js';
+import {
+  installOwnedConfig,
+  installBorrowedConfigSettings,
+} from '../__tests__/helpers/session-settings-owner-fixture.js';
+const acquireSettings = installBorrowedConfigSettings();
+const acquireConfig = installOwnedConfig();
+
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -78,14 +84,15 @@ describe('OAuthManager concurrency', () => {
       releaseAuthLock: vi.fn(async () => undefined),
     };
 
-    const { config: config } = createProviderConfigFixture({
+    const config = acquireConfig({
       sessionId: 'concurrency',
       targetDir: process.cwd(),
       cwd: process.cwd(),
       debugMode: false,
       model: 'gpt-5',
-      settingsService: new SettingsService(),
     });
+    const ownedSettings = new SettingsService();
+    acquireSettings(config, ownedSettings);
     const oauthManager = new OAuthManager(tokenStore, undefined, { config });
 
     const provider: OAuthProvider = {

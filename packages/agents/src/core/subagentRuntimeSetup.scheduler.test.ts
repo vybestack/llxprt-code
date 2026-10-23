@@ -41,7 +41,9 @@ describe('createToolExecutionConfig', () => {
   it('should build config from runtime context', () => {
     const fixture = makeSchedulerFixture('sess-123');
     const config = createToolExecutionConfig(
-      fixture.runtimeBundle,
+      fixture.runtimeBundle.telemetryRoot,
+      () => fixture.runtimeBundle.runtimeContext.readToolExecutionPolicy(),
+      () => fixture.runtimeBundle.runtimeContext.state.sessionId,
       fixture.toolRegistry,
     );
     expect(config).toBeDefined();
@@ -52,7 +54,9 @@ describe('createToolExecutionConfig', () => {
     const fixture = makeSchedulerFixture('sess-123');
     const toolConfig = { tools: ['allowed_tool'] };
     const config = createToolExecutionConfig(
-      fixture.runtimeBundle,
+      fixture.runtimeBundle.telemetryRoot,
+      () => fixture.runtimeBundle.runtimeContext.readToolExecutionPolicy(),
+      () => fixture.runtimeBundle.runtimeContext.state.sessionId,
       fixture.toolRegistry,
       undefined,
       toolConfig,
@@ -67,7 +71,9 @@ describe('createToolExecutionConfig', () => {
   it('should include ephemeral settings', () => {
     const fixture = makeSchedulerFixture('sess-456');
     const config = createToolExecutionConfig(
-      fixture.runtimeBundle,
+      fixture.runtimeBundle.telemetryRoot,
+      () => fixture.runtimeBundle.runtimeContext.readToolExecutionPolicy(),
+      () => fixture.runtimeBundle.runtimeContext.state.sessionId,
       fixture.toolRegistry,
     );
     expect(config.readExecutionPolicy()).toBeDefined();
@@ -78,7 +84,9 @@ describe('createToolExecutionConfig — fail-closed empty whitelist (#2069)', ()
   it('preserves explicit empty tools array as tools.allowed=[]', () => {
     const fixture = makeSchedulerFixture('sess-fc');
     const config = createToolExecutionConfig(
-      fixture.runtimeBundle,
+      fixture.runtimeBundle.telemetryRoot,
+      () => fixture.runtimeBundle.runtimeContext.readToolExecutionPolicy(),
+      () => fixture.runtimeBundle.runtimeContext.state.sessionId,
       fixture.toolRegistry,
       undefined,
       { tools: [] },
@@ -98,7 +106,9 @@ describe('createToolExecutionConfig — fail-closed empty whitelist (#2069)', ()
   it('preserves parent explicit empty tools.allowed when intersecting with a non-empty whitelist', () => {
     const fixture = makeSchedulerFixture('sess-fc');
     const config = createToolExecutionConfig(
-      fixture.runtimeBundle,
+      fixture.runtimeBundle.telemetryRoot,
+      () => fixture.runtimeBundle.runtimeContext.readToolExecutionPolicy(),
+      () => fixture.runtimeBundle.runtimeContext.state.sessionId,
       fixture.toolRegistry,
       { tools: { allowed: [] } },
       { tools: ['read_file'] },
@@ -122,7 +132,9 @@ describe('createToolExecutionConfig — fail-closed empty whitelist (#2069)', ()
       getEnabledTools: () => [{ name: 'read_file' }],
     };
     const config = createToolExecutionConfig(
-      fixture.runtimeBundle,
+      fixture.runtimeBundle.telemetryRoot,
+      () => fixture.runtimeBundle.runtimeContext.readToolExecutionPolicy(),
+      () => fixture.runtimeBundle.runtimeContext.state.sessionId,
       toolRegistry,
       { tools: { allowed: ['functions.read_file'] } },
       { tools: ['functions.read_file'] },
@@ -138,7 +150,9 @@ describe('createToolExecutionConfig — fail-closed empty whitelist (#2069)', ()
   it('does not set tools.allowed when toolConfig is undefined', () => {
     const fixture = makeSchedulerFixture('sess-fc');
     const config = createToolExecutionConfig(
-      fixture.runtimeBundle,
+      fixture.runtimeBundle.telemetryRoot,
+      () => fixture.runtimeBundle.runtimeContext.readToolExecutionPolicy(),
+      () => fixture.runtimeBundle.runtimeContext.state.sessionId,
       fixture.toolRegistry,
       undefined,
       undefined,
@@ -158,7 +172,9 @@ describe('createToolExecutionConfig — fail-closed empty whitelist (#2069)', ()
   it('does not set tools.allowed when toolConfig is omitted', () => {
     const fixture = makeSchedulerFixture('sess-fc');
     const config = createToolExecutionConfig(
-      fixture.runtimeBundle,
+      fixture.runtimeBundle.telemetryRoot,
+      () => fixture.runtimeBundle.runtimeContext.readToolExecutionPolicy(),
+      () => fixture.runtimeBundle.runtimeContext.state.sessionId,
       fixture.toolRegistry,
     );
     expect(
@@ -173,7 +189,9 @@ describe('Issue #2069: scheduler governance excludes task/list_subagents', () =>
   it('createToolExecutionConfig().getExcludeTools() returns task and list_subagents', () => {
     const fixture = makeSchedulerFixture('sess-2069');
     const config = createToolExecutionConfig(
-      fixture.runtimeBundle,
+      fixture.runtimeBundle.telemetryRoot,
+      () => fixture.runtimeBundle.runtimeContext.readToolExecutionPolicy(),
+      () => fixture.runtimeBundle.runtimeContext.state.sessionId,
       fixture.toolRegistry,
     );
     const excluded = [...config.readGovernance().excluded];
@@ -184,7 +202,9 @@ describe('Issue #2069: scheduler governance excludes task/list_subagents', () =>
   it('buildToolGovernance from child execution config marks task/list_subagents as blocked (fail-closed)', async () => {
     const fixture = makeSchedulerFixture('sess-2069');
     const toolExecConfig = createToolExecutionConfig(
-      fixture.runtimeBundle,
+      fixture.runtimeBundle.telemetryRoot,
+      () => fixture.runtimeBundle.runtimeContext.readToolExecutionPolicy(),
+      () => fixture.runtimeBundle.runtimeContext.state.sessionId,
       fixture.toolRegistry,
     );
 
@@ -199,7 +219,9 @@ describe('Issue #2069: scheduler governance excludes task/list_subagents', () =>
     const fixture = makeSchedulerFixture('sess-2069');
     const toolConfig = { tools: ['read_file', 'task', 'list_subagents'] };
     const config = createToolExecutionConfig(
-      fixture.runtimeBundle,
+      fixture.runtimeBundle.telemetryRoot,
+      () => fixture.runtimeBundle.runtimeContext.readToolExecutionPolicy(),
+      () => fixture.runtimeBundle.runtimeContext.state.sessionId,
       fixture.toolRegistry,
       undefined,
       toolConfig,
@@ -219,7 +241,9 @@ describe('Issue #2069: scheduler governance excludes task/list_subagents', () =>
     const fixture = makeSchedulerFixture('sess-2069');
     const toolConfig = { tools: ['task', 'list_subagents'] };
     const config = createToolExecutionConfig(
-      fixture.runtimeBundle,
+      fixture.runtimeBundle.telemetryRoot,
+      () => fixture.runtimeBundle.runtimeContext.readToolExecutionPolicy(),
+      () => fixture.runtimeBundle.runtimeContext.state.sessionId,
       fixture.toolRegistry,
       undefined,
       toolConfig,
@@ -240,7 +264,9 @@ describe('Issue #2069: scheduler governance excludes task/list_subagents', () =>
       getEnabledTools: () => [],
     };
     const config = createToolExecutionConfig(
-      fixture.runtimeBundle,
+      fixture.runtimeBundle.telemetryRoot,
+      () => fixture.runtimeBundle.runtimeContext.readToolExecutionPolicy(),
+      () => fixture.runtimeBundle.runtimeContext.state.sessionId,
       toolRegistry,
       undefined,
       { tools: ['read_file'] },
@@ -258,7 +284,9 @@ describe('Issue #2069: scheduler governance excludes task/list_subagents', () =>
       tools: ['ReadFileTool', 'TaskTool', 'listSubagents'],
     };
     const config = createToolExecutionConfig(
-      fixture.runtimeBundle,
+      fixture.runtimeBundle.telemetryRoot,
+      () => fixture.runtimeBundle.runtimeContext.readToolExecutionPolicy(),
+      () => fixture.runtimeBundle.runtimeContext.state.sessionId,
       fixture.toolRegistry,
       undefined,
       toolConfig,
@@ -281,7 +309,9 @@ describe('Issue #2069: scheduler governance excludes task/list_subagents', () =>
       getEnabledTools: () => [{ name: 'tool.v1' }],
     };
     const config = createToolExecutionConfig(
-      fixture.runtimeBundle,
+      fixture.runtimeBundle.telemetryRoot,
+      () => fixture.runtimeBundle.runtimeContext.readToolExecutionPolicy(),
+      () => fixture.runtimeBundle.runtimeContext.state.sessionId,
       toolRegistry,
       undefined,
       { tools: ['functions.tool.v1'] },
@@ -301,7 +331,9 @@ describe('Issue #2069: scheduler governance excludes task/list_subagents', () =>
       description: 'custom',
     };
     const config = createToolExecutionConfig(
-      fixture.runtimeBundle,
+      fixture.runtimeBundle.telemetryRoot,
+      () => fixture.runtimeBundle.runtimeContext.readToolExecutionPolicy(),
+      () => fixture.runtimeBundle.runtimeContext.state.sessionId,
       fixture.toolRegistry,
       undefined,
       { tools: [customDeclaration] },
@@ -321,7 +353,9 @@ describe('Issue #2069: scheduler governance excludes task/list_subagents', () =>
       getEnabledTools: () => [{ name: 'read_file' }],
     };
     const config = createToolExecutionConfig(
-      fixture.runtimeBundle,
+      fixture.runtimeBundle.telemetryRoot,
+      () => fixture.runtimeBundle.runtimeContext.readToolExecutionPolicy(),
+      () => fixture.runtimeBundle.runtimeContext.state.sessionId,
       toolRegistry,
       undefined,
       {
@@ -341,7 +375,9 @@ describe('Issue #2069: scheduler governance excludes task/list_subagents', () =>
   it('applyToolWhitelistToEphemerals fail-closes when only excluded non-string declarations remain', () => {
     const fixture = makeSchedulerFixture('sess-2184');
     const config = createToolExecutionConfig(
-      fixture.runtimeBundle,
+      fixture.runtimeBundle.telemetryRoot,
+      () => fixture.runtimeBundle.runtimeContext.readToolExecutionPolicy(),
+      () => fixture.runtimeBundle.runtimeContext.state.sessionId,
       fixture.toolRegistry,
       undefined,
       { tools: [{ name: 'functions.task', description: 'nested' }] },

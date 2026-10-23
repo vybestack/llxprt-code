@@ -21,7 +21,8 @@ import {
   formatAuthFailureReason,
 } from '../../scripts/lib/bun-test-retry.js';
 import { spawn } from 'node:child_process';
-import { readdirSync, statSync, writeFileSync } from 'node:fs';
+import { writeReportFile } from '../../scripts/lib/junit-report-writer.js';
+import { readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -296,7 +297,7 @@ async function main(): Promise<void> {
         (failed.length > 0 ? ` (${failed.length} failed)` : ''),
     );
 
-    writeFileSync(
+    writeReportFile(
       JUNIT_PATH,
       generateJUnit(results, testFiles.length, failed.length),
     );

@@ -1,5 +1,5 @@
-import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
-const fixtureOwners = installRuntimeTestOwners();
+import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
+const fixtureOwnersBorrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -95,12 +95,17 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
   beforeEach(() => {
     settingsService = new SettingsService();
     config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager({
-      sessionSettings: fixtureOwners.adopt(config, settingsService)
-        .settingsOwner,
+    providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       settingsService,
       config,
-    });
+      undefined,
+      undefined,
+      fixtureOwnersBorrowedSettings(config, settingsService),
+    );
   });
 
   describe('Aggregated Error When All Backends Fail', () => {
@@ -709,7 +714,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
           contents: [{ role: 'user', parts: [{ text: 'test' }] }],
           settings: settingsService,
           config,
-          runtime: { settingsService, config },
+          runtime: {},
         });
         for await (const _chunk of iterator) {
           // Consume

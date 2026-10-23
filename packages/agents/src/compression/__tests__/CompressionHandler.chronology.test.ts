@@ -99,7 +99,12 @@ describe('CompressionHandler chronology survival (#1721 C2)', () => {
     const providerResult: CompressionProviderResult = { provider };
     handler = new CompressionHandler(
       runtimeContext,
+      undefined,
       historyService,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       {},
       vi.fn().mockResolvedValue(providerResult),
       vi.fn().mockResolvedValue(undefined),

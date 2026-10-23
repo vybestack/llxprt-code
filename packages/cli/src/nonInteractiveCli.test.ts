@@ -1,3 +1,5 @@
+import { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
+let metricSource: UiTelemetryService;
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -11,7 +13,6 @@ import {
   FatalTurnLimitedError,
   JsonStreamEventType,
   StreamJsonFormatter,
-  uiTelemetryService,
 } from '@vybestack/llxprt-code-core';
 import type { AgentEvent } from '@vybestack/llxprt-code-agents';
 import { processAgentStream } from './nonInteractiveCliSupport.js';
@@ -97,6 +98,7 @@ describe('processAgentStream', () => {
   let processStderrSpy: Mock<typeof process.stderr.write>;
 
   beforeEach(() => {
+    metricSource = new UiTelemetryService();
     consoleErrorSpy = vi
       .spyOn(DebugLogger.prototype, 'error')
       .mockImplementation(() => {});
@@ -153,7 +155,7 @@ describe('processAgentStream', () => {
       streamFromEvents(events),
       createContext(),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     const meaningfulWrites = processStdoutSpy.mock.calls
@@ -175,7 +177,7 @@ describe('processAgentStream', () => {
       streamFromEvents(events),
       createContext({ streamFormatter }),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     const jsonEvents = parseJsonStdoutEvents(processStdoutSpy.mock.calls);
@@ -205,7 +207,7 @@ describe('processAgentStream', () => {
       streamFromEvents(events),
       createContext({ streamFormatter, emojiFilter }),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     const jsonEvents = parseJsonStdoutEvents(processStdoutSpy.mock.calls);
@@ -228,7 +230,7 @@ describe('processAgentStream', () => {
       streamFromEvents(events),
       createContext({ config: createMockConfig({ includeInResponse: true }) }),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     const output = processStdoutSpy.mock.calls.map(([value]) => value).join('');
@@ -272,7 +274,7 @@ describe('processAgentStream', () => {
       streamFromEvents(events),
       createContext({ config: createMockConfig({ includeInResponse: true }) }),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     const output = processStdoutSpy.mock.calls.map(([value]) => value).join('');
@@ -308,7 +310,7 @@ describe('processAgentStream', () => {
       streamFromEvents(events),
       createContext({ config: createMockConfig({ includeInResponse: true }) }),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     const output = processStdoutSpy.mock.calls.map(([value]) => value).join('');
@@ -359,7 +361,7 @@ describe('processAgentStream', () => {
         }),
       }),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     const output = processStdoutSpy.mock.calls.map(([value]) => value).join('');
@@ -389,7 +391,7 @@ describe('processAgentStream', () => {
       streamFromEvents(events),
       createContext(),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     expect(processStdoutSpy).toHaveBeenCalledWith(
@@ -421,7 +423,7 @@ describe('processAgentStream', () => {
       streamFromEvents(events),
       createContext({ streamFormatter }),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     const jsonEvents = parseJsonStdoutEvents(processStdoutSpy.mock.calls);
@@ -458,7 +460,7 @@ describe('processAgentStream', () => {
       streamFromEvents(events),
       createContext(),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     expect(processStdoutSpy).not.toHaveBeenCalledWith(
@@ -487,7 +489,7 @@ describe('processAgentStream', () => {
       streamFromEvents(events),
       createContext(),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(
@@ -504,7 +506,7 @@ describe('processAgentStream', () => {
         streamFromEvents(events),
         createContext(),
         Date.now(),
-        () => uiTelemetryService.getMetrics(),
+        () => metricSource.getMetrics(),
       ),
     ).rejects.toThrow(FatalTurnLimitedError);
   });
@@ -519,7 +521,7 @@ describe('processAgentStream', () => {
         streamFromEvents(events),
         createContext(),
         Date.now(),
-        () => uiTelemetryService.getMetrics(),
+        () => metricSource.getMetrics(),
       ),
     ).rejects.toThrow('API connection failed');
   });
@@ -543,7 +545,7 @@ describe('processAgentStream', () => {
         streamFromEvents(events),
         createContext({ streamFormatter }),
         Date.now(),
-        () => uiTelemetryService.getMetrics(),
+        () => metricSource.getMetrics(),
       );
     } catch (error) {
       thrownError = error;
@@ -569,7 +571,7 @@ describe('processAgentStream', () => {
   });
 
   it('emits a flat JSON object with session_id, response, and stats on completion', async () => {
-    const metrics = uiTelemetryService.getMetrics();
+    const metrics = metricSource.getMetrics();
     const events: AgentEvent[] = [
       { type: 'text', text: 'The capital is Paris.' },
       { type: 'done', reason: 'stop' },
@@ -608,7 +610,7 @@ describe('processAgentStream', () => {
       streamFromEvents(events),
       createContext({ streamFormatter }),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     const jsonEvents = parseJsonStdoutEvents(processStdoutSpy.mock.calls);
@@ -625,7 +627,7 @@ describe('processAgentStream', () => {
       streamFromEvents(events),
       createContext(),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     expect(consoleErrorSpy).toHaveBeenCalledWith('Operation cancelled.');
@@ -648,7 +650,7 @@ describe('processAgentStream', () => {
       streamFromEvents(events),
       createContext(),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     expect(processStderrSpy).toHaveBeenCalledWith(
@@ -658,7 +660,7 @@ describe('processAgentStream', () => {
 
   it('emits a stream-json RESULT event with stats on completion', async () => {
     const streamFormatter = new StreamJsonFormatter();
-    const metrics = uiTelemetryService.getMetrics();
+    const metrics = metricSource.getMetrics();
     const events: AgentEvent[] = [
       { type: 'text', text: 'done' },
       { type: 'done', reason: 'stop' },
@@ -692,7 +694,7 @@ describe('processAgentStream', () => {
       streamFromEvents(events),
       createContext(),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     expect(processStderrSpy).toHaveBeenCalledWith(
@@ -704,7 +706,7 @@ describe('processAgentStream', () => {
 
   it('emits a stream-json warning and RESULT on done{refusal} @issue:2329', async () => {
     const streamFormatter = new StreamJsonFormatter();
-    const metrics = uiTelemetryService.getMetrics();
+    const metrics = metricSource.getMetrics();
     const events: AgentEvent[] = [
       { type: 'text', text: 'partial' },
       {
@@ -736,7 +738,7 @@ describe('processAgentStream', () => {
   });
 
   it('includes finish_reason:"refusal" in plain jsonOutput on done{refusal} @issue:2329', async () => {
-    const metrics = uiTelemetryService.getMetrics();
+    const metrics = metricSource.getMetrics();
     const events: AgentEvent[] = [
       { type: 'text', text: 'partial response' },
       {
@@ -773,7 +775,7 @@ describe('processAgentStream', () => {
   });
 
   it('does not include finish_reason in plain jsonOutput on a normal done{stop} @issue:2329', async () => {
-    const metrics = uiTelemetryService.getMetrics();
+    const metrics = metricSource.getMetrics();
     const events: AgentEvent[] = [
       { type: 'text', text: 'The capital is Paris.' },
       { type: 'done', reason: 'stop' },
@@ -814,7 +816,7 @@ describe('processAgentStream', () => {
       streamFromEvents(events),
       createContext(),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     expect(processStderrSpy).toHaveBeenCalledWith(
@@ -841,7 +843,7 @@ describe('processAgentStream', () => {
         streamFromEvents(events),
         createContext({ streamFormatter }),
         Date.now(),
-        () => uiTelemetryService.getMetrics(),
+        () => metricSource.getMetrics(),
       ),
     ).rejects.toThrow(
       'Stream idle timeout: no response received within the allowed time.',
@@ -876,7 +878,7 @@ describe('processAgentStream', () => {
       streamFromEvents(events),
       createContext({ streamFormatter }),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     const jsonEvents = parseJsonStdoutEvents(processStdoutSpy.mock.calls);

@@ -1,4 +1,15 @@
-import type { ProfileManager } from '@vybestack/llxprt-code-settings';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+import type { InteractiveAuthRequestPort } from './interactive-auth-coordinator.js';
+import type {
+  InteractiveAuthPrompt,
+  InteractiveAuthPromptOperation,
+} from '@vybestack/llxprt-code-core/runtime/contracts/InteractiveAuthPrompt.js';
+import { requestInteractiveAuthentication } from './interactive-auth-request.js';
+import {
+  InteractiveAuthCoordinator,
+  type InteractiveAuthHostHandler,
+  type InteractiveAuthSessionStatus,
+} from './interactive-auth-coordinator.js';
 import type { SessionAuthPolicy } from './types.js';
 /**
  * @license
@@ -20,6 +31,7 @@ import {
 } from './types.js';
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
 import {
+  OAuthUIBridge,
   type AuthLockStatus,
   type AuthLockRecoveryResult,
   type ForceRecoverOptions,
@@ -33,7 +45,12 @@ import type {
 } from '@vybestack/llxprt-code-auth';
 import { ProactiveRenewalManager } from './proactive-renewal-manager.js';
 import { OAuthBucketManager } from './OAuthBucketManager.js';
-import { createProfileManager } from './profile-utils.js';
+import {
+  createOAuthProfileReads,
+  type OAuthProfileReads,
+} from './oauth-profile-reads.js';
+import { OAuthForegroundLifetime } from './oauth-foreground-lifetime.js';
+import { closeOwnedTokenStore } from './proxy/credential-store-factory.js';
 import { TokenAccessCoordinator } from './token-access-coordinator.js';
 import { AuthFlowOrchestrator } from './auth-flow-orchestrator.js';
 import { AuthStatusService } from './auth-status-service.js';
@@ -136,17 +153,23 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     return this.bucketManager.checkpointFailoverHandlers();
   }
 
+  private readonly foreground = new OAuthForegroundLifetime();
   private providerRegistry: ProviderRegistry;
   private tokenStore: TokenStore;
   private settings?: IOAuthSettingsProvider;
   private readonly bucketManager: OAuthBucketManager;
   private proactiveRenewalManager: ProactiveRenewalManager;
   private readonly tokenAccessCoordinator: TokenAccessCoordinator;
+  private readonly parentInteractiveAuth?: InteractiveAuthPromptOperation;
+  private readonly interactiveAuthUI = new OAuthUIBridge();
+  private readonly interactiveAuth = new InteractiveAuthCoordinator((event) => {
+    this.interactiveAuthUI.emit(event);
+  });
   private readonly authFlowOrchestrator: AuthFlowOrchestrator;
   private readonly authStatusService: AuthStatusService;
   private _runtimeMessageBus: MessageBus | undefined;
   private readonly readSessionAuthPolicy: () => SessionAuthPolicy;
-  private readonly profileReads: Pick<ProfileManager, 'loadProfile'>;
+  private readonly profileReads: OAuthProfileReads;
   private readonly browserProfileStore: BrowserProfileAssociationStore;
 
   /**
@@ -177,15 +200,12 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     tokenStore: TokenStore,
     settings?: IOAuthSettingsProvider,
     runtimeDeps?: OAuthManagerRuntimeMessageBusDeps,
+    private readonly tokenStoreOwnership: 'owned' | 'borrowed' = 'borrowed',
   ) {
-    const directory = runtimeDeps?.config?.profileDirectory;
-    let profiles: ReturnType<typeof createProfileManager> | undefined;
-    this.profileReads = runtimeDeps?.profileReads ?? {
-      loadProfile: async (name) => {
-        profiles ??= createProfileManager(directory);
-        return (await profiles).loadProfile(name);
-      },
-    };
+    this.parentInteractiveAuth = runtimeDeps?.requestInteractiveAuth;
+    this.profileReads =
+      runtimeDeps?.profileReads ??
+      createOAuthProfileReads(runtimeDeps?.config?.profileDirectory);
     this.providerRegistry = new ProviderRegistry(settings);
     this.tokenStore = tokenStore;
     this.settings = settings;
@@ -216,6 +236,7 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
         prompt: this.readSessionAuthPolicy().bucketPrompt,
         delay: this.readSessionAuthPolicy().bucketDelay,
       }),
+      (event, timestamp) => this.interactiveAuthUI.emit(event, timestamp),
     );
     // Assign AFTER authFlowOrchestrator exists so the setter can propagate the
     // bus to the orchestrator. Idempotent with the constructor argument above,
@@ -227,6 +248,7 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
       this.proactiveRenewalManager,
       this.bucketManager,
       this, // facadeRef — satisfies BucketFailoverOAuthManagerLike
+      this.interactiveRequestPort(),
       settings,
       // Pass a getter so the coordinator always reads the live config value,
       // even if tests mutate manager.config after construction.
@@ -361,7 +383,9 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     providerName: string,
     bucket?: string | unknown,
   ): Promise<string | null> {
-    return this.tokenAccessCoordinator.getToken(providerName, bucket);
+    return this.foreground.accept((signal) =>
+      this.tokenAccessCoordinator.getToken(providerName, bucket, signal),
+    );
   }
 
   /**
@@ -369,7 +393,9 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
    * Delegates to TokenAccessCoordinator.
    */
   async peekStoredToken(providerName: string): Promise<OAuthToken | null> {
-    return this.tokenAccessCoordinator.peekStoredToken(providerName);
+    return this.foreground.accept(() =>
+      this.tokenAccessCoordinator.peekStoredToken(providerName),
+    );
   }
 
   /**
@@ -380,7 +406,9 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     providerName: string,
     bucket?: string | unknown,
   ): Promise<OAuthToken | null> {
-    return this.tokenAccessCoordinator.getOAuthToken(providerName, bucket);
+    return this.foreground.accept((signal) =>
+      this.tokenAccessCoordinator.getOAuthToken(providerName, bucket, signal),
+    );
   }
 
   /**
@@ -402,8 +430,77 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
    * and join in-flight ones. Later token reads no longer schedule renewals.
    * Called by the owner of this manager before it releases the token store.
    */
-  async dispose(): Promise<void> {
-    await this.proactiveRenewalManager.cancelAndJoin();
+  private closing: Promise<void> | undefined;
+
+  dispose(): Promise<void> {
+    this.closing ??= this.foreground
+      .dispose(async () => {
+        this.interactiveAuth.unbindHost();
+        await this.interactiveAuth.dispose();
+        await this.proactiveRenewalManager.cancelAndJoin();
+      })
+      .finally(() => {
+        if (this.tokenStoreOwnership === 'owned')
+          closeOwnedTokenStore(this.tokenStore);
+      });
+    return this.closing;
+  }
+
+  private interactiveRequestPort(): InteractiveAuthRequestPort {
+    if (this.parentInteractiveAuth === undefined) return this.interactiveAuth;
+    return {
+      hasHost: () => true,
+      requestAuth: async (challenge, options) => {
+        await this.requestInteractiveAuth({
+          ...challenge,
+          timeoutMs: options?.timeoutMs,
+          signal: options?.signal,
+        });
+        return { kind: 'succeeded', correlationId: challenge.correlationId };
+      },
+    };
+  }
+
+  requestInteractiveAuth(prompt: InteractiveAuthPrompt): Promise<void> {
+    if (this.parentInteractiveAuth !== undefined)
+      return this.parentInteractiveAuth(prompt);
+    const runtimeKind =
+      prompt.requester.runtimeKind === 'unregistered'
+        ? undefined
+        : prompt.requester.runtimeKind;
+    return requestInteractiveAuthentication(
+      this.interactiveAuth,
+      prompt.provider,
+      prompt.bucket,
+      runtimeKind,
+      prompt.reason,
+      prompt.timeoutMs,
+      prompt.requester.runtimeId !== undefined && runtimeKind !== undefined
+        ? { runtimeId: prompt.requester.runtimeId, runtimeKind }
+        : undefined,
+      prompt.signal,
+    );
+  }
+
+  attachInteractiveAuthMessages(callback: OAuthUICallback | null): void {
+    if (callback === null) this.interactiveAuthUI.clearCallback();
+    else this.interactiveAuthUI.setCallback(callback);
+  }
+
+  bindInteractiveAuthHost(handler: InteractiveAuthHostHandler): void {
+    this.interactiveAuth.bindHost(handler);
+  }
+
+  unbindInteractiveAuthHost(): void {
+    this.interactiveAuth.unbindHost();
+  }
+
+  cancelInteractiveAuth(): number {
+    return this.interactiveAuth.cancelActiveSessions();
+  }
+
+  getInteractiveAuthSessions(): readonly InteractiveAuthSessionStatus[] {
+    return this.interactiveAuth.getActiveSessions();
   }
 
   createProfileOAuthWork(signal: AbortSignal): ProfileOAuthWork {
@@ -417,7 +514,12 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
       prepareRenewals: (profile, loadProfile) =>
         renewals.prepareProactiveRenewalsForProfile(profile, loadProfile),
       getToken: (request) =>
-        this.tokenAccessCoordinator.getProfileOAuthToken(request, renewals),
+        this.foreground.accept((signal) =>
+          this.tokenAccessCoordinator.getProfileOAuthToken(
+            { ...request, signal: AbortSignal.any([request.signal, signal]) },
+            renewals,
+          ),
+        ),
       cancelAndJoin: () => renewals.cancelAndJoin(),
     };
   }
@@ -632,6 +734,7 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
    * @param bucket - Optional bucket name, defaults to current session bucket or 'default'
    */
   async getAnthropicUsageInfo(
+    requestFetch: NetworkFetch,
     bucket?: string,
   ): Promise<Record<string, unknown> | null> {
     const provider = this.providerRegistry.getProvider('claudecode');
@@ -650,25 +753,28 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
       )) ??
       'default';
 
-    return getAnthropicUsageInfo(this.tokenStore, bucketToUse);
+    return getAnthropicUsageInfo(requestFetch, this.tokenStore, bucketToUse);
   }
 
   /**
    * Get Anthropic usage information for all authenticated buckets.
    * Returns a map of bucket name to usage info for all buckets that have valid OAuth tokens.
    */
-  async getAllAnthropicUsageInfo(): Promise<
-    Map<string, Record<string, unknown>>
-  > {
-    return getAllAnthropicUsageInfo(this.tokenStore);
+  async getAllAnthropicUsageInfo(
+    requestFetch: NetworkFetch,
+  ): Promise<Map<string, Record<string, unknown>>> {
+    return getAllAnthropicUsageInfo(requestFetch, this.tokenStore);
   }
 
   /**
    * Get Codex usage information for all authenticated buckets.
    * Returns a map of bucket name to usage info for all buckets that have valid OAuth tokens with account_id.
    */
-  async getAllCodexUsageInfo(): Promise<Map<string, Record<string, unknown>>> {
+  async getAllCodexUsageInfo(
+    requestFetch: NetworkFetch,
+  ): Promise<Map<string, Record<string, unknown>>> {
     return getAllCodexUsageInfo(
+      requestFetch,
       this.tokenStore,
       this.readSessionAuthPolicy().baseUrl,
     );
@@ -679,10 +785,11 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
    * Returns a map of bucket name to reset-credits info for all buckets that
    * have valid OAuth tokens with account_id.
    */
-  async getAllCodexRateLimitResetCredits(): ReturnType<
-    typeof getAllCodexRateLimitResetCredits
-  > {
+  async getAllCodexRateLimitResetCredits(
+    requestFetch: NetworkFetch,
+  ): ReturnType<typeof getAllCodexRateLimitResetCredits> {
     return getAllCodexRateLimitResetCredits(
+      requestFetch,
       this.tokenStore,
       this.readSessionAuthPolicy().baseUrl,
     );
@@ -726,10 +833,13 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     failedAccessToken: string,
     bucket?: string,
   ): Promise<OAuthToken | null> {
-    return this.tokenAccessCoordinator.forceRefreshToken(
-      providerName,
-      failedAccessToken,
-      bucket,
+    return this.foreground.accept((signal) =>
+      this.tokenAccessCoordinator.forceRefreshToken(
+        providerName,
+        failedAccessToken,
+        bucket,
+        signal,
+      ),
     );
   }
 

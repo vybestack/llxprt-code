@@ -55,7 +55,6 @@ describe('OpenAIResponsesProvider reasoning include parameter @plan:PLAN-2026011
 
       const runtime = createProviderRuntimeContext({
         runtimeId: 'reasoning-include-enabled-test',
-        settingsService: settings,
       });
 
       let capturedBody: string | undefined;
@@ -123,7 +122,6 @@ describe('OpenAIResponsesProvider reasoning include parameter @plan:PLAN-2026011
 
       const runtime = createProviderRuntimeContext({
         runtimeId: 'reasoning-include-effort-test',
-        settingsService: settings,
       });
 
       let capturedBody: string | undefined;
@@ -192,7 +190,6 @@ describe('OpenAIResponsesProvider reasoning include parameter @plan:PLAN-2026011
 
       const runtime = createProviderRuntimeContext({
         runtimeId: 'reasoning-include-disabled-test',
-        settingsService: settings,
       });
 
       let capturedBody: string | undefined;
@@ -263,7 +260,6 @@ describe('OpenAIResponsesProvider reasoning include parameter @plan:PLAN-2026011
 
       const runtime = createProviderRuntimeContext({
         runtimeId: 'reasoning-strip-enabled-test',
-        settingsService: settings,
       });
 
       let capturedBody: string | undefined;
@@ -339,7 +335,6 @@ describe('OpenAIResponsesProvider reasoning include parameter @plan:PLAN-2026011
 
       const runtime = createProviderRuntimeContext({
         runtimeId: 'reasoning-parse-output-item-test',
-        settingsService: settings,
       });
 
       // Base64 encode some reasoning content (simulating encrypted_content)
@@ -418,7 +413,6 @@ describe('OpenAIResponsesProvider reasoning include parameter @plan:PLAN-2026011
 
       const runtime = createProviderRuntimeContext({
         runtimeId: 'reasoning-parse-summary-delta-test',
-        settingsService: settings,
       });
 
       mockFetch.mockImplementation(
@@ -491,7 +485,6 @@ describe('OpenAIResponsesProvider reasoning include parameter @plan:PLAN-2026011
 
       const runtime = createProviderRuntimeContext({
         runtimeId: 'reasoning-context-test',
-        settingsService: settings,
       });
 
       const encryptedContent = Buffer.from(
@@ -591,7 +584,6 @@ describe('OpenAIResponsesProvider reasoning include parameter @plan:PLAN-2026011
 
       const runtime = createProviderRuntimeContext({
         runtimeId: 'reasoning-strip-context-test',
-        settingsService: settings,
       });
 
       const encryptedContent = Buffer.from(

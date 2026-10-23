@@ -32,23 +32,32 @@ describe('One-shot finish diagnostics', () => {
         };
       },
     };
+    const settingsService = new SettingsService();
     const context = buildContext({
       history: generateHistory(20),
       resolveProvider: () => ({
         invocation: captureProviderInvocation(
-          createProviderRuntimeContext({
-            settingsService: new SettingsService(),
-          }),
+          {
+            runtimeId: createProviderRuntimeContext({}).runtimeId,
+            metadata: createProviderRuntimeContext({}).metadata,
+            globalSettings: settingsService.getAllGlobalSettings(),
+            providerSettings: settingsService.getProviderSettings(
+              provider.name,
+            ),
+          },
           provider.name,
         ),
         provider,
-        runtime: createProviderRuntimeContext({
-          settingsService: new SettingsService(),
-        }),
+        runtime: createProviderRuntimeContext({}),
       }),
     });
 
-    const result = new OneShotStrategy().compress(context);
+    const result = new OneShotStrategy(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ).compress(context);
 
     await expect(result).rejects.toBeInstanceOf(EmptySummaryError);
     await expect(result).rejects.toMatchObject({

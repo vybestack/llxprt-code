@@ -6,53 +6,54 @@
  * @plan PLAN-20260214-SESSIONBROWSER.P29
  */
 
-import {
-  WorkspaceTrustLifecycle,
-  assembleWorkspaceMemory,
-  WorkspaceFilesystemOwner,
-} from '@vybestack/llxprt-code-core';
-
-import process from 'node:process';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import type {
+  AgentProfilePreflight,
+  AgentActivationOperation,
+  AgentProfileApplication,
+} from '@vybestack/llxprt-code-agents';
+import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import type { ProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition.js';
 import type {
   ApprovalMode,
-  PolicyEngineConfig,
   Config,
   LlxprtExtension,
-  SandboxConfig,
   MCPServerConfig,
+  PolicyEngineConfig,
+  SandboxConfig,
+  SessionSettingsOwner,
+  ProviderSwitcher,
 } from '@vybestack/llxprt-code-core';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import process from 'node:process';
 
+import { type CliArgs } from './cliArgParser.js';
+import type { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
+import { resolveMcpServers } from './mcpServerConfig.js';
+import { loadSandboxConfig } from './sandboxConfig.js';
 import {
   loadSettings,
   type MergedSettings,
   type Settings,
 } from './settings.js';
-import { loadSandboxConfig } from './sandboxConfig.js';
-import { resolveMcpServers } from './mcpServerConfig.js';
-import { type CliArgs } from './cliArgParser.js';
-import type { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 
 // @plan:PLAN-20251020-STATELESSPROVIDER3.P04
 import {
   parseBootstrapArgs,
   prepareRuntimeForProfile,
-  type BootstrapRuntimeState,
-  type CliRuntimeOverrides,
 } from './profileBootstrap.js';
 
+import { resolveApprovalMode } from './approvalModeResolver.js';
+import { buildConfig, resolveProxy } from './configBuilder.js';
+import { loadEnvironment } from './environmentLoader.js';
+import { resolveContextAndEnvironment } from './interactiveContext.js';
+import { resolveIntermediateConfig } from './intermediateConfig.js';
+import { finalizeConfig } from './postConfigRuntime.js';
 import {
-  resolveProfileToLoad,
   loadAndPrepareProfile,
+  resolveProfileToLoad,
   type ProfileLoadResult,
 } from './profileResolution.js';
-import { resolveContextAndEnvironment } from './interactiveContext.js';
-import { loadEnvironment } from './environmentLoader.js';
-import { resolveApprovalMode } from './approvalModeResolver.js';
 import { resolveProviderAndModel } from './providerModelResolver.js';
-import { buildConfig } from './configBuilder.js';
-import { finalizeConfig } from './postConfigRuntime.js';
-import { resolveIntermediateConfig } from './intermediateConfig.js';
 
 type ConfigBuildPieces = {
   context: ContextResolutionResult;
@@ -91,37 +92,31 @@ import type { ContextResolutionResult } from './interactiveContext.js';
 async function bootstrapAndLoadProfile(
   settings: Settings,
   argv: CliArgs,
-  runtimeOverrides: CliRuntimeOverrides,
+  preflight: AgentProfilePreflight | undefined,
+  settingsService: SettingsService | undefined,
+  authority: CredentialAuthority | undefined,
+  contributions: ProviderContributionRegistry | undefined,
+  onPreflightReady: ((operation: AgentProfilePreflight) => void) | undefined,
 ) {
   const bootstrapParsed = parseBootstrapArgs();
   const parsedWithOverrides = {
     bootstrapArgs: bootstrapParsed.bootstrapArgs,
     runtimeMetadata: {
       ...bootstrapParsed.runtimeMetadata,
-      settingsService:
-        runtimeOverrides.settingsService ??
-        bootstrapParsed.runtimeMetadata.settingsService,
-      providerContributions:
-        runtimeOverrides.providerContributions ??
-        bootstrapParsed.runtimeMetadata.providerContributions,
+      proxy: resolveProxy(argv.proxy),
     },
   };
   const bootstrapArgs = parsedWithOverrides.bootstrapArgs;
-  const runtimeState = await prepareRuntimeForProfile(parsedWithOverrides);
-  if (runtimeState.registration) {
-    runtimeOverrides.onRuntimeRegistrationReady?.(runtimeState.registration);
-  }
-  // The registry may come from either source. Post-config re-assembly must see
-  // the SAME one, or it rebuilds the provider manager without the plugins.
-  const effectiveOverrides: CliRuntimeOverrides = {
-    ...runtimeOverrides,
-    ...(parsedWithOverrides.runtimeMetadata.providerContributions === undefined
-      ? {}
-      : {
-          providerContributions:
-            parsedWithOverrides.runtimeMetadata.providerContributions,
-        }),
-  };
+  const runtimeState =
+    preflight ??
+    (await prepareRuntimeForProfile(
+      parsedWithOverrides,
+      authority,
+      settingsService,
+      undefined,
+      contributions,
+    ));
+  onPreflightReady?.(runtimeState);
 
   const { profileToLoad, profileExplicitlySpecified } = resolveProfileToLoad({
     bootstrapArgs,
@@ -135,7 +130,7 @@ async function bootstrapAndLoadProfile(
     profileToLoad,
     profileExplicitlySpecified,
   });
-  return { bootstrapArgs, runtimeState, profileResult, effectiveOverrides };
+  return { bootstrapArgs, runtimeState, profileResult };
 }
 
 /** Steps 7-8: Resolve approval mode and provider/model, sync to SettingsService */
@@ -144,7 +139,7 @@ function resolveApprovalAndProvider(
   profileMergedSettings: MergedSettings,
   context: ContextResolutionResult,
   profileResult: ProfileLoadResult,
-  runtimeState: BootstrapRuntimeState,
+  runtimeState: AgentProfilePreflight,
 ) {
   const securitySettings = (profileMergedSettings as Partial<MergedSettings>)
     .security;
@@ -164,18 +159,15 @@ function resolveApprovalAndProvider(
     settingsModel: profileMergedSettings.model,
     envDefaultModel: process.env.LLXPRT_DEFAULT_MODEL,
     envProviderModel: process.env.GEMINI_MODEL,
-    providerDefaultModel: runtimeState.providerManager
-      .getProviderByName('gemini')
-      ?.getDefaultModel(),
+    providerDefaultModel: runtimeState.readProviderDefaultModel('gemini'),
   });
   if (
     providerModel.provider !== undefined &&
     providerModel.model &&
     providerModel.model.trim() !== ''
   ) {
-    runtimeState.runtime.settingsService.setProviderSetting(
+    runtimeState.chooseProviderModel(
       providerModel.provider,
-      'model',
       providerModel.model,
     );
   }
@@ -210,7 +202,7 @@ async function resolveConfigBuildPieces(
   settings: Settings,
   profileMergedSettings: MergedSettings,
   profileResult: ProfileLoadResult,
-  runtimeState: BootstrapRuntimeState,
+  runtimeState: AgentProfilePreflight,
   cwd: string,
   extensions: LlxprtExtension[],
   extensionEnablementManager: ExtensionEnablementManager,
@@ -285,50 +277,17 @@ async function resolveConfigBuildPieces(
   };
 }
 
-/**
- * Narrow the bootstrap runtime's structural settings state to the
- * SettingsService surface Config consumes (profileBootstrap composes it via
- * createRuntimeSettingsService). Fails fast with a clear message instead of
- * letting a malformed runtime surface as an opaque error inside buildConfig.
- */
-function isSettingsServiceLike(
-  value: unknown,
-): value is { get: unknown; set: unknown } {
-  if (value === null || typeof value !== 'object') {
-    return false;
-  }
-  const candidate = value as { get?: unknown; set?: unknown };
-  return (
-    typeof candidate.get === 'function' && typeof candidate.set === 'function'
-  );
-}
-
-function requireBootstrapSettingsService(
-  runtimeState: BootstrapRuntimeState,
-): SettingsService {
-  // The runtime is assembled upstream via type assertions, so the static type
-  // cannot be trusted here — validate the value structurally as unknown.
-  const settingsService: unknown = runtimeState.runtime.settingsService;
-  if (!isSettingsServiceLike(settingsService)) {
-    throw new Error(
-      '[config] Bootstrap runtime is missing its SettingsService. ' +
-        'prepareRuntimeForProfile() must run before loadCliConfig() (issue #2300).',
-    );
-  }
-  return settingsService as SettingsService;
-}
-
 function buildLoadedConfig(
   sessionId: string,
   cwd: string,
   argv: CliArgs,
   pieces: ConfigBuildPieces,
-  settingsService: SettingsService,
+  initialSettings: Record<string, unknown>,
 ): Config {
   return buildConfig({
     sessionId,
     cwd,
-    settingsService,
+    initialSettings,
     argv,
     profileSettingsWithTools: pieces.profileSettingsWithTools,
     context: pieces.context,
@@ -368,11 +327,27 @@ export async function loadCliConfig(
   sessionId: string,
   argv: CliArgs,
   cwd: string = process.cwd(),
-  runtimeOverrides: CliRuntimeOverrides = {},
+  preflight?: AgentProfilePreflight,
+  settingsService?: SettingsService,
+  settingsOwner?: SessionSettingsOwner,
+  authority?: CredentialAuthority,
+  contributions?: ProviderContributionRegistry,
+  onActivationBootstrapReady?: (operation: AgentActivationOperation) => void,
+  onProfileApplicationReady?: (application: AgentProfileApplication) => void,
+  onProviderSwitchReady?: (switchProvider: ProviderSwitcher) => void,
+  onPreflightReady?: (operation: AgentProfilePreflight) => void,
 ): Promise<Config> {
   loadEnvironment();
-  const { bootstrapArgs, runtimeState, profileResult, effectiveOverrides } =
-    await bootstrapAndLoadProfile(settings, argv, runtimeOverrides);
+  const { bootstrapArgs, runtimeState, profileResult } =
+    await bootstrapAndLoadProfile(
+      settings,
+      argv,
+      preflight,
+      settingsService,
+      authority,
+      contributions,
+      onPreflightReady,
+    );
   const profileMergedSettings = profileResult.profileMergedSettings;
 
   const pieces = await resolveConfigBuildPieces(
@@ -387,31 +362,18 @@ export async function loadCliConfig(
   );
   // The Config must bind to the SAME SettingsService the bootstrap runtime
   // registered — Config construction never adopts ambient state (issue #2300).
-  bindSelectedMcpSettings(effectiveOverrides, pieces);
   const config = buildLoadedConfig(
     sessionId,
     cwd,
     argv,
     pieces,
-    requireBootstrapSettingsService(runtimeState),
+    runtimeState.captureSettings(),
   );
 
-  const trust = new WorkspaceTrustLifecycle({
-    localTrust: config.initialWorkspaceTrust,
-  });
-  const filesystem = new WorkspaceFilesystemOwner({
-    targetDir: config.getTargetDir(),
-    includeDirectories: config.getConfiguredIncludeDirectories(),
-    isTrusted: () => trust.isTrustedFolder(),
-  });
-  const memory = assembleWorkspaceMemory(config, filesystem, trust);
-  try {
-    await memory.operations.refresh();
-    return await finalizeConfig({
-      filesystem,
-      memory,
-      workspaceTrust: trust,
-      trustCleanup: () => trust.dispose(),
+  return finalizeConfig(
+    {
+      bindMcpSettings: () =>
+        bindSelectedMcpSettings(settingsOwner ?? runtimeState, pieces),
       config,
       runtimeState,
       bootstrapArgs,
@@ -421,31 +383,22 @@ export async function loadCliConfig(
       profileLoadResult: profileResult,
       providerModelResult: pieces.providerModel,
       defaultDisabledTools: profileMergedSettings.defaultDisabledTools ?? [],
-      runtimeOverrides: effectiveOverrides,
       approvalMode: pieces.approvalMode,
       interactive: pieces.context.interactive,
-    });
-  } catch (error) {
-    const results = [];
-    for (const resource of [memory, filesystem, trust])
-      results.push(...(await Promise.allSettled([resource.dispose()])));
-    const failures = results.flatMap((result) =>
-      result.status === 'rejected' ? [result.reason] : [],
-    );
-    if (failures.length > 0)
-      throw new AggregateError(
-        [error, ...failures],
-        'Memory bootstrap cleanup failed',
-      );
-    throw error;
-  }
+    },
+    settingsOwner,
+    onActivationBootstrapReady,
+    onProfileApplicationReady,
+    onProviderSwitchReady,
+    preflight === undefined,
+  );
 }
 
 function bindSelectedMcpSettings(
-  overrides: CliRuntimeOverrides,
+  owner: Pick<AgentProfilePreflight, 'bindMcpSettings'>,
   pieces: ConfigBuildPieces,
 ): void {
-  overrides.sessionSettingsOwner?.bindMcpSettings(
+  owner.bindMcpSettings(
     {
       mcpServers: pieces.mcpServers,
       blockedMcpServers: [...pieces.blockedMcpServers],

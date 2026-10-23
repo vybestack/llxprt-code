@@ -205,6 +205,7 @@ function toOAuthManager(stub: OAuthManagerStub): OAuthManager {
 
 describe('Issue #2411: base-URL-aware OAuth eligibility for Anthropic', () => {
   let runtimeContext: ProviderRuntimeContext;
+  let config: ReturnType<typeof createRuntimeConfigStub>;
   let settingsService: SettingsService;
   let runtimeIdCounter: number;
 
@@ -230,8 +231,8 @@ describe('Issue #2411: base-URL-aware OAuth eligibility for Anthropic', () => {
   ): void => {
     runtimeContext = result.runtime;
     settingsService = result.settingsService;
-    runtimeContext.config ??= createRuntimeConfigStub(settingsService);
-    runtimeContext.config.getEphemeralSettings = () => ({
+    config = createRuntimeConfigStub(settingsService);
+    config.getEphemeralSettings = () => ({
       ...settingsService.getAllGlobalSettings(),
       ...settingsService.getProviderSettings('anthropic'),
     });
@@ -287,7 +288,7 @@ describe('Issue #2411: base-URL-aware OAuth eligibility for Anthropic', () => {
       contents,
       settings: settingsService,
       runtime: runtimeContext,
-      config: runtimeContext.config,
+      config,
       // Non-streaming so the SDK mock's messages.create returns a plain object.
       ephemerals: { streaming: 'disabled', ...(overrides.ephemerals ?? {}) },
       ...overrides,
@@ -484,7 +485,7 @@ describe('Issue #2411: base-URL-aware OAuth eligibility for Anthropic', () => {
         ],
         settings: settingsService,
         runtime: runtimeContext,
-        config: runtimeContext.config,
+        config,
         ephemerals: { streaming: 'disabled' },
         resolved: {
           // The mock SDK ignores the model entirely; use a generic placeholder

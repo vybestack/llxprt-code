@@ -85,10 +85,6 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
         provider: 'test-provider',
       },
       providerRuntime: {
-        config: {
-          getEnableHooks: () => false,
-          getHookSystem: () => null,
-        },
         runtimeId: 'test-runtime',
       },
       ephemerals: {
@@ -160,17 +156,10 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
   });
 
   describe('runtime config handoff', () => {
-    it('preserves the Config instance when GenAI request config carries abort state', () => {
-      const configInstance = {
-        getEnableHooks: () => false,
-        getHookSystem: () => null,
-        getUserMemory: () => undefined,
-        getConversationLoggingEnabled: () => false,
-      };
+    it('keeps GenAI abort state in runtime metadata without publishing Config', () => {
       const abortController = new AbortController();
       const tools = [];
       const baseRuntimeContext = {
-        config: configInstance,
         settingsService: new SettingsService(),
         runtimeId: 'test-runtime',
         metadata: { source: 'test' },
@@ -180,9 +169,9 @@ describe('StreamProcessor._buildAndSendStreamRequest — stream retry boundary (
         config: { abortSignal: abortController.signal, tools },
       });
 
-      expect(runtimeContext.config).toBe(configInstance);
-      expect(runtimeContext.config).not.toHaveProperty('abortSignal');
-      expect(runtimeContext.config).not.toHaveProperty('tools');
+      expect(runtimeContext).not.toHaveProperty('config');
+      expect(runtimeContext).not.toHaveProperty('abortSignal');
+      expect(runtimeContext).not.toHaveProperty('tools');
       expect(runtimeContext.metadata?.['abortSignal']).toBe(
         abortController.signal,
       );

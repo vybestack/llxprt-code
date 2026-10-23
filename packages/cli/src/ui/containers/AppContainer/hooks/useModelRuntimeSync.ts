@@ -14,10 +14,12 @@ import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type {
   EphemeralSettingsRuntime,
   ModelState,
+  SettingsTelemetryState,
 } from '../../../cliUiRuntime.js';
 
 type ModelRuntimeSyncRuntime = Pick<ModelState, 'getModel'> &
-  Pick<EphemeralSettingsRuntime, 'getEphemeralSetting'>;
+  Pick<EphemeralSettingsRuntime, 'getEphemeralSetting'> &
+  Pick<SettingsTelemetryState, 'subscribeModelSelection'>;
 
 interface UseModelRuntimeSyncParams {
   config: ModelRuntimeSyncRuntime;
@@ -106,7 +108,10 @@ export function useModelRuntimeSync({
 
     syncModelAndContextLimit(undefined, true);
 
-    return subscribeToModelRuntimeEvents(syncModelAndContextLimit);
+    return subscribeToModelRuntimeEvents(
+      config.subscribeModelSelection,
+      syncModelAndContextLimit,
+    );
   }, [
     config,
     getActiveModelName,
@@ -126,16 +131,13 @@ export function useModelRuntimeSync({
  * (issue #2193).
  */
 function subscribeToModelRuntimeEvents(
+  subscribe: SettingsTelemetryState['subscribeModelSelection'],
   syncModelAndContextLimit: (payload?: ModelProfileInfoPayload) => void,
 ): () => void {
-  const handleModelChanged = () => syncModelAndContextLimit();
-  const handleModelProfileChanged = (payload: ModelProfileInfoPayload) =>
-    syncModelAndContextLimit(payload);
+  const release = subscribe(syncModelAndContextLimit);
   const handleSettingsChanged = () => syncModelAndContextLimit();
   const handleLoadBalancerSelectionChanged = () => syncModelAndContextLimit();
 
-  coreEvents.on(CoreEvent.ModelChanged, handleModelChanged);
-  coreEvents.on(CoreEvent.ModelProfileChanged, handleModelProfileChanged);
   coreEvents.on(CoreEvent.SettingsChanged, handleSettingsChanged);
   coreEvents.on(
     CoreEvent.LoadBalancerSelectionChanged,
@@ -143,8 +145,7 @@ function subscribeToModelRuntimeEvents(
   );
 
   return () => {
-    coreEvents.off(CoreEvent.ModelChanged, handleModelChanged);
-    coreEvents.off(CoreEvent.ModelProfileChanged, handleModelProfileChanged);
+    release();
     coreEvents.off(CoreEvent.SettingsChanged, handleSettingsChanged);
     coreEvents.off(
       CoreEvent.LoadBalancerSelectionChanged,

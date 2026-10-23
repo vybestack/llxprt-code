@@ -4,19 +4,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { afterEach, describe, expect, it, vi } from 'bun:test';
-import { useRuntimeTestOwners } from './__tests__/runtime-owner-test-helpers.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { mkdtemp, rm, realpath } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { runCleanupSteps } from '../../../agents/src/core/subagent-cleanup.js';
 import { OAuthManager } from '../auth/oauth-manager.js';
 import {
   MemoryTokenStore,
   createTestProvider,
 } from '../auth/__tests__/behavioral/test-utils.js';
-import { interactiveAuthCoordinator } from '../auth/interactive-auth-coordinator.js';
 
 describe('owner OAuth interactive authentication timeout', () => {
-  const owners = useRuntimeTestOwners();
+  const retiring: Array<() => void | Promise<void>> = [];
   afterEach(async () => {
-    await interactiveAuthCoordinator.dispose();
-    interactiveAuthCoordinator.unbindHost();
+    await runCleanupSteps(retiring.splice(0).reverse());
+  });
+  afterEach(async () => {
     vi.restoreAllMocks();
   });
 
@@ -24,12 +30,28 @@ describe('owner OAuth interactive authentication timeout', () => {
     timeout: number | undefined,
     withConfig = true,
   ): Promise<number[]> {
-    const root = withConfig ? owners.config() : undefined;
-    const config = root?.config;
-    root?.settingsOwner.writeUserParameter(
-      'auth.interactiveTimeoutMs',
-      timeout,
-    );
+    let config: Config | undefined;
+    let settingsOwner: SessionSettingsOwner | undefined;
+    if (withConfig) {
+      const raw = await mkdtemp(join(tmpdir(), 'oauth-timeout-owner-'));
+      retiring.push(() => rm(raw, { recursive: true, force: true }));
+      const directory = await realpath(raw);
+      const selected = new Config({
+        sessionId: 'same-label',
+        targetDir: directory,
+        cwd: directory,
+        model: 'owner-model',
+        debugMode: false,
+      });
+      config = selected;
+      retiring.push(() => selected.dispose());
+      const settings = new SettingsService();
+      const owner = new SessionSettingsOwner(settings);
+      settingsOwner = owner;
+      retiring.push(() => owner.dispose());
+      owner.bindTelemetry(selected);
+      owner.writeUserParameter('auth.interactiveTimeoutMs', timeout);
+    }
     const manager = new OAuthManager(new MemoryTokenStore(), undefined, {
       config,
       readSessionAuthPolicy: () => ({
@@ -38,7 +60,7 @@ describe('owner OAuth interactive authentication timeout', () => {
         profileName: null,
         bucketPrompt: undefined,
         bucketDelay: undefined,
-        interactiveTimeoutMs: root?.settingsOwner.readNamedParameter(
+        interactiveTimeoutMs: settingsOwner?.readNamedParameter(
           'auth.interactiveTimeoutMs',
         ),
       }),
@@ -47,13 +69,14 @@ describe('owner OAuth interactive authentication timeout', () => {
         runtimeKind: 'subagent',
       }),
     });
+    retiring.push(() => manager.dispose());
     manager.registerProvider(createTestProvider('timeout-provider'));
     await manager.toggleOAuthEnabled('timeout-provider');
     let started = (): void => {};
     const ready = new Promise<void>((resolve) => {
       started = resolve;
     });
-    interactiveAuthCoordinator.bindHost(async () => {
+    manager.bindInteractiveAuthHost(async () => {
       started();
       await new Promise<void>(() => {});
     });
@@ -75,8 +98,9 @@ describe('owner OAuth interactive authentication timeout', () => {
       .getToken('timeout-provider', 'work')
       .catch((error: unknown) => error);
     await ready;
-    interactiveAuthCoordinator.cancelActiveSessions();
+    manager.cancelInteractiveAuth();
     expect(await result).toMatchObject({ outcomeKind: 'cancelled' });
+    await manager.dispose();
     return delays;
   }
 

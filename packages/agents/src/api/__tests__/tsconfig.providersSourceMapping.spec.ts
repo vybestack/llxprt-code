@@ -84,9 +84,10 @@ describe('agents tsconfig maps providers to source (build-boundary) @plan:issue2
         '../providers/src/auth/index.ts',
       '@vybestack/llxprt-code-providers/composition.js':
         '../providers/src/composition/index.ts',
-      '@vybestack/llxprt-code-providers/runtime.js':
-        '../providers/src/runtime/index.ts',
     };
+    expect(
+      paths?.['@vybestack/llxprt-code-providers/runtime.js'],
+    ).toBeUndefined();
     for (const [subpath, expectedTarget] of Object.entries(expectedTargets)) {
       expect(paths?.[subpath]?.[0]).toBe(expectedTarget);
     }

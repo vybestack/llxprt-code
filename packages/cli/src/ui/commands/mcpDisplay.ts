@@ -9,11 +9,13 @@ import type {
   ToolInfo,
   McpPromptInfo,
   McpResourceInfo,
-  Agent,
+  McpServerInfo,
+  McpBlockedServer,
+  McpDiscoveryState,
+  McpDetailStatus,
   McpServerDetail,
 } from '@vybestack/llxprt-code-agents';
 import { MCPServerStatus } from '@vybestack/llxprt-code-mcp';
-import type { McpCommandRuntime } from '../cliUiRuntime.js';
 
 export const COLOR_GREEN = '\u001b[32m';
 export const COLOR_YELLOW = '\u001b[33m';
@@ -25,12 +27,6 @@ export const RESET_COLOR = '\u001b[0m';
 export const MAX_MCP_RESOURCES_TO_SHOW = 10;
 
 export type RuntimeMcpServers = Record<string, MCPServerConfig | undefined>;
-
-// @plan:ISSUE-2376 — the /mcp status + schema rendering is fully migrated to the
-// Agent surface (agent.mcp.details()); this alias is retained solely for
-// mcpAuth.ts, whose OAuth-restart flow still needs the #2384 McpCommandRuntime
-// (getMcpClientManager/getAgentClient) and is orthogonal to the display path.
-export type RuntimeMcpServices = McpCommandRuntime;
 
 export const getResourceName = (resource: McpResourceInfo): string =>
   resource.name ?? resource.uri;
@@ -418,8 +414,15 @@ function resolveConnectionStatus(status: string | undefined): MCPServerStatus {
   }
 }
 
+export interface McpStatusReads {
+  readonly listServers: () => readonly McpServerInfo[];
+  readonly listBlockedServers: () => readonly McpBlockedServer[];
+  readonly discoveryState: () => McpDiscoveryState;
+  readonly readDetails: () => Promise<McpDetailStatus>;
+}
+
 export async function buildMcpStatusMessage(
-  agent: Agent | null,
+  reads: McpStatusReads,
   serverNames: string[],
   mcpServers: RuntimeMcpServers,
   blockedMcpServers: ReadonlyArray<{ name: string; extensionName?: string }>,
@@ -427,12 +430,8 @@ export async function buildMcpStatusMessage(
   showSchema: boolean,
   showTips: boolean,
 ): Promise<string> {
-  if (agent === null) {
-    return '';
-  }
-
   const statuses = new Map(
-    agent.mcp.listServers().map((server) => [server.name, server.status]),
+    reads.listServers().map((server) => [server.name, server.status]),
   );
   const connectingServers = serverNames.filter(
     (name) => statuses.get(name) === 'connecting',
@@ -442,7 +441,7 @@ export async function buildMcpStatusMessage(
   // singleton is never written by the real McpClientManager startup path, so
   // reading it here caused /mcp list to diverge from actual server state
   // (issue #2516).
-  const discoveryState = agent.mcp.discoveryState();
+  const discoveryState = reads.discoveryState();
 
   let message = '';
 
@@ -463,11 +462,7 @@ export async function buildMcpStatusMessage(
   // (which don't depend on details).
   let detailByServer = new Map<string, McpServerDetail>();
   try {
-    const details = await agent.mcp.details({
-      includeTools: true,
-      includePrompts: true,
-      includeResources: true,
-    });
+    const details = await reads.readDetails();
     detailByServer = new Map(details.servers.map((s) => [s.name, s]));
   } catch (error) {
     message += `${COLOR_YELLOW}Failed to load MCP tool details: ${error instanceof Error ? error.message : String(error)}${RESET_COLOR}\n\n`;

@@ -1,15 +1,23 @@
+import {
+  useRecordingPrompts,
+  withRecordingLifetimeFixture,
+} from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
+import { bindOwnerBrowserCatalog } from './browserCatalogHost.js';
+import { describe, expect, it } from 'bun:test';
+import { readFile, readdir } from 'node:fs/promises';
+import { renderHook, waitFor } from '../../__tests__/render.js';
+import { resumeOwnerSession } from '../utils/resumeOwnerSession.js';
+import {
+  type UseSessionBrowserProps,
+  useSessionBrowser,
+} from './useSessionBrowser.js';
+import { Key } from './useKeypress.js';
+
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { describe, expect, it } from 'bun:test';
-import { readFile, readdir } from 'node:fs/promises';
-import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
-import { renderHook, waitFor } from '../../__tests__/render.js';
-import { resumeOwnerSession } from '../utils/ownerSessionUi.js';
-import { useSessionBrowser } from './useSessionBrowser.js';
-import type { Key } from './useKeypress.js';
 
 function key(name: string): Key {
   return {
@@ -27,9 +35,18 @@ const human = (text: string) => ({
 });
 
 describe('owner session browser', () => {
+  useRecordingPrompts();
   it('lists and deletes a closed source through the Agent without affecting the live owner', async () => {
     await withRecordingLifetimeFixture(
-      async ({ agent, borrow, chatsDir, config }) => {
+      async (
+        agent,
+        config,
+        _settingsOwner,
+        _settingsService,
+        _oauthManager,
+        borrow,
+        chatsDir,
+      ) => {
         await agent.setHistory([human('browser deletion source')]);
         await agent.session.setRecording({ enabled: true });
         const sourceId = (await agent.session.listSessions()).at(0)?.id;
@@ -40,19 +57,35 @@ describe('owner session browser', () => {
         await next.session.setRecording({ enabled: true });
         const path = next.session.getRecording().path;
         if (!path) throw new Error('Missing live owner');
+        const catalog: Pick<
+          UseSessionBrowserProps,
+          'readCatalog' | 'deleteTarget'
+        > = {
+          readCatalog: bindOwnerBrowserCatalog(
+            () => next.session.listBrowserTargetsDetailed(),
+            () => next.session.getRecording().path,
+            () => config.getSessionId(),
+          ),
+          deleteTarget: async (target) => {
+            if (target.kind === 'checkpoint')
+              await next.session.deleteCheckpoint(target.checkpointId);
+            else await next.session.deleteSession(target.session.sessionId);
+          },
+        };
         const browser = renderHook(() =>
           useSessionBrowser({
             chatsDir,
             projectHash: config.projectTempDir.split('/').at(-1) ?? '',
             currentSessionId: config.getSessionId(),
-            ownerAgent: next,
+            ...catalog,
             onSelect: async (target) => {
               await resumeOwnerSession(
-                next,
+                next.session.resume.bind(next.session),
                 target.kind === 'session'
                   ? target.session.sessionId
                   : target.checkpointId,
                 'allowed',
+                next.session.listBrowserTargetsDetailed.bind(next.session),
               );
               return { ok: true };
             },
@@ -86,7 +119,15 @@ describe('owner session browser', () => {
   }, 30000);
   it('selects a real owner session and replays it without a raw recording swap', async () => {
     await withRecordingLifetimeFixture(
-      async ({ agent, borrow, chatsDir, config }) => {
+      async (
+        agent,
+        config,
+        _settingsOwner,
+        _settingsService,
+        _oauthManager,
+        borrow,
+        chatsDir,
+      ) => {
         await agent.setHistory([human('browser resume source')]);
         await agent.session.setRecording({ enabled: true });
         const sourceId = (await agent.session.listSessions()).at(0)?.id;
@@ -96,19 +137,35 @@ describe('owner session browser', () => {
         await next.setHistory([human('prior owner')]);
         await next.session.setRecording({ enabled: true });
         let shown = false;
+        const catalog: Pick<
+          UseSessionBrowserProps,
+          'readCatalog' | 'deleteTarget'
+        > = {
+          readCatalog: bindOwnerBrowserCatalog(
+            () => next.session.listBrowserTargetsDetailed(),
+            () => next.session.getRecording().path,
+            () => config.getSessionId(),
+          ),
+          deleteTarget: async (target) => {
+            if (target.kind === 'checkpoint')
+              await next.session.deleteCheckpoint(target.checkpointId);
+            else await next.session.deleteSession(target.session.sessionId);
+          },
+        };
         const browser = renderHook(() =>
           useSessionBrowser({
             chatsDir,
             projectHash: config.projectTempDir.split('/').at(-1) ?? '',
             currentSessionId: config.getSessionId(),
-            ownerAgent: next,
+            ...catalog,
             onSelect: async (target) => {
               const replay = await resumeOwnerSession(
-                next,
+                next.session.resume.bind(next.session),
                 target.kind === 'session'
                   ? target.session.sessionId
                   : target.checkpointId,
                 'allowed',
+                next.session.listBrowserTargetsDetailed.bind(next.session),
               );
               shown = replay.uiHistory.some(
                 (item) =>

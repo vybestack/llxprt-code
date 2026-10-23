@@ -10,7 +10,6 @@ import {
   isInternalSettingKey,
   type Profile,
 } from '@vybestack/llxprt-code-settings';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 import type { ReadonlySettingsSnapshot } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import { canonicalizeToolName, INVALID_TOOL_NAME } from './toolGovernance.js';
@@ -158,24 +157,24 @@ export function createSettingsSnapshot(
 }
 
 function populateProviderSettings(
-  service: SettingsService,
+  writeSetting: (key: string, value: unknown) => void,
   provider: string,
   profile: Profile,
 ): void {
   const modelParams = profile.modelParams;
   const temperature = modelParams.temperature;
   if (typeof temperature === 'number' && Number.isFinite(temperature)) {
-    service.set(`providers.${provider}.temperature`, temperature);
+    writeSetting(`providers.${provider}.temperature`, temperature);
   }
 
   const maxTokens = modelParams.max_tokens;
   if (typeof maxTokens === 'number' && Number.isFinite(maxTokens)) {
-    service.set(`providers.${provider}.maxTokens`, maxTokens);
+    writeSetting(`providers.${provider}.maxTokens`, maxTokens);
   }
 
   const baseUrl = getStringSetting(profile.ephemeralSettings, ['base-url']);
   if (baseUrl) {
-    service.set(`providers.${provider}.base-url`, baseUrl);
+    writeSetting(`providers.${provider}.base-url`, baseUrl);
   }
   // Subagent runtimes use a fresh SettingsService; writing an explicit
   // undefined provider base URL would mask provider defaults.
@@ -188,7 +187,7 @@ function isMissingAuthValue(value: unknown): boolean {
 function tryLoadApiKeyFromKeyfile(
   provider: string,
   expandedKeyfile: string,
-  service: SettingsService,
+  writeSetting: (key: string, value: unknown) => void,
 ): void {
   const resolvedPath = path.resolve(expandedKeyfile);
   try {
@@ -198,8 +197,8 @@ function tryLoadApiKeyFromKeyfile(
     // is built.
     const content = fs.readFileSync(resolvedPath, 'utf8').trim();
     if (content !== '') {
-      service.set('auth-key', content);
-      service.set(`providers.${provider}.auth-key`, content);
+      writeSetting('auth-key', content);
+      writeSetting(`providers.${provider}.auth-key`, content);
     } else {
       debugLogger.warn(
         `SubagentOrchestrator: auth key file '${resolvedPath}' is empty`,
@@ -215,22 +214,22 @@ function tryLoadApiKeyFromKeyfile(
 }
 
 function populateAuthSettings(
-  service: SettingsService,
+  writeSetting: (key: string, value: unknown) => void,
   provider: string,
   profile: Profile,
 ): void {
   const authKey = getStringSetting(profile.ephemeralSettings, ['auth-key']);
   const hasProfileAuthKey = !isMissingAuthValue(authKey);
   if (hasProfileAuthKey) {
-    service.set('auth-key', authKey);
-    service.set(`providers.${provider}.auth-key`, authKey);
+    writeSetting('auth-key', authKey);
+    writeSetting(`providers.${provider}.auth-key`, authKey);
   }
   const authKeyName = getStringSetting(profile.ephemeralSettings, [
     'auth-key-name',
   ]);
   if (authKeyName) {
-    service.set('auth-key-name', authKeyName);
-    service.set(`providers.${provider}.auth-key-name`, authKeyName);
+    writeSetting('auth-key-name', authKeyName);
+    writeSetting(`providers.${provider}.auth-key-name`, authKeyName);
   }
 
   const authKeyfile = getStringSetting(profile.ephemeralSettings, [
@@ -238,45 +237,45 @@ function populateAuthSettings(
   ]);
   if (authKeyfile) {
     const expandedKeyfile = expandTilde(authKeyfile);
-    service.set('auth-keyfile', expandedKeyfile);
-    service.set(`providers.${provider}.auth-keyfile`, expandedKeyfile);
+    writeSetting('auth-keyfile', expandedKeyfile);
+    writeSetting(`providers.${provider}.auth-keyfile`, expandedKeyfile);
     // Keep the keyfile reference available even when the local file cannot be
     // read; downstream auth resolution follows the same warning/fallback model
     // used by profile activation instead of failing subagent startup here.
     if (!hasProfileAuthKey) {
-      tryLoadApiKeyFromKeyfile(provider, expandedKeyfile, service);
+      tryLoadApiKeyFromKeyfile(provider, expandedKeyfile, writeSetting);
     }
   }
 }
 
 function populateCompressionSettings(
-  service: SettingsService,
+  writeSetting: (key: string, value: unknown) => void,
   profile: Profile,
 ): void {
   const contextLimit = getNumberSetting(profile.ephemeralSettings, [
     'context-limit',
   ]);
   if (contextLimit !== undefined) {
-    service.set('context-limit', contextLimit);
+    writeSetting('context-limit', contextLimit);
   }
 
   const compressionThreshold = getNumberSetting(profile.ephemeralSettings, [
     'compression-threshold',
   ]);
   if (compressionThreshold !== undefined) {
-    service.set('compression-threshold', compressionThreshold);
+    writeSetting('compression-threshold', compressionThreshold);
   }
 
   const preserveThreshold = getNumberSetting(profile.ephemeralSettings, [
     'compression-preserve-threshold',
   ]);
   if (preserveThreshold !== undefined) {
-    service.set('compression-preserve-threshold', preserveThreshold);
+    writeSetting('compression-preserve-threshold', preserveThreshold);
   }
 }
 
 function populateToolAndMiscSettings(
-  service: SettingsService,
+  writeSetting: (key: string, value: unknown) => void,
   profile: Profile,
   defaultDisabledTools: ReadonlySet<string>,
 ): void {
@@ -284,7 +283,7 @@ function populateToolAndMiscSettings(
     'toolFormat',
   ]);
   if (toolFormat) {
-    service.set('toolFormatOverride', toolFormat);
+    writeSetting('toolFormatOverride', toolFormat);
   }
 
   const { allowed, disabled } = resolveToolGovernance(
@@ -292,32 +291,35 @@ function populateToolAndMiscSettings(
     defaultDisabledTools,
   );
   if (allowed) {
-    service.set('tools.allowed', allowed);
+    writeSetting('tools.allowed', allowed);
   }
 
   if (disabled) {
-    service.set('tools.disabled', disabled);
+    writeSetting('tools.disabled', disabled);
   }
 
   const userAgent = getStringSetting(profile.ephemeralSettings, ['user-agent']);
   if (userAgent) {
-    service.set('user-agent', userAgent);
+    writeSetting('user-agent', userAgent);
   }
 }
 
-function populateGcpSettings(service: SettingsService, profile: Profile): void {
+function populateGcpSettings(
+  writeSetting: (key: string, value: unknown) => void,
+  profile: Profile,
+): void {
   const gcpProject = getStringSetting(profile.ephemeralSettings, [
     'GOOGLE_CLOUD_PROJECT',
   ]);
   if (gcpProject) {
-    service.set('GOOGLE_CLOUD_PROJECT', gcpProject);
+    writeSetting('GOOGLE_CLOUD_PROJECT', gcpProject);
   }
 
   const gcpLocation = getStringSetting(profile.ephemeralSettings, [
     'GOOGLE_CLOUD_LOCATION',
   ]);
   if (gcpLocation) {
-    service.set('GOOGLE_CLOUD_LOCATION', gcpLocation);
+    writeSetting('GOOGLE_CLOUD_LOCATION', gcpLocation);
   }
 }
 
@@ -338,7 +340,7 @@ function cloneEphemeralValue(key: string, value: unknown): unknown {
 }
 
 function populateGeneralEphemerals(
-  service: SettingsService,
+  writeSetting: (key: string, value: unknown) => void,
   profile: Profile,
 ): void {
   const ephemerals = profile.ephemeralSettings as
@@ -357,34 +359,36 @@ function populateGeneralEphemerals(
     ) {
       const clonedValue = cloneEphemeralValue(key, value);
       if (clonedValue !== undefined) {
-        service.set(key, clonedValue);
+        writeSetting(key, clonedValue);
       }
     }
   }
 }
 
 export function populatePreActivationSettings(
-  service: SettingsService,
+  writeSetting: (key: string, value: unknown) => void,
+  selectProfile: (profileName: string) => void,
   profile: Profile,
   profileName: string,
 ): void {
   const provider = profile.provider;
-  service.setCurrentProfileName(profileName);
-  service.set('activeProvider', provider);
-  service.set(`providers.${provider}.model`, profile.model);
-  populateProviderSettings(service, provider, profile);
-  populateAuthSettings(service, provider, profile);
+  selectProfile(profileName);
+  writeSetting('activeProvider', provider);
+  writeSetting(`providers.${provider}.model`, profile.model);
+  populateProviderSettings(writeSetting, provider, profile);
+  populateAuthSettings(writeSetting, provider, profile);
 }
 
 export function populatePostActivationSettings(
-  service: SettingsService,
+  writeSetting: (key: string, value: unknown) => void,
+  selectProfile: (profileName: string) => void,
   profile: Profile,
   profileName: string,
   defaultDisabledTools: ReadonlySet<string>,
 ): void {
-  service.setCurrentProfileName(profileName);
-  populateGeneralEphemerals(service, profile);
-  populateGcpSettings(service, profile);
-  populateCompressionSettings(service, profile);
-  populateToolAndMiscSettings(service, profile, defaultDisabledTools);
+  selectProfile(profileName);
+  populateGeneralEphemerals(writeSetting, profile);
+  populateGcpSettings(writeSetting, profile);
+  populateCompressionSettings(writeSetting, profile);
+  populateToolAndMiscSettings(writeSetting, profile, defaultDisabledTools);
 }

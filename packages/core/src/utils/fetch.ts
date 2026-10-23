@@ -6,7 +6,19 @@
 
 import { getErrorMessage, isNodeError } from './errors.js';
 import { URL } from 'node:url';
-import { ProxyAgent, setGlobalDispatcher } from 'undici';
+import { createRequire } from 'node:module';
+import type * as Undici from 'undici';
+import { dispatchOwnedFetch } from './owned-fetch-request.js';
+
+const packageRequire = createRequire(
+  createRequire(import.meta.url).resolve('undici/package.json'),
+);
+const { Agent, ProxyAgent }: typeof Undici = packageRequire('./');
+
+export type NetworkFetch = (
+  input: RequestInfo | URL,
+  init?: RequestInit,
+) => Promise<Response>;
 
 const PRIVATE_IP_RANGES = [
   /^10\./,
@@ -85,6 +97,48 @@ export async function fetchWithTimeout(
   }
 }
 
-export function setGlobalProxy(proxy: string) {
-  setGlobalDispatcher(new ProxyAgent(proxy));
+export class OwnedFetch {
+  private readonly dispatcher;
+  private readonly cancellation = new AbortController();
+  private closing: Promise<void> | undefined;
+
+  constructor(proxy?: string) {
+    this.dispatcher = proxy === undefined ? new Agent() : new ProxyAgent(proxy);
+  }
+
+  readonly fetch: NetworkFetch = async (input, init) => {
+    if (this.closing !== undefined || this.cancellation.signal.aborted)
+      throw new Error('Root fetch is closed');
+    const request = new Request(input, init);
+    return dispatchOwnedFetch(
+      this.dispatcher,
+      request,
+      AbortSignal.any([request.signal, this.cancellation.signal]),
+      captureReplayableBody(init?.body),
+    );
+  };
+
+  closeAdmissionAndAbort(): void {
+    this.cancellation.abort();
+  }
+
+  dispose(): Promise<void> {
+    this.closing ??= this.dispatcher.close();
+    return this.closing;
+  }
+}
+
+function captureReplayableBody(
+  body: RequestInit['body'],
+): string | Uint8Array | undefined {
+  if (typeof body === 'string') return body;
+  if (body instanceof URLSearchParams) return body.toString();
+  if (body instanceof ArrayBuffer) return new Uint8Array(body.slice(0));
+  if (ArrayBuffer.isView(body))
+    return new Uint8Array(
+      body.buffer,
+      body.byteOffset,
+      body.byteLength,
+    ).slice();
+  return undefined;
 }

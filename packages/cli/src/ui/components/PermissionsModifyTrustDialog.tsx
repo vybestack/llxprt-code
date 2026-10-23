@@ -27,6 +27,10 @@ interface PermissionsModifyTrustDialogProps {
   onExit: () => void;
   addItem: UseHistoryManagerReturn['addItem'];
   config?: PermissionsTrustRuntime;
+  readIdeWorkspaceTrust: Parameters<typeof usePermissionsTrustDialogFlow>[3];
+  subscribeIdeWorkspaceTrust: Parameters<
+    typeof usePermissionsTrustDialogFlow
+  >[4];
 }
 
 interface UpdatedPromptProps {
@@ -147,8 +151,20 @@ const TrustForm: React.FC<TrustFormProps> = ({
 
 export const PermissionsModifyTrustDialog: React.FC<
   PermissionsModifyTrustDialogProps
-> = ({ onExit, addItem, config }) => {
-  const flow = usePermissionsTrustDialogFlow(onExit, addItem, config);
+> = ({
+  onExit,
+  addItem,
+  config,
+  readIdeWorkspaceTrust,
+  subscribeIdeWorkspaceTrust,
+}) => {
+  const flow = usePermissionsTrustDialogFlow(
+    onExit,
+    addItem,
+    config,
+    readIdeWorkspaceTrust,
+    subscribeIdeWorkspaceTrust,
+  );
 
   useKeypress(
     (key) => {

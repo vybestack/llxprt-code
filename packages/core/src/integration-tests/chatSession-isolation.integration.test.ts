@@ -32,7 +32,6 @@ import type {
 } from '../runtime/AgentRuntimeContext.js';
 import type { RuntimeProvider as IProvider } from '../runtime/contracts/RuntimeProvider.js';
 import { createProviderRuntimeContext } from '../runtime/providerRuntimeContext.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 const noopProviderAdapter: AgentRuntimeProviderAdapter = {
   getActiveProvider: () => ({ name: 'stub-provider' }) as IProvider,
@@ -46,7 +45,6 @@ const noopToolsView: ToolRegistryView = {
 
 function createProviderRuntimeStub(runtimeId: string) {
   return createProviderRuntimeContext({
-    settingsService: new SettingsService(),
     runtimeId,
     metadata: { source: 'chatSession-isolation.integration.test' },
   });

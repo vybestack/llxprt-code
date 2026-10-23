@@ -7,13 +7,12 @@
 import type { Agent } from '@vybestack/llxprt-code-agents';
 
 import type { MessageActionReturn, OpenDialogActionReturn } from './types.js';
-import type { RuntimeApi } from '../contexts/RuntimeContext.js';
 import {
   getProtectedSettingKeys,
   isInternalSettingKey,
   type LoadBalancerProfile,
 } from '@vybestack/llxprt-code-settings';
-import { createTokenStore } from '@vybestack/llxprt-code-providers/auth.js';
+import type { OAuthControl } from '../contexts/OAuthControlContext.js';
 import { validateBucketName, validateProfileName } from './profileSchemas.js';
 
 /**
@@ -174,13 +173,11 @@ export function createLoadBalancerProfileDefinition(
 
 async function verifyBucketsExist(
   bucketArgs: readonly string[],
-  runtimeApi: RuntimeApi,
-  agent?: Pick<Agent, 'getProvider'> | null,
+  readProvider: () => string | null | undefined,
+  listBuckets: OAuthControl['listBuckets'],
 ): Promise<MessageActionReturn | null> {
   try {
-    const provider = agent
-      ? agent.getProvider()
-      : runtimeApi.providerStatus().providerName;
+    const provider = readProvider();
 
     if (!provider) {
       return {
@@ -190,8 +187,7 @@ async function verifyBucketsExist(
       };
     }
 
-    const tokenStore = createTokenStore();
-    const availableBuckets = await tokenStore.listBuckets(provider);
+    const availableBuckets = await listBuckets(provider);
 
     for (const bucket of bucketArgs) {
       if (!availableBuckets.includes(bucket)) {
@@ -230,8 +226,9 @@ function validateBucketArgs(
 
 export async function saveModelProfile(
   parts: readonly string[],
-  runtimeApi: RuntimeApi,
-  agent?: Pick<Agent, 'getProvider' | 'saveProfileSnapshot'> | null,
+  readProvider: () => string | null | undefined,
+  saveSnapshot: Agent['saveProfileSnapshot'],
+  listBuckets: OAuthControl['listBuckets'],
 ): Promise<MessageActionReturn | OpenDialogActionReturn> {
   if (parts.length < 2) {
     return {
@@ -276,20 +273,23 @@ export async function saveModelProfile(
   }
 
   if (bucketArgs.length > 0) {
-    const bucketError = await verifyBucketsExist(bucketArgs, runtimeApi, agent);
+    const bucketError = await verifyBucketsExist(
+      bucketArgs,
+      readProvider,
+      listBuckets,
+    );
     if (bucketError) {
       return bucketError;
     }
   }
 
   try {
-    const runtime = agent ?? runtimeApi;
     const authConfig =
       bucketArgs.length > 0
         ? { auth: { type: 'oauth' as const, buckets: bucketArgs } }
         : undefined;
 
-    await runtime.saveProfileSnapshot(profileName, authConfig);
+    await saveSnapshot(profileName, authConfig);
     return {
       type: 'message',
       messageType: 'info',
@@ -318,7 +318,9 @@ function findMissingProfile(
 
 export async function saveLoadBalancerProfile(
   parts: readonly string[],
-  runtimeApi: RuntimeApi,
+  listProfiles: () => Promise<readonly string[]>,
+  readEphemerals: () => Readonly<Record<string, unknown>>,
+  saveProfile: (name: string, profile: LoadBalancerProfile) => Promise<void>,
 ): Promise<MessageActionReturn | OpenDialogActionReturn> {
   if (parts.length < 5) {
     return {
@@ -372,8 +374,7 @@ export async function saveLoadBalancerProfile(
   }
 
   try {
-    const runtime = runtimeApi;
-    const availableProfiles = await runtime.listSavedProfiles();
+    const availableProfiles = await listProfiles();
 
     const missing = findMissingProfile(selectedProfiles, availableProfiles);
     if (missing !== null) {
@@ -384,7 +385,7 @@ export async function saveLoadBalancerProfile(
       };
     }
 
-    const currentEphemerals = runtime.getEphemeralSettings();
+    const currentEphemerals = readEphemerals();
     const filteredEphemerals =
       buildLoadBalancerEphemeralSettings(currentEphemerals);
     const contextLimit =
@@ -397,7 +398,7 @@ export async function saveLoadBalancerProfile(
       contextLimit,
     );
 
-    await runtime.saveLoadBalancerProfile(lbProfileName, lbProfile);
+    await saveProfile(lbProfileName, lbProfile);
 
     return {
       type: 'message',

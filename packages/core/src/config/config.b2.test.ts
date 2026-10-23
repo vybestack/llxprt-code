@@ -21,7 +21,6 @@ import {
   buildIdeIntegrationMockBody,
   buildMemoryDiscoveryMockBody,
   buildEventsMockBody,
-  buildFetchMockBody,
   createBaseParams,
   createSettingsServiceMock,
   resetAgentClientMock,
@@ -36,11 +35,8 @@ const hoistedConfigMocks = {
     emitModelChanged: vi.fn(),
     emitConsoleLog: vi.fn(),
   },
-  setGlobalProxy: vi.fn(),
 } as HoistedConfigMocks;
 // Exposed for assertions in the Proxy Configuration tests below.
-const mockCoreEvents = hoistedConfigMocks.coreEvents;
-const mockSetGlobalProxy = hoistedConfigMocks.setGlobalProxy;
 
 const __actual = { ...(await import('fs')) };
 void vi.mock('fs', () => buildFsMockBody(__actual));
@@ -77,8 +73,6 @@ const __actual5 = { ...(await import('../utils/events.js')) };
 void vi.mock('../utils/events.js', () =>
   buildEventsMockBody(__actual5, hoistedConfigMocks),
 );
-
-void vi.mock('../utils/fetch.js', () => buildFetchMockBody(hoistedConfigMocks));
 
 describe('Server Config (config.ts)', () => {
   // One shared spy-backed service: baseParams and the integration describe
@@ -485,60 +479,18 @@ describe('Server Config (config.ts)', () => {
     });
   });
 
-  describe('Proxy Configuration Error Handling', () => {
-    beforeEach(() => {
-      vi.clearAllMocks();
-    });
-
-    it('should call setGlobalProxy when proxy is configured', () => {
-      const paramsWithProxy: ConfigParameters = {
+  describe('declarative proxy configuration', () => {
+    it('retains distinct proxy input on two live configurations', () => {
+      const a = new Config({
         ...baseParams,
-        proxy: 'http://proxy.example.com:8080',
-      };
-      new Config(paramsWithProxy);
-
-      expect(mockSetGlobalProxy).toHaveBeenCalledWith(
-        'http://proxy.example.com:8080',
-      );
-    });
-
-    it('should not call setGlobalProxy when proxy is not configured', () => {
-      new Config(baseParams);
-
-      expect(mockSetGlobalProxy).not.toHaveBeenCalled();
-    });
-
-    it('should emit error feedback when setGlobalProxy throws an error', () => {
-      const proxyError = new Error('Invalid proxy URL');
-      mockSetGlobalProxy.mockImplementation(() => {
-        throw proxyError;
+        proxy: 'http://proxy-a.example:8080',
       });
-
-      const paramsWithProxy: ConfigParameters = {
+      const b = new Config({
         ...baseParams,
-        proxy: 'invalid-proxy',
-      };
-      new Config(paramsWithProxy);
-
-      expect(mockCoreEvents.emitFeedback).toHaveBeenCalledWith(
-        'error',
-        'Invalid proxy configuration detected. Check debug drawer for more details (F12)',
-        proxyError,
-      );
-    });
-
-    it('should not emit error feedback when setGlobalProxy succeeds', () => {
-      mockSetGlobalProxy.mockImplementation(() => {
-        // Success - no error thrown
+        proxy: 'http://proxy-b.example:8080',
       });
-
-      const paramsWithProxy: ConfigParameters = {
-        ...baseParams,
-        proxy: 'http://proxy.example.com:8080',
-      };
-      new Config(paramsWithProxy);
-
-      expect(mockCoreEvents.emitFeedback).not.toHaveBeenCalled();
+      expect(a.getProxy()).toBe('http://proxy-a.example:8080');
+      expect(b.getProxy()).toBe('http://proxy-b.example:8080');
     });
   });
 });

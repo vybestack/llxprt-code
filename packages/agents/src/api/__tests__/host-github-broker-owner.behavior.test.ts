@@ -1,3 +1,4 @@
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -15,7 +16,7 @@ import { z } from 'zod';
 import type { GitHubBrokerClient } from '@vybestack/llxprt-code-tools';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { fromConfig } from '../fromConfig.js';
+
 import type { Agent } from '../agent.js';
 
 import { createAgent } from '../createAgent.js';
@@ -131,13 +132,36 @@ async function withConfig(
 }
 
 function adopt(config: Config, client?: GitHubBrokerClient): Promise<Agent> {
-  return fromConfig({
+  return fromConfig(
     config,
-    settingsService: new SettingsService(),
-    sessionId: 'same-report-label',
-    activation: { authMode: 'none' },
-    githubBrokerClient: client,
-  });
+    new SettingsService(),
+    { sessionId: 'same-report-label', activation: { authMode: 'none' } },
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    client,
+  );
 }
 
 function github(agent: Agent) {
@@ -290,12 +314,36 @@ describe('explicit host GitHub broker ownership', () => {
       const wire = await reportWire();
       const settingsService = new SettingsService();
       settingsService.set('tools.disabled', ['github']);
-      const excluded = await fromConfig({
+      const excluded = await fromConfig(
         config,
         settingsService,
-        githubBrokerClient: wire.client,
-        activation: { authMode: 'none' },
-      });
+        { activation: { authMode: 'none' } },
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        wire.client,
+      );
       try {
         expect(excluded.tools.get('github')).toBeUndefined();
         expect(wire.accepted()).toStrictEqual([]);
@@ -312,16 +360,39 @@ describe('explicit host GitHub broker ownership', () => {
       const cleanupFailure = new Error('Owned report transport cleanup failed');
       let failure: unknown;
       try {
-        await fromConfig({
+        await fromConfig(
           config,
-          settingsService: new SettingsService(),
-          sessionId: '',
-          githubBrokerClient: wire.client,
-          disposeGitHubBroker: async (): Promise<void> => {
+          new SettingsService(),
+          { sessionId: '', activation: { authMode: 'none' } },
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          wire.client,
+          async (): Promise<void> => {
             throw cleanupFailure;
           },
-          activation: { authMode: 'none' },
-        });
+        );
       } catch (error: unknown) {
         failure = error;
       }
@@ -352,19 +423,47 @@ describe('explicit host GitHub broker ownership', () => {
       try {
         let failure: unknown;
         try {
-          await fromConfig({
+          await fromConfig(
             config,
-            settingsService: new SettingsService(),
-            activation: { authMode: 'none' },
-            githubBrokerClient: owned.client,
-            disposeGitHubBroker: async (): Promise<void> => {
+            new SettingsService(),
+            { activation: { authMode: 'none' } },
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            owned.client,
+            async (): Promise<void> => {
               await owned.stop();
               throw cleanup;
             },
-            prepareSessionTools: (): void => {
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            (): void => {
               throw primary;
             },
-          });
+          );
         } catch (error: unknown) {
           failure = error;
         }

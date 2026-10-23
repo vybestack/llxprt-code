@@ -1,3 +1,4 @@
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -13,7 +14,6 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import {
   ApprovalMode,
-  fromConfig,
   toConfigParameters,
   type Agent,
 } from '@vybestack/llxprt-code-agents';
@@ -132,17 +132,39 @@ async function withTimeoutFixture(
       subagentDirectory: join(directory, 'subagents'),
       sessionId: 'task-timeout-validation-session',
     });
-    agent = await fromConfig({
-      settingsService: new SettingsService(),
-      runtimeFactoryBindings: factories,
+    agent = await fromConfig(
       config,
-      asyncTaskManager: manager,
-      activation: {
-        provider: 'openai',
-        model: 'timeout-validation-parent-model',
-        cliOverrides: { key: 'local-test-key', baseUrl },
+      new SettingsService(),
+      {
+        activation: {
+          provider: 'openai',
+          model: 'timeout-validation-parent-model',
+          cliOverrides: { key: 'local-test-key', baseUrl },
+        },
       },
-    });
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      factories,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      manager,
+    );
     agent.setEphemeralSetting('task-max-async', 1);
     agent.setEphemeralSetting(defaultKey, 60);
     agent.setEphemeralSetting(maximumKey, 100);

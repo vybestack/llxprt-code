@@ -1,3 +1,4 @@
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 /**
  * @license
@@ -18,17 +19,27 @@ import {
   type WorkspacePromptSelection,
   type WorkspaceResourceSelection,
 } from '@vybestack/llxprt-code-core';
-import { afterEach } from 'bun:test';
+import { afterEach, beforeEach } from 'bun:test';
 import { useMemo } from 'react';
 import type { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 
-import type { Agent, FromConfigOptions } from '@vybestack/llxprt-code-agents';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import {
   buildSlashCommandRuntime,
   type CliUiRuntime,
   type UiRuntimeDeclarationSource,
 } from '../ui/cliUiRuntime.js';
+
+type UiFixtureOwner = Awaited<ReturnType<typeof createUiSessionOwner>>;
+
+function installUiSessionFixture(): () => UiFixtureOwner {
+  let owner: UiFixtureOwner;
+  beforeEach(async () => {
+    owner = await createUiSessionOwner();
+  });
+  return () => owner;
+}
 
 type DefinitionFixturePorts = Pick<
   Agent['workspace'],
@@ -44,8 +55,8 @@ type FixtureRuntime = ((
       WorkspacePromptSelection &
         Pick<WorkspaceResourceSelection, 'listResources'>
     >,
-  sessionOwner?: ReturnType<typeof createUiSessionOwner> | Agent,
-  settingsOwner?: NonNullable<FromConfigOptions['settingsOwner']>,
+  sessionOwner?: UiFixtureOwner | Agent,
+  settingsOwner?: SessionSettingsOwner,
 ) => CliUiRuntime) & {
   dispose(): Promise<void>;
 };
@@ -70,6 +81,15 @@ function createFixtureMemory(
   });
 }
 
+function createFixtureCatalogs(): WorkspaceMcpCatalogOwner {
+  return new WorkspaceMcpCatalogOwner(
+    () => true,
+    async () => {
+      throw new Error('Fixture resource transport is unavailable');
+    },
+  );
+}
+
 function createFixtureCheckpoints(
   filesystem: WorkspaceFilesystemOwner,
 ): WorkspaceCheckpointOwner {
@@ -92,6 +112,7 @@ function workspaceProjection(
     checkpoints: checkpoints.operations,
     ...retainedRoot.ignore,
     ...retainedRoot.search,
+    ...retainedRoot.files,
     getDirectories: () => [...retainedRoot.paths.directories()],
     addDirectory: (directory) => retainedRoot.addDirectory(directory),
     containsPath: (filePath) => retainedRoot.paths.contains(filePath),
@@ -119,8 +140,8 @@ async function closeInstructionFixture(
 
 function buildSuppliedSessionRuntime(
   source: Parameters<FixtureRuntime>[0],
-  owner: ReturnType<typeof createUiSessionOwner> | Agent,
-  settingsOwner: NonNullable<FromConfigOptions['settingsOwner']> | undefined,
+  owner: UiFixtureOwner | Agent,
+  settingsOwner: SessionSettingsOwner | undefined,
 ): CliUiRuntime {
   return buildSlashCommandRuntime(
     source,
@@ -142,6 +163,7 @@ export function installWorkspaceRuntimeFixture(
   definitions?: () => DefinitionFixturePorts,
 ): FixtureRuntime {
   const createRoot = installTestWorkspaceFilesystem(settleDisposal);
+  const readSessionOwner = installUiSessionFixture();
   let root: WorkspaceFilesystemOwner | undefined;
   let instructions: SessionInstructionOwner | undefined;
   let memory: WorkspaceMemoryOwner | undefined;
@@ -156,13 +178,9 @@ export function installWorkspaceRuntimeFixture(
     root = undefined;
   });
   const compose = (
-    source: UiRuntimeDeclarationSource &
-      Partial<
-        WorkspacePromptSelection &
-          Pick<WorkspaceResourceSelection, 'listResources'>
-      >,
-    suppliedSessionOwner?: ReturnType<typeof createUiSessionOwner> | Agent,
-    settingsOwner?: NonNullable<FromConfigOptions['settingsOwner']>,
+    source: Parameters<FixtureRuntime>[0],
+    suppliedSessionOwner?: UiFixtureOwner | Agent,
+    settingsOwner?: SessionSettingsOwner,
   ): CliUiRuntime => {
     if (suppliedSessionOwner)
       return buildSuppliedSessionRuntime(
@@ -182,12 +200,7 @@ export function installWorkspaceRuntimeFixture(
       false,
       async () => {},
     );
-    catalogs ??= new WorkspaceMcpCatalogOwner(
-      () => true,
-      async () => {
-        throw new Error('Fixture resource transport is unavailable');
-      },
-    );
+    catalogs ??= createFixtureCatalogs();
     const mcp = catalogs;
     publishFixtureCatalogs(source, mcp);
     checkpoints ??= createFixtureCheckpoints(root);
@@ -197,7 +210,13 @@ export function installWorkspaceRuntimeFixture(
       checkpoints,
       definitions?.() ?? definitionFixture(),
     );
-    return buildFixtureSessionRuntime(source, workspace, instructions, mcp);
+    return buildFixtureSessionRuntime(
+      source,
+      workspace,
+      instructions,
+      mcp,
+      readSessionOwner(),
+    );
   };
   return Object.assign(compose, {
     dispose: async (): Promise<void> => {
@@ -268,13 +287,9 @@ function buildFixtureSessionRuntime(
   workspace: Agent['workspace'],
   instructions: SessionInstructionOwner,
   catalogs: WorkspaceMcpCatalogOwner,
+  owner: UiFixtureOwner,
 ): CliUiRuntime {
   const servers = source.getMcpServers() ?? {};
-  const owner = createUiSessionOwner(undefined, undefined, {
-    mcpServers: servers,
-    settingsMcpServers: servers,
-    blockedMcpServers: readFixtureBlockedServers(source),
-  });
   return buildSlashCommandRuntime(
     source,
     {
@@ -283,6 +298,13 @@ function buildFixtureSessionRuntime(
       memory: instructions.memory,
       mcp: {
         ...owner.mcp,
+        listServers: () =>
+          Object.entries(servers).map(([name, config]) => ({
+            name,
+            config,
+            status: 'disconnected',
+          })),
+        listBlockedServers: () => readFixtureBlockedServers(source),
         ...catalogs.promptSelection,
         ...catalogs.resourceSelection,
       },

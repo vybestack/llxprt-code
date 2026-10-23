@@ -39,6 +39,21 @@ export function createJunitTempDirectory(
   };
 }
 
+/**
+ * Writes a report file and names the destination in any failure. Windows Bun
+ * reports a bare "EISDIR: illegal operation on a directory, write" without the
+ * path, which leaves a failed report write undiagnosable.
+ */
+export function writeReportFile(reportPath: string, content: string): void {
+  try {
+    writeFileSync(reportPath, content);
+  } catch (error) {
+    throw new Error(`Failed to write report ${reportPath}: ${String(error)}`, {
+      cause: error,
+    });
+  }
+}
+
 export interface JUnitTestFileOutcome {
   readonly name: string;
   readonly passed: boolean;

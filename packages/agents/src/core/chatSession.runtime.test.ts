@@ -1,9 +1,9 @@
-import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import { BeforeToolSelectionHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { configureProviderTokenizer } from '@vybestack/llxprt-code-providers/composition.js';
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -12,35 +12,35 @@ import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-provid
 import { installModelToolFixture } from './__tests__/model-tool-fixture.js';
 const modelTools = installModelToolFixture();
 
-import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
-import type { ChatSessionConfig } from './chatSession.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import {
+  AfterModelHookOutput,
+  BeforeModelHookOutput,
+} from '@vybestack/llxprt-code-core/hooks/types.js';
 import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import { ChatSession } from './chatSession.js';
-import type { TextBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { getToolCalls } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
-import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderRuntimeContext,
   type ProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
   createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
-import {
-  AfterModelHookOutput,
-  BeforeModelHookOutput,
-} from '@vybestack/llxprt-code-core/hooks/types.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { TextBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { beforeEach, describe, expect, it, vi, type Mock } from 'bun:test';
+import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
+import type { ChatSessionConfig } from './chatSession.js';
+import { ChatSession } from './chatSession.js';
 
 /**
  * Extracts visible text from a neutral ModelOutput — the post-P13
@@ -80,15 +80,13 @@ describe('ChatSession runtime context', () => {
     settingsService.set('providers.stub.model', 'stub-model');
 
     providerRuntime = createProviderRuntimeContext({
-      settingsService,
-      config,
       runtimeId: 'test.runtime',
       metadata: { source: 'chatSession.runtime.test' },
     });
 
     manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    configureProviderRuntimeFactories(config, manager);
+    configureProviderTokenizer(manager);
   });
 
   it('passes runtime context and tools to provider generateChatCompletion', async () => {
@@ -137,7 +135,17 @@ describe('ChatSession runtime context', () => {
     const historyService = new HistoryService();
     const view = createAgentRuntimeContext({
       prepareProviderInvocation: (name, parameters, signal) =>
-        captureProviderInvocation(providerRuntime, name, parameters, signal),
+        captureProviderInvocation(
+          {
+            runtimeId: providerRuntime.runtimeId,
+            metadata: providerRuntime.metadata,
+            globalSettings: settingsService.getAllGlobalSettings(),
+            providerSettings: settingsService.getProviderSettings(name),
+          },
+          name,
+          parameters,
+          signal,
+        ),
       state: runtimeState,
       history: historyService,
       settings: {
@@ -161,6 +169,13 @@ describe('ChatSession runtime context', () => {
 
     const chat = new ChatSession(
       view,
+      config,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       {} as unknown as ContentGenerator,
       generationConfig,
       [],
@@ -171,6 +186,7 @@ describe('ChatSession runtime context', () => {
       'prompt-123',
     );
 
+    expect(chat.getConfig()?.getTargetDir()).toBe(config.getTargetDir());
     expect(response).toBeDefined();
     expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
     expect(retryWithBackoff).toHaveBeenCalled();
@@ -267,7 +283,7 @@ describe('ChatSession runtime context', () => {
           },
         }),
     };
-    const hookRuntime = { ...providerRuntime, config };
+    const hookRuntime = { ...providerRuntime };
     const view = createAgentRuntimeContext({
       state: runtimeState,
       history: historyService,
@@ -289,11 +305,28 @@ describe('ChatSession runtime context', () => {
       tools: createToolRegistryViewFromRegistry(modelTools()),
       providerRuntime: hookRuntime,
       prepareProviderInvocation: (name, parameters, signal) =>
-        captureProviderInvocation(hookRuntime, name, parameters, signal),
+        captureProviderInvocation(
+          {
+            runtimeId: hookRuntime.runtimeId,
+            metadata: hookRuntime.metadata,
+            globalSettings: settingsService.getAllGlobalSettings(),
+            providerSettings: settingsService.getProviderSettings(name),
+          },
+          name,
+          parameters,
+          signal,
+        ),
     });
 
     const chat = new ChatSession(
       view,
+      config,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       {} as unknown as ContentGenerator,
       {},
       [],
@@ -384,7 +417,7 @@ describe('ChatSession runtime context', () => {
       model: config.getModel(),
       sessionId: config.getSessionId(),
     });
-    const hookRuntime = { ...providerRuntime, config };
+    const hookRuntime = { ...providerRuntime };
     const view = createAgentRuntimeContext({
       state: runtimeState,
       history: new HistoryService(),
@@ -406,11 +439,28 @@ describe('ChatSession runtime context', () => {
       tools: createToolRegistryViewFromRegistry(modelTools()),
       providerRuntime: hookRuntime,
       prepareProviderInvocation: (name, parameters, signal) =>
-        captureProviderInvocation(hookRuntime, name, parameters, signal),
+        captureProviderInvocation(
+          {
+            runtimeId: hookRuntime.runtimeId,
+            metadata: hookRuntime.metadata,
+            globalSettings: settingsService.getAllGlobalSettings(),
+            providerSettings: settingsService.getProviderSettings(name),
+          },
+          name,
+          parameters,
+          signal,
+        ),
     });
 
     const chat = new ChatSession(
       view,
+      config,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       {} as unknown as ContentGenerator,
       { tools },
       [],

@@ -43,7 +43,6 @@ describe('OpenAIResponsesProvider reasoning.effort', () => {
 
     const runtime = createProviderRuntimeContext({
       runtimeId: 'openai-responses-reasoning-runtime',
-      settingsService: settings,
     });
 
     let capturedBody: string | undefined;
@@ -109,7 +108,6 @@ describe('OpenAIResponsesProvider reasoning.effort', () => {
     settings.set('reasoning.enabled', true);
     const runtime = createProviderRuntimeContext({
       runtimeId: 'openai-responses-max-effort-runtime',
-      settingsService: settings,
     });
     let capturedBody: string | undefined;
     let capturedUrl: string | undefined;
@@ -175,7 +173,6 @@ describe('OpenAIResponsesProvider reasoning.effort', () => {
     settings.set('reasoning.enabled', true);
     const runtime = createProviderRuntimeContext({
       runtimeId: 'openai-responses-minimal-5x6-runtime',
-      settingsService: settings,
     });
     let capturedBody: string | undefined;
 
@@ -234,7 +231,6 @@ describe('OpenAIResponsesProvider reasoning.effort', () => {
     settings.set('reasoning.enabled', true);
     const runtime = createProviderRuntimeContext({
       runtimeId: 'openai-responses-minimal-pre5x6-runtime',
-      settingsService: settings,
     });
     let capturedBody: string | undefined;
 

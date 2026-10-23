@@ -10,42 +10,14 @@ import { DebugLogger } from '@vybestack/llxprt-code-core';
 
 const logger = new DebugLogger('llxprt:zed-integration:commands');
 
-export type ZedCommandAgent = Pick<Agent, 'compress' | 'getModel'> & {
-  readonly tools: Pick<Agent['tools'], 'list'>;
-  readonly memory: Pick<Agent['memory'], 'getFilePaths'>;
-  readonly profiles: Pick<Agent['profiles'], 'list'>;
-  readonly tasks: Pick<Agent['tasks'], 'list'>;
-};
-
-export interface ZedCommandContext {
-  readonly agent: ZedCommandAgent;
-}
-
 export interface ZedCommandResult {
   readonly text: string;
-}
-
-export function projectZedCommandAgent(
-  agent: ZedCommandAgent,
-): ZedCommandAgent {
-  return {
-    compress: (options) => agent.compress(options),
-    getModel: () => agent.getModel(),
-    tools: { list: () => agent.tools.list() },
-    memory: { getFilePaths: () => agent.memory.getFilePaths() },
-    profiles: { list: () => agent.profiles.list() },
-    tasks: { list: () => agent.tasks.list() },
-  };
 }
 
 interface ZedCommandDefinition {
   readonly name: string;
   readonly description: string;
   readonly inputHint?: string;
-  readonly handler: (
-    context: ZedCommandContext,
-    args: string,
-  ) => Promise<ZedCommandResult>;
 }
 
 export function parseZedCommandPrompt(
@@ -78,85 +50,28 @@ const COMMANDS: readonly ZedCommandDefinition[] = [
   {
     name: 'compact',
     description: 'Compress conversation history to free context space',
-    handler: async ({ agent }) => ({
-      text: formatCompression(await agent.compress()),
-    }),
   },
   {
     name: 'tools',
     description: 'List available tools and their enabled status',
-    handler: async ({ agent }) => {
-      const tools = agent.tools.list();
-      return {
-        text:
-          tools.length === 0
-            ? 'No tools available.'
-            : `Available tools:\n${tools
-                .map((tool) => `  ${tool.enabled ? '[x]' : '[ ]'} ${tool.name}`)
-                .join('\n')}`,
-      };
-    },
   },
   {
     name: 'memory',
     description: 'Show memory files currently in use',
-    handler: async ({ agent }) => {
-      const paths = agent.memory.getFilePaths();
-      return {
-        text:
-          paths.length === 0
-            ? 'No memory files in use.'
-            : `Memory files:\n${paths.map((path) => `  ${path}`).join('\n')}`,
-      };
-    },
   },
   {
     name: 'profile',
     description: 'List saved profiles and identify the startup default',
-    handler: async ({ agent }) => {
-      const profiles = agent.profiles.list();
-      return {
-        text:
-          profiles.length === 0
-            ? 'No profiles available.'
-            : `Profiles:\n${profiles
-                .map(
-                  (profile) =>
-                    `  ${profile.name}${profile.isDefault ? ' (default)' : ''}`,
-                )
-                .join('\n')}`,
-      };
-    },
   },
   {
     name: 'model',
     description: 'Show the current model',
-    handler: async ({ agent }) => ({
-      text: `Current model: ${agent.getModel()}`,
-    }),
   },
   {
     name: 'task',
     description: 'Show active subagent tasks',
-    handler: async ({ agent }) => {
-      const tasks = agent.tasks.list();
-      return {
-        text:
-          tasks.length === 0
-            ? 'No active tasks.'
-            : `Tasks:\n${tasks
-                .map((task) =>
-                  task.kind === 'subagent'
-                    ? `  [${task.status}] ${task.goalPrompt}`
-                    : `  [${task.status}] ${task.command}`,
-                )
-                .join('\n')}`,
-      };
-    },
   },
 ];
-
-const COMMAND_MAP = new Map(COMMANDS.map((command) => [command.name, command]));
 
 export function getZedAvailableCommands(): acp.AvailableCommand[] {
   return COMMANDS.map(({ name, description, inputHint }) => ({
@@ -173,19 +88,95 @@ export function buildAvailableCommandsUpdate(): acp.SessionUpdate {
   };
 }
 
-export async function executeZedCommand(
-  prompt: string,
-  context: ZedCommandContext,
-): Promise<ZedCommandResult | null> {
-  const parsed = parseZedCommandPrompt(prompt);
-  if (parsed === null) return null;
-  const command = COMMAND_MAP.get(parsed.name);
-  if (command === undefined) return null;
-  try {
-    return await command.handler(context, parsed.args);
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
-    logger.error(() => `Command /${command.name} failed: ${detail}`);
-    return { text: `Command /${command.name} failed. See logs for details.` };
-  }
+export function createZedCommandExecutor(
+  compress: Agent['compress'],
+  readModel: Agent['getModel'],
+  listTools: Agent['tools']['list'],
+  readMemoryFiles: Agent['memory']['getFilePaths'],
+  listProfiles: Agent['profiles']['list'],
+  listTasks: Agent['tasks']['list'],
+): (prompt: string) => Promise<ZedCommandResult | null> {
+  return async (prompt: string): Promise<ZedCommandResult | null> => {
+    const parsed = parseZedCommandPrompt(prompt);
+    if (parsed === null) return null;
+    try {
+      switch (parsed.name) {
+        case 'compact':
+          return { text: formatCompression(await compress()) };
+        case 'tools':
+          return formatTools(listTools());
+        case 'memory':
+          return formatMemory(readMemoryFiles());
+        case 'profile':
+          return formatProfiles(listProfiles());
+        case 'model':
+          return { text: `Current model: ${readModel()}` };
+        case 'task':
+          return formatTasks(listTasks());
+        default:
+          return null;
+      }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      logger.error(() => `Command /${parsed.name} failed: ${detail}`);
+      return { text: `Command /${parsed.name} failed. See logs for details.` };
+    }
+  };
+}
+
+function formatTools(
+  tools: ReturnType<Agent['tools']['list']>,
+): ZedCommandResult {
+  return {
+    text:
+      tools.length === 0
+        ? 'No tools available.'
+        : `Available tools:\n${tools
+            .map((tool) => `  ${tool.enabled ? '[x]' : '[ ]'} ${tool.name}`)
+            .join('\n')}`,
+  };
+}
+
+function formatMemory(
+  paths: ReturnType<Agent['memory']['getFilePaths']>,
+): ZedCommandResult {
+  return {
+    text:
+      paths.length === 0
+        ? 'No memory files in use.'
+        : `Memory files:\n${paths.map((path) => `  ${path}`).join('\n')}`,
+  };
+}
+
+function formatProfiles(
+  profiles: ReturnType<Agent['profiles']['list']>,
+): ZedCommandResult {
+  return {
+    text:
+      profiles.length === 0
+        ? 'No profiles available.'
+        : `Profiles:\n${profiles
+            .map(
+              (profile) =>
+                `  ${profile.name}${profile.isDefault ? ' (default)' : ''}`,
+            )
+            .join('\n')}`,
+  };
+}
+
+function formatTasks(
+  tasks: ReturnType<Agent['tasks']['list']>,
+): ZedCommandResult {
+  return {
+    text:
+      tasks.length === 0
+        ? 'No active tasks.'
+        : `Tasks:\n${tasks
+            .map((task) =>
+              task.kind === 'subagent'
+                ? `  [${task.status}] ${task.goalPrompt}`
+                : `  [${task.status}] ${task.command}`,
+            )
+            .join('\n')}`,
+  };
 }

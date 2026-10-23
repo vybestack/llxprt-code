@@ -12,20 +12,20 @@
  * Extracted from the original monolithic compression-retry.test.ts.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
-import { ChatSession } from '../../core/chatSession.js';
-import * as compressionFactory from '../compressionStrategyFactory.js';
-import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { EmptySummaryError } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
+import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
   createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { EmptySummaryError } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { ChatSession } from '../../core/chatSession.js';
+import * as compressionFactory from '../compressionStrategyFactory.js';
 import { makeHttpError } from './compression-retry-helpers.js';
 
 const original = { ...(await import('@vybestack/llxprt-code-settings')) };
@@ -63,7 +63,6 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
     runtimeSetup = createChatSessionRuntime();
     providerRuntimeSnapshot = {
       ...runtimeSetup.runtime,
-      config: runtimeSetup.config,
     };
   });
 
@@ -140,7 +139,19 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
       embedContent: vi.fn(),
     };
 
-    return new ChatSession(view, mockContentGenerator, { maxOutputTokens }, []);
+    return new ChatSession(
+      view,
+      runtimeSetup.config,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockContentGenerator,
+      { maxOutputTokens },
+      [],
+    );
   }
 
   /**

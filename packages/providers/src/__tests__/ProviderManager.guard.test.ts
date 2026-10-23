@@ -1,9 +1,16 @@
+import {
+  installOwnedConfig,
+  installBorrowedConfigSettings,
+} from './helpers/session-settings-owner-fixture.js';
+const acquireSettings = installBorrowedConfigSettings();
+const acquireConfig = installOwnedConfig();
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, expect, it } from 'bun:test';
+import { resolve } from 'node:path';
 import { ProviderManager } from '../ProviderManager.js';
 import {
   BaseProvider,
@@ -39,12 +46,33 @@ class HarnessProvider extends BaseProvider {
   }
 }
 
+class WorkspaceProvider extends HarnessProvider {
+  readonly requestProviderFileBindings = undefined;
+  readonly requestWorkspaceDirectory: string | undefined = undefined;
+
+  protected async *generateChatCompletionWithOptions(
+    _options: NormalizedGenerateChatOptions,
+  ): AsyncIterableIterator<IContent> {
+    yield {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: this.requestWorkspaceDirectory ?? '' }],
+    };
+  }
+}
+
 function fixture() {
   const settings = new SettingsService();
   settings.setProviderSetting('openai', 'model', 'owner-model');
   settings.setProviderSetting('openai', 'base-url', 'http://127.0.0.1:1/v1');
   const config = createRuntimeConfigStub(settings);
-  const manager = new ProviderManager({ settingsService: settings, config });
+  const manager = new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    settings,
+    config,
+  );
   const provider = new HarnessProvider();
   manager.registerProvider(provider);
   return { manager, provider, settings };
@@ -78,7 +106,11 @@ describe('ProviderManager owner admission', () => {
     other.setProviderSetting('openai', 'model', 'other-owner-model');
     other.setProviderSetting('openai', 'base-url', 'http://127.0.0.1:2/v1');
     const invocation = captureProviderInvocation(
-      { settingsService: other, runtimeId: 'same-label' },
+      {
+        runtimeId: 'same-label',
+        globalSettings: other.getAllGlobalSettings(),
+        providerSettings: other.getProviderSettings('openai'),
+      },
       'openai',
     );
     const options = manager.normalizeRuntimeInputs(
@@ -140,7 +172,13 @@ describe('ProviderManager owner admission', () => {
 
   it('fails closed when no provider is active or targeted', () => {
     const settingsService = new SettingsService();
-    const manager = new ProviderManager({ settingsService });
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settingsService,
+    );
     expect(() => manager.normalizeRuntimeInputs({ contents: [] })).toThrow(
       'No provider is active or targeted',
     );
@@ -157,7 +195,14 @@ describe('ProviderManager admission fallback and isolation', () => {
       getEphemeralSetting: (key) =>
         key === 'base-url' ? 'https://foreign.example.test/v1' : undefined,
     });
-    const manager = new ProviderManager({ settingsService: own, config });
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      own,
+      config,
+    );
     manager.registerProvider(new HarnessProvider());
     const normalized = manager.normalizeRuntimeInputs(
       { contents: [] },
@@ -172,7 +217,14 @@ describe('ProviderManager admission fallback and isolation', () => {
       const settingsService = new SettingsService();
       settingsService.set('base-url', 'https://config.example.test/v1');
       const config = createRuntimeConfigStub(settingsService, {});
-      const manager = new ProviderManager({ settingsService, config });
+      const manager = new ProviderManager(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        settingsService,
+        config,
+      );
       manager.registerProvider(new HarnessProvider());
       const normalized = manager.normalizeRuntimeInputs(
         { contents: [], resolved: { baseURL: absent } },
@@ -191,7 +243,14 @@ describe('ProviderManager admission fallback and isolation', () => {
     const config = createRuntimeConfigStub(settingsService, {
       getModel: () => 'config-model',
     });
-    const manager = new ProviderManager({ settingsService, config });
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settingsService,
+      config,
+    );
     manager.registerProvider(new HarnessProvider('anthropic'));
     expect(
       manager.normalizeRuntimeInputs({ contents: [] }, 'anthropic').resolved
@@ -204,7 +263,14 @@ describe('ProviderManager admission fallback and isolation', () => {
     settingsService.set('activeProvider', 'openai');
     settingsService.set('auth-key', 'foreground-credential');
     const config = createRuntimeConfigStub(settingsService);
-    const manager = new ProviderManager({ settingsService, config });
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settingsService,
+      config,
+    );
     manager.registerProvider(new HarnessProvider('anthropic'));
     expect(
       manager.normalizeRuntimeInputs({ contents: [] }, 'anthropic').resolved
@@ -232,7 +298,14 @@ describe('ProviderManager admission fallback and isolation', () => {
     const config = createRuntimeConfigStub(settingsService, {
       getModel: () => '',
     });
-    const manager = new ProviderManager({ settingsService, config });
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settingsService,
+      config,
+    );
     expect(() =>
       manager.normalizeRuntimeInputs(
         { contents: [], resolved: { model: '' } },
@@ -246,12 +319,215 @@ describe('ProviderManager admission fallback and isolation', () => {
     const config = createRuntimeConfigStub(settingsService, {
       getModel: () => '',
     });
-    const manager = new ProviderManager({ settingsService, config });
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settingsService,
+      config,
+    );
     expect(() =>
       manager.normalizeRuntimeInputs(
         { contents: [], resolved: { model: 'explicit-model', baseURL: '' } },
         'unknown-provider',
       ),
     ).toThrow('Incomplete runtime resolution (baseURL)');
+  });
+});
+
+describe('ProviderManager runtime replacement ownership', () => {
+  it('adopts the separately selected settings rather than context-carried settings', () => {
+    const initial = new SettingsService();
+    initial.setProviderSetting('openai', 'model', 'initial-model');
+    const selected = new SettingsService();
+    selected.setProviderSetting('openai', 'model', 'selected-model');
+    const foreign = new SettingsService();
+    foreign.setProviderSetting('openai', 'model', 'foreign-model');
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      initial,
+    );
+    manager.registerProvider(new HarnessProvider());
+    manager.setActiveProvider('openai');
+
+    manager.setRuntimeContext(
+      { runtimeId: 'same-label' },
+      undefined,
+      selected,
+      createRuntimeConfigStub(selected),
+    );
+    const admitted = manager.normalizeRuntimeInputs({ contents: [] }, 'openai');
+
+    expect(admitted.resolved?.model).toBe('selected-model');
+    expect(selected.get('activeProvider')).toBe('openai');
+    expect(foreign.get('activeProvider')).toBeUndefined();
+  });
+
+  it('clears the former Config when replacement explicitly has no Config', () => {
+    const selected = new SettingsService();
+    const formerConfig = createRuntimeConfigStub(selected);
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      selected,
+      formerConfig,
+    );
+
+    manager.setRuntimeContext(
+      {
+        runtimeId: 'same-label',
+      },
+      undefined,
+      selected,
+      undefined,
+    );
+
+    expect(() => manager.prepareStatelessProviderInvocation()).toThrow(
+      'config',
+    );
+  });
+});
+
+describe('ProviderManager Config binding', () => {
+  it('does not synthesize a runtime when binding Config', () => {
+    const selected = new SettingsService();
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      selected,
+    );
+    manager.setConfig(createRuntimeConfigStub(selected));
+
+    expect(() => manager.prepareStatelessProviderInvocation()).toThrow(
+      'runtime',
+    );
+  });
+});
+
+describe('ProviderManager stateless preparation ownership', () => {
+  it('retains selected settings instead of adopting context-carried settings', () => {
+    const selected = new SettingsService();
+    selected.setProviderSetting('openai', 'model', 'selected-model');
+    const foreign = new SettingsService();
+    foreign.setProviderSetting('openai', 'model', 'foreign-model');
+    const config = createRuntimeConfigStub(selected);
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      selected,
+      config,
+      {
+        runtimeId: 'same-label',
+        metadata: { owner: 'selected' },
+      },
+    );
+    manager.registerProvider(new HarnessProvider());
+
+    manager.prepareStatelessProviderInvocation();
+    const admitted = manager.normalizeRuntimeInputs({ contents: [] }, 'openai');
+
+    expect(admitted.resolved?.model).toBe('selected-model');
+    expect(foreign.getProviderSettings('openai').model).toBe('foreign-model');
+  });
+
+  it('requires an explicitly selected runtime before preparation', () => {
+    const selected = new SettingsService();
+    const config = createRuntimeConfigStub(selected);
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      selected,
+      config,
+    );
+
+    expect(() => manager.prepareStatelessProviderInvocation()).toThrow(
+      'runtime',
+    );
+  });
+
+  it('requires Config from the manager owner before preparation', () => {
+    const selected = new SettingsService();
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      selected,
+      undefined,
+      {
+        runtimeId: 'same-label',
+      },
+    );
+
+    expect(() => manager.prepareStatelessProviderInvocation()).toThrow(
+      'config',
+    );
+  });
+});
+
+describe('ProviderManager selected workspace binding', () => {
+  it('uses a separately selected Config directory instead of the context Config', async () => {
+    const selectedConfig = acquireConfig({
+      sessionId: 'workspace-selected',
+      targetDir: '/workspace-selected',
+      cwd: process.cwd(),
+      model: 'workspace-model',
+      debugMode: false,
+    });
+    const selectedSettings = new SettingsService();
+    const selectedSettingsOwner = acquireSettings(
+      selectedConfig,
+      selectedSettings,
+    );
+    for (const [key, value] of Object.entries(
+      selectedConfig.getInitialSettings(),
+    ))
+      selectedSettings.set(key, value);
+    selectedSettingsOwner.initializeProviderSelection(
+      selectedConfig.getProvider(),
+      selectedConfig.getModel(),
+    );
+
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      selectedSettings,
+      selectedConfig,
+      {
+        runtimeId: 'same-label',
+      },
+      undefined,
+      selectedSettingsOwner,
+    );
+    try {
+      manager.registerProvider(new WorkspaceProvider());
+      manager.setActiveProvider('openai');
+      const provider = manager.getActiveProvider();
+      if (!provider) throw new Error('Fixture provider missing');
+      const chunks: IContent[] = [];
+      for await (const chunk of provider.generateChatCompletion({
+        contents: [],
+      }))
+        chunks.push(chunk);
+      expect(chunks).toMatchObject([
+        { blocks: [{ text: resolve('/workspace-selected') }] },
+      ]);
+    } finally {
+      manager.dispose();
+    }
   });
 });

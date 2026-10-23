@@ -3,17 +3,29 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { describe, expect, it, vi } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'bun:test';
 import { act, Suspense, useEffect } from 'react';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import { ShellJobOwner } from '../../../../../../agents/src/session/shell-job-owner.js';
+import { TaskLaunchOwner } from '../../../../../../agents/src/session/task-launch-owner.js';
 import { renderHook, waitFor } from '../../../../__tests__/render.js';
 import {
   buildAgent,
   drain,
+  fixtureAgentResources,
 } from '../../../../../../agents/src/api/__tests__/helpers/agentHarness.js';
+import { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { SubagentTerminateMode } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import { TaskLaunchOwner } from '../../../../../../agents/src/session/task-launch-owner.js';
+import { useOwnedCredentials } from '../../../../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import {
+  buildTaskNotificationAgent,
+  launchHeldNotificationTask,
+} from '../../../../__tests__/task-notification-fixture.js';
 import { useSubmitQuery, type UseSubmitQueryDeps } from '../useSubmitQuery.js';
 import { useQueuedSubmissions } from '../useQueuedSubmissions.js';
 import { useAgentEventStream } from '../useAgentEventStream.js';
@@ -22,6 +34,9 @@ import type { QueuedSubmission } from '../types.js';
 import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
 import { createDeferred } from './createDeferred.js';
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
+import { streamPolicyOperations } from './stream-policy-operations.js';
+import { submissionOperations } from './submission-operations.js';
+import { agentStreamOperations } from './helpers/agentStreamOperations.js';
 import {
   createLoadedSettings,
   createMockOverrides,
@@ -53,7 +68,7 @@ void vi.mock('../streamUtils.js', () => ({
 }));
 
 function renderNotificationQueue(
-  agent: UseSubmitQueryDeps['agent'],
+  agent: Agent,
   queuedSubmissionsRef: UseSubmitQueryDeps['queuedSubmissionsRef'],
   drainSuppressedRef: UseSubmitQueryDeps['drainSuppressedRef'],
   runStreamRef: UseSubmitQueryDeps['runStreamRef'],
@@ -69,9 +84,13 @@ function renderNotificationQueue(
   >
 > {
   const noop = (): void => {};
+  const streamOperations = agentStreamOperations(agent);
   const deps: UseSubmitQueryDeps = {
-    runtime: createStreamRuntimeForTest({}, createMockOverrides()),
-    agent,
+    ...{ runtime: createStreamRuntimeForTest({}, createMockOverrides()) },
+    ...streamPolicyOperations(
+      createStreamRuntimeForTest({}, createMockOverrides()),
+    ),
+    ...submissionOperations(agent, undefined, undefined),
     addItem: () => 1,
     settings: createLoadedSettings(),
     onDebugMessage: noop,
@@ -113,7 +132,7 @@ function renderNotificationQueue(
   return renderHook(
     () => {
       const events = useAgentEventStream({
-        agent,
+        ...streamOperations,
         addItem: () => 1,
         processAgentEventRef: { current: null },
         flushPendingHistoryItem: noop,
@@ -142,27 +161,16 @@ function renderNotificationQueue(
   );
 }
 
-function backgroundOwners(agent: UseSubmitQueryDeps['agent']): {
+function backgroundOwners(agent: Agent): {
   tasks: TaskLaunchOwner;
   shell: ShellJobOwner;
 } {
-  if (
-    !('deps' in agent) ||
-    typeof agent.deps !== 'object' ||
-    agent.deps === null
-  )
-    throw new Error('Expected agent dependencies');
-  if (
-    !('taskLaunchOwner' in agent.deps) ||
-    !(agent.deps.taskLaunchOwner instanceof TaskLaunchOwner)
-  )
+  const { taskOwner, shellOwner } = fixtureAgentResources(agent);
+  if (!(taskOwner instanceof TaskLaunchOwner))
     throw new Error('Expected task owner');
-  if (
-    !('shellOwner' in agent.deps) ||
-    !(agent.deps.shellOwner instanceof ShellJobOwner)
-  )
+  if (!(shellOwner instanceof ShellJobOwner))
     throw new Error('Expected shell owner');
-  return { tasks: agent.deps.taskLaunchOwner, shell: agent.deps.shellOwner };
+  return { tasks: taskOwner, shell: shellOwner };
 }
 
 async function finishBackgroundWork(
@@ -214,6 +222,23 @@ async function finishBackgroundWork(
 }
 
 describe('background notification queue ownership', () => {
+  let promptDirectory: string;
+  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+  // The prompt service initializes once per process from the first caller's
+  // directory. Owning it here keeps the physical child launched by the held
+  // notification fixture independent of whichever earlier test initialized it.
+  beforeAll(async () => {
+    promptDirectory = await mkdtemp(join(tmpdir(), 'engine-prompts-'));
+    process.env.LLXPRT_PROMPTS_DIR = promptDirectory;
+    await initializePromptSystem();
+  });
+  afterAll(async () => {
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(promptDirectory, { recursive: true, force: true });
+  });
+
+  const credentials = useOwnedCredentials();
   it('delivers a pending notice while a busy render is suspended and only idle has committed', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     const { tasks, shell } = backgroundOwners(agent);
@@ -615,21 +640,15 @@ describe('background notification queue ownership', () => {
   }
 
   it('aborts an in-flight completion on unmount and retains ownership until it settles', async () => {
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-    if (
-      !('deps' in agent) ||
-      typeof agent.deps !== 'object' ||
-      agent.deps === null
-    ) {
-      throw new Error('Expected agent dependencies');
-    }
-    if (
-      !('taskLaunchOwner' in agent.deps) ||
-      !(agent.deps.taskLaunchOwner instanceof TaskLaunchOwner)
-    ) {
-      throw new Error('Expected task owner');
-    }
-    const owner = agent.deps.taskLaunchOwner;
+    const manager = new AsyncTaskManager();
+    const { agent, cleanup } = await buildTaskNotificationAgent(
+      manager,
+      credentials().authority,
+    );
+    const { tasks: owner } = backgroundOwners(agent);
+    let task:
+      | Awaited<ReturnType<typeof launchHeldNotificationTask>>
+      | undefined;
     const submissions: React.MutableRefObject<QueuedSubmission[]> = {
       current: [],
     };
@@ -660,21 +679,10 @@ describe('background notification queue ownership', () => {
       suppressed,
       runStreamRef,
     );
+    let recovery: ReturnType<typeof renderNotificationQueue> | undefined;
     try {
-      await owner.start(async (launch, publish) => {
-        owner.manager.registerTask({
-          id: 'unmount-old-task',
-          subagentName: 'worker',
-          goalPrompt: 'work',
-          abortController: launch.controller,
-        });
-        launch.register('unmount-old-task');
-        publish({ llmContent: '', returnDisplay: '' });
-      });
-      owner.manager.completeTask('unmount-old-task', {
-        terminate_reason: SubagentTerminateMode.GOAL,
-        emitted_vars: { result: 'OLD_SESSION_OUTPUT' },
-      });
+      task = await launchHeldNotificationTask(agent);
+      task.release();
       await waitFor(() =>
         expect(rendered.result.current.queuedSubmissions).toHaveLength(1),
       );
@@ -685,7 +693,7 @@ describe('background notification queue ownership', () => {
       const signal = await entered.promise;
       rendered.unmount();
       expect(signal.aborted).toBe(true);
-      expect(owner.getPendingNotifications()).toHaveLength(1);
+      expect(manager.getPendingNotifications()).toHaveLength(1);
       const oldSession = { id: agent.session.getSessionId() };
       await expect(agent.session.startNewSession()).rejects.toThrow(
         'completion notices',
@@ -694,12 +702,12 @@ describe('background notification queue ownership', () => {
       release.resolve();
       await finished.promise;
       await waitFor(() => expect(owner.hasPendingWork()).toBe(false));
-      expect(owner.getPendingNotifications()).toHaveLength(1);
+      expect(manager.getPendingNotifications()).toHaveLength(1);
       expect(await agent.getHistory()).toStrictEqual([]);
       await expect(agent.session.startNewSession()).rejects.toThrow(
         'completion notices',
       );
-      const recovery = renderNotificationQueue(
+      recovery = renderNotificationQueue(
         agent,
         { current: [] },
         { current: false },
@@ -709,41 +717,35 @@ describe('background notification queue ownership', () => {
           },
         },
       );
-      try {
-        await waitFor(() => expect(owner.hasPendingWork()).toBe(false));
-        await waitFor(() =>
-          expect(owner.getPendingNotifications()).toStrictEqual([]),
-        );
-        expect(JSON.stringify(await agent.getHistory())).toContain(
-          'OLD_SESSION_OUTPUT',
-        );
-        await agent.session.startNewSession();
-        expect(await agent.getHistory()).toStrictEqual([]);
-      } finally {
-        recovery.unmount();
-      }
+      await waitFor(() => expect(owner.hasPendingWork()).toBe(false));
+      await waitFor(() =>
+        expect(manager.getPendingNotifications()).toStrictEqual([]),
+      );
+      expect(JSON.stringify(await agent.getHistory())).toContain(
+        'OLD_SESSION_OUTPUT',
+      );
+      await agent.session.startNewSession();
+      expect(await agent.getHistory()).toStrictEqual([]);
+      recovery.unmount();
       await owner.join();
     } finally {
       release.resolve();
       rendered.unmount();
+      recovery?.unmount();
+      await task?.close();
       await cleanup();
     }
   });
 
   it('blocks clear while a completion is queued and until its submitted turn finishes', async () => {
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-    if (
-      !('deps' in agent) ||
-      typeof agent.deps !== 'object' ||
-      agent.deps === null
-    )
-      throw new Error('Expected agent dependencies');
-    if (
-      !('taskLaunchOwner' in agent.deps) ||
-      !(agent.deps.taskLaunchOwner instanceof TaskLaunchOwner)
-    )
-      throw new Error('Expected task owner');
-    const owner = agent.deps.taskLaunchOwner;
+    const manager = new AsyncTaskManager();
+    const { agent, cleanup } = await buildTaskNotificationAgent(
+      manager,
+      credentials().authority,
+    );
+    let task:
+      | Awaited<ReturnType<typeof launchHeldNotificationTask>>
+      | undefined;
     const submissions: React.MutableRefObject<QueuedSubmission[]> = {
       current: [],
     };
@@ -768,20 +770,8 @@ describe('background notification queue ownership', () => {
       runStreamRef,
     );
     try {
-      await owner.start(async (launch, publish) => {
-        owner.manager.registerTask({
-          id: 'ui-old-task',
-          subagentName: 'worker',
-          goalPrompt: 'work',
-          abortController: launch.controller,
-        });
-        launch.register('ui-old-task');
-        publish({ llmContent: '', returnDisplay: '' });
-      });
-      owner.manager.completeTask('ui-old-task', {
-        terminate_reason: SubagentTerminateMode.GOAL,
-        emitted_vars: { result: 'OLD_SESSION_OUTPUT' },
-      });
+      task = await launchHeldNotificationTask(agent);
+      task.release();
       await waitFor(() =>
         expect(rendered.result.current.queuedSubmissions).toHaveLength(1),
       );
@@ -800,13 +790,14 @@ describe('background notification queue ownership', () => {
       );
       release.resolve();
       await waitFor(() =>
-        expect(owner.getPendingNotifications()).toStrictEqual([]),
+        expect(manager.getPendingNotifications()).toStrictEqual([]),
       );
       await agent.session.startNewSession();
       expect(await agent.getHistory()).toStrictEqual([]);
     } finally {
       release.resolve();
       rendered.unmount();
+      await task?.close();
       await cleanup();
     }
   });

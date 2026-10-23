@@ -3,7 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
+import { buildProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition.js';
 /**
  * Behavioral tests for the production guard helper (#2481) and capability
  * consumption ordering (#1954 AC4/AC5). Exercises the REAL guard helper and
@@ -19,24 +19,26 @@ import {
   afterEach,
   mock,
 } from 'bun:test';
-import type { Config } from '@vybestack/llxprt-code-core';
+import { Config } from '@vybestack/llxprt-code-core';
+import { makeConfig } from './__tests__/startup-config-fixture.js';
+import { useCommandOwners as installCommandOwners } from './__tests__/command-owner-fixture.js';
+const makeStartupOwner = installCommandOwners();
+const actualErrorReporting = {
+  ...(await import('./session/errorReporting.js')),
+};
+const actualProviderGuard = {
+  ...(await import('./unconfiguredProviderGuard.js')),
+};
+import * as credentialModule from '@vybestack/llxprt-code-providers/auth.js';
+import fs from 'node:fs';
+const credentialExports = { ...credentialModule };
 import { installDefinitionRuntimeFixture } from './__tests__/definition-runtime-fixture.js';
-const definitionFixture = installDefinitionRuntimeFixture();
+installDefinitionRuntimeFixture();
 import {
   guardUnconfiguredProvider,
   UNCONFIGURED_PROVIDER_MESSAGE,
 } from './unconfiguredProviderGuard.js';
 import { buildImageModeFlags } from './config/imageModeDispatch.js';
-
-function makeConfig(hasActive: boolean, interactive: boolean): Config {
-  return {
-    getProvider: () => (hasActive ? 'fake' : undefined),
-    isInteractive: () => interactive,
-    getOutputFormat: () => 'text',
-    getListExtensions: () => false,
-    getExperimentalZedIntegration: () => false,
-  } as unknown as Config;
-}
 
 /**
  * Arguments the real `main()` passed to the ACP client's `runZedIntegration`.
@@ -55,18 +57,28 @@ type ZedIntegrationCall = {
 };
 
 /** The contributions `bootstrapRuntimeAndConfig` reports as already loaded. */
-const loadedProviderContributions = Object.freeze({ loaded: 'by-cli' });
+const loadedProviderContributions = buildProviderContributionRegistry([]);
 /** The OAuth settings surface the CLI's own provider manager is built with. */
 const cliOAuthSettings = Object.freeze({ source: 'cli-adapter' });
 const zedIntegrationCalls: ZedIntegrationCall[] = [];
 
 function setupCommonMainMocks(callOrder: string[], config: Config): void {
   void mock.module('./cliProviderInit.js', () => ({
-    activateConfiguredProvider: async () => {
+    activateConfiguredProvider: async (
+      _config: unknown,
+      _manager: unknown,
+      _argv: unknown,
+      operation: {
+        preflight(intent: {
+          authMode: 'none';
+        }): Promise<{ token?: object; authFailed: boolean }>;
+      },
+    ) => {
       callOrder.push('activation');
-      return { authFailed: false, token: undefined, intent: undefined };
+      const intent = { authMode: 'none' } as const;
+      return { ...(await operation.preflight(intent)), intent };
     },
-    configureProvidersAndServices: async (...args: unknown[]) => args[5],
+    configureProvidersAndServices: async () => {},
     connectIdeClientIfEnabled: async () => {},
     ensureAcpProviderActivated: () => {
       callOrder.push('acp-activated');
@@ -75,28 +87,42 @@ function setupCommonMainMocks(callOrder: string[], config: Config): void {
   void mock.module('./cliTerminalSession.js', () => ({
     constructAgentWithSpinner: async () => {
       callOrder.push('agent-construction');
-      return {};
+      return makeStartupOwner('startup-order-owner');
     },
     prepareTerminalSession: async () => {},
   }));
   void mock.module('./cliSessionBootstrap.js', () => ({
-    bootstrapRuntimeAndConfig: async () => ({
-      config,
-      providerManager: {
-        hasActiveProvider: () => config.getProvider() !== undefined,
-      },
-      runtimeSettingsService: {},
-      profileApplication: {},
+    discoverCliProviderContributions: async () => ({
       providerContributions: loadedProviderContributions,
-      activationOperation: {
-        dispose: () => {},
-        workspaceDefinitions: definitionFixture().definitionOwner,
-      },
+      authFactories: new Map(),
     }),
+    bootstrapRuntimeAndConfig: async (
+      _settings: unknown,
+      _argv: unknown,
+      _root: unknown,
+      _authority: unknown,
+      preflight: {
+        hasActiveProvider(): boolean;
+        prepareConfiguredWorkspace(
+          config: Config,
+          before: () => void,
+        ): Promise<void>;
+      },
+    ) => {
+      if (config instanceof Config)
+        await preflight.prepareConfiguredWorkspace(config, () => {});
+      vi.spyOn(preflight, 'hasActiveProvider').mockImplementation(
+        () => config.getProvider() !== undefined,
+      );
+      return config;
+    },
     setupSessionRecording: async () => undefined,
     setupOwnerSessionRecording: async () => null,
   }));
   void mock.module('./session/nonInteractiveSession.js', () => ({
+    runPipedOrPromptSession: async () => {
+      throw new Error('Unexpected headless launch');
+    },
     dispatchInteractiveOrNonInteractive: async () => {
       callOrder.push('dispatch');
     },
@@ -114,6 +140,7 @@ function setupCommonMainMocks(callOrder: string[], config: Config): void {
     },
   }));
   void mock.module('./cliBootstrap.js', () => ({
+    captureBootstrapEnvPath: () => null,
     configureEarlyDebugLogging: () => {},
     createMemoizedStdinReader: () => async () => '',
     ensureStdinOrPromptProvided: async () => {},
@@ -132,6 +159,7 @@ function setupCommonMainMocks(callOrder: string[], config: Config): void {
       callOrder.push('exit-cleanup');
     },
     registerSyncCleanup: () => {},
+    registerCleanup: () => {},
   }));
   void mock.module('./utils/sessionCleanup.js', () => ({
     cleanupExpiredSessions: async () => {},
@@ -153,6 +181,7 @@ function setupCommonMainMocks(callOrder: string[], config: Config): void {
     reportStartupResult: () => ({ messages: [], needsLegacyFallback: false }),
   }));
   void mock.module('./session/errorReporting.js', () => ({
+    ...actualErrorReporting,
     formatNonInteractiveError: () => '',
   }));
   void mock.module('./session/outputListeners.js', () => ({
@@ -179,13 +208,15 @@ describe('guardUnconfiguredProvider: production main-boundary guard (#2481)', ()
     });
   });
 
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
 
   it('returns void when a provider is configured', async () => {
     const result = await guardUnconfiguredProvider(
       makeConfig(true, false),
       cleanupFn,
-      { hasActiveProvider: () => true },
+      () => true,
     );
     expect(result).toBeUndefined();
     expect(process.exit).not.toHaveBeenCalled();
@@ -196,7 +227,7 @@ describe('guardUnconfiguredProvider: production main-boundary guard (#2481)', ()
     const result = await guardUnconfiguredProvider(
       makeConfig(false, true),
       cleanupFn,
-      { hasActiveProvider: () => false },
+      () => false,
     );
     expect(result).toBeUndefined();
     expect(process.exit).not.toHaveBeenCalled();
@@ -205,9 +236,11 @@ describe('guardUnconfiguredProvider: production main-boundary guard (#2481)', ()
 
   it('exits with code 52 when unconfigured and non-interactive', async () => {
     await expect(
-      guardUnconfiguredProvider(makeConfig(false, false), cleanupFn, {
-        hasActiveProvider: () => false,
-      }),
+      guardUnconfiguredProvider(
+        makeConfig(false, false),
+        cleanupFn,
+        () => false,
+      ),
     ).rejects.toThrow('process.exit(52) called');
     expect(cleanupFn).toHaveBeenCalledTimes(1);
   });
@@ -225,7 +258,7 @@ describe('guardUnconfiguredProvider: production main-boundary guard (#2481)', ()
       guardResult: guardUnconfiguredProvider(
         makeConfig(false, false),
         cleanupFn,
-        { hasActiveProvider: () => false },
+        () => false,
       ),
       stderrChunks,
     };
@@ -247,9 +280,11 @@ describe('guardUnconfiguredProvider: production main-boundary guard (#2481)', ()
       .fn()
       .mockRejectedValue(new Error('cleanup failed'));
     await expect(
-      guardUnconfiguredProvider(makeConfig(false, false), failingCleanup, {
-        hasActiveProvider: () => false,
-      }),
+      guardUnconfiguredProvider(
+        makeConfig(false, false),
+        failingCleanup,
+        () => false,
+      ),
     ).rejects.toThrow('process.exit(52) called');
     expect(failingCleanup).toHaveBeenCalledTimes(1);
   });
@@ -273,6 +308,7 @@ describe('main() orchestration: guard stops before activation (#2481)', () => {
     // reference itself (not the namespace) before registration.
     const realGuard = guardUnconfiguredProvider;
     void mock.module('./unconfiguredProviderGuard.js', () => ({
+      ...actualProviderGuard,
       guardUnconfiguredProvider: async (
         cfg: Config,
         runCleanup: () => Promise<void>,
@@ -315,10 +351,7 @@ describe('main() orchestration: guard stops before activation (#2481)', () => {
   });
 
   it('ACP/Zed: ensureAcpProviderActivated is reached without passing the general guard', async () => {
-    const config = {
-      ...makeConfig(false, false),
-      getExperimentalZedIntegration: () => true,
-    } as unknown as Config;
+    const config = makeConfig(false, false, true);
     vi.spyOn(process, 'exit').mockImplementation(() => {
       throw new Error('unexpected process.exit');
     });
@@ -330,10 +363,7 @@ describe('main() orchestration: guard stops before activation (#2481)', () => {
   });
 
   it('ACP/Zed: the host injects its own exit cleanup into the ACP client', async () => {
-    const config = {
-      ...makeConfig(false, false),
-      getExperimentalZedIntegration: () => true,
-    } as unknown as Config;
+    const config = makeConfig(false, false, true);
     vi.spyOn(process, 'exit').mockImplementation(() => {
       throw new Error('unexpected process.exit');
     });
@@ -356,10 +386,7 @@ describe('main() orchestration: guard stops before activation (#2481)', () => {
   });
 
   it('ACP/Zed: sessions use the CLI-loaded provider contributions and OAuth settings', async () => {
-    const config = {
-      ...makeConfig(false, false),
-      getExperimentalZedIntegration: () => true,
-    } as unknown as Config;
+    const config = makeConfig(false, false, true);
     vi.spyOn(process, 'exit').mockImplementation(() => {
       throw new Error('unexpected process.exit');
     });
@@ -387,9 +414,12 @@ describe('main() orchestration: capability consumption precedes settings/sandbox
 
   async function runMainConfigured(config: Config): Promise<void> {
     void mock.module('@vybestack/llxprt-code-providers/auth.js', () => ({
-      createTokenStore: () => {
-        callOrder.push('createTokenStore');
-        return {};
+      ...credentialExports,
+      HostCredentialOwner: class extends credentialExports.HostCredentialOwner {
+        constructor(environment: NodeJS.ProcessEnv) {
+          callOrder.push('captureCredentialAuthority');
+          super(environment);
+        }
       },
     }));
     void mock.module('./utils/sandbox-bashrc.js', () => ({
@@ -398,6 +428,7 @@ describe('main() orchestration: capability consumption precedes settings/sandbox
       },
     }));
     void mock.module('./unconfiguredProviderGuard.js', () => ({
+      ...actualProviderGuard,
       guardUnconfiguredProvider: async () => {},
       UNCONFIGURED_PROVIDER_MESSAGE: '',
     }));
@@ -410,13 +441,13 @@ describe('main() orchestration: capability consumption precedes settings/sandbox
     process.env.LLXPRT_CREDENTIAL_SOCKET = '/tmp/test-ac4-socket.sock';
     try {
       await runMainConfigured(makeConfig(true, false));
-      expect(callOrder).toContain('createTokenStore');
+      expect(callOrder).toContain('captureCredentialAuthority');
       expect(callOrder).toContain('applySandboxBashrc');
       expect(callOrder).toContain('loadSettings');
-      expect(callOrder.indexOf('createTokenStore')).toBeLessThan(
+      expect(callOrder.indexOf('captureCredentialAuthority')).toBeLessThan(
         callOrder.indexOf('applySandboxBashrc'),
       );
-      expect(callOrder.indexOf('createTokenStore')).toBeLessThan(
+      expect(callOrder.indexOf('captureCredentialAuthority')).toBeLessThan(
         callOrder.indexOf('loadSettings'),
       );
       expect(callOrder.indexOf('applySandboxBashrc')).toBeLessThan(
@@ -430,17 +461,25 @@ describe('main() orchestration: capability consumption precedes settings/sandbox
   it('without a credential socket: does NOT consume the descriptor (direct mode), does NOT apply sandbox.bashrc (F3), and still reaches loadSettings', async () => {
     delete process.env.LLXPRT_CREDENTIAL_SOCKET;
     await runMainConfigured(makeConfig(true, false));
-    expect(callOrder).not.toContain('createTokenStore');
+    expect(callOrder).toContain('captureCredentialAuthority');
+    expect(callOrder.indexOf('captureCredentialAuthority')).toBeLessThan(
+      callOrder.indexOf('loadSettings'),
+    );
     expect(callOrder).not.toContain('applySandboxBashrc');
     expect(callOrder).toContain('loadSettings');
   });
 
-  it('fd-only ordering: invokes createTokenStore but never applySandboxBashrc (#1954 AC4)', async () => {
+  it('fd-only ordering: rejects mismatched transport before settings or sandbox.bashrc (#1954 AC4)', async () => {
     delete process.env.LLXPRT_CREDENTIAL_SOCKET;
     process.env.LLXPRT_CAPABILITY_FD = '3';
+    vi.spyOn(fs, 'readSync').mockImplementation(() => 0);
+    vi.spyOn(fs, 'closeSync').mockImplementation(() => {});
     try {
-      await runMainConfigured(makeConfig(true, false));
-      expect(callOrder).toContain('createTokenStore');
+      await expect(runMainConfigured(makeConfig(true, false))).rejects.toThrow(
+        'Capability transport requires LLXPRT_CREDENTIAL_SOCKET',
+      );
+      expect(callOrder).toContain('captureCredentialAuthority');
+      expect(callOrder).not.toContain('loadSettings');
       expect(callOrder).not.toContain('applySandboxBashrc');
     } finally {
       delete process.env.LLXPRT_CAPABILITY_FD;
@@ -473,13 +512,15 @@ describe('main() image mode: bypasses the conversational stdin guard (#2128)', (
       configurable: true,
     });
 
-    void mock.module('@vybestack/llxprt-code-providers/auth.js', () => ({
-      createTokenStore: () => ({}),
-    }));
+    void mock.module(
+      '@vybestack/llxprt-code-providers/auth.js',
+      () => credentialExports,
+    );
     void mock.module('./utils/sandbox-bashrc.js', () => ({
       applySandboxBashrc: () => {},
     }));
     void mock.module('./unconfiguredProviderGuard.js', () => ({
+      ...actualProviderGuard,
       guardUnconfiguredProvider: async () => {},
       UNCONFIGURED_PROVIDER_MESSAGE: '',
     }));
@@ -489,7 +530,7 @@ describe('main() image mode: bypasses the conversational stdin guard (#2128)', (
         token: undefined,
         intent: undefined,
       }),
-      configureProvidersAndServices: async (...args: unknown[]) => args[5],
+      configureProvidersAndServices: async () => {},
       connectIdeClientIfEnabled: async () => {},
       ensureAcpProviderActivated: () => {},
     }));
@@ -498,19 +539,18 @@ describe('main() image mode: bypasses the conversational stdin guard (#2128)', (
       prepareTerminalSession: async () => {},
     }));
     void mock.module('./cliSessionBootstrap.js', () => ({
-      bootstrapRuntimeAndConfig: async () => ({
-        config,
-        runtimeSettingsService: {},
-        profileApplication: {},
-        activationOperation: {
-          dispose: () => {},
-          workspaceDefinitions: definitionFixture().definitionOwner,
-        },
+      discoverCliProviderContributions: async () => ({
+        providerContributions: loadedProviderContributions,
+        authFactories: new Map(),
       }),
+      bootstrapRuntimeAndConfig: async () => config,
       setupSessionRecording: async () => undefined,
       setupOwnerSessionRecording: async () => null,
     }));
     void mock.module('./session/nonInteractiveSession.js', () => ({
+      runPipedOrPromptSession: async () => {
+        throw new Error('Unexpected headless launch');
+      },
       dispatchInteractiveOrNonInteractive: async () => {},
     }));
     void mock.module('./cliSandbox.js', () => ({
@@ -531,6 +571,7 @@ describe('main() image mode: bypasses the conversational stdin guard (#2128)', (
       }),
     }));
     void mock.module('./cliBootstrap.js', () => ({
+      captureBootstrapEnvPath: () => null,
       configureEarlyDebugLogging: () => {},
       createMemoizedStdinReader: () => async () => '',
       // Track whether the guard is invoked.
@@ -550,6 +591,7 @@ describe('main() image mode: bypasses the conversational stdin guard (#2128)', (
       cleanupCheckpoints: async () => {},
       runExitCleanup: async () => {},
       registerSyncCleanup: () => {},
+      registerCleanup: () => {},
     }));
     void mock.module('./utils/sessionCleanup.js', () => ({
       cleanupExpiredSessions: async () => {},
@@ -565,6 +607,7 @@ describe('main() image mode: bypasses the conversational stdin guard (#2128)', (
       }),
     }));
     void mock.module('./session/errorReporting.js', () => ({
+      ...actualErrorReporting,
       formatNonInteractiveError: () => '',
     }));
     void mock.module('./session/outputListeners.js', () => ({

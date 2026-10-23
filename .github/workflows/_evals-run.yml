@@ -8,12 +8,6 @@ on:
         required: false
         type: string
         default: '[1, 2, 3]'
-    secrets:
-      provider-api-key:
-        description: >-
-          The resolved provider API key, passed by the caller under the fixed
-          input name provider-api-key (callers resolve the configured secret).
-        required: true
 
 permissions:
   contents: read
@@ -55,53 +49,24 @@ jobs:
       - name: Create logs directory
         run: mkdir -p evals/logs
 
-      - name: Provider configuration preflight
-        shell: bash
-        env:
-          OPENAI_API_KEY: ${{ secrets.provider-api-key }}
-          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
-          KEY_VAR_NAME: ${{ vars.KEY_VAR_NAME }}
-          LLXPRT_DEFAULT_MODEL: ${{ vars.LLXPRT_DEFAULT_MODEL }}
-          LLXPRT_DEFAULT_PROVIDER: ${{ vars.LLXPRT_DEFAULT_PROVIDER }}
-        run: |
-          set -euo pipefail
-          missing=0
-          if [ -z "${OPENAI_API_KEY:-}" ]; then
-            echo "::error::OPENAI_API_KEY (secret named by KEY_VAR_NAME) is required for real-model evals"
-            missing=1
-          fi
-          if [ -z "${OPENAI_BASE_URL:-}" ]; then
-            echo "::error::OPENAI_BASE_URL repository variable is required for real-model evals"
-            missing=1
-          fi
-          if [ -z "${LLXPRT_DEFAULT_MODEL:-}" ]; then
-            echo "::error::LLXPRT_DEFAULT_MODEL repository variable is required for real-model evals"
-            missing=1
-          fi
-          if [ -z "${LLXPRT_DEFAULT_PROVIDER:-}" ]; then
-            echo "::error::LLXPRT_DEFAULT_PROVIDER repository variable is required for real-model evals"
-            missing=1
-          fi
-          # Report which key variable was consulted (name only, never the value).
-          echo "Consulted API key secret named: ${KEY_VAR_NAME:-<unset>}"
-          if [ "$missing" -ne 0 ]; then
-            exit 1
-          fi
-          echo "All required provider configuration values are present."
-
       - name: Build project
         run: npm run build
 
+      # Evals run against the same pinned local Ollama + Gemma 4 E2B model as
+      # PR E2E; the action exports the provider environment for later steps.
+      - name: Set up local Gemma 4 E2B model
+        uses: ./.github/actions/setup-local-gemma
+
       - name: Run all evals
         env:
-          OPENAI_API_KEY: ${{ secrets.provider-api-key }}
-          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
-          LLXPRT_DEFAULT_MODEL: ${{ vars.LLXPRT_DEFAULT_MODEL }}
-          LLXPRT_DEFAULT_PROVIDER: ${{ vars.LLXPRT_DEFAULT_PROVIDER }}
-          LLXPRT_AUTH_TYPE: provider
           LLXPRT_FORCE_FILE_STORAGE: 'true'
           RUN_EVALS: '1'
         run: npm run test:all_evals
+
+      - name: Collect local model log
+        if: always()
+        shell: bash
+        run: cp "$RUNNER_TEMP/ollama-server.log" evals/logs/ 2>/dev/null || true
 
       - name: Prepare eval artifact
         id: prepare

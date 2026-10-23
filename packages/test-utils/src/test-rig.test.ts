@@ -12,12 +12,28 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { createServer } from 'node:http';
+import { createServer, type Server } from 'node:http';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { restoreEnv, setEnv } from './env-test-helpers.js';
 import { TestRig } from './test-rig.js';
 import { readLedger } from './model-request-ledger.js';
+
+/** Resolves with the bound port only once the server is accepting connections. */
+async function listenOnLoopback(server: Server): Promise<number> {
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', reject);
+      resolve();
+    });
+  });
+  const address = server.address();
+  if (address === null || typeof address === 'string') {
+    throw new Error('Local test server has no TCP port');
+  }
+  return address.port;
+}
 
 function requireTestDir(testDir: string | null): string {
   if (testDir === null) {
@@ -87,6 +103,7 @@ describe('TestRig setup and cleanup behavior', () => {
         'openai-request-timeout-ms': 850_000,
         'openai-headers-timeout-ms': 900_000,
       },
+      modelParams: { temperature: 0, seed: 20260101 },
     });
   });
 
@@ -105,6 +122,7 @@ describe('TestRig setup and cleanup behavior', () => {
         'utf8',
       ),
     );
+    expect(profile.modelParams).toStrictEqual({});
     expect(profile.ephemeralSettings).not.toHaveProperty(
       'stream-first-response-timeout-ms',
     );
@@ -152,13 +170,9 @@ describe('TestRig setup and cleanup behavior', () => {
         response.end(`data: ${chunk}\n\ndata: [DONE]\n\n`);
       });
     });
-    server.listen(0, '127.0.0.1');
+    const port = await listenOnLoopback(server);
     try {
-      const address = server.address();
-      if (address === null || typeof address === 'string') {
-        throw new Error('Local test server has no TCP port');
-      }
-      setEnv('OPENAI_BASE_URL', `http://127.0.0.1:${address.port}/v1`);
+      setEnv('OPENAI_BASE_URL', `http://127.0.0.1:${port}/v1`);
       const rig = new TestRig();
       rig.setup('real CLI local model E2E profile');
 
@@ -177,10 +191,20 @@ describe('TestRig setup and cleanup behavior', () => {
           completionRequest === undefined
             ? undefined
             : JSON.parse(completionRequest.body).reasoning_effort,
+        temperature:
+          completionRequest === undefined
+            ? undefined
+            : JSON.parse(completionRequest.body).temperature,
+        seed:
+          completionRequest === undefined
+            ? undefined
+            : JSON.parse(completionRequest.body).seed,
       }).toStrictEqual({
         path: '/v1/chat/completions',
         model: 'qwen3.5:2b',
         reasoningEffort: 'none',
+        temperature: 0,
+        seed: 20260101,
       });
     } finally {
       server.closeAllConnections();
@@ -205,13 +229,9 @@ describe('TestRig setup and cleanup behavior', () => {
         );
       }, 1_500);
     });
-    server.listen(0, '127.0.0.1');
+    const port = await listenOnLoopback(server);
     try {
-      const address = server.address();
-      if (address === null || typeof address === 'string') {
-        throw new Error('Local test server has no TCP port');
-      }
-      setEnv('OPENAI_BASE_URL', `http://127.0.0.1:${address.port}/v1`);
+      setEnv('OPENAI_BASE_URL', `http://127.0.0.1:${port}/v1`);
       const rig = new TestRig();
       rig.setup('local profile headers deadline');
       const profilePath = join(
@@ -255,13 +275,9 @@ describe('TestRig setup and cleanup behavior', () => {
         );
       }, 1_500);
     });
-    server.listen(0, '127.0.0.1');
+    const port = await listenOnLoopback(server);
     try {
-      const address = server.address();
-      if (address === null || typeof address === 'string') {
-        throw new Error('Local test server has no TCP port');
-      }
-      setEnv('OPENAI_BASE_URL', `http://127.0.0.1:${address.port}/v1`);
+      setEnv('OPENAI_BASE_URL', `http://127.0.0.1:${port}/v1`);
       const rig = new TestRig();
       rig.setup('local profile SDK deadline');
       const profilePath = join(
@@ -300,13 +316,9 @@ describe('TestRig setup and cleanup behavior', () => {
     const server = createServer((_request, _response) => {
       // Keep the first response pending so only the CLI watchdog can end it.
     });
-    server.listen(0, '127.0.0.1');
+    const port = await listenOnLoopback(server);
     try {
-      const address = server.address();
-      if (address === null || typeof address === 'string') {
-        throw new Error('Local test server has no TCP port');
-      }
-      setEnv('OPENAI_BASE_URL', `http://127.0.0.1:${address.port}/v1`);
+      setEnv('OPENAI_BASE_URL', `http://127.0.0.1:${port}/v1`);
       const rig = new TestRig();
       rig.setup('local profile watchdog');
       const profilePath = join(
@@ -369,9 +381,11 @@ describe('TestRig setup and cleanup behavior', () => {
     await firstRun;
   });
 
-  // The run is recorded before the CLI is spawned. Emptying PATH makes the
-  // spawn fail with ENOENT straight away, so the recording is observable
-  // without a real provider call and without leaving a child process behind.
+  // The run is recorded before the CLI is spawned. Selecting the installed
+  // `llxprt` binary and emptying PATH makes the spawn fail with ENOENT
+  // straight away, so the recording is observable without a real provider call
+  // and without leaving a child process behind. (The source-entry command is
+  // the absolute Bun path, which an empty PATH does not hide.)
   it('records a real-provider run to the ledger when LLXPRT_E2E_MODEL_LEDGER is set', async () => {
     const root = createRoot();
     setEnv('LLXPRT_DEFAULT_PROVIDER', 'openai');
@@ -379,6 +393,7 @@ describe('TestRig setup and cleanup behavior', () => {
     setEnv('OPENAI_API_KEY', 'test-key');
     setEnv('OPENAI_BASE_URL', 'http://127.0.0.1:1');
     setEnv('LLXPRT_TEST_PROFILE', undefined);
+    setEnv('INTEGRATION_TEST_USE_INSTALLED_LLXPRT', 'true');
     setEnv('PATH', join(root, 'no-executables-here'));
 
     const ledgerPath = join(root, 'ledger.jsonl');

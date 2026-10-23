@@ -8,13 +8,11 @@ import { INITIAL_WELCOME_STATE } from './welcomeState.js';
 import { useState, useCallback, useEffect } from 'react';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { type LoadedSettings } from '../../config/settings.js';
-import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
   isWelcomeCompleted,
   markWelcomeCompleted,
 } from '../../config/welcomeConfig.js';
-import { useRuntimeApi } from '../contexts/RuntimeContext.js';
-import { useOAuthControl } from '../contexts/OAuthControlContext.js';
+import type { OAuthControl } from '../contexts/OAuthControlContext.js';
 
 const debug = new DebugLogger('llxprt:ui:useWelcomeOnboarding');
 
@@ -57,7 +55,19 @@ export interface WelcomeActions {
 export interface UseWelcomeOnboardingOptions {
   settings: LoadedSettings;
   isFolderTrustComplete: boolean;
-  agent: Agent;
+  listProviders: () => string[];
+  listAvailableModels: (provider?: string) => Promise<readonly ModelInfo[]>;
+  setActiveModel: (model: string) => Promise<unknown>;
+  readProviderStatus: () => { providerName: string | null };
+  listSavedProfiles: () => Promise<string[]>;
+  saveProfileSnapshot: (name: string) => Promise<unknown>;
+  setDefaultProfileName: (name: string) => void;
+  loadProfileByName: (name: string) => Promise<unknown>;
+  switchProviderAfterAuth: (provider: string) => Promise<{ changed: boolean }>;
+  updateActiveProviderApiKey: (
+    key: string,
+  ) => Promise<{ message: string; providerName: string }>;
+  authenticate: OAuthControl['authenticate'];
   suppressStartup?: boolean;
 }
 
@@ -80,21 +90,21 @@ export interface UseWelcomeOnboardingReturn {
 }
 
 function useProviderLoader(
-  runtime: ReturnType<typeof useRuntimeApi>,
+  listProviders: UseWelcomeOnboardingOptions['listProviders'],
 ): [string[], React.Dispatch<React.SetStateAction<string[]>>] {
   const [availableProviders, setAvailableProviders] = useState<string[]>([]);
 
   useEffect(() => {
-    const providers = runtime.listProviders();
+    const providers = listProviders();
     setAvailableProviders(providers);
     debug.log(`Loaded ${providers.length} providers: ${providers.join(', ')}`);
-  }, [runtime]);
+  }, [listProviders]);
 
   return [availableProviders, setAvailableProviders];
 }
 
 function useModelLoader(
-  runtime: ReturnType<typeof useRuntimeApi>,
+  listAvailableModels: UseWelcomeOnboardingOptions['listAvailableModels'],
   selectedProvider: string | undefined,
   setState: React.Dispatch<React.SetStateAction<WelcomeState>>,
 ): [ModelInfo[], React.Dispatch<React.SetStateAction<ModelInfo[]>>] {
@@ -111,7 +121,7 @@ function useModelLoader(
       setState((prev) => ({ ...prev, modelsLoadStatus: 'loading' }));
 
       try {
-        const models = await runtime.listAvailableModels(selectedProvider);
+        const models = await listAvailableModels(selectedProvider);
         const modelInfos: ModelInfo[] = models.map((m) => ({
           id: m.id,
           name: m.name,
@@ -127,20 +137,20 @@ function useModelLoader(
     };
 
     void loadModels();
-  }, [runtime, selectedProvider, setState]);
+  }, [listAvailableModels, selectedProvider, setState]);
 
   return [availableModels, setAvailableModels];
 }
 
 function useSelectModelAction(
-  runtime: ReturnType<typeof useRuntimeApi>,
+  setActiveModel: UseWelcomeOnboardingOptions['setActiveModel'],
   setState: React.Dispatch<React.SetStateAction<WelcomeState>>,
 ) {
   return useCallback(
     async (modelId: string) => {
       debug.log(`[selectModel] Setting model: ${modelId}`);
       try {
-        await runtime.setActiveModel(modelId);
+        await setActiveModel(modelId);
         debug.log(`[selectModel] Model set successfully: ${modelId}`);
       } catch (error) {
         debug.log(`[selectModel] Failed to set model: ${error}`);
@@ -157,12 +167,12 @@ function useSelectModelAction(
         step: 'completion',
       }));
     },
-    [runtime, setState],
+    [setActiveModel, setState],
   );
 }
 
 function useOnAuthCompleteAction(
-  runtime: ReturnType<typeof useRuntimeApi>,
+  listAvailableModels: UseWelcomeOnboardingOptions['listAvailableModels'],
   selectedProvider: string | undefined,
   setState: React.Dispatch<React.SetStateAction<WelcomeState>>,
   setAvailableModels: React.Dispatch<React.SetStateAction<ModelInfo[]>>,
@@ -175,7 +185,7 @@ function useOnAuthCompleteAction(
     try {
       if (selectedProvider) {
         setState((prev) => ({ ...prev, modelsLoadStatus: 'loading' }));
-        const models = await runtime.listAvailableModels(selectedProvider);
+        const models = await listAvailableModels(selectedProvider);
         const modelInfos: ModelInfo[] = models.map((m) => ({
           id: m.id,
           name: m.name,
@@ -198,7 +208,7 @@ function useOnAuthCompleteAction(
       authInProgress: false,
       error: undefined,
     }));
-  }, [runtime, selectedProvider, setState, setAvailableModels]);
+  }, [listAvailableModels, selectedProvider, setState, setAvailableModels]);
 }
 
 function useGoBackAction(
@@ -228,7 +238,8 @@ function useGoBackAction(
 }
 
 function useWelcomeStepActions(
-  runtime: ReturnType<typeof useRuntimeApi>,
+  setActiveModel: UseWelcomeOnboardingOptions['setActiveModel'],
+  listAvailableModels: UseWelcomeOnboardingOptions['listAvailableModels'],
   setState: React.Dispatch<React.SetStateAction<WelcomeState>>,
   selectedProvider: string | undefined,
   setAvailableModels: React.Dispatch<React.SetStateAction<ModelInfo[]>>,
@@ -248,9 +259,9 @@ function useWelcomeStepActions(
     [setState],
   );
 
-  const selectModel = useSelectModelAction(runtime, setState);
+  const selectModel = useSelectModelAction(setActiveModel, setState);
   const onAuthComplete = useOnAuthCompleteAction(
-    runtime,
+    listAvailableModels,
     selectedProvider,
     setState,
     setAvailableModels,
@@ -298,16 +309,22 @@ function useWelcomeStepActions(
   };
 }
 
-function useProfileSave(runtime: ReturnType<typeof useRuntimeApi>) {
+function useProfileSave(
+  readProviderStatus: UseWelcomeOnboardingOptions['readProviderStatus'],
+  listSavedProfiles: UseWelcomeOnboardingOptions['listSavedProfiles'],
+  saveProfileSnapshot: UseWelcomeOnboardingOptions['saveProfileSnapshot'],
+  setDefaultProfileName: UseWelcomeOnboardingOptions['setDefaultProfileName'],
+  loadProfileByName: UseWelcomeOnboardingOptions['loadProfileByName'],
+) {
   return useCallback(
     async (name: string) => {
       try {
         debug.log(
-          `[saveProfile] START name=${name}, active provider: ${runtime.providerStatus().providerName}`,
+          `[saveProfile] START name=${name}, active provider: ${readProviderStatus().providerName}`,
         );
 
         // Check if profile already exists
-        const existingProfiles = await runtime.listSavedProfiles();
+        const existingProfiles = await listSavedProfiles();
         debug.log(
           `[saveProfile] Existing profiles: ${existingProfiles.join(', ')}`,
         );
@@ -319,37 +336,44 @@ function useProfileSave(runtime: ReturnType<typeof useRuntimeApi>) {
 
         // Save the profile snapshot
         debug.log(`[saveProfile] Calling saveProfileSnapshot...`);
-        await runtime.saveProfileSnapshot(name);
+        await saveProfileSnapshot(name);
         debug.log(`[saveProfile] Saved profile: ${name}`);
 
         // Set as default profile so it loads on startup
         debug.log(`[saveProfile] Setting as default profile...`);
-        runtime.setDefaultProfileName(name);
+        setDefaultProfileName(name);
         debug.log(`[saveProfile] Set default profile: ${name}`);
 
         // Load the profile immediately in current session
         debug.log(`[saveProfile] Loading profile...`);
-        const loadResult = await runtime.loadProfileByName(name);
+        const loadResult = await loadProfileByName(name);
         debug.log(
           `[saveProfile] Load result: ${JSON.stringify(loadResult, null, 2)}`,
         );
         debug.log(
-          `[saveProfile] After load - active provider: ${runtime.providerStatus().providerName}`,
+          `[saveProfile] After load - active provider: ${readProviderStatus().providerName}`,
         );
       } catch (error) {
         debug.log(`[saveProfile] Failed: ${error}`);
         throw error;
       }
     },
-    [runtime],
+    [
+      readProviderStatus,
+      listSavedProfiles,
+      saveProfileSnapshot,
+      setDefaultProfileName,
+      loadProfileByName,
+    ],
   );
 }
 
 function useTriggerAuth(
-  runtime: ReturnType<typeof useRuntimeApi>,
-  agent: Agent,
+  readProviderStatus: UseWelcomeOnboardingOptions['readProviderStatus'],
+  switchProviderAfterAuth: UseWelcomeOnboardingOptions['switchProviderAfterAuth'],
+  updateActiveProviderApiKey: UseWelcomeOnboardingOptions['updateActiveProviderApiKey'],
+  authenticate: UseWelcomeOnboardingOptions['authenticate'],
 ) {
-  const oauthControl = useOAuthControl();
   return useCallback(
     async (
       provider: string,
@@ -359,13 +383,13 @@ function useTriggerAuth(
       debug.log(`[triggerAuth] START provider=${provider} method=${method}`);
 
       debug.log(
-        `[triggerAuth] Before auth - current active: ${runtime.providerStatus().providerName}`,
+        `[triggerAuth] Before auth - current active: ${readProviderStatus().providerName}`,
       );
 
       // Authenticate FIRST before switching provider (prevents double OAuth)
       if (method === 'oauth') {
         debug.log(`[triggerAuth] Starting OAuth for ${provider}`);
-        await oauthControl.authenticate(provider, undefined, {
+        await authenticate(provider, undefined, {
           signalAuthCompletion: true,
         });
         debug.log(`[triggerAuth] OAuth complete for ${provider}`);
@@ -374,11 +398,9 @@ function useTriggerAuth(
       // Now switch to the provider AFTER auth is complete
       // IMPORTANT: Pass autoOAuth: false to prevent the agent provider switch
       // from triggering a second OAuth flow - we already authenticated above
-      const switchResult = await agent.setProvider(provider, undefined, {
-        autoOAuth: false,
-      });
+      const switchResult = await switchProviderAfterAuth(provider);
       debug.log(
-        `[triggerAuth] After provider switch - changed: ${switchResult.changed}, now active: ${runtime.providerStatus().providerName}`,
+        `[triggerAuth] After provider switch - changed: ${switchResult.changed}, now active: ${readProviderStatus().providerName}`,
       );
 
       // For API key method, set the key after switching provider
@@ -389,26 +411,44 @@ function useTriggerAuth(
         debug.log(
           `[triggerAuth] Calling updateActiveProviderApiKey for ${provider}`,
         );
-        const result = await runtime.updateActiveProviderApiKey(apiKey);
+        const result = await updateActiveProviderApiKey(apiKey);
         debug.log(
           `[triggerAuth] API key result: ${result.message}, providerName=${result.providerName}`,
         );
       }
 
       debug.log(
-        `[triggerAuth] END - active provider: ${runtime.providerStatus().providerName}`,
+        `[triggerAuth] END - active provider: ${readProviderStatus().providerName}`,
       );
     },
-    [runtime, agent, oauthControl],
+    [
+      readProviderStatus,
+      switchProviderAfterAuth,
+      updateActiveProviderApiKey,
+      authenticate,
+    ],
   );
 }
 
 export const useWelcomeOnboarding = (
   options: UseWelcomeOnboardingOptions,
 ): UseWelcomeOnboardingReturn => {
-  const { settings: _settings, isFolderTrustComplete, agent } = options;
+  const {
+    settings: _settings,
+    isFolderTrustComplete,
+    listProviders,
+    listAvailableModels,
+    setActiveModel,
+    readProviderStatus,
+    listSavedProfiles,
+    saveProfileSnapshot,
+    setDefaultProfileName,
+    loadProfileByName,
+    switchProviderAfterAuth,
+    updateActiveProviderApiKey,
+    authenticate,
+  } = options;
   const suppressStartup = options.suppressStartup === true;
-  const runtime = useRuntimeApi();
   const [welcomeCompleted, setWelcomeCompleted] = useState(() =>
     suppressStartup ? true : isWelcomeCompleted(),
   );
@@ -418,31 +458,34 @@ export const useWelcomeOnboarding = (
 
   const [state, setState] = useState<WelcomeState>(INITIAL_WELCOME_STATE);
 
-  const [availableProviders] = useProviderLoader(runtime);
+  const [availableProviders] = useProviderLoader(listProviders);
   const [availableModels, setAvailableModels] = useModelLoader(
-    runtime,
+    listAvailableModels,
     state.selectedProvider,
     setState,
   );
 
-  const {
-    startSetup,
-    selectProvider,
-    selectModel,
-    selectAuthMethod,
-    onAuthComplete,
-    onAuthError,
-    skipSetup,
-    goBack,
-  } = useWelcomeStepActions(
-    runtime,
+  const stepActions = useWelcomeStepActions(
+    setActiveModel,
+    listAvailableModels,
     setState,
     state.selectedProvider,
     setAvailableModels,
   );
 
-  const saveProfile = useProfileSave(runtime);
-  const triggerAuth = useTriggerAuth(runtime, agent);
+  const saveProfile = useProfileSave(
+    readProviderStatus,
+    listSavedProfiles,
+    saveProfileSnapshot,
+    setDefaultProfileName,
+    loadProfileByName,
+  );
+  const triggerAuth = useTriggerAuth(
+    readProviderStatus,
+    switchProviderAfterAuth,
+    updateActiveProviderApiKey,
+    authenticate,
+  );
 
   const dismiss = useCallback(() => {
     const skipped = state.step === 'skipped';
@@ -466,14 +509,7 @@ export const useWelcomeOnboarding = (
     showWelcome,
     state,
     actions: {
-      startSetup,
-      selectProvider,
-      selectModel,
-      selectAuthMethod,
-      onAuthComplete,
-      onAuthError,
-      skipSetup,
-      goBack,
+      ...stepActions,
       saveProfile,
       dismiss,
       resetAndReopen,

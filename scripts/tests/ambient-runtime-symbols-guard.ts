@@ -107,7 +107,7 @@ function collectFileViolations(
   violations: AmbientSymbolViolation[],
 ): void {
   const migratedRetryConsumer =
-    /(?:^|\/)(?:errors|RetryOrchestrator)\.ts$/.test(file);
+    /(?:^|[/\\])(?:errors|RetryOrchestrator)\.ts$/.test(file);
   for (let index = 0; index < lines.length; index += 1) {
     if (
       BANNED_PATTERN.test(lines[index]) ||

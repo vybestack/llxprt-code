@@ -1,3 +1,8 @@
+import type { Config } from '@vybestack/llxprt-code-core';
+import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
+import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import { AgentBootstrapError } from './agentBootstrap.js';
+import { cleanupFailedMediaAssembly } from './fromConfig-cleanup.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -24,7 +29,10 @@ export interface SessionImageSelection {
 }
 
 export function assembleSessionImages(
-  client: SessionClientOwner,
+  client: Pick<
+    SessionClientOwner,
+    'hasImageComposition' | 'bindImageOperation'
+  >,
   workspaceRoot: string,
   manager: RuntimeProviderManager,
   oauthManager: OAuthManager | undefined,
@@ -85,4 +93,29 @@ export function prepareImageConstruction(
         : Object.freeze({ run: selection.run, ownership: 'caller' });
   }
   return { selection: copied, cleanupFailedConstruction: dispose };
+}
+
+export async function acquireAdoptedMedia(
+  config: Config,
+  borrowed: LocalMediaStore | undefined,
+): Promise<SessionMediaOwner | undefined> {
+  const owner =
+    borrowed === undefined
+      ? new SessionMediaOwner(
+          config.projectTempDir,
+          config.getMediaStoreQuotaByteLimit(),
+        )
+      : undefined;
+  try {
+    if ((borrowed ?? owner?.store) === undefined)
+      throw new AgentBootstrapError('Missing explicit media owner');
+    return owner;
+  } catch (error) {
+    return cleanupFailedMediaAssembly(
+      error,
+      undefined,
+      owner?.dispose.bind(owner),
+      undefined,
+    );
+  }
 }

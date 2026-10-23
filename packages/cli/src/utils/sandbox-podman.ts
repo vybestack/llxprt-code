@@ -244,6 +244,25 @@ async function terminateAfterFailure(
   throw failure;
 }
 
+/**
+ * A readiness error, such as the poll deadline, can land after OpenSSH has
+ * already exited but before its stdio has closed and the startup failure has
+ * been raised. The exit diagnostic is the root cause in that case (#3774), so
+ * wait for it instead of reporting the readiness error.
+ */
+async function preferTunnelExitFailure(
+  monitor: TunnelStartupMonitor,
+  readinessError: unknown,
+): Promise<unknown> {
+  if (monitor.isRunning()) return readinessError;
+  try {
+    await monitor.failure;
+  } catch (tunnelFailure) {
+    return tunnelFailure;
+  }
+  return readinessError;
+}
+
 async function waitForTunnelReadiness(
   monitor: TunnelStartupMonitor,
   readiness: (signal: AbortSignal) => Promise<void>,
@@ -259,11 +278,12 @@ async function waitForTunnelReadiness(
     return monitor.process;
   } catch (error) {
     abortController.abort();
-    let failure = error;
+    const rootCause = await preferTunnelExitFailure(monitor, error);
+    let failure = rootCause;
     await readinessPromise.catch((readinessError: unknown) => {
       if (readinessError !== error) {
         failure = new AggregateError(
-          [error, readinessError],
+          [rootCause, readinessError],
           'OpenSSH tunnel startup and readiness cleanup failed',
         );
       }

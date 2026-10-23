@@ -1,11 +1,57 @@
+import { captureAgentAdoption as fromConfig } from './agent-resource-capture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './session-client-capture.js';
+import { fixtureAgentResources } from './agent-resource-capture.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+
+import { toConfigParameters } from '../../agentConfig.adapter.js';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
+import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import { OwnedCredentialFixture } from './owned-credential-fixture.js';
+import {
+  acquirePreferredProviderManager,
+  acquirePreferredOAuth,
+  preparePreferredProviderCompletion,
+} from '../../preferred-provider-acquisition.js';
+import { releaseAdoptedFileScope } from '../../adoption-release.js';
+import { randomUUID } from 'node:crypto';
+import {
+  runCleanupSteps,
+  cleanupAfterFailure,
+} from '../../../core/subagent-cleanup.js';
+import type { SessionClientOwner } from '../../../session/session-client-owner.js';
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
+
+import { fileURLToPath } from 'node:url';
+import { buildTestMcpRuntime } from './mcp-owner-fixture.js';
+import { createAgentRuntimeFactoryBindings } from '../../runtimeFactories.js';
+import { injectConfirmationForcingPolicy } from '../../confirmationForcing.js';
+import { executeProviderActivation } from '../../providerActivationExecutor.js';
+import { assembleProviderSwitch } from '../../providerSwitchAssembly.js';
+import { assembleModelSelection } from '../../model-selection.js';
+
+import { SimpleExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
+
+import type { Agent } from '@vybestack/llxprt-code-agents';
+
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { SimpleExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
-import { fromConfig } from '@vybestack/llxprt-code-agents';
-import { buildCliStyleConfig } from './buildCliStyleConfig.js';
 
 /**
  * @plan:PLAN-20260617-COREAPI.P13
@@ -38,12 +84,6 @@ import { buildCliStyleConfig } from './buildCliStyleConfig.js';
  * importing the not-yet-existent class.
  */
 
-import type { Agent } from '@vybestack/llxprt-code-agents';
-import {
-  coreEvents,
-  CoreEvent,
-} from '@vybestack/llxprt-code-core/utils/events.js';
-
 // ─── Internal record narrowing (cast-exempt in the helper) ──────────────────
 
 interface RecordLike {
@@ -52,15 +92,6 @@ interface RecordLike {
 
 function asRecord(v: unknown): RecordLike | null {
   return typeof v === 'object' && v !== null ? (v as RecordLike) : null;
-}
-
-/**
- * Narrows the opaque public `Agent` to its AgentImpl internals WITHOUT
- * exporting a cast. This narrowing lives ONLY in this helper; specs receive
- * {@link Agent} and pass it to {@link captureProbe}.
- */
-function agentInternals(agent: Agent): RecordLike {
-  return agent as unknown as RecordLike;
 }
 
 // ─── Probe: the captured resource-reference snapshot ────────────────────────
@@ -93,41 +124,17 @@ export interface DisposalProbe {
    */
   readonly ownership: unknown;
 }
-
-/**
- * Captures the disposal probe snapshot from a built agent. Call BEFORE
- * `agent.dispose()`. Every field is read via a guarded structural probe of the
- * AgentImpl internals; absent fields yield `null`. The captured references are
- * what the post-dispose flag reads observe.
- */
 export function captureProbe(agent: Agent): DisposalProbe {
-  const impl = agentInternals(agent);
+  const captured = fixtureAgentResources(agent);
+  const handles = captured.ownership.injectedSchedulerHandles;
+  const injected = handles[0];
   return {
-    agentClient: readField(impl, 'agentClient'),
-    scheduler:
-      readField(impl, 'injectedFactoryScheduler') ??
-      readField(impl, 'scheduler'),
-    confirmationCoordinator:
-      readField(impl, 'injectedFactoryCoordinator') ??
-      readField(impl, 'confirmationCoordinator'),
-    messageBus: readField(impl, 'messageBus') ?? readField(impl, 'bus'),
-    // dispose.md §Interface Contracts: `dispose(ownership: OwnershipRecord)`.
-    // The ownership record is recorded at createAgent line 141 (per dispose.md)
-    // and held by the facade. P24's dispose() receives it and sets per-resource
-    // teardown completion markers for the NET-NEW steps. Captured pre-dispose so
-    // the post-dispose reads observe the markers set on the SAME record.
-    ownership: readField(impl, 'ownership'),
+    agentClient: captured.publishedClient(agent),
+    scheduler: injected,
+    confirmationCoordinator: injected,
+    messageBus: captured.messageBus,
+    ownership: captured.ownership,
   };
-}
-
-function readField(rec: RecordLike, key: string): unknown {
-  if (key in rec) {
-    const v = rec[key];
-    if (v !== undefined && v !== null) {
-      return v;
-    }
-  }
-  return null;
 }
 
 // ─── Disposed-flag readers (capture-before-dispose) ─────────────────────────
@@ -140,38 +147,16 @@ function readField(rec: RecordLike, key: string): unknown {
 // real flipped `true`.
 
 /**
- * Reads the agentClient disposed state by observing the GENUINE
- * listener-membership transition of its model-change handler. The real
- * `AgentClient` constructor (client.ts) registers
- * `coreEvents.on(CoreEvent.ModelChanged, this.handleModelChanged)` (plus the
- * ModelProfileChanged twin) and `AgentClient.dispose()` unconditionally calls
- * the matching `coreEvents.off(...)` for both. There is NO
- * `disposed`/`isDisposed` boolean on AgentClient — the genuine observable is
- * the handler reference (an instance arrow-function field, stable across
- * dispose) being present in `coreEvents.listeners(CoreEvent.ModelChanged)`
- * before dispose and absent after.
- *
- * This reader returns `true` when the captured client's handler is no longer
- * registered (disposed) and `false` while it is still registered (alive).
- * The headless fake client IS constructed by Config.refreshAuth and its
- * constructor DOES register the handler, so the pre-dispose state is genuinely
- * "registered" and the post-dispose state is genuinely "removed" — a real
- * transition. Handler references are per-instance, so coexisting clients in
- * one spec observe independently.
+ * Observes release of the captured client's owner-local notification subscription.
+ * Each real session client receives its own release operation during binding;
+ * disposal releases that subscription and clears the operation.
  */
 export function agentClientDisposed(probe: DisposalProbe): boolean {
   const client = asRecord(probe.agentClient);
   if (client === null) {
     return false;
   }
-  const handler = client['handleModelChanged'];
-  if (typeof handler !== 'function') {
-    return false;
-  }
-  const listeners = coreEvents.listeners(CoreEvent.ModelChanged);
-  // Pre-dispose: the constructor-registered handler is still on the emitter
-  // → false (alive). Post-dispose: dispose() removed it → true (disposed).
-  return !listeners.includes(handler);
+  return client['releaseModelNotifications'] === undefined;
 }
 
 /**
@@ -180,6 +165,8 @@ export function agentClientDisposed(probe: DisposalProbe): boolean {
  * `disposed = true` on the captured handle.
  */
 export function schedulerDisposed(probe: DisposalProbe): boolean {
+  if (probe.scheduler === undefined)
+    throw new Error('No scheduler reached actual injected acquisition');
   return flagOf(probe.scheduler);
 }
 
@@ -188,6 +175,8 @@ export function schedulerDisposed(probe: DisposalProbe): boolean {
  * calls `injectedFactoryCoordinator.dispose()`.
  */
 export function confirmationCoordinatorDisposed(probe: DisposalProbe): boolean {
+  if (probe.confirmationCoordinator === undefined)
+    throw new Error('No coordinator reached actual injected acquisition');
   return flagOf(probe.confirmationCoordinator);
 }
 
@@ -422,6 +411,210 @@ export interface FakeExtension {
   readonly contextFiles: readonly string[];
 }
 
+class ExtensionDisposalOwner {
+  private config!: Config;
+  private settings!: SettingsService;
+  private settingsOwner!: SessionSettingsOwner;
+  private policy!: RuntimePolicyOwner;
+  private mcp!: Awaited<ReturnType<typeof buildTestMcpRuntime>>;
+  private manager!: ReturnType<typeof acquirePreferredProviderManager>;
+  private oauth!: ReturnType<typeof acquirePreferredOAuth>;
+  private owner!: SessionClientOwner;
+  private media!: SessionMediaOwner;
+  private tokenizer!: ReturnType<typeof configureProviderTokenizer>;
+  private content!: ReturnType<typeof createRuntimeContentGeneratorFactory>;
+  private readonly release = new AcquisitionRelease();
+  private readonly runtimeId = 'extension-' + randomUUID();
+  private readonly files = new ProviderFileLifecycle({
+    maxFiles: 100,
+    maxBytes: 512 * 1024 * 1024,
+  });
+  private readonly rollbackSteps: Array<() => void | Promise<void>> = [];
+  private previousReplay = process.env.LLXPRT_FAKE_RESPONSES;
+  private directory!: string;
+  constructor(
+    private readonly credentials: OwnedCredentialFixture,
+    private readonly loader: SimpleExtensionLoader,
+  ) {}
+
+  async create(): Promise<Agent> {
+    try {
+      await this.openWorkspace();
+      this.acquireProviders();
+      await this.bindClient();
+      await this.activate();
+      return await fromConfig(
+        this.config,
+        this.settings,
+        { mcpOwnership: 'agent' },
+        this.settingsOwner,
+        this.manager,
+        undefined,
+        undefined,
+        this.mcp,
+        undefined,
+        capturedSessionClient(this.owner),
+      );
+    } catch (primary) {
+      await cleanupAfterFailure(primary, () =>
+        settleEngineRelease(
+          [...this.rollbackSteps].reverse(),
+          this.previousReplay,
+        ),
+      );
+      throw primary;
+    }
+  }
+  private async openWorkspace(): Promise<void> {
+    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+      new URL('../fixtures/plain-text.jsonl', import.meta.url),
+    );
+    this.directory = await realpath(
+      await mkdtemp(join(tmpdir(), 'extension-disposal-')),
+    );
+    this.rollbackSteps.push(() =>
+      rm(this.directory, { recursive: true, force: true }),
+    );
+    this.config = new Config({
+      ...toConfigParameters({
+        provider: 'fake',
+        model: 'fake-model',
+        sessionId: randomUUID(),
+        workingDir: this.directory,
+      }),
+      enableExtensionReloading: true,
+      interactive: true,
+      includeDirectories: [process.cwd()],
+    });
+    this.rollbackSteps.push(() => this.config.dispose());
+    this.settings = new SettingsService();
+    for (const [key, value] of Object.entries(this.config.getInitialSettings()))
+      this.settings.set(key, value);
+    this.policy = new RuntimePolicyOwner(this.config);
+    this.rollbackSteps.push(() => this.policy.dispose());
+    injectConfirmationForcingPolicy(this.policy.session.confirmation);
+    this.mcp = await buildTestMcpRuntime(
+      this.config,
+      this.policy.session.messageBus,
+      {},
+      this.loader,
+      this.policy,
+    );
+    this.rollbackSteps.push(() => this.mcp.dispose());
+  }
+  private acquireProviders(): void {
+    this.rollbackSteps.push(() => this.release.rollback());
+    this.settingsOwner = new SessionSettingsOwner(this.settings);
+    this.release.acquire('settings', () => this.settingsOwner.dispose());
+    this.settingsOwner.initializeProviderSelection(
+      this.config.getProvider(),
+      this.config.getModel(),
+    );
+    this.settingsOwner.bindTelemetry(this.config);
+    for (const scope of [this.runtimeId, this.config.getSessionId()])
+      this.release.acquire('files', () =>
+        releaseAdoptedFileScope(this.files, scope),
+      );
+    this.manager = acquirePreferredProviderManager(
+      this.config,
+      this.settings,
+      this.settingsOwner,
+      this.files,
+      this.runtimeId,
+      this.credentials.authority,
+      this.release,
+    );
+    const factoriesTokenizer = configureProviderTokenizer(this.manager);
+    const factoriesContent = createRuntimeContentGeneratorFactory();
+    this.tokenizer = factoriesTokenizer;
+    this.content = factoriesContent;
+    this.oauth = acquirePreferredOAuth(
+      undefined,
+      this.policy.session.messageBus,
+      this.config,
+      this.settings,
+      this.manager,
+      this.runtimeId,
+      this.mcp.profileDefinitions,
+      this.credentials.authority,
+      this.release,
+      undefined,
+    );
+  }
+  private async bindClient(): Promise<void> {
+    this.media = new SessionMediaOwner(
+      this.config.projectTempDir,
+      1024 * 1024 * 1024,
+    );
+    this.rollbackSteps.push(() => this.media.dispose());
+    this.owner = await createCapturedSessionOwner(
+      this.config,
+      assembleTaskSchemaPolicy(this.settings),
+      this.manager,
+      createAgentRuntimeFactoryBindings().agentClientFactory,
+      this.media.store,
+      this.mcp.readInstructions,
+      this.mcp.workspacePaths,
+      this.settingsOwner,
+      this.content,
+      this.tokenizer,
+    );
+    this.rollbackSteps.push(() => this.owner.dispose());
+    this.owner.bindMcpRuntime(this.mcp);
+    this.owner.bindProviderFiles(this.files, (provider) =>
+      this.oauth.composeRetryOperations(provider),
+    );
+    this.owner.bindHooks();
+  }
+  private async activate(): Promise<void> {
+    await preparePreferredProviderCompletion(
+      this.config,
+      this.settings,
+      this.settingsOwner,
+      this.manager,
+      this.oauth,
+      this.runtimeId,
+      this.tokenizer,
+      undefined,
+    );
+    await this.mcp.initialize();
+    const activation = await executeProviderActivation(
+      this.config,
+      { provider: this.config.getProvider(), model: this.config.getModel() },
+      assembleProviderSwitch(
+        this.config,
+        this.settings,
+        this.manager,
+        this.oauth,
+        () => 'agent',
+        () => this.owner.refreshAuth(),
+        this.settingsOwner,
+      ),
+      this.settings,
+      this.manager,
+      (method) => this.owner.refreshAuth(method),
+      assembleModelSelection(this.settingsOwner),
+    );
+    requireCallerActivation(activation);
+    await this.owner.initializeTools();
+    await capturedSessionClient(this.owner).startChat();
+  }
+  private closing: Promise<void> | undefined;
+  close(): Promise<void> {
+    return (this.closing ??= settleEngineRelease(
+      [
+        () => this.owner.dispose(),
+        () => this.release.close(),
+        () => this.media.dispose(),
+        () => this.mcp.dispose(),
+        () => this.policy.dispose(),
+        () => this.config.dispose(),
+        () => rm(this.directory, { recursive: true, force: true }),
+      ],
+      this.previousReplay,
+    ));
+  }
+}
 export async function buildExtensionDisposalAgent(
   extensions: readonly FakeExtension[],
   missingUnload = false,
@@ -430,42 +623,50 @@ export async function buildExtensionDisposalAgent(
   cleanup(): Promise<void>;
   recorder: { readonly unloaded: readonly string[] };
 }> {
+  const credentials = await OwnedCredentialFixture.create();
   const data = extensions.map((extension) => ({
     ...extension,
     contextFiles: [...extension.contextFiles],
   }));
   const loader = new SimpleExtensionLoader([...data]);
-  const recorder = {
-    get unloaded(): readonly string[] {
-      return data
-        .filter((extension) => !loader.getExtensions().includes(extension))
-        .map((extension) => extension.name);
-    },
-  };
-  const built = await buildCliStyleConfig(
-    'plain-text.jsonl',
-    {},
-    {},
-    { enableExtensionReloading: true },
-    loader,
-  );
-  const agent = await fromConfig({
-    settingsOwner: built.settingsOwner,
-    settingsService: built.settingsService,
-    config: built.config,
-    providerManager: built.providerManager,
-    agentClient: built.agentClient,
-    mcpRuntime: built.mcpRuntime,
-    mcpOwnership: 'agent',
+  const owner = new ExtensionDisposalOwner(credentials, loader);
+  const agent = await owner.create().catch(async (primary: unknown) => {
+    await cleanupAfterFailure(primary, () => credentials.dispose());
+    throw primary;
   });
   if (missingUnload)
     Object.defineProperty(loader, 'unloadExtension', { value: undefined });
   return {
     agent,
-    recorder,
+    recorder: {
+      get unloaded(): readonly string[] {
+        return data
+          .filter((extension) => !loader.getExtensions().includes(extension))
+          .map((extension) => extension.name);
+      },
+    },
     cleanup: async () => {
       await agent.dispose().catch(() => undefined);
-      await built.cleanup().catch(() => undefined);
+      await owner.close().catch(() => undefined);
+      await credentials.dispose();
     },
   };
+}
+
+async function settleEngineRelease(
+  steps: ReadonlyArray<() => void | Promise<void>>,
+  previousReplay: string | undefined,
+): Promise<void> {
+  try {
+    await runCleanupSteps(steps);
+  } finally {
+    if (previousReplay === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
+    else process.env.LLXPRT_FAKE_RESPONSES = previousReplay;
+  }
+}
+
+function requireCallerActivation(
+  result: Awaited<ReturnType<typeof executeProviderActivation>>,
+): void {
+  if (result.authFailed) throw result.authError;
 }

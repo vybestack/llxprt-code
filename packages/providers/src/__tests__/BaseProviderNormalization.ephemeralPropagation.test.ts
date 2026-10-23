@@ -1,5 +1,5 @@
-import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
-const fixtureOwners = installRuntimeTestOwners();
+import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
+const fixtureOwnersBorrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -67,7 +67,6 @@ function createHarnessRuntimeContext(settingsService: SettingsService) {
   const config = createRuntimeConfigStub(settingsService);
   const runtimeContext = {
     settingsService,
-    config,
     runtimeId: 'ephemeral-harness',
   };
   return { config, runtimeContext };
@@ -78,12 +77,17 @@ function createHarnessWithDumpContext(): Harness {
   settingsService.set('dumpcontext', 'on');
   const { config, runtimeContext } =
     createHarnessRuntimeContext(settingsService);
-  const manager = new ProviderManager({
-    sessionSettings: fixtureOwners.adopt(config, settingsService).settingsOwner,
+  const manager = new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     settingsService,
     config,
-    runtime: runtimeContext,
-  });
+    runtimeContext,
+    undefined,
+    fixtureOwnersBorrowedSettings(config, settingsService),
+  );
   const provider = new HarnessProvider(config, settingsService);
   manager.registerProvider(provider);
   settingsService.set('activeProvider', provider.name);

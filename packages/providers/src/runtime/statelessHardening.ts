@@ -14,12 +14,12 @@
  * Stateless hardening preference resolution from owner metadata.
  */
 
-const STATELESS_METADATA_KEYS = [
+const STATELESS_METADATA_KEYS = Object.freeze([
   'statelessHardening',
   'statelessProviderMode',
   'statelessGuards',
   'statelessMode',
-] as const;
+] as const);
 
 export type StatelessHardeningPreference = 'legacy' | 'strict';
 

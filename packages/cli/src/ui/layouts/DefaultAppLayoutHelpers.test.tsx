@@ -38,7 +38,7 @@ const config = buildSlashCommandRuntime(
     debugMode: false,
     model: 'test-model',
   }),
-  createUiSessionOwner(),
+  await createUiSessionOwner(),
 );
 
 const settings = new LoadedSettings(
@@ -58,6 +58,10 @@ function buildHistory(...ids: number[]): HistoryItem[] {
 function renderStaticItems(history: HistoryItem[]): React.ReactElement[] {
   const { result } = renderHook(() =>
     useStaticItems(
+      () => false,
+      () => false,
+      () => () => {},
+      async () => {},
       config,
       settings,
       '1.0.0',

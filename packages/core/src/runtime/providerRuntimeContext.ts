@@ -1,4 +1,3 @@
-import type { SessionSettingsOwner } from '../session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -24,12 +23,8 @@ import type { SessionSettingsOwner } from '../session/session-settings-owner.js'
  * Issue #2616 PR A: this module is explicit-only. The former module-level
  * activeContext pointer, its set/clear/peek/get accessors, and the
  * defaultRuntimeStateFactory fallback are deleted — a context exists only
- * when a caller supplies its settings service.
+ * when a caller supplies its identity data.
  */
-import type { ProviderRetryOperations } from './contracts/ProviderRetryOperations.js';
-import type { Config } from '../config/config.js';
-import { MissingRuntimeProviderError } from './errors/MissingRuntimeProviderError.js';
-import type { RequestMediaResolutionService } from '../storage/request-media-resolver.js';
 import type { ProviderFileReferenceMetadata } from '../services/history/IContent.js';
 
 export interface ProviderFileBindingStore {
@@ -71,84 +66,24 @@ export interface RuntimeSettingsState {
  * @requirement REQ-D01-003
  * @pseudocode lines 122-133
  */
-export interface ProviderRequestCollaborators extends ProviderRetryOperations {
-  readonly config?: Config;
+export interface ProviderRequestCollaborators {
   readonly runtimeId?: string;
   readonly runtimeKind?: RuntimeKind;
   readonly metadata?: Readonly<Record<string, unknown>>;
-  readonly mediaResolver?: RequestMediaResolutionService;
-  readonly requestMediaBudgetBytes?: number;
-  readonly providerFileBindings?: ProviderFileBindingStore;
-  readonly providerFileLifecycle?: object;
 }
 
-export interface ProviderRuntimeContext extends ProviderRetryOperations {
-  readonly sessionSettings?: SessionSettingsOwner;
-  settingsService: RuntimeSettingsState;
-  config?: Config;
+export interface ProviderRuntimeContext {
   runtimeId?: string;
   runtimeKind?: RuntimeKind;
   metadata?: Record<string, unknown>;
-  mediaResolver?: RequestMediaResolutionService;
-  requestMediaBudgetBytes?: number;
-  providerFileBindings?: ProviderFileBindingStore;
-  providerFileLifecycle?: object;
-}
-
-/**
- * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P11
- * @requirement REQ-D01-002
- * @requirement REQ-D01-003
- * @pseudocode lines 122-133
- */
-export interface ProviderRuntimeContextInit extends ProviderRetryOperations {
-  readonly sessionSettings?: SessionSettingsOwner;
-  settingsService?: RuntimeSettingsState | null;
-  config?: Config;
-  runtimeId?: string;
-  runtimeKind?: RuntimeKind;
-  metadata?: Record<string, unknown>;
-  mediaResolver?: RequestMediaResolutionService;
-  requestMediaBudgetBytes?: number;
-  providerFileBindings?: ProviderFileBindingStore;
-  providerFileLifecycle?: object;
 }
 
 export function createProviderRuntimeContext(
-  init: ProviderRuntimeContextInit = {},
+  init: ProviderRuntimeContext = {},
 ): ProviderRuntimeContext {
-  const settingsService = init.settingsService;
-  if (!settingsService) {
-    throw new MissingRuntimeProviderError({
-      providerKey: 'provider-runtime',
-      missingFields: ['settings'],
-      requirement: 'REQ-SP4-004',
-      stage: 'createProviderRuntimeContext',
-      metadata: {
-        hint: 'init.settingsService is not provided. Construct the service at the composition site (e.g. via the runtime settings adapter) and pass it explicitly before creating provider runtime contexts.',
-      },
-      message:
-        'MissingProviderRuntimeError(provider-runtime): provider runtime context creation requires settings (REQ-SP4-004).',
-    });
-  }
-
   return {
-    sessionSettings: init.sessionSettings,
-    settingsService,
-    readRetryAuthToken: init.readRetryAuthToken,
-    handleAuthError: init.handleAuthError,
-    tryBucketFailover: init.tryBucketFailover,
-    readFailoverBuckets: init.readFailoverBuckets,
-    readCurrentBucket: init.readCurrentBucket,
-    readFailoverReasons: init.readFailoverReasons,
-    resetBucketSession: init.resetBucketSession,
-    config: init.config,
     runtimeId: init.runtimeId,
     runtimeKind: init.runtimeKind,
     metadata: init.metadata,
-    mediaResolver: init.mediaResolver,
-    requestMediaBudgetBytes: init.requestMediaBudgetBytes,
-    providerFileBindings: init.providerFileBindings,
-    providerFileLifecycle: init.providerFileLifecycle,
   };
 }

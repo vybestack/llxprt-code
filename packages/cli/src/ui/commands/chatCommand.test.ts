@@ -1,8 +1,12 @@
+import { checkpointBindings } from '../../__tests__/recording-checkpoint-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { getProjectHash } from '@vybestack/llxprt-code-core';
+
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -16,9 +20,10 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { assertDefined } from '../../__tests__/assertions.js';
-import { chatCommand } from './chatCommand.js';
+import { createChatCommand } from './chatCommand.js';
+import { bindChatRecordingOperations } from './chatCommandHost.js';
 import { createCompletionHandler } from './schema/index.js';
-import type { CommandContext, SlashCommand } from './types.js';
+import type { SlashCommand } from './types.js';
 import { MessageType } from '../types.js';
 
 const PROJECT_HASH = 'chat-command-checkpoints';
@@ -36,10 +41,57 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
   let chatsDir: string;
   let recording: SessionRecordingService;
   let mediaStore: LocalMediaStore;
-  let context: CommandContext;
+  let context: CommandOwnerFixture;
+
+  // Registered the way the session host registers it, from the recording,
+  // project and chat history the fixture currently provides.
+  const registeredChat = (): SlashCommand =>
+    createChatCommand(
+      bindChatRecordingOperations(
+        () =>
+          context.recordingSwapCallbacks?.getCurrentRecording() ??
+          context.recordingIntegration?.getRecordingService() ??
+          null,
+        () =>
+          context.services.config
+            ? getProjectHash(context.services.config.getProjectRoot())
+            : null,
+        () => context.services.config?.projectChatsDir ?? null,
+        ...checkpointBindings(
+          () =>
+            context.recordingSwapCallbacks?.getCurrentRecording() ??
+            context.recordingIntegration?.getRecordingService() ??
+            null,
+          () =>
+            context.services.config
+              ? getProjectHash(context.services.config.getProjectRoot())
+              : null,
+          () => context.services.config?.projectChatsDir ?? null,
+          () => context.services.agent?.agentClient.mediaStore,
+        ),
+        () => {
+          const client = context.services.agent?.agentClient;
+          return client?.hasChatInitialized() === true
+            ? client.getChat().getHistory()
+            : null;
+        },
+        async (history) => {
+          if (context.services.agent === null)
+            throw new Error('Session agent is unavailable');
+          await context.services.agent.agentClient
+            .getChat()
+            .setHistory(history);
+        },
+        () =>
+          context.services.config ? context.services.config.getModel() : null,
+      ),
+      () => true,
+    );
 
   const command = (name: string): SlashCommand => {
-    const result = chatCommand.subCommands?.find((item) => item.name === name);
+    const result = registeredChat().subCommands?.find(
+      (item) => item.name === name,
+    );
     assertDefined(result);
     return result;
   };
@@ -50,7 +102,7 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
   ): Promise<string[]> => {
     const schema = command(commandName).schema;
     assertDefined(schema);
-    const handler = createCompletionHandler(schema);
+    const handler = createCompletionHandler(schema, true);
     const result = await handler(
       context,
       {
@@ -165,7 +217,9 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
   });
 
   it('exposes all recording-native subcommands', () => {
-    expect(chatCommand.subCommands?.map((item) => item.name)).toStrictEqual([
+    expect(
+      registeredChat().subCommands?.map((item) => item.name),
+    ).toStrictEqual([
       'list',
       'save',
       'resume',

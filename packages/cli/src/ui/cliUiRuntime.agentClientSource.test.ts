@@ -1,10 +1,52 @@
+import { adoptFixture as fromConfig } from '../../../agents/src/api/__tests__/helpers/adoption-fixture.js';
+import {
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from '../../../agents/src/api/__tests__/helpers/session-client-capture.js';
+import {
+  captureAgentAdoption,
+  fixtureAgentResources,
+} from '../../../agents/src/api/__tests__/helpers/agent-resource-capture.js';
+import { withGenerationOwner } from '../../../agents/src/api/__tests__/helpers/generation-owner-fixture.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { MCPOAuthTokenStorage } from '@vybestack/llxprt-code-mcp';
+import { McpRuntimeOwner } from '../../../agents/src/api/mcpRuntimeAssembly.js';
+import { toConfigParameters } from '../../../agents/src/api/agentConfig.adapter.js';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import {
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
+import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import {
+  acquirePreferredProviderManager,
+  acquirePreferredOAuth,
+  preparePreferredProviderCompletion,
+} from '../../../agents/src/api/preferred-provider-acquisition.js';
+import { releaseAdoptedFileScope } from '../../../agents/src/api/adoption-release.js';
+import { buildAgentClientFactory } from '../../../agents/src/api/agentBootstrap.js';
+import { randomUUID } from 'node:crypto';
+import {
+  runCleanupSteps,
+  cleanupAfterFailure,
+} from '../../../agents/src/core/subagent-cleanup.js';
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it } from 'bun:test';
+import { beforeAll, afterAll, describe, expect, it } from 'bun:test';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
@@ -12,16 +54,162 @@ import { json } from 'node:stream/consumers';
 import { z } from 'zod';
 import { fetchGitHubSuggestions } from './hooks/githubAtCompletion.js';
 import { FakeProvider } from '../../../providers/src/fake/FakeProvider.js';
-import { fromConfig } from '@vybestack/llxprt-code-agents';
-import { createSessionClientEngineFixture } from '../../../agents/src/api/__tests__/helpers/session-client-engine-fixture.js';
+
 import {
   buildSlashCommandRuntime,
   buildUiRuntimeFromSource,
 } from './cliUiRuntime.js';
 
 describe('UI session client ownership', () => {
+  let promptDirectory: string;
+  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+  beforeAll(async () => {
+    promptDirectory = await mkdtemp(join(tmpdir(), 'ui-owner-prompts-'));
+    process.env.LLXPRT_PROMPTS_DIR = promptDirectory;
+    await initializePromptSystem();
+  });
+  afterAll(async () => {
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(promptDirectory, { recursive: true, force: true });
+  });
+  const credentials = useOwnedCredentials();
   it('routes completion through the explicit session report tool and closes retained completion admission', async () => {
-    const fixture = await createSessionClientEngineFixture();
+    const fixturePreviousReplay = process.env.LLXPRT_FAKE_RESPONSES;
+    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+      new URL(
+        '../../../agents/src/api/__tests__/fixtures/multi-turn-text.jsonl',
+        import.meta.url,
+      ),
+    );
+    const fixtureDirectory = await realpath(
+      await mkdtemp(join(tmpdir(), 'explicit-engine-owner-')),
+    );
+    const fixtureConfig = new Config(
+      toConfigParameters({
+        provider: 'fake',
+        model: 'fake-model',
+        sessionId: randomUUID(),
+        workingDir: fixtureDirectory,
+      }),
+    );
+    const fixtureSettings = new SettingsService();
+    const fixturePolicy = new RuntimePolicyOwner(fixtureConfig);
+    const fixtureMessageBus = fixturePolicy.session.messageBus;
+    const fixtureMcp = await McpRuntimeOwner.create(
+      {
+        openBrowser: async () => {
+          throw new Error('Unexpected browser request');
+        },
+        tokenStorage: new MCPOAuthTokenStorage({
+          getCredentials: async () => null,
+          setCredentials: async () => {
+            throw new Error('Unexpected token write');
+          },
+          deleteCredentials: async () => {},
+          listServers: async () => [],
+          getAllCredentials: async () => new Map(),
+          clearAll: async () => {},
+        }),
+      },
+      fixtureConfig,
+      fixtureMessageBus,
+      undefined,
+      undefined,
+      undefined,
+      fixturePolicy,
+      'runtime',
+    );
+
+    const fixtureRuntimeId = 'engine-' + randomUUID();
+    const fixtureRelease = new AcquisitionRelease();
+    const fixtureSettingsOwner = new SessionSettingsOwner(fixtureSettings);
+    fixtureRelease.acquire('settings', () => fixtureSettingsOwner.dispose());
+    fixtureSettingsOwner.initializeProviderSelection(
+      fixtureConfig.getProvider(),
+      fixtureConfig.getModel(),
+    );
+    fixtureSettingsOwner.bindTelemetry(fixtureConfig);
+    const fixtureFiles = new ProviderFileLifecycle({
+      maxFiles: 100,
+      maxBytes: 512 * 1024 * 1024,
+    });
+    for (const scope of [fixtureRuntimeId, fixtureConfig.getSessionId()])
+      fixtureRelease.acquire('files', () =>
+        releaseAdoptedFileScope(fixtureFiles, scope),
+      );
+    const fixtureManager = acquirePreferredProviderManager(
+      fixtureConfig,
+      fixtureSettings,
+      fixtureSettingsOwner,
+      fixtureFiles,
+      fixtureRuntimeId,
+      credentials().authority,
+      fixtureRelease,
+    );
+    const fixtureTokenizer = configureProviderTokenizer(fixtureManager);
+    const fixtureContent = createRuntimeContentGeneratorFactory();
+    const fixtureOAuth = acquirePreferredOAuth(
+      undefined,
+      fixtureMessageBus,
+      fixtureConfig,
+      fixtureSettings,
+      fixtureManager,
+      fixtureRuntimeId,
+      fixtureMcp.profileDefinitions,
+      credentials().authority,
+      fixtureRelease,
+      undefined,
+    );
+    const fixtureMedia = new SessionMediaOwner(
+      fixtureConfig.projectTempDir,
+      1024 * 1024,
+    );
+    const fixtureOwner = await createCapturedSessionOwner(
+      fixtureConfig,
+      assembleTaskSchemaPolicy(fixtureSettings),
+      fixtureManager,
+      buildAgentClientFactory(),
+      fixtureMedia.store,
+      fixtureMcp.readInstructions,
+      fixtureMcp.workspacePaths,
+      fixtureSettingsOwner,
+      fixtureContent,
+      fixtureTokenizer,
+    );
+    fixtureOwner.bindMcpRuntime(fixtureMcp);
+    fixtureOwner.bindHooks();
+    const fixtureClose = settleEngineRelease.bind(
+      undefined,
+      [
+        () => fixtureOwner.dispose(),
+        () => fixtureRelease.close(),
+        () => fixtureMedia.dispose(),
+        () => fixtureMcp.dispose(),
+        () => fixtureConfig.dispose(),
+        () => rm(fixtureDirectory, { recursive: true, force: true }),
+      ],
+      fixturePreviousReplay,
+    );
+    try {
+      await preparePreferredProviderCompletion(
+        fixtureConfig,
+        fixtureSettings,
+        fixtureSettingsOwner,
+        fixtureManager,
+        fixtureOAuth,
+        fixtureRuntimeId,
+        fixtureTokenizer,
+        undefined,
+      );
+      await fixtureMcp.initialize();
+      await fixtureOwner.initializeTools();
+      await fixtureOwner.refreshAuth();
+      await capturedSessionClient(fixtureOwner).startChat();
+    } catch (primary) {
+      await cleanupAfterFailure(primary, fixtureClose);
+    }
+
     const requestSchema = z
       .object({
         op: z.enum(['issue.list', 'pr.list']),
@@ -56,15 +244,35 @@ describe('UI session client ownership', () => {
     if (address === null || typeof address === 'string')
       throw new Error('Missing completion server');
     const endpoint = `http://127.0.0.1:${address.port}`;
-    const agent = await fromConfig({
-      config: fixture.config,
-      settingsService: fixture.settingsService,
-      settingsOwner: fixture.handle.settingsOwner,
-      providerManager: fixture.handle.providerManager,
-      messageBus: fixture.messageBus,
-      mcpRuntime: fixture.mcp,
-      agentClient: fixture.owner.getAgentClient(),
-      githubBrokerClient: {
+    const agent = await fromConfig(
+      fixtureConfig,
+      fixtureSettings,
+      {},
+      fixtureSettingsOwner,
+      fixtureManager,
+      undefined,
+      fixtureMessageBus,
+      fixtureMcp,
+      undefined,
+      capturedSessionClient(fixtureOwner),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
         runOperation: async (op, params, signal) => {
           const response = await fetch(endpoint, {
             method: 'POST',
@@ -75,9 +283,9 @@ describe('UI session client ownership', () => {
           return z.record(z.unknown()).parse(input);
         },
       },
-    });
+    );
     try {
-      const runtime = buildUiRuntimeFromSource(fixture.config, agent);
+      const runtime = buildUiRuntimeFromSource(fixtureConfig, agent);
       const reads = runtime.app.githubCompletion;
       if (reads === undefined)
         throw new Error('Missing GitHub completion reads');
@@ -118,7 +326,7 @@ describe('UI session client ownership', () => {
       ).toStrictEqual([]);
     } finally {
       await agent.dispose();
-      await fixture.cleanup();
+      await fixtureClose();
       const closed = new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),
       );
@@ -128,20 +336,156 @@ describe('UI session client ownership', () => {
   });
 
   it('resolves the published current client without embedding it in the workspace command projection', async () => {
-    const fixture = await createSessionClientEngineFixture();
-    const agent = await fromConfig({
-      settingsService: fixture.settingsService,
-      settingsOwner: fixture.handle.settingsOwner,
-      config: fixture.config,
-      providerManager: fixture.handle.providerManager,
-      messageBus: fixture.messageBus,
-      mcpRuntime: fixture.mcp,
-      agentClient: fixture.owner.getAgentClient(),
+    const fixturePreviousReplay = process.env.LLXPRT_FAKE_RESPONSES;
+    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+      new URL(
+        '../../../agents/src/api/__tests__/fixtures/multi-turn-text.jsonl',
+        import.meta.url,
+      ),
+    );
+    const fixtureDirectory = await realpath(
+      await mkdtemp(join(tmpdir(), 'explicit-engine-owner-')),
+    );
+    const fixtureConfig = new Config(
+      toConfigParameters({
+        provider: 'fake',
+        model: 'fake-model',
+        sessionId: randomUUID(),
+        workingDir: fixtureDirectory,
+      }),
+    );
+    const fixtureSettings = new SettingsService();
+    const fixturePolicy = new RuntimePolicyOwner(fixtureConfig);
+    const fixtureMessageBus = fixturePolicy.session.messageBus;
+    const fixtureMcp = await McpRuntimeOwner.create(
+      {
+        openBrowser: async () => {
+          throw new Error('Unexpected browser request');
+        },
+        tokenStorage: new MCPOAuthTokenStorage({
+          getCredentials: async () => null,
+          setCredentials: async () => {
+            throw new Error('Unexpected token write');
+          },
+          deleteCredentials: async () => {},
+          listServers: async () => [],
+          getAllCredentials: async () => new Map(),
+          clearAll: async () => {},
+        }),
+      },
+      fixtureConfig,
+      fixtureMessageBus,
+      undefined,
+      undefined,
+      undefined,
+      fixturePolicy,
+      'runtime',
+    );
+
+    const fixtureRuntimeId = 'engine-' + randomUUID();
+    const fixtureRelease = new AcquisitionRelease();
+    const fixtureSettingsOwner = new SessionSettingsOwner(fixtureSettings);
+    fixtureRelease.acquire('settings', () => fixtureSettingsOwner.dispose());
+    fixtureSettingsOwner.initializeProviderSelection(
+      fixtureConfig.getProvider(),
+      fixtureConfig.getModel(),
+    );
+    fixtureSettingsOwner.bindTelemetry(fixtureConfig);
+    const fixtureFiles = new ProviderFileLifecycle({
+      maxFiles: 100,
+      maxBytes: 512 * 1024 * 1024,
     });
+    for (const scope of [fixtureRuntimeId, fixtureConfig.getSessionId()])
+      fixtureRelease.acquire('files', () =>
+        releaseAdoptedFileScope(fixtureFiles, scope),
+      );
+    const fixtureManager = acquirePreferredProviderManager(
+      fixtureConfig,
+      fixtureSettings,
+      fixtureSettingsOwner,
+      fixtureFiles,
+      fixtureRuntimeId,
+      credentials().authority,
+      fixtureRelease,
+    );
+    const fixtureTokenizer = configureProviderTokenizer(fixtureManager);
+    const fixtureContent = createRuntimeContentGeneratorFactory();
+    const fixtureOAuth = acquirePreferredOAuth(
+      undefined,
+      fixtureMessageBus,
+      fixtureConfig,
+      fixtureSettings,
+      fixtureManager,
+      fixtureRuntimeId,
+      fixtureMcp.profileDefinitions,
+      credentials().authority,
+      fixtureRelease,
+      undefined,
+    );
+    const fixtureMedia = new SessionMediaOwner(
+      fixtureConfig.projectTempDir,
+      1024 * 1024,
+    );
+    const fixtureOwner = await createCapturedSessionOwner(
+      fixtureConfig,
+      assembleTaskSchemaPolicy(fixtureSettings),
+      fixtureManager,
+      buildAgentClientFactory(),
+      fixtureMedia.store,
+      fixtureMcp.readInstructions,
+      fixtureMcp.workspacePaths,
+      fixtureSettingsOwner,
+      fixtureContent,
+      fixtureTokenizer,
+    );
+    fixtureOwner.bindMcpRuntime(fixtureMcp);
+    fixtureOwner.bindHooks();
+    const fixtureClose = settleEngineRelease.bind(
+      undefined,
+      [
+        () => fixtureOwner.dispose(),
+        () => fixtureRelease.close(),
+        () => fixtureMedia.dispose(),
+        () => fixtureMcp.dispose(),
+        () => fixtureConfig.dispose(),
+        () => rm(fixtureDirectory, { recursive: true, force: true }),
+      ],
+      fixturePreviousReplay,
+    );
     try {
-      const ui = buildUiRuntimeFromSource(fixture.config, agent);
-      const workspace = buildSlashCommandRuntime(fixture.config, agent);
-      const previous = ui.agentClientSource.getAgentClient();
+      await preparePreferredProviderCompletion(
+        fixtureConfig,
+        fixtureSettings,
+        fixtureSettingsOwner,
+        fixtureManager,
+        fixtureOAuth,
+        fixtureRuntimeId,
+        fixtureTokenizer,
+        undefined,
+      );
+      await fixtureMcp.initialize();
+      await fixtureOwner.initializeTools();
+      await fixtureOwner.refreshAuth();
+      await capturedSessionClient(fixtureOwner).startChat();
+    } catch (primary) {
+      await cleanupAfterFailure(primary, fixtureClose);
+    }
+
+    const agent = await captureAgentAdoption(
+      fixtureConfig,
+      fixtureSettings,
+      {},
+      fixtureSettingsOwner,
+      fixtureManager,
+      undefined,
+      fixtureMessageBus,
+      fixtureMcp,
+      undefined,
+      capturedSessionClient(fixtureOwner),
+    );
+    try {
+      const workspace = buildSlashCommandRuntime(fixtureConfig, agent);
+      const previous = capturedSessionClient(fixtureOwner);
       await agent.setHistory([
         {
           speaker: 'human',
@@ -155,10 +499,10 @@ describe('UI session client ownership', () => {
             import.meta.url,
           ),
         ),
-        fixture.config.getTargetDir(),
+        fixtureConfig.getTargetDir(),
       );
       provider.name = 'ui-profile-owner';
-      fixture.handle.providerManager.registerProvider(provider);
+      fixtureManager.registerProvider(provider);
       await agent.profiles.applySnapshot({
         version: 1,
         provider: provider.name,
@@ -166,7 +510,10 @@ describe('UI session client ownership', () => {
         modelParams: {},
         ephemeralSettings: {},
       });
-      const current = ui.agentClientSource.getAgentClient();
+      await fixtureAgentResources(agent).readObservedHistory(agent);
+      const current = fixtureAgentResources(agent).historyReaders.at(-1);
+      if (current === undefined)
+        throw new Error('No actual history receiver after profile publication');
       expect(current).not.toBe(previous);
       expect(
         (await agent.getHistory()).filter(
@@ -177,7 +524,7 @@ describe('UI session client ownership', () => {
       expect('createDetachedAgentClient' in workspace).toBe(false);
       expect('getAgentClientFactory' in workspace).toBe(false);
       await agent.dispose();
-      await fixture.mcp.refreshContext();
+      await fixtureMcp.refreshContext();
       await previous.addHistory({
         speaker: 'human',
         blocks: [{ type: 'text', text: 'borrowed caller survives' }],
@@ -189,34 +536,50 @@ describe('UI session client ownership', () => {
       ).toHaveLength(2);
     } finally {
       await agent.dispose();
-      await fixture.cleanup();
+      await fixtureClose();
     }
   });
 
   it('creates detached clients from the session owner while retaining the primary client', async () => {
-    const fixture = await createSessionClientEngineFixture();
-    try {
-      const agent = await fromConfig({
-        config: fixture.config,
-        settingsService: fixture.settingsService,
-        settingsOwner: fixture.handle.settingsOwner,
-        providerManager: fixture.handle.providerManager,
-        messageBus: fixture.messageBus,
-        mcpRuntime: fixture.mcp,
-        agentClient: fixture.owner.getAgentClient(),
-      });
-      const ui = buildUiRuntimeFromSource(fixture.config, agent);
-      const detached = await ui.agentClientSource.createDetachedAgentClient?.();
-      expect(detached).toBeDefined();
-      expect(detached).not.toBe(agent.agentClient);
-      expect(detached?.mediaStore).toBe(agent.agentClient.mediaStore);
-      expect(detached?.hasChatInitialized()).toBe(false);
-      await detached?.dispose();
-      expect(
-        agent.agentClient.getHistoryService()?.getRawHistory(),
-      ).toHaveLength(0);
-    } finally {
-      await fixture.cleanup();
-    }
+    const initializationChatStates: boolean[] = [];
+    const cleanup = await withGenerationOwner(
+      async (owner, clients) => {
+        const primary = clients[1];
+        await primary.startChat();
+        expect(
+          await owner.generate('detached owner operation', undefined),
+        ).toBe('turn one reply');
+        const detached = clients[2];
+        expect(detached).toBeDefined();
+        expect(detached).not.toBe(primary);
+        expect(detached.mediaStore).toBe(primary.mediaStore);
+        expect(detached.initialized).toBe(1);
+        expect(initializationChatStates).toStrictEqual([false, false]);
+        expect(detached.disposed).toBe(1);
+        expect(primary.disposed).toBe(0);
+        expect(primary.getHistoryService()?.getRawHistory()).toHaveLength(0);
+        await primary.startChat();
+        expect(await primary.getHistory()).toStrictEqual([]);
+      },
+      'gemini',
+      (client) => {
+        client.initializedEffect = () => {
+          initializationChatStates.push(client.hasChatInitialized());
+        };
+      },
+    );
+    expect(cleanup).toStrictEqual([]);
   });
 });
+
+async function settleEngineRelease(
+  steps: ReadonlyArray<() => void | Promise<void>>,
+  previousReplay: string | undefined,
+): Promise<void> {
+  try {
+    await runCleanupSteps(steps);
+  } finally {
+    if (previousReplay === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
+    else process.env.LLXPRT_FAKE_RESPONSES = previousReplay;
+  }
+}

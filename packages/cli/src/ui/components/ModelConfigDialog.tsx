@@ -3,6 +3,24 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import {
+  useGetActiveProviderName,
+  type GetActiveProviderNameOperation,
+  useGetActiveModelName,
+  type GetActiveModelNameOperation,
+  useGetActiveModelParams,
+  type GetActiveModelParamsOperation,
+  useGetEphemeralSettings,
+  type GetEphemeralSettingsOperation,
+  useGetUnallowedParametersForActiveModel,
+  type GetUnallowedParametersForActiveModelOperation,
+  useSetActiveModelParam,
+  type SetActiveModelParamOperation,
+  useClearActiveModelParam,
+  type ClearActiveModelParamOperation,
+  useSetEphemeralSetting,
+  type SetEphemeralSettingOperation,
+} from '../contexts/RuntimeContext.js';
 
 import type React from 'react';
 import { useCallback, useRef, useState } from 'react';
@@ -11,10 +29,9 @@ import type { Key } from '../hooks/useKeypress.js';
 import { SemanticColors } from '../colors.js';
 import { useResponsive } from '../hooks/useResponsive.js';
 import { useKeypress } from '../hooks/useKeypress.js';
-import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 import { TextInput } from './ProfileCreateWizard/TextInput.js';
 import { parseValue } from '../commands/setCommand.js';
-import { parseEphemeralSettingValue } from '@vybestack/llxprt-code-providers/runtime/ephemeralSettings.js';
+import { parseEphemeralSettingValue } from '@vybestack/llxprt-code-settings/settings/ephemeral-settings.js';
 import { getSettingSpec } from '@vybestack/llxprt-code-settings';
 import { validateModelParam } from './modelConfigParamCommit.js';
 
@@ -187,16 +204,18 @@ interface RuntimeReads {
 }
 
 function readRuntimeSnapshot(
-  runtime: ReturnType<typeof useRuntimeApi>,
+  getActiveProviderName: GetActiveProviderNameOperation,
+  getActiveModelName: GetActiveModelNameOperation,
+  getActiveModelParams: GetActiveModelParamsOperation,
+  getEphemeralSettings: GetEphemeralSettingsOperation,
+  getUnallowedParametersForActiveModel: GetUnallowedParametersForActiveModelOperation,
 ): RuntimeReads {
   return {
-    providerName: runtime.getActiveProviderName(),
-    modelName: runtime.getActiveModelName(),
-    modelParams: runtime.getActiveModelParams(),
-    ephemeralSettings: runtime.getEphemeralSettings(),
-    unallowedParameters: new Set(
-      runtime.getUnallowedParametersForActiveModel(),
-    ),
+    providerName: getActiveProviderName(),
+    modelName: getActiveModelName(),
+    modelParams: getActiveModelParams(),
+    ephemeralSettings: getEphemeralSettings(),
+    unallowedParameters: new Set(getUnallowedParametersForActiveModel()),
   };
 }
 
@@ -311,7 +330,11 @@ interface KeypressDispatch {
   setSelectedIndex: React.Dispatch<React.SetStateAction<number>>;
   enumIndex: number;
   setEnumIndex: React.Dispatch<React.SetStateAction<number>>;
-  runtime: ReturnType<typeof useRuntimeApi>;
+  getActiveModelParams: GetActiveModelParamsOperation;
+  getEphemeralSettings: GetEphemeralSettingsOperation;
+  setActiveModelParam: SetActiveModelParamOperation;
+  clearActiveModelParam: ClearActiveModelParamOperation;
+  setEphemeralSetting: SetEphemeralSettingOperation;
   setValidationError: (msg: string | null) => void;
   validationError: string | null;
   params: Record<string, unknown>;
@@ -450,14 +473,14 @@ function applyPlannedWrite(
   write: PlannedWrite,
 ): void {
   if (write.kind === 'set-param') {
-    d.runtime.setActiveModelParam(field.key, write.value);
+    d.setActiveModelParam(field.key, write.value);
     return;
   }
   if (write.kind === 'clear-param') {
-    d.runtime.clearActiveModelParam(field.key);
+    d.clearActiveModelParam(field.key);
     return;
   }
-  d.runtime.setEphemeralSetting(field.key, write.value);
+  d.setEphemeralSetting(field.key, write.value);
 }
 
 // The inverse of a planned write, derived from the same store the forward
@@ -501,8 +524,8 @@ function commitPendingEdits(d: KeypressDispatch): boolean {
   // d.ephemeral are render-time reads that can be stale if the runtime
   // changed externally since the last render, and the rollback must restore
   // the values the runtime actually held when [s]ave fired.
-  const paramsNow = d.runtime.getActiveModelParams();
-  const ephemeralNow = d.runtime.getEphemeralSettings();
+  const paramsNow = d.getActiveModelParams();
+  const ephemeralNow = d.getEphemeralSettings();
   const priors = planned.map((entry) =>
     priorWriteFor(entry.field, entry.write, paramsNow, ephemeralNow),
   );
@@ -777,9 +800,23 @@ const FieldRowsSplit: React.FC<{
 export const ModelConfigDialog: React.FC<ModelConfigDialogProps> = ({
   onClose,
 }) => {
-  const runtime = useRuntimeApi();
+  const getActiveProviderName = useGetActiveProviderName();
+  const getActiveModelName = useGetActiveModelName();
+  const getActiveModelParams = useGetActiveModelParams();
+  const getEphemeralSettings = useGetEphemeralSettings();
+  const getUnallowedParametersForActiveModel =
+    useGetUnallowedParametersForActiveModel();
+  const setActiveModelParam = useSetActiveModelParam();
+  const clearActiveModelParam = useClearActiveModelParam();
+  const setEphemeralSetting = useSetEphemeralSetting();
   const { width } = useResponsive();
-  const reads = readRuntimeSnapshot(runtime);
+  const reads = readRuntimeSnapshot(
+    getActiveProviderName,
+    getActiveModelName,
+    getActiveModelParams,
+    getEphemeralSettings,
+    getUnallowedParametersForActiveModel,
+  );
   const fields = buildFields(reads.unallowedParameters);
 
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -799,7 +836,11 @@ export const ModelConfigDialog: React.FC<ModelConfigDialogProps> = ({
     setSelectedIndex,
     enumIndex,
     setEnumIndex,
-    runtime,
+    getActiveModelParams,
+    getEphemeralSettings,
+    setActiveModelParam,
+    clearActiveModelParam,
+    setEphemeralSetting,
     setValidationError,
     validationError,
     params: reads.modelParams,
@@ -813,18 +854,13 @@ export const ModelConfigDialog: React.FC<ModelConfigDialogProps> = ({
   const dialogWidth = Math.min(width, 80);
 
   return (
-    <Box
-      borderStyle="round"
-      borderColor={SemanticColors.border.default}
-      flexDirection="column"
-      padding={1}
+    <ModelConfigFrame
       width={dialogWidth}
+      providerName={reads.providerName}
+      modelName={reads.modelName}
+      validationError={validationError}
+      isEditing={editingIndex !== null}
     >
-      <DialogHeader
-        providerName={reads.providerName}
-        modelName={reads.modelName}
-      />
-
       <FieldRowsSplit
         paramFields={fields.filter(
           (f) => f.kind === 'param' || f.key === 'context-limit',
@@ -841,14 +877,41 @@ export const ModelConfigDialog: React.FC<ModelConfigDialogProps> = ({
         enumIndex={enumIndex}
         onEditChange={setEditValue}
       />
+    </ModelConfigFrame>
+  );
+};
 
+function ModelConfigFrame({
+  width,
+  providerName,
+  modelName,
+  validationError,
+  isEditing,
+  children,
+}: {
+  width: number;
+  providerName: ReturnType<typeof readRuntimeSnapshot>['providerName'];
+  modelName: ReturnType<typeof readRuntimeSnapshot>['modelName'];
+  validationError: string | null;
+  isEditing: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <Box
+      borderStyle="round"
+      borderColor={SemanticColors.border.default}
+      flexDirection="column"
+      padding={1}
+      width={width}
+    >
+      <DialogHeader providerName={providerName} modelName={modelName} />
+      {children}
       {validationError !== null && (
         <Box marginTop={1}>
           <Text color={SemanticColors.status.error}>{validationError}</Text>
         </Box>
       )}
-
-      <DialogFooter isEditing={editingIndex !== null} />
+      <DialogFooter isEditing={isEditing} />
     </Box>
   );
-};
+}

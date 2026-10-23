@@ -4,8 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { IPromptProcessor } from './types.js';
-import type { CommandContext } from '../../ui/commands/types.js';
+import type { IPromptProcessor, PromptInvocation } from './types.js';
 
 /**
  * Appends the user's full command invocation to the prompt if arguments are
@@ -14,7 +13,7 @@ import type { CommandContext } from '../../ui/commands/types.js';
  * This processor is only used if the prompt does NOT contain {{args}}.
  */
 export class DefaultArgumentProcessor implements IPromptProcessor {
-  async process(prompt: string, context: CommandContext): Promise<string> {
+  async process(prompt: string, context: PromptInvocation): Promise<string> {
     if (context.invocation!.args) {
       return `${prompt}\n\n${context.invocation!.raw}`;
     }

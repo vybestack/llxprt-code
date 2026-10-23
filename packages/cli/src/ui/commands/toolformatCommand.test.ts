@@ -3,19 +3,24 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandOwnerFixture } from '../../__tests__/mockCommandContext.js';
 
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
-import { toolformatCommand } from './toolformatCommand.js';
+import { createToolFormatCommand } from './toolformatCommand.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import type { CommandContext } from './types.js';
 
 const mockRuntime = {
   getActiveToolFormatState: vi.fn(),
   setActiveToolFormatOverride: vi.fn(),
 };
 
+const toolformatCommand = createToolFormatCommand(
+  () => mockRuntime.getActiveToolFormatState(),
+  (format) => mockRuntime.setActiveToolFormatOverride(format),
+);
+
 describe('toolformatCommand', () => {
-  let mockContext: CommandContext;
+  let mockContext: CommandOwnerFixture;
   beforeEach(() => {
     vi.resetAllMocks();
 

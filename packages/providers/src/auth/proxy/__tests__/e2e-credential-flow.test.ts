@@ -38,9 +38,8 @@ import { KeyringTokenStore } from '@vybestack/llxprt-code-auth';
 import { CredentialProxyServer } from '../credential-proxy-server.js';
 import { ProactiveScheduler } from '../proactive-scheduler.js';
 import {
-  createTokenStore,
+  HostCredentialOwner,
   createProviderKeyStorage,
-  resetFactorySingletons,
 } from '../credential-store-factory.js';
 
 // ─── In-Memory Test Doubles ──────────────────────────────────────────────────
@@ -197,7 +196,6 @@ describe('E2E Credential Flow (Phase 37)', () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ce-'));
     priorSocketEnv = process.env.LLXPRT_CREDENTIAL_SOCKET;
     delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-    resetFactorySingletons();
   });
 
   afterEach(async () => {
@@ -206,7 +204,6 @@ describe('E2E Credential Flow (Phase 37)', () => {
     } else {
       process.env.LLXPRT_CREDENTIAL_SOCKET = priorSocketEnv;
     }
-    resetFactorySingletons();
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
@@ -579,15 +576,16 @@ describe('E2E Credential Flow (Phase 37)', () => {
      * @requirement E2E.9
      * @scenario Factory detection in non-sandbox mode
      * @given LLXPRT_CREDENTIAL_SOCKET is NOT set
-     * @when createTokenStore() is called
+     * @when new HostCredentialOwner(process.env).authority.createTokenStore() is called
      * @then Returns KeyringTokenStore (no proxy involved)
      */
     it('returns KeyringTokenStore when credential socket env is not set', () => {
       // Ensure env var is not set
       delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-      resetFactorySingletons();
 
-      const store = createTokenStore();
+      const store = new HostCredentialOwner(
+        process.env,
+      ).authority.createTokenStore();
 
       // Should NOT be a ProxyTokenStore
       expect(store).not.toBeInstanceOf(ProxyTokenStore);
@@ -599,14 +597,15 @@ describe('E2E Credential Flow (Phase 37)', () => {
      * @requirement E2E.9.2
      * @scenario Factory returns proxy store when env var is set
      * @given LLXPRT_CREDENTIAL_SOCKET is set
-     * @when createTokenStore() is called
+     * @when new HostCredentialOwner(process.env).authority.createTokenStore() is called
      * @then Returns ProxyTokenStore
      */
     it('returns ProxyTokenStore when credential socket env is set', () => {
       process.env.LLXPRT_CREDENTIAL_SOCKET = path.join(tmpDir, 'test.sock');
-      resetFactorySingletons();
 
-      const store = createTokenStore();
+      const store = new HostCredentialOwner(
+        process.env,
+      ).authority.createTokenStore();
 
       expect(store).toBeInstanceOf(ProxyTokenStore);
     });
@@ -615,14 +614,15 @@ describe('E2E Credential Flow (Phase 37)', () => {
      * @requirement E2E.9.3
      * @scenario Factory returns proxy key storage when env var is set
      * @given LLXPRT_CREDENTIAL_SOCKET is set
-     * @when createProviderKeyStorage() is called
+     * @when createProviderKeyStorage(new HostCredentialOwner(process.env).authority) is called
      * @then Returns ProxyProviderKeyStorage
      */
     it('returns ProxyProviderKeyStorage when credential socket env is set', () => {
       process.env.LLXPRT_CREDENTIAL_SOCKET = path.join(tmpDir, 'keys.sock');
-      resetFactorySingletons();
 
-      const storage = createProviderKeyStorage();
+      const storage = createProviderKeyStorage(
+        new HostCredentialOwner(process.env).authority,
+      );
 
       expect(storage).toBeInstanceOf(ProxyProviderKeyStorage);
     });
@@ -630,18 +630,21 @@ describe('E2E Credential Flow (Phase 37)', () => {
     /**
      * @requirement E2E.9.4
      * @scenario Factory memoizes singleton instances
-     * @given createTokenStore() is called multiple times
+     * @given new HostCredentialOwner(process.env).authority.createTokenStore() is called multiple times
      * @when In the same mode (proxy or direct)
      * @then Returns the same instance
      */
     it('memoizes factory singletons', () => {
       process.env.LLXPRT_CREDENTIAL_SOCKET = path.join(tmpDir, 'memo.sock');
-      resetFactorySingletons();
 
-      const store1 = createTokenStore();
-      const store2 = createTokenStore();
+      const store1 = new HostCredentialOwner(
+        process.env,
+      ).authority.createTokenStore();
+      const store2 = new HostCredentialOwner(
+        process.env,
+      ).authority.createTokenStore();
 
-      expect(store1).toBe(store2);
+      expect(store1).not.toBe(store2);
     });
   });
 

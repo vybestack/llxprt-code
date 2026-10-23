@@ -1,14 +1,19 @@
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
+import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
+import {
+  useRecordingPrompts,
+  withRecordingLifetimeFixture,
+} from './helpers/recording-owner-lifetime-fixture.js';
 import { describe, expect, it, spyOn } from 'bun:test';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildAgent, internalConfig } from './helpers/agentHarness.js';
-import { withRecordingLifetimeFixture } from './helpers/recording-owner-lifetime-fixture.js';
+
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
 async function withAgents(
   scenario: (input: {
@@ -45,6 +50,7 @@ async function locks(dir: string): Promise<string[]> {
 }
 
 describe('Agent recording identity transitions', () => {
+  useRecordingPrompts();
   it('initializes generated facade recording identity in Config before resume', async () => {
     await withAgents(async ({ build }) => {
       const { agent } = await build();
@@ -192,7 +198,7 @@ describe('Agent recording identity transitions', () => {
 
       const { agent } = await build('history-owner');
       const config = internalConfig(agent);
-      const client = agent.agentClient;
+      const client = fixtureAgentResources(agent).publishedClient(agent);
       const failure = new Error('prior history unavailable');
       const fault = spyOn(client, 'getHistory').mockRejectedValueOnce(failure);
       try {
@@ -213,7 +219,15 @@ describe('Agent recording identity transitions', () => {
 
   it('resumes two borrowed facades independently without adopting their shared Config identity', async () => {
     await withRecordingLifetimeFixture(
-      async ({ agent: a, config, borrow, chatsDir }) => {
+      async (
+        a,
+        config,
+        _settingsOwner,
+        _settingsService,
+        _oauthManager,
+        borrow,
+        chatsDir,
+      ) => {
         const b = await borrow();
         expect(config.getSessionId()).toBeUndefined();
         await a.setHistory([

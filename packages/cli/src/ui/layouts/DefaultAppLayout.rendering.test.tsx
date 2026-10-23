@@ -172,11 +172,11 @@ function createSettings(useAlternateBuffer: boolean) {
 }
 
 /** Renders DefaultAppLayout through real Ink and returns what tests assert on. */
-function renderLayout({
+async function renderLayout({
   useAlternateBuffer,
   screenReader = false,
   historyText,
-}: RenderOptions): RenderedLayout {
+}: RenderOptions): Promise<RenderedLayout> {
   const mainControlsRef: { current: DOMElement | null } = { current: null };
   const rootUiRef: { current: DOMElement | null } = { current: null };
   const pendingHistoryItemRef: { current: DOMElement | null } = {
@@ -195,6 +195,10 @@ function renderLayout({
         },
   );
 
+  const uiRuntime = buildUiRuntimeFromSource(
+    configSource as never,
+    await createUiSessionOwner(),
+  );
   const rendered = render(
     <SettingsProfileProvider store={createSettingsProfileStore()}>
       <VimModeProvider settings={settings}>
@@ -215,13 +219,20 @@ function renderLayout({
         >
           <TurnProvider store={turnStore}>
             <DefaultAppLayout
-              uiRuntime={buildUiRuntimeFromSource(
-                configSource as never,
-                createUiSessionOwner(),
-              )}
+              readIdeMode={() => false}
+              readIdeDiffingEnabled={() => false}
+              subscribeIdeDiffing={() => () => {}}
+              resolveIdeDiff={async () => {}}
+              readIdeWorkspaceTrust={() => undefined}
+              subscribeIdeWorkspaceTrust={() => () => {}}
+              screenReaderEnabled={uiRuntime.app.getScreenReader()}
+              disableLoadingPhrases={
+                uiRuntime.app.getAccessibility().disableLoadingPhrases === true
+              }
+              debugMode={uiRuntime.app.getDebugMode()}
               slashCommandRuntime={buildSlashCommandRuntime(
                 configSource as never,
-                createUiSessionOwner(),
+                await createUiSessionOwner(),
               )}
               settings={settings}
               startupWarnings={[]}
@@ -255,10 +266,10 @@ describe('DefaultAppLayout rendering', () => {
   });
 
   describe('standard buffer with the static header suppressed', () => {
-    it('mounts the live controls and the root when there are no static items', () => {
+    it('mounts the live controls and the root when there are no static items', async () => {
       setEnv('LLXPRT_CODE_SUPPRESS_STATIC_HEADER', 'true');
 
-      const { mainControlsRef, rootUiRef } = renderLayout({
+      const { mainControlsRef, rootUiRef } = await renderLayout({
         useAlternateBuffer: false,
       });
 
@@ -266,10 +277,10 @@ describe('DefaultAppLayout rendering', () => {
       expect(mainControlsRef.current).not.toBeNull();
     });
 
-    it('renders committed history content into the frame', () => {
+    it('renders committed history content into the frame', async () => {
       setEnv('LLXPRT_CODE_SUPPRESS_STATIC_HEADER', 'true');
 
-      const { frame } = renderLayout({
+      const { frame } = await renderLayout({
         useAlternateBuffer: false,
         historyText: HISTORY_SENTINEL,
       });
@@ -277,10 +288,10 @@ describe('DefaultAppLayout rendering', () => {
       expect(frame).toContain(HISTORY_SENTINEL);
     });
 
-    it('renders no history content when history is empty', () => {
+    it('renders no history content when history is empty', async () => {
       setEnv('LLXPRT_CODE_SUPPRESS_STATIC_HEADER', 'true');
 
-      const { frame, mainControlsRef } = renderLayout({
+      const { frame, mainControlsRef } = await renderLayout({
         useAlternateBuffer: false,
       });
 
@@ -290,8 +301,8 @@ describe('DefaultAppLayout rendering', () => {
   });
 
   describe('buffer selection', () => {
-    it('renders a fixed-height viewport when the alternate buffer is enabled', () => {
-      const { lineCount, mainControlsRef } = renderLayout({
+    it('renders a fixed-height viewport when the alternate buffer is enabled', async () => {
+      const { lineCount, mainControlsRef } = await renderLayout({
         useAlternateBuffer: true,
       });
 
@@ -299,10 +310,10 @@ describe('DefaultAppLayout rendering', () => {
       expect(mainControlsRef.current).not.toBeNull();
     });
 
-    it('renders a content-height root when the alternate buffer is disabled', () => {
+    it('renders a content-height root when the alternate buffer is disabled', async () => {
       setEnv('LLXPRT_CODE_SUPPRESS_STATIC_HEADER', 'true');
 
-      const { frame, lineCount, mainControlsRef } = renderLayout({
+      const { frame, lineCount, mainControlsRef } = await renderLayout({
         useAlternateBuffer: false,
         historyText: HISTORY_SENTINEL,
       });
@@ -314,8 +325,8 @@ describe('DefaultAppLayout rendering', () => {
       expect(mainControlsRef.current).not.toBeNull();
     });
 
-    it('falls back to the standard buffer when the screen reader is enabled', () => {
-      const { lineCount, mainControlsRef } = renderLayout({
+    it('falls back to the standard buffer when the screen reader is enabled', async () => {
+      const { lineCount, mainControlsRef } = await renderLayout({
         useAlternateBuffer: true,
         screenReader: true,
       });

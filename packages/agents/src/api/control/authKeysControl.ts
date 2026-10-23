@@ -3,34 +3,9 @@
  * @requirement:REQ-008
  */
 
+import type { ApiKeyUpdateResult } from '@vybestack/llxprt-code-core';
 import type { AgentAuthKeysControl, KeyInfo } from '../agent.js';
 import type { AgentAuthState } from './authState.js';
-
-/**
- * Callback bundle injected by AgentImpl so AuthKeysControl can mutate the
- * per-agent auth state and drive the live provider key mutator without holding
- * a back-reference to the whole AgentImpl.
- *
- * @plan:PLAN-20260617-COREAPI.P18
- * @requirement:REQ-008
- */
-export interface AuthKeysControlDeps {
-  /** The per-agent in-memory auth state (keyStore lives here). */
-  readonly authState: AgentAuthState;
-  /** Reads the current keyName reference from providerState. */
-  readonly getKeyName: () => string | undefined;
-  /**
-   * Sets/clears the keyName reference on providerState (the single source of
-   * truth for the keyName winner). Called by use(name)/delete(name).
-   */
-  readonly setKeyName: (keyName: string | undefined) => void;
-  /**
-   * Pushes a raw key value to the live provider via the real runtime mutator
-   * updateActiveProviderApiKey. Wrapped in try/catch by the caller — safe
-   * no-op under the fake seam.
-   */
-  readonly updateProviderApiKey: (apiKey: string | null) => Promise<void>;
-}
 
 /**
  * In-memory named-key store + raw-key setter. The secret value lives ONLY in
@@ -42,7 +17,14 @@ export interface AuthKeysControlDeps {
  * @requirement:REQ-008
  */
 export class AuthKeysControl implements AgentAuthKeysControl {
-  constructor(private readonly deps: AuthKeysControlDeps) {}
+  constructor(
+    private readonly authState: AgentAuthState,
+    private readonly getKeyName: () => string | undefined,
+    private readonly setKeyName: (name: string | undefined) => void,
+    private readonly updateProviderApiKey: (
+      apiKey: string | null,
+    ) => Promise<ApiKeyUpdateResult>,
+  ) {}
 
   /**
    * Returns the list of named keys in the in-memory store (name only — never
@@ -51,7 +33,7 @@ export class AuthKeysControl implements AgentAuthKeysControl {
    * @requirement:REQ-008
    */
   async list(): Promise<readonly KeyInfo[]> {
-    const names = Array.from(this.deps.authState.keyStore.keys());
+    const names = Array.from(this.authState.keyStore.keys());
     return names.map((name) => ({ name }));
   }
 
@@ -70,7 +52,7 @@ export class AuthKeysControl implements AgentAuthKeysControl {
     if (name.length === 0) {
       throw new Error('Key name must be non-empty');
     }
-    this.deps.authState.keyStore.set(name, apiKey);
+    this.authState.keyStore.set(name, apiKey);
   }
 
   /**
@@ -89,11 +71,11 @@ export class AuthKeysControl implements AgentAuthKeysControl {
     if (name.length === 0) {
       throw new Error('Key name must be non-empty');
     }
-    this.deps.setKeyName(name);
-    const secret = this.deps.authState.keyStore.get(name);
+    this.setKeyName(name);
+    const secret = this.authState.keyStore.get(name);
     if (secret !== undefined) {
       try {
-        await this.deps.updateProviderApiKey(secret);
+        await this.updateProviderApiKey(secret);
       } catch {
         // No-op under the fake seam or if the provider rejects it.
       }
@@ -110,39 +92,19 @@ export class AuthKeysControl implements AgentAuthKeysControl {
     name: string,
     _opts?: { readonly provider?: string },
   ): Promise<void> {
-    this.deps.authState.keyStore.delete(name);
-    if (this.deps.getKeyName() === name) {
-      this.deps.setKeyName(undefined);
+    this.authState.keyStore.delete(name);
+    if (this.getKeyName() === name) {
+      this.setKeyName(undefined);
     }
   }
 
-  /**
-   * Sets/clears the raw-key flag. A non-null value marks a raw key present
-   * (highest precedence winner) and pushes the value to the live provider via
-   * the real mutator (try/catch). null clears the raw-key flag (and pushes null
-   * to clear the live provider key). NEVER stores the raw value on status.
-   * @plan:PLAN-20260617-COREAPI.P18
-   * @requirement:REQ-008
-   */
   async setRaw(
     apiKey: string | null,
     _opts?: { readonly provider?: string },
-  ): Promise<void> {
-    if (apiKey !== null) {
-      this.deps.authState.rawKeyPresent = true;
-      try {
-        await this.deps.updateProviderApiKey(apiKey);
-      } catch {
-        // No-op under the fake seam.
-      }
-    } else {
-      this.deps.authState.rawKeyPresent = false;
-      try {
-        await this.deps.updateProviderApiKey(null);
-      } catch {
-        // No-op under the fake seam.
-      }
-    }
+  ): Promise<ApiKeyUpdateResult> {
+    const result = await this.updateProviderApiKey(apiKey);
+    this.authState.rawKeyPresent = Boolean(apiKey?.trim());
+    return result;
   }
 
   /**
@@ -154,6 +116,6 @@ export class AuthKeysControl implements AgentAuthKeysControl {
     path: string | null,
     _opts?: { readonly provider?: string },
   ): Promise<void> {
-    this.deps.authState.keyFile = path ?? undefined;
+    this.authState.keyFile = path ?? undefined;
   }
 }

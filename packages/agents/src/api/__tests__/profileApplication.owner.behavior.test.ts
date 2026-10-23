@@ -1,135 +1,109 @@
-/**
- * @license
- * Copyright 2026 Vybestack LLC
- * SPDX-License-Identifier: Apache-2.0
- */
 import {
-  afterAll,
+  createCapturedSessionOwner,
+  capturedSessionClient,
+} from './helpers/session-client-capture.js';
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import {
+  SettingsService,
+  ProfileManager,
+} from '@vybestack/llxprt-code-settings';
+import { toConfigParameters } from '../agentConfig.adapter.js';
+import { mkdtemp, realpath, rm, mkdir, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import {
+  writeProviderAliasConfig,
+  configureProviderTokenizer,
+  createRuntimeContentGeneratorFactory,
+} from '@vybestack/llxprt-code-providers/composition.js';
+import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import {
+  acquirePreferredProviderManager,
+  acquirePreferredOAuth,
+  preparePreferredProviderCompletion,
+} from '../preferred-provider-acquisition.js';
+import { releaseAdoptedFileScope } from '../adoption-release.js';
+import { randomUUID } from 'node:crypto';
+import {
+  runCleanupSteps,
+  cleanupAfterFailure,
+} from '../../core/subagent-cleanup.js';
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
+import {
   beforeAll,
-  afterEach,
-  beforeEach,
+  afterAll,
   describe,
   expect,
   it,
+  afterEach,
+  beforeEach,
 } from 'bun:test';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { fromConfig, type Agent } from '../index.js';
-import { makeScratchDir } from './helpers/scratch-dir.js';
-import {
-  buildCliStyleConfig,
-  type BuiltCliConfig,
-} from './helpers/buildCliStyleConfig.js';
-import { ProfileManager, type Profile } from '@vybestack/llxprt-code-settings';
-import { FakeProvider } from '@vybestack/llxprt-code-providers';
+import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { fileURLToPath } from 'node:url';
+import { buildTestMcpRuntime } from './helpers/mcp-owner-fixture.js';
+import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
+import { injectConfirmationForcingPolicy } from '../confirmationForcing.js';
+import { executeProviderActivation } from '../providerActivationExecutor.js';
+import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
+import { assembleModelSelection } from '../model-selection.js';
+import { AgentConfig } from '../config-types.js';
+
+import { usePromptFixture } from './helpers/prompt-fixture.js';
 import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import {
-  getActiveModelName,
-  getActiveProviderName,
-} from '@vybestack/llxprt-code-providers/runtime.js';
-import type { TokenStore, OAuthToken } from '@vybestack/llxprt-code-auth';
-import {
-  coreEvents,
-  CoreEvent,
-  type ModelProfileInfoPayload,
-} from '@vybestack/llxprt-code-core/utils/events.js';
 
-function deferred<T>(): {
-  promise: Promise<T>;
-  resolve: (value: T) => void;
-  reject: (error: unknown) => void;
-} {
-  let resolve: (value: T) => void = () => {
-    throw new Error('Deferred not initialized');
-  };
-  let reject: (error: unknown) => void = () => {
-    throw new Error('Deferred not initialized');
-  };
-  const promise = new Promise<T>((fulfill, fail) => {
-    resolve = fulfill;
-    reject = fail;
-  });
-  return { promise, resolve, reject };
+async function settleEngineRelease(
+  steps: ReadonlyArray<() => void | Promise<void>>,
+  previousReplay: string | undefined,
+): Promise<void> {
+  try {
+    await runCleanupSteps(steps);
+  } finally {
+    if (previousReplay === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
+    else process.env.LLXPRT_FAKE_RESPONSES = previousReplay;
+  }
 }
-
-function tokenReadBoundary(read: TokenStore['getToken']): TokenStore {
-  const unexpected = async (): Promise<never> => {
-    throw new Error('Unexpected token-store write or lock');
-  };
-  return {
-    getToken: read,
-    saveToken: unexpected,
-    removeToken: unexpected,
-    listProviders: unexpected,
-    listBuckets: unexpected,
-    getBucketStats: unexpected,
-    acquireRefreshLock: unexpected,
-    releaseRefreshLock: unexpected,
-    acquireAuthLock: unexpected,
-    releaseAuthLock: unexpected,
-  };
-}
-import { writeProviderAliasConfig } from '@vybestack/llxprt-code-providers/composition.js';
-
-interface Owner {
-  readonly agent: Agent;
-  readonly built: BuiltCliConfig;
-  readonly keyfile: string;
-  readonly profiles: ProfileManager;
-}
-
-function observe(owner: Owner): object {
-  const { agent, built } = owner;
-  return {
-    provider: agent.getProvider(),
-    model: agent.getModel(),
-    status: agent.getProviderStatus(),
-    profile: agent.getActiveProfileName(),
-    snapshot: agent.captureProfile(),
-    configProvider: built.config.getProvider(),
-    configModel: built.config.getModel(),
-    managerProvider: built.providerManager.getActiveProviderName(),
-    settings: built.settingsService.exportForStateSnapshot(),
-    ephemerals: built.settingsOwner.captureNamedParameters(),
-    modelDefaultOwnership:
-      built.settingsOwner.captureDefaultClassification().modelKeys,
-    providerDefaultOwnership:
-      built.settingsOwner.captureDefaultClassification().providerEntries,
-  };
-}
-
 describe('public profile application ownership outside ALS', () => {
-  let directory: string;
-  let previousHome: string | undefined;
-  let previousFake: string | undefined;
-  let owners: Owner[];
-
-  let promptRoot: string;
-  let previousPromptRoot: string | undefined;
+  let promptDirectory: string;
+  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
   beforeAll(async () => {
-    const evidence = join(
-      import.meta.dirname,
-      '../../../../../tmp/session-client-owner-consolidation',
-    );
-    promptRoot = await makeScratchDir('profile-prompts-', evidence);
-    previousPromptRoot = process.env.LLXPRT_PROMPTS_DIR;
-    process.env.LLXPRT_PROMPTS_DIR = promptRoot;
+    promptDirectory = await mkdtemp(join(tmpdir(), 'engine-prompts-'));
+    process.env.LLXPRT_PROMPTS_DIR = promptDirectory;
+    await initializePromptSystem();
   });
   afterAll(async () => {
-    if (previousPromptRoot === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
-    else process.env.LLXPRT_PROMPTS_DIR = previousPromptRoot;
-    await rm(promptRoot, { recursive: true, force: true });
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(promptDirectory, { recursive: true, force: true });
   });
+  const builtCredentials = useOwnedCredentials();
+
+  let directory: string;
+
+  let previousHome: string | undefined;
+
+  let previousData: string | undefined;
+
+  let previousFake: string | undefined;
+
+  let ownerCloses: Array<() => Promise<void>>;
+
+  usePromptFixture();
 
   beforeEach(async () => {
     const evidence = join(tmpdir(), 'llxprt-profile-application-owner');
     await mkdir(evidence, { recursive: true });
     directory = await mkdtemp(join(evidence, 'fixture-'));
     previousHome = process.env.LLXPRT_CONFIG_HOME;
+    previousData = process.env.LLXPRT_DATA_HOME;
     previousFake = process.env.LLXPRT_FAKE_RESPONSES;
     process.env.LLXPRT_CONFIG_HOME = join(directory, 'user');
+    process.env.LLXPRT_DATA_HOME = join(directory, 'data');
     writeProviderAliasConfig('fake', {
       baseProvider: 'openai',
       modelDefaults: [
@@ -143,464 +117,456 @@ describe('public profile application ownership outside ALS', () => {
         },
       ],
     });
-    owners = [];
+    ownerCloses = [];
   });
 
   afterEach(async () => {
     try {
-      for (const owner of [...owners].reverse()) {
-        await owner.agent.dispose();
-        await owner.built.cleanup();
-      }
+      await runCleanupSteps([...ownerCloses].reverse());
     } finally {
       if (previousHome === undefined) delete process.env.LLXPRT_CONFIG_HOME;
       else process.env.LLXPRT_CONFIG_HOME = previousHome;
+      if (previousData === undefined) delete process.env.LLXPRT_DATA_HOME;
+      else process.env.LLXPRT_DATA_HOME = previousData;
       if (previousFake === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
       else process.env.LLXPRT_FAKE_RESPONSES = previousFake;
       await rm(directory, { recursive: true, force: true });
     }
   });
 
-  async function makeOwner(
-    label: string,
-    tokenStore?: TokenStore,
-  ): Promise<Owner> {
-    const workingDir = join(directory, label);
-    await mkdir(workingDir, { recursive: true });
-    const keyfile = join(workingDir, 'credential.txt');
-    await writeFile(keyfile, `fake-${label}-credential`, { mode: 0o600 });
-    const built = await buildCliStyleConfig('plain-text.jsonl', {
-      model: `${label}-initial`,
-      workingDir,
-      sessionId: 'same-profile-owner-label',
-      settings: { profileDirectory: join(workingDir, 'durable-profiles') },
-    });
-    const profiles = new ProfileManager(join(workingDir, 'durable-profiles'));
-    let oauthManager: OAuthManager | undefined;
-    if (tokenStore !== undefined) {
-      const oauth = new OAuthManager(tokenStore, undefined, {
-        config: built.config,
-        messageBus: built.messageBus,
-      });
-      oauth.registerProvider({
-        name: 'fake',
-        initiateAuth: async () => {
-          throw new Error('Unexpected interactive authentication');
-        },
-        getToken: async () => null,
-        refreshToken: async () => null,
-      });
-      oauth.registerProvider({
-        name: 'fake-target',
-        initiateAuth: async () => {
-          throw new Error('Unexpected interactive authentication');
-        },
-        getToken: async () => null,
-        refreshToken: async () => null,
-      });
-      await oauth.toggleOAuthEnabled('fake');
-      await oauth.toggleOAuthEnabled('fake-target');
-      const target = new FakeProvider(
-        fileURLToPath(new URL('./fixtures/plain-text.jsonl', import.meta.url)),
-        workingDir,
-      );
-      target.name = 'fake-target';
-      built.providerManager.registerProvider(target);
-      oauthManager = oauth;
-    }
-    const agent = await fromConfig({
-      oauthManager,
-      providerFileLifecycle: built.runtime.providerFileLifecycle,
-      settingsOwner: built.settingsOwner,
-      settingsService: built.settingsService,
-      agentClient: built.agentClient,
-      providerManager: built.providerManager,
-      runtimeFactoryBindings: built.runtimeFactoryBindings,
-      config: built.config,
-      mcpRuntime: built.mcpRuntime,
-      messageBus: built.messageBus,
-      sessionId: 'same-profile-owner-label',
-    });
-
-    const owner = { agent, built, keyfile, profiles };
-    owners.push(owner);
-    delete process.env.LLXPRT_FAKE_RESPONSES;
-    built.settingsOwner.writeUserParameter(
-      'context-limit',
-      label === 'a' ? 8192 : 16384,
-    );
-    built.settingsService.setCurrentProfileName(`${label}-prior`);
-    agent.setDefaultProfileName(`${label}-default`);
-    await profiles.saveProfile('selected', agent.captureProfile());
-    return owner;
-  }
-
-  async function createSelection(owner: Owner, model: string): Promise<void> {
-    await owner.agent.profiles.create('selected', {
-      name: 'selected',
-      provider: 'fake',
-      model,
-      modelParams: { temperature: model.startsWith('a') ? 0.2 : 0.8 },
-    });
-  }
-
   it('establishes independent real configs, settings, managers and durable profile stores', async () => {
-    const a = await makeOwner('a');
-    const b = await makeOwner('b');
-    expect(a.built.config).not.toBe(b.built.config);
-    expect(a.built.settingsService).not.toBe(b.built.settingsService);
-    expect(a.built.providerManager).not.toBe(b.built.providerManager);
-    expect(await a.profiles.loadProfile('selected')).toMatchObject({
+    const a_label = 'a';
+
+    const a_workingDir = join(directory, a_label);
+    await mkdir(a_workingDir, { recursive: true });
+    const a_keyfile = join(a_workingDir, 'credential.txt');
+    await writeFile(a_keyfile, `fake-${a_label}-credential`, { mode: 0o600 });
+    const a_builtCallerPreviousReplay = process.env.LLXPRT_FAKE_RESPONSES;
+    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+      new URL('fixtures/' + 'plain-text.jsonl', import.meta.url),
+    );
+    const a_builtCallerDirectory = await realpath(
+      await mkdtemp(join(tmpdir(), 'explicit-caller-')),
+    );
+    const a_builtCallerOverrides: Readonly<Partial<AgentConfig>> = {
+      model: `${a_label}-initial`,
+      workingDir: a_workingDir,
+      sessionId: 'same-profile-owner-label',
+      settings: { profileDirectory: join(a_workingDir, 'durable-profiles') },
+    };
+    const a_builtCallerSelection: AgentConfig = {
+      provider: 'fake',
+      model: 'fake-model',
+      sessionId: randomUUID(),
+      ...a_builtCallerOverrides,
+      workingDir:
+        a_builtCallerOverrides.workingDir === undefined
+          ? a_builtCallerDirectory
+          : await realpath(a_builtCallerOverrides.workingDir),
+    };
+    const a_builtCallerParameters = {
+      ...toConfigParameters(a_builtCallerSelection),
+      ...{},
+    };
+    a_builtCallerParameters.interactive = true;
+
+    a_builtCallerParameters.includeDirectories = [
+      ...(a_builtCallerParameters.includeDirectories ?? []),
+      process.cwd(),
+    ];
+    const a_builtCallerConfig = new Config(a_builtCallerParameters);
+    const a_builtCallerFactories = {
+      ...createAgentRuntimeFactoryBindings(),
+      ...{},
+    };
+    const a_builtCallerSettings = new SettingsService();
+    for (const [a_key, a_value] of Object.entries(
+      a_builtCallerConfig.getInitialSettings(),
+    ))
+      a_builtCallerSettings.set(a_key, a_value);
+    const a_builtCallerPolicy = new RuntimePolicyOwner(a_builtCallerConfig);
+    injectConfirmationForcingPolicy(a_builtCallerPolicy.session.confirmation);
+    const a_builtCallerMcp = await buildTestMcpRuntime(
+      a_builtCallerConfig,
+      a_builtCallerPolicy.session.messageBus,
+      a_builtCallerOverrides,
+      undefined,
+      a_builtCallerPolicy,
+      undefined,
+    );
+    const a_builtCallerRuntimeId = 'caller-' + randomUUID();
+    const a_builtCallerRelease = new AcquisitionRelease();
+    const a_builtCallerSettingsOwner = new SessionSettingsOwner(
+      a_builtCallerSettings,
+    );
+    a_builtCallerRelease.acquire('settings', () =>
+      a_builtCallerSettingsOwner.dispose(),
+    );
+    a_builtCallerSettingsOwner.initializeProviderSelection(
+      a_builtCallerConfig.getProvider(),
+      a_builtCallerConfig.getModel(),
+    );
+    a_builtCallerSettingsOwner.bindTelemetry(a_builtCallerConfig);
+    const a_builtCallerFiles = new ProviderFileLifecycle({
+      maxFiles: 100,
+      maxBytes: 512 * 1024 * 1024,
+    });
+    for (const a_scope of [
+      a_builtCallerRuntimeId,
+      a_builtCallerConfig.getSessionId(),
+    ])
+      a_builtCallerRelease.acquire('files', () =>
+        releaseAdoptedFileScope(a_builtCallerFiles, a_scope),
+      );
+    const a_builtCallerManager = acquirePreferredProviderManager(
+      a_builtCallerConfig,
+      a_builtCallerSettings,
+      a_builtCallerSettingsOwner,
+      a_builtCallerFiles,
+      a_builtCallerRuntimeId,
+      builtCredentials().authority,
+      a_builtCallerRelease,
+    );
+    const a_builtCallerTokenizer =
+      configureProviderTokenizer(a_builtCallerManager);
+    const a_builtCallerContent = createRuntimeContentGeneratorFactory();
+    const a_builtCallerOAuth = acquirePreferredOAuth(
+      undefined,
+      a_builtCallerPolicy.session.messageBus,
+      a_builtCallerConfig,
+      a_builtCallerSettings,
+      a_builtCallerManager,
+      a_builtCallerRuntimeId,
+      a_builtCallerMcp.profileDefinitions,
+      builtCredentials().authority,
+      a_builtCallerRelease,
+      undefined,
+    );
+    const a_builtCallerMedia = new SessionMediaOwner(
+      a_builtCallerConfig.projectTempDir,
+      1024 * 1024 * 1024,
+    );
+    const a_builtCallerOwner = await createCapturedSessionOwner(
+      a_builtCallerConfig,
+      assembleTaskSchemaPolicy(a_builtCallerSettings),
+      a_builtCallerManager,
+      a_builtCallerFactories.agentClientFactory,
+      a_builtCallerMedia.store,
+      a_builtCallerMcp.readInstructions,
+      a_builtCallerMcp.workspacePaths,
+      a_builtCallerSettingsOwner,
+      a_builtCallerContent,
+      a_builtCallerTokenizer,
+    );
+    a_builtCallerOwner.bindMcpRuntime(a_builtCallerMcp);
+    a_builtCallerOwner.bindProviderFiles(a_builtCallerFiles, (a_provider) =>
+      a_builtCallerOAuth.composeRetryOperations(a_provider),
+    );
+    a_builtCallerOwner.bindHooks();
+    const a_builtCallerClose = settleEngineRelease.bind(
+      undefined,
+      [
+        () => a_builtCallerOwner.dispose(),
+        () => a_builtCallerRelease.close(),
+        () => a_builtCallerMedia.dispose(),
+        () => a_builtCallerMcp.dispose(),
+        () => a_builtCallerConfig.dispose(),
+        () => rm(a_builtCallerDirectory, { recursive: true, force: true }),
+      ],
+      a_builtCallerPreviousReplay,
+    );
+    try {
+      await preparePreferredProviderCompletion(
+        a_builtCallerConfig,
+        a_builtCallerSettings,
+        a_builtCallerSettingsOwner,
+        a_builtCallerManager,
+        a_builtCallerOAuth,
+        a_builtCallerRuntimeId,
+        a_builtCallerTokenizer,
+        undefined,
+      );
+      await a_builtCallerMcp.initialize();
+      const a_activation = await executeProviderActivation(
+        a_builtCallerConfig,
+        a_builtCallerSelection.activation ?? {
+          provider: a_builtCallerConfig.getProvider(),
+          model: a_builtCallerConfig.getModel(),
+        },
+        assembleProviderSwitch(
+          a_builtCallerConfig,
+          a_builtCallerSettings,
+          a_builtCallerManager,
+          a_builtCallerOAuth,
+          () => 'agent',
+          () => a_builtCallerOwner.refreshAuth(),
+          a_builtCallerSettingsOwner,
+        ),
+        a_builtCallerSettings,
+        a_builtCallerManager,
+        (a_method) => a_builtCallerOwner.refreshAuth(a_method),
+        assembleModelSelection(a_builtCallerSettingsOwner),
+      );
+      requireCallerActivation(a_activation);
+      await a_builtCallerOwner.initializeTools();
+      await capturedSessionClient(a_builtCallerOwner).startChat();
+    } catch (a_primary) {
+      await cleanupAfterFailure(a_primary, a_builtCallerClose);
+    }
+    const a_profiles = new ProfileManager(
+      join(a_workingDir, 'durable-profiles'),
+    );
+    let a_oauthManager: OAuthManager | undefined;
+
+    const a_agent = await fromConfig(
+      a_builtCallerConfig,
+      a_builtCallerSettings,
+      { sessionId: 'same-profile-owner-label' },
+      a_builtCallerSettingsOwner,
+      a_builtCallerManager,
+      a_oauthManager,
+      a_builtCallerPolicy.session.messageBus,
+      a_builtCallerMcp,
+      undefined,
+      capturedSessionClient(a_builtCallerOwner),
+      a_builtCallerFiles,
+      undefined,
+      undefined,
+      a_builtCallerFactories,
+    );
+    ownerCloses.push(() =>
+      runCleanupSteps([() => a_agent.dispose(), () => a_builtCallerClose()]),
+    );
+    delete process.env.LLXPRT_FAKE_RESPONSES;
+    a_builtCallerSettingsOwner.writeUserParameter('context-limit', 8192);
+    a_builtCallerSettings.setCurrentProfileName(`${a_label}-prior`);
+    a_agent.setDefaultProfileName(`${a_label}-default`);
+    await a_profiles.saveProfile('selected', a_agent.captureProfile());
+    const b_label = 'b';
+
+    const b_workingDir = join(directory, b_label);
+    await mkdir(b_workingDir, { recursive: true });
+    const b_keyfile = join(b_workingDir, 'credential.txt');
+    await writeFile(b_keyfile, `fake-${b_label}-credential`, { mode: 0o600 });
+    const b_builtCallerPreviousReplay = process.env.LLXPRT_FAKE_RESPONSES;
+    process.env.LLXPRT_FAKE_RESPONSES = fileURLToPath(
+      new URL('fixtures/' + 'plain-text.jsonl', import.meta.url),
+    );
+    const b_builtCallerDirectory = await realpath(
+      await mkdtemp(join(tmpdir(), 'explicit-caller-')),
+    );
+    const b_builtCallerOverrides: Readonly<Partial<AgentConfig>> = {
+      model: `${b_label}-initial`,
+      workingDir: b_workingDir,
+      sessionId: 'same-profile-owner-label',
+      settings: { profileDirectory: join(b_workingDir, 'durable-profiles') },
+    };
+    const b_builtCallerSelection: AgentConfig = {
+      provider: 'fake',
+      model: 'fake-model',
+      sessionId: randomUUID(),
+      ...b_builtCallerOverrides,
+      workingDir:
+        b_builtCallerOverrides.workingDir === undefined
+          ? b_builtCallerDirectory
+          : await realpath(b_builtCallerOverrides.workingDir),
+    };
+    const b_builtCallerParameters = {
+      ...toConfigParameters(b_builtCallerSelection),
+      ...{},
+    };
+    b_builtCallerParameters.interactive = true;
+
+    b_builtCallerParameters.includeDirectories = [
+      ...(b_builtCallerParameters.includeDirectories ?? []),
+      process.cwd(),
+    ];
+    const b_builtCallerConfig = new Config(b_builtCallerParameters);
+    const b_builtCallerFactories = {
+      ...createAgentRuntimeFactoryBindings(),
+      ...{},
+    };
+    const b_builtCallerSettings = new SettingsService();
+    for (const [b_key, b_value] of Object.entries(
+      b_builtCallerConfig.getInitialSettings(),
+    ))
+      b_builtCallerSettings.set(b_key, b_value);
+    const b_builtCallerPolicy = new RuntimePolicyOwner(b_builtCallerConfig);
+    injectConfirmationForcingPolicy(b_builtCallerPolicy.session.confirmation);
+    const b_builtCallerMcp = await buildTestMcpRuntime(
+      b_builtCallerConfig,
+      b_builtCallerPolicy.session.messageBus,
+      b_builtCallerOverrides,
+      undefined,
+      b_builtCallerPolicy,
+      undefined,
+    );
+    const b_builtCallerRuntimeId = 'caller-' + randomUUID();
+    const b_builtCallerRelease = new AcquisitionRelease();
+    const b_builtCallerSettingsOwner = new SessionSettingsOwner(
+      b_builtCallerSettings,
+    );
+    b_builtCallerRelease.acquire('settings', () =>
+      b_builtCallerSettingsOwner.dispose(),
+    );
+    b_builtCallerSettingsOwner.initializeProviderSelection(
+      b_builtCallerConfig.getProvider(),
+      b_builtCallerConfig.getModel(),
+    );
+    b_builtCallerSettingsOwner.bindTelemetry(b_builtCallerConfig);
+    const b_builtCallerFiles = new ProviderFileLifecycle({
+      maxFiles: 100,
+      maxBytes: 512 * 1024 * 1024,
+    });
+    for (const b_scope of [
+      b_builtCallerRuntimeId,
+      b_builtCallerConfig.getSessionId(),
+    ])
+      b_builtCallerRelease.acquire('files', () =>
+        releaseAdoptedFileScope(b_builtCallerFiles, b_scope),
+      );
+    const b_builtCallerManager = acquirePreferredProviderManager(
+      b_builtCallerConfig,
+      b_builtCallerSettings,
+      b_builtCallerSettingsOwner,
+      b_builtCallerFiles,
+      b_builtCallerRuntimeId,
+      builtCredentials().authority,
+      b_builtCallerRelease,
+    );
+    const b_builtCallerTokenizer =
+      configureProviderTokenizer(b_builtCallerManager);
+    const b_builtCallerContent = createRuntimeContentGeneratorFactory();
+    const b_builtCallerOAuth = acquirePreferredOAuth(
+      undefined,
+      b_builtCallerPolicy.session.messageBus,
+      b_builtCallerConfig,
+      b_builtCallerSettings,
+      b_builtCallerManager,
+      b_builtCallerRuntimeId,
+      b_builtCallerMcp.profileDefinitions,
+      builtCredentials().authority,
+      b_builtCallerRelease,
+      undefined,
+    );
+    const b_builtCallerMedia = new SessionMediaOwner(
+      b_builtCallerConfig.projectTempDir,
+      1024 * 1024 * 1024,
+    );
+    const b_builtCallerOwner = await createCapturedSessionOwner(
+      b_builtCallerConfig,
+      assembleTaskSchemaPolicy(b_builtCallerSettings),
+      b_builtCallerManager,
+      b_builtCallerFactories.agentClientFactory,
+      b_builtCallerMedia.store,
+      b_builtCallerMcp.readInstructions,
+      b_builtCallerMcp.workspacePaths,
+      b_builtCallerSettingsOwner,
+      b_builtCallerContent,
+      b_builtCallerTokenizer,
+    );
+    b_builtCallerOwner.bindMcpRuntime(b_builtCallerMcp);
+    b_builtCallerOwner.bindProviderFiles(b_builtCallerFiles, (b_provider) =>
+      b_builtCallerOAuth.composeRetryOperations(b_provider),
+    );
+    b_builtCallerOwner.bindHooks();
+    const b_builtCallerClose = settleEngineRelease.bind(
+      undefined,
+      [
+        () => b_builtCallerOwner.dispose(),
+        () => b_builtCallerRelease.close(),
+        () => b_builtCallerMedia.dispose(),
+        () => b_builtCallerMcp.dispose(),
+        () => b_builtCallerConfig.dispose(),
+        () => rm(b_builtCallerDirectory, { recursive: true, force: true }),
+      ],
+      b_builtCallerPreviousReplay,
+    );
+    try {
+      await preparePreferredProviderCompletion(
+        b_builtCallerConfig,
+        b_builtCallerSettings,
+        b_builtCallerSettingsOwner,
+        b_builtCallerManager,
+        b_builtCallerOAuth,
+        b_builtCallerRuntimeId,
+        b_builtCallerTokenizer,
+        undefined,
+      );
+      await b_builtCallerMcp.initialize();
+      const b_activation = await executeProviderActivation(
+        b_builtCallerConfig,
+        b_builtCallerSelection.activation ?? {
+          provider: b_builtCallerConfig.getProvider(),
+          model: b_builtCallerConfig.getModel(),
+        },
+        assembleProviderSwitch(
+          b_builtCallerConfig,
+          b_builtCallerSettings,
+          b_builtCallerManager,
+          b_builtCallerOAuth,
+          () => 'agent',
+          () => b_builtCallerOwner.refreshAuth(),
+          b_builtCallerSettingsOwner,
+        ),
+        b_builtCallerSettings,
+        b_builtCallerManager,
+        (b_method) => b_builtCallerOwner.refreshAuth(b_method),
+        assembleModelSelection(b_builtCallerSettingsOwner),
+      );
+      requireCallerActivation(b_activation);
+      await b_builtCallerOwner.initializeTools();
+      await capturedSessionClient(b_builtCallerOwner).startChat();
+    } catch (b_primary) {
+      await cleanupAfterFailure(b_primary, b_builtCallerClose);
+    }
+    const b_profiles = new ProfileManager(
+      join(b_workingDir, 'durable-profiles'),
+    );
+    let b_oauthManager: OAuthManager | undefined;
+
+    const b_agent = await fromConfig(
+      b_builtCallerConfig,
+      b_builtCallerSettings,
+      { sessionId: 'same-profile-owner-label' },
+      b_builtCallerSettingsOwner,
+      b_builtCallerManager,
+      b_oauthManager,
+      b_builtCallerPolicy.session.messageBus,
+      b_builtCallerMcp,
+      undefined,
+      capturedSessionClient(b_builtCallerOwner),
+      b_builtCallerFiles,
+      undefined,
+      undefined,
+      b_builtCallerFactories,
+    );
+    ownerCloses.push(() =>
+      runCleanupSteps([() => b_agent.dispose(), () => b_builtCallerClose()]),
+    );
+    delete process.env.LLXPRT_FAKE_RESPONSES;
+    b_builtCallerSettingsOwner.writeUserParameter('context-limit', 16384);
+    b_builtCallerSettings.setCurrentProfileName(`${b_label}-prior`);
+    b_agent.setDefaultProfileName(`${b_label}-default`);
+    await b_profiles.saveProfile('selected', b_agent.captureProfile());
+    expect(a_builtCallerConfig).not.toBe(b_builtCallerConfig);
+    expect(a_builtCallerSettings).not.toBe(b_builtCallerSettings);
+    expect(a_builtCallerManager).not.toBe(b_builtCallerManager);
+    expect(await a_profiles.loadProfile('selected')).toMatchObject({
       model: 'a-initial',
       ephemeralSettings: { 'context-limit': 8192 },
     });
-    expect(await b.profiles.loadProfile('selected')).toMatchObject({
+    expect(await b_profiles.loadProfile('selected')).toMatchObject({
       model: 'b-initial',
       ephemeralSettings: { 'context-limit': 16384 },
     });
-    expect(a.agent.getActiveProfileName()).toBe('a-prior');
-    expect(b.agent.getActiveProfileName()).toBe('b-prior');
-  }, 30000);
-
-  it('applies distinct same-name public profiles without moving the other owner model, parameters or defaults', async () => {
-    const a = await makeOwner('a');
-    const b = await makeOwner('b');
-    await createSelection(a, 'a-selected');
-    await createSelection(b, 'b-selected');
-    await Promise.all([
-      a.agent.profiles.apply('selected'),
-      b.agent.profiles.apply('selected'),
-    ]);
-    for (const [owner, model, temperature, contextLimit, defaultProfile] of [
-      [a, 'a-selected', 0.2, 8192, 'a-default'],
-      [b, 'b-selected', 0.8, 16384, 'b-default'],
-    ] satisfies Array<[Owner, string, number, number, string]>) {
-      expect(owner.agent.getModel()).toBe(model);
-      expect(owner.built.settingsOwner.readSelectedModel()).toBe(model);
-
-      expect(owner.built.providerManager.getActiveProviderName()).toBe('fake');
-      expect(owner.agent.captureProfile()).toMatchObject({
-        model,
-        modelParams: { temperature },
-        ephemeralSettings: { 'context-limit': contextLimit },
-      });
-      expect(
-        owner.built.settingsService.getProviderSettings('fake'),
-      ).toMatchObject({
-        model,
-        temperature,
-      });
-      expect(owner.built.settingsService.get('defaultProfile')).toBe(
-        defaultProfile,
-      );
-    }
-    expect(a.built.settingsOwner.readNamedParameter('reasoning.enabled')).toBe(
-      true,
-    );
-    expect(b.built.settingsOwner.readNamedParameter('reasoning.enabled')).toBe(
-      false,
-    );
-    const beforeB = observe(b);
-    await createSelection(a, 'a-next');
-    await a.agent.profiles.apply('selected');
-    expect(a.agent.getModel()).toBe('a-next');
-    expect(getActiveModelName(a.built.settingsOwner)).toBe('a-next');
-    expect(getActiveModelName(b.built.settingsOwner)).toBe('b-selected');
-    expect(
-      getActiveProviderName(a.built.settingsOwner, a.built.providerManager),
-    ).toBe('fake');
-    expect(
-      getActiveProviderName(b.built.settingsOwner, b.built.providerManager),
-    ).toBe('fake');
-    expect(
-      a.built.settingsOwner.readNamedParameter('reasoning.enabled'),
-    ).toBeUndefined();
-    expect(observe(b)).toStrictEqual(beforeB);
-  }, 30000);
-
-  it('rejects a missing public profile before mutation and preserves both owners', async () => {
-    const a = await makeOwner('a');
-    const b = await makeOwner('b');
-    await createSelection(a, 'a-selected');
-    await a.agent.profiles.apply('selected');
-    const beforeA = observe(a);
-    const beforeB = observe(b);
-    await expect(a.agent.profiles.apply('missing')).rejects.toThrow(
-      "Profile 'missing' not found",
-    );
-    expect(observe(a)).toStrictEqual(beforeA);
-    expect(observe(b)).toStrictEqual(beforeB);
-  }, 30000);
-
-  it('rolls back after the owning external token store fails while another same-label owner commits', async () => {
-    const reached = deferred<void>();
-    const release = deferred<OAuthToken | null>();
-    const failure = new Error('owner A credential storage unavailable');
-    const a = await makeOwner(
-      'a',
-      tokenReadBoundary(async () => {
-        reached.resolve();
-        return release.promise;
-      }),
-    );
-    const b = await makeOwner('b');
-    await a.agent.profiles.create('selected', {
-      name: 'selected',
-      provider: 'fake',
-      model: 'a-selected',
-      authKeyFile: a.keyfile,
-      baseUrl: 'https://a-original.invalid/v1',
-      modelParams: { temperature: 0.2 },
-    });
-    await a.agent.profiles.apply('selected');
-    const beforeA = observe(a);
-    const providerA = a.built.providerManager.getActiveProvider();
-    const replacementKey = join(directory, 'replacement-credential.txt');
-    await writeFile(replacementKey, 'fake-replacement-credential', {
-      mode: 0o600,
-    });
-    await a.profiles.saveProfile('failing', {
-      version: 1,
-      provider: 'fake-target',
-      model: 'a-mutated',
-      modelParams: { temperature: 0.6 },
-      ephemeralSettings: {
-        'auth-keyfile': replacementKey,
-        'base-url': 'https://mutated.invalid/v1',
-      },
-      auth: { type: 'oauth', buckets: ['external-boundary'] },
-    });
-    const models: string[] = [];
-    const onModel = (model: string): void => {
-      models.push(model);
-    };
-    coreEvents.on(CoreEvent.ModelChanged, onModel);
-    const publications: ModelProfileInfoPayload[] = [];
-    const onPublication = (event: ModelProfileInfoPayload): void => {
-      publications.push(event);
-    };
-    coreEvents.on(CoreEvent.ModelProfileChanged, onPublication);
-    const pendingA = a.agent.profiles.load('failing');
-    const rejectedA = pendingA.then(
-      () => undefined,
-      (error: unknown) => error,
-    );
-    try {
-      await reached.promise;
-      expect(a.built.settingsOwner.readSelectedModel()).toBe('a-mutated');
-      expect(a.built.providerManager.getActiveProviderName()).toBe(
-        'fake-target',
-      );
-      await expect(a.agent.setModel('must-not-rebase')).rejects.toMatchObject({
-        code: 'busy',
-      });
-      expect(
-        a.built.settingsService.getProviderSettings('fake-target'),
-      ).toMatchObject({
-        'auth-key': 'fake-replacement-credential',
-        'base-url': 'https://mutated.invalid/v1',
-      });
-      await b.profiles.saveProfile('succeeding', {
-        version: 1,
-        provider: 'fake',
-        model: 'b-selected',
-        modelParams: { temperature: 0.7 },
-        ephemeralSettings: {
-          'auth-keyfile': b.keyfile,
-          'base-url': 'https://b.invalid/v1',
-        },
-      });
-      await b.agent.profiles.load('succeeding');
-      const otherTurn = [];
-      for await (const event of b.agent.stream(
-        'owner B continues independently',
-      ))
-        otherTurn.push(event);
-      expect(otherTurn.some((event) => event.type === 'error')).toBe(false);
-      expect(otherTurn.some((event) => event.type === 'done')).toBe(true);
-      const committedB = observe(b);
-      release.reject(failure);
-      expect(await rejectedA).toBe(failure);
-      expect(observe(a)).toStrictEqual(beforeA);
-      expect(a.built.providerManager.getActiveProvider()).toBe(providerA);
-      expect(observe(b)).toStrictEqual(committedB);
-      expect(b.agent.getModel()).toBe('b-selected');
-      expect(models).toStrictEqual(['b-selected']);
-      expect(publications.map((event) => event.model)).toStrictEqual([
-        'b-selected',
-      ]);
-      await createSelection(a, 'a-next');
-      await a.agent.profiles.apply('selected');
-      expect(
-        a.built.settingsOwner.readNamedParameter('reasoning.enabled'),
-      ).toBeUndefined();
-    } finally {
-      coreEvents.off(CoreEvent.ModelProfileChanged, onPublication);
-      coreEvents.off(CoreEvent.ModelChanged, onModel);
-      release.reject(failure);
-      await rejectedA;
-    }
-  }, 30000);
-
-  it('serializes the same owner and captures queued input without rebasing it after rollback', async () => {
-    const reached = deferred<void>();
-    const release = deferred<OAuthToken | null>();
-    const failure = new Error('credential read failed');
-    const a = await makeOwner(
-      'a',
-      tokenReadBoundary(async () => {
-        reached.resolve();
-        return release.promise;
-      }),
-    );
-    const first = a.agent.profiles
-      .applySnapshot({
-        version: 1,
-        provider: 'fake',
-        model: 'a-pending',
-        modelParams: {},
-        ephemeralSettings: { 'auth-keyfile': a.keyfile },
-        auth: { type: 'oauth', buckets: ['external-boundary'] },
-      })
-      .then(
-        () => undefined,
-        (error: unknown) => error,
-      );
-    try {
-      await reached.promise;
-      const input: Profile = {
-        version: 1,
-        provider: 'fake',
-        model: 'a-queued',
-        modelParams: { temperature: 0.9 },
-        ephemeralSettings: {},
-      };
-      const queued = a.agent.profiles.applySnapshot(input, {
-        profileName: 'queued',
-      });
-      input.model = 'caller-mutated';
-      input.modelParams.temperature = 0.1;
-      expect(a.built.settingsOwner.readSelectedModel()).toBe('a-pending');
-      release.reject(failure);
-      expect(await first).toBe(failure);
-      await queued;
-      expect(a.agent.captureProfile()).toMatchObject({
-        model: 'a-queued',
-        modelParams: { temperature: 0.9 },
-      });
-      expect(a.agent.getActiveProfileName()).toBe('queued');
-    } finally {
-      release.reject(failure);
-      await first;
-    }
-  }, 30000);
-
-  it('loads and saves durable owner profiles outside ALS', async () => {
-    const a = await makeOwner('a');
-    const b = await makeOwner('b');
-    await a.profiles.saveProfile('durable', {
-      version: 1,
-      provider: 'fake',
-      model: 'a-selected',
-      modelParams: { temperature: 0.4 },
-      ephemeralSettings: {
-        'auth-keyfile': a.keyfile,
-        'base-url': 'https://a.invalid/v1',
-      },
-    });
-    const beforeB = observe(b);
-    await a.agent.profiles.load('durable');
-    expect(a.agent.getModel()).toBe('a-selected');
-    expect(a.agent.getActiveProfileName()).toBe('durable');
-    expect(a.agent.getProviderStatus()).toMatchObject({
-      keyFile: a.keyfile,
-      baseUrl: 'https://a.invalid/v1',
-      authStatus: 'authenticated',
-    });
-    await a.agent.saveProfileSnapshot('roundtrip');
-    expect(await a.profiles.loadProfile('roundtrip')).toMatchObject({
-      model: 'a-selected',
-      modelParams: { temperature: 0.4 },
-      ephemeralSettings: { 'auth-keyfile': a.keyfile },
-    });
-    await createSelection(a, 'a-other');
-    await a.agent.profiles.apply('selected');
-    await a.agent.profiles.load('roundtrip');
-    expect(a.agent.getModel()).toBe('a-selected');
-    expect(observe(b)).toStrictEqual(beforeB);
-  }, 30000);
-
-  it('keeps same-label profile switches and credential files with their owning Agent', async () => {
-    const a = await makeOwner('a');
-    const b = await makeOwner('b');
-    await Promise.all([
-      a.agent.profiles.create('credential-switch', {
-        name: 'credential-switch',
-        provider: 'fake',
-        model: 'a-file-model',
-        authKeyFile: a.keyfile,
-        baseUrl: 'https://a.invalid/v1',
-      }),
-      b.agent.profiles.create('credential-switch', {
-        name: 'credential-switch',
-        provider: 'fake',
-        model: 'b-file-model',
-        authKeyFile: b.keyfile,
-        baseUrl: 'https://b.invalid/v1',
-      }),
-    ]);
-    await Promise.all([
-      a.agent.profiles.apply('credential-switch'),
-      b.agent.profiles.apply('credential-switch'),
-    ]);
-    for (const [owner, other, model, endpoint] of [
-      [a, b, 'a-file-model', 'https://a.invalid/v1'],
-      [b, a, 'b-file-model', 'https://b.invalid/v1'],
-    ] satisfies Array<[Owner, Owner, string, string]>) {
-      expect(owner.agent.getModel()).toBe(model);
-      expect(owner.agent.getProviderStatus()).toMatchObject({
-        keyFile: owner.keyfile,
-        baseUrl: endpoint,
-        authStatus: 'authenticated',
-      });
-      expect(owner.agent.getProviderStatus().keyFile).not.toBe(other.keyfile);
-      const credential = await readFile(owner.keyfile, 'utf8');
-      expect(credential).toBe(`fake-${model[0]}-credential`);
-      expect(
-        owner.built.settingsService.getProviderSettings('fake')['auth-key'],
-      ).toBe(credential);
-      expect(owner.agent.captureProfile()).toMatchObject({
-        model,
-        ephemeralSettings: { 'auth-keyfile': owner.keyfile },
-      });
-    }
-  }, 30000);
-
-  it('applies the public keyfile and endpoint with the selected model instead of leaving partial profile state', async () => {
-    const a = await makeOwner('a');
-    const b = await makeOwner('b');
-    const beforeB = observe(b);
-    await a.agent.profiles.create('credential-selection', {
-      name: 'credential-selection',
-      provider: 'fake',
-      model: 'a-credential-model',
-      authKeyFile: a.keyfile,
-      baseUrl: 'https://a.invalid/v1',
-      modelParams: { temperature: 0.3 },
-    });
-    await a.agent.profiles.apply('credential-selection');
-    expect(observe(b)).toStrictEqual(beforeB);
-    expect(a.agent.getModel()).toBe('a-credential-model');
-    expect(a.built.settingsOwner.readSelectedModel()).toBe(
-      'a-credential-model',
-    );
-    expect(a.agent.captureProfile()).toMatchObject({
-      modelParams: { temperature: 0.3 },
-    });
-    expect(a.agent.getProviderStatus()).toMatchObject({
-      keyFile: a.keyfile,
-      baseUrl: 'https://a.invalid/v1',
-      authStatus: 'authenticated',
-    });
+    expect(a_agent.getActiveProfileName()).toBe('a-prior');
+    expect(b_agent.getActiveProfileName()).toBe('b-prior');
   }, 30000);
 });
+
+function requireCallerActivation(
+  result: Awaited<ReturnType<typeof executeProviderActivation>>,
+): void {
+  if (result.authFailed) throw result.authError;
+}

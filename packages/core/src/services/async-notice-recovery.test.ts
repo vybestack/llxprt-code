@@ -24,29 +24,75 @@ const shellScenarios = shellOutcomes.flatMap((state) =>
   })),
 );
 
+/**
+ * Bounds the wait for a real shell job to reach a terminal event. The timer
+ * is ref'd, so it also keeps the event loop alive while the job's child
+ * process (which the manager unrefs) is the only other pending work.
+ */
+const SHELL_TERMINAL_WAIT_MS = process.platform === 'win32' ? 15_000 : 5_000;
+
+function awaitShellOutcome(
+  terminal: Promise<ShellOutcome>,
+): Promise<ShellOutcome | 'timeout'> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => resolve('timeout'), SHELL_TERMINAL_WAIT_MS);
+    terminal.then(
+      (outcome) => {
+        clearTimeout(timer);
+        resolve(outcome);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+/**
+ * Launches a real shell job that ends in `expected` and returns once the
+ * manager reports a terminal event. Every terminal outcome is observed, so a
+ * job that ends differently fails here with its actual state and output
+ * instead of leaving the test waiting for an event that will not come.
+ */
 async function finishShell(
   shell: ShellJobManager,
-  state: ShellOutcome,
+  expected: ShellOutcome,
 ): Promise<ShellJob> {
-  const terminal = deferred();
-  const events = {
-    completed: shell.onJobCompleted.bind(shell),
-    failed: shell.onJobFailed.bind(shell),
-    cancelled: shell.onJobCancelled.bind(shell),
-  };
+  const terminal = deferred<ShellOutcome>();
+  const unsubscribe = [
+    shell.onJobCompleted(() => terminal.resolve('completed')),
+    shell.onJobFailed(() => terminal.resolve('failed')),
+    shell.onJobCancelled(() => terminal.resolve('cancelled')),
+  ];
+  // Each command is valid for both POSIX sh and PowerShell, the shell the
+  // manager launches on Windows.
   const commands = {
-    completed: 'printf shell-output',
+    completed: 'echo shell-output',
     failed: 'exit 7',
     cancelled: 'sleep 30',
   };
-  const off = events[state](terminal.resolve);
   try {
-    const job = shell.launch({ command: commands[state], cwd: process.cwd() });
-    if (state === 'cancelled') await shell.cancel(job.id);
-    await terminal.promise;
+    const job = shell.launch({
+      command: commands[expected],
+      cwd: process.cwd(),
+    });
+    if (expected === 'cancelled') await shell.cancel(job.id);
+    const actual = await awaitShellOutcome(terminal.promise);
+    if (actual !== expected) {
+      const reached =
+        actual === 'timeout'
+          ? `no terminal event within ${SHELL_TERMINAL_WAIT_MS}ms`
+          : `a ${actual} event`;
+      throw new Error(
+        `Expected shell job ${job.id} to end ${expected} but saw ${reached}. ` +
+          `Job: ${JSON.stringify(shell.get(job.id))}. ` +
+          `Output: ${JSON.stringify(shell.tailOutput(job.id).output)}`,
+      );
+    }
     return job;
   } finally {
-    off();
+    for (const off of unsubscribe) off();
   }
 }
 
@@ -71,9 +117,12 @@ async function settle(): Promise<void> {
   await nextTurn();
 }
 
-function deferred(): { promise: Promise<void>; resolve: () => void } {
-  let resolve!: () => void;
-  const promise = new Promise<void>((done) => {
+function deferred<T = void>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+} {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
     resolve = done;
   });
   return { promise, resolve };

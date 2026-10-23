@@ -1,3 +1,4 @@
+import { scopeInputs } from './__tests__/subagent-test-helpers.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -13,6 +14,10 @@ import { createChatPolicyFixture } from './__tests__/session-policy-fixture.js';
 import type { CompletedToolCall } from './coreToolScheduler.js';
 import type { ToolResultDisplay } from '@vybestack/llxprt-code-tools';
 import { HookType } from '@vybestack/llxprt-code-core/hooks/types.js';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { physicalHookCommand } from '../api/__tests__/helpers/physicalHookCommand.js';
 
 /**
  * SubAgentScope buildPartsFromCompletedCalls dedup, hook delegation to parent config.
@@ -95,17 +100,7 @@ void vi.mock('./nonInteractiveToolExecutor.js', () => ({
   ...realNonInteractiveToolExecutorModule,
   executeToolCall: toolExecutorMock,
 }));
-const actual4 = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
-void vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
-  ...actual4,
-  IdeClient: {
-    getInstance: vi.fn().mockResolvedValue({
-      getConnectionStatus: vi.fn(),
-      initialize: vi.fn(),
-      shutdown: vi.fn(),
-    }),
-  },
-}));
+
 const actual5 = {
   ...(await import('@vybestack/llxprt-code-core/core/prompts.js')),
 };
@@ -115,7 +110,11 @@ void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
 }));
 
 import {
-  createMockConfig,
+  installSubagentCleanup,
+  seedSubagentSettings,
+  createSubagentConfig,
+  acquireSubagentSettings,
+  acquireSubagentWorkspace,
   createMockStream,
   defaultModelConfig,
   defaultRunConfig,
@@ -124,6 +123,8 @@ import {
 } from './__tests__/subagent-test-helpers.js';
 
 describe('subagent.ts', () => {
+  const retainSubagentCleanup = installSubagentCleanup();
+
   let mockSendMessageStream: Mock<(...args: unknown[]) => unknown>;
 
   beforeEach(() => {
@@ -166,7 +167,20 @@ describe('subagent.ts', () => {
 
   describe('buildPartsFromCompletedCalls output deduplication', () => {
     it('should not call onMessage for tools with canUpdateOutput=true (fixes #898)', async () => {
-      const { config, mcpRuntime } = await createMockConfig();
+      const configSettings = seedSubagentSettings();
+      const config = createSubagentConfig(
+        configSettings,
+        retainSubagentCleanup,
+      );
+      await acquireSubagentSettings(
+        config,
+        configSettings,
+        retainSubagentCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(
+        config,
+        retainSubagentCleanup,
+      );
       const runtimeBundle = createStatelessRuntimeBundle();
       const historyAddSpy = vi.spyOn(runtimeBundle.history, 'add');
       const { overrides } = createRuntimeOverrides(
@@ -185,7 +199,7 @@ describe('subagent.ts', () => {
         defaultRunConfig,
         undefined,
         undefined,
-        overrides,
+        ...scopeInputs(overrides),
       );
 
       // Track onMessage calls
@@ -235,7 +249,20 @@ describe('subagent.ts', () => {
     });
 
     it('should call onMessage for tools with canUpdateOutput=false', async () => {
-      const { config, mcpRuntime } = await createMockConfig();
+      const configSettings = seedSubagentSettings();
+      const config = createSubagentConfig(
+        configSettings,
+        retainSubagentCleanup,
+      );
+      await acquireSubagentSettings(
+        config,
+        configSettings,
+        retainSubagentCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(
+        config,
+        retainSubagentCleanup,
+      );
       const { overrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
       );
@@ -251,7 +278,7 @@ describe('subagent.ts', () => {
         defaultRunConfig,
         undefined,
         undefined,
-        overrides,
+        ...scopeInputs(overrides),
       );
 
       // Track onMessage calls
@@ -300,7 +327,20 @@ describe('subagent.ts', () => {
     });
 
     it('should call onMessage for error calls even if tool had canUpdateOutput=true', async () => {
-      const { config, mcpRuntime } = await createMockConfig();
+      const configSettings = seedSubagentSettings();
+      const config = createSubagentConfig(
+        configSettings,
+        retainSubagentCleanup,
+      );
+      await acquireSubagentSettings(
+        config,
+        configSettings,
+        retainSubagentCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(
+        config,
+        retainSubagentCleanup,
+      );
       const { overrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
       );
@@ -316,7 +356,7 @@ describe('subagent.ts', () => {
         defaultRunConfig,
         undefined,
         undefined,
-        overrides,
+        ...scopeInputs(overrides),
       );
 
       // Track onMessage calls
@@ -383,7 +423,20 @@ describe('subagent.ts', () => {
 
     const observeProduceFunctionResponseOnlyPartsForErrorToolCallsAnthropicBoundary =
       async () => {
-        const { config, mcpRuntime } = await createMockConfig();
+        const configSettings = seedSubagentSettings();
+        const config = createSubagentConfig(
+          configSettings,
+          retainSubagentCleanup,
+        );
+        await acquireSubagentSettings(
+          config,
+          configSettings,
+          retainSubagentCleanup,
+        );
+        const mcpRuntime = await acquireSubagentWorkspace(
+          config,
+          retainSubagentCleanup,
+        );
         const { overrides } = createRuntimeOverrides(
           mcpRuntime.workspaceFilesystem.paths,
         );
@@ -399,7 +452,7 @@ describe('subagent.ts', () => {
           defaultRunConfig,
           undefined,
           undefined,
-          overrides,
+          ...scopeInputs(overrides),
         );
 
         // Simulate error completed calls with tool_call in responseParts
@@ -474,7 +527,20 @@ describe('subagent.ts', () => {
 
     const observeProduceValidPairedPartsForMixedSuccessErrorCallsAnthropicBoundary =
       async () => {
-        const { config, mcpRuntime } = await createMockConfig();
+        const configSettings = seedSubagentSettings();
+        const config = createSubagentConfig(
+          configSettings,
+          retainSubagentCleanup,
+        );
+        await acquireSubagentSettings(
+          config,
+          configSettings,
+          retainSubagentCleanup,
+        );
+        const mcpRuntime = await acquireSubagentWorkspace(
+          config,
+          retainSubagentCleanup,
+        );
         const { overrides } = createRuntimeOverrides(
           mcpRuntime.workspaceFilesystem.paths,
         );
@@ -490,7 +556,7 @@ describe('subagent.ts', () => {
           defaultRunConfig,
           undefined,
           undefined,
-          overrides,
+          ...scopeInputs(overrides),
         );
 
         const completedCalls = makePartsCalls([
@@ -564,7 +630,20 @@ describe('subagent.ts', () => {
       };
 
     it('should handle calls where tool is undefined gracefully', async () => {
-      const { config, mcpRuntime } = await createMockConfig();
+      const configSettings = seedSubagentSettings();
+      const config = createSubagentConfig(
+        configSettings,
+        retainSubagentCleanup,
+      );
+      await acquireSubagentSettings(
+        config,
+        configSettings,
+        retainSubagentCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(
+        config,
+        retainSubagentCleanup,
+      );
       const { overrides } = createRuntimeOverrides(
         mcpRuntime.workspaceFilesystem.paths,
       );
@@ -580,7 +659,7 @@ describe('subagent.ts', () => {
         defaultRunConfig,
         undefined,
         undefined,
-        overrides,
+        ...scopeInputs(overrides),
       );
 
       // Track onMessage calls
@@ -625,6 +704,24 @@ describe('subagent.ts', () => {
   });
 
   describe('Hook delegation to parent config', () => {
+    const hookDirectories: string[] = [];
+
+    afterEach(async () => {
+      for (const directory of hookDirectories.splice(0))
+        await rm(directory, { recursive: true, force: true });
+    });
+
+    async function denyingHookCommand(): Promise<string> {
+      const directory = await mkdtemp(join(tmpdir(), 'child-hook-denied-'));
+      hookDirectories.push(directory);
+      const script = join(directory, 'deny.ts');
+      await writeFile(
+        script,
+        "process.stderr.write('child-hook-denied\\n');\nprocess.exit(2);\n",
+      );
+      return physicalHookCommand(script);
+    }
+
     it('should trigger BeforeTool hook when subagent executes a tool', async () => {
       const effects: string[] = [];
       const tool = new MockTool({
@@ -637,16 +734,32 @@ describe('subagent.ts', () => {
           };
         },
       });
-      const { config, toolRegistry, mcpRuntime } = await createMockConfig({
-        getTool: (name) => (name === tool.name ? tool : undefined),
-        getEnabledTools: () => [tool],
-        getAllTools: () => [tool],
-      });
+      const configSettings = seedSubagentSettings();
+      const config = createSubagentConfig(
+        configSettings,
+        retainSubagentCleanup,
+      );
+      await acquireSubagentSettings(
+        config,
+        configSettings,
+        retainSubagentCleanup,
+      );
+      const mcpRuntime = await acquireSubagentWorkspace(
+        config,
+        retainSubagentCleanup,
+        {
+          getTool: (name) => (name === tool.name ? tool : undefined),
+          getEnabledTools: () => [tool],
+          getAllTools: () => [tool],
+        },
+      );
+      const toolRegistry = mcpRuntime.toolSelection;
       mcpRuntime.policyOwner.session.confirmation.addRule({
         toolName: '*',
         decision: PolicyDecision.ALLOW,
         priority: 100,
       });
+      const denyCommand = await denyingHookCommand();
       vi.spyOn(config, 'getEnableHooks').mockReturnValue(true);
       vi.spyOn(config, 'getHooks').mockReturnValue({
         BeforeTool: [
@@ -655,7 +768,7 @@ describe('subagent.ts', () => {
             hooks: [
               {
                 type: HookType.Command,
-                command: 'echo child-hook-denied >&2; exit 2',
+                command: denyCommand,
                 timeout: 5000,
               },
             ],
@@ -701,7 +814,7 @@ describe('subagent.ts', () => {
         defaultRunConfig,
         { tools: ['read_file'] },
         undefined,
-        {
+        ...scopeInputs({
           ...createRuntimeOverrides(mcpRuntime.workspaceFilesystem.paths, {
             runtimeBundle,
             toolRegistry,
@@ -711,7 +824,7 @@ describe('subagent.ts', () => {
             sessionId: () => 'hook-child',
             transcriptPath: () => undefined,
           }),
-        },
+        }),
       );
       try {
         await scope.runNonInteractive(new ContextState());

@@ -24,27 +24,23 @@ import {
 
 describe('isProviderConfigured (pure guard)', () => {
   it('returns true when manager has an active provider', () => {
-    expect(isProviderConfigured({ hasActiveProvider: () => true })).toBe(true);
+    expect(isProviderConfigured(() => true)).toBe(true);
   });
 
   it('returns false when manager has no active provider (regardless of config string)', () => {
-    expect(isProviderConfigured({ hasActiveProvider: () => false })).toBe(
-      false,
-    );
+    expect(isProviderConfigured(() => false)).toBe(false);
   });
 
   it('returns false when provider is empty string and no active provider', () => {
-    expect(isProviderConfigured({ hasActiveProvider: () => false })).toBe(
-      false,
-    );
+    expect(isProviderConfigured(() => false)).toBe(false);
   });
 
   it('returns true when manager has active provider even if config string is empty', () => {
-    expect(isProviderConfigured({ hasActiveProvider: () => true })).toBe(true);
+    expect(isProviderConfigured(() => true)).toBe(true);
   });
 
   it('returns true when manager has active provider even if config string differs', () => {
-    expect(isProviderConfigured({ hasActiveProvider: () => true })).toBe(true);
+    expect(isProviderConfigured(() => true)).toBe(true);
   });
 
   it('returns false when manager is undefined', () => {
@@ -56,16 +52,14 @@ describe('isProviderConfigured (pure guard)', () => {
     expect(isProviderConfigured(undefined)).toBe(false);
 
     // A non-empty config provider string with an inactive manager is NOT configured.
-    expect(isProviderConfigured({ hasActiveProvider: () => false })).toBe(
-      false,
-    );
+    expect(isProviderConfigured(() => false)).toBe(false);
   });
 
   it('has no side effects — does not call process.exit or throw', () => {
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
       throw new Error('should not be called');
     });
-    const result = isProviderConfigured({ hasActiveProvider: () => false });
+    const result = isProviderConfigured(() => false);
     expect(result).toBe(false);
     expect(exitSpy).not.toHaveBeenCalled();
     exitSpy.mockRestore();
@@ -237,9 +231,11 @@ describe('guardUnconfiguredProvider: void return and exit behavior', () => {
       throw new Error(`process.exit(${code}) called`);
     });
 
-    const result = guardUnconfiguredProvider(config, () => Promise.resolve(), {
-      hasActiveProvider: () => false,
-    });
+    const result = guardUnconfiguredProvider(
+      config,
+      () => Promise.resolve(),
+      () => false,
+    );
     expect(result).toBeInstanceOf(Promise);
     // Await settlement so the real guard's runCleanup + finally complete
     // before the afterEach restores the real process.exit.
@@ -253,7 +249,7 @@ describe('guardUnconfiguredProvider: void return and exit behavior', () => {
     const result = await guardUnconfiguredProvider(
       config,
       () => Promise.resolve(),
-      { hasActiveProvider: () => true },
+      () => true,
     );
     expect(result).toBeUndefined();
   });
@@ -264,7 +260,7 @@ describe('guardUnconfiguredProvider: void return and exit behavior', () => {
     const result = await guardUnconfiguredProvider(
       config,
       () => Promise.resolve(),
-      { hasActiveProvider: () => true },
+      () => true,
     );
     expect(result).toBeUndefined();
   });
@@ -280,9 +276,11 @@ describe('guardUnconfiguredProvider: void return and exit behavior', () => {
     });
 
     await expect(
-      guardUnconfiguredProvider(config, () => Promise.resolve(), {
-        hasActiveProvider: () => false,
-      }),
+      guardUnconfiguredProvider(
+        config,
+        () => Promise.resolve(),
+        () => false,
+      ),
     ).rejects.toThrow('process.exit(52) called');
     expect(exitSpy).toHaveBeenCalledWith(52);
   });
@@ -301,7 +299,7 @@ describe('guardUnconfiguredProvider: void return and exit behavior', () => {
       guardUnconfiguredProvider(
         config,
         () => Promise.reject(new Error('cleanup failed')),
-        { hasActiveProvider: () => false },
+        () => false,
       ),
     ).rejects.toThrow('process.exit(52) called');
     expect(exitSpy).toHaveBeenCalledWith(52);
@@ -319,9 +317,7 @@ describe('guardUnconfiguredProvider: void return and exit behavior', () => {
     });
 
     await expect(
-      guardUnconfiguredProvider(config, cleanupFn, {
-        hasActiveProvider: () => false,
-      }),
+      guardUnconfiguredProvider(config, cleanupFn, () => false),
     ).rejects.toThrow('process.exit(52) called');
     expect(cleanupFn).toHaveBeenCalledTimes(1);
   });
@@ -349,7 +345,7 @@ describe('guardUnconfiguredProvider: void return and exit behavior', () => {
         guardUnconfiguredProvider(
           config,
           () => Promise.reject(new Error('cleanup failed')),
-          { hasActiveProvider: () => false },
+          () => false,
         ),
       exitSpy,
       debugErrorSpy,

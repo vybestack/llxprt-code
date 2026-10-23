@@ -1,10 +1,18 @@
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { overrideInputs } from '../../../../providers/src/runtime/__tests__/provider-switch-inputs.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import {
+  createOwnedOAuthManager,
+  createOwnedTokenStoreClose,
+} from '@vybestack/llxprt-code-providers/composition.js';
+import { useOwnedCredentials } from '../../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import { runCleanupSteps } from '../../../../agents/src/core/subagent-cleanup.js';
+import { ProviderManager } from '@vybestack/llxprt-code-providers';
+
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 /**
  * @plan:PLAN-20260603-ISSUE1584.P12
@@ -191,419 +199,437 @@ describe('--key-name bootstrap parsing @plan:PLAN-20260211-SECURESTORE.P17', () 
   });
 });
 
-let runtimeRoot: import('@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js').IsolatedRuntimeContextHandle;
-let runtimeManager: import('@vybestack/llxprt-code-core').RuntimeProviderManager;
-
 // ─── Precedence & Resolution Tests (R21-R27) ────────────────────────────────
 
-describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURESTORE.P17', () => {
-  let mockKeyring: KeyringAdapter & { store: Map<string, string> };
-  let tempDir: string;
-  let runtimeMod: typeof import('@vybestack/llxprt-code-providers/runtime.js');
-  let contextFactoryMod: typeof import('@vybestack/llxprt-code-providers/runtime.js');
-  let cleanupHandle: (() => Promise<void> | void) | null = null;
-
-  beforeEach(async () => {
-    mockKeyring = createMockKeyring();
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'auth-key-name-test-'));
-    mockStorageRef = createTestStorage(mockKeyring, tempDir);
-
-    runtimeMod = await import('@vybestack/llxprt-code-providers/runtime.js');
-    contextFactoryMod = await import(
-      '@vybestack/llxprt-code-providers/runtime.js'
-    );
-  });
-
-  afterEach(async () => {
-    if (cleanupHandle) {
-      await Promise.resolve(cleanupHandle()).catch(() => {});
-      cleanupHandle = null;
-    }
-    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
-  });
-
-  async function setupRuntime(): Promise<
-    Awaited<ReturnType<typeof contextFactoryMod.createIsolatedRuntimeContext>>
-  > {
-    const handle = (() => {
-      const capturedConfig1 = new Config({
-        sessionId: 'auth-key-owner',
-        targetDir: tempDir,
-        cwd: tempDir,
-        model: 'test-model',
-        debugMode: false,
-      });
-      return contextFactoryMod.createIsolatedRuntimeContext(
-        {
-          runtimeId: 'auth-key-test',
-          config: capturedConfig1,
-          prepare: async ({ providerManager }) => {
-            const stub = createStubProvider();
-            providerManager.registerProvider(stub);
-            await providerManager.setActiveProvider('test-provider');
-          },
-        },
-        new SettingsService(),
-      );
-    })();
-    await handle.activate();
-    runtimeRoot = handle;
-    runtimeManager = handle.providerManager;
-    cleanupHandle = handle.cleanup;
-
-    return handle;
-  }
-
-  // ─── Precedence Tests (R23.1, R23.2, R27.3) ────────────────────────────
-
-  /** @requirement R23.2 */
-  it('--key beats --key-name: raw CLI key takes highest precedence', async () => {
-    await mockStorageRef!.saveKey('mykey', 'stored-key-value');
-    await setupRuntime();
-
-    await runtimeMod.applyCliArgumentOverrides(
-      {},
-      { keyOverride: 'raw-cli-key', keyNameOverride: 'mykey' },
-      ...(await overrideInputs(runtimeRoot)),
-      runtimeManager.getActiveProvider(),
-    );
-
-    const cfg = runtimeRoot.settingsOwner;
-    expect(cfg.readNamedParameter('auth-key')).toBe('raw-cli-key');
-  });
-
-  /** @requirement R23.1 */
-  it('--key-name beats auth-key-name: CLI flag beats profile field', async () => {
-    await mockStorageRef!.saveKey('cli-named', 'cli-named-value');
-    await mockStorageRef!.saveKey('profile-named', 'profile-named-value');
-    const { settingsOwner: config } = await setupRuntime();
-    config.writeUserParameter('auth-key-name', 'profile-named');
-
-    await runtimeMod.applyCliArgumentOverrides(
-      {},
-      { keyNameOverride: 'cli-named' },
-      ...(await overrideInputs(runtimeRoot)),
-      runtimeManager.getActiveProvider(),
-    );
-
-    const cfg = runtimeRoot.settingsOwner;
-    // auth-key-name stores the name reference; auth-key is cleared
-    expect(cfg.readNamedParameter('auth-key-name')).toBe('cli-named');
-    expect(cfg.readNamedParameter('auth-key')).toBeUndefined();
-  });
-
-  /** @requirement R23.1 */
-  it('auth-key-name beats auth-key: named key beats inline profile key', async () => {
-    await mockStorageRef!.saveKey('my-named', 'named-key-value');
-    const { settingsOwner: config } = await setupRuntime();
-    config.writeUserParameter('auth-key-name', 'my-named');
-    config.writeUserParameter('auth-key', 'inline-key-value');
-
-    await runtimeMod.applyCliArgumentOverrides(
-      {},
-      {},
-      ...(await overrideInputs(runtimeRoot)),
-      runtimeManager.getActiveProvider(),
-    );
-
-    const cfg = runtimeRoot.settingsOwner;
-    // auth-key-name kept; auth-key cleared to prevent raw key in snapshots
-    expect(cfg.readNamedParameter('auth-key-name')).toBe('my-named');
-    expect(cfg.readNamedParameter('auth-key')).toBeUndefined();
-  });
-
-  /** @requirement R23.1, R27.3 */
-  it('--key beats all: raw key overrides key-name + auth-key-name', async () => {
-    await mockStorageRef!.saveKey('named', 'named-value');
-    const { settingsOwner: config } = await setupRuntime();
-    config.writeUserParameter('auth-key-name', 'named');
-
-    await runtimeMod.applyCliArgumentOverrides(
-      {},
-      { keyOverride: 'raw-wins', keyNameOverride: 'named' },
-      ...(await overrideInputs(runtimeRoot)),
-      runtimeManager.getActiveProvider(),
-    );
-
-    const cfg = runtimeRoot.settingsOwner;
-    expect(cfg.readNamedParameter('auth-key')).toBe('raw-wins');
-  });
-
-  /** @requirement R23.1, R27.3 */
-  it('--key-name beats keyfile: named key from CLI beats file-based auth', async () => {
-    await mockStorageRef!.saveKey('cli-key', 'cli-key-value');
-    await setupRuntime();
-    const keyfilePath = path.join(tempDir, 'should-not-read.key');
-    await fs.writeFile(keyfilePath, 'keyfile-content');
-
-    await runtimeMod.applyCliArgumentOverrides(
-      {},
-      { keyNameOverride: 'cli-key', keyfileOverride: keyfilePath },
-      ...(await overrideInputs(runtimeRoot)),
-      runtimeManager.getActiveProvider(),
-    );
-
-    const cfg = runtimeRoot.settingsOwner;
-    // auth-key-name stores the name reference; auth-key is cleared
-    expect(cfg.readNamedParameter('auth-key-name')).toBe('cli-key');
-    expect(cfg.readNamedParameter('auth-key')).toBeUndefined();
-  });
-
-  // ─── Named Key Resolution (R21.1, R22.1) ──────────────────────────────
-
-  /** @requirement R22.1 */
-  it('--key-name resolves stored key via ProviderKeyStorage', async () => {
-    await mockStorageRef!.saveKey('myanthropic', 'sk-ant-abc123');
-    await setupRuntime();
-
-    await runtimeMod.applyCliArgumentOverrides(
-      {},
-      { keyNameOverride: 'myanthropic' },
-      ...(await overrideInputs(runtimeRoot)),
-      runtimeManager.getActiveProvider(),
-    );
-
-    const cfg = runtimeRoot.settingsOwner;
-    // auth-key-name stores the name reference; auth-key is cleared
-    expect(cfg.readNamedParameter('auth-key-name')).toBe('myanthropic');
-    expect(cfg.readNamedParameter('auth-key')).toBeUndefined();
-  });
-
-  /** @requirement R21.1 */
-  it('auth-key-name profile field resolves stored key', async () => {
-    await mockStorageRef!.saveKey('work-gemini', 'AIzaSy-work-key');
-    const { settingsOwner: config } = await setupRuntime();
-    config.writeUserParameter('auth-key-name', 'work-gemini');
-
-    await runtimeMod.applyCliArgumentOverrides(
-      {},
-      {},
-      ...(await overrideInputs(runtimeRoot)),
-      runtimeManager.getActiveProvider(),
-    );
-
-    const cfg = runtimeRoot.settingsOwner;
-    // auth-key-name preserved; auth-key cleared to prevent raw key in snapshots
-    expect(cfg.readNamedParameter('auth-key-name')).toBe('work-gemini');
-    expect(cfg.readNamedParameter('auth-key')).toBeUndefined();
-  });
-
-  // ─── Error Handling (R24.1, R24.2) ─────────────────────────────────────
-
-  /** @requirement R24.1 */
-  it('throws actionable error when --key-name references non-existent key', async () => {
-    await setupRuntime();
-
-    await expect(
-      runtimeMod.applyCliArgumentOverrides(
-        {},
-        { keyNameOverride: 'notexist' },
-        ...(await overrideInputs(runtimeRoot)),
-        runtimeManager.getActiveProvider(),
-      ),
-    ).rejects.toThrow("Named key 'notexist' not found");
-  });
-
-  /** @requirement R24.1 */
-  it('error message includes /key save hint', async () => {
-    await setupRuntime();
-
-    await expect(
-      runtimeMod.applyCliArgumentOverrides(
-        {},
-        { keyNameOverride: 'missing' },
-        ...(await overrideInputs(runtimeRoot)),
-        runtimeManager.getActiveProvider(),
-      ),
-    ).rejects.toThrow('/key save missing');
-  });
-
-  /** @requirement R24.1 */
-  it('does NOT fall through when named key is not found', async () => {
-    await setupRuntime();
-
-    await expect(
-      runtimeMod.applyCliArgumentOverrides(
-        {},
-        { keyNameOverride: 'missing', keyfileOverride: '/tmp/fallback.key' },
-        ...(await overrideInputs(runtimeRoot)),
-        runtimeManager.getActiveProvider(),
-      ),
-    ).rejects.toThrow("Named key 'missing' not found");
-  });
-
-  /** @requirement R24.1 */
-  it('throws when auth-key-name references non-existent key', async () => {
-    const { settingsOwner: config } = await setupRuntime();
-    config.writeUserParameter('auth-key-name', 'ghost');
-
-    await expect(
-      runtimeMod.applyCliArgumentOverrides(
-        {},
-        {},
-        ...(await overrideInputs(runtimeRoot)),
-        runtimeManager.getActiveProvider(),
-      ),
-    ).rejects.toThrow("Named key 'ghost' not found");
-  });
-
-  /** @requirement R24.1 */
-  it('auth-key-name error does NOT fall through to lower-precedence sources', async () => {
-    const { settingsOwner: config } = await setupRuntime();
-    config.writeUserParameter('auth-key-name', 'ghost');
-    config.writeUserParameter('auth-key', 'inline-fallback');
-
-    await expect(
-      runtimeMod.applyCliArgumentOverrides(
-        {},
-        {},
-        ...(await overrideInputs(runtimeRoot)),
-        runtimeManager.getActiveProvider(),
-      ),
-    ).rejects.toThrow("Named key 'ghost' not found");
-  });
-
-  // ─── No Deprecation (R26.1) ───────────────────────────────────────────
-
-  /** @requirement R26.1 */
-  it('--key raw value still works', async () => {
-    await setupRuntime();
-
-    await runtimeMod.applyCliArgumentOverrides(
-      { key: 'direct-raw-key' },
-      {},
-      ...(await overrideInputs(runtimeRoot)),
-      runtimeManager.getActiveProvider(),
-    );
-
-    const cfg = runtimeRoot.settingsOwner;
-    expect(cfg.readNamedParameter('auth-key')).toBe('direct-raw-key');
-  });
-
-  /** @requirement R26.1 */
-  it('--key via bootstrapArgs still works', async () => {
-    await setupRuntime();
-
-    await runtimeMod.applyCliArgumentOverrides(
-      {},
-      { keyOverride: 'bootstrap-key' },
-      ...(await overrideInputs(runtimeRoot)),
-      runtimeManager.getActiveProvider(),
-    );
-
-    const cfg = runtimeRoot.settingsOwner;
-    expect(cfg.readNamedParameter('auth-key')).toBe('bootstrap-key');
-  });
-
-  /** @requirement R26.1 */
-  it('--keyfile still reads and trims file content', async () => {
-    await setupRuntime();
-    const keyfilePath = path.join(tempDir, 'legacy.key');
-    await fs.writeFile(keyfilePath, '  keyfile-value  \n');
-
-    await runtimeMod.applyCliArgumentOverrides(
-      {},
-      { keyfileOverride: keyfilePath },
-      ...(await overrideInputs(runtimeRoot)),
-      runtimeManager.getActiveProvider(),
-    );
-
-    const cfg = runtimeRoot.settingsOwner;
-    expect(cfg.readNamedParameter('auth-keyfile')).toBe(keyfilePath);
-  });
-
-  // ─── Ephemeral Setting (R21.2) ────────────────────────────────────────
-
-  /** @requirement R21.2 */
-  it('auth-key-name is stored and retrieved as ephemeral setting', async () => {
-    const { settingsOwner: config } = await setupRuntime();
-    config.writeUserParameter('auth-key-name', 'mykey');
-    expect(config.readNamedParameter('auth-key-name')).toBe('mykey');
-  });
-
-  describe('Issue #208 auth-key-name clear behavior', () => {
+describe('explicit named-key credential owner', () => {
+  const credentials = useOwnedCredentials();
+  let runtimeConfig: Config;
+  let runtimeManager: ProviderManager;
+  let runtimeSettings: SettingsService;
+  let runtimeSettingsOwner: SessionSettingsOwner;
+  describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURESTORE.P17', () => {
     let mockKeyring: KeyringAdapter & { store: Map<string, string> };
     let tempDir: string;
-    let runtimeMod: typeof import('@vybestack/llxprt-code-providers/runtime.js');
-    let contextFactoryMod: typeof import('@vybestack/llxprt-code-providers/runtime.js');
-    let cleanupHandle: (() => Promise<void> | void) | null = null;
+    let runtimeMod: typeof import('../../../../agents/src/api/settingsResolver.js');
+    const release: Array<() => void | Promise<void>> = [];
+    const keyOperations = {
+      getProviderKeys: () => runtimeConfig.getProviderKeys(),
+      setEphemeralSetting: (key: string, value: unknown): void =>
+        runtimeSettingsOwner.writeUserParameter(key, value),
+    };
 
     beforeEach(async () => {
       mockKeyring = createMockKeyring();
-      tempDir = await fs.mkdtemp(
-        path.join(os.tmpdir(), 'auth-key-name-clear-'),
-      );
+      tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'auth-key-name-test-'));
       mockStorageRef = createTestStorage(mockKeyring, tempDir);
 
-      runtimeMod = await import('@vybestack/llxprt-code-providers/runtime.js');
-      contextFactoryMod = await import(
-        '@vybestack/llxprt-code-providers/runtime.js'
+      runtimeMod = await import(
+        '../../../../agents/src/api/settingsResolver.js'
       );
     });
 
     afterEach(async () => {
-      if (cleanupHandle) {
-        await Promise.resolve(cleanupHandle()).catch(() => {});
-        cleanupHandle = null;
-      }
-      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+      await runCleanupSteps([
+        ...release.splice(0).reverse(),
+        () => fs.rm(tempDir, { recursive: true, force: true }),
+      ]);
     });
 
-    async function setupRuntime(): Promise<
-      Awaited<ReturnType<typeof contextFactoryMod.createIsolatedRuntimeContext>>
-    > {
-      const handle = (() => {
-        const capturedConfig2 = new Config({
-          sessionId: 'auth-key-owner',
-          targetDir: tempDir,
-          cwd: tempDir,
-          model: 'test-model',
-          debugMode: false,
-        });
-        return contextFactoryMod.createIsolatedRuntimeContext(
-          {
-            runtimeId: 'auth-key-clear-test',
-            config: capturedConfig2,
-            prepare: async ({ providerManager }) => {
-              providerManager.registerProvider(createStubProvider());
-              await providerManager.setActiveProvider('test-provider');
-            },
-          },
-          new SettingsService(),
-        );
-      })();
-      await handle.activate();
-      runtimeRoot = handle;
-      runtimeManager = handle.providerManager;
-      cleanupHandle = handle.cleanup;
-
-      return handle;
+    async function setupRuntime(
+      runtimeId = 'auth-key-test',
+      directory = tempDir,
+    ): Promise<void> {
+      runtimeConfig = new Config({
+        sessionId: 'auth-key-owner',
+        targetDir: directory,
+        cwd: directory,
+        model: 'test-model',
+        debugMode: false,
+      });
+      release.push(() => runtimeConfig.dispose());
+      runtimeSettings = new SettingsService();
+      runtimeSettingsOwner = new SessionSettingsOwner(runtimeSettings);
+      release.push(() => runtimeSettingsOwner.dispose());
+      runtimeSettingsOwner.bindTelemetry(runtimeConfig);
+      runtimeManager = new ProviderManager(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        runtimeSettings,
+        runtimeConfig,
+        {
+          runtimeId,
+          metadata: { source: 'cli-isolated-runtime-factory' },
+        },
+        undefined,
+        runtimeSettingsOwner,
+      );
+      release.push(() => runtimeManager.dispose());
+      if (mockStorageRef === null)
+        throw new Error('Missing fixture key storage');
+      runtimeManager.bindProviderKeyStorage(mockStorageRef);
+      runtimeConfig.bindProviderKeyStorage(mockStorageRef);
+      const tokens = credentials().authority.createTokenStore();
+      const closeTokens = createOwnedTokenStoreClose(tokens);
+      let transferred = false;
+      release.push(() => (transferred ? undefined : closeTokens()));
+      const oauth = createOwnedOAuthManager(
+        tokens,
+        undefined,
+        undefined,
+        runtimeConfig,
+        runtimeManager,
+        runtimeSettings,
+      );
+      release.push(() => oauth.dispose());
+      transferred = true;
+      runtimeManager.setRetryOperationsFactory((name, profileId) =>
+        oauth.composeRetryOperations(
+          name,
+          profileId ? { profileId } : undefined,
+        ),
+      );
+      await runtimeSettingsOwner.startTelemetry(runtimeConfig);
+      runtimeManager.registerProvider(createStubProvider());
+      runtimeManager.setActiveProvider('test-provider');
     }
 
-    it('clears auth-key-name and keyfile state when API key is cleared', async () => {
-      const { settingsOwner: config, settingsService } = await setupRuntime();
+    // ─── Precedence Tests (R23.1, R23.2, R27.3) ────────────────────────────
 
-      config.writeUserParameter('auth-key-name', 'saved-name');
-      config.writeUserParameter('auth-keyfile', '/tmp/test-provider.key');
+    /** @requirement R23.2 */
+    it('--key beats --key-name: raw CLI key takes highest precedence', async () => {
+      await mockStorageRef!.saveKey('mykey', 'stored-key-value');
+      await setupRuntime();
 
-      const providerSettings =
-        settingsService.getProviderSettings('test-provider');
-      providerSettings['auth-keyfile'] = '/tmp/test-provider.key';
-
-      await runtimeMod.updateActiveProviderApiKey(
-        null,
-        ...(await overrideInputs(runtimeRoot)),
+      await runtimeMod.applyCliArgumentOverrides(
+        {},
+        { keyOverride: 'raw-cli-key', keyNameOverride: 'mykey' },
+        keyOperations,
+        runtimeSettings,
         runtimeManager.getActiveProvider(),
       );
 
-      expect(config.readNamedParameter('auth-key-name')).toBeUndefined();
-      expect(config.readNamedParameter('auth-keyfile')).toBeUndefined();
-      expect(
-        settingsService.getProviderSettings('test-provider')['auth-keyfile'],
-      ).toBeUndefined();
-      expect(
-        settingsService.getProviderSettings('test-provider')['auth-keyfile'],
-      ).toBeUndefined();
+      const cfg = runtimeSettingsOwner;
+      expect(cfg.readNamedParameter('auth-key')).toBe('raw-cli-key');
+    });
+
+    /** @requirement R23.1 */
+    it('--key-name beats auth-key-name: CLI flag beats profile field', async () => {
+      await mockStorageRef!.saveKey('cli-named', 'cli-named-value');
+      await mockStorageRef!.saveKey('profile-named', 'profile-named-value');
+      await setupRuntime();
+      const config = runtimeSettingsOwner;
+      config.writeUserParameter('auth-key-name', 'profile-named');
+
+      await runtimeMod.applyCliArgumentOverrides(
+        {},
+        { keyNameOverride: 'cli-named' },
+        keyOperations,
+        runtimeSettings,
+        runtimeManager.getActiveProvider(),
+      );
+
+      const cfg = runtimeSettingsOwner;
+      // auth-key-name stores the name reference; auth-key is cleared
+      expect(cfg.readNamedParameter('auth-key-name')).toBe('cli-named');
+      expect(cfg.readNamedParameter('auth-key')).toBeUndefined();
+    });
+
+    /** @requirement R23.1 */
+    it('auth-key-name beats auth-key: named key beats inline profile key', async () => {
+      await mockStorageRef!.saveKey('my-named', 'named-key-value');
+      await setupRuntime();
+      const config = runtimeSettingsOwner;
+      config.writeUserParameter('auth-key-name', 'my-named');
+      config.writeUserParameter('auth-key', 'inline-key-value');
+
+      await runtimeMod.applyCliArgumentOverrides(
+        {},
+        {},
+        keyOperations,
+        runtimeSettings,
+        runtimeManager.getActiveProvider(),
+      );
+
+      const cfg = runtimeSettingsOwner;
+      // auth-key-name kept; auth-key cleared to prevent raw key in snapshots
+      expect(cfg.readNamedParameter('auth-key-name')).toBe('my-named');
+      expect(cfg.readNamedParameter('auth-key')).toBeUndefined();
+    });
+
+    /** @requirement R23.1, R27.3 */
+    it('--key beats all: raw key overrides key-name + auth-key-name', async () => {
+      await mockStorageRef!.saveKey('named', 'named-value');
+      await setupRuntime();
+      const config = runtimeSettingsOwner;
+      config.writeUserParameter('auth-key-name', 'named');
+
+      await runtimeMod.applyCliArgumentOverrides(
+        {},
+        { keyOverride: 'raw-wins', keyNameOverride: 'named' },
+        keyOperations,
+        runtimeSettings,
+        runtimeManager.getActiveProvider(),
+      );
+
+      const cfg = runtimeSettingsOwner;
+      expect(cfg.readNamedParameter('auth-key')).toBe('raw-wins');
+    });
+
+    /** @requirement R23.1, R27.3 */
+    it('--key-name beats keyfile: named key from CLI beats file-based auth', async () => {
+      await mockStorageRef!.saveKey('cli-key', 'cli-key-value');
+      await setupRuntime();
+      const keyfilePath = path.join(tempDir, 'should-not-read.key');
+      await fs.writeFile(keyfilePath, 'keyfile-content');
+
+      await runtimeMod.applyCliArgumentOverrides(
+        {},
+        { keyNameOverride: 'cli-key', keyfileOverride: keyfilePath },
+        keyOperations,
+        runtimeSettings,
+        runtimeManager.getActiveProvider(),
+      );
+
+      const cfg = runtimeSettingsOwner;
+      // auth-key-name stores the name reference; auth-key is cleared
+      expect(cfg.readNamedParameter('auth-key-name')).toBe('cli-key');
+      expect(cfg.readNamedParameter('auth-key')).toBeUndefined();
+    });
+
+    // ─── Named Key Resolution (R21.1, R22.1) ──────────────────────────────
+
+    /** @requirement R22.1 */
+    it('--key-name resolves stored key via ProviderKeyStorage', async () => {
+      await mockStorageRef!.saveKey('myanthropic', 'sk-ant-abc123');
+      await setupRuntime();
+
+      await runtimeMod.applyCliArgumentOverrides(
+        {},
+        { keyNameOverride: 'myanthropic' },
+        keyOperations,
+        runtimeSettings,
+        runtimeManager.getActiveProvider(),
+      );
+
+      const cfg = runtimeSettingsOwner;
+      // auth-key-name stores the name reference; auth-key is cleared
+      expect(cfg.readNamedParameter('auth-key-name')).toBe('myanthropic');
+      expect(cfg.readNamedParameter('auth-key')).toBeUndefined();
+    });
+
+    /** @requirement R21.1 */
+    it('auth-key-name profile field resolves stored key', async () => {
+      await mockStorageRef!.saveKey('work-gemini', 'AIzaSy-work-key');
+      await setupRuntime();
+      const config = runtimeSettingsOwner;
+      config.writeUserParameter('auth-key-name', 'work-gemini');
+
+      await runtimeMod.applyCliArgumentOverrides(
+        {},
+        {},
+        keyOperations,
+        runtimeSettings,
+        runtimeManager.getActiveProvider(),
+      );
+
+      const cfg = runtimeSettingsOwner;
+      // auth-key-name preserved; auth-key cleared to prevent raw key in snapshots
+      expect(cfg.readNamedParameter('auth-key-name')).toBe('work-gemini');
+      expect(cfg.readNamedParameter('auth-key')).toBeUndefined();
+    });
+
+    // ─── Error Handling (R24.1, R24.2) ─────────────────────────────────────
+
+    /** @requirement R24.1 */
+    it('throws actionable error when --key-name references non-existent key', async () => {
+      await setupRuntime();
+
+      await expect(
+        runtimeMod.applyCliArgumentOverrides(
+          {},
+          { keyNameOverride: 'notexist' },
+          keyOperations,
+          runtimeSettings,
+          runtimeManager.getActiveProvider(),
+        ),
+      ).rejects.toThrow("Named key 'notexist' not found");
+    });
+
+    /** @requirement R24.1 */
+    it('error message includes /key save hint', async () => {
+      await setupRuntime();
+
+      await expect(
+        runtimeMod.applyCliArgumentOverrides(
+          {},
+          { keyNameOverride: 'missing' },
+          keyOperations,
+          runtimeSettings,
+          runtimeManager.getActiveProvider(),
+        ),
+      ).rejects.toThrow('/key save missing');
+    });
+
+    /** @requirement R24.1 */
+    it('does NOT fall through when named key is not found', async () => {
+      await setupRuntime();
+
+      await expect(
+        runtimeMod.applyCliArgumentOverrides(
+          {},
+          { keyNameOverride: 'missing', keyfileOverride: '/tmp/fallback.key' },
+          keyOperations,
+          runtimeSettings,
+          runtimeManager.getActiveProvider(),
+        ),
+      ).rejects.toThrow("Named key 'missing' not found");
+    });
+
+    /** @requirement R24.1 */
+    it('throws when auth-key-name references non-existent key', async () => {
+      await setupRuntime();
+      const config = runtimeSettingsOwner;
+      config.writeUserParameter('auth-key-name', 'ghost');
+
+      await expect(
+        runtimeMod.applyCliArgumentOverrides(
+          {},
+          {},
+          keyOperations,
+          runtimeSettings,
+          runtimeManager.getActiveProvider(),
+        ),
+      ).rejects.toThrow("Named key 'ghost' not found");
+    });
+
+    /** @requirement R24.1 */
+    it('auth-key-name error does NOT fall through to lower-precedence sources', async () => {
+      await setupRuntime();
+      const config = runtimeSettingsOwner;
+      config.writeUserParameter('auth-key-name', 'ghost');
+      config.writeUserParameter('auth-key', 'inline-fallback');
+
+      await expect(
+        runtimeMod.applyCliArgumentOverrides(
+          {},
+          {},
+          keyOperations,
+          runtimeSettings,
+          runtimeManager.getActiveProvider(),
+        ),
+      ).rejects.toThrow("Named key 'ghost' not found");
+    });
+
+    // ─── No Deprecation (R26.1) ───────────────────────────────────────────
+
+    /** @requirement R26.1 */
+    it('--key raw value still works', async () => {
+      await setupRuntime();
+
+      await runtimeMod.applyCliArgumentOverrides(
+        { key: 'direct-raw-key' },
+        {},
+        keyOperations,
+        runtimeSettings,
+        runtimeManager.getActiveProvider(),
+      );
+
+      const cfg = runtimeSettingsOwner;
+      expect(cfg.readNamedParameter('auth-key')).toBe('direct-raw-key');
+    });
+
+    /** @requirement R26.1 */
+    it('--key via bootstrapArgs still works', async () => {
+      await setupRuntime();
+
+      await runtimeMod.applyCliArgumentOverrides(
+        {},
+        { keyOverride: 'bootstrap-key' },
+        keyOperations,
+        runtimeSettings,
+        runtimeManager.getActiveProvider(),
+      );
+
+      const cfg = runtimeSettingsOwner;
+      expect(cfg.readNamedParameter('auth-key')).toBe('bootstrap-key');
+    });
+
+    /** @requirement R26.1 */
+    it('--keyfile still reads and trims file content', async () => {
+      await setupRuntime();
+      const keyfilePath = path.join(tempDir, 'legacy.key');
+      await fs.writeFile(keyfilePath, '  keyfile-value  \n');
+
+      await runtimeMod.applyCliArgumentOverrides(
+        {},
+        { keyfileOverride: keyfilePath },
+        keyOperations,
+        runtimeSettings,
+        runtimeManager.getActiveProvider(),
+      );
+
+      const cfg = runtimeSettingsOwner;
+      expect(cfg.readNamedParameter('auth-keyfile')).toBe(keyfilePath);
+    });
+
+    // ─── Ephemeral Setting (R21.2) ────────────────────────────────────────
+
+    /** @requirement R21.2 */
+    it('auth-key-name is stored and retrieved as ephemeral setting', async () => {
+      await setupRuntime();
+      const config = runtimeSettingsOwner;
+      config.writeUserParameter('auth-key-name', 'mykey');
+      expect(config.readNamedParameter('auth-key-name')).toBe('mykey');
+    });
+
+    describe('Issue #208 auth-key-name clear behavior', () => {
+      let runtimeMod: typeof import('../../../../agents/src/api/providerMutations.js');
+      let clearDirectory: string;
+      beforeEach(async () => {
+        clearDirectory = await fs.mkdtemp(
+          path.join(os.tmpdir(), 'auth-key-name-clear-'),
+        );
+        mockStorageRef = createTestStorage(createMockKeyring(), clearDirectory);
+        runtimeMod = await import(
+          '../../../../agents/src/api/providerMutations.js'
+        );
+      });
+      afterEach(async () => {
+        await runCleanupSteps([
+          ...release.splice(0).reverse(),
+          () => fs.rm(clearDirectory, { recursive: true, force: true }),
+        ]);
+      });
+      it('clears auth-key-name and keyfile state when API key is cleared', async () => {
+        await setupRuntime('auth-key-clear-test', clearDirectory);
+        const config = runtimeSettingsOwner;
+        const settingsService = runtimeSettings;
+
+        config.writeUserParameter('auth-key-name', 'saved-name');
+        config.writeUserParameter('auth-keyfile', '/tmp/test-provider.key');
+
+        const providerSettings =
+          settingsService.getProviderSettings('test-provider');
+        providerSettings['auth-keyfile'] = '/tmp/test-provider.key';
+
+        await runtimeMod.updateActiveProviderApiKey(
+          null,
+          keyOperations,
+          runtimeSettings,
+          runtimeManager.getActiveProvider(),
+        );
+
+        expect(config.readNamedParameter('auth-key-name')).toBeUndefined();
+        expect(config.readNamedParameter('auth-keyfile')).toBeUndefined();
+        expect(
+          settingsService.getProviderSettings('test-provider')['auth-keyfile'],
+        ).toBeUndefined();
+        expect(
+          settingsService.getProviderSettings('test-provider')['auth-keyfile'],
+        ).toBeUndefined();
+      });
     });
   });
 });

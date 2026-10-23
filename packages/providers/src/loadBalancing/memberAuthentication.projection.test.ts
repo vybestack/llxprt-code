@@ -1,5 +1,5 @@
-import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
-const fixtureOwners = installRuntimeTestOwners();
+import { installBorrowedConfigSettings } from '../__tests__/helpers/session-settings-owner-fixture.js';
+const fixtureOwnersBorrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -19,7 +19,8 @@ import type {
   ResolvedSubProfile,
 } from './loadBalancerTypes.js';
 
-import { createProviderKeyStorage } from '../runtime/index.js';
+import { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
+const keyStorage = new CredentialAuthority().createProviderKeyStorage();
 
 const storedKeys = new Map<string, string>();
 
@@ -38,16 +39,20 @@ function createProjectionFixture(
   settings.setProviderSetting('projection-probe', 'auth-key', 'ambient-key');
   const config = createRuntimeConfigStub(settings);
   const runtime = {
-    settingsService: settings,
-    config,
     runtimeId: 'projection-test',
   };
-  const manager = new ProviderManager({
-    sessionSettings: fixtureOwners.adopt(config, settings).settingsOwner,
-    settingsService: settings,
+  const manager = new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    settings,
     config,
     runtime,
-  });
+    undefined,
+    fixtureOwnersBorrowedSettings(config, settings),
+  );
+  manager.bindProviderKeyStorage(keyStorage);
   const projections: GenerateChatOptions[] = [];
   let delegateRequests = 0;
   const delegate: IProvider = {
@@ -152,7 +157,7 @@ describe('load balancer projection credentials', () => {
     if (process.env.LLXPRT_TEST_STORAGE_ISOLATED !== '1') {
       throw new Error('Projection credential tests require isolated storage');
     }
-    const getKey = vi.spyOn(createProviderKeyStorage(), 'getKey');
+    const getKey = vi.spyOn(keyStorage, 'getKey');
     restoreStorage = () => getKey.mockRestore();
     getKey.mockImplementation(async (name) => storedKeys.get(name) ?? null);
   });

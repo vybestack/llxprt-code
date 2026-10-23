@@ -1,7 +1,7 @@
 import { Config as RealConfig } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService as RealSettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { assembleModelSelection } from './providerMutations.js';
+import { assembleModelSelection } from '../../../agents/src/api/model-selection.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -113,11 +113,13 @@ void vi.mock('@vybestack/llxprt-code-core', () => {
   };
 });
 
-const { switchActiveProvider } = await import('./providerSwitch.js');
-const { setEphemeralSetting, clearEphemeralSetting } = await import(
-  './ownerSettingsOperations.js'
+const { switchActiveProvider } = await import(
+  '../../../agents/src/api/provider-switch/provider-switch.js'
 );
-const { setActiveModel } = await import('./providerMutations.js');
+
+const { setActiveModel } = await import(
+  '../../../agents/src/api/providerMutations.js'
+);
 
 const mockOAuthManager = {
   clearRetryHandlers: () => {},
@@ -260,11 +262,7 @@ describe('explicit ownership across provider switches (issue #3255)', () => {
 
     // Explicit session write carrying the same scalar as the source alias
     // default: ownership, not value equality, decides what survives.
-    setEphemeralSetting(
-      'reasoning.effortWireFormat',
-      'anthropic',
-      settingsOwner,
-    );
+    settingsOwner.writeUserParameter('reasoning.effortWireFormat', 'anthropic');
 
     pushOpenRouterReasoningAlias({
       'reasoning.effortWireFormat': 'openrouter',
@@ -292,11 +290,9 @@ describe('explicit ownership across provider switches (issue #3255)', () => {
 
     // Fresh object with equal content: neither identity nor equality can
     // classify it, only explicit ownership can.
-    setEphemeralSetting(
-      'reasoning.effortMap',
-      { high: 'provider-high' },
-      settingsOwner,
-    );
+    settingsOwner.writeUserParameter('reasoning.effortMap', {
+      high: 'provider-high',
+    });
 
     pushOpenRouterReasoningAlias({
       'reasoning.effortMap': { high: 'openrouter-high' },
@@ -341,8 +337,8 @@ describe('explicit ownership across provider switches (issue #3255)', () => {
     });
     await switchActiveProvider('anthropic', {}, ...stubSwitchInputs());
     activeProviderName = 'anthropic';
-    setEphemeralSetting('reasoning.effortWireFormat', 'openai', settingsOwner);
-    clearEphemeralSetting('reasoning.effortWireFormat', settingsOwner);
+    settingsOwner.writeUserParameter('reasoning.effortWireFormat', 'openai');
+    settingsOwner.writeUserParameter('reasoning.effortWireFormat', undefined);
 
     // Clearing releases explicit ownership, so the target default applies
     // instead of the key staying permanently user-owned.
@@ -383,7 +379,7 @@ describe('explicit ownership across provider switches (issue #3255)', () => {
       'anthropic-budget',
     );
 
-    clearEphemeralSetting('reasoning.effortWireFormat', settingsOwner);
+    settingsOwner.writeUserParameter('reasoning.effortWireFormat', undefined);
     expect(settingsOwner.readNamedParameter('reasoning.effortWireFormat')).toBe(
       undefined,
     );
@@ -479,11 +475,9 @@ describe('alias reasoning maps propagate to request preparation (issue #3255)', 
     // the full runtime hand-off to reach request preparation.
     const invocation = createRuntimeInvocationContext({
       runtimeId: createProviderRuntimeContext({
-        settingsService: stubSettingsService as never,
         runtimeId: 'alias-request-test',
       }).runtimeId,
       runtimeMetadata: createProviderRuntimeContext({
-        settingsService: stubSettingsService as never,
         runtimeId: 'alias-request-test',
       }).metadata,
 

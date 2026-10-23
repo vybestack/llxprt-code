@@ -1,3 +1,7 @@
+import {
+  UiTelemetryService,
+  type SessionMetricEventSink,
+} from './uiTelemetry.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -341,6 +345,9 @@ function bindMeasurements(
 }
 
 export class RootTelemetry {
+  readonly metricEvents: SessionMetricEventSink = {
+    addEvent: (event) => this.localMetrics.addEvent(event),
+  };
   private accepting = false;
   private closed = false;
   private lifetime: ProviderLifetime | undefined;
@@ -400,11 +407,13 @@ export class RootTelemetry {
   private constructor(
     private options: RootTelemetryOptions,
     private readonly transports: () => RootTelemetryTransports,
+    readonly localMetrics: UiTelemetryService,
   ) {}
 
   static prepare(
     options: RootTelemetryOptions,
     transports?: () => RootTelemetryTransports,
+    metrics = new UiTelemetryService(),
   ): RootTelemetry {
     const captured = Object.freeze({ ...options });
     const runtime = new RootTelemetry(
@@ -422,6 +431,7 @@ export class RootTelemetry {
                 logger: new FileLogExporter(captured.outfile, captured),
                 meter: new FileMetricExporter(captured.outfile, captured),
               }),
+      metrics,
     );
     return runtime;
   }
@@ -477,6 +487,7 @@ export class RootTelemetry {
     return {
       retire: () => this.setEnabled(false),
       publish: () => {
+        this.localMetrics.reset();
         this.options = options;
         this.lifetime = candidate.lifetime;
         candidate.lifetime = undefined;
@@ -590,6 +601,7 @@ export class RootTelemetry {
   close(): Promise<void> {
     if (this.closing !== undefined) return this.closing;
     this.closed = true;
+    this.localMetrics.close();
     this.accepting = false;
     this.requestedEnabled = false;
     this.closing = (async () => {

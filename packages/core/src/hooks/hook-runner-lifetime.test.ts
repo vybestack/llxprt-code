@@ -20,7 +20,7 @@ import { ConfigSource } from './hookRegistry.js';
 import { HookEventName, HookType, type HookInput } from './types.js';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
-import { escapeShellArg } from '../utils/shell-utils.js';
+import { physicalHookCommand } from './__tests__/physical-hook-command.js';
 
 async function waitForFile(path: string): Promise<void> {
   const deadline = Date.now() + 5000;
@@ -58,7 +58,7 @@ spawn(process.execPath, [${JSON.stringify(child)}], { stdio: 'inherit' });
 await new Promise(resolve => setTimeout(resolve, 2000));
 `,
   );
-  return `exec ${escapeShellArg('node', 'bash')} ${escapeShellArg(parent, 'bash')}`;
+  return physicalHookCommand(parent);
 }
 
 function runner(directory: string): HookRunner {
@@ -91,7 +91,7 @@ describe('physical hook ownership', () => {
   function useProject(): () => string {
     let directory = '';
     beforeEach(async () => {
-      directory = await mkdtemp(join(tmpdir(), 'llxprt-hook-lifetime-'));
+      directory = await mkdtemp(join(tmpdir(), "llxprt hook lifetime's-"));
     });
     afterEach(async () => {
       await rm(directory, { recursive: true, force: true });
@@ -99,136 +99,137 @@ describe('physical hook ownership', () => {
     return () => directory;
   }
 
-  describe.skipIf(process.platform === 'win32')(
-    'hook subprocess lifetime',
-    () => {
-      const project = useProject();
+  describe('hook subprocess lifetime on native Windows and POSIX shells', () => {
+    const project = useProject();
 
-      it('joins cancellation through a TERM-immune descendant and retains the original reason', async () => {
-        const directory = project();
-        const cancellation = new AbortController();
-        const reason = new Error('the turn was cancelled');
-        const pending = runner(directory).executeHook(
-          {
-            type: HookType.Command,
-            source: ConfigSource.Project,
-            command: await heldCommand(directory),
-          },
-          HookEventName.BeforeTool,
-          input(directory),
-          cancellation.signal,
-        );
-        await waitForFile(join(directory, 'descendant.pid'));
-        cancellation.abort(reason);
-        const result = await pending;
-        await sleep(1300);
-        expect({
-          success: result.success,
-          error: result.error,
-          late: existsSync(join(directory, 'late-privileged')),
-        }).toStrictEqual({ success: false, error: reason, late: false });
+    it('joins cancellation through a TERM-immune descendant and retains the original reason', async () => {
+      const directory = project();
+      const cancellation = new AbortController();
+      const reason = new Error('the turn was cancelled');
+      const pending = runner(directory).executeHook(
+        {
+          type: HookType.Command,
+          source: ConfigSource.Project,
+          command: await heldCommand(directory),
+        },
+        HookEventName.BeforeTool,
+        input(directory),
+        cancellation.signal,
+      );
+      await waitForFile(join(directory, 'descendant.pid'));
+      cancellation.abort(reason);
+      const result = await pending;
+      await sleep(1300);
+      expect({
+        success: result.success,
+        error: result.error,
+        late: existsSync(join(directory, 'late-privileged')),
+      }).toStrictEqual({ success: false, error: reason, late: false });
+    });
+
+    it('joins timeout cleanup before a descendant can perform its delayed write', async () => {
+      const directory = project();
+      const result = await runner(directory).executeHook(
+        {
+          type: HookType.Command,
+          source: ConfigSource.Project,
+          command: await heldCommand(directory),
+          timeout: 250,
+        },
+        HookEventName.BeforeTool,
+        input(directory),
+      );
+      await sleep(1300);
+      expect({
+        success: result.success,
+        message: result.error?.message,
+        late: existsSync(join(directory, 'late-privileged')),
+      }).toStrictEqual({
+        success: false,
+        message: 'Hook timed out after 250ms',
+        late: false,
       });
+    });
 
-      it('joins timeout cleanup before a descendant can perform its delayed write', async () => {
-        const directory = project();
-        const result = await runner(directory).executeHook(
-          {
-            type: HookType.Command,
-            source: ConfigSource.Project,
-            command: await heldCommand(directory),
-            timeout: 250,
-          },
-          HookEventName.BeforeTool,
-          input(directory),
-        );
-        await sleep(1300);
-        expect({
-          success: result.success,
-          message: result.error?.message,
-          late: existsSync(join(directory, 'late-privileged')),
-        }).toStrictEqual({
-          success: false,
-          message: 'Hook timed out after 250ms',
-          late: false,
-        });
-      });
-
-      it('delivers JSON stdin and preserves stdout feedback and stderr', async () => {
-        const directory = project();
-        const script = join(directory, 'feedback.mts');
-        await writeFile(
-          script,
-          `import { writeFileSync } from 'node:fs';
+    it('delivers JSON stdin and preserves stdout feedback and stderr', async () => {
+      const directory = project();
+      const script = join(directory, 'feedback.ts');
+      await writeFile(
+        script,
+        `import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 let json = '';
 process.stdin.on('data', chunk => { json += chunk.toString(); });
 process.stdin.on('end', () => {
   const input = JSON.parse(json);
   writeFileSync('input.json', JSON.stringify(input));
   console.error('hook diagnostic');
-  console.log(JSON.stringify({ hookSpecificOutput: { tool_input: { file_path: input.cwd + '/owned.txt' } } }));
+  console.log(JSON.stringify({ hookSpecificOutput: { tool_input: { file_path: join(input.cwd, 'owned.txt') } } }));
 });
 process.stdin.resume();
 `,
-        );
-        const driver = spawn(
-          process.execPath,
-          [
-            fileURLToPath(
-              new URL('./hook-runner-physical-driver.ts', import.meta.url),
+      );
+      const driver = spawn(
+        process.execPath,
+        [
+          fileURLToPath(
+            new URL(
+              './__tests__/hook-runner-physical-driver.ts',
+              import.meta.url,
             ),
-            directory,
-          ],
-          { stdio: ['ignore', 'pipe', 'pipe'] },
-        );
-        let stderr = '';
-        driver.stderr.on('data', (chunk: Buffer) => {
-          stderr += chunk.toString();
-        });
-        driver.stdout.resume();
-        const exit = await new Promise<number | null>((resolve, reject) => {
-          driver.on('error', reject);
-          driver.on('close', resolve);
-        });
-        expect({ exit, stderr }).toStrictEqual({ exit: 0, stderr: '' });
-        const result = z
-          .object({
-            success: z.boolean(),
-            stdout: z.string(),
-            stderr: z.string(),
-            exitCode: z.number(),
-            output: z.object({ hookSpecificOutput: z.record(z.unknown()) }),
-          })
-          .parse(
-            JSON.parse(await readFile(join(directory, 'result.json'), 'utf8')),
-          );
-        expect({
-          success: result.success,
-          stderr: result.stderr.trim(),
-          stdout: result.stdout,
-          code: result.exitCode,
-        }).toStrictEqual({
-          success: true,
-          stderr: 'hook diagnostic',
-          stdout:
-            JSON.stringify({
-              hookSpecificOutput: {
-                tool_input: { file_path: join(directory, 'owned.txt') },
-              },
-            }) + String.fromCharCode(10),
-          code: 0,
-        });
-        expect({
-          input: JSON.parse(
-            await readFile(join(directory, 'input.json'), 'utf8'),
           ),
-          feedback: result.output.hookSpecificOutput,
-          stderr: result.stderr.trim(),
-        }).toStrictEqual({
-          input: input(directory),
-          feedback: { tool_input: { file_path: join(directory, 'owned.txt') } },
-          stderr: 'hook diagnostic',
-        });
+          directory,
+        ],
+        { stdio: ['ignore', 'pipe', 'pipe'] },
+      );
+      let stderr = '';
+      driver.stderr.on('data', (chunk: Buffer) => {
+        stderr += chunk.toString();
       });
-    },
-  );
+      driver.stdout.resume();
+      const exit = await new Promise<number | null>((resolve, reject) => {
+        driver.on('error', reject);
+        driver.on('close', resolve);
+      });
+      expect({ exit, stderr }).toStrictEqual({ exit: 0, stderr: '' });
+      const result = z
+        .object({
+          success: z.boolean(),
+          stdout: z.string(),
+          stderr: z.string(),
+          exitCode: z.number(),
+          output: z.object({ hookSpecificOutput: z.record(z.unknown()) }),
+        })
+        .parse(
+          JSON.parse(await readFile(join(directory, 'result.json'), 'utf8')),
+        );
+      expect({
+        success: result.success,
+        stderr: result.stderr.trim(),
+        stdout: result.stdout,
+        code: result.exitCode,
+      }).toStrictEqual({
+        success: true,
+        stderr: 'hook diagnostic',
+        stdout:
+          JSON.stringify({
+            hookSpecificOutput: {
+              tool_input: { file_path: join(directory, 'owned.txt') },
+            },
+          }) + String.fromCharCode(10),
+        code: 0,
+      });
+      expect({
+        input: JSON.parse(
+          await readFile(join(directory, 'input.json'), 'utf8'),
+        ),
+        feedback: result.output.hookSpecificOutput,
+        stderr: result.stderr.trim(),
+      }).toStrictEqual({
+        input: input(directory),
+        feedback: { tool_input: { file_path: join(directory, 'owned.txt') } },
+        stderr: 'hook diagnostic',
+      });
+    });
+  });
 });

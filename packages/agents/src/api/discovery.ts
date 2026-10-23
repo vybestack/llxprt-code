@@ -9,24 +9,15 @@
  * Agent (i.e. before any CLI runtime or Config exists). They are deliberately
  * callable standalone — with NO Agent and NO registered runtime.
  *
- * Provider enumeration is re-projected from the SAME accessor the instance path
- * uses — `ProviderManager.listProviders()` — but reached via the runtime-free
- * composition seam `createProviderManager` (from
- * `@vybestack/llxprt-code-providers/composition.js`). That seam builds a fully
- * registered ProviderManager from a fresh SettingsService and imports nothing
- * from the CLI. We deliberately do NOT call the global
- * `@vybestack/llxprt-code-providers/runtime.js` `listProviders()` accessor: it
- * requires an owner Config, which does not exist before Agent construction.
+ * Provider enumeration projects the canonical alias data and validates its
+ * provider contributions without acquiring credentials or live providers.
  *
  * Tool enumeration is re-projected from the canonical built-in tool classes'
  * `static readonly Name` properties — the SAME classes `registerStandardTools`
  * (core's tool-registry factory) registers — without constructing a live Config.
  */
 
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { NodeFileSystem } from '@vybestack/llxprt-code-providers/composition.js';
-import { createProviderManager } from '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { listProviderAliasNames } from '@vybestack/llxprt-code-providers/composition.js';
 import { LSTool } from '@vybestack/llxprt-code-tools/tools/ls.js';
 import { ReadFileTool } from '@vybestack/llxprt-code-tools/tools/read-file.js';
 import { GrepTool } from '@vybestack/llxprt-code-tools/tools/grep.js';
@@ -118,25 +109,13 @@ function projectProviderInfos(
 /**
  * Returns the static, built-in provider set as public ProviderInfo[].
  *
- * Callable with no Agent and no registered CLI runtime: it constructs a
- * runtime-free ProviderManager (fresh SettingsService) purely to enumerate the
- * registered built-in provider names, then re-projects them to the public shape.
+ * Callable before Agent construction without acquiring a runtime or credentials.
  *
  * @plan:PLAN-20260617-COREAPI.P25
  * @requirement:REQ-017
  */
 export function listProviders(): readonly ProviderInfo[] {
-  const settingsService = new SettingsService();
-  const context: ProviderRuntimeContext = {
-    settingsService,
-    runtimeId: 'static-discovery',
-    metadata: { stage: 'static-discovery' },
-  };
-  const { manager } = createProviderManager(context, {
-    fileSystem: new NodeFileSystem(),
-  });
-  const names = manager.listProviders();
-  return projectProviderInfos(names);
+  return projectProviderInfos(listProviderAliasNames());
 }
 
 /**

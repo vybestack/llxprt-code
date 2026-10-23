@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { shellExecutionReads } from './__tests__/shell-execution-reads.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { Buffer } from 'node:buffer';
 import * as fs from 'node:fs';
@@ -20,10 +21,12 @@ import { useShellCommandProcessor } from './shellCommandProcessor.js';
 /**
  * ~202 KB of deterministic output: 2000 lines of "shellNNNN " + 90 x's.
  * Real shell execution through the real service, so the test observes the
- * actual commit boundary rather than a rehearsal of it.
+ * actual commit boundary rather than a rehearsal of it. The generator is a
+ * Node expression because `node -p "..."` quotes the same way in every shell
+ * the service selects (bash, PowerShell); awk and printf do not.
  */
 const LARGE_OUTPUT_COMMAND =
-  'awk \'BEGIN{for(i=0;i<2000;i++)printf "shell%04d %s\\n",i,"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}\'';
+  "node -p \"Array.from({ length: 2000 }, (unused, i) => 'shell' + String(i).padStart(4, '0') + ' ' + 'x'.repeat(90)).join('\\n')\"";
 
 interface ShellHarnessProps {
   config: ShellState & SessionIdentity;
@@ -49,8 +52,8 @@ function ShellHarness({
       onExecPromise(command);
     },
     () => {},
-    config,
-    agent,
+    ...shellExecutionReads(config),
+    (entry) => agent.addHistory(entry),
     () => {},
     120,
     40,

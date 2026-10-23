@@ -6,7 +6,6 @@
 
 import {
   CommandKind,
-  type CommandContext,
   type MessageActionReturn,
   type OpenDialogActionReturn,
   type SlashCommand,
@@ -37,7 +36,7 @@ function getTierBand(priority: number): string {
   return 'Tier 0 (Base)';
 }
 
-interface PolicyRuleDisplay {
+export interface PolicyRuleDisplay {
   priority?: number;
   toolName?: string;
   toolNamePrefix?: string;
@@ -46,7 +45,7 @@ interface PolicyRuleDisplay {
   source?: string;
 }
 
-interface PolicyRuleBase {
+export interface PolicyRuleBase {
   priority?: number;
   toolName?: string;
   toolNamePrefix?: string;
@@ -54,7 +53,7 @@ interface PolicyRuleBase {
   source?: string;
 }
 
-function toPolicyRuleDisplay<T extends PolicyRuleBase>(
+export function toPolicyRuleDisplay<T extends PolicyRuleBase>(
   rule: T,
   extractPattern: (r: T) => string | undefined,
 ): PolicyRuleDisplay {
@@ -144,33 +143,23 @@ function formatPolicyOutput(
   };
 }
 
-interface PolicyInfo {
+export interface PolicyInfo {
   rules: PolicyRuleDisplay[];
   defaultDecision: PolicyDecision;
   nonInteractive: boolean;
 }
 
-function getPolicyInfo(context: CommandContext): PolicyInfo | null {
-  const agent = context.services.agent;
-  if (agent) {
-    const rules: PolicyRuleDisplay[] = agent.policy
-      .getRules()
-      .map((r) => toPolicyRuleDisplay(r, (rule) => rule.argsPattern));
-    return {
-      rules,
-      defaultDecision: agent.policy.getDefaultDecision(),
-      nonInteractive: agent.policy.isNonInteractive(),
-    };
-  }
-
-  return null;
+export interface PoliciesCommandOperations {
+  readonly getPolicyInfo: () => PolicyInfo | null;
 }
 
 /**
  * /policies list — renders a read-only tier-grouped table of all active rules.
  */
-function listAction(context: CommandContext): MessageActionReturn {
-  const info = getPolicyInfo(context);
+function listAction(
+  operations: PoliciesCommandOperations,
+): MessageActionReturn {
+  const info = operations.getPolicyInfo();
   if (!info) {
     return {
       type: 'message',
@@ -190,9 +179,9 @@ function listAction(context: CommandContext): MessageActionReturn {
  * /policies menu — opens the interactive policy manager dialog.
  */
 function menuAction(
-  context: CommandContext,
+  operations: PoliciesCommandOperations,
 ): OpenDialogActionReturn | MessageActionReturn {
-  const info = getPolicyInfo(context);
+  const info = operations.getPolicyInfo();
   if (!info) {
     return {
       type: 'message',
@@ -206,39 +195,41 @@ function menuAction(
   };
 }
 
-const listCommand: SlashCommand = {
-  name: 'list',
-  description: 'display all policy rules in a read-only tier-grouped table',
-  kind: CommandKind.BUILT_IN,
-  autoExecute: true,
-  action: (context: CommandContext): MessageActionReturn => listAction(context),
-};
+export function createPoliciesCommand(
+  operations: PoliciesCommandOperations,
+): SlashCommand {
+  const listCommand: SlashCommand = {
+    name: 'list',
+    description: 'display all policy rules in a read-only tier-grouped table',
+    kind: CommandKind.BUILT_IN,
+    autoExecute: true,
+    action: (): MessageActionReturn => listAction(operations),
+  };
 
-const menuCommand: SlashCommand = {
-  name: 'menu',
-  description: 'open the interactive policy manager dialog',
-  kind: CommandKind.BUILT_IN,
-  autoExecute: true,
-  action: (
-    context: CommandContext,
-  ): OpenDialogActionReturn | MessageActionReturn => menuAction(context),
-};
+  const menuCommand: SlashCommand = {
+    name: 'menu',
+    description: 'open the interactive policy manager dialog',
+    kind: CommandKind.BUILT_IN,
+    autoExecute: true,
+    action: (): OpenDialogActionReturn | MessageActionReturn =>
+      menuAction(operations),
+  };
 
-export const policiesCommand: SlashCommand = {
-  name: 'policies',
-  description: 'inspect and manage policy rules (list or interactive menu)',
-  kind: CommandKind.BUILT_IN,
-  autoExecute: true,
-  subCommands: [listCommand, menuCommand],
-  action: (
-    context: CommandContext,
-    args: string,
-  ): MessageActionReturn | OpenDialogActionReturn => {
-    const trimmed = args.trim();
-    if (trimmed === 'menu') {
-      return menuAction(context);
-    }
-    // Default to list for bare /policies or /policies list
-    return listAction(context);
-  },
-};
+  return {
+    name: 'policies',
+    description: 'inspect and manage policy rules (list or interactive menu)',
+    kind: CommandKind.BUILT_IN,
+    autoExecute: true,
+    subCommands: [listCommand, menuCommand],
+    action: (
+      _invocation,
+      args: string,
+    ): MessageActionReturn | OpenDialogActionReturn => {
+      const trimmed = args.trim();
+      if (trimmed === 'menu') {
+        return menuAction(operations);
+      }
+      return listAction(operations);
+    },
+  };
+}

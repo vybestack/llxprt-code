@@ -1,69 +1,203 @@
+import { ProviderReadFixture } from '../../../agents/src/api/__tests__/helpers/provider-read-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
-import { describe, it, expect } from 'bun:test';
+import { beforeEach, afterEach, describe, it, expect } from 'bun:test';
 import {
   MessageBusType,
   type ToolConfirmationRequest,
 } from '@vybestack/llxprt-code-policy/confirmation-bus/types.js';
-import { createProviderConfigFixture } from './__tests__/provider-config-fixture.js';
+import {
+  Config,
+  WorkspaceTrustLifecycle,
+  WorkspaceFilesystemOwner,
+  assembleWorkspaceMemory,
+} from '@vybestack/llxprt-code-core';
+import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createIsolatedRuntimeContext, listProviders } from './index.js';
-import { assembleCliProviderRuntime } from './assembleCliProviderRuntime.js';
-import { ProviderFileLifecycle } from '../providerFilePolicy.js';
+import {
+  installBorrowedConfigSettings,
+  installOwnedConfig,
+} from '../__tests__/helpers/session-settings-owner-fixture.js';
+import { mkdtemp, rm, writeFile, readdir } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { prepareAgentPreflight } from '../../../agents/src/api/profile-preflight.js';
+import {
+  captureAgentAdoption as fromConfig,
+  captureAgentCreation as createAgent,
+  fixtureAgentResources,
+} from '../../../agents/src/api/__tests__/helpers/agent-resource-capture.js';
 
-function createOwner(
-  settingsService: SettingsService,
-  sessionId: string,
-): ReturnType<typeof createProviderConfigFixture> {
-  return createProviderConfigFixture({
+import type { Agent } from '../../../agents/src/api/agent.js';
+import { internalConfig } from '../../../agents/src/api/__tests__/helpers/agentHarness.js';
+
+import {
+  acquirePreferredProviderManager,
+  acquirePreferredOAuth,
+  preparePreferredProviderCompletion,
+} from '../../../agents/src/api/preferred-provider-acquisition.js';
+import { createRuntimeTokenizerFactory } from '../composition/runtimeTokenizerFactory.js';
+import type { ProviderManager } from '../ProviderManager.js';
+import type { OAuthManager } from '../auth/oauth-manager.js';
+import { ProviderFileLifecycle } from '../providerFilePolicy.js';
+import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+const acquireSettings = installBorrowedConfigSettings();
+const acquireConfig = installOwnedConfig();
+function createConfig(sessionId: string): Config {
+  return acquireConfig({
     targetDir: process.cwd(),
     cwd: process.cwd(),
     sessionId,
     debugMode: false,
+    provider: 'openai',
     model: `${sessionId}-model`,
-    settingsService,
+    mcpEnabled: false,
+    telemetry: { enabled: false },
   });
 }
 
-describe('CLI foreground provider ownership', () => {
-  it('binds the same runtime bus, provider manager, OAuth manager, and file lifecycle to the Config', () => {
-    const settings = new SettingsService();
-    const { config: config } = createOwner(settings, 'bundle-owner');
-    const bundle = assembleCliProviderRuntime({
-      settingsService: settings,
+describe('foreground explicit provider identity and preflight ownership', () => {
+  const credentials = useOwnedCredentials();
+  let config: Config;
+  let settings: SettingsService;
+  let owner: SessionSettingsOwner;
+  let policy: RuntimePolicyOwner;
+  let files: ProviderFileLifecycle;
+  let manager: ProviderManager;
+  let oauth: OAuthManager;
+  let release: AcquisitionRelease;
+  const agents: Agent[] = [];
+  beforeEach(async () => {
+    config = createConfig('caller-config');
+    settings = new SettingsService();
+    settings.set('activeProvider', 'openai');
+    owner = acquireSettings(config, settings);
+    policy = new RuntimePolicyOwner(config);
+    files = new ProviderFileLifecycle({
+      maxFiles: 100,
+      maxBytes: 512 * 1024 * 1024,
+    });
+    release = new AcquisitionRelease();
+    release.acquire('policy', () => policy.dispose());
+    manager = acquirePreferredProviderManager(
       config,
-      runtimeId: 'bundle-owner',
-    });
-
-    expect('providerManager' in config).toBe(false);
-    expect(bundle.oauthManager?.runtimeMessageBus).toBe(
-      bundle.runtimeMessageBus,
+      settings,
+      owner,
+      files,
+      'same-label',
+      credentials().authority,
+      release,
     );
-    expect(listProviders(bundle.providerManager)).toContain('openai');
-    expect(() => Reflect.apply(listProviders, undefined, [])).toThrow(
-      'Provider listing requires an explicit owner',
+    oauth = acquirePreferredOAuth(
+      undefined,
+      policy.session.messageBus,
+      config,
+      settings,
+      manager,
+      'same-label',
+      undefined,
+      credentials().authority,
+      release,
+      undefined,
     );
-    expect('providerManager' in config).toBe(false);
-    expect(bundle.runtime.providerFileLifecycle).toBe(
-      bundle.registration.providerFileLifecycle,
+    await preparePreferredProviderCompletion(
+      config,
+      settings,
+      owner,
+      manager,
+      oauth,
+      'same-label',
+      createRuntimeTokenizerFactory(),
+      undefined,
     );
-    bundle.registration.dispose();
   });
-
-  it('preserves supplied OAuth bus and pending caller confirmation during final assembly', async () => {
-    const settings = new SettingsService();
-    const early = assembleCliProviderRuntime({
-      settingsService: settings,
-      config: undefined,
-      runtimeId: 'early-auth-owner',
+  afterEach(async () => {
+    const results = await Promise.allSettled(
+      agents.splice(0).map((agent) => agent.dispose()),
+    );
+    await release.close();
+    const failures = results.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
+    if (failures.length > 0)
+      throw new AggregateError(failures, 'Agent cleanup failed');
+  });
+  async function adopt(): Promise<Agent> {
+    const agent = await fromConfig(
+      config,
+      settings,
+      {
+        activation: {
+          provider: 'openai',
+          model: config.getModel(),
+          authMode: 'none',
+        },
+      },
+      owner,
+      manager,
+      oauth,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      files,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      credentials().authority,
+      policy,
+    );
+    agents.push(agent);
+    return agent;
+  }
+  it('keeps the exact supplied Config on its actual Agent owner and supports stateless provider admission', async () => {
+    const agent = await adopt();
+    expect(fixtureAgentResources(agent).manager).toBe(manager);
+    expect(internalConfig(agent)).toBe(config);
+    expect(() => manager.prepareStatelessProviderInvocation()).not.toThrow();
+  });
+  it('binds the exact bus, supplied provider manager, OAuth and file scope without Config service locators', async () => {
+    const agent = await adopt();
+    expect('providerManager' in config).toBe(false);
+    expect(oauth.runtimeMessageBus).toBe(
+      fixtureAgentResources(agent).messageBus,
+    );
+    expect(manager.listProviders()).toContain('openai');
+    expect(() => Reflect.construct(ProviderReadFixture, [])).toThrow(
+      'Provider reads require an explicit session owner',
+    );
+    expect('providerManager' in config).toBe(false);
+    expect(fixtureAgentResources(agent).manager).toBe(manager);
+    const retained = await agent.retainProviderFile({
+      cacheKey: 'caller-file',
+      fileId: 'caller-file',
+      bytes: 8,
+      identity: {
+        provider: 'openai',
+        baseURL: 'http://127.0.0.1',
+        credentialHash: 'caller',
+      },
+      policy: {
+        mode: 'enabled',
+        scope: 'session',
+        retentionMs: 60000,
+        deletion: 'delete',
+        zeroDataRetention: 'incompatible-while-retained',
+      },
+      deleteRemote: async () => undefined,
     });
-    const oauth = early.oauthManager;
-    if (oauth === undefined) throw new Error('Missing early OAuth owner');
-    const bus = early.runtimeMessageBus;
+    await retained.lease.release();
+    expect(files.snapshot().retainedFiles).toBe(1);
+    expect(agent.captureProviderFiles()).toStrictEqual(files.snapshot());
+  });
+  it('preserves supplied OAuth bus and pending caller confirmation during final Agent adoption', async () => {
+    const bus = policy.session.messageBus;
     let confirmation: ToolConfirmationRequest | undefined;
     const unsubscribe = bus.subscribe<ToolConfirmationRequest>(
       MessageBusType.TOOL_CONFIRMATION_REQUEST,
@@ -72,19 +206,11 @@ describe('CLI foreground provider ownership', () => {
       },
     );
     const pending = bus.requestConfirmation({ name: 'privileged_unknown' }, {});
-    const { config } = createOwner(settings, 'final-auth-owner');
-    const final = assembleCliProviderRuntime({
-      settingsService: settings,
-      config,
-      runtimeId: early.registration.runtimeId,
-      registration: early.registration,
-      oauthManager: oauth,
-    });
     try {
-      expect(final.oauthManager).toBe(oauth);
+      const agent = await adopt();
+      expect(fixtureAgentResources(agent).messageBus).toBe(bus);
       expect(oauth.runtimeMessageBus).toBe(bus);
-      if (confirmation === undefined)
-        throw new Error('Missing caller confirmation');
+      if (!confirmation) throw new Error('Missing caller confirmation');
       bus.publish({
         type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
         correlationId: confirmation.correlationId,
@@ -93,105 +219,136 @@ describe('CLI foreground provider ownership', () => {
       expect(await pending).toBe(true);
     } finally {
       unsubscribe();
-      await final.policyOwner?.dispose();
-      final.registration.dispose();
     }
   });
-
-  it('keeps concurrent equal-label roots independent across interleaved Config adoption and one cleanup', () => {
-    const settingsA = new SettingsService();
-    const settingsB = new SettingsService();
-    const earlyA = assembleCliProviderRuntime({
-      settingsService: settingsA,
-      config: undefined,
-      runtimeId: 'same-cli-label',
-    });
-    const earlyB = assembleCliProviderRuntime({
-      settingsService: settingsB,
-      config: undefined,
-      runtimeId: 'same-cli-label',
-    });
-    const { config: configA } = createOwner(settingsA, 'foreground-a');
-    const { config: configB } = createOwner(settingsB, 'foreground-b');
-    settingsA.set('activeProvider', 'openai');
-    settingsB.set('activeProvider', 'kimi');
-    const runtimeB = assembleCliProviderRuntime({
-      settingsService: settingsB,
-      config: configB,
-      runtimeId: 'same-cli-label',
-      registration: earlyB.registration,
-    });
-    const runtimeA = assembleCliProviderRuntime({
-      settingsService: settingsA,
-      config: configA,
-      runtimeId: 'same-cli-label',
-      registration: earlyA.registration,
-    });
-
-    expect(runtimeA.registration).toBe(earlyA.registration);
-    expect(runtimeB.registration).toBe(earlyB.registration);
-    expect(runtimeA.registration.config).toBe(configA);
-    expect(runtimeB.registration.config).toBe(configB);
-    expect(runtimeA.providerManager.getActiveProvider()?.name).toBe('openai');
-    expect(runtimeB.providerManager.getActiveProvider()?.name).toBe('kimi');
-    expect(runtimeA.registration.providerFileLifecycle).not.toBe(
-      runtimeB.registration.providerFileLifecycle,
-    );
-    runtimeA.registration.dispose();
-    expect(runtimeB.registration.config).toBe(configB);
-    expect(runtimeB.providerManager.getActiveProvider()?.name).toBe('kimi');
-    runtimeB.registration.dispose();
-  });
-
-  it('rejects another Config from borrowing a pre-Config handle', () => {
-    const settings = new SettingsService();
-    const early = assembleCliProviderRuntime({
-      settingsService: settings,
-      config: undefined,
-      runtimeId: 'one-handle',
-    });
-    const { config: owner } = createOwner(settings, 'handle-owner');
-    const { config: sibling } = createOwner(settings, 'handle-sibling');
-    const bound = assembleCliProviderRuntime({
-      settingsService: settings,
-      config: owner,
-      runtimeId: 'one-handle',
-      registration: early.registration,
-    });
-    expect(() =>
-      assembleCliProviderRuntime({
-        settingsService: settings,
-        config: sibling,
-        runtimeId: 'one-handle',
-        registration: early.registration,
-      }),
-    ).toThrow('belongs to another Config');
-    expect(bound.registration.config).toBe(owner);
-    expect('providerManager' in sibling).toBe(false);
-    bound.registration.dispose();
-  });
-
-  it('restores Config and handle ownership on failed post-Config assembly, then retries on the exact Config', async () => {
-    const settings = new SettingsService();
-    const early = assembleCliProviderRuntime({
-      settingsService: settings,
-      config: undefined,
-      runtimeId: 'retry-label',
-    });
-    const { config: config } = createOwner(settings, 'retry-config');
-    const { config: sibling } = createOwner(settings, 'retry-sibling');
-    settings.set('activeProvider', 'provider-does-not-exist');
-    const identity = {
+  it('keeps equal-label roots independent across interleaved activation and one cleanup', async () => {
+    const first = await createAgent({
+      sessionId: 'same-cli-label',
       provider: 'openai',
-      baseURL: 'http://127.0.0.1',
-      credentialHash: 'retained-key',
-    };
-    const retained = await early.registration.providerFileLifecycle.retain({
-      cacheKey: 'prior-file',
+      model: 'foreground-a-model',
+      credentialAuthority: credentials().authority,
+      workingDir: process.cwd(),
+    });
+    const second = await createAgent({
+      sessionId: 'same-cli-label',
+      provider: 'kimi',
+      model: 'foreground-b-model',
+      credentialAuthority: credentials().authority,
+      workingDir: process.cwd(),
+    });
+    agents.push(first, second);
+    expect(fixtureAgentResources(first).manager).not.toBe(
+      fixtureAgentResources(second).manager,
+    );
+    expect(fixtureAgentResources(first).messageBus).not.toBe(
+      fixtureAgentResources(second).messageBus,
+    );
+    expect(internalConfig(first)).not.toBe(internalConfig(second));
+    expect(internalConfig(first).getSessionId()).toBe('same-cli-label');
+    expect(internalConfig(second).getSessionId()).toBe('same-cli-label');
+    expect(first.getProvider()).toBe('openai');
+    expect(second.getProvider()).toBe('kimi');
+    const retained = await first.retainProviderFile({
+      cacheKey: 'first',
+      fileId: 'first',
+      bytes: 1,
+      identity: {
+        provider: 'openai',
+        baseURL: 'http://127.0.0.1',
+        credentialHash: 'first',
+      },
+      policy: {
+        mode: 'enabled',
+        scope: 'session',
+        retentionMs: 60000,
+        deletion: 'delete',
+        zeroDataRetention: 'incompatible-while-retained',
+      },
+      deleteRemote: async () => undefined,
+    });
+    await retained.lease.release();
+    expect([
+      first.captureProviderFiles().retainedFiles,
+      second.captureProviderFiles().retainedFiles,
+    ]).toStrictEqual([1, 0]);
+    await first.dispose();
+    expect(second.getProvider()).toBe('kimi');
+    expect(second.getModel()).toBe('foreground-b-model');
+  });
+  it('rejects another Config from attaching to a previously prepared owner without replacing it', async () => {
+    const operation = await prepareAgentPreflight(
+      { runtimeId: 'one-owner' },
+      credentials().authority,
+      settings,
+    );
+    const sibling = createConfig('sibling');
+    const trust = new WorkspaceTrustLifecycle({ localTrust: true });
+    const filesystem = new WorkspaceFilesystemOwner({
+      targetDir: config.getTargetDir(),
+      isTrusted: () => true,
+    });
+    const memory = assembleWorkspaceMemory(config, filesystem, trust);
+    try {
+      await operation.preparePostConfiguration(
+        config,
+        filesystem,
+        memory,
+        trust,
+        undefined,
+        owner,
+      );
+      await expect(
+        operation.preparePostConfiguration(
+          sibling,
+          filesystem,
+          memory,
+          trust,
+          undefined,
+          owner,
+        ),
+      ).rejects.toThrow('already prepared');
+      expect(operation.captureInput().runtimeId).toBe('one-owner');
+      expect('providerManager' in sibling).toBe(false);
+    } finally {
+      await operation.dispose();
+      await memory.dispose();
+      await filesystem.dispose();
+      await trust.dispose();
+    }
+  });
+  it('closes failed Config attachment and accepts a new independent preflight without crossing file ownership', async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), 'preflight-attachment-recovery-'),
+    );
+    const settings = new SettingsService();
+    const early = await prepareAgentPreflight(
+      { runtimeId: 'retry-label' },
+      credentials().authority,
+      settings,
+    );
+    const configSettings = settings;
+    const config = createConfig('retry-config');
+    const settingsOwner = acquireSettings(config, configSettings);
+    const siblingStore = settings;
+    const sibling = createConfig('retry-sibling');
+    const siblingSettings = acquireSettings(sibling, siblingStore);
+    const trust = new WorkspaceTrustLifecycle({ localTrust: true });
+    const filesystem = new WorkspaceFilesystemOwner({
+      targetDir: directory,
+      isTrusted: () => true,
+    });
+    const memory = assembleWorkspaceMemory(config, filesystem, trust);
+    const file = join(directory, 'retained-file');
+    await writeFile(file, 'retained contents');
+    const retained = await early.retainProviderFile({
+      cacheKey: file,
       fileId: 'retained-file',
       bytes: 17,
-      identity,
-      scopeId: 'retry-label',
+      identity: {
+        provider: 'openai',
+        baseURL: 'http://127.0.0.1',
+        credentialHash: 'retained-key',
+      },
       policy: {
         mode: 'enabled',
         scope: 'session',
@@ -199,104 +356,117 @@ describe('CLI foreground provider ownership', () => {
         deletion: 'delete',
         zeroDataRetention: 'incompatible-while-retained',
       },
-      deleteRemote: async () => {},
+      deleteRemote: () => rm(file),
     });
     await retained.lease.release();
-    const originalHandleOwner = early.registration.config;
-
-    expect(() =>
-      assembleCliProviderRuntime({
-        settingsService: settings,
-        config,
-        runtimeId: 'retry-label',
-        registration: early.registration,
-      }),
-    ).toThrow(
-      "Could not activate explicitly-configured provider 'provider-does-not-exist'",
-    );
-    expect(early.registration.config).toBe(originalHandleOwner);
-    expect(early.registration.providerManager).toBe(early.providerManager);
-    expect('providerManager' in config).toBe(false);
-    expect(early.registration.providerFileLifecycle.snapshot()).toMatchObject({
-      retainedFiles: 1,
-      retainedBytes: 17,
-      activeLeases: 0,
-    });
-    expect(() =>
-      assembleCliProviderRuntime({
-        settingsService: settings,
-        config: sibling,
-        runtimeId: 'retry-label',
-        registration: early.registration,
-      }),
-    ).toThrow('belongs to another Config');
-
-    settings.set('activeProvider', 'openai');
-    const recovered = assembleCliProviderRuntime({
-      settingsService: settings,
-      config,
-      runtimeId: 'retry-label',
-      registration: early.registration,
-    });
-    expect(recovered.registration.config).toBe(config);
-    expect(recovered.runtime.providerFileLifecycle).toBe(
-      early.registration.providerFileLifecycle,
-    );
-    expect(recovered.providerManager.getActiveProvider()?.name).toBe('openai');
-    const lifecycle = recovered.runtime.providerFileLifecycle;
-    if (!(lifecycle instanceof ProviderFileLifecycle))
-      throw new Error('Missing recovered file owner');
-    const acquired = lifecycle.acquire({
-      cacheKey: 'prior-file',
-      identity,
-      scope: 'session',
-      scopeId: 'retry-label',
-    });
-    expect(acquired).toBeDefined();
-    await acquired?.lease.release();
-    await lifecycle.cleanupScope('session', 'retry-label');
-    expect(
-      early.registration.providerFileLifecycle.snapshot().retainedFiles,
-    ).toBe(0);
-    recovered.registration.dispose();
+    const prepare = (owner: typeof early, selectedConfig: typeof config) =>
+      owner.preparePostConfiguration(
+        selectedConfig,
+        filesystem,
+        memory,
+        trust,
+        undefined,
+        settingsOwner,
+      );
+    settings.set('activeProvider', 'provider-does-not-exist');
+    try {
+      expect(early.captureProviderFiles()).toMatchObject({
+        retainedFiles: 1,
+        retainedBytes: 17,
+        activeLeases: 0,
+      });
+      await expect(prepare(early, config)).rejects.toThrow(
+        'provider-does-not-exist',
+      );
+      expect(() => early.captureInput()).toThrow('disposed');
+      expect(() => early.readProviderDefaultModel('openai')).toThrow(
+        'disposed',
+      );
+      expect('providerManager' in config).toBe(false);
+      expect(early.captureProviderFiles()).toMatchObject({
+        retainedFiles: 0,
+        retainedBytes: 0,
+        activeLeases: 0,
+      });
+      expect(await readdir(directory)).not.toContain('retained-file');
+      await expect(prepare(early, sibling)).rejects.toThrow('disposed');
+      expect('providerManager' in sibling).toBe(false);
+      settings.set('activeProvider', 'openai');
+      const recovered = await prepareAgentPreflight(
+        { runtimeId: 'retry-label' },
+        credentials().authority,
+        settings,
+      );
+      const nextFilesystem = new WorkspaceFilesystemOwner({
+        targetDir: directory,
+        isTrusted: () => true,
+      });
+      const nextMemory = assembleWorkspaceMemory(config, nextFilesystem, trust);
+      try {
+        await recovered.preparePostConfiguration(
+          config,
+          nextFilesystem,
+          nextMemory,
+          trust,
+          undefined,
+          settingsOwner,
+        );
+        expect(recovered.captureInput().runtimeId).toBe('retry-label');
+        expect('runtime' in recovered).toBe(false);
+        expect(recovered.captureProviderFiles().retainedFiles).toBe(0);
+        expect(
+          (
+            await recovered.preflight({
+              provider: 'openai',
+              authMode: 'none',
+            })
+          ).activeProvider,
+        ).toBe('openai');
+        expect(early.captureProviderFiles().retainedFiles).toBe(0);
+        await expect(
+          recovered.preparePostConfiguration(
+            sibling,
+            nextFilesystem,
+            nextMemory,
+            trust,
+            undefined,
+            settingsOwner,
+          ),
+        ).rejects.toThrow('already prepared');
+      } finally {
+        await recovered.dispose();
+        await nextMemory.dispose();
+        await nextFilesystem.dispose();
+      }
+    } finally {
+      await early.dispose();
+      await memory.dispose();
+      await filesystem.dispose();
+      await trust.dispose();
+      await settingsOwner.dispose();
+      await siblingSettings.dispose();
+      await config.dispose();
+      await sibling.dispose();
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   it('does not replace an independent isolated Agent with the same label', async () => {
-    const agent = (() => {
-      const {
-        config: capturedConfig16,
-        settingsService,
-        settingsOwner,
-      } = createOwner(new SettingsService(), 'shared-label');
-      return createIsolatedRuntimeContext(
-        {
-          runtimeId: 'shared-label',
-          runtimeKind: 'agent',
-          config: capturedConfig16,
-          settingsOwner,
-        },
-        settingsService,
-      );
-    })();
-    await agent.activate();
-    const settings = new SettingsService();
-    const { config: config } = createOwner(settings, 'foreground-with-agent');
-    try {
-      const assembled = assembleCliProviderRuntime({
-        settingsService: settings,
-        config,
-        runtimeId: 'shared-label',
-      });
-      expect('providerManager' in config).toBe(false);
-      expect(assembled.registration.providerFileLifecycle).not.toBe(
-        agent.providerFileLifecycle,
-      );
-      assembled.registration.dispose();
-      expect('providerManager' in agent.config).toBe(false);
-    } finally {
-      await agent.cleanup();
-      await agent.config.dispose();
-      await config.dispose();
-    }
+    const isolated = await createAgent({
+      sessionId: 'shared-label',
+      provider: 'openai',
+      model: 'isolated-model',
+      credentialAuthority: credentials().authority,
+      workingDir: process.cwd(),
+    });
+    agents.push(isolated);
+    const foreground = await adopt();
+    expect('providerManager' in config).toBe(false);
+    expect(fixtureAgentResources(foreground).manager).not.toBe(
+      fixtureAgentResources(isolated).manager,
+    );
+    await foreground.dispose();
+    expect('providerManager' in internalConfig(isolated)).toBe(false);
+    expect(isolated.getModel()).toBe('isolated-model');
   });
 });

@@ -1,4 +1,6 @@
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
+import { createTestChildOrchestrator } from './child-launch-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -20,21 +22,20 @@ const fixturePaths = installTestWorkspacePaths({
  * max-lines disable is needed.
  */
 
-import { afterEach, vi } from 'bun:test';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { ToolRegistry, type ToolSelection } from '@vybestack/llxprt-code-tools';
-import { CoreMessageBusAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreMessageBusAdapter.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
+import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import type { RunConfig } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { CoreMessageBusAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreMessageBusAdapter.js';
 import {
   SettingsService,
   type Profile,
   type ProfileManager,
 } from '@vybestack/llxprt-code-settings';
-import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
-import type { RunConfig } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import { SubagentOrchestrator } from '../subagentOrchestrator.js';
+import { ToolRegistry, type ToolSelection } from '@vybestack/llxprt-code-tools';
+import { afterEach, vi } from 'bun:test';
 import { type SubAgentScope as SubAgentScopeInstance } from '../subagent.js';
 
 const foregroundConfigs: Config[] = [];
@@ -117,7 +118,8 @@ export function createOrchestratorForTurns(options: {
 
   const foregroundConfig1 = options.foregroundConfig ?? makeForegroundConfig();
   const foregroundSettings1 = createSessionSettingsFixture(foregroundConfig1);
-  const orchestrator = new SubagentOrchestrator({
+  const orchestrator = createTestChildOrchestrator({
+    credentialAuthority: new CredentialAuthority(),
     workspaceTrust: foregroundSettings1.workspaceTrust,
     createChildSettings: () =>
       foregroundSettings1.settingsOwner.createChildStore(),

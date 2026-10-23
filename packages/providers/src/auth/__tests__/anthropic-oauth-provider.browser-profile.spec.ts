@@ -36,7 +36,7 @@ const startLocalOAuthCallbackMock = startLocalOAuthCallback as Mock<
 /**
  * Minimal TokenStore mock for exercising the provider in isolation.
  */
-function createTokenStore(): TokenStore {
+function makeTokenStore(): TokenStore {
   return {
     saveToken: vi.fn<TokenStore['saveToken']>(async () => {}),
     getToken: vi.fn<TokenStore['getToken']>(async () => null),
@@ -143,7 +143,8 @@ describe('AnthropicOAuthProvider browser profile association', () => {
     vi.spyOn(global.console, 'log').mockImplementation(() => {});
     association = () => undefined;
     provider = new AnthropicOAuthProvider(
-      createTokenStore(),
+      globalThis.fetch,
+      makeTokenStore(),
       undefined,
       undefined,
       (name, bucket) => association(name, bucket),

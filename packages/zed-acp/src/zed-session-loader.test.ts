@@ -61,7 +61,7 @@ describe('hasRecordedSessionFile (issue #1604 re-attach probe)', () => {
     };
 
     const exists = await hasRecordedSessionFile(
-      buildConfig(),
+      buildConfig().projectChatsDir,
       sessionId,
       lister,
     );
@@ -78,7 +78,7 @@ describe('hasRecordedSessionFile (issue #1604 re-attach probe)', () => {
     ];
 
     const exists = await hasRecordedSessionFile(
-      buildConfig(),
+      buildConfig().projectChatsDir,
       'sess-1234567890ab',
       lister,
     );
@@ -89,7 +89,7 @@ describe('hasRecordedSessionFile (issue #1604 re-attach probe)', () => {
   it('reports false when the chats dir is empty (fresh project, no recordings yet)', async () => {
     const lister: ChatSessionFileLister = async () => [];
     const exists = await hasRecordedSessionFile(
-      buildConfig(),
+      buildConfig().projectChatsDir,
       'sess-1234567890ab',
       lister,
     );
@@ -112,7 +112,11 @@ describe('hasRecordedSessionFile (issue #1604 re-attach probe)', () => {
 
     // Must resolve false (not reject): a missing directory routes to re-attach.
     await expect(
-      hasRecordedSessionFile(buildConfig(), 'sess-1234567890ab', lister),
+      hasRecordedSessionFile(
+        buildConfig().projectChatsDir,
+        'sess-1234567890ab',
+        lister,
+      ),
     ).resolves.toBe(false);
     // ENOENT is expected → logged at debug only, NOT warn.
     expect(warnSpy).not.toHaveBeenCalled();
@@ -128,7 +132,11 @@ describe('hasRecordedSessionFile (issue #1604 re-attach probe)', () => {
     };
 
     await expect(
-      hasRecordedSessionFile(buildConfig(), 'sess-1234567890ab', lister),
+      hasRecordedSessionFile(
+        buildConfig().projectChatsDir,
+        'sess-1234567890ab',
+        lister,
+      ),
     ).rejects.toThrow('EACCES');
   });
 
@@ -140,7 +148,7 @@ describe('hasRecordedSessionFile (issue #1604 re-attach probe)', () => {
     ];
 
     const exists = await hasRecordedSessionFile(
-      buildConfig(),
+      buildConfig().projectChatsDir,
       sessionId,
       lister,
     );
@@ -166,7 +174,7 @@ describe('readAgentHistoryAsIContent (issue #1604 re-attach replay bridge)', () 
     ];
     const { agent, getHistory } = buildAgent(history);
 
-    const items = await readAgentHistoryAsIContent(agent);
+    const items = await readAgentHistoryAsIContent(() => agent.getHistory());
 
     expect(getHistory).toHaveBeenCalledTimes(1);
     expect(items).toStrictEqual(history);
@@ -175,7 +183,7 @@ describe('readAgentHistoryAsIContent (issue #1604 re-attach replay bridge)', () 
 
   it('returns an empty array for a fresh unprompted session (empty live history → zero replay updates)', async () => {
     const { agent } = buildAgent([]);
-    const items = await readAgentHistoryAsIContent(agent);
+    const items = await readAgentHistoryAsIContent(() => agent.getHistory());
     expect(items).toStrictEqual([]);
   });
 });

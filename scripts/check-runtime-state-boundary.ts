@@ -4,8 +4,9 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
-import { dirname, relative, resolve, sep } from 'node:path';
+import { existsSync, mkdirSync } from 'node:fs';
+import { dirname, resolve, sep } from 'node:path';
+import { portableRelativePath as relative } from './compiler-source-path.js';
 import { parseArgs } from 'node:util';
 import ts from 'typescript';
 import { verifyJavascriptModuleIdentities } from './tests/runtime-javascript-module-identity.js';
@@ -34,11 +35,6 @@ import {
   type RuntimeServiceShapeOptions,
 } from './tests/runtime-service-shape-guard.js';
 import { scanState, workspacePath } from './runtime-state-scan.js';
-import {
-  evaluateRatchet,
-  formatBlockedAudit,
-  parseRatchetBaseline,
-} from './runtime-boundary-ratchet.js';
 import {
   scanAmbientDelegation,
   type AmbientSource,
@@ -375,7 +371,7 @@ function auditProgram(
       ...new Set([
         ...configuration.fileNames.filter(
           (file) =>
-            files.includes(file) ||
+            files.includes(workspacePath(workspace, file)) ||
             file.endsWith('.json') ||
             (!isTestSource(file) && /\.d\.(?:ts|mts|cts)$/.test(file)),
         ),
@@ -406,11 +402,18 @@ function declarationCandidates(
     : defaultConfig;
   if (!existsSync(workspacePath(workspace, config))) return [source];
   const parsed = compilerConfiguration(workspace, config);
-  if (!parsed.fileNames.includes(source)) return [source];
+  const compilerSource = parsed.fileNames.find(
+    (file) => workspacePath(workspace, file) === source,
+  );
+  if (compilerSource === undefined) return [source];
   return [
     source,
     ...ts
-      .getOutputFileNames(parsed, source, !ts.sys.useCaseSensitiveFileNames)
+      .getOutputFileNames(
+        parsed,
+        compilerSource,
+        !ts.sys.useCaseSensitiveFileNames,
+      )
       .filter((file) => /\.d\.(?:ts|mts|cts)$/.test(file)),
   ];
 }
@@ -754,12 +757,38 @@ export function auditRuntimeStateBoundary(
   };
 }
 
+/**
+ * Lists compiler diagnostics by program and identifies incomplete scanners.
+ * Returns an empty string when no compiler diagnostic blocks the audit.
+ */
+export function formatBlockedAudit(
+  result: Pick<AuditResult, 'programs' | 'scanners'>,
+): string {
+  const lines: string[] = [];
+  for (const program of result.programs) {
+    for (const problem of program.compilerDiagnostics) {
+      const location = problem.file
+        ? `${problem.file}:${problem.line ?? 0}:${problem.column ?? 0}`
+        : '(no file)';
+      lines.push(
+        `[${program.compilerConfig}] ${location} ${problem.category} TS${problem.code}: ${problem.message}`,
+      );
+    }
+  }
+  if (lines.length === 0) return '';
+  const { serviceShape, ambientDelegation } = result.scanners;
+  if (serviceShape !== 'complete')
+    lines.push(`scanner serviceShape: ${serviceShape}`);
+  if (ambientDelegation !== 'complete')
+    lines.push(`scanner ambientDelegation: ${ambientDelegation}`);
+  return `runtime-boundary audit blocked by compiler diagnostics:\n${lines.join('\n')}\n`;
+}
+
 if (import.meta.main) {
   const { values } = parseArgs({
     options: {
       workspace: { type: 'string', default: process.cwd() },
       output: { type: 'string' },
-      baseline: { type: 'string' },
     },
     strict: true,
   });
@@ -777,23 +806,9 @@ if (import.meta.main) {
       mkdirSync(dirname(output), { recursive: true });
       await Bun.write(output, json);
     }
-    if (values.baseline) {
-      const baseline = parseRatchetBaseline(
-        readFileSync(
-          workspacePath(resolve(values.workspace), values.baseline),
-          'utf8',
-        ),
-      );
-      const verdict = evaluateRatchet(result, baseline);
-      process.stderr.write(formatBlockedAudit(result));
-      process.stdout.write(
-        `${JSON.stringify({ ...verdict, scanners: result.scanners }, null, 2)}\n`,
-      );
-      process.exitCode = verdict.exitCode;
-    } else {
-      process.stdout.write(json);
-      process.exitCode = result.exitCode;
-    }
+    process.stderr.write(formatBlockedAudit(result));
+    process.stdout.write(json);
+    process.exitCode = result.exitCode;
   } catch (error) {
     process.stderr.write(
       `${JSON.stringify({ fatal: error instanceof Error ? error.message : String(error), exitCode: 2 })}\n`,

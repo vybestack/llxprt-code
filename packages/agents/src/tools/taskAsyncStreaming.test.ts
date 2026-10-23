@@ -15,14 +15,14 @@ import { TaskLaunchOwner } from '../session/task-launch-owner.js';
  * would miss.
  */
 
-import { describe, it, expect, vi } from 'bun:test';
-import { TaskTool, type TaskToolParams } from './task.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
 import { SubagentTerminateMode } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import type { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { describe, expect, it, vi } from 'bun:test';
+import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
+import { TaskTool, type TaskToolParams } from './task.js';
 
 interface AsyncStreamingHarness {
   tool: TaskTool;
@@ -133,10 +133,13 @@ function createAsyncStreamingHarness(
     } as unknown as Config,
     {
       ...createTaskPolicyFixture({}),
-      readMcpInstructions: () => undefined,
+
       messageBus: new MessageBus(),
-      orchestratorFactory: () =>
-        ({ launch }) as unknown as SubagentOrchestrator,
+      launchChild: (request, signal) =>
+        (({ launch }) as unknown as SubagentOrchestrator).launch(
+          request,
+          signal,
+        ),
       taskLaunchOwner: new TaskLaunchOwner(
         mockAsyncTaskManager as unknown as AsyncTaskManager,
       ),

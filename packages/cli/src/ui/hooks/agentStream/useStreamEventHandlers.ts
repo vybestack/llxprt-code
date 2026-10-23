@@ -25,8 +25,7 @@ import {
   type ServerContentEvent,
   type AgentRequestInput,
 } from '@vybestack/llxprt-code-core';
-import { type UserPromptEvent } from '@vybestack/llxprt-code-telemetry';
-import type { StreamEventAgent } from './streamEventAgent.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import { type LoadedSettings } from '../../../config/settings.js';
 import {
   type HistoryItemWithoutId,
@@ -49,26 +48,6 @@ import {
   getErrorFallbackModel,
 } from '../../../utils/apiErrorFormatting.js';
 import {
-  resolveContentPrefixIdentity,
-  createCliModelIdentityRuntime,
-} from '../../utils/modelIdentity.js';
-
-/**
- * Shared content-prefix identity resolver. Reads fresh runtime state at call
- * time (no dependencies on component state/props), so a single stable reference
- * can be reused by both ContentEventDeps and StreamEventDeps without risk of
- * staleness (issue #2263).
- */
-function defaultGetContentPrefixIdentity(
-  agent: StreamEventAgent,
-): string | null {
-  try {
-    return resolveContentPrefixIdentity(createCliModelIdentityRuntime(agent));
-  } catch {
-    return null;
-  }
-}
-import {
   processContentEvent,
   type ContentEventDeps,
 } from './contentEventProcessor.js';
@@ -78,7 +57,7 @@ import {
   type PrepareQueryDeps,
 } from './queryPreparer.js';
 import { getTokenLimitForConfiguredContext } from './contextLimit.js';
-import type { StreamRuntime, UiSubagentManager } from '../../cliUiRuntime.js';
+import type { UiSubagentManager } from '../../cliUiRuntime.js';
 interface StreamEventHandlersResult {
   handleContentEvent: (
     eventValue: ServerContentEvent['value'],
@@ -132,11 +111,20 @@ interface StreamEventHandlersResult {
 }
 
 interface StreamEventHandlerDeps {
-  runtime: StreamRuntime;
-  // @plan:ISSUE-2376 — the Agent surface supplies named-tool lookup
-  // (agent.tools.get) for @file processing; threaded alongside the #2384
-  // StreamRuntime rather than through getToolRegistry.
-  agent: StreamEventAgent;
+  atCommandConfig: PrepareQueryDeps['atCommandConfig'];
+  logUserPrompt: PrepareQueryDeps['logUserPrompt'];
+  getModel: () => string;
+  getProvider: () => string | undefined;
+  readSelectedProvider: () => string | undefined;
+  readCitations: () => unknown;
+  readProfileName: () => string | null;
+  readContextLimit: () => unknown;
+  getMaxSessionTurns: () => number;
+  getProviderContextLimit: Agent['getProviderContextLimit'];
+  getContentPrefixIdentity: () => string | null;
+  getToolHandle: Agent['tools']['get'];
+  findResource: Agent['mcp']['findResource'];
+  readResource: Agent['mcp']['readResource'];
   settings: LoadedSettings;
   addItem: UseHistoryManagerReturn['addItem'];
   removeItems?: RemoveHistoryItems;
@@ -366,7 +354,9 @@ function useUserCancelledHandler(deps: StreamEventHandlerDeps) {
 function useErrorEventHandler(deps: StreamEventHandlerDeps) {
   const {
     addItem,
-    runtime,
+    getProvider,
+    readSelectedProvider,
+    getModel,
     flushPendingHistoryItem,
     pendingHistoryItemRef,
     clearSubmissions,
@@ -388,7 +378,11 @@ function useErrorEventHandler(deps: StreamEventHandlerDeps) {
         pendingResponse.endCommittedSegments();
         setPendingHistoryItem(null);
       }
-      const apiErrorInfo = buildApiErrorInfo(runtime);
+      const apiErrorInfo = buildApiErrorInfo(
+        getProvider,
+        readSelectedProvider,
+        getModel,
+      );
       const providerName = getActiveProviderNameForApiError(apiErrorInfo);
       const fallbackModel = getErrorFallbackModel(apiErrorInfo, providerName);
       addItem(
@@ -405,7 +399,9 @@ function useErrorEventHandler(deps: StreamEventHandlerDeps) {
     },
     [
       addItem,
-      runtime,
+      getProvider,
+      readSelectedProvider,
+      getModel,
       flushPendingHistoryItem,
       pendingResponse,
       pendingHistoryItemRef,
@@ -419,7 +415,7 @@ function useErrorEventHandler(deps: StreamEventHandlerDeps) {
 function useCitationEventHandler(deps: StreamEventHandlerDeps) {
   const {
     addItem,
-    runtime,
+    readCitations,
     flushPendingHistoryItem,
     pendingHistoryItemRef,
     setPendingHistoryItem,
@@ -429,7 +425,7 @@ function useCitationEventHandler(deps: StreamEventHandlerDeps) {
 
   return useCallback(
     (text: string, userMessageTimestamp: number) => {
-      if (!showCitations(settings, runtime)) return;
+      if (!showCitations(settings, readCitations)) return;
       if (pendingHistoryItemRef.current) {
         flushPendingHistoryItem(userMessageTimestamp);
         pendingResponse.endCommittedSegments();
@@ -439,7 +435,7 @@ function useCitationEventHandler(deps: StreamEventHandlerDeps) {
     },
     [
       addItem,
-      runtime,
+      readCitations,
       flushPendingHistoryItem,
       pendingHistoryItemRef,
       pendingResponse,
@@ -471,7 +467,7 @@ function useFinishedNoticeHandler(deps: StreamEventHandlerDeps) {
 function useChatCompressionHandler(deps: StreamEventHandlerDeps) {
   const {
     addItem,
-    runtime,
+    getModel,
     pendingHistoryItemRef,
     pendingResponse,
     setPendingHistoryItem,
@@ -490,7 +486,7 @@ function useChatCompressionHandler(deps: StreamEventHandlerDeps) {
         {
           type: 'info',
           text:
-            `IMPORTANT: This conversation approached the input token limit for ${runtime.model.getModel()}. ` +
+            `IMPORTANT: This conversation approached the input token limit for ${getModel()}. ` +
             `A compressed context will be sent for future messages (compressed from: ` +
             `${eventValue?.originalTokenCount ?? 'unknown'} to ` +
             `${eventValue?.newTokenCount ?? 'unknown'} tokens).`,
@@ -500,7 +496,7 @@ function useChatCompressionHandler(deps: StreamEventHandlerDeps) {
     },
     [
       addItem,
-      runtime,
+      getModel,
       pendingHistoryItemRef,
       pendingResponse,
       setPendingHistoryItem,
@@ -509,28 +505,35 @@ function useChatCompressionHandler(deps: StreamEventHandlerDeps) {
 }
 
 function useMaxSessionTurnsHandler(deps: StreamEventHandlerDeps) {
-  const { addItem, runtime } = deps;
+  const { addItem, getMaxSessionTurns } = deps;
   return useCallback(
     () =>
       addItem(
         {
           type: 'info',
-          text: `The session has reached the maximum number of turns: ${runtime.sessionLimits.getMaxSessionTurns()}. Please update this limit in your setting.json file.`,
+          text: `The session has reached the maximum number of turns: ${getMaxSessionTurns()}. Please update this limit in your setting.json file.`,
         },
         Date.now(),
       ),
-    [addItem, runtime],
+    [addItem, getMaxSessionTurns],
   );
 }
 
 function useContextOverflowHandler(deps: StreamEventHandlerDeps) {
-  const { addItem, runtime, onCancelSubmit } = deps;
+  const {
+    addItem,
+    getModel,
+    readContextLimit,
+    onCancelSubmit,
+    getProviderContextLimit,
+  } = deps;
   return useCallback(
     (estimatedRequestTokenCount: number, remainingTokenCount: number) => {
       onCancelSubmit(true);
       const limit = getTokenLimitForConfiguredContext(
-        runtime,
-        deps.agent.getProviderContextLimit(),
+        getModel,
+        readContextLimit,
+        getProviderContextLimit(),
       );
       const isLessThan75Percent =
         limit > 0 && remainingTokenCount < limit * 0.75;
@@ -540,7 +543,13 @@ function useContextOverflowHandler(deps: StreamEventHandlerDeps) {
           ' Please try reducing the size of your message or use the `/compress` command to compress the chat history.';
       addItem({ type: 'info', text }, Date.now());
     },
-    [addItem, runtime, onCancelSubmit, deps.agent],
+    [
+      addItem,
+      getModel,
+      readContextLimit,
+      onCancelSubmit,
+      getProviderContextLimit,
+    ],
   );
 }
 
@@ -578,11 +587,10 @@ function useContentEventDeps(
       thinkingBlocksRef: deps.thinkingBlocksRef,
       turnCancelledRef: deps.turnCancelledRef,
       setPendingHistoryItem: deps.setPendingHistoryItem,
-      getContentPrefixIdentity: () =>
-        defaultGetContentPrefixIdentity(deps.agent),
+      getContentPrefixIdentity: deps.getContentPrefixIdentity,
     }),
     [
-      deps.agent,
+      deps.getContentPrefixIdentity,
       deps.addItem,
       pendingResponse,
       deps.sanitizeContent,
@@ -598,14 +606,11 @@ function useContentEventDeps(
 function usePrepareQueryDeps(deps: StreamEventHandlerDeps): PrepareQueryDeps {
   return useMemo(
     () => ({
-      runtime: deps.runtime,
-      getToolHandle: (name: string) => deps.agent.tools.get(name),
-      findResource: (identifier: string) =>
-        deps.agent.mcp.findResource(identifier),
-      readResource: (server: string, uri: string) =>
-        deps.agent.mcp.readResource(server, uri),
-      logUserPrompt: (event: UserPromptEvent) =>
-        deps.runtime.settings.logUserPrompt(event),
+      atCommandConfig: deps.atCommandConfig,
+      getToolHandle: deps.getToolHandle,
+      findResource: deps.findResource,
+      readResource: deps.readResource,
+      logUserPrompt: deps.logUserPrompt,
       addItem: deps.addItem,
       onDebugMessage: deps.onDebugMessage,
       handleShellCommand: deps.handleShellCommand,
@@ -616,8 +621,11 @@ function usePrepareQueryDeps(deps: StreamEventHandlerDeps): PrepareQueryDeps {
       subagentManager: deps.subagentManager,
     }),
     [
-      deps.runtime,
-      deps.agent,
+      deps.atCommandConfig,
+      deps.logUserPrompt,
+      deps.getToolHandle,
+      deps.findResource,
+      deps.readResource,
       deps.addItem,
       deps.onDebugMessage,
       deps.handleShellCommand,
@@ -631,7 +639,7 @@ function usePrepareQueryDeps(deps: StreamEventHandlerDeps): PrepareQueryDeps {
 }
 
 function useDisplayUserMessage(deps: StreamEventHandlerDeps) {
-  const { addItem, runtime, lastProfileNameRef } = deps;
+  const { addItem, readProfileName, lastProfileNameRef } = deps;
   return useCallback(
     (trimmedQuery: string, userMessageTimestamp: number) => {
       addItem(
@@ -641,10 +649,10 @@ function useDisplayUserMessage(deps: StreamEventHandlerDeps) {
       // Inline profile_change notifications are now owned exclusively by the
       // ModelInfo event path (agentEventDispatcher.handleModelInfoEvent).
       // We still track lastProfileNameRef for backward-compatible diagnostics.
-      const liveProfileName = getCurrentProfileName(runtime);
+      const liveProfileName = getCurrentProfileName(readProfileName);
       lastProfileNameRef.current = liveProfileName ?? undefined;
     },
-    [addItem, runtime, lastProfileNameRef],
+    [addItem, readProfileName, lastProfileNameRef],
   );
 }
 

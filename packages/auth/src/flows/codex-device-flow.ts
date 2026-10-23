@@ -1,3 +1,4 @@
+import type { OAuthFetch } from '../types.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -107,7 +108,10 @@ export class CodexDeviceFlow {
     log: () => {},
   };
 
-  constructor(options?: { logger?: IDebugLogger; networkTimeoutMs?: number }) {
+  constructor(
+    private readonly requestFetch: OAuthFetch,
+    options?: { logger?: IDebugLogger; networkTimeoutMs?: number },
+  ) {
     this.logger = options?.logger ?? CodexDeviceFlow.NO_OP_LOGGER;
     this.networkTimeoutMs = options?.networkTimeoutMs ?? 30_000;
   }
@@ -228,7 +232,7 @@ export class CodexDeviceFlow {
       this.networkTimeoutMs,
     );
     try {
-      const response = await globalThis.fetch(input, {
+      const response = await this.requestFetch(input, {
         ...init,
         signal: controller.signal,
       });

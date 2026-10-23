@@ -28,8 +28,7 @@ function makeProviderInfo(
   provider: ProviderStub | null,
 ): OpenAIProviderInfoReturn {
   return {
-    provider,
-    conversationCache: null,
+    providerIdentity: provider,
     isResponsesAPI: false,
     currentModel: provider ? 'test-model' : null,
     remoteTokenInfo: {},

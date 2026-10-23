@@ -1,5 +1,5 @@
-import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
-const fixtureOwners = installRuntimeTestOwners();
+import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
+const fixtureOwnersBorrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -86,12 +86,17 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
     vi.useFakeTimers();
     settingsService = new SettingsService();
     runtimeConfig = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager({
-      sessionSettings: fixtureOwners.adopt(runtimeConfig, settingsService)
-        .settingsOwner,
+    providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       settingsService,
-      config: runtimeConfig,
-    });
+      runtimeConfig,
+      undefined,
+      undefined,
+      fixtureOwnersBorrowedSettings(runtimeConfig, settingsService),
+    );
     config = {
       profileName: 'test-lb',
       strategy: 'failover',

@@ -9,6 +9,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Config } from '../config/config.js';
+import { WorkspaceToolCatalogOwner } from '../services/workspace-tool-catalog-owner.js';
+import { RuntimePolicyOwner } from '../policy/policy-owner.js';
+import { initializeParser } from '../utils/shell-parser.js';
 
 import { createMcpApprovalPolicy } from '../policy/mcp-approval.js';
 import { LspServiceClient } from '@vybestack/llxprt-code-ide-integration';
@@ -17,19 +20,6 @@ import { WorkspaceLspOwner } from './workspace-lsp-owner.js';
 const fixture = fileURLToPath(
   new URL('../../../lsp/test/fixtures/fake-lsp-server.ts', import.meta.url),
 );
-const roots: WorkspaceLspOwner[] = [];
-const directories: string[] = [];
-const { initializeTestConfig } = await import(
-  '../__tests__/config-test-helpers.js'
-);
-
-async function workspace(): Promise<{ directory: string; file: string }> {
-  const directory = await mkdtemp(join(tmpdir(), 'workspace-lsp-owner-'));
-  directories.push(directory);
-  const file = join(directory, 'input.ts');
-  await writeFile(file, 'const value = TYPE_ERROR;\n');
-  return { directory, file };
-}
 
 function settings(): {
   servers: Array<{ id: string; command: string; args?: string[] }>;
@@ -44,42 +34,143 @@ function settings(): {
   };
 }
 
-async function activate(
-  root: WorkspaceLspOwner,
-  directory: string,
-): Promise<Awaited<ReturnType<typeof initializeTestConfig>>> {
-  roots.push(root);
-  const config = new Config({
-    sessionId: 'same-label',
-    targetDir: directory,
-    cwd: directory,
-    model: 'test',
-    debugMode: false,
-  });
-  const runtime = await initializeTestConfig(config);
-  const approval = createMcpApprovalPolicy(
-    {
-      ...runtime.policyOwner.session.decisions,
-      ...runtime.policyOwner.session.confirmation,
-    },
-    async () => {},
-    () => {},
-  );
-  await root.initialize(runtime.toolPublication, approval);
-  const health = await root.inspection.read();
-  expect(health.reason).toBeUndefined();
-  return runtime;
-}
-
 describe('WorkspaceLspOwner real process lifetime', () => {
-  afterEach(async () => {
-    await Promise.all(roots.splice(0).map((root) => root.dispose()));
-    await Promise.all(
-      directories
-        .splice(0)
-        .map((directory) => rm(directory, { recursive: true, force: true })),
+  const roots: WorkspaceLspOwner[] = [];
+
+  const directories: string[] = [];
+
+  const closes: Array<() => void | Promise<void>> = [];
+
+  async function workspace(): Promise<{ directory: string; file: string }> {
+    const directory = await mkdtemp(join(tmpdir(), 'workspace-lsp-owner-'));
+    directories.push(directory);
+    const file = join(directory, 'input.ts');
+    await writeFile(file, 'const value = TYPE_ERROR;\n');
+    return { directory, file };
+  }
+
+  async function activate(
+    root: WorkspaceLspOwner,
+    directory: string,
+  ): Promise<WorkspaceToolCatalogOwner> {
+    roots.push(root);
+    const config = new Config({
+      sessionId: 'same-label',
+      targetDir: directory,
+      cwd: directory,
+      model: 'test',
+      debugMode: false,
+    });
+    closes.push(() => config.dispose());
+    const policy = new RuntimePolicyOwner(config);
+    closes.push(() => policy.dispose());
+    const catalog = new WorkspaceToolCatalogOwner(
+      config,
+      policy.session.messageBus,
+      policy.trust,
     );
+    closes.push(() => catalog.dispose());
+    await initializeParser();
+    await catalog.initialize();
+    const approval = createMcpApprovalPolicy(
+      {
+        ...policy.session.decisions,
+        ...policy.session.confirmation,
+      },
+      async () => {},
+      () => {},
+    );
+    await root.initialize(catalog.publication, approval);
+    const health = await root.inspection.read();
+    expect(health.reason).toBeUndefined();
+    return catalog;
+  }
+
+  afterEach(async () => {
+    const failures: unknown[] = [];
+    const cleanup = [
+      ...roots.splice(0).map((root) => () => root.dispose()),
+      ...closes.splice(0).reverse(),
+      ...directories
+        .splice(0)
+        .map(
+          (directory) => () => rm(directory, { recursive: true, force: true }),
+        ),
+    ];
+    for (const close of cleanup) {
+      try {
+        await close();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length > 0)
+      throw new AggregateError(failures, 'LSP process fixture cleanup failed');
   });
+  it('retains the exact LSP startup promise and original publication on repeated initialization', async () => {
+    const { directory, file } = await workspace();
+    const root = new WorkspaceLspOwner(settings(), directory, () => true);
+    roots.push(root);
+    const config = new Config({
+      sessionId: 'same-label',
+      targetDir: directory,
+      cwd: directory,
+      model: 'test',
+      debugMode: false,
+    });
+    closes.push(() => config.dispose());
+    const policy = new RuntimePolicyOwner(config);
+    closes.push(() => policy.dispose());
+    const catalog = new WorkspaceToolCatalogOwner(
+      config,
+      policy.session.messageBus,
+      policy.trust,
+    );
+    closes.push(() => catalog.dispose());
+    await initializeParser();
+    await catalog.initialize();
+    const approval = createMcpApprovalPolicy(
+      { ...policy.session.decisions, ...policy.session.confirmation },
+      async () => {},
+      () => {},
+    );
+    const first = root.initialize(catalog.publication, approval);
+    const repeated = root.initialize(catalog.publication, approval);
+    expect(repeated).toBe(first);
+    await first;
+    const published = catalog.selection
+      .getAllTools()
+      .filter((tool) => tool.name.includes('lsp-navigation'));
+    expect(published.length).toBeGreaterThan(0);
+    const peerPolicy = new RuntimePolicyOwner(config);
+    closes.push(() => peerPolicy.dispose());
+    const peerCatalog = new WorkspaceToolCatalogOwner(
+      config,
+      peerPolicy.session.messageBus,
+      peerPolicy.trust,
+    );
+    closes.push(() => peerCatalog.dispose());
+    await peerCatalog.initialize();
+    expect(() => root.initialize(peerCatalog.publication, approval)).toThrow(
+      'LSP owner requires its original tool registration port',
+    );
+    expect(
+      peerCatalog.selection
+        .getAllTools()
+        .filter((tool) => published.includes(tool)),
+    ).toStrictEqual([]);
+    expect(
+      catalog.selection
+        .getAllTools()
+        .filter((tool) => tool.name.includes('lsp-navigation'))
+        .map((tool) => tool.name),
+    ).toStrictEqual(published.map((tool) => tool.name));
+    expect((await root.inspection.read()).alive).toBe(true);
+    expect(
+      (await root.diagnostics.waitForDiagnostics(file, 5000)).length,
+    ).toBeGreaterThan(0);
+  });
+
   it('checks real changed files and isolates independent roots with identical labels', async () => {
     const { directory, file } = await workspace();
     const first = new WorkspaceLspOwner(settings(), directory, () => true);
@@ -110,7 +201,7 @@ describe('WorkspaceLspOwner real process lifetime', () => {
     const { directory, file } = await workspace();
     const root = new WorkspaceLspOwner(settings(), directory, () => true);
     const config = await activate(root, directory);
-    const navigation = config.toolSelection
+    const navigation = config.selection
       .getAllTools()
       .filter(
         (tool) =>
@@ -126,9 +217,7 @@ describe('WorkspaceLspOwner real process lifetime', () => {
     const closed = root.dispose();
     expect(new Set([root.dispose(), closed]).size).toBe(1);
     expect(
-      config.toolSelection
-        .getAllTools()
-        .some((tool) => navigation.includes(tool)),
+      config.selection.getAllTools().some((tool) => navigation.includes(tool)),
     ).toBe(false);
     await expect(
       invocation.execute(new AbortController().signal),
@@ -192,8 +281,18 @@ describe('WorkspaceLspOwner real process lifetime', () => {
       model: 'test',
       debugMode: false,
     });
-    const runtime = await initializeTestConfig(config);
-    const registry = runtime.toolPublication;
+    closes.push(() => config.dispose());
+    const policy = new RuntimePolicyOwner(config);
+    closes.push(() => policy.dispose());
+    const catalog = new WorkspaceToolCatalogOwner(
+      config,
+      policy.session.messageBus,
+      policy.trust,
+    );
+    closes.push(() => catalog.dispose());
+    await initializeParser();
+    await catalog.initialize();
+    const registry = catalog.publication;
     const primary = new Error('navigation publication failed');
     const publication = {
       registerTool: registry.registerTool.bind(registry),
@@ -204,16 +303,23 @@ describe('WorkspaceLspOwner real process lifetime', () => {
     };
     const approval = createMcpApprovalPolicy(
       {
-        ...runtime.policyOwner.session.decisions,
-        ...runtime.policyOwner.session.confirmation,
+        ...policy.session.decisions,
+        ...policy.session.confirmation,
       },
       async () => {},
       () => {},
     );
-    await expect(root.initialize(publication, approval)).rejects.toBe(primary);
+    // Bun 1.4 evaluates expect(...).rejects on a pending promise in a nested
+    // event loop that starves the LSP child's pipe I/O, so the real request
+    // times out. Await the outcome first, then assert it.
+    const [outcome] = await Promise.allSettled([
+      root.initialize(publication, approval),
+    ]);
+    expect(outcome.status).toBe('rejected');
+    expect((outcome as PromiseRejectedResult).reason).toBe(primary);
     expect(service.isAlive()).toBe(false);
     expect(
-      runtime.toolSelection
+      catalog.selection
         .getAllTools()
         .some((tool) => tool.name.includes('lsp-navigation')),
     ).toBe(false);
@@ -234,16 +340,14 @@ describe('WorkspaceLspOwner real process lifetime', () => {
     );
     const config = await activate(root, directory);
     await root.diagnostics.waitForDiagnostics(file, 5000);
-    const navigation = config.toolSelection
+    const navigation = config.selection
       .getAllTools()
       .filter((tool) => tool.name.includes('lsp-navigation'));
     expect(navigation.length).toBeGreaterThan(0);
     await service.shutdown();
     expect(root.diagnostics.getDiagnostics(file)).toStrictEqual([]);
     expect(
-      config.toolSelection
-        .getAllTools()
-        .some((tool) => navigation.includes(tool)),
+      config.selection.getAllTools().some((tool) => navigation.includes(tool)),
     ).toBe(false);
     expect(() =>
       navigation[0].build({ filePath: file, line: 1, character: 1 }),
@@ -255,7 +359,7 @@ describe('WorkspaceLspOwner real process lifetime', () => {
     let trusted = true;
     const root = new WorkspaceLspOwner(settings(), directory, () => trusted);
     const config = await activate(root, directory);
-    const navigation = config.toolSelection
+    const navigation = config.selection
       .getAllTools()
       .filter((tool) => tool.name.includes('lsp-navigation'));
     trusted = false;

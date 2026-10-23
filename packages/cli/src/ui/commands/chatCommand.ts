@@ -5,7 +5,6 @@
  */
 
 import React from 'react';
-import { dirname } from 'node:path';
 import { Text } from 'ink';
 import { Colors } from '../colors.js';
 import type {
@@ -14,13 +13,11 @@ import type {
   MessageActionReturn,
   SlashCommandActionReturn,
 } from './types.js';
-import { CommandKind } from './types.js';
+import { composeChatCommand } from './chatCommandShape.js';
 import {
-  CheckpointService,
   HistoryMutationService,
-  SessionDiscovery,
-  getProjectHash,
   type ContinueTarget,
+  type UnreadableRecording,
   type IContent,
   type SessionRecordingService,
   type TextBlock,
@@ -37,33 +34,41 @@ import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { warnUnreadableRecordings } from '../utils/warnUnreadableRecordings.js';
 
-function getProjectHashForContext(context: CommandContext): string | null {
-  const recording = getRecording(context);
-  if (recording !== null) return recording.getProjectHash();
-  const config = context.services.config;
-  return config ? getProjectHash(config.getProjectRoot()) : null;
-}
-function getRecording(context: CommandContext): SessionRecordingService | null {
-  return (
-    context.recordingSwapCallbacks?.getCurrentRecording() ??
-    context.recordingIntegration?.getRecordingService() ??
-    null
-  );
+/**
+ * Operations the recording-native /chat command uses. The host binds them to
+ * the session's recording, project and chat history when it registers the
+ * command, so invocation context never selects the owner.
+ */
+export interface ChatRecordingOperations {
+  readonly getRecording: () => SessionRecordingService | null;
+  readonly getProjectHash: () => string | null;
+  readonly getChatsDir: () => string | null;
+  readonly listTargets: () => Promise<{
+    targets: ContinueTarget[];
+    unreadableRecordings: readonly UnreadableRecording[];
+  }>;
+  readonly saveCheckpoint: (name: string, overwrite: boolean) => Promise<void>;
+  readonly deleteCheckpoint: (target: CheckpointTarget) => Promise<void>;
+  readonly renameCheckpoint: (
+    target: CheckpointTarget,
+    name: string,
+    overwrite: boolean,
+  ) => Promise<void>;
+  readonly nameSession: (name: string, overwrite: boolean) => Promise<void>;
+  /** Live chat history, or null when no chat has been initialized. */
+  readonly getChatHistory: () => readonly IContent[] | null;
+  readonly replaceChatHistory: (history: IContent[]) => Promise<void>;
+  /** Configured model name, or null when no configuration is available. */
+  readonly getModel: () => string | null;
 }
 
-function getChatsDir(context: CommandContext): string | null {
-  const recording = getRecording(context);
-  if (recording !== null) return recording.getChatsDir();
-  return context.services.config?.projectChatsDir ?? null;
-}
+type CheckpointTarget = Extract<ContinueTarget, { kind: 'checkpoint' }>;
 
-type CheckpointResolution =
-  | { target: Extract<ContinueTarget, { kind: 'checkpoint' }> }
-  | { error: string };
+type CheckpointResolution = { target: CheckpointTarget } | { error: string };
 
 function resolveCheckpoint(
   ref: string,
-  checkpoints: ReadonlyArray<Extract<ContinueTarget, { kind: 'checkpoint' }>>,
+  checkpoints: readonly CheckpointTarget[],
 ): CheckpointResolution {
   const exactId = checkpoints.filter(
     (checkpoint) => checkpoint.checkpointId === ref,
@@ -83,29 +88,24 @@ function resolveCheckpoint(
 }
 
 async function listProjectCheckpoints(
-  context: CommandContext,
-): Promise<Array<Extract<ContinueTarget, { kind: 'checkpoint' }>>> {
-  const projectHash = getProjectHashForContext(context);
+  operations: ChatRecordingOperations,
+): Promise<CheckpointTarget[]> {
+  const projectHash = operations.getProjectHash();
   if (projectHash === null) return [];
-  const chatsDir = getChatsDir(context);
+  const chatsDir = operations.getChatsDir();
   if (chatsDir === null) return [];
-  const detailed = await SessionDiscovery.listContinueTargetsDetailed(
-    chatsDir,
-    projectHash,
-    context.services.agent?.agentClient.mediaStore,
-  );
+  const detailed = await operations.listTargets();
   warnUnreadableRecordings('/chat checkpoints', detailed.unreadableRecordings);
   return detailed.targets.filter(
-    (target): target is Extract<ContinueTarget, { kind: 'checkpoint' }> =>
-      target.kind === 'checkpoint',
+    (target): target is CheckpointTarget => target.kind === 'checkpoint',
   );
 }
 
-const getSavedChatTags = async (
-  context: CommandContext,
-): Promise<ChatDetail[]> => {
+async function getSavedChatTags(
+  operations: ChatRecordingOperations,
+): Promise<ChatDetail[]> {
   try {
-    const checkpoints = await listProjectCheckpoints(context);
+    const checkpoints = await listProjectCheckpoints(operations);
     return checkpoints
       .map((checkpoint) => ({
         name: checkpoint.checkpointName,
@@ -121,30 +121,61 @@ const getSavedChatTags = async (
     debugLogger.warn(`Failed to list saved chat checkpoints: ${String(error)}`);
     return [];
   }
-};
+}
 
 const checkpointSuggestionDescription = 'Saved conversation checkpoint';
-const chatTagSchema: CommandArgumentSchema = [
-  {
-    kind: 'value',
-    name: 'tag',
-    description: 'Select saved checkpoint',
-    completer: withFuzzyFilter(async (ctx) => {
-      const chatDetails = await getSavedChatTags(ctx);
-      return [...chatDetails].reverse().map((chat) => ({
-        value: chat.name,
-        description: checkpointSuggestionDescription,
-      }));
-    }),
-  },
-];
 
-const listCommand: SlashCommand = {
-  name: 'list',
-  description: 'List saved conversation checkpoints',
-  kind: CommandKind.BUILT_IN,
-  action: async (context): Promise<void> => {
-    const chatDetails = await getSavedChatTags(context);
+function createChatTagSchema(
+  operations: ChatRecordingOperations,
+  readFuzzyFiltering: () => boolean,
+): CommandArgumentSchema {
+  return [
+    {
+      kind: 'value',
+      name: 'tag',
+      description: 'Select saved checkpoint',
+      completer: withFuzzyFilter(async () => {
+        const chatDetails = await getSavedChatTags(operations);
+        return [...chatDetails].reverse().map((chat) => ({
+          value: chat.name,
+          description: checkpointSuggestionDescription,
+        }));
+      }, readFuzzyFiltering),
+    },
+  ];
+}
+
+function overwriteConfirmation(
+  context: CommandContext,
+  name: string,
+  fallbackInvocation: string,
+): SlashCommandActionReturn {
+  return {
+    type: 'confirm_action',
+    prompt: React.createElement(
+      Text,
+      null,
+      'A session or checkpoint named ',
+      React.createElement(Text, { color: Colors.AccentPurple }, name),
+      ' already exists. Do you want to overwrite it?',
+    ),
+    originalInvocation: {
+      raw: context.invocation?.raw ?? fallbackInvocation,
+    },
+  };
+}
+
+function isCollision(context: CommandContext, detail: string): boolean {
+  return (
+    context.overwriteConfirmed !== true && detail.includes('already exists')
+  );
+}
+
+function createListAction(
+  operations: ChatRecordingOperations,
+): NonNullable<SlashCommand['action']> {
+  return async (context): Promise<void> => {
+    const chatDetails = await getSavedChatTags(operations);
 
     const item: HistoryItemChatList = {
       type: MessageType.CHAT_LIST,
@@ -152,15 +183,13 @@ const listCommand: SlashCommand = {
     };
 
     context.ui.addItem(item);
-  },
-};
+  };
+}
 
-const saveCommand: SlashCommand = {
-  name: 'save',
-  description:
-    'Save the current conversation as a checkpoint. Usage: /chat save <tag>',
-  kind: CommandKind.BUILT_IN,
-  action: async (context, args): Promise<SlashCommandActionReturn | void> => {
+function createSaveAction(
+  operations: ChatRecordingOperations,
+): NonNullable<SlashCommand['action']> {
+  return async (context, args): Promise<SlashCommandActionReturn | void> => {
     const tag = args.trim();
     if (!tag) {
       return {
@@ -170,8 +199,8 @@ const saveCommand: SlashCommand = {
       };
     }
 
-    const recording = getRecording(context);
-    const projectHash = getProjectHashForContext(context);
+    const recording = operations.getRecording();
+    const projectHash = operations.getProjectHash();
     if (!recording || projectHash === null) {
       return {
         type: 'message',
@@ -181,14 +210,7 @@ const saveCommand: SlashCommand = {
     }
 
     try {
-      await new CheckpointService(
-        context.services.agent?.agentClient.mediaStore,
-      ).createCheckpoint(
-        recording,
-        projectHash,
-        tag,
-        context.overwriteConfirmed === true,
-      );
+      await operations.saveCheckpoint(tag, context.overwriteConfirmed === true);
       return {
         type: 'message',
         messageType: 'info',
@@ -196,23 +218,8 @@ const saveCommand: SlashCommand = {
       };
     } catch (error: unknown) {
       const detail = error instanceof Error ? error.message : String(error);
-      if (
-        context.overwriteConfirmed !== true &&
-        detail.includes('already exists')
-      ) {
-        return {
-          type: 'confirm_action',
-          prompt: React.createElement(
-            Text,
-            null,
-            'A session or checkpoint named ',
-            React.createElement(Text, { color: Colors.AccentPurple }, tag),
-            ' already exists. Do you want to overwrite it?',
-          ),
-          originalInvocation: {
-            raw: context.invocation?.raw ?? `/chat save ${tag}`,
-          },
-        };
+      if (isCollision(context, detail)) {
+        return overwriteConfirmation(context, tag, `/chat save ${tag}`);
       }
       return {
         type: 'message',
@@ -220,18 +227,11 @@ const saveCommand: SlashCommand = {
         content: `Failed to save checkpoint: ${detail}`,
       };
     }
-  },
-};
+  };
+}
 
-const resumeCommand: SlashCommand = {
-  name: 'resume',
-  altNames: ['load'],
-  description:
-    'Resume a conversation from a checkpoint. Usage: /chat resume <tag>',
-  kind: CommandKind.BUILT_IN,
-  schema: chatTagSchema,
-  autoExecute: true,
-  action: async (context, args): Promise<SlashCommandActionReturn> => {
+function createResumeAction(): NonNullable<SlashCommand['action']> {
+  return async (_context, args): Promise<SlashCommandActionReturn> => {
     const tag = args.trim();
     if (!tag) {
       return {
@@ -246,18 +246,20 @@ const resumeCommand: SlashCommand = {
       type: 'perform_resume',
       sessionRef: tag,
     };
-  },
-};
+  };
+}
 
-const deleteCommand: SlashCommand = {
-  name: 'delete',
-  altNames: ['rm', 'remove'],
-  description:
-    'Delete a conversation checkpoint. Usage: /chat delete <tag> [--force]',
-  kind: CommandKind.BUILT_IN,
-  schema: chatTagSchema,
-  autoExecute: true,
-  action: async (context, args): Promise<SlashCommandActionReturn> => {
+async function deleteCheckpointTarget(
+  operations: ChatRecordingOperations,
+  target: CheckpointTarget,
+): Promise<void> {
+  await operations.deleteCheckpoint(target);
+}
+
+function createDeleteAction(
+  operations: ChatRecordingOperations,
+): NonNullable<SlashCommand['action']> {
+  return async (context, args): Promise<SlashCommandActionReturn> => {
     const force = args.includes('--force');
     const tag = args.replace('--force', '').trim();
 
@@ -285,8 +287,7 @@ const deleteCommand: SlashCommand = {
       };
     }
 
-    const recording = getRecording(context);
-    const checkpoints = await listProjectCheckpoints(context);
+    const checkpoints = await listProjectCheckpoints(operations);
     const resolved = resolveCheckpoint(tag, checkpoints);
     if ('error' in resolved) {
       return {
@@ -295,27 +296,9 @@ const deleteCommand: SlashCommand = {
         content: `${resolved.error}.`,
       };
     }
-    const target = resolved.target;
 
     try {
-      const service = new CheckpointService(
-        context.services.agent?.agentClient.mediaStore,
-      );
-      if (recording?.getSessionId() === target.source.sessionId) {
-        await service.deleteCheckpoint(
-          recording,
-          target.source.projectHash,
-          target.checkpointId,
-        );
-      } else {
-        await service.deleteCheckpointClosed(
-          target.source.filePath,
-          target.source.projectHash,
-          getChatsDir(context) ?? dirname(target.source.filePath),
-          target.source.sessionId,
-          target.checkpointId,
-        );
-      }
+      await deleteCheckpointTarget(operations, resolved.target);
       return {
         type: 'message',
         messageType: 'info',
@@ -329,47 +312,23 @@ const deleteCommand: SlashCommand = {
         content: `Failed to delete checkpoint: ${detail}`,
       };
     }
-  },
-};
-
-async function renameCheckpointTarget(
-  context: CommandContext,
-  target: Extract<ContinueTarget, { kind: 'checkpoint' }>,
-  newName: string,
-  projectHash: string,
-): Promise<void> {
-  const recording = getRecording(context);
-  const service = new CheckpointService(
-    context.services.agent?.agentClient.mediaStore,
-  );
-  if (recording?.getSessionId() === target.source.sessionId) {
-    await service.renameCheckpoint(
-      recording,
-      projectHash,
-      target.checkpointId,
-      newName,
-      context.overwriteConfirmed === true,
-    );
-    return;
-  }
-  await service.renameCheckpointClosed(
-    target.source.filePath,
-    projectHash,
-    getChatsDir(context) ?? dirname(target.source.filePath),
-    target.source.sessionId,
-    target.checkpointId,
-    newName,
-    context.overwriteConfirmed === true,
-  );
+  };
 }
 
-const renameCommand: SlashCommand = {
-  name: 'rename',
-  altNames: ['mv'],
-  description:
-    'Rename a conversation checkpoint. Usage: /chat rename <old_tag> <new_tag>',
-  kind: CommandKind.BUILT_IN,
-  action: async (context, args): Promise<SlashCommandActionReturn> => {
+async function renameCheckpointTarget(
+  operations: ChatRecordingOperations,
+  target: CheckpointTarget,
+  newName: string,
+  _projectHash: string,
+  overwrite: boolean,
+): Promise<void> {
+  await operations.renameCheckpoint(target, newName, overwrite);
+}
+
+function createRenameAction(
+  operations: ChatRecordingOperations,
+): NonNullable<SlashCommand['action']> {
+  return async (context, args): Promise<SlashCommandActionReturn> => {
     const parts = args.trim().split(/\s+/);
     if (parts.length !== 2) {
       return {
@@ -381,7 +340,7 @@ const renameCommand: SlashCommand = {
 
     const [oldTag, newTag] = parts;
 
-    const checkpoints = await listProjectCheckpoints(context);
+    const checkpoints = await listProjectCheckpoints(operations);
     const resolved = resolveCheckpoint(oldTag, checkpoints);
     if ('error' in resolved) {
       return {
@@ -390,9 +349,8 @@ const renameCommand: SlashCommand = {
         content: resolved.error,
       };
     }
-    const target = resolved.target;
 
-    const projectHash = getProjectHashForContext(context);
+    const projectHash = operations.getProjectHash();
     if (projectHash === null) {
       return {
         type: 'message',
@@ -402,7 +360,13 @@ const renameCommand: SlashCommand = {
     }
 
     try {
-      await renameCheckpointTarget(context, target, newTag, projectHash);
+      await renameCheckpointTarget(
+        operations,
+        resolved.target,
+        newTag,
+        projectHash,
+        context.overwriteConfirmed === true,
+      );
       return {
         type: 'message',
         messageType: 'info',
@@ -410,23 +374,12 @@ const renameCommand: SlashCommand = {
       };
     } catch (error: unknown) {
       const detail = error instanceof Error ? error.message : String(error);
-      if (
-        context.overwriteConfirmed !== true &&
-        detail.includes('already exists')
-      ) {
-        return {
-          type: 'confirm_action',
-          prompt: React.createElement(
-            Text,
-            null,
-            'A session or checkpoint named ',
-            React.createElement(Text, { color: Colors.AccentPurple }, newTag),
-            ' already exists. Do you want to overwrite it?',
-          ),
-          originalInvocation: {
-            raw: context.invocation?.raw ?? `/chat rename ${oldTag} ${newTag}`,
-          },
-        };
+      if (isCollision(context, detail)) {
+        return overwriteConfirmation(
+          context,
+          newTag,
+          `/chat rename ${oldTag} ${newTag}`,
+        );
       }
       return {
         type: 'message',
@@ -434,16 +387,15 @@ const renameCommand: SlashCommand = {
         content: `Failed to rename checkpoint: ${detail}`,
       };
     }
-  },
-};
+  };
+}
 
-const clearCommand: SlashCommand = {
-  name: 'clear',
-  description: 'Clear the current conversation history',
-  kind: CommandKind.BUILT_IN,
-  action: async (context): Promise<MessageActionReturn | void> => {
-    const client = context.services.agent?.agentClient;
-    if (client?.hasChatInitialized() !== true) {
+function createClearAction(
+  operations: ChatRecordingOperations,
+): NonNullable<SlashCommand['action']> {
+  return async (context): Promise<MessageActionReturn | void> => {
+    const history = operations.getChatHistory();
+    if (history === null) {
       return {
         type: 'message',
         messageType: 'info',
@@ -451,10 +403,7 @@ const clearCommand: SlashCommand = {
       };
     }
 
-    const chat = client.getChat();
-    const history = chat.getHistory();
-
-    const recording = getRecording(context);
+    const recording = operations.getRecording();
     if (!recording) {
       return {
         type: 'message',
@@ -463,8 +412,7 @@ const clearCommand: SlashCommand = {
       };
     }
 
-    const mutator = new HistoryMutationService();
-    const result = await mutator.clear(history, recording);
+    const result = await new HistoryMutationService().clear(history, recording);
 
     if (!result.ok) {
       return {
@@ -481,19 +429,40 @@ const clearCommand: SlashCommand = {
       };
     }
 
-    await chat.setHistory(result.remainingHistory);
+    await operations.replaceChatHistory(result.remainingHistory);
     context.ui.updateHistoryTokenCount(0);
     context.ui.clear();
     return undefined;
-  },
-};
+  };
+}
 
-const restoreHistory = async (
-  context: CommandContext,
+function toUiHistory(history: readonly IContent[]): HistoryItemWithoutId[] {
+  // Model thinking blocks ride along raw here; the load_history handler
+  // filters them with the same emoji rule as the text (#2888).
+  return history.map((content: IContent) => {
+    const textBlocks = content.blocks.filter(
+      (b): b is TextBlock => b.type === 'text',
+    );
+    const text = textBlocks.map((b) => b.text).join('');
+    const thinkingBlocks = content.blocks.filter(
+      (b): b is ThinkingBlock => b.type === 'thinking',
+    );
+    return {
+      type: content.speaker === 'human' ? MessageType.USER : MessageType.AI,
+      text,
+      ...(content.speaker === 'ai' && thinkingBlocks.length > 0
+        ? { thinkingBlocks }
+        : {}),
+    };
+  });
+}
+
+async function restoreHistory(
+  operations: ChatRecordingOperations,
   turns: number,
-): Promise<SlashCommandActionReturn> => {
-  const client = context.services.agent?.agentClient;
-  if (client?.hasChatInitialized() !== true) {
+): Promise<SlashCommandActionReturn> {
+  const currentHistory = operations.getChatHistory();
+  if (currentHistory === null) {
     return {
       type: 'message',
       messageType: 'error',
@@ -501,7 +470,6 @@ const restoreHistory = async (
     };
   }
 
-  const currentHistory = client.getChat().getHistory();
   const turnsToRestore = Math.abs(turns);
 
   if (turnsToRestore < 1) {
@@ -512,7 +480,7 @@ const restoreHistory = async (
     };
   }
 
-  const recording = getRecording(context);
+  const recording = operations.getRecording();
   if (!recording) {
     return {
       type: 'message',
@@ -521,8 +489,7 @@ const restoreHistory = async (
     };
   }
 
-  const mutator = new HistoryMutationService();
-  const result = await mutator.restore(
+  const result = await new HistoryMutationService().restore(
     currentHistory,
     turnsToRestore,
     recording,
@@ -544,43 +511,19 @@ const restoreHistory = async (
     };
   }
 
-  // Convert to UI history items for display. The slash-command result handler
-  // applies the client history exactly once after durable persistence
-  // succeeds. Model thinking blocks ride along raw here; the load_history
-  // handler filters them with the same emoji rule as the text (#2888).
-  const uiHistory: HistoryItemWithoutId[] = result.remainingHistory.map(
-    (content: IContent) => {
-      const textBlocks = content.blocks.filter(
-        (b): b is TextBlock => b.type === 'text',
-      );
-      const text = textBlocks.map((b) => b.text).join('');
-      const thinkingBlocks = content.blocks.filter(
-        (b): b is ThinkingBlock => b.type === 'thinking',
-      );
-      return {
-        type: content.speaker === 'human' ? MessageType.USER : MessageType.AI,
-        text,
-        ...(content.speaker === 'ai' && thinkingBlocks.length > 0
-          ? { thinkingBlocks }
-          : {}),
-      };
-    },
-  );
-
+  // The slash-command result handler applies the client history exactly once
+  // after durable persistence succeeds.
   return {
     type: 'load_history',
-    history: uiHistory,
+    history: toUiHistory(result.remainingHistory),
     clientHistory: result.remainingHistory,
   };
-};
+}
 
-const restoreCommand: SlashCommand = {
-  name: 'restore',
-  altNames: ['undo'],
-  description:
-    'Restore conversation to N turns ago. Usage: /chat restore <number>',
-  kind: CommandKind.BUILT_IN,
-  action: async (context, args): Promise<SlashCommandActionReturn> => {
+function createRestoreAction(
+  operations: ChatRecordingOperations,
+): NonNullable<SlashCommand['action']> {
+  return async (_context, args): Promise<SlashCommandActionReturn> => {
     const turnsStr = args.trim();
     if (!turnsStr) {
       return {
@@ -599,15 +542,14 @@ const restoreCommand: SlashCommand = {
       };
     }
 
-    return restoreHistory(context, -turns);
-  },
-};
+    return restoreHistory(operations, -turns);
+  };
+}
 
-const nameCommand: SlashCommand = {
-  name: 'name',
-  description: 'Name the active session. Usage: /chat name <name>',
-  kind: CommandKind.BUILT_IN,
-  action: async (context, args): Promise<SlashCommandActionReturn> => {
+function createNameAction(
+  operations: ChatRecordingOperations,
+): NonNullable<SlashCommand['action']> {
+  return async (context, args): Promise<SlashCommandActionReturn> => {
     const name = args.trim();
     if (!name) {
       return {
@@ -617,8 +559,8 @@ const nameCommand: SlashCommand = {
       };
     }
 
-    const recording = getRecording(context);
-    const projectHash = getProjectHashForContext(context);
+    const recording = operations.getRecording();
+    const projectHash = operations.getProjectHash();
     if (!recording || projectHash === null) {
       return {
         type: 'message',
@@ -628,14 +570,7 @@ const nameCommand: SlashCommand = {
     }
 
     try {
-      await new CheckpointService(
-        context.services.agent?.agentClient.mediaStore,
-      ).setSessionName(
-        recording,
-        projectHash,
-        name,
-        context.overwriteConfirmed === true,
-      );
+      await operations.nameSession(name, context.overwriteConfirmed === true);
       return {
         type: 'message',
         messageType: 'info',
@@ -643,23 +578,8 @@ const nameCommand: SlashCommand = {
       };
     } catch (error: unknown) {
       const detail = error instanceof Error ? error.message : String(error);
-      if (
-        context.overwriteConfirmed !== true &&
-        detail.includes('already exists')
-      ) {
-        return {
-          type: 'confirm_action',
-          prompt: React.createElement(
-            Text,
-            null,
-            'A session or checkpoint named ',
-            React.createElement(Text, { color: Colors.AccentPurple }, name),
-            ' already exists. Do you want to overwrite it?',
-          ),
-          originalInvocation: {
-            raw: context.invocation?.raw ?? `/chat name ${name}`,
-          },
-        };
+      if (isCollision(context, detail)) {
+        return overwriteConfirmation(context, name, `/chat name ${name}`);
       }
       return {
         type: 'message',
@@ -667,46 +587,46 @@ const nameCommand: SlashCommand = {
         content: `Failed to name session: ${detail}`,
       };
     }
-  },
-};
+  };
+}
 
-const debugCommand: SlashCommand = {
-  name: 'debug',
-  description: 'Show chat diagnostics and debug information',
-  kind: CommandKind.BUILT_IN,
-  action: async (context): Promise<SlashCommandActionReturn> => {
-    const { config } = context.services;
-    const client = context.services.agent?.agentClient;
+function describeHistoryEntries(operations: ChatRecordingOperations): string[] {
+  const lines: string[] = [];
+  try {
+    const history = operations.getChatHistory();
+    lines.push(`Chat initialized: ${history !== null}`);
+    lines.push(
+      history === null
+        ? 'History entries: 0 (chat not initialized)'
+        : `History entries: ${history.length}`,
+    );
+  } catch {
+    lines.push('Chat initialized: true', 'History entries: unavailable');
+  }
+  return lines;
+}
 
-    const debugInfo: string[] = [];
+function describeModel(operations: ChatRecordingOperations): string {
+  try {
+    const model = operations.getModel();
+    return model === null
+      ? 'Current model: unavailable (config not initialized)'
+      : `Current model: ${model}`;
+  } catch {
+    return 'Current model: unavailable';
+  }
+}
 
-    const chatInitialized = client?.hasChatInitialized() ?? false;
-    debugInfo.push(`Chat initialized: ${chatInitialized}`);
+function createDebugAction(
+  operations: ChatRecordingOperations,
+): NonNullable<SlashCommand['action']> {
+  return async (): Promise<SlashCommandActionReturn> => {
+    const debugInfo = [
+      ...describeHistoryEntries(operations),
+      describeModel(operations),
+    ];
 
-    if (chatInitialized && client) {
-      try {
-        const chat = client.getChat();
-        const history = chat.getHistory();
-        debugInfo.push(`History entries: ${history.length}`);
-      } catch {
-        debugInfo.push('History entries: unavailable');
-      }
-    } else {
-      debugInfo.push('History entries: 0 (chat not initialized)');
-    }
-
-    if (config) {
-      try {
-        const model = config.getModel();
-        debugInfo.push(`Current model: ${model}`);
-      } catch {
-        debugInfo.push('Current model: unavailable');
-      }
-    } else {
-      debugInfo.push('Current model: unavailable (config not initialized)');
-    }
-
-    const recording = getRecording(context);
+    const recording = operations.getRecording();
     if (recording?.getFilePath()) {
       debugInfo.push(`Recording file: ${recording.getFilePath()}`);
       debugInfo.push(`Session ID: ${recording.getSessionId()}`);
@@ -719,36 +639,25 @@ const debugCommand: SlashCommand = {
       messageType: 'info',
       content: `Chat Debug Information:\n${debugInfo.map((line) => `• ${line}`).join('\n')}`,
     };
-  },
-};
+  };
+}
 
-export const chatCommand: SlashCommand = {
-  name: 'chat',
-  description: 'Manage conversation checkpoints',
-  kind: CommandKind.BUILT_IN,
-  subCommands: [
-    listCommand,
-    saveCommand,
-    resumeCommand,
-    deleteCommand,
-    renameCommand,
-    clearCommand,
-    restoreCommand,
-    nameCommand,
-    debugCommand,
-  ],
-  action: async (): Promise<MessageActionReturn> => ({
-    type: 'message',
-    messageType: 'info',
-    content: `Available /chat commands:
-• list - List all saved conversation checkpoints
-• save <tag> - Save current conversation with a tag
-• resume <tag> - Resume a saved conversation (alias of /continue)
-• delete <tag> [--force] - Delete a saved checkpoint
-• rename <old_tag> <new_tag> - Rename a checkpoint
-• clear - Clear current conversation history
-• restore <number> - Restore conversation to N turns ago
-• name <name> - Name the active session
-• debug - Show chat diagnostics and debug information`,
-  }),
-};
+export function createChatCommand(
+  operations: ChatRecordingOperations,
+  readFuzzyFiltering: () => boolean,
+): SlashCommand {
+  return composeChatCommand(
+    {
+      list: createListAction(operations),
+      save: createSaveAction(operations),
+      resume: createResumeAction(),
+      delete: createDeleteAction(operations),
+      rename: createRenameAction(operations),
+      clear: createClearAction(operations),
+      restore: createRestoreAction(operations),
+      name: createNameAction(operations),
+      debug: createDebugAction(operations),
+    },
+    createChatTagSchema(operations, readFuzzyFiltering),
+  );
+}

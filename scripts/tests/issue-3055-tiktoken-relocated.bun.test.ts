@@ -25,13 +25,12 @@
  *   relative to the package's real `__dirname` — the test PASSES.
  *
  * The fixture writes its token count to a file (path passed via env var) rather
- * than stdout: Bun's stdout pipe is not reliably flushed under `spawnSync` from
- * a `bun test` parent, so a file makes the assertion unambiguous. The
+ * than stdout: Bun's stdout pipe is not reliably flushed from a `bun test`
+ * parent, so a file makes the assertion unambiguous. The
  * repository's own `node_modules` is never modified.
  */
 
 import { afterAll, describe, expect, it } from 'bun:test';
-import { spawnSync } from 'node:child_process';
 import {
   copyFileSync,
   cpSync,
@@ -46,6 +45,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cliBundleConfig } from '../bun-build.config.ts';
+import { describeOwnedChild, runOwnedChild } from './owned-child-process.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const repoRoot = resolve(__filename, '..', '..', '..');
@@ -177,10 +177,9 @@ describe('issue #3055: tiktoken resolves from a relocated node_modules', () => {
 
     // 5. Execute the relocated bundle. process.execPath is the Bun binary
     //    running this test. The fixture writes its token count to resultFile.
-    const proc = spawnSync(process.execPath, [relocatedBundle], {
+    const proc = await runOwnedChild(process.execPath, [relocatedBundle], {
       cwd: runDir,
-      encoding: 'utf8',
-      timeout: 60_000,
+      timeoutMs: 60_000,
       env: {
         ...process.env,
         RESULT_FILE: resultFile,
@@ -188,20 +187,22 @@ describe('issue #3055: tiktoken resolves from a relocated node_modules', () => {
       },
     });
 
-    expect(proc.error).toBeUndefined();
-    // Assert the signal is null BEFORE status: when spawnSync kills the child
-    // on timeout, proc.status is null and proc.signal is 'SIGTERM', so the
-    // status assertion alone would read "expected null to be 0" and hide the
-    // timeout. Naming the signal surfaces the real failure mode.
+    // The captured output goes into every message so a stalled or failing
+    // child can be diagnosed from the report alone.
+    const diagnostics =
+      `relocated fixture result file exists: ${existsSync(resultFile)}\n` +
+      describeOwnedChild(proc);
+    expect(
+      proc.timedOut,
+      `relocated fixture exceeded its time limit and was killed.\n${diagnostics}`,
+    ).toBe(false);
     expect(
       proc.signal,
-      `relocated fixture was killed by signal ${proc.signal} (likely timeout).\n` +
-        `stdout: ${proc.stdout}\nstderr: ${proc.stderr}`,
+      `relocated fixture was killed by signal ${proc.signal}.\n${diagnostics}`,
     ).toBeNull();
     expect(
-      proc.status,
-      `relocated fixture exited ${proc.status}.\n` +
-        `stdout: ${proc.stdout}\nstderr: ${proc.stderr}`,
+      proc.exitCode,
+      `relocated fixture exited ${proc.exitCode}.\n${diagnostics}`,
     ).toBe(0);
     // The result file's presence + numeric content proves the encoder actually
     // tokenised input using the relocated WASM payload.

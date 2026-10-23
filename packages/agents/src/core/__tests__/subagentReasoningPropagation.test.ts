@@ -37,9 +37,15 @@ const defaultDisabledTools = normalizeDefaultToolSet(DEFAULT_DISABLED_TOOLS);
 
 function populate(profile: Profile, profileName: string) {
   const service = createRuntimeSettingsService();
-  populatePreActivationSettings(service, profile, profileName);
+  populatePreActivationSettings(
+    service.set.bind(service),
+    service.setCurrentProfileName.bind(service),
+    profile,
+    profileName,
+  );
   populatePostActivationSettings(
-    service,
+    service.set.bind(service),
+    service.setCurrentProfileName.bind(service),
     profile,
     profileName,
     defaultDisabledTools,

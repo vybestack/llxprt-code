@@ -1,3 +1,4 @@
+import { captureAgentAdoption as fromConfig } from './helpers/agent-resource-capture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -19,7 +20,6 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import {
   ApprovalMode,
-  fromConfig,
   toConfigParameters,
   type Agent,
 } from '@vybestack/llxprt-code-agents';
@@ -32,7 +32,7 @@ import {
   HookEventName,
   HookType,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
-import { escapeShellArg } from '@vybestack/llxprt-code-core/utils/shell-utils.js';
+import { physicalHookCommand } from './helpers/physicalHookCommand.js';
 
 function gate(): { promise: Promise<void>; release: () => void } {
   let release = (): void => {};
@@ -140,9 +140,10 @@ console.log(JSON.stringify({ hookSpecificOutput: { llm_request: { contents: [...
     if (retirement !== undefined)
       await writeFile(
         join(directory, 'hook-descendant.ts'),
-        `import { writeFileSync } from 'node:fs';
+        `import { renameSync, writeFileSync } from 'node:fs';
 process.on('SIGTERM', () => {});
-writeFileSync('task-hook-child.pid', String(process.pid));
+writeFileSync('task-hook-child.pid.tmp', String(process.pid));
+renameSync('task-hook-child.pid.tmp', 'task-hook-child.pid');
 await Bun.sleep(1500);
 writeFileSync('task-hook-late', 'privileged');
 `,
@@ -157,9 +158,7 @@ writeFileSync('task-hook-late', 'privileged');
         ...args: Parameters<SubagentOrchestrator['launch']>
       ) {
         const launched = await actualLaunch.apply(this, args);
-        launchedSessionIds.push(
-          launched.runtime.runtimeContext.state.sessionId,
-        );
+        launchedSessionIds.push(launched.identity.sessionId);
         return launched;
       });
       restoreLaunchObservation = () => observation.mockRestore();
@@ -213,7 +212,7 @@ writeFileSync('task-hook-late', 'privileged');
                 hooks: [
                   {
                     type: HookType.Command,
-                    command: `exec ${escapeShellArg(process.execPath, 'bash')} ${escapeShellArg(hookScript, 'bash')}`,
+                    command: physicalHookCommand(hookScript),
                   },
                 ],
               },
@@ -222,18 +221,30 @@ writeFileSync('task-hook-late', 'privileged');
         : undefined,
     });
     mcp = await McpRuntimeOwner.create(createTestOAuthBinding(), config);
-    agent = await fromConfig({
-      ...createSessionSettingsFixture(config),
-      runtimeFactoryBindings: factories,
+    const adoptedSettings1 = createSessionSettingsFixture(config);
+    agent = await fromConfig(
       config,
-      mcpRuntime: mcp,
-      mcpOwnership: 'caller',
-      activation: {
-        provider: 'openai',
-        model: 'parent-model',
-        cliOverrides: { key: 'local-test-key', baseUrl },
+      adoptedSettings1.settingsService,
+      {
+        activation: {
+          provider: 'openai',
+          model: 'parent-model',
+          cliOverrides: { key: 'local-test-key', baseUrl },
+        },
+        mcpOwnership: 'caller',
       },
-    });
+      adoptedSettings1.settingsOwner,
+      undefined,
+      undefined,
+      undefined,
+      mcp,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      factories,
+    );
     const completed = gate();
     let completedCalls: Parameters<
       NonNullable<Parameters<Agent['tools']['openClientChannel']>[0]>
