@@ -26,23 +26,49 @@ jobs:
   # Run the canonical test shards independently so the nightly wall clock is
   # bounded by its slowest shard instead of the sum of every workspace.
   windows_ci:
-    name: 'Windows CI (Nightly) [${{ matrix.shard }}]'
+    name: 'Windows CI (Nightly) [${{ matrix.shard }} ${{ matrix.partition }}]'
     runs-on: '${{ matrix.os }}'
     timeout-minutes: 45
     strategy:
       fail-fast: false
+      # The cli shard is split into three partitions, matching the PR workflow
+      # (SHARD_PARTITION_COUNTS in scripts/affected-test-shards.ts), so a slow
+      # runner cannot push one job past the time limit. Every other shard
+      # runs whole as 1of1.
       matrix:
-        shard:
-          - 'cli'
-          - 'agents'
-          - 'providers'
-          - 'core'
-          - 'rest'
-          - 'scripts'
-        os:
-          - 'windows-latest'
-        node-version:
-          - '24.x'
+        include:
+          - shard: 'cli'
+            partition: '1of3'
+            os: 'windows-latest'
+            node-version: '24.x'
+          - shard: 'cli'
+            partition: '2of3'
+            os: 'windows-latest'
+            node-version: '24.x'
+          - shard: 'cli'
+            partition: '3of3'
+            os: 'windows-latest'
+            node-version: '24.x'
+          - shard: 'agents'
+            partition: '1of1'
+            os: 'windows-latest'
+            node-version: '24.x'
+          - shard: 'providers'
+            partition: '1of1'
+            os: 'windows-latest'
+            node-version: '24.x'
+          - shard: 'core'
+            partition: '1of1'
+            os: 'windows-latest'
+            node-version: '24.x'
+          - shard: 'rest'
+            partition: '1of1'
+            os: 'windows-latest'
+            node-version: '24.x'
+          - shard: 'scripts'
+            partition: '1of1'
+            os: 'windows-latest'
+            node-version: '24.x'
     steps:
       - name: 'Checkout'
         uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
@@ -104,6 +130,9 @@ jobs:
           LLXPRT_AUTH_TYPE: provider
           NO_COLOR: true
           CI: true
+          # Partition identity consumed by the CLI runner
+          # (packages/cli/run-bun-tests.ts); other shards carry 1of1.
+          LLXPRT_CLI_TEST_PARTITION: ${{ matrix.partition }}
         run: 'bun scripts/test.ts --shard "${{ matrix.shard }}"'
 
       - name: 'Smoke test CLI entry (launcher -> Bun, no Node in chain)'
@@ -118,7 +147,7 @@ jobs:
           ${{ always() && matrix.shard != 'scripts' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         uses: 'dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2' # ratchet:dorny/test-reporter@v3
         with:
-          name: 'Windows Test Results [${{ matrix.shard }}] (Node ${{ matrix.node-version }})'
+          name: 'Windows Test Results [${{ matrix.shard }} ${{ matrix.partition }}] (Node ${{ matrix.node-version }})'
           path: 'packages/*/junit.xml'
           reporter: 'java-junit'
           fail-on-error: 'false'
@@ -128,30 +157,56 @@ jobs:
           ${{ always() && matrix.shard != 'scripts' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
         uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # ratchet:actions/upload-artifact@v7
         with:
-          name: 'test-results-fork-windows-${{ matrix.shard }}-${{ matrix.node-version }}'
+          name: 'test-results-fork-windows-${{ matrix.shard }}-${{ matrix.partition }}-${{ matrix.node-version }}'
           path: 'packages/*/junit.xml'
 
   #
   # macOS CI (Nightly) — issue #2876
   #
   macos_ci:
-    name: 'macOS CI (Nightly) [${{ matrix.shard }}]'
+    name: 'macOS CI (Nightly) [${{ matrix.shard }} ${{ matrix.partition }}]'
     runs-on: '${{ matrix.os }}'
     timeout-minutes: 45
     strategy:
       fail-fast: false
+      # The cli shard is split into three partitions, matching the PR workflow
+      # (SHARD_PARTITION_COUNTS in scripts/affected-test-shards.ts), so a slow
+      # runner cannot push one job past the time limit. Every other shard
+      # runs whole as 1of1.
       matrix:
-        shard:
-          - 'cli'
-          - 'agents'
-          - 'providers'
-          - 'core'
-          - 'rest'
-          - 'scripts'
-        os:
-          - 'macos-latest'
-        node-version:
-          - '24.x'
+        include:
+          - shard: 'cli'
+            partition: '1of3'
+            os: 'macos-latest'
+            node-version: '24.x'
+          - shard: 'cli'
+            partition: '2of3'
+            os: 'macos-latest'
+            node-version: '24.x'
+          - shard: 'cli'
+            partition: '3of3'
+            os: 'macos-latest'
+            node-version: '24.x'
+          - shard: 'agents'
+            partition: '1of1'
+            os: 'macos-latest'
+            node-version: '24.x'
+          - shard: 'providers'
+            partition: '1of1'
+            os: 'macos-latest'
+            node-version: '24.x'
+          - shard: 'core'
+            partition: '1of1'
+            os: 'macos-latest'
+            node-version: '24.x'
+          - shard: 'rest'
+            partition: '1of1'
+            os: 'macos-latest'
+            node-version: '24.x'
+          - shard: 'scripts'
+            partition: '1of1'
+            os: 'macos-latest'
+            node-version: '24.x'
     steps:
       - name: 'Checkout'
         uses: 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' # ratchet:actions/checkout@v7
@@ -205,6 +260,9 @@ jobs:
           LLXPRT_AUTH_TYPE: provider
           NO_COLOR: true
           CI: true
+          # Partition identity consumed by the CLI runner
+          # (packages/cli/run-bun-tests.ts); other shards carry 1of1.
+          LLXPRT_CLI_TEST_PARTITION: ${{ matrix.partition }}
         run: 'bun scripts/test.ts --shard "${{ matrix.shard }}"'
 
       - name: 'Run shell-script behavioral tests (#2606)'
@@ -225,7 +283,7 @@ jobs:
           ${{ always() && matrix.shard != 'scripts' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         uses: 'dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2' # ratchet:dorny/test-reporter@v3
         with:
-          name: 'macOS Test Results [${{ matrix.shard }}] (Node ${{ matrix.node-version }})'
+          name: 'macOS Test Results [${{ matrix.shard }} ${{ matrix.partition }}] (Node ${{ matrix.node-version }})'
           path: 'packages/*/junit.xml'
           reporter: 'java-junit'
           fail-on-error: 'false'
@@ -235,7 +293,7 @@ jobs:
           ${{ always() && matrix.shard != 'scripts' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
         uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # ratchet:actions/upload-artifact@v7
         with:
-          name: 'test-results-fork-macos-${{ matrix.shard }}-${{ matrix.node-version }}'
+          name: 'test-results-fork-macos-${{ matrix.shard }}-${{ matrix.partition }}-${{ matrix.node-version }}'
           path: 'packages/*/junit.xml'
 
   #
