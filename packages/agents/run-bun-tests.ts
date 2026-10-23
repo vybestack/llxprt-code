@@ -203,10 +203,17 @@ export async function runTestFileWithTimeoutRetry<
   return runTimeoutRetry(file, runAttempt, logRetry);
 }
 
+/**
+ * `cwd` is where the child `bun test` starts, and Bun reads `bunfig.toml`
+ * (and its preloads) from there. It defaults to the workspace so real runs get
+ * the storage-isolation preload; tests of runner mechanics pass a scratch
+ * directory so a trivial child is not charged for the preload graph.
+ */
 export function runTestFile(
   file: string,
   reportPath: string,
   env: NodeJS.ProcessEnv = process.env,
+  cwd: string = WORKSPACE_ROOT,
 ): Promise<TestResult> {
   assertRunnerActive();
   const runnerEnv = process.env;
@@ -236,7 +243,7 @@ export function runTestFile(
         file,
       ],
       {
-        cwd: WORKSPACE_ROOT,
+        cwd,
         stdio: 'inherit',
         env,
         detached: process.platform !== 'win32',

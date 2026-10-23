@@ -207,7 +207,7 @@ jobs:
         run: 'npm ci'
 
       - name: 'Fix rollup platform dependency'
-        run: 'npm install @rollup/rollup-linux-x64-gnu --no-save || true'
+        run: 'npm install @rollup/rollup-linux-x64-gnu@4.59.0 --no-save --ignore-scripts || true'
 
       - name: 'Build project'
         run: 'npm run build'

@@ -210,8 +210,11 @@ jobs:
           bun .github/scripts/issue-planner.ts --render-context planner
           bun .github/scripts/issue-planner.ts --render-instructions planner
 
-      - name: 'Install LLxprt CLI nightly'
-        run: npm install -g @vybestack/llxprt-code@nightly
+      # This job holds issue write tokens and model API keys, so no dependency
+      # lifecycle script may run; the launcher resolves Bun from the installed
+      # @oven/bun-* package without one.
+      - name: 'Install LLxprt CLI nightly without lifecycle scripts'
+        run: npm install -g --ignore-scripts @vybestack/llxprt-code@nightly
 
       - name: 'Check API quota and select optimal key'
         env:

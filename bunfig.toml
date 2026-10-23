@@ -3,6 +3,54 @@
 # node_modules behaves identically under bun and npm during the migration.
 linker = "hoisted"
 
+# Dependency cooldown (issue #3930): refuse package versions published less
+# than 3 days ago (value is in seconds). Existing bun.lock entries are not
+# re-gated. Bun's exclude list takes exact package names only (globs such as
+# "@oven/bun-*" are not supported), so the Bun runtime packages and our own
+# @vybestack packages are listed explicitly. They are exempt so security pins
+# and release installs are never delayed. A test keeps this list in sync with
+# the manifests.
+minimumReleaseAge = 259200
+minimumReleaseAgeExcludes = [
+  "bun",
+  "@oven/bun-darwin-aarch64",
+  "@oven/bun-darwin-x64",
+  "@oven/bun-darwin-x64-baseline",
+  "@oven/bun-freebsd-aarch64",
+  "@oven/bun-freebsd-x64",
+  "@oven/bun-linux-aarch64",
+  "@oven/bun-linux-aarch64-android",
+  "@oven/bun-linux-aarch64-musl",
+  "@oven/bun-linux-x64",
+  "@oven/bun-linux-x64-android",
+  "@oven/bun-linux-x64-baseline",
+  "@oven/bun-linux-x64-musl",
+  "@oven/bun-linux-x64-musl-baseline",
+  "@oven/bun-windows-aarch64",
+  "@oven/bun-windows-x64",
+  "@oven/bun-windows-x64-baseline",
+  "@vybestack/llxprt-code",
+  "@vybestack/llxprt-code-a2a-server",
+  "@vybestack/llxprt-code-agents",
+  "@vybestack/llxprt-code-auth",
+  "@vybestack/llxprt-code-core",
+  "@vybestack/llxprt-code-ide-integration",
+  "@vybestack/llxprt-code-lsp",
+  "@vybestack/llxprt-code-mcp",
+  "@vybestack/llxprt-code-policy",
+  "@vybestack/llxprt-code-providers",
+  "@vybestack/llxprt-code-settings",
+  "@vybestack/llxprt-code-storage",
+  "@vybestack/llxprt-code-telemetry",
+  "@vybestack/llxprt-code-test-utils",
+  "@vybestack/llxprt-code-tools",
+  "@vybestack/llxprt-code-zed-acp",
+  "@vybestack/llxprt-plugin-google-gemini",
+  "@vybestack/llxprt-plugin-google-mcp-auth",
+  "@vybestack/llxprt-ui",
+  "llxprt-code-vscode-ide-companion",
+]
+
 [test]
 preload = [
   "./scripts/tests/storage-isolation-guard.ts",

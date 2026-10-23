@@ -329,8 +329,8 @@ describe('.github/workflows/release.yml', () => {
     expect(asString(pluginInstall['if'])).toContain(
       "steps.duplicate_check.outputs.is_duplicate != 'true'",
     );
-    expect(asString(asRecord(pluginBunSetup.with)['bun-version'])).toBe(
-      '1.4.2',
+    expect(asString(asRecord(pluginBunSetup.with)['bun-version-file'])).toBe(
+      '.bun-version',
     );
     expect(asString(pluginInstall.run)).toContain(
       'plugins/google-gemini plugins/google-mcp-auth',

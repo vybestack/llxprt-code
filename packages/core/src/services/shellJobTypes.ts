@@ -7,7 +7,8 @@
 export interface ShellProcessIdentity {
   readonly killed: boolean;
   readonly exitCode: number | null;
-  readonly signalCode: string | null;
+  /** Bun reports unnamed signals (for example Linux real-time signals) as numbers. */
+  readonly signalCode: string | number | null;
 }
 
 /**

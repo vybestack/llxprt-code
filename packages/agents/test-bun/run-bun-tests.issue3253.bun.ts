@@ -50,6 +50,10 @@ function createAttemptSequence<T extends { readonly timedOut: boolean }>(
   };
 }
 
+// These tests exercise runner mechanics with a trivial child under a 4 s
+// budget, so the child starts in its scratch directory (no bunfig, no
+// preloads) rather than the workspace, where the storage-isolation preload
+// graph can consume the budget on slow runners.
 async function withShortPerFileTimeout<T>(run: () => Promise<T>): Promise<T> {
   const saved = process.env.LLXPRT_TEST_FILE_TIMEOUT_MS;
   // 4s leaves headroom for child Bun startup under CI load while staying far
@@ -176,7 +180,7 @@ describe('real agents test-file child retries', () => {
       const result = await withShortPerFileTimeout(() =>
         runTestFileWithTimeoutRetry(
           file,
-          () => runTestFile(file, reportPath),
+          () => runTestFile(file, reportPath, undefined, dir),
           (message) => logs.push(message),
         ),
       );
@@ -217,7 +221,7 @@ describe('real agents test-file child retries', () => {
       const result = await withShortPerFileTimeout(() =>
         runTestFileWithTimeoutRetry(
           file,
-          () => runTestFile(file, reportPath),
+          () => runTestFile(file, reportPath, undefined, dir),
           () => undefined,
         ),
       );
@@ -282,7 +286,7 @@ writeFileSync(${JSON.stringify(marker)}, JSON.stringify({ home: process.env.HOME
 it('passes', async () => { await Bun.sleep(50); });`,
       );
       const result = await withShortPerFileTimeout(() =>
-        runTestFile(file, join(root, 'junit.xml'), childEnv),
+        runTestFile(file, join(root, 'junit.xml'), childEnv, root),
       );
       expect(result.passed).toBe(true);
       expect(result.timedOut).toBe(false);

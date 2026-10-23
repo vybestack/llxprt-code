@@ -56,17 +56,18 @@ void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
 
 // Mock clientToolGovernance module so tests can control tool name/governance returns
 void vi.mock('./clientToolGovernance.js', () => ({
-  getToolGovernanceEphemerals: vi.fn(() => undefined),
-  readToolList: vi.fn((v: unknown) =>
+  // Plain functions: setupAgentClient resets every vi.fn() implementation
+  // (Bun 1.4), and nothing in this file asserts on these calls.
+  getToolGovernanceEphemerals: () => undefined,
+  readToolList: (v: unknown) =>
     Array.isArray(v)
       ? (v as unknown[]).filter(
           (e): e is string => typeof e === 'string' && e.trim().length > 0,
         )
       : [],
-  ),
-  buildToolDeclarationsFromView: vi.fn(() => []),
-  getEnabledToolNamesForPrompt: vi.fn(() => []),
-  shouldIncludeSubagentDelegationForConfig: vi.fn(() => Promise.resolve(false)),
+  buildToolDeclarationsFromView: () => [],
+  getEnabledToolNamesForPrompt: () => [],
+  shouldIncludeSubagentDelegationForConfig: () => Promise.resolve(false),
 }));
 
 // --- Mocks (hoisted so vi.mock factories can reference them) ---

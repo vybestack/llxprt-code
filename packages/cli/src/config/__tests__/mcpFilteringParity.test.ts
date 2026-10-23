@@ -333,7 +333,7 @@ describe('mcpFilteringParity: MCP server filtering', () => {
   const originalArgv = process.argv;
 
   beforeEach(() => {
-    vi.resetAllMocks();
+    vi.clearAllMocks();
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );

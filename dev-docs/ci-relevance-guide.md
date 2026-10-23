@@ -126,7 +126,6 @@ authoritative `changed_files` count.
 | `nightly.yml`                     | `schedule`, `workflow_dispatch` | Nightly full test suite.                                   |
 | `ocr-infrastructure-notifier.yml` | `workflow_run`                  | Triggered by completion of the OCR Review workflow.        |
 | `release.yml`                     | `schedule`, `workflow_dispatch` | Release automation.                                        |
-| `upstream-sync.yml`               | `workflow_dispatch`             | Manual upstream sync.                                      |
 
 These workflows are triggered by non-code events (schedules, issue comments,
 labels) and have no code-path filter because the event itself determines

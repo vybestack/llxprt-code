@@ -22,7 +22,7 @@ const repoRoot = resolve(__dirname, '..', '..');
  * any future bump or downgrade trip CI until this constant and the rationale in
  * dev-docs/bun.md are updated deliberately together.
  */
-const EXPECTED_BUN_VERSION = '1.3.14';
+const EXPECTED_BUN_VERSION = '1.4.4';
 
 /**
  * The exact, intentional set of packages whose install/postinstall lifecycle

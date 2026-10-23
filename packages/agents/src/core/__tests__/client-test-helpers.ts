@@ -157,15 +157,11 @@ function setupConfigMock(mockFns: ClientMockFns): ContentGeneratorConfig {
       createContentGenerator: () => contentGenerator,
     },
   };
+  // The automocked Config constructor loses its instance-building
+  // implementation when vi.resetAllMocks() runs (Bun 1.4 resets mock
+  // implementations), so build the instance from the mocked prototype directly.
   const mockConfigObject = Object.assign(
-    new HostConfig({
-      sessionId: 'test-session-id',
-      cwd: process.cwd(),
-      targetDir: process.cwd(),
-      debugMode: false,
-      model: 'test-model',
-      telemetry: { enabled: false },
-    }),
+    Object.create(HostConfig.prototype) as Config,
     {
       getContentGeneratorConfig: vi
         .fn()

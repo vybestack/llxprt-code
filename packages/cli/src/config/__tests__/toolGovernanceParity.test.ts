@@ -355,7 +355,7 @@ describe('toolGovernanceParity: interactive mode', () => {
   const originalIsTTY = process.stdin.isTTY;
 
   beforeEach(() => {
-    vi.resetAllMocks();
+    vi.clearAllMocks();
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
@@ -443,7 +443,7 @@ describe('toolGovernanceParity: non-interactive mode', () => {
   const originalIsTTY = process.stdin.isTTY;
 
   beforeEach(() => {
-    vi.resetAllMocks();
+    vi.clearAllMocks();
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );
@@ -566,7 +566,7 @@ describe('toolGovernanceParity: tool policy - non-interactive allowed sets', () 
   const originalIsTTY = process.stdin.isTTY;
 
   beforeEach(() => {
-    vi.resetAllMocks();
+    vi.clearAllMocks();
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue(
       path.resolve(path.sep, 'mock', 'home', 'user'),
     );

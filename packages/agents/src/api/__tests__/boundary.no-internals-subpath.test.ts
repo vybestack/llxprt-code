@@ -168,7 +168,12 @@ describe('boundary: the agents internals subpath is dead (issue #3222)', () => {
     // THIS file never see a quoted subpath specifier to flag (the established
     // fragment-assembly idiom in this directory).
     const specifier = AGENTS_PACKAGE + '/internals.js';
-    await expect(import(specifier)).rejects.toThrow(/Cannot find module/);
+    // Bun 1.3 said "Cannot find module '<specifier>'"; Bun 1.4 says "Cannot
+    // find package '<name>'". The stable contract is the Node error code.
+    await expect(import(specifier)).rejects.toMatchObject({
+      code: 'ERR_MODULE_NOT_FOUND',
+      message: expect.stringMatching(/^Cannot find (module|package) /),
+    });
   });
 });
 

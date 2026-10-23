@@ -418,7 +418,13 @@ describe('#3469 launch resource release', () => {
     port: number,
     respond: (socket: net.Socket) => void,
   ): Promise<{ server: net.Server; port: number }> {
-    const server = net.createServer(respond);
+    // Discard the probe's request bytes. Accepted sockets are not read until a
+    // consumer attaches (Node semantics, which Bun 1.4 now follows), and an
+    // unread request would keep the socket open so server.close() never settles.
+    const server = net.createServer((socket) => {
+      socket.resume();
+      respond(socket);
+    });
     const whenListening = new Promise<number>((resolve, reject) => {
       server.once('listening', () => {
         const address = server.address();
@@ -446,7 +452,7 @@ describe('#3469 launch resource release', () => {
     process.env.LLXPRT_CACHE_HOME = isolatedCacheDir;
     originalCwd = process.cwd();
     process.chdir(fixturePath);
-    vi.resetAllMocks();
+    vi.clearAllMocks();
     vi.spyOn(os, 'platform').mockReturnValue('darwin');
     delete process.env.LLXPRT_SANDBOX_NETWORK;
     delete process.env.SANDBOX_NETWORK;

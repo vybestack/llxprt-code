@@ -101,6 +101,11 @@ async function* readChunks(
   }
 }
 
+/** Bun reports signals without a name (Linux real-time signals) as numbers. */
+function signalName(signalCode: string | number | null): string | null {
+  return typeof signalCode === 'number' ? `SIG${signalCode}` : signalCode;
+}
+
 function openTransport(
   source: string,
   env: Record<string, string | undefined>,
@@ -125,7 +130,7 @@ function openTransport(
       output: Readable.from(readChunks(child.stdout)),
       exit: child.exited.then(() => ({
         exitCode: child.exitCode,
-        signal: child.signalCode,
+        signal: signalName(child.signalCode),
       })),
       stop: async () => {
         await child.stdin.end();
