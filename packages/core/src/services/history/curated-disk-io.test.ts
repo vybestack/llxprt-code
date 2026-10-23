@@ -1,13 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { withCuratedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 import { describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'node:fs';
 import {
   batchRow,
   withBatchFixture,
 } from './__tests__/support/addbatch-stream-test-helpers.js';
-import { expectTicketDiskContents } from './ticket-disk-contract-test-helpers.js';
-import { withCuratedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 import type { IContent } from './IContent.js';
+import { expectTicketDiskContents } from './ticket-disk-contract-test-helpers.js';
 
 function observeDiskOperations(): {
   snapshot(): { opens: number; truncates: number };
@@ -55,7 +55,12 @@ describe('curated queries over real disk with bounded I/O', () => {
       const disk = observeDiskOperations();
       try {
         await history.addBatch(rows);
-        expectTicketDiskContents(recorder, rows.length, (index) => rows[index]);
+        await history.waitForCommit();
+        await expectTicketDiskContents(
+          recorder,
+          rows.length,
+          (index) => rows[index],
+        );
         await expectFullRows(history.streamRawHistory(), rows);
         expect(history.getTotalTokens()).toBe(4 * rows.length);
         expect(disk.snapshot().opens).toBeLessThanOrEqual(32);
@@ -69,7 +74,12 @@ describe('curated queries over real disk with bounded I/O', () => {
     await withBatchFixture(async ({ history, recorder, reads }) => {
       const rows = Array.from({ length: 512 }, (_, index) => batchRow(index));
       await history.addBatch(rows);
-      expectTicketDiskContents(recorder, rows.length, (index) => rows[index]);
+      await history.waitForCommit();
+      await expectTicketDiskContents(
+        recorder,
+        rows.length,
+        (index) => rows[index],
+      );
       await withCuratedHistoryForTest(history, async (oracle) => {
         const disk = observeDiskOperations();
         try {

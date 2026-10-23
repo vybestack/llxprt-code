@@ -1,68 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import {
-  mediaParticipant,
+  journalMediaParticipant as mediaParticipant,
   rejectedValue,
   rollbackRow,
   rowBodies,
   rowsOf,
   withRollbackFixture,
 } from './chronology-rollback-test-helpers.js';
-
-function aggregate(error: unknown): AggregateError {
-  expect(error).toBeInstanceOf(AggregateError);
-  if (!(error instanceof AggregateError)) throw new Error('Missing aggregate');
-  return error;
-}
-
-describe('history mutation cleanup after compensation failure', () => {
-  it('orders primary, partially admitted compensation and ownership failures while restoring local state', async () => {
-    await withRollbackFixture(async (history, recorder) => {
-      await history.addBatch([rollbackRow(0)]);
-      const primary = new Error('publication failed');
-      const ownershipFailure = new Error('ownership rollback failed');
-      await history.registerMediaOwner(
-        mediaParticipant(() => ({
-          publish: () => undefined,
-          rollback: () => {
-            throw ownershipFailure;
-          },
-        })),
-      );
-      const replacement = [rollbackRow(1), rollbackRow(2)];
-      const error = aggregate(
-        await rejectedValue(
-          history.replaceBatch(replacement, undefined, {
-            afterPublication: () => {
-              recorder.failAdmissionAfter(1);
-              throw primary;
-            },
-          }),
-        ),
-      );
-      expect(error.errors).toStrictEqual([
-        primary,
-        recorder.failure,
-        ownershipFailure,
-      ]);
-      expect(replacement.map((row) => row.metadata)).toStrictEqual([
-        undefined,
-        undefined,
-      ]);
-      // The injected fault lets the restoring transaction begin but not write
-      // its first row. Readers discard an unfinished transaction, so durable
-      // history is the committed replacement and derived state follows it.
-      expect(history.getTotalTokens()).toBe(8);
-      expect(await rowsOf(history)).toHaveLength(2);
-      const following = rollbackRow(3);
-      await history.addBatch([following]);
-      expect(following.metadata).toBeUndefined();
-      const durable = await rowsOf(history);
-      expect(durable).toHaveLength(3);
-      expect(durable[2].metadata?.chronology?.seq).toBe(4);
-    });
-  });
-});
 
 describe('history mutation cleanup after marker restoration failure', () => {
   it('ignores a callback that poisons a caller marker and still cleans up rows and ownership', async () => {

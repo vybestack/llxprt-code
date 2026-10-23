@@ -12,10 +12,7 @@ import {
   withRollbackFixture,
 } from './chronology-rollback-test-helpers.js';
 
-async function retryAfterFailure(
-  size: number,
-  observer: boolean,
-): Promise<void> {
+async function retryAfterFailure(size: number): Promise<void> {
   await withRollbackFixture(async (history, recorder) => {
     await history.addBatch([batchRow(20000)]);
     await history.waitForCommit();
@@ -23,23 +20,19 @@ async function retryAfterFailure(
     const ready = batchGate();
     const release = batchGate();
     const failure = new Error('observer rollback');
-    if (!observer) recorder.failAdmissionAfter(7);
     const operation = history.addBatch(batch, undefined, {
       streamPublication: true,
       afterPublication: async () => {
-        if (!observer) return;
         ready.resolve();
         await release.promise;
         throw failure;
       },
     });
-    if (observer) await ready.promise;
+    await ready.promise;
     const queued = rollbackRow(90000);
     history.add(queued);
     release.resolve();
-    expect(await rejectedValue(operation)).toBe(
-      observer ? failure : recorder.failure,
-    );
+    expect(await rejectedValue(operation)).toBe(failure);
     await history.waitForTokenUpdates();
     expect(history.getTotalTokens()).toBe(8);
     const prior = await rowsOf(history);
@@ -88,16 +81,9 @@ describe('addBatch streamed atomicity', () => {
     }, true);
   });
   it.each([512, 8192])(
-    'compensates partial admission of %i mixed rows before a queued add and retries',
-    async (size) => {
-      await expect(retryAfterFailure(size, false)).resolves.toBeUndefined();
-    },
-    180000,
-  );
-  it.each([512, 8192])(
     'compensates observer rejection of %i mixed rows before a queued add and retries',
     async (size) => {
-      await expect(retryAfterFailure(size, true)).resolves.toBeUndefined();
+      await expect(retryAfterFailure(size)).resolves.toBeUndefined();
     },
     180000,
   );

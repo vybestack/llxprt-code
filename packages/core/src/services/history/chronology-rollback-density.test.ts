@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'bun:test';
 import {
   exactTokenizer,
-  mediaParticipant,
+  journalMediaParticipant as mediaParticipant,
   rejectedValue,
   rollbackRow,
   rowsOf,
@@ -16,7 +16,7 @@ describe('density chronology rollback before the batch commit', () => {
         const baseline = [rollbackRow(0), rollbackRow(1), rollbackRow(2)];
         for (const row of baseline) history.add(row);
         await history.waitForCommit();
-        const stored = baseline;
+        const stored = await rowsOf(history);
         expect(
           stored.map((row) => row.metadata?.chronology?.seq),
         ).toStrictEqual([1, 2, 3]);

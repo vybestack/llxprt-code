@@ -1,20 +1,15 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { mkdtempSync, rmSync } from 'node:fs';
-import { appendFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { SnapshotProbeHistory } from './__tests__/support/old-store-snapshot-history.js';
-import { JournalResolver } from '../../recording/journalResolver.js';
-import { RowOwnership } from '../../recording/rowOwnership.js';
+import type { SessionRecordingPort } from '../../recording/recordingPort.js';
 import {
-  AdmissionFailureRecorder,
-  exactTokenizer,
+  withNativeDetachedFixture,
+  type NativeDetachedFixture,
+} from './__tests__/support/detached-contract-fixture.js';
+import {
+  durableRowsOf,
   rollbackRow,
 } from './chronology-rollback-test-helpers.js';
 import type { IContent } from './IContent.js';
-import type { HistoryCheckpoint } from './historyCheckpointRows.js';
-import type { HistoryIndexedRows } from './historyMutationSnapshot.js';
 
 export function detachedRow(index: number, bytes = 2048): IContent {
   return {
@@ -38,51 +33,21 @@ export async function* detachedRows(
   for (let index = 0; index < size; index++) yield detachedRow(index, bytes);
 }
 
-export interface DetachedFixture {
-  readonly history: SnapshotProbeHistory;
-  readonly recorder: AdmissionFailureRecorder;
-  readonly owners: RowOwnership;
-  readonly releaseWriter: () => void;
+export interface DetachedFixture extends NativeDetachedFixture {
+  readonly recorder: SessionRecordingPort;
 }
 
 export async function withDetachedFixture<T>(
   action: (fixture: DetachedFixture) => Promise<T>,
   pending = false,
 ): Promise<T> {
-  const root = mkdtempSync(join(tmpdir(), 'detached-fixture-'));
-  let releaseWriter = (): void => {};
-  const gate = new Promise<void>((resolve) => {
-    releaseWriter = resolve;
+  return withNativeDetachedFixture(async (fixture) => {
+    if (pending) fixture.pauseWriter();
+    return action({
+      ...fixture,
+      recorder: fixture.recording,
+    });
   });
-  if (!pending) releaseWriter();
-  const recorder = new AdmissionFailureRecorder({
-    sessionId: 'detached',
-    projectHash: 'detached',
-    chatsDir: root,
-    workspaceDirs: [root],
-    provider: 'test',
-    model: 'test',
-    io: {
-      appendFile: async (file, data, encoding): Promise<void> => {
-        await gate;
-        await appendFile(file, data, encoding);
-      },
-    },
-  });
-  const owners = new RowOwnership();
-  const history = new SnapshotProbeHistory({
-    recording: recorder,
-    mutationOwnership: owners,
-  });
-  history.setTokenizerFactory(exactTokenizer());
-  try {
-    return await action({ history, recorder, owners, releaseWriter });
-  } finally {
-    releaseWriter();
-    await history.dispose();
-    await recorder.dispose();
-    rmSync(root, { recursive: true, force: true });
-  }
 }
 
 export async function detachedDigest(
@@ -101,26 +66,11 @@ export async function detachedDigest(
 }
 
 export async function detachedDurableDigest(
-  recorder: AdmissionFailureRecorder,
+  recorder: SessionRecordingPort,
 ): Promise<Awaited<ReturnType<typeof detachedDigest>>> {
-  const path = recorder.getFilePath();
-  if (path === null) throw new Error('Missing journal');
-  const resolver = await JournalResolver.open(path);
-  try {
-    const rows = async function* (): AsyncGenerator<IContent, void, unknown> {
-      for await (const entry of resolver.resolve()) yield entry.content;
-    };
-    return await detachedDigest(rows());
-  } finally {
-    await resolver.close();
-  }
-}
-
-/** The synchronous checkpoint the file-backed store hands out; the journal store hands an async source. */
-export function indexedCheckpoint(
-  checkpoint: HistoryCheckpoint,
-): HistoryIndexedRows {
-  if (Symbol.asyncIterator in checkpoint)
-    throw new Error('Expected the indexed checkpoint of the file-backed store');
-  return checkpoint;
+  return detachedDigest(
+    (async function* () {
+      yield* await durableRowsOf(recorder);
+    })(),
+  );
 }

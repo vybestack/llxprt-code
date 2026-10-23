@@ -1,24 +1,14 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { expect } from 'bun:test';
-import { appendFileSync } from 'node:fs';
 import { RowOwnership } from '../../recording/rowOwnership.js';
-import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
+import { batchGate } from './__tests__/support/addbatch-stream-test-helpers.js';
+import { withNativeDetachedFixture } from './__tests__/support/detached-contract-fixture.js';
 import {
-  exactTokenizer,
-  mediaParticipant,
   rejectedValue,
   rollbackRow,
 } from './chronology-rollback-test-helpers.js';
-import type { HistoryMediaOwner } from './historyBatchContracts.js';
-import type { HistoryService } from './HistoryService.js';
+import type { DetachedHistorySink } from './detachedHistoryMutation.js';
 import type { IContent } from './IContent.js';
-type HistoryBackend = 'old' | 'journal';
-
-type MediaInput = Parameters<HistoryMediaOwner['prepareReplacement']>[0];
-interface OwnerObservation {
-  traversed: number;
-  bytes: number;
-}
 
 export function ownerFixtureRow(index: number, bytes: number): IContent {
   return {
@@ -34,102 +24,13 @@ export function ownerFixtureRow(index: number, bytes: number): IContent {
   };
 }
 
-function prepareOwners(
-  input: MediaInput,
-  previous: RowOwnership,
-  transaction: RowOwnership,
-  observation: OwnerObservation,
-  trap: boolean,
-): () => void {
-  if (Array.isArray(input.previous)) {
-    for (const row of input.previous) previous.retain(row);
-  }
-  const nextArray = Array.isArray(input.next) ? input.next : undefined;
-  if (nextArray !== undefined) {
-    for (const row of nextArray) transaction.retain(row);
-  } else {
-    let nextCount = 0;
-    for (const row of input.next) {
-      expect(row.blocks.length).toBeGreaterThan(0);
-      nextCount++;
-    }
-    expect(nextCount).toBe(input.next.length);
-  }
-  const eager: IContent[] = [];
-  for (const row of input.previous) {
-    expect(row).toStrictEqual(ownerFixtureRow(observation.traversed, 2048));
-    observation.traversed++;
-    observation.bytes += Buffer.byteLength(JSON.stringify(row));
-    if (trap) {
-      eager.push(row);
-      previous.retain(row);
-      transaction.retain(row);
-    }
-  }
-  return () => {
-    if (nextArray !== undefined) {
-      for (const row of nextArray) transaction.release(row);
-    }
-    if (Array.isArray(input.previous)) {
-      for (const row of input.previous) previous.release(row);
-    }
-    for (const row of eager) {
-      transaction.release(row);
-      previous.release(row);
-    }
-  };
-}
-
-async function verifyRestoration(
-  history: HistoryService,
+async function* ownerRows(
   size: number,
-): Promise<void> {
-  let index = 0;
-  for await (const row of history.getRecent(0)) {
-    expect(row).toStrictEqual(ownerFixtureRow(index++, 2048));
-  }
-  expect(index).toBe(size);
+): AsyncGenerator<IContent, void, unknown> {
+  for (let index = 0; index < size; index++) yield ownerFixtureRow(index, 2048);
 }
 
-async function publishOwnerRows(
-  input: MediaInput,
-  kind: 'density' | 'transform',
-  reached: (() => void) | undefined,
-  gate: Promise<void>,
-  primary: Error,
-): Promise<never> {
-  if (kind === 'transform') {
-    let published = 0;
-    for (const row of input.next) {
-      expect(row).toStrictEqual(ownerFixtureRow(published++, 2048));
-      if (published === input.next.length) {
-        reached?.();
-        await gate;
-        throw primary;
-      }
-    }
-  }
-  reached?.();
-  await gate;
-  throw primary;
-}
-
-async function waitForOwnerPause(
-  ready: Promise<void>,
-  operation: Promise<unknown>,
-): Promise<void> {
-  await Promise.race([
-    ready,
-    operation.then((error) => {
-      throw error ?? new Error('Density publication ended before pause');
-    }),
-  ]);
-}
-
-async function observeDensity(
-  history: HistoryService,
-  previous: RowOwnership,
-  transaction: RowOwnership,
+export async function pausedDensity(
   size: number,
   trap: boolean,
   kind: 'density' | 'transform' = 'density',
@@ -139,96 +40,93 @@ async function observeDensity(
   traversed: number;
   bytes: number;
 }> {
-  history.setTokenizerFactory(exactTokenizer());
-  const observation = { traversed: 0, bytes: 0 };
-  let release: (() => void) | undefined;
-  let reached: (() => void) | undefined;
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const ready = new Promise<void>((resolve) => {
-    reached = resolve;
-  });
-  const primary = new Error('paused density rollback');
-  await history.registerMediaOwner(
-    mediaParticipant((input) => {
-      const rollback = prepareOwners(
-        input,
-        previous,
-        transaction,
-        observation,
-        trap,
-      );
-      return {
-        publish: () => publishOwnerRows(input, kind, reached, gate, primary),
-        rollback,
-      };
-    }),
-  );
-  const replacement = rollbackRow(size, 2048);
-  if (kind === 'density') transaction.retain(replacement);
-  const operation = rejectedValue(
-    kind === 'transform'
-      ? history.detachedValues.transform(
-          async (source, sink) => {
-            for await (const row of source.streamRows())
-              await sink.appendValue(row);
-          },
-          undefined,
-          { publishTokens: true },
-        )
-      : history.applyDensityResult({
-          replacements: new Map([[Math.floor(size / 2), replacement]]),
-          removals: [size - 1],
-          metadata: {
-            readWritePairsPruned: 0,
-            fileDeduplicationsPruned: 0,
-            recencyPruned: 1,
-          },
+  return withNativeDetachedFixture(async ({ history, owners }) => {
+    await history.detachedValues.replace(ownerRows(size));
+    const previous = new RowOwnership();
+    const retained: IContent[] = [];
+    const ready = batchGate();
+    const release = batchGate();
+    const primary = new Error('paused journal rollback');
+    let traversed = 0;
+    let bytes = 0;
+    const operation = rejectedValue(
+      history.detachedValues.transform(async (source, sink) => {
+        for await (const row of source.streamRows()) {
+          expect(row).toStrictEqual(ownerFixtureRow(traversed, 2048));
+          traversed++;
+          bytes += Buffer.byteLength(JSON.stringify(row));
+          previous.retain(row);
+          owners.retain(row);
+          if (trap) {
+            retained.push(row);
+          }
+          try {
+            await appendOwnerRow(sink, kind, traversed, size, row);
+            if (traversed === size) {
+              ready.resolve();
+              await release.promise;
+              throw primary;
+            }
+          } finally {
+            if (!trap) {
+              previous.release(row);
+              owners.release(row);
+            }
+          }
+        }
+      }),
+    );
+    try {
+      await Promise.race([
+        ready.promise,
+        operation.then((error) => {
+          throw error ?? new Error('Missing publication pause');
         }),
-  );
-  await waitForOwnerPause(ready, operation);
-  const result = {
-    previous: previous.snapshot(),
-    transaction: transaction.snapshot(),
-    ...observation,
-  };
-  release?.();
-  expect(await operation).toBe(primary);
-  if (kind === 'density') transaction.release(replacement);
-  expect(previous.snapshot().liveRows).toBe(0);
-  expect(transaction.snapshot().liveRows).toBe(0);
-  await verifyRestoration(history, size);
-  expect(replacement.metadata).toBeUndefined();
-  return result;
+      ]);
+      const result = {
+        previous: previous.snapshot(),
+        transaction: owners.snapshot(),
+        traversed,
+        bytes,
+      };
+      release.resolve();
+      expect(await operation).toBe(primary);
+      for (const row of retained) {
+        previous.release(row);
+        owners.release(row);
+      }
+      retained.length = 0;
+      expect(previous.snapshot().liveRows).toBe(0);
+      expect(owners.snapshot().liveRows).toBe(0);
+      await expectOwnerRows(history.streamRawHistory(), size);
+      return result;
+    } finally {
+      release.resolve();
+      await operation;
+    }
+  });
 }
 
-/**
- * `backend` names the store the fixture builds; omitted, the environment
- * selects it. The owner callbacks observed here are the old store's media
- * owner protocol (`prepareReplacement` over previous and next row iterables).
- */
-export async function pausedDensity(
+async function expectOwnerRows(
+  rows: AsyncIterable<IContent>,
   size: number,
-  trap: boolean,
-  kind: 'density' | 'transform' = 'density',
-  backend?: HistoryBackend,
-): Promise<Awaited<ReturnType<typeof observeDensity>>> {
-  const transaction = new RowOwnership();
-  const result = await withCoreSuffixFixture(
-    size,
-    (history, previous) =>
-      observeDensity(history, previous, transaction, size, trap, kind),
-    2048,
-    ownerFixtureRow,
-    transaction,
-    undefined,
-  );
-  const output = process.env.CHRONOLOGY_DENSITY_OWNER_OUTPUT;
-  if (output !== undefined)
-    appendFileSync(
-      output,
-      JSON.stringify({ size, trap, kind, ...result }) + '\n',
-    );
-  return result;
+): Promise<void> {
+  let index = 0;
+  for await (const row of rows)
+    expect(row).toStrictEqual(ownerFixtureRow(index++, 2048));
+  expect(index).toBe(size);
+}
+
+async function appendOwnerRow(
+  sink: DetachedHistorySink,
+  kind: 'density' | 'transform',
+  traversed: number,
+  size: number,
+  row: IContent,
+): Promise<void> {
+  if (kind === 'density' && traversed === size)
+    await sink.removeValue(traversed - 1);
+  else if (kind === 'density' && traversed === Math.floor(size / 2) + 1)
+    await sink.appendReplacement(traversed - 1, rollbackRow(size, 2048));
+  else await sink.appendDerived(traversed - 1, row);
 }

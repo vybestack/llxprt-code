@@ -1,35 +1,40 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
 import {
+  appendFileSync,
   mkdtempSync,
   readFileSync,
   rmSync,
   writeFileSync,
-  appendFileSync,
 } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  withBatchFixture,
   batchGate,
+  withBatchFixture,
 } from './__tests__/support/addbatch-stream-test-helpers.js';
-import { HistoryService } from './HistoryService.js';
 import {
   assertOwnerBound,
-  oracleExport,
-  seedRows,
-  sha256,
   exportSummaryRow,
+  oracleExport,
   recordExportSummaryOwners,
+  sha256,
 } from './export-summary-test-helpers.js';
+import { HistoryService } from './HistoryService.js';
+
+async function* exportRows(
+  size: number,
+): AsyncGenerator<ReturnType<typeof exportSummaryRow>, void, unknown> {
+  for (let index = 0; index < size; index++) yield exportSummaryRow(index);
+}
 
 describe('streamed history JSON export', () => {
   it.each([512, 8192])(
     'writes exact legacy bytes for %i mixed durable rows without retaining the document',
     async (size) => {
-      await withBatchFixture(async ({ history, recorder, owners }) => {
-        await seedRows(recorder, size);
+      await withBatchFixture(async ({ history, owners }) => {
+        await history.detachedValues.replace(exportRows(size));
         const root = mkdtempSync(join(tmpdir(), 'history-export-'));
         const path = join(root, 'history.json');
         writeFileSync(path, '');
@@ -57,11 +62,11 @@ describe('streamed history JSON export', () => {
   );
 
   it('does not pull another row while the sink is backpressured and pins membership', async () => {
-    await withBatchFixture(async ({ history, recorder, owners }) => {
+    await withBatchFixture(async ({ history, owners }) => {
       await history.addBatch(
         Array.from({ length: 3 }, (_, index) => exportSummaryRow(index)),
       );
-      await recorder.flush();
+      await history.waitForCommit();
       const entered = batchGate();
       const release = batchGate();
       let text = '';
@@ -91,8 +96,8 @@ describe('streamed history JSON export', () => {
 
 describe('history JSON export lifecycle', () => {
   it('releases the cursor on sink error, early close, and cancellation of a stalled sink', async () => {
-    await withBatchFixture(async ({ history, recorder, owners }) => {
-      await seedRows(recorder, 3);
+    await withBatchFixture(async ({ history, owners }) => {
+      await history.detachedValues.replace(exportRows(3));
       await expect(
         history.writeJSON(async () => {
           throw new Error('sink failed');
@@ -135,9 +140,9 @@ describe('history JSON export lifecycle', () => {
     } finally {
       await empty.dispose();
     }
-    await withBatchFixture(async ({ history, recorder, owners }) => {
+    await withBatchFixture(async ({ history, owners }) => {
       const row = exportSummaryRow(0, 9 * 1024 * 1024);
-      await recorder.commit('content', { content: row });
+      await history.addBatch([row]);
       const hash = createHash('sha256');
       await history.writeJSON(async (chunk) => {
         hash.update(chunk);

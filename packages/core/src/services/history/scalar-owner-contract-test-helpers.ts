@@ -1,8 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { expect } from 'bun:test';
-import { JournalResolver } from '../../recording/journalResolver.js';
-import type { SessionRecordingService } from '../../recording/SessionRecordingService.js';
+import type { SessionRecordingPort } from '../../recording/recordingPort.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
+import { durableRowsOf } from './chronology-rollback-test-helpers.js';
 import type { IContent } from './IContent.js';
 
 export function scalarRowCharge(row: IContent): number {
@@ -28,22 +28,14 @@ export function expectScalarRow(row: IContent, index: number): void {
 }
 
 export async function expectScalarDurableRows(
-  recorder: SessionRecordingService,
+  recorder: SessionRecordingPort,
   length: number,
   expected: (index: number) => IContent,
 ): Promise<void> {
-  const file = recorder.getFilePath();
-  if (file === null) throw new Error('Scalar fixture has no journal');
-  const resolver = await JournalResolver.open(file);
-  try {
-    let index = 0;
-    for await (const entry of resolver.resolve()) {
-      expect(entry.content).toStrictEqual(expected(index));
-      expectScalarRow(entry.content, index);
-      index++;
-    }
-    expect(index).toBe(length);
-  } finally {
-    await resolver.close();
+  const rows = await durableRowsOf(recorder);
+  expect(rows).toHaveLength(length);
+  for (const [index, row] of rows.entries()) {
+    expect(row).toStrictEqual(expected(index));
+    expectScalarRow(row, index);
   }
 }

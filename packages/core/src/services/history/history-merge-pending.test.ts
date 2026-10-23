@@ -25,7 +25,10 @@ describe('history merge pending source identities', () => {
           async (target, targetRecorder, releaseTarget) => {
             const baseline = mergeRow(0);
             target.add(baseline);
-            await target.merge(source);
+            const merging = target.merge(source);
+            releaseSource();
+            releaseTarget();
+            await merging;
             const live = await rowsOf(target);
             expect(live).toStrictEqual([baseline, incoming]);
             expect(live[1]).not.toBe(incoming);
@@ -66,7 +69,9 @@ describe('history merge pending source identities', () => {
             };
             throw primary;
           });
-          expect(await rejectedValue(target.merge(source))).toBe(primary);
+          const merging = target.merge(source);
+          releaseSource();
+          expect(await rejectedValue(merging)).toBe(primary);
           expect(await rowsOf(target)).toStrictEqual([]);
           expect((await rowsOf(source))[0]).toStrictEqual(incoming);
           expect(incoming.metadata?.chronology).toBe(marker);

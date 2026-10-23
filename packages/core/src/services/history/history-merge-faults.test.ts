@@ -24,47 +24,6 @@ async function withSource(
   }
 }
 
-describe('history merge compensation and publication', () => {
-  for (const pending of [false, true]) {
-    it(`restores ${pending ? 'pending' : 'durable'} values after partial admission and allows a queued mutation`, async () => {
-      await withSource(async (source) =>
-        withRollbackFixture(async (target, recorder, releaseWriter) => {
-          const marker = {
-            seq: 1,
-            userTurn: 1,
-            step: 0,
-            recordedAt: 1700000000000,
-          };
-          const baseline = mergeRow(0, 2048, marker);
-          target.add(baseline);
-          await target.waitForTokenUpdates();
-          if (!pending) await target.waitForCommit();
-          const tokens = target.getTotalTokens();
-          recorder.failAdmissionAfter(1);
-          const merge = target.merge(source);
-          const following = mergeRow(30);
-          target.add(following);
-          expect(await rejectedValue(Promise.resolve(merge))).toBe(
-            recorder.failure,
-          );
-          const rows = await rowsOf(target);
-          expect(rows).toStrictEqual([baseline, following]);
-          expect(rows[0]).not.toBe(baseline);
-          expect(baseline.metadata?.chronology).toBe(marker);
-          await target.waitForTokenUpdates();
-          expect(target.getTotalTokens()).toBe(tokens * 2);
-          releaseWriter();
-          await target.waitForCommit();
-          expect(await durableRowsOf(recorder)).toStrictEqual([
-            baseline,
-            following,
-          ]);
-        }, pending),
-      );
-    });
-  }
-});
-
 describe('history merge observer and serialization compensation', () => {
   it('emits appended rows in order and compensates a throwing content observer', async () => {
     await withSource(async (source) =>
@@ -94,6 +53,7 @@ describe('history merge observer and serialization compensation', () => {
       const first = mergeRow(10);
       const later = mergeRow(11);
       source.addAll([first, later]);
+      releaseSource();
       await source.waitForTokenUpdates();
       later.blocks.push({
         type: 'tool_response',

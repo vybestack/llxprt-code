@@ -1,20 +1,18 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { tmpdir } from 'node:os';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { appendFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { collectJournalFileRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { SessionRecordingService } from '../../recording/SessionRecordingService.js';
+import type { SessionRecordingPort } from '../../recording/recordingPort.js';
 import type {
   SessionEventType,
   SessionRecordLine,
 } from '../../recording/types.js';
 import type { RuntimeTokenizerFactory } from '../../runtime/contracts/RuntimeTokenizerFactory.js';
 import type { HistoryService } from './HistoryService.js';
-import { SnapshotProbeHistory } from './__tests__/support/old-store-snapshot-history.js';
-import { JournalResolver } from '../../recording/journalResolver.js';
-import type { ContextRange } from './historyEventTypes.js';
 import type { IContent } from './IContent.js';
+import { withNativeDetachedFixture } from './__tests__/support/detached-contract-fixture.js';
+import type { DetachedIOFaults } from './__tests__/support/detached-io-faults.js';
 import type { HistoryMediaOwner } from './historyBatchContracts.js';
+import type { ContextRange } from './historyEventTypes.js';
 
 export function expectedRange(size: number): ContextRange {
   return {
@@ -27,18 +25,16 @@ export function expectedRange(size: number): ContextRange {
 }
 
 export async function durableRowsOf(
-  recorder: SessionRecordingService,
+  recorder: SessionRecordingPort,
 ): Promise<IContent[]> {
+  await recorder.flush();
   const filePath = recorder.getFilePath();
   if (filePath === null) throw new Error('Missing durable journal');
-  const resolver = await JournalResolver.open(filePath);
-  const rows: IContent[] = [];
-  try {
-    for await (const entry of resolver.resolve()) rows.push(entry.content);
-    return rows;
-  } finally {
-    await resolver.close();
-  }
+  const result: IContent[] = [];
+  await collectJournalFileRowsForAssertions(filePath, (rows) => {
+    result.push(...rows);
+  });
+  return result;
 }
 
 export class AdmissionFailureRecorder extends SessionRecordingService {
@@ -122,45 +118,37 @@ export function mediaParticipant(
   };
 }
 
+export function journalMediaParticipant(
+  prepare: () => ReturnType<HistoryMediaOwner['prepareReplacement']>,
+): HistoryMediaOwner {
+  return {
+    prepareReferenceAddition: prepare,
+    prepareReferenceReplacement: prepare,
+    prepareReplacement: prepare,
+    adopt: () => undefined,
+    reconcile: async () => undefined,
+    releaseAll: async () => undefined,
+  };
+}
+
 export async function withRollbackFixture<T>(
   action: (
-    history: SnapshotProbeHistory,
-    recorder: AdmissionFailureRecorder,
+    history: HistoryService,
+    recorder: SessionRecordingPort,
     releaseWriter: () => void,
+    io: DetachedIOFaults,
   ) => Promise<T>,
   pending = false,
 ): Promise<T> {
-  let release: (() => void) | undefined;
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
+  return withNativeDetachedFixture(async (fixture) => {
+    if (pending) fixture.pauseWriter();
+    return action(
+      fixture.history,
+      fixture.recording,
+      fixture.releaseWriter,
+      fixture.io,
+    );
   });
-  const releaseWriter = (): void => release?.();
-  if (!pending) releaseWriter();
-  const root = mkdtempSync(join(tmpdir(), 'chronology-rollback-fixture-'));
-  const recorder = new AdmissionFailureRecorder({
-    sessionId: 'rollback',
-    projectHash: 'rollback',
-    chatsDir: root,
-    workspaceDirs: [root],
-    provider: 'test',
-    model: 'test',
-    io: {
-      appendFile: async (filePath, data, encoding): Promise<void> => {
-        await gate;
-        await appendFile(filePath, data, encoding);
-      },
-    },
-  });
-  const history = new SnapshotProbeHistory({ recording: recorder });
-  history.setTokenizerFactory(exactTokenizer());
-  try {
-    return await action(history, recorder, releaseWriter);
-  } finally {
-    releaseWriter();
-    await history.dispose();
-    await recorder.dispose();
-    rmSync(root, { recursive: true, force: true });
-  }
 }
 
 /** Journal rows carry stamped chronology; bodies compare speaker and blocks only. */

@@ -1,126 +1,110 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { withValueTransformFixture } from './transform-value-test-helpers.js';
 import { batchRow } from './__tests__/support/addbatch-stream-test-helpers.js';
 import {
-  batchValues,
+  batchRowSource,
   batchText,
   eventRows,
-  visitBatch,
-  type BatchTestCursor,
-  type BatchTestValues,
+  readBatch,
 } from './batch-event-test-helpers.js';
+import type { HistoryBatchRowSource } from './history-batch-values.js';
+import { withValueTransformFixture } from './transform-value-test-helpers.js';
 
-describe('scoped synchronous contentBatchAdded', () => {
+describe('journal contentBatchAdded scope', () => {
   it('publishes only the append suffix and the full replacement in order', async () => {
     await withValueTransformFixture(async ({ history }) => {
       await history.addBatch([batchRow(99)]);
-      const batches: string[][] = [];
-      history.on('contentBatchAdded', (value) => {
-        const texts: string[] = [];
-        visitBatch(value, (row) => {
-          texts.push(batchText(row));
-        });
-        batches.push(texts);
-      });
+      const batches: Array<Promise<string[]>> = [];
+      history.on('contentBatchAdded', (value) =>
+        batches.push(readBatch(value, batchText)),
+      );
       await history.detachedValues.append(eventRows(3));
       await history.detachedValues.replace(eventRows(2), undefined, {
         publishBatch: true,
       });
-      expect(batches).toStrictEqual([
+      expect(await Promise.all(batches)).toStrictEqual([
         [0, 1, 2].map((i) => `${i}:` + 'x'.repeat(2048)),
         [0, 1].map((i) => `${i}:` + 'x'.repeat(2048)),
       ]);
     });
   });
-  it('expires both the view and an escaped cursor before token publication', async () => {
+
+  it('retires event reads before token publication', async () => {
     await withValueTransformFixture(async ({ history, owners }) => {
-      let held: BatchTestValues | undefined;
-      let escaped: BatchTestCursor | undefined;
-      history.on('contentBatchAdded', (value) => {
-        held = batchValues(value);
-        held.withRows((cursor) => {
-          escaped = cursor;
-          expect(cursor.next().done).toBe(false);
-        });
-        expect(owners.snapshot().liveRows).toBe(0);
+      let held: HistoryBatchRowSource | undefined;
+      let reading: Promise<string[]> | undefined;
+      let late: Promise<unknown> | undefined;
+      history.once('contentBatchAdded', (value) => {
+        held = batchRowSource(value);
+        reading = readBatch(value, batchText);
       });
       history.on('tokensUpdated', () => {
-        if (held === undefined || escaped === undefined)
-          throw new Error('Missing event handles');
-        expect(() => held?.withRows(() => undefined)).toThrow('closed');
-        expect(() => escaped?.next()).toThrow('closed');
-        expect(() => held?.length).toThrow('closed');
+        if (held === undefined) throw new Error('Missing batch source');
+        late = held
+          .rows()
+          [Symbol.asyncIterator]()
+          .next()
+          .catch((error: unknown) => error);
       });
       await history.detachedValues.replace(eventRows(3), undefined, {
         publishBatch: true,
       });
+      expect(await reading).toHaveLength(3);
+      expect(await late).toBeInstanceOf(Error);
+      expect(owners.snapshot().liveRows).toBe(0);
     });
   });
-});
 
-describe('independent batch listeners and failure cleanup', () => {
-  it('supports repeated independent listeners with early release and no shared row mutation', async () => {
+  it('supports independent listeners and early return without sharing decoded row mutations', async () => {
     await withValueTransformFixture(async ({ history, owners }) => {
-      const counts: number[] = [];
+      const passes: Array<Promise<unknown>> = [];
       history.on('contentBatchAdded', (value) => {
-        batchValues(value).withRows((cursor) => {
-          const item = cursor.next();
-          if (item.done === true) throw new Error('Missing first row');
-          item.value.blocks = [];
-          cursor.return();
-          expect(() => cursor.next()).toThrow('closed');
-        });
-        counts.push(owners.snapshot().liveRows);
+        passes.push(
+          (async (): Promise<void> => {
+            for await (const row of batchRowSource(value).rows()) {
+              row.blocks = [];
+              break;
+            }
+          })(),
+        );
       });
       history.on('contentBatchAdded', (value) => {
-        counts.push(
-          visitBatch(value, (row) => {
-            expect(row.blocks.length).toBe(1);
-          }),
-        );
-        counts.push(visitBatch(value, () => undefined));
+        passes.push(readBatch(value, (row) => row.blocks.length));
+        passes.push(readBatch(value, batchText));
       });
       await history.detachedValues.replace(eventRows(3), undefined, {
         publishBatch: true,
       });
-      expect(counts).toStrictEqual([0, 3, 3]);
+      const results = await Promise.all(passes);
+      expect(results[1]).toStrictEqual([1, 1, 1]);
+      expect(results[2]).toHaveLength(3);
+      expect(owners.snapshot().liveRows).toBe(0);
     });
   });
-  it('rejects nested readers and releases a row when the visitor throws', async () => {
+
+  it('compensates a throwing listener without dispatching later subscribers', async () => {
     await withValueTransformFixture(async ({ history, owners }) => {
-      const failure = new Error('batch reader visitor');
-      let late = false;
-      history.on('contentBatchAdded', (value) => {
-        const view = batchValues(value);
-        expect(() =>
-          view.withRows((cursor) => {
-            cursor.next();
-            expect(() => view.withRows(() => undefined)).toThrow('active');
-            throw failure;
-          }),
-        ).toThrow(failure);
-        expect(owners.snapshot().liveSerializedBytes).toBe(0);
+      const failure = new Error('batch listener');
+      let later = false;
+      history.once('contentBatchAdded', () => {
         throw failure;
       });
-      history.on('contentBatchAdded', () => {
-        late = true;
+      history.once('contentBatchAdded', () => {
+        later = true;
       });
       await expect(
         history.detachedValues.replace(eventRows(3), undefined, {
           publishBatch: true,
         }),
       ).rejects.toBe(failure);
-      expect(late).toBe(false);
+      expect(later).toBe(false);
       expect(history.length()).toBe(0);
       expect(history.getTotalTokens()).toBe(0);
       expect(owners.snapshot().liveRows).toBe(0);
     });
   });
-});
 
-describe('native batch dispatch and reentrancy', () => {
-  it('keeps native ordered on once prepend off and current-dispatch listener semantics', async () => {
+  it('preserves once, prepend, off and current-dispatch listener order', async () => {
     await withValueTransformFixture(async ({ history }) => {
       const order: string[] = [];
       const later = (): void => {
@@ -148,13 +132,12 @@ describe('native batch dispatch and reentrancy', () => {
       expect(order).toStrictEqual(['prepend-once', 'first', 'later', 'first']);
     });
   });
-  it('closes the event before reentrant mutations leave the FIFO', async () => {
+
+  it('completes batch publication before reentrant mutations leave the FIFO', async () => {
     await withValueTransformFixture(async ({ history }) => {
       const order: string[] = [];
       let queued: Promise<void> | undefined;
-      let held: BatchTestValues | undefined;
-      history.once('contentBatchAdded', (value) => {
-        held = batchValues(value);
+      history.once('contentBatchAdded', () => {
         order.push('batch');
         history.add(batchRow(9));
         queued = history.addBatch([batchRow(10)]);
@@ -162,7 +145,6 @@ describe('native batch dispatch and reentrancy', () => {
       });
       history.on('contentAdded', () => {
         order.push('queued-add');
-        expect(() => held?.withRows(() => undefined)).toThrow('closed');
       });
       await history.detachedValues.replace(eventRows(2), undefined, {
         publishBatch: true,
@@ -172,25 +154,19 @@ describe('native batch dispatch and reentrancy', () => {
       expect(history.length()).toBe(4);
     });
   });
-});
 
-describe('complete oversized batch values', () => {
-  it('delivers a complete row larger than nine MiB without a universal byte rejection', async () => {
+  it('delivers the complete oversized row without a universal byte rejection', async () => {
     await withValueTransformFixture(async ({ history }) => {
-      let bytes = 0;
-      history.on('contentBatchAdded', (value) => {
-        expect(
-          visitBatch(value, (row) => {
-            bytes = Buffer.byteLength(batchText(row));
-          }),
-        ).toBe(1);
+      let bytes: Promise<number[]> | undefined;
+      history.once('contentBatchAdded', (value) => {
+        bytes = readBatch(value, (row) => Buffer.byteLength(batchText(row)));
       });
       await history.detachedValues.replace(
         eventRows(1, 9 * 1024 * 1024 + 37),
         undefined,
         { publishBatch: true },
       );
-      expect(bytes).toBe(9 * 1024 * 1024 + 39);
+      expect(await bytes).toStrictEqual([9 * 1024 * 1024 + 39]);
     });
   });
 });

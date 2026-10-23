@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from './IContent.js';
-import { withDetachedContractFixture } from './__tests__/support/detached-contract-fixture.js';
+import { withNativeDetachedFixture } from './__tests__/support/detached-contract-fixture.js';
 import { rejectedValue } from './chronology-rollback-test-helpers.js';
 import {
   detachedDigest,
@@ -9,9 +9,8 @@ import {
   detachedRows,
 } from './detached-rollback-test-helpers.js';
 describe('detached cursor lifecycle on journal', () => {
-  const backend = 'journal';
   it('closes a source cursor that escapes its transform before acknowledgement', async () => {
-    await withDetachedContractFixture(backend, async ({ history, owners }) => {
+    await withNativeDetachedFixture(async ({ history, owners }) => {
       await history.detachedValues.replace(detachedRows(8));
       let cursor: AsyncIterator<IContent> | undefined;
       let ackOwners = -1;
@@ -39,41 +38,38 @@ describe('detached cursor lifecycle on journal', () => {
   });
 
   it('returns a cancelled submitted iterator without altering previous history', async () => {
-    await withDetachedContractFixture(
-      backend,
-      async ({ history, durable, owners }) => {
-        await history.detachedValues.replace(detachedRows(3));
-        const controller = new AbortController();
-        const failure = new Error('cancel capture');
-        let returned = false;
-        const submitted = async function* (): AsyncGenerator<
-          IContent,
-          void,
-          unknown
-        > {
-          try {
-            yield detachedRow(8);
-            controller.abort(failure);
-            yield detachedRow(9);
-          } finally {
-            returned = true;
-          }
-        };
-        expect(
-          await rejectedValue(
-            history.detachedValues.replace(submitted(), undefined, {
-              signal: controller.signal,
-            }),
-          ),
-        ).toBe(failure);
-        expect(returned).toBe(true);
-        const expected = await detachedDigest(detachedRows(3));
-        expect(await detachedDigest(history.streamRawHistory())).toStrictEqual(
-          expected,
-        );
-        expect(await durable()).toStrictEqual(expected);
-        expect(owners.snapshot().liveRows).toBe(0);
-      },
-    );
+    await withNativeDetachedFixture(async ({ history, durable, owners }) => {
+      await history.detachedValues.replace(detachedRows(3));
+      const controller = new AbortController();
+      const failure = new Error('cancel capture');
+      let returned = false;
+      const submitted = async function* (): AsyncGenerator<
+        IContent,
+        void,
+        unknown
+      > {
+        try {
+          yield detachedRow(8);
+          controller.abort(failure);
+          yield detachedRow(9);
+        } finally {
+          returned = true;
+        }
+      };
+      expect(
+        await rejectedValue(
+          history.detachedValues.replace(submitted(), undefined, {
+            signal: controller.signal,
+          }),
+        ),
+      ).toBe(failure);
+      expect(returned).toBe(true);
+      const expected = await detachedDigest(detachedRows(3));
+      expect(await detachedDigest(history.streamRawHistory())).toStrictEqual(
+        expected,
+      );
+      expect(await durable()).toStrictEqual(expected);
+      expect(owners.snapshot().liveRows).toBe(0);
+    });
   });
 });

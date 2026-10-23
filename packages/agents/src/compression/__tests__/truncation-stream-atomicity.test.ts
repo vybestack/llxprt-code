@@ -1,18 +1,18 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
-import {
-  withRollbackFixture,
-  expectedRange,
-} from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+import { describe, expect, it } from 'bun:test';
 import {
+  expectedRange,
+  withRollbackFixture,
+} from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
+import {
+  collectRows,
   truncationHandler,
   truncationRow,
-  collectRows,
   TruncationStreamHistory,
 } from './truncation-stream-helpers.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 async function rollback(size: number): Promise<PerformCompressionResult> {
   return withRollbackFixture(async (history, recorder) => {
@@ -25,9 +25,11 @@ async function rollback(size: number): Promise<PerformCompressionResult> {
     const original = Array.from({ length: size }, (_, index) =>
       truncationRow(index, 64),
     );
-    recorder.failAdmissionAfter(2);
+    history.once('tokensUpdated', () => {
+      throw new Error('injected journal publication failure');
+    });
     await expect(handler.performCompression('rollback')).rejects.toThrow(
-      'injected journal admission failure',
+      'injected journal publication failure',
     );
     expect(await collectRows(history)).toStrictEqual(original);
     expect(history.getContextRange()).toStrictEqual(expectedRange(size));
@@ -40,7 +42,7 @@ async function rollback(size: number): Promise<PerformCompressionResult> {
 
 describe('disk truncation atomicity and caller ownership', () => {
   it.each([512, 8192])(
-    'restores all %i durable rows after partial candidate admission',
+    'restores all %i durable rows after candidate publication rejection',
     async (size) => {
       expect(await rollback(size)).toBe(PerformCompressionResult.COMPRESSED);
     },
@@ -54,6 +56,7 @@ describe('disk truncation atomicity and caller ownership', () => {
         truncationRow(index, 64),
       );
       for (const row of callers) history.add(row);
+      release();
       await history.waitForTokenUpdates();
       const markers = callers.map((row) => row.metadata?.chronology);
       const values = JSON.stringify(
@@ -61,9 +64,11 @@ describe('disk truncation atomicity and caller ownership', () => {
       );
       release();
       await recorder.flush();
-      recorder.failAdmissionAfter(1);
+      history.once('tokensUpdated', () => {
+        throw new Error('injected journal publication failure');
+      });
       await expect(handler.performCompression('strong')).rejects.toThrow(
-        'injected journal admission failure',
+        'injected journal publication failure',
       );
       expect(JSON.stringify(callers)).toBe(values);
       expect(

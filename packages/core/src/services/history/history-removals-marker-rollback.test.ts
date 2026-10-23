@@ -1,10 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import {
-  withRemovalFixture,
+  assertRemovalRows,
   removalReferences,
   removalRow,
-  assertRemovalRows,
+  withRemovalFixture,
 } from './history-removals-test-helpers.js';
 import type { ChronologyMarker, IContent } from './IContent.js';
 
@@ -27,6 +27,7 @@ describe('removal marker rollback', () => {
         pauseWriter();
         history.addAll(input);
         await waitForPausedWrite;
+        releaseWriter();
         await history.waitForTokenUpdates();
         await history.settleMediaOwnership();
         const listener = (): void => {

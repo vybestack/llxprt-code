@@ -1,26 +1,26 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
-import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { DetachedHistoryOptions } from '@vybestack/llxprt-code-core/services/history/detachedHistoryAPI.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { DetachedHistoryJournal } from '@vybestack/llxprt-code-core/services/history/detachedHistoryJournal.js';
-import {
-  withValueTransformFixture,
-  transformProbes,
-  transformPhaseSampler,
-} from '@vybestack/llxprt-code-core/services/history/transform-value-test-helpers.js';
 import { probedTransformInput } from '@vybestack/llxprt-code-core/services/history/__tests__/support/transform-value-fixtures-test-helpers.js';
+import { rejectedValue } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-test-helpers.js';
 import {
   detachedDigest,
   detachedDurableDigest,
-  indexedCheckpoint,
 } from '@vybestack/llxprt-code-core/services/history/detached-rollback-test-helpers.js';
-import { rejectedValue } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-test-helpers.js';
+import type { DetachedHistoryOptions } from '@vybestack/llxprt-code-core/services/history/detachedHistoryAPI.js';
+import { DetachedHistoryJournal } from '@vybestack/llxprt-code-core/services/history/detachedHistoryJournal.js';
+import { checkpointRows } from '@vybestack/llxprt-code-core/services/history/historyCheckpointRows.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import {
+  transformPhaseSampler,
+  transformProbes,
+  withValueTransformFixture,
+} from '@vybestack/llxprt-code-core/services/history/transform-value-test-helpers.js';
+import { describe, expect, it } from 'bun:test';
 import { publishCandidate } from '../diskTruncation.js';
 import {
   executeTruncation,
-  truncationValues,
   truncationValueRow,
+  truncationValues,
 } from './truncation-value-helpers.js';
 
 function publish(
@@ -28,7 +28,8 @@ function publish(
   options: DetachedHistoryOptions,
 ): Promise<IContent | undefined> {
   return history.detachedValues.withCheckpoint(async (checkpoint) => {
-    const previous = indexedCheckpoint(checkpoint);
+    const previous = new DetachedHistoryJournal();
+    for await (const row of checkpointRows(checkpoint)) previous.append(row);
     const candidate = new DetachedHistoryJournal();
     try {
       for (let index = 11; index < previous.length; index++)
@@ -48,6 +49,7 @@ function publish(
       );
     } finally {
       candidate.close();
+      previous.close();
     }
   }, options.signal);
 }
@@ -57,7 +59,7 @@ async function rejectPublication(
   mode: 'cancel' | 'admission',
 ): Promise<number> {
   return withValueTransformFixture(async (fixture) => {
-    const { history, recorder, owners } = fixture;
+    const { history, recorder, owners, io } = fixture;
     const probes = transformProbes();
     const sample = transformPhaseSampler(
       `truncation-${mode}`,
@@ -73,7 +75,7 @@ async function rejectPublication(
     const expected = await detachedDigest(truncationValues(size));
     const signal = new AbortController();
     const failure = new Error('cancelled while real content writer held');
-    if (mode === 'admission') recorder.failAdmissionAfter(3);
+    if (mode === 'admission') io.rejectNextWrite(failure, 'trailer');
     else fixture.pauseWriter();
     const operation = rejectedValue(
       publish(history, { signal: signal.signal }).then(() => {}),
@@ -91,9 +93,7 @@ async function rejectPublication(
         signal.abort(failure);
         fixture.releaseWriter();
       }
-      expect(await operation).toBe(
-        mode === 'cancel' ? failure : recorder.failure,
-      );
+      expect(await operation).toBe(failure);
       await sample('rollback');
       expect(await detachedDigest(history.streamRawHistory())).toStrictEqual(
         expected,
@@ -124,7 +124,8 @@ async function summaryPublication(): Promise<IContent | undefined> {
   return withValueTransformFixture(async ({ history }) => {
     await history.detachedValues.replace(truncationValues(32));
     return history.detachedValues.withCheckpoint(async (checkpoint) => {
-      const previous = indexedCheckpoint(checkpoint);
+      const previous = new DetachedHistoryJournal();
+      for await (const row of checkpointRows(checkpoint)) previous.append(row);
       const candidate = new DetachedHistoryJournal();
       try {
         for (let index = 11; index < 32; index++) {
@@ -175,6 +176,7 @@ async function summaryPublication(): Promise<IContent | undefined> {
         return result;
       } finally {
         candidate.close();
+        previous.close();
       }
     });
   });

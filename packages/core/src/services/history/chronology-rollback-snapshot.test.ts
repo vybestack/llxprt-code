@@ -1,24 +1,17 @@
-import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { describe, expect, it } from 'bun:test';
+import { withNativeDetachedFixture } from './__tests__/support/detached-contract-fixture.js';
 import {
   durableRowsOf,
-  mediaParticipant,
+  journalMediaParticipant as mediaParticipant,
   rejectedValue,
   rollbackRow,
   rowsOf,
   withRollbackFixture,
 } from './chronology-rollback-test-helpers.js';
-import { HistoryJournalStore } from './historyJournalStore.js';
-import { RowOwnership } from '../../recording/rowOwnership.js';
-import { createRowCounters } from '../../recording/journalCounters.js';
+import { checkpointRows } from './historyCheckpointRows.js';
 import type { IContent } from './IContent.js';
-import {
-  PhaseOwners,
-  expectDetachedAdmission,
-  expectPhaseEmpty,
-  recordPhase,
-} from './snapshot-phase-test-helpers.js';
 
 describe('row values after publication compensation', () => {
   it('restores the original row value after a publication failure', async () => {
@@ -44,64 +37,41 @@ describe('row values after publication compensation', () => {
   });
 });
 
-describe('rollback snapshot lifetime and pending membership', () => {
-  it('keeps captured pending row values after durability and store disposal', async () => {
-    await withRollbackFixture(async (_history, recorder) => {
-      const ownership = new RowOwnership();
-      const store = new HistoryJournalStore(recorder, {
-        ...createRowCounters().counters,
-        ownership,
-      });
+describe('rollback snapshot lifetime', () => {
+  it('keeps checkpoint row values after replacement and store disposal', async () => {
+    await withRollbackFixture(async (history) => {
       const before = [rollbackRow(0, 2048), rollbackRow(1, 2048)];
-      for (const row of before) store.apply({ kind: 'content', content: row });
-      await store.withMutationSnapshot(async (snapshot) => {
-        await store.waitForDurable();
-        store.apply({ kind: 'rewind', itemsRemoved: before.length });
-        await store.waitForDurable();
-        await store.dispose();
+      await history.addBatch(before);
+      const expected = await rowsOf(history);
+      await history.detachedValues.withCheckpoint(async (snapshot) => {
+        await history.detachedValues.replace([]);
+        await history.dispose();
         expect(snapshot.length).toBe(before.length);
-        expect([...snapshot].map((row) => row.blocks)).toStrictEqual(
-          before.map((row) => row.blocks),
-        );
-        const iterator = snapshot[Symbol.iterator]();
-        expect(iterator.next().value?.blocks).toStrictEqual(before[0].blocks);
-        iterator.return();
+        const first = [];
+        for await (const row of checkpointRows(snapshot)) first.push(row);
+        expect(first).toStrictEqual(expected);
+        const iterator = checkpointRows(snapshot);
+        expect((await iterator.next()).value).toStrictEqual(expected[0]);
+        await iterator.return();
       });
-      expect(ownership.snapshot().liveRows).toBe(0);
     });
   });
 
-  it('preserves the primary callback failure while releasing a borrowed snapshot iterator', async () => {
-    await withRollbackFixture(async (_history, recorder, releaseWriter) => {
-      const ownership = new PhaseOwners();
-      const transaction = new PhaseOwners();
-      const store = new HistoryJournalStore(
-        recorder,
-        { ...createRowCounters().counters, ownership },
-        transaction,
-      );
-      const pending = rollbackRow(0);
-      store.apply({ kind: 'content', content: pending });
+  it('preserves callback error identity and releases a borrowed checkpoint iterator', async () => {
+    await withNativeDetachedFixture(async ({ history, owners }) => {
+      await history.addBatch([rollbackRow(0)]);
       const primary = new Error('snapshot callback failure');
-      const error = await rejectedValue(
-        store.withMutationSnapshot(async (snapshot) => {
-          for (const row of snapshot) {
+      const operation = history.detachedValues.withCheckpoint(
+        async (snapshot) => {
+          for await (const row of checkpointRows(snapshot)) {
             expect(row.speaker).toBe('human');
             throw primary;
           }
-        }),
+        },
       );
-      expect(error).toBe(primary);
-      expectDetachedAdmission(ownership, transaction);
-      recordPhase('original-callback-before-ack', ownership, transaction);
-      releaseWriter();
-      await store.waitForDurable();
-      expect(ownership.snapshot().liveRows).toBe(0);
-      expectPhaseEmpty(ownership);
-      expectPhaseEmpty(transaction);
-      recordPhase('original-callback-after-ack', ownership, transaction);
-      await store.dispose();
-    }, true);
+      expect(await rejectedValue(operation)).toBe(primary);
+      expect(owners.snapshot().liveRows).toBe(0);
+    });
   });
 });
 
@@ -172,7 +142,9 @@ describe('serialization failure during admission', () => {
         ],
       };
       const error = await rejectedValue(
-        history.replaceBatch([fresh, unserializable]),
+        Promise.resolve().then(() =>
+          history.replaceBatch([fresh, unserializable]),
+        ),
       );
       expect(error).toBe(serializationFailure);
       expect(fresh.metadata).toBeUndefined();

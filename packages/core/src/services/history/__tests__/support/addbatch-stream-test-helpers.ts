@@ -1,21 +1,18 @@
-import { tmpdir } from 'node:os';
-import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { mkdtempSync, rmSync, appendFileSync } from 'node:fs';
-import { appendFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
+import { appendFileSync } from 'node:fs';
+import type { RowCounters } from '../../../../recording/journalCounters.js';
+import type { SessionRecordingPort } from '../../../../recording/recordingPort.js';
 import { RowOwnership } from '../../../../recording/rowOwnership.js';
-import { createRowCounters } from '../../../../recording/journalCounters.js';
-import { SnapshotProbeHistory } from './old-store-snapshot-history.js';
+import { HistoryService } from '../../HistoryService.js';
 import type { IContent } from '../../IContent.js';
-import {
-  AdmissionFailureRecorder,
-  exactTokenizer,
-  rollbackRow,
-} from '../../chronology-rollback-test-helpers.js';
+import { rollbackRow } from '../../chronology-rollback-test-helpers.js';
+import type { JournalSession } from '../../journalSession.js';
+import { withNativeDetachedFixture } from './detached-contract-fixture.js';
+import type { DetachedIOFaults } from './detached-io-faults.js';
 
-export class BatchStreamHistory extends SnapshotProbeHistory {
-  constructor(options?: ConstructorParameters<typeof SnapshotProbeHistory>[0]) {
+export class BatchStreamHistory extends HistoryService {
+  constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
     super(options);
     forbidHistoryMaterializationForTest(
       this,
@@ -24,9 +21,6 @@ export class BatchStreamHistory extends SnapshotProbeHistory {
   }
 }
 
-/** Each acquisition remains charged in the aggregate. The second census names
- * values already held by the external input, without excusing an internal pin.
- */
 export class BatchOwnerCensus extends RowOwnership {
   readonly external = new RowOwnership();
   readonly internal = new RowOwnership();
@@ -77,62 +71,34 @@ export function batchGate(): { promise: Promise<void>; resolve(): void } {
 
 export async function withBatchFixture<T>(
   action: (fixture: {
-    history: BatchStreamHistory;
-    recorder: AdmissionFailureRecorder;
+    history: HistoryService;
+    recorder: SessionRecordingPort;
     owners: BatchOwnerCensus;
-    reads: ReturnType<typeof createRowCounters>;
+    reads: RowCounters;
+    io: DetachedIOFaults;
+    session: JournalSession;
     pauseWriter(): void;
     waitForPausedWrite: Promise<void>;
     releaseWriter(): void;
   }) => Promise<T>,
 ): Promise<T> {
-  const root = mkdtempSync(join(tmpdir(), 'addbatch-fixture-'));
-  const writer = batchGate();
-  const pausedWrite = batchGate();
-  let paused = false;
-  const recorder = new AdmissionFailureRecorder({
-    sessionId: 'addbatch-stream',
-    projectHash: 'addbatch-stream',
-    chatsDir: root,
-    workspaceDirs: [root],
-    provider: 'test',
-    model: 'test',
-    io: {
-      appendFile: async (path, data, encoding): Promise<void> => {
-        if (paused) {
-          pausedWrite.resolve();
-          await writer.promise;
-        }
-        await appendFile(path, data, encoding);
-      },
-    },
-  });
-  const owners = new BatchOwnerCensus();
-  const reads = createRowCounters();
-  const history = new BatchStreamHistory({
-    recording: recorder,
-    mutationOwnership: owners,
-    attachmentCounters: { ...reads.counters, ownership: owners },
-  });
-  history.setTokenizerFactory(exactTokenizer());
-  try {
-    return await action({
-      history,
-      recorder,
-      owners,
-      reads,
-      pauseWriter: () => {
-        paused = true;
-      },
-      waitForPausedWrite: pausedWrite.promise,
-      releaseWriter: () => writer.resolve(),
+  return withNativeDetachedFixture(async (fixture) => {
+    forbidHistoryMaterializationForTest(
+      fixture.history,
+      'addBatch eager materialization reached',
+    );
+    return action({
+      history: fixture.history,
+      recorder: fixture.recording,
+      owners: fixture.owners,
+      reads: fixture.reads,
+      io: fixture.io,
+      session: fixture.session,
+      pauseWriter: fixture.pauseWriter,
+      waitForPausedWrite: fixture.writerPaused,
+      releaseWriter: fixture.releaseWriter,
     });
-  } finally {
-    writer.resolve();
-    await history.dispose();
-    await recorder.dispose();
-    rmSync(root, { recursive: true, force: true });
-  }
+  });
 }
 
 export function recordBatchOwners(

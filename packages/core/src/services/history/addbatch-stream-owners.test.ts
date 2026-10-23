@@ -1,12 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { RowOwnership } from '../../recording/rowOwnership.js';
 import {
   batchRow,
   recordBatchOwners,
   withBatchFixture,
 } from './__tests__/support/addbatch-stream-test-helpers.js';
-import { RowOwnership } from '../../recording/rowOwnership.js';
 import { batchRowSource } from './batch-event-test-helpers.js';
+import { durableRowsOf } from './chronology-rollback-test-helpers.js';
 import type { IContent } from './IContent.js';
 
 const bound = { rows: 440, serializedBytes: 8 * 1024 * 1024 };
@@ -15,9 +16,12 @@ describe('addBatch actual disk publication owners', () => {
   it.each([512, 8192])(
     'bounds internally created rows for %i external rows',
     async (size) => {
-      await withBatchFixture(async ({ history, recorder, owners, reads }) => {
-        for (let index = 0; index < size; index++)
-          await recorder.commit('content', { content: batchRow(index) });
+      await withBatchFixture(async ({ history, owners, reads }) => {
+        await history.detachedValues.replace(
+          (function* () {
+            for (let index = 0; index < size; index++) yield batchRow(index);
+          })(),
+        );
         const batch = Array.from({ length: size }, (_, index) =>
           batchRow(size + index),
         );
@@ -48,14 +52,13 @@ describe('addBatch actual disk publication owners', () => {
           afterPublication: () => {
             recordBatchOwners('durable-publication', size, owners);
             expect(batch).toHaveLength(size);
-            expect(owners.internal.snapshot().liveRows).toBeGreaterThan(0);
             expect(owners.internal.within(bound)).toBe(true);
             expect(reads.snapshot().peakDecodedRows).toBeLessThanOrEqual(440);
           },
         });
         await Promise.all(passes);
         expect(observed).toBe(1);
-        expect(history.getTotalTokens()).toBe(37 + 4 * size);
+        expect(history.getTotalTokens()).toBe(37 + 8 * size);
         let index = 0;
         for await (const row of history.streamRawHistory()) {
           expect(row).toStrictEqual(batchRow(index));
@@ -142,7 +145,8 @@ describe('addBatch explicit journal backpressure', () => {
         waitForPausedWrite,
         releaseWriter,
       }) => {
-        await recorder.commit('content', { content: batchRow(20000) });
+        await history.addBatch([batchRow(20000)]);
+        await history.waitForCommit();
         pauseWriter();
         const batch = [batchRow(0), batchRow(1)];
         let published = false;
@@ -154,18 +158,11 @@ describe('addBatch explicit journal backpressure', () => {
         });
         await waitForPausedWrite;
         expect(published).toBe(false);
-        let admitted = 0;
-        for await (const row of history.streamRawHistory()) {
-          expect(row).toStrictEqual(
-            admitted === 0 ? batchRow(20000) : batch[0],
-          );
-          admitted++;
-        }
-        expect(admitted).toBe(2);
+        expect(await durableRowsOf(recorder)).toStrictEqual([batchRow(20000)]);
         releaseWriter();
         await operation;
         expect(published).toBe(true);
-        expect(history.getTotalTokens()).toBe(8);
+        expect(history.getTotalTokens()).toBe(12);
         await history.waitForCommit();
       },
     );

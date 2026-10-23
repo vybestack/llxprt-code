@@ -1,22 +1,16 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { expect } from 'bun:test';
-import { appendFileSync, mkdtempSync, rmSync } from 'node:fs';
-import { appendFile } from 'node:fs/promises';
+import { appendFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { setImmediate } from 'node:timers/promises';
-import { HistoryService } from './HistoryService.js';
+import type { HistoryService } from './HistoryService.js';
 import type { ChronologyMarker, IContent } from './IContent.js';
-import {
-  BatchOwnerCensus,
-  batchGate,
-} from './__tests__/support/addbatch-stream-test-helpers.js';
-import {
-  AdmissionFailureRecorder,
-  exactTokenizer,
-  mediaParticipant,
-} from './chronology-rollback-test-helpers.js';
+import type { BatchOwnerCensus } from './__tests__/support/addbatch-stream-test-helpers.js';
+import { batchGate } from './__tests__/support/addbatch-stream-test-helpers.js';
+import { journalMediaParticipant as mediaParticipant } from './chronology-rollback-test-helpers.js';
+import type { DetachedFixture } from './detached-rollback-test-helpers.js';
+
+import { withNativeDetachedFixture } from './__tests__/support/detached-contract-fixture.js';
 
 const jsc: unknown = createRequire(import.meta.url)('bun:jsc');
 
@@ -121,60 +115,14 @@ export function expectTransformBound(owners: BatchOwnerCensus): void {
 }
 
 export async function withValueTransformFixture<T>(
-  action: (fixture: {
-    history: HistoryService;
-    recorder: AdmissionFailureRecorder;
-    owners: BatchOwnerCensus;
-    pauseWriter(): void;
-    writerPaused: Promise<void>;
-    releaseWriter(): void;
-  }) => Promise<T>,
+  action: (fixture: DetachedFixture) => Promise<T>,
 ): Promise<T> {
-  const root = mkdtempSync(join(tmpdir(), 'transform-values-'));
-  const gate = batchGate();
-  const paused = batchGate();
-  let pause = false;
-  const recorder = new AdmissionFailureRecorder({
-    sessionId: 'transform-values',
-    projectHash: 'transform-values',
-    chatsDir: root,
-    workspaceDirs: [root],
-    provider: 'test',
-    model: 'test',
-    io: {
-      appendFile: async (path, data, encoding): Promise<void> => {
-        if (pause && String(data).includes('"type":"content"')) {
-          paused.resolve();
-          await gate.promise;
-        }
-        await appendFile(path, data, encoding);
-      },
-    },
-  });
-  const owners = new BatchOwnerCensus();
-  const history = new HistoryService({
-    recording: recorder,
-    mutationOwnership: owners,
-  });
-  history.setTokenizerFactory(exactTokenizer());
-  try {
-    await recorder.flush();
-    return await action({
-      history,
-      recorder,
-      owners,
-      pauseWriter: () => {
-        pause = true;
-      },
-      writerPaused: paused.promise,
-      releaseWriter: () => gate.resolve(),
-    });
-  } finally {
-    gate.resolve();
-    await history.dispose();
-    await recorder.dispose();
-    rmSync(root, { recursive: true, force: true });
-  }
+  return withNativeDetachedFixture((fixture) =>
+    action({
+      ...fixture,
+      recorder: fixture.recording,
+    }),
+  );
 }
 
 export async function pauseTransformFinalization(

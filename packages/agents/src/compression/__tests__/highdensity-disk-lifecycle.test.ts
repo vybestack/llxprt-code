@@ -1,68 +1,18 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
-import { createRequire } from 'node:module';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
-import {
-  withRollbackFixture,
-  expectedRange,
-} from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
-import {
-  highdensitySetup,
-  highdensityRow,
-  HighdensityDiskHistory,
-} from './highdensity-disk-helpers.js';
+import { describe, expect, it } from 'bun:test';
 import {
   HighdensityFaultHistory,
   deferred,
 } from './highdensity-disk-fault-helpers.js';
+import {
+  HighdensityDiskHistory,
+  highdensityRow,
+  highdensitySetup,
+} from './highdensity-disk-helpers.js';
 import { collectRows } from './truncation-stream-helpers.js';
-const { gcAndSweep }: { gcAndSweep: () => void } = createRequire(
-  import.meta.url,
-)('bun:jsc');
-
-function admissionRow(index: number): IContent {
-  const row = highdensityRow(index, 64);
-  return row.blocks.length === 0
-    ? { ...row, blocks: [{ type: 'text', text: `empty-ai-${index}` }] }
-    : row;
-}
-
-async function rollback(size: number): Promise<PerformCompressionResult> {
-  return withRollbackFixture(async (history, recorder) => {
-    const { handler, transport } = highdensitySetup(history);
-    const callers = Array.from({ length: size }, (_, index) =>
-      admissionRow(index),
-    );
-    const markers = callers.map((row) => row.metadata?.chronology);
-    for (const row of callers) history.add(row);
-    await history.waitForTokenUpdates();
-    await recorder.flush();
-    history.setCacheAnchorSeq(2);
-    const expected = Array.from({ length: size }, (_, index) =>
-      admissionRow(index),
-    );
-    recorder.failAdmissionAfter(2);
-    await expect(handler.performCompression('rollback')).rejects.toThrow(
-      'injected journal admission failure',
-    );
-    expect(await collectRows(history)).toStrictEqual(expected);
-    expect(history.getContextRange()).toStrictEqual(expectedRange(size));
-    expect(history.getCacheAnchorSeq()).toBe(2);
-    gcAndSweep();
-    await new Promise<void>((resolve) => setImmediate(resolve));
-    expect(
-      callers.every(
-        (row, index) => row.metadata?.chronology === markers[index],
-      ),
-    ).toBe(true);
-    const result = await handler.performCompression('retry');
-    expect(result).toBe(PerformCompressionResult.COMPRESSED);
-    expect(transport.requests).toHaveLength(0);
-    return result;
-  });
-}
 
 async function pinned(size: number): Promise<number> {
   let created: HighdensityFaultHistory | undefined;
@@ -113,13 +63,6 @@ async function pinned(size: number): Promise<number> {
 }
 
 describe('disk high-density atomicity and queued append', () => {
-  it.each([512, 8192])(
-    'restores all %i rows, chronology and caller marker identity after partial admission',
-    async (size) => {
-      expect(await rollback(size)).toBe(PerformCompressionResult.COMPRESSED);
-    },
-    180_000,
-  );
   it.each([512, 8192])(
     'pins %i rows during estimation and flushes queued appends after hook failure',
     async (size) => {

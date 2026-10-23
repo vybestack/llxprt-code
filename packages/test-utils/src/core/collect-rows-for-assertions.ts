@@ -1,7 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { JournalResolver } from '@vybestack/llxprt-code-core/recording/journalResolver.js';
 import { isJournalFileName } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
-import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+import { openJournalReadOnly } from '../../../core/src/journal/journalReader.js';
+import { readStoredRow } from '../../../core/src/journal/rowReads.js';
+import {
+  iterateRowEntries,
+  rowTreeRootOf,
+} from '../../../core/src/journal/rowTreeReader.js';
+import { decodeStoredRow } from '../../../core/src/services/history/journalRowCodec.js';
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
@@ -71,11 +77,14 @@ export function collectJournalRowsForAssertions(
 }
 
 async function* journalFileRows(path: string): AsyncGenerator<IContent> {
-  const session = await JournalSession.open(path);
+  const reader = await openJournalReadOnly(path);
   try {
-    for await (const { content } of session.rows()) yield content;
+    const root = rowTreeRootOf(reader.trailer);
+    if (root !== undefined)
+      for await (const entry of iterateRowEntries(reader, root))
+        yield decodeStoredRow(await readStoredRow(reader, entry));
   } finally {
-    await session.close();
+    await reader.close();
   }
 }
 

@@ -1,67 +1,40 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import {
-  withBatchFixture,
   batchRow,
+  withBatchFixture,
 } from './__tests__/support/addbatch-stream-test-helpers.js';
+import { checkpointRows } from './historyCheckpointRows.js';
 
-describe('mutation snapshot disk ticket ownership', () => {
-  it('releases each decoded pending row with its acquired identity', async () => {
-    await withBatchFixture(
-      async ({ history, owners, pauseWriter, releaseWriter }) => {
-        pauseWriter();
-        const input = batchRow(0);
-        history.add(input);
-        let beforeClose = -1;
-        try {
-          await history.withSnapshot(async (snapshot) => {
-            expect(snapshot.length).toBe(1);
-            const first = snapshot.readRow(0);
-            const second = snapshot.readRow(0);
-            expect(first).toStrictEqual(input);
-            expect(second).toStrictEqual(input);
-            expect(first).not.toBe(second);
-            for (const row of snapshot) expect(row).toStrictEqual(input);
-            beforeClose = owners.snapshot().liveRows;
-          });
-          expect({
-            beforeClose,
-            afterClose: owners.snapshot().liveRows,
-          }).toStrictEqual({ beforeClose: 0, afterClose: 0 });
-        } finally {
-          releaseWriter();
-        }
-      },
-    );
-  });
-
-  it('bounds decoded owners while 512 pending disk tickets remain captured', async () => {
-    await withBatchFixture(
-      async ({ history, owners, pauseWriter, releaseWriter }) => {
-        pauseWriter();
-        const input = Array.from({ length: 512 }, (_, index) =>
-          batchRow(index),
+describe('mutation checkpoint decoded ownership', () => {
+  for (const size of [1, 512]) {
+    it(`releases each of ${size} decoded rows with its acquired identity`, async () => {
+      await withBatchFixture(async ({ history, owners }) => {
+        await history.detachedValues.replace(
+          (async function* () {
+            for (let index = 0; index < size; index++) yield batchRow(index);
+          })(),
         );
-        for (const row of input) history.add(row);
-        let beforeClose = -1;
-        try {
-          await history.withSnapshot(async (snapshot) => {
-            expect(snapshot.length).toBe(input.length);
-            let index = 0;
-            for (const row of snapshot)
-              expect(row).toStrictEqual(input[index++]);
-            expect(index).toBe(input.length);
-            beforeClose = owners.snapshot().liveRows;
-            expect(owners.snapshot().peakRows).toBeLessThanOrEqual(2);
-          });
-          expect({
-            beforeClose,
-            afterClose: owners.snapshot().liveRows,
-          }).toStrictEqual({ beforeClose: 0, afterClose: 0 });
-        } finally {
-          releaseWriter();
-        }
-      },
-    );
-  });
+        await history.detachedValues.withCheckpoint(async (snapshot) => {
+          expect(snapshot.length).toBe(size);
+          const first = checkpointRows(snapshot);
+          const second = checkpointRows(snapshot);
+          const one = await first.next();
+          await first.return();
+          const two = await second.next();
+          expect(one.value).toStrictEqual(batchRow(0));
+          expect(two.value).toStrictEqual(batchRow(0));
+          expect(one.value).not.toBe(two.value);
+          await second.return();
+          let index = 0;
+          for await (const row of checkpointRows(snapshot))
+            expect(row).toStrictEqual(batchRow(index++));
+          expect(index).toBe(size);
+          expect(owners.snapshot().liveRows).toBe(0);
+        });
+        expect(owners.snapshot().liveRows).toBe(0);
+        expect(owners.snapshot().peakRows).toBeLessThanOrEqual(2);
+      });
+    });
+  }
 });

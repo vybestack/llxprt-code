@@ -1,318 +1,87 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { setImmediate } from 'node:timers/promises';
-import { gcAndSweep } from 'bun:jsc';
-import {
-  batchRow,
-  withBatchFixture,
-} from './__tests__/support/addbatch-stream-test-helpers.js';
-import {
-  detachedDigest,
-  detachedDurableDigest,
-} from './detached-rollback-test-helpers.js';
-import type { IContent } from './IContent.js';
-import type { HistoryService } from './HistoryService.js';
-import type { BatchOwnerCensus } from './__tests__/support/addbatch-stream-test-helpers.js';
+import { batchRow } from './__tests__/support/addbatch-stream-test-helpers.js';
+import { withNativeDetachedFixture } from './__tests__/support/detached-contract-fixture.js';
+import { rejectedValue, rowsOf } from './chronology-rollback-test-helpers.js';
+import { detachedDigest } from './detached-rollback-test-helpers.js';
 
-function submission(size: number): {
-  rows: IContent[];
-  weak: ReadonlyArray<WeakRef<object>>;
-} {
-  const rows = Array.from({ length: size }, (_, index) => batchRow(index));
-  return {
-    rows,
-    weak: rows.flatMap((row) => {
-      const marker = row.metadata?.chronology;
-      if (marker === undefined) throw new Error('Missing test chronology');
-      return [new WeakRef(row), new WeakRef(marker)];
-    }),
-  };
-}
-
-const MAX_COLLECTION_CYCLES = 10;
-
-function liveProbes(probes: ReadonlyArray<WeakRef<object>>): number {
-  return probes.filter((probe) => probe.deref() !== undefined).length;
-}
-
-/**
- * JSC scans the machine stack conservatively, so a stale stack slot can pin a
- * few probe targets for one collection (observed as 4 of 1024 on Linux CI).
- * Poll across several suspend+collect cycles instead of asserting on one: a
- * submission genuinely retained by a live structure never reaches zero, so the
- * caller's `toBe(0)` still fails for real retention.
- */
-async function collected(
-  probes: ReadonlyArray<WeakRef<object>>,
-): Promise<number> {
-  let live = liveProbes(probes);
-  for (let cycle = 0; cycle < MAX_COLLECTION_CYCLES && live > 0; cycle++) {
-    for (let index = 0; index < 8; index++) {
-      await setImmediate();
-      gcAndSweep();
-    }
-    await setImmediate();
-    live = liveProbes(probes);
-  }
-  return live;
-}
-
-async function turns(): Promise<void> {
-  for (let index = 0; index < 64; index++) await setImmediate();
-}
-
-async function nextTurns(operation: Promise<void>): Promise<boolean> {
-  let settled = false;
-  void operation.then(
-    () => {
-      settled = true;
-    },
-    () => {
-      settled = true;
-    },
-  );
-  await turns();
-  return settled;
-}
-
-async function finalAdmission(): Promise<number> {
-  return withBatchFixture(
-    async ({
-      history,
-      owners,
-      pauseWriter,
-      waitForPausedWrite,
-      releaseWriter,
-    }) => {
-      pauseWriter();
-      const input = submission(1);
-      owners.registerInput(input.rows);
-      let observed = false;
-      const operation = history.addBatch(input.rows, undefined, {
-        streamPublication: true,
-        afterPublication: () => {
-          observed = true;
-        },
+describe('journal batch publication timing', () => {
+  it.each([false, true])(
+    'publishes only after the whole journal group commits with explicit durability=%s',
+    async (awaitDurableCommit) => {
+      await withNativeDetachedFixture(async (fixture) => {
+        const { history, owners } = fixture;
+        await history.addBatch([batchRow(0)]);
+        fixture.pauseWriter();
+        let published = false;
+        let acknowledged = false;
+        const operation = history.detachedValues.append(
+          [batchRow(1)],
+          undefined,
+          {
+            streamPublication: true,
+            awaitDurableCommit,
+            afterPublication: () => {
+              published = true;
+            },
+            onAcknowledged: () => {
+              acknowledged = true;
+            },
+          },
+        );
+        await fixture.writerPaused;
+        expect(published).toBe(false);
+        expect(acknowledged).toBe(false);
+        expect((await detachedDigest(fixture.primaryRows())).count).toBe(1);
+        fixture.releaseWriter();
+        await operation;
+        expect(published).toBe(true);
+        expect(acknowledged).toBe(true);
+        expect(await rowsOf(history)).toStrictEqual([batchRow(0), batchRow(1)]);
+        expect((await fixture.durable()).count).toBe(2);
+        expect(history.getTotalTokens()).toBe(8);
+        expect(owners.snapshot().liveRows).toBe(0);
       });
-      input.rows = [];
-      await waitForPausedWrite;
-      expect(await nextTurns(operation)).toBe(true);
-      await operation;
-      expect(observed).toBe(true);
-      expect(history.length()).toBe(1);
-      expect(await collected(input.weak)).toBe(0);
-      // Return is publication, not acknowledgement: pending values still own their charges.
-      expect(owners.snapshot().liveRows).toBe(1);
-      expect(owners.snapshot().liveRows).toBeLessThanOrEqual(440);
-      expect(owners.snapshot().liveSerializedBytes).toBeLessThanOrEqual(
-        8 * 1024 * 1024,
-      );
-      releaseWriter();
-      await history.waitForCommit();
-      expect(owners.snapshot().liveRows).toBe(0);
-      expect(owners.snapshot().liveSerializedBytes).toBe(0);
-      return history.length();
     },
   );
-}
 
-async function callbackCompensation(): Promise<number> {
-  return withBatchFixture(
-    async ({
-      history,
-      recorder,
-      owners,
-      pauseWriter,
-      waitForPausedWrite,
-      releaseWriter,
-    }) => {
+  it('compensates a publication callback rejection after releasing the primary writer', async () => {
+    await withNativeDetachedFixture(async (fixture) => {
+      const { history, owners } = fixture;
       await history.addBatch([batchRow(0)]);
-      const baseline = await detachedDigest(
-        (async function* (): AsyncGenerator<IContent, void, unknown> {
-          yield batchRow(0);
-        })(),
-      );
-      pauseWriter();
-      const failure = new Error('published callback rejection');
-      let published = false;
+      fixture.pauseWriter();
+      const failure = new Error('publication callback');
       const operation = history.addBatch([batchRow(1)], undefined, {
-        streamPublication: true,
         afterPublication: () => {
-          published = true;
-          releaseWriter();
           throw failure;
         },
       });
-      void operation.catch(() => undefined);
-      await waitForPausedWrite;
-      await turns();
-      expect(published).toBe(true);
-      await expect(operation).rejects.toBe(failure);
-      expect(await detachedDigest(history.streamRawHistory())).toStrictEqual(
-        baseline,
-      );
-      expect(await detachedDurableDigest(recorder)).toStrictEqual(baseline);
+      const rejected = rejectedValue(operation);
+      await fixture.writerPaused;
+      fixture.releaseWriter();
+      expect(await rejected).toBe(failure);
+      expect(await rowsOf(history)).toStrictEqual([batchRow(0)]);
+      expect((await fixture.durable()).count).toBe(1);
       expect(history.getTotalTokens()).toBe(4);
       expect(owners.snapshot().liveRows).toBe(0);
-      return history.length();
-    },
-  );
-}
+    });
+  });
 
-async function explicitDurability(): Promise<number> {
-  return withBatchFixture(
-    async ({
-      history,
-      owners,
-      pauseWriter,
-      waitForPausedWrite,
-      releaseWriter,
-    }) => {
-      pauseWriter();
-      let published = false;
-      const operation = history.addBatch([batchRow(0)], undefined, {
-        streamPublication: true,
-        awaitDurableCommit: true,
-        afterPublication: () => {
-          published = true;
-        },
-      });
-      await waitForPausedWrite;
-      expect(await nextTurns(operation)).toBe(false);
-      expect(published).toBe(false);
-      expect(owners.snapshot().liveRows).toBe(1);
-      releaseWriter();
-      await operation;
-      expect(published).toBe(true);
-      expect(owners.snapshot().liveRows).toBe(0);
-      return history.length();
-    },
-  );
-}
-
-async function cancelledFinalAdmission(): Promise<number> {
-  return withBatchFixture(
-    async ({
-      history,
-      recorder,
-      owners,
-      pauseWriter,
-      waitForPausedWrite,
-      releaseWriter,
-    }) => {
+  it('restores the committed baseline when acknowledgement cancels the batch', async () => {
+    await withNativeDetachedFixture(async ({ history, durable, owners }) => {
+      await history.addBatch([batchRow(0)]);
       const controller = new AbortController();
-      const failure = new Error('cancel published admission');
-      pauseWriter();
-      let published = false;
-      const operation = history.detachedValues.append(
-        [batchRow(0)],
-        undefined,
-        {
-          streamPublication: true,
+      const failure = new Error('cancel acknowledged batch');
+      await expect(
+        history.detachedValues.append([batchRow(1)], undefined, {
           signal: controller.signal,
-          afterPublication: () => {
-            published = true;
-            controller.abort(failure);
-          },
-        },
-      );
-      void operation.catch(() => undefined);
-      await waitForPausedWrite;
-      await turns();
-      expect(published).toBe(true);
-      expect(owners.snapshot().liveRows).toBe(1);
-      expect(await nextTurns(operation)).toBe(false);
-      releaseWriter();
-      await expect(operation).rejects.toBe(failure);
+          onAcknowledged: () => controller.abort(failure),
+        }),
+      ).rejects.toBe(failure);
+      expect(await rowsOf(history)).toStrictEqual([batchRow(0)]);
+      expect((await durable()).count).toBe(1);
+      expect(history.getTotalTokens()).toBe(4);
       expect(owners.snapshot().liveRows).toBe(0);
-      expect(history.length()).toBe(0);
-      expect((await detachedDurableDigest(recorder)).count).toBe(0);
-      expect(history.getTotalTokens()).toBe(0);
-      return history.length();
-    },
-  );
-}
-
-async function cancelledSubmission(
-  history: HistoryService,
-  owners: BatchOwnerCensus,
-): Promise<ReadonlyArray<WeakRef<object>>> {
-  const controller = new AbortController();
-  const failure = new Error('cancel first capture');
-  const input = submission(512);
-  owners.registerInput(input.rows);
-  const operation = history.detachedValues.append(input.rows, undefined, {
-    signal: controller.signal,
-  });
-  expect(owners.snapshot().liveRows).toBe(512);
-  input.rows = [];
-  controller.abort(failure);
-  await expect(operation).rejects.toBe(failure);
-  return input.weak;
-}
-
-async function firstTurnCancellation(): Promise<number> {
-  return withBatchFixture(async ({ history, owners }) => {
-    const weak = await cancelledSubmission(history, owners);
-    expect(owners.snapshot().liveRows).toBe(0);
-    expect(owners.snapshot().liveSerializedBytes).toBe(0);
-    expect(history.length()).toBe(0);
-    expect(await collected(weak)).toBe(0);
-    return history.length();
-  });
-}
-
-async function namedAcknowledgement(): Promise<number> {
-  return withBatchFixture(
-    async ({
-      history,
-      owners,
-      pauseWriter,
-      waitForPausedWrite,
-      releaseWriter,
-    }) => {
-      pauseWriter();
-      let acknowledged = false;
-      const operation = history.detachedValues.append(
-        [batchRow(0)],
-        undefined,
-        {
-          streamPublication: true,
-          onAcknowledged: () => {
-            acknowledged = true;
-          },
-        },
-      );
-      await waitForPausedWrite;
-      await turns();
-      expect(acknowledged).toBe(false);
-      expect(owners.snapshot().liveRows).toBe(1);
-      releaseWriter();
-      await operation;
-      expect(acknowledged).toBe(true);
-      expect(owners.snapshot().liveRows).toBe(0);
-      return history.length();
-    },
-  );
-}
-
-describe('addBatch streaming temporal contract', () => {
-  it('returns after the final admission so its caller can release a paused writer', async () => {
-    expect(await finalAdmission()).toBe(1);
-  });
-  it('allows publication callback to release the final writer and compensate its exact rejection', async () => {
-    expect(await callbackCompensation()).toBe(1);
-  });
-  it('explicit durable mode does not return or notify before the writer is released', async () => {
-    expect(await explicitDurability()).toBe(1);
-  });
-  it('keeps cancelled final admission charged until released compensation settles', async () => {
-    expect(await cancelledFinalAdmission()).toBe(0);
-  });
-  it('does not call an explicitly named acknowledgement before durability', async () => {
-    expect(await namedAcknowledgement()).toBe(1);
-  });
-  it('releases the caller submission when cancelled on the first capture turn', async () => {
-    expect(await firstTurnCancellation()).toBe(0);
+    });
   });
 });

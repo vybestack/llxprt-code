@@ -1,10 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { indexedCheckpoint } from './detached-rollback-test-helpers.js';
 import { describe, expect, it } from 'bun:test';
 import {
-  withRollbackFixture,
   durableRowsOf,
+  withRollbackFixture,
 } from './chronology-rollback-test-helpers.js';
+import { checkpointRows } from './historyCheckpointRows.js';
 import type { IContent } from './IContent.js';
 
 describe('fallback value serialization and media', () => {
@@ -21,7 +21,7 @@ describe('fallback value serialization and media', () => {
       history.add(row);
       const operation = history.detachedValues.withCheckpoint(
         async (checkpoint) => {
-          const snapshot = indexedCheckpoint(checkpoint);
+          const snapshot = checkpoint;
           const expected: IContent['blocks'] = [
             {
               type: 'tool_call',
@@ -30,7 +30,8 @@ describe('fallback value serialization and media', () => {
               parameters: { name: 'loop', self: { _circular: true } },
             },
           ];
-          expect(snapshot.readRow(0).blocks).toStrictEqual(expected);
+          const rows = await Array.fromAsync(checkpointRows(snapshot));
+          expect(rows[0].blocks).toStrictEqual(expected);
           await history.detachedValues.replace(snapshot);
           expect((await durableRowsOf(recorder))[0].blocks).toStrictEqual(
             expected,

@@ -1,144 +1,99 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { RowOwnership } from '../../recording/rowOwnership.js';
-import { HistoryDensityRows } from './historyDensityRows.js';
-import { planMutation } from './planHistoryMutation.js';
-import { opToEnvelope } from './historyJournalEnvelope.js';
-import {
-  withRollbackFixture,
-  rowsOf,
-} from './chronology-rollback-test-helpers.js';
-import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+import { batchRow } from './__tests__/support/addbatch-stream-test-helpers.js';
+import { withNativeDetachedFixture } from './__tests__/support/detached-contract-fixture.js';
+import { rejectedValue, rowsOf } from './chronology-rollback-test-helpers.js';
 import type { IContent } from './IContent.js';
-import type { DensityRowDecision } from './historyDiskDensity.js';
-import type { HistoryJournalOp } from './historyStorePort.js';
-import type { SessionRecordingService } from '../../recording/SessionRecordingService.js';
 
-async function consumePlan(
-  plan: Generator<HistoryJournalOp, void, unknown>,
-  recorder: SessionRecordingService,
-  owner: RowOwnership,
-  abandon: boolean,
-): Promise<void> {
-  try {
-    for (const op of plan) {
-      if (op.kind === 'density' && op.payload.replacements.length > 0)
-        expect(owner.snapshot().liveRows).toBeGreaterThanOrEqual(
-          op.payload.replacements.length,
-        );
-      if (abandon) break;
-      const { type, payload } = opToEnvelope(op);
-      await recorder.commit(type, payload);
-    }
-  } finally {
-    plan.return();
-  }
-  expect(owner.snapshot().liveRows).toBe(0);
-  expect(owner.snapshot().peakRows).toBeLessThanOrEqual(440);
+function marked(index: number, seq: number): IContent {
+  return {
+    ...batchRow(index),
+    metadata: { chronology: { seq, userTurn: 1, step: 0, recordedAt: 0 } },
+  };
 }
 
-async function publish(
-  originals: readonly IContent[],
-  decisions: ReadonlyArray<DensityRowDecision | undefined>,
-  abandon = false,
-): Promise<IContent[]> {
-  return withRollbackFixture(async (history, recorder) => {
-    const previous = new HistoryDensityRows();
-    const next = new HistoryDensityRows();
-    const owner = new RowOwnership();
-    try {
-      for (const [index, row] of originals.entries()) {
-        previous.append(row);
-        await recorder.commit('content', { content: row });
-        const decision = decisions[index];
-        if (decision?.kind !== 'removed')
-          next.append(decision?.kind === 'replaced' ? decision.row : row);
-      }
-      const diskDensityResult = {
-        removalCount: decisions.filter((entry) => entry?.kind === 'removed')
-          .length,
-        replacementCount: decisions.filter(
-          (entry) => entry?.kind === 'replaced',
-        ).length,
+describe('bounded density publication preserves addressed rows', () => {
+  it('publishes 128 replacements and releases every live row', async () => {
+    await withNativeDetachedFixture(async ({ history, owners, durable }) => {
+      const originals = Array.from({ length: 128 }, (_, index) =>
+        batchRow(index),
+      );
+      await history.detachedValues.replace(
+        (async function* () {
+          yield* originals;
+        })(),
+      );
+      const replacements = originals.map(
+        (row, index): IContent => ({
+          ...row,
+          blocks: [{ type: 'text', text: `changed:${index}` }],
+        }),
+      );
+      await history.applyDensityResult({
+        replacements: new Map(replacements.map((row, index) => [index, row])),
+        removals: [],
         metadata: {
           readWritePairsPruned: 0,
           fileDeduplicationsPruned: 0,
           recencyPruned: 0,
         },
-        decision: (index: number): DensityRowDecision | undefined =>
-          decisions[index],
-        close: (): void => {},
-      };
-      const plan = planMutation(
-        previous,
-        { nextHistory: next, diskDensityResult, options: {} },
-        owner,
+      });
+      expect(await rowsOf(history)).toStrictEqual(replacements);
+      expect((await durable()).count).toBe(128);
+      expect(owners.snapshot().liveRows).toBe(0);
+      expect(owners.snapshot().peakRows).toBeLessThanOrEqual(440);
+      expect(owners.snapshot().peakSerializedBytes).toBeLessThanOrEqual(
+        8 * 1024 * 1024,
       );
-      await consumePlan(plan, recorder, owner, abandon);
-      return await rowsOf(history);
-    } finally {
-      previous.close();
-      next.close();
-    }
+    });
   });
-}
 
-function marked(index: number, seq: number): IContent {
-  const row = suffixRow(index);
-  return {
-    ...row,
-    metadata: { chronology: { seq, userTurn: 1, step: 0, recordedAt: 0 } },
-  };
-}
+  for (const removed of [0, 1]) {
+    it(`removes only addressed duplicate chronology row ${removed}`, async () => {
+      await withNativeDetachedFixture(async ({ history }) => {
+        await history.addBatch([marked(0, 7), marked(1, 7)]);
+        const replacement = marked(2, 99);
+        await history.applyDensityResult({
+          removals: [removed],
+          replacements: new Map([[1 - removed, replacement]]),
+          metadata: {
+            readWritePairsPruned: 0,
+            fileDeduplicationsPruned: 0,
+            recencyPruned: 1,
+          },
+        });
+        expect(await rowsOf(history)).toStrictEqual([marked(2, 7)]);
+        expect(replacement.metadata?.chronology?.seq).toBe(99);
+      });
+    });
+  }
 
-describe('bounded density publication preserves sequential addressed semantics', () => {
-  it('charges all live replacement rows until durable publication consumes them', async () => {
-    const originals = Array.from({ length: 128 }, (_, index) =>
-      suffixRow(index, 2048),
-    );
-    const replacements = originals.map((row, index) => ({
-      ...row,
-      blocks: [{ type: 'text' as const, text: `changed:${index}` }],
-    }));
-    expect(
-      await publish(
-        originals,
-        replacements.map((row) => ({ kind: 'replaced', row })),
-      ),
-    ).toStrictEqual(replacements);
-  });
-  it('does not resurrect duplicate chronology removed before a later replacement', async () => {
-    expect(
-      await publish(
-        [marked(0, 7), marked(1, 7)],
-        [{ kind: 'removed' }, { kind: 'replaced', row: marked(2, 7) }],
-      ),
-    ).toStrictEqual([]);
-  });
-  it('releases the paused batch and lookahead when publication is abandoned', async () => {
-    const originals = Array.from({ length: 128 }, (_, index) =>
-      suffixRow(index, 2048),
-    );
-    const decisions: DensityRowDecision[] = originals.map((row, index) => ({
-      kind: 'replaced',
-      row: { ...row, blocks: [{ type: 'text', text: `abandoned:${index}` }] },
-    }));
-    expect(await publish(originals, decisions, true)).toStrictEqual(originals);
-  });
-  it('removes an earlier replacement when duplicate chronology is removed later', async () => {
-    expect(
-      await publish(
-        [marked(0, 7), marked(1, 7)],
-        [{ kind: 'replaced', row: marked(2, 7) }, { kind: 'removed' }],
-      ),
-    ).toStrictEqual([]);
-  });
-  it('applies chronology-changing replacements before later addressed removals', async () => {
-    expect(
-      await publish(
-        [marked(0, 7), marked(1, 9)],
-        [{ kind: 'replaced', row: marked(2, 9) }, { kind: 'removed' }],
-      ),
-    ).toStrictEqual([]);
+  it('releases the in-flight row and preserves all values when publication is abandoned', async () => {
+    await withNativeDetachedFixture(async ({ history, owners, durable }) => {
+      await history.detachedValues.replace(
+        (async function* () {
+          for (let index = 0; index < 128; index++) yield batchRow(index);
+        })(),
+      );
+      const before = await rowsOf(history);
+      const failure = new Error('abandoned density publication');
+      expect(
+        await rejectedValue(
+          history.detachedValues.transform(async (source, sink) => {
+            for await (const row of source.streamRows()) {
+              await sink.appendReplacement(0, {
+                ...row,
+                blocks: [{ type: 'text', text: 'abandoned' }],
+              });
+              throw failure;
+            }
+          }),
+        ),
+      ).toBe(failure);
+      expect(await rowsOf(history)).toStrictEqual(before);
+      expect((await durable()).count).toBe(128);
+      expect(owners.snapshot().liveRows).toBe(0);
+      expect(owners.snapshot().peakRows).toBeLessThanOrEqual(440);
+    });
   });
 });

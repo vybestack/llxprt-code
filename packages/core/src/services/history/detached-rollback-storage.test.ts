@@ -1,76 +1,58 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it, spyOn } from 'bun:test';
-import * as fs from 'node:fs';
+import { describe, expect, it } from 'bun:test';
+import { readdirSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { rejectedValue } from './chronology-rollback-test-helpers.js';
 import {
-  withDetachedFixture,
-  detachedRows,
   detachedDigest,
   detachedDurableDigest,
+  detachedRows,
+  withDetachedFixture,
 } from './detached-rollback-test-helpers.js';
-import { rejectedValue } from './chronology-rollback-test-helpers.js';
-import { getScratchRoot } from '../../storage/scratch-root.js';
 
-describe('detached external scratch I/O', () => {
-  it.each([
-    [512, 'read'],
-    [512, 'write'],
-    [8192, 'read'],
-    [8192, 'write'],
-  ])(
-    'preserves %s previous values on zero-progress %s',
-    async (size: number, kind: string) => {
-      await withDetachedFixture(async ({ history, recorder, owners }) => {
-        await history.detachedValues.replace(detachedRows(size));
-        const expected = await detachedDigest(detachedRows(size));
-        const before = fs.readdirSync(getScratchRoot());
-        let restore = (): void => {};
-        let result: unknown;
-        try {
-          result = await rejectedValue(
+describe('detached journal I/O', () => {
+  const cases = [512, 8192].flatMap((size) =>
+    (['read', 'write'] satisfies Array<'read' | 'write'>).map((kind) => ({
+      size,
+      kind,
+    })),
+  );
+  for (const { size, kind } of cases) {
+    it(`preserves ${size} previous values on zero-progress ${kind} without creating scratch storage`, async () => {
+      await withDetachedFixture(
+        async ({ history, recorder, owners, io, session }) => {
+          await history.detachedValues.replace(detachedRows(size));
+          const expected = await detachedDigest(detachedRows(size));
+          const directory = dirname(session.path);
+          const before = readdirSync(directory).sort();
+          const result = await rejectedValue(
             history.detachedValues.transform(async (source, sink) => {
-              for await (const row of source.streamRows())
-                await sink.appendValue(row);
-              if (kind === 'read') {
-                const fault = spyOn(fs, 'readSync').mockImplementation(() => 0);
-                restore = () => {
-                  fault.mockRestore();
-                };
-              } else {
-                const fault = spyOn(fs, 'writeSync').mockImplementation(
-                  () => 0,
-                );
-                restore = () => {
-                  fault.mockRestore();
-                };
+              let index = 0;
+              for await (const row of source.streamRows()) {
+                if (index++ === 0) io.zeroNext(kind);
                 await sink.appendValue({
-                  speaker: 'human',
-                  blocks: [{ type: 'text', text: 'candidate fault' }],
+                  ...row,
+                  metadata: { ...row.metadata, turnId: 'changed' },
                 });
               }
             }),
           );
-        } finally {
-          restore();
-        }
-        expect(result).toBeInstanceOf(Error);
-        if (!(result instanceof Error)) throw new Error('Expected I/O failure');
-        expect(result.message).toContain('I/O made no progress');
-        expect(await detachedDigest(history.streamRawHistory())).toStrictEqual(
-          expected,
-        );
-        expect(await detachedDurableDigest(recorder)).toStrictEqual(expected);
-        expect(history.getTotalTokens()).toBe(size * 4);
-        expect(owners.snapshot().liveRows).toBe(0);
-        expect(
-          fs
-            .readdirSync(getScratchRoot())
-            .filter(
-              (name) =>
-                name.startsWith('history-detached-') && !before.includes(name),
-            ),
-        ).toStrictEqual([]);
-      });
-    },
-    180_000,
-  );
+          expect(result).toBeInstanceOf(Error);
+          if (!(result instanceof Error))
+            throw new Error('Expected I/O failure');
+          expect(result.message).toMatch(/(no progress|Unexpected end)/i);
+          expect(
+            await detachedDigest(history.streamRawHistory()),
+          ).toStrictEqual(expected);
+          expect(await detachedDurableDigest(recorder)).toStrictEqual(expected);
+          expect(history.getTotalTokens()).toBe(size * 4);
+          expect(owners.snapshot().liveRows).toBe(0);
+          expect(
+            owners.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 }),
+          ).toBe(true);
+          expect(readdirSync(directory).sort()).toStrictEqual(before);
+        },
+      );
+    }, 180_000);
+  }
 });

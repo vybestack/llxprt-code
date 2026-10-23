@@ -10,13 +10,11 @@ import {
   iterateRowEntries,
   rowTreeRootOf,
 } from '../../../../journal/rowTreeReader.js';
+import type { RowCounters } from '../../../../recording/journalCounters.js';
+import type { SessionRecordingPort } from '../../../../recording/recordingPort.js';
 import type { RowOwnership } from '../../../../recording/rowOwnership.js';
 import { exactTokenizer } from '../../chronology-rollback-test-helpers.js';
-import {
-  detachedDigest,
-  detachedDurableDigest,
-  withDetachedFixture,
-} from '../../detached-rollback-test-helpers.js';
+import { detachedDigest } from '../../detached-rollback-test-helpers.js';
 import { HistoryService } from '../../HistoryService.js';
 import type { IContent } from '../../IContent.js';
 import { decodeStoredRow } from '../../journalRowCodec.js';
@@ -24,7 +22,6 @@ import { JournalSession } from '../../journalSession.js';
 import { batchGate, BatchOwnerCensus } from './addbatch-stream-test-helpers.js';
 import { createCoreSuffixFixtureGraph } from './core-suffix-fixture-test-helpers.js';
 import { DetachedIOFaults } from './detached-io-faults.js';
-type HistoryBackend = 'old' | 'journal';
 
 export interface DetachedContractFixture {
   readonly history: HistoryService;
@@ -33,6 +30,8 @@ export interface DetachedContractFixture {
 }
 
 export interface NativeDetachedFixture extends DetachedContractFixture {
+  readonly recording: SessionRecordingPort;
+  readonly reads: RowCounters;
   readonly owners: BatchOwnerCensus;
   readonly writerPaused: Promise<void>;
   readonly io: DetachedIOFaults;
@@ -148,16 +147,18 @@ export async function withNativeDetachedFixture<T>(
   const io = new DetachedIOFaults();
   const writer = await heldSession(root, io);
   const owners = new BatchOwnerCensus();
-  const { service: history, recording } = nativeGraph(
-    root,
-    owners,
-    writer.session,
-  );
+  const {
+    service: history,
+    recording,
+    counters: reads,
+  } = nativeGraph(root, owners, writer.session);
   history.setTokenizerFactory(exactTokenizer());
   try {
     await history.waitForCommit();
     return await action({
       history,
+      recording,
+      reads,
       owners,
       writerPaused: writer.paused,
       io,
@@ -193,21 +194,4 @@ export async function withNativeDetachedFixture<T>(
     await recording.dispose();
     rmSync(root, { recursive: true, force: true });
   }
-}
-
-export async function withDetachedContractFixture(
-  backend: HistoryBackend,
-  action: (fixture: DetachedContractFixture) => Promise<void>,
-): Promise<void> {
-  if (backend === 'journal') {
-    await withNativeDetachedFixture(action);
-    return;
-  }
-  await withDetachedFixture(async ({ history, recorder, owners }) => {
-    await action({
-      history,
-      owners,
-      durable: () => detachedDurableDigest(recorder),
-    });
-  });
 }

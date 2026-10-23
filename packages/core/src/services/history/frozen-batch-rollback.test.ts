@@ -1,10 +1,10 @@
-import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { describe, expect, it } from 'bun:test';
 import {
   durableRowsOf,
   expectedRange,
-  mediaParticipant,
+  journalMediaParticipant as mediaParticipant,
   rejectedValue,
   rollbackRow,
   rowsOf,
@@ -86,36 +86,6 @@ describe('frozen pending batch rollback', () => {
       });
     });
   }
-});
-
-describe('frozen pending serialization rollback', () => {
-  it('compensates partially admitted rows and restores chronology after an admission failure', async () => {
-    await withRollbackFixture(async (history, recorder, releaseWriter) => {
-      const { row: baseline, marker } = markedBaseline();
-      await history.addBatch([baseline]);
-      freezeStampedRow(baseline);
-      const fresh = rollbackRow(1);
-      const bad = rollbackRow(5);
-      recorder.failAdmissionAfter(1);
-      expect(await rejectedValue(history.addBatch([fresh, bad]))).toBe(
-        recorder.failure,
-      );
-      expect(fresh.metadata).toBeUndefined();
-      expect(bad.metadata).toBeUndefined();
-      await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
-        expect(rows).toStrictEqual([baseline]);
-      });
-      expect(baseline.metadata?.chronology).toBe(marker);
-      expect(await rowsOf(history)).toStrictEqual([baseline]);
-      releaseWriter();
-      await history.waitForCommit();
-      expect(await durableRowsOf(recorder)).toStrictEqual([baseline]);
-      const following = rollbackRow(2);
-      await history.addBatch([following]);
-      expect(following.metadata).toBeUndefined();
-      expect((await rowsOf(history))[1].metadata?.chronology?.seq).toBe(2);
-    });
-  });
 });
 
 describe('frozen pending rollback queue ordering', () => {

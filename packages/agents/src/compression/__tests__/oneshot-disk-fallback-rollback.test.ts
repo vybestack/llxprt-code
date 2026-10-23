@@ -1,15 +1,15 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { describe, expect, it } from 'bun:test';
 import { createRequire } from 'node:module';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import {
-  withRollbackFixture,
   expectedRange,
+  withRollbackFixture,
 } from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
-import { oneshotSetup, oneshotRow } from './oneshot-disk-helpers.js';
-import { collectRows } from './truncation-stream-helpers.js';
 import { buildCompressionSystemInstruction } from '../compressionSystemPrompt.js';
+import { oneshotRow, oneshotSetup } from './oneshot-disk-helpers.js';
+import { collectRows } from './truncation-stream-helpers.js';
 
 const { gcAndSweep }: { gcAndSweep: () => void } = createRequire(
   import.meta.url,
@@ -43,7 +43,9 @@ async function rollback(size: number): Promise<number> {
     history.setCacheAnchorSeq(1);
     history.syncTotalTokens(size);
     await history.waitForTokenUpdates();
-    recorder.failAdmissionAfter(2);
+    history.once('tokensUpdated', () => {
+      throw new Error('injected journal publication failure');
+    });
     expect(await handler.performCompression('fallback-fault')).toBe(
       PerformCompressionResult.FAILED,
     );
@@ -73,7 +75,7 @@ async function rollback(size: number): Promise<number> {
 }
 describe('one-shot disk eligible fallback compensation', () => {
   it.each([512, 8192])(
-    'restores %i rows and caller marker identity after partial fallback journal admission before successful retry',
+    'restores %i rows and caller marker identity after fallback publication rejection before successful retry',
     async (size) => {
       expect(await rollback(size)).toBe(2);
     },
