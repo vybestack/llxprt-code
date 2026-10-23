@@ -30,31 +30,38 @@ function barrier(): { promise: Promise<void>; open(): void } {
   return { promise, open };
 }
 
-async function assertRequestLease(
+async function assertPinnedLeases(
   root: string,
   reference: MediaReferenceBlock,
+  requestActive: boolean,
 ): Promise<void> {
   const directory = `${root}/references/sha256/${reference.contentId.slice('sha256:'.length)}`;
   const files = await readdir(directory);
-  expect(files.length).toBe(1);
-  expect(files[0]).not.toBe(
-    createHash('sha256')
-      .update(historyOwnerIdFor(reference.contentId))
-      .digest('hex'),
+  const historyDigest = createHash('sha256')
+    .update(historyOwnerIdFor(reference.contentId))
+    .digest('hex');
+  expect(files.length).toBe(requestActive ? 2 : 1);
+  expect(files.filter((name) => name === historyDigest)).toStrictEqual([
+    historyDigest,
+  ]);
+  expect(files.filter((name) => name !== historyDigest)).toHaveLength(
+    requestActive ? 1 : 0,
   );
-  const value: unknown = JSON.parse(
-    await readFile(`${directory}/${files[0]}`, 'utf8'),
-  );
-  const reservation = parseReservationRecord(value);
-  if (reservation === undefined) throw new Error('Missing request reservation');
-  expect(reservation.ownerDigest).toBe(files[0]);
-  expect(reservation.relatedContentIds).toContain(reference.contentId);
-  const lease: unknown = JSON.parse(
-    await readFile(`${root}/instances/${reservation.instanceId}`, 'utf8'),
-  );
-  expect(parseInstanceLeaseRecord(lease)?.instanceId).toBe(
-    reservation.instanceId,
-  );
+  for (const file of files) {
+    const value: unknown = JSON.parse(
+      await readFile(`${directory}/${file}`, 'utf8'),
+    );
+    const reservation = parseReservationRecord(value);
+    if (reservation === undefined) throw new Error('Missing media reservation');
+    expect(reservation.ownerDigest).toBe(file);
+    expect(reservation.relatedContentIds).toContain(reference.contentId);
+    const lease: unknown = JSON.parse(
+      await readFile(`${root}/instances/${reservation.instanceId}`, 'utf8'),
+    );
+    expect(parseInstanceLeaseRecord(lease)?.instanceId).toBe(
+      reservation.instanceId,
+    );
+  }
 }
 
 async function consume(
@@ -99,7 +106,7 @@ describe('actual CLI clear with a pinned pending media consumer', () => {
       [false, true].map((abort) => ({ size, abort })),
     ),
   )(
-    'keeps a request-only blob lease over clear at $size rows, abort=$abort',
+    'keeps distinct request and checkpoint blob leases over clear at $size rows, abort=$abort',
     async ({ size, abort }) => {
       await withCLI(
         directory(),
@@ -142,7 +149,7 @@ describe('actual CLI clear with a pinned pending media consumer', () => {
               expect(await runCommand(context, 'clear')).toBeUndefined();
               await history.settleMediaOwnership();
               expect((await contents(client.getHistory())).length).toBe(2);
-              await assertRequestLease(store.rootDirectory, reference);
+              await assertPinnedLeases(store.rootDirectory, reference, true);
               expect(
                 (
                   await store.reclaimUnreferenced(
@@ -165,9 +172,11 @@ describe('actual CLI clear with a pinned pending media consumer', () => {
               expect(resolver.accounting().activeRequestCount).toBe(0);
               expect(resolver.accounting().reservedContentCount).toBe(0);
               expect(resolver.accounting().materializedNormalizedBytes).toBe(0);
-              expect(await store.hasReservations(reference.contentId)).toBe(
-                false,
-              );
+              await assertPinnedLeases(store.rootDirectory, reference, false);
+              expect(await store.readReserved(reference)).toStrictEqual(bytes);
+              expect(
+                (await contents(checkpointRows(held)))[size - 1].blocks,
+              ).toStrictEqual([reference]);
               expect(
                 (
                   await store.reclaimUnreferenced(
@@ -175,13 +184,23 @@ describe('actual CLI clear with a pinned pending media consumer', () => {
                     Number.MAX_SAFE_INTEGER,
                   )
                 ).objectsRemoved,
-              ).toBe(1);
+              ).toBe(0);
             } finally {
               controller.abort(reason);
               proceed.open();
               await pending;
             }
           });
+          await history.settleMediaOwnership();
+          expect(await store.hasReservations(reference.contentId)).toBe(false);
+          expect(
+            (
+              await store.reclaimUnreferenced(
+                new Set(),
+                Number.MAX_SAFE_INTEGER,
+              )
+            ).objectsRemoved,
+          ).toBe(1);
         },
       );
     },
