@@ -24,6 +24,7 @@ export async function withArrayClient<T>(
     const client = agent.agentClient;
     const store = client.mediaStore;
     if (store === undefined) throw new Error('Missing session media store');
+    await client.getHistoryService()?.dispose();
     client.storeHistoryServiceForReuse(fixture.history);
     await client.startChat([]);
     fixture.history.setTokenizerFactory(exactTokenizer());
