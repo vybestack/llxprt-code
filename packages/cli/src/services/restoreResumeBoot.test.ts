@@ -1,21 +1,24 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { readRecordedRows } from '../__tests__/journal-recording.js';
+import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
+
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 
 import {
-  SessionRecordingService,
-  replaySession,
-  resumeJsonlSession,
-  type JsonlResumeResult as ResumeResult,
+  createSessionRecorder,
+  resumeSession,
+  type ResumeResult,
 } from '@vybestack/llxprt-code-core';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { buildAgent } from '../../../agents/src/api/__tests__/helpers/agentHarness.js';
+import { bindClientTokenization } from '../../../agents/src/session/session-client-binding.js';
+import { accountingFactory } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { restoreResumeBoot } from './restoreResumeBoot.js';
-
-// The fixtures are JSONL recordings of the old store.
 
 let root: string;
 
@@ -26,7 +29,7 @@ let history: HistoryService;
 describe('startup journal restoration', () => {
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), 'caller-boot-'));
-    const recording = new SessionRecordingService({
+    const recording = createSessionRecorder({
       chatsDir: root,
       sessionId: 'source',
       projectHash: 'project',
@@ -34,12 +37,14 @@ describe('startup journal restoration', () => {
       model: 'test',
       workspaceDirs: [],
     });
-    recording.recordContent({
-      speaker: 'human',
-      blocks: [{ type: 'text', text: 'original' }],
-    });
+    await recordRowsForTest(recording, [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'original' }],
+      },
+    ]);
     await recording.dispose();
-    const result = await resumeJsonlSession({
+    const result = await resumeSession({
       continueRef: 'source',
       chatsDir: root,
       projectHash: 'project',
@@ -55,6 +60,29 @@ describe('startup journal restoration', () => {
     await history.dispose();
     await resumed.recording.dispose();
     await rm(root, { recursive: true, force: true });
+  });
+  it('uses the inactive client tokenizer while adopting a journal before authentication', async () => {
+    const built = await buildAgent('plain-text.jsonl');
+    const client = await built.agent.sessionClient.createDetachedAgentClient();
+    bindClientTokenization(
+      client,
+      accountingFactory((text) => text.length),
+    );
+    try {
+      await restoreResumeBoot(
+        client,
+        resumed.recording,
+        resumed.boot,
+        () => {},
+      );
+      expect(client.hasChatInitialized()).toBe(false);
+      expect(client.getHistoryService()?.getTotalTokens()).toBe(
+        'original'.length,
+      );
+    } finally {
+      await client.dispose();
+      await built.cleanup();
+    }
   });
   it(
     'initializes the client before adopting its journal and appends without duplicating the prefix',
@@ -84,15 +112,14 @@ async function verifyInitializesTheClientBeforeAdoptingItsJournalAndAppendsWitho
     },
   );
   expect(published).toBe(true);
-  expect(history.journalPath()).toBe(resumed.boot.filePath);
+  expect(history.journalPath()).toBe(resumed.recording.getFilePath());
   history.add({
     speaker: 'human',
     blocks: [{ type: 'text', text: 'continued' }],
   });
   await history.waitForCommit();
-  const replay = await replaySession(resumed.boot.filePath, 'project');
-  if (!replay.ok) throw new Error(replay.error);
-  expect(replay.history.map((row) => row.blocks)).toStrictEqual([
+  const rows = await readRecordedRows(resumed.recording.getFilePath()!);
+  expect(rows.map((row) => row.blocks)).toStrictEqual([
     [{ type: 'text', text: 'original' }],
     [{ type: 'text', text: 'continued' }],
   ]);
@@ -125,5 +152,5 @@ async function verifyRestoresThePriorJournalWhenSessionPublicationFails(): Promi
       [{ type: 'text', text: 'previous' }],
     ]);
   });
-  expect(history.journalPath()).not.toBe(resumed.boot.filePath);
+  expect(history.journalPath()).not.toBe(resumed.recording.getFilePath());
 }

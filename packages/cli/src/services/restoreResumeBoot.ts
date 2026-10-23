@@ -5,6 +5,7 @@ import {
   type ResumeBootHandle,
   type SessionRecordingPort,
   type HistoryService,
+  type IContent,
 } from '@vybestack/llxprt-code-core';
 
 type ResumeSourceClient = Pick<
@@ -35,10 +36,14 @@ export async function admitResumeHistorySource(
         counters: boot.counters,
         ownership: boot.ownership,
       });
-    else await client.storeHistoryForLaterUse([]);
+    else await client.storeHistoryForLaterUse(emptyHistory());
   }
   const history = client.getHistoryService();
   if (history === null)
     throw new Error('History service unavailable after resume initialization');
   return history;
+}
+
+async function* emptyHistory(): AsyncGenerator<IContent, void, unknown> {
+  yield* [];
 }
