@@ -32,6 +32,7 @@ import {
   type ChildSlot,
   type RowTreeNode,
 } from './rowTreeNode.js';
+import { TOOL_RANK_NODE_BYTES } from './tool-ranking-tree.js';
 
 /** What a copy of one version shares with the copies of the others. */
 export interface CopyShared {
@@ -259,11 +260,15 @@ export class GroupCopier {
 
   /**
    * A value of the id trie. Only an `IdFact` holds an offset, `mappedRef`; the
-   * trie does not say which namespace a value is in, and every other value is
-   * shorter than the smallest fact (design 3.3).
+   * trie does not say which namespace a value is in. Other values are shorter
+   * than the smallest fact, except the distinct-width ranking node.
    */
   readonly factValue = async (value: Uint8Array): Promise<Uint8Array> => {
-    if (value.length < ID_FACT_MIN_BYTES) return value;
+    if (
+      value.length < ID_FACT_MIN_BYTES ||
+      value.length === TOOL_RANK_NODE_BYTES
+    )
+      return value;
     const fact = decodeIdFact(value);
     if (fact.mappedRef === 0) return value;
     const mappedRef = await remapOffset(

@@ -5,6 +5,8 @@ import type { IdFactBatch } from './idFactBatch.js';
 import { ID_NS } from './idKeys.js';
 
 export const TOOL_RANKING_READY = 'history:tool-ranking:2';
+/** No IdFact encoding is 56 bytes; compaction uses this width to identify offset-free ranking nodes. */
+export const TOOL_RANK_NODE_BYTES = 56;
 const utf8 = new TextEncoder();
 const namespace = ID_NS.nativeScalar;
 
@@ -51,7 +53,7 @@ export class ToolRankingTree {
   async node(id: number): Promise<ToolRankNode> {
     if (id === 0) throw new RangeError('Empty tool ranking child');
     const bytes = await this.facts.getEntry(namespace, this.key(['node', id]));
-    if (bytes?.length !== 56)
+    if (bytes?.length !== TOOL_RANK_NODE_BYTES)
       throw new JournalFormatError('Missing tool ranking node');
     const data = view(bytes);
     return {
@@ -148,7 +150,7 @@ export class ToolRankingTreeWriter extends ToolRankingTree {
       total:
         Math.max(0, node.saving) + (left?.total ?? 0) + (right?.total ?? 0),
     };
-    const bytes = new Uint8Array(56);
+    const bytes = new Uint8Array(TOOL_RANK_NODE_BYTES);
     const data = view(bytes);
     data.setBigUint64(0, next.label, true);
     data.setUint32(8, next.ordinal, true);

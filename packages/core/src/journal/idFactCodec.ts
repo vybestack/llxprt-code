@@ -94,9 +94,9 @@ const MAPPED_BIT = 1 << (2 * POSITION_ORDER.length);
 const USED_BITS = (1 << (2 * POSITION_ORDER.length + 1)) - 1;
 
 /**
- * The smallest `IdFact`: the flags and the five counters. Every other value of
- * the id trie is shorter (a count is 4 bytes, a unit position 13, an
- * occurrence 14, a hash 16), so a value of at least this size is a fact.
+ * The smallest `IdFact`: the flags and the five counters. Other id trie values
+ * are shorter (a count is 4 bytes, a unit position 13, an occurrence 14, a hash
+ * 16), except the 56-byte ranking node, a width no IdFact can have.
  */
 export const ID_FACT_MIN_BYTES = FLAGS_BYTES + COUNTERS * 4;
 

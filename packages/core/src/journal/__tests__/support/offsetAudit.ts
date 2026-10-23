@@ -14,6 +14,7 @@ import {
 import type { RecordAccess } from '../../recordAccess.js';
 import { RECORD_KIND } from '../../recordKinds.js';
 import { readRowTreeNode } from '../../rowTreeReader.js';
+import { TOOL_RANK_NODE_BYTES } from '../../tool-ranking-tree.js';
 import { readVersionAt } from '../../trailerAccess.js';
 import type { Version } from '../../version.js';
 
@@ -185,7 +186,10 @@ export class OffsetAudit {
       await this.check(OFFSET.metaValue, decodeMapRef(value), node);
     } else if (values === 'state') {
       await this.check(OFFSET.stateValue, decodeMapRef(value), node);
-    } else if (value.length >= ID_FACT_MIN_BYTES) {
+    } else if (
+      value.length >= ID_FACT_MIN_BYTES &&
+      value.length !== TOOL_RANK_NODE_BYTES
+    ) {
       const fact = decodeIdFact(value);
       if (fact.mappedRef !== 0) {
         await this.check(OFFSET.idFactMapped, fact.mappedRef, node);
