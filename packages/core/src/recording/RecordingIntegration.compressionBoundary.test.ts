@@ -1,5 +1,5 @@
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
-import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
+import { JournalResumeBoot, resumePointOf } from './journalResume.js';
 /**
  * Copyright 2026 Vybestack LLC
  *
@@ -30,57 +30,29 @@ import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/cu
  * replayed history, and the live history only.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
 import * as os from 'node:os';
+import * as path from 'node:path';
 
 import { HistoryService } from '../services/history/HistoryService.js';
 import { type IContent } from '../services/history/IContent.js';
 import { RecordingIntegration } from './RecordingIntegration.js';
-import { SessionRecordingService } from './SessionRecordingService.js';
-import { replaySession } from './ReplayEngine.js';
+import { JournalRecordingService } from './journalRecordingService.js';
+import type { SessionRecordingServiceConfig } from './types.js';
 import {
-  type SessionRecordingServiceConfig,
-  type ReplayResult,
-} from './types.js';
+  journalRows,
+  journalGroups,
+  type RecordedJournalGroup,
+} from './__tests__/support/journal-read-test-helpers.js';
+import { MUTATION } from '../journal/recordKinds.js';
 
 const PROJECT_HASH = 'project-hash-compression-boundary';
 const SESSION_ID = 'compression-boundary-session-0001';
 
-type ReplayOkResult = Extract<ReplayResult, { ok: true }>;
-
-function assertReplayOk(
-  result: ReplayResult,
-): asserts result is ReplayOkResult {
-  expect(result.ok).toBe(true);
+interface RecordedHistory {
+  readonly history: IContent[];
 }
-
-interface JsonlEvent {
-  readonly type: string;
-  readonly payload: unknown;
-}
-
-function isJsonlEvent(value: unknown): value is JsonlEvent {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    typeof (value as { type?: unknown }).type === 'string'
-  );
-}
-
-function isContentPayload(value: unknown): value is { content: IContent } {
-  if (typeof value !== 'object' || value === null) {
-    return false;
-  }
-  const content = (value as { content?: unknown }).content;
-  return (
-    typeof content === 'object' &&
-    content !== null &&
-    Array.isArray((content as { blocks?: unknown }).blocks)
-  );
-}
-
 function makeConfig(chatsDir: string): SessionRecordingServiceConfig {
   return {
     sessionId: SESSION_ID,
@@ -169,41 +141,23 @@ function hasNoDuplicates(values: readonly string[]): boolean {
   return new Set(values).size === values.length;
 }
 
-async function readEvents(filePath: string): Promise<JsonlEvent[]> {
-  const raw = await fs.readFile(filePath, 'utf-8');
-  if (raw.trim() === '') {
-    return [];
-  }
-  const events: JsonlEvent[] = [];
-  for (const line of raw.trim().split('\n')) {
-    const parsed: unknown = JSON.parse(line);
-    if (isJsonlEvent(parsed)) {
-      events.push(parsed);
-    }
-  }
-  return events;
+function readEvents(filePath: string): Promise<RecordedJournalGroup[]> {
+  return journalGroups(filePath);
 }
-
-/** The `IContent` of every `content` record in the file, in written order. */
-function recordedContents(events: readonly JsonlEvent[]): IContent[] {
-  const contents: IContent[] = [];
-  for (const event of events) {
-    if (event.type === 'content' && isContentPayload(event.payload)) {
-      contents.push(event.payload.content);
-    }
-  }
-  return contents;
+function recordedContents(events: readonly RecordedJournalGroup[]): IContent[] {
+  return events
+    .filter((event) => event.trailer.mutation === MUTATION.append)
+    .flatMap((event) => event.rows);
 }
-
-/** Serialized form of each recorded content, for byte-identity comparison. */
-function recordedFingerprints(events: readonly JsonlEvent[]): string[] {
+function recordedFingerprints(
+  events: readonly RecordedJournalGroup[],
+): string[] {
   return recordedContents(events).map((content) => JSON.stringify(content));
 }
-
-function countType(events: readonly JsonlEvent[], type: string): number {
-  return events.filter((event) => event.type === type).length;
+function countReplacements(events: readonly RecordedJournalGroup[]): number {
+  return events.filter((event) => event.trailer.mutation === MUTATION.replace)
+    .length;
 }
-
 /**
  * Replace history wholesale the way the hard-limit truncation fallback and the
  * provider-content restore do: snapshot, `clear()`, re-`add()`. Runs outside
@@ -212,7 +166,9 @@ function countType(events: readonly JsonlEvent[], type: string): number {
 async function rebuildHistoryInPlace(
   historyService: HistoryService,
 ): Promise<void> {
-  await historyService.replaceAll(curatedHistoryForTest(historyService));
+  await historyService.replaceAll(
+    await Array.fromAsync(historyService.streamRawHistory()),
+  );
 }
 
 /** Run a compression cycle whose rebuild happens under the compression lock. */
@@ -221,7 +177,7 @@ async function compressUnderLock(
   summaryText: string,
 ): Promise<void> {
   historyService.startCompression();
-  const itemsCompressed = curatedHistoryForTest(historyService).length;
+  const itemsCompressed = historyService.length();
   const summary = textContent(summaryText, 'ai');
   await historyService.replaceAll([summary]);
   historyService.endCompression(summary, itemsCompressed);
@@ -230,7 +186,7 @@ async function compressUnderLock(
 interface RecordingHarness {
   readonly tempDir: string;
   readonly chatsDir: string;
-  readonly recordingService: SessionRecordingService;
+  readonly recordingService: JournalRecordingService;
   readonly integration: RecordingIntegration;
   readonly historyService: HistoryService;
 }
@@ -241,9 +197,9 @@ async function createHarness(): Promise<RecordingHarness> {
   );
   const chatsDir = path.join(tempDir, 'chats');
   await fs.mkdir(chatsDir, { recursive: true });
-  const recordingService = new SessionRecordingService(makeConfig(chatsDir));
+  const recordingService = JournalRecordingService.create(makeConfig(chatsDir));
   const integration = new RecordingIntegration(recordingService);
-  const historyService = new HistoryService({ backend: 'old' });
+  const historyService = new HistoryService({});
   await integration.subscribeToJournal(historyService);
   return {
     tempDir,
@@ -256,20 +212,18 @@ async function createHarness(): Promise<RecordingHarness> {
 
 let harness: RecordingHarness;
 
-async function flushAndReadEvents(): Promise<JsonlEvent[]> {
+async function flushAndReadEvents(): Promise<RecordedJournalGroup[]> {
   await harness.integration.flushAtTurnBoundary();
   const filePath = harness.recordingService.getFilePath();
   expect(filePath).not.toBeNull();
   return readEvents(filePath ?? '');
 }
 
-async function flushAndReplay(): Promise<ReplayOkResult> {
+async function flushAndReplay(): Promise<RecordedHistory> {
   await harness.integration.flushAtTurnBoundary();
   const filePath = harness.recordingService.getFilePath();
   expect(filePath).not.toBeNull();
-  const replay = await replaySession(filePath ?? '', PROJECT_HASH);
-  assertReplayOk(replay);
-  return replay;
+  return { history: await journalRows(filePath ?? '') };
 }
 
 function recordToolTurn(label: string): IContent[] {
@@ -407,7 +361,7 @@ async function testRecordingCompressionBoundary02(): Promise<void> {
     'turn-2-user',
   ]);
   expect(hasNoDuplicates(recordedFingerprints(events))).toBe(true);
-  expect(countType(events, 'compressed')).toBe(1);
+  expect(countReplacements(events)).toBe(1);
 }
 
 async function testRecordingCompressionBoundary03(): Promise<void> {
@@ -417,7 +371,9 @@ async function testRecordingCompressionBoundary03(): Promise<void> {
   // Real ordering: the compression rebuild is queued first, then a stream
   // add that arrived while the lock was held is flushed behind it.
   harness.historyService.startCompression();
-  const snapshot = curatedHistoryForTest(harness.historyService);
+  const snapshot = await Array.fromAsync(
+    harness.historyService.streamRawHistory(),
+  );
   await harness.historyService.replaceAll([
     textContent('mid-turn-summary', 'ai'),
   ]);
@@ -436,7 +392,7 @@ async function testRecordingCompressionBoundary03(): Promise<void> {
 
       const events = await flushAndReadEvents();
       expect(hasNoDuplicates(recordedFingerprints(events))).toBe(true);
-      expect(countType(events, 'compressed')).toBe(1);
+      expect(countReplacements(events)).toBe(1);
     },
   );
 }
@@ -520,21 +476,24 @@ async function testRecordingCompressionBoundary07(): Promise<void> {
   await harness.integration.dispose();
   await harness.recordingService.dispose();
 
-  const replayed = await replaySession(sessionPath, PROJECT_HASH);
-  assertReplayOk(replayed);
+  const replayed = { history: await journalRows(sessionPath) };
   const recordsBeforeResume = replayed.history.length;
 
   // Resume: append to the same file, restore the replayed history, then
   // subscribe. A later rebuild must not append the restored entries again.
-  const resumedRecording = new SessionRecordingService(
+  const resumedRecording = await JournalRecordingService.open(
     makeConfig(harness.chatsDir),
+    sessionPath,
   );
-  resumedRecording.initializeForResume(sessionPath, replayed.lastSeq);
   const resumedIntegration = new RecordingIntegration(resumedRecording);
-  const resumedHistory = new HistoryService({
-    backend: 'old',
-    recording: resumedRecording,
-  });
+  const resumedHistory = new HistoryService();
+  await resumedHistory.adoptResumeBoot(
+    resumedRecording,
+    new JournalResumeBoot(
+      resumedRecording,
+      await resumePointOf(resumedRecording),
+    ),
+  );
   await resumedIntegration.subscribeToJournal(resumedHistory);
 
   try {
@@ -566,7 +525,7 @@ async function testRecordingCompressionBoundary08(): Promise<void> {
 }
 
 async function testRecordingCompressionBoundary09(): Promise<void> {
-  const replacementService = new HistoryService({ backend: 'old' });
+  const replacementService = new HistoryService({});
   await harness.integration.subscribeToJournal(replacementService);
 
   try {
@@ -601,7 +560,7 @@ async function testRecordingCompressionBoundary10(): Promise<void> {
 }
 
 interface ResumedSession {
-  readonly recording: SessionRecordingService;
+  readonly recording: JournalRecordingService;
   readonly integration: RecordingIntegration;
   readonly history: HistoryService;
 }
@@ -613,16 +572,21 @@ interface ResumedSession {
  */
 async function resumeHarnessSession(
   sessionPath: string,
-): Promise<{ resumed: ResumedSession; replayed: ReplayOkResult }> {
+): Promise<{ resumed: ResumedSession; replayed: RecordedHistory }> {
   await harness.integration.dispose();
   await harness.recordingService.dispose();
 
-  const replayed = await replaySession(sessionPath, PROJECT_HASH);
-  assertReplayOk(replayed);
-  const recording = new SessionRecordingService(makeConfig(harness.chatsDir));
-  recording.initializeForResume(sessionPath, replayed.lastSeq);
+  const replayed = { history: await journalRows(sessionPath) };
+  const recording = await JournalRecordingService.open(
+    makeConfig(harness.chatsDir),
+    sessionPath,
+  );
   const integration = new RecordingIntegration(recording);
-  const history = new HistoryService({ backend: 'old', recording });
+  const history = new HistoryService();
+  await history.adoptResumeBoot(
+    recording,
+    new JournalResumeBoot(recording, await resumePointOf(recording)),
+  );
   await integration.subscribeToJournal(history);
   return { resumed: { recording, integration, history }, replayed };
 }
@@ -717,7 +681,7 @@ async function testRecordingCompressionBoundary12(): Promise<void> {
 
 async function testRecordingCompressionBoundary13(): Promise<void> {
   const snapshot = textContent('unstamped disk snapshot');
-  harness.recordingService.recordContent(snapshot);
+  await (await harness.recordingService.session()).append([snapshot]);
   await harness.recordingService.flush();
   const sessionPath = harness.recordingService.getFilePath();
   expect(sessionPath).not.toBeNull();
@@ -733,8 +697,7 @@ async function testRecordingCompressionBoundary13(): Promise<void> {
     resumed.history.add(textContent('unstamped disk snapshot'));
     await resumed.integration.flushAtTurnBoundary();
 
-    const replay = await replaySession(sessionPath ?? '', PROJECT_HASH);
-    assertReplayOk(replay);
+    const replay = { history: await journalRows(sessionPath ?? '') };
     expect(textsOf(replay.history)).toStrictEqual([
       'unstamped disk snapshot',
       'unstamped disk snapshot',

@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { readFileSync } from 'node:fs';
+import type { JournalRecordingService } from '../../recording/journalRecordingService.js';
+import { JournalOwners } from './journalOwners.js';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import {
   FanoutHarness,
@@ -37,28 +38,20 @@ async function withRejectingObserver(
   await service.waitForCommit();
 }
 
-interface JournalLine {
-  readonly type: string;
-  readonly payload: {
-    readonly content?: { readonly blocks: Array<{ text?: string }> };
-    readonly tx?: string;
-    readonly origin?: string;
-  };
-}
-
-/** The content lines of a journal file as written to disk, with their origins. */
-function contentLines(path: string): Array<{ text: string; origin?: string }> {
-  return readFileSync(path, 'utf8')
-    .split('\n')
-    .filter((line) => line.trim() !== '')
-    .map((line) => JSON.parse(line) as JournalLine)
-    .filter((line) => line.type === 'content')
-    .map((line) => ({
-      text: line.payload.content?.blocks[0]?.text ?? '',
-      ...(line.payload.origin === undefined
-        ? {}
-        : { origin: line.payload.origin }),
-    }));
+async function ownedRows(
+  recording: JournalRecordingService,
+): Promise<Array<{ text: string; origin?: string }>> {
+  const session = await recording.session();
+  const owners = new JournalOwners(session.store);
+  const rows: Array<{ text: string; origin?: string }> = [];
+  for await (const { entry, content } of session.rows()) {
+    const origin = await owners.originOf(entry.owner);
+    rows.push({
+      text: rowText(content),
+      ...(origin === undefined ? {} : { origin }),
+    });
+  }
+  return rows;
 }
 
 describe('a failed /clear keeps the origin of every restored row', () => {
@@ -157,7 +150,7 @@ describe('a failed /clear keeps the origin of every restored row', () => {
 
     const path = a.getFilePath();
     if (path === null) throw new Error('The recording has no journal file');
-    const restored = contentLines(path).slice(-2);
+    const restored = (await ownedRows(a)).slice(-2);
     expect(restored).toStrictEqual([
       { text: 'shared' },
       { text: 'private to A', origin: historyOriginId(ownerA) },

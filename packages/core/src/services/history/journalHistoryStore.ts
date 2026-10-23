@@ -472,7 +472,7 @@ export class JournalHistoryStore
   detachJournal(recorder: SessionRecordingPort): Promise<void> {
     const journalRecorder = requireJournalRecorder(recorder);
     return this.opened.then(() =>
-      this.adopted === journalRecorder
+      !this.disposed && this.adopted === journalRecorder
         ? this.exclusive(
             () => this.topology.detach(this.adoptedWrites, this.failure),
             true,
@@ -766,8 +766,10 @@ export class JournalHistoryStore
     const snapshot = await this.session.store.snapshot();
     try {
       const edits = await build(snapshot);
+      const owners = this.owners;
       const prepared = await this.topology.prepare(edits);
       const group = await this.mirrors.commit(prepared);
+      if (owners !== this.owners) this.owners.invalidate();
       try {
         if (rowsAfter === undefined) {
           this.tentativeRows = group.after.rows;

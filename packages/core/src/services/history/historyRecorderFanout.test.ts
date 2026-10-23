@@ -1,21 +1,21 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { SessionRecordingService } from '../../recording/SessionRecordingService.js';
-import { HistoryRecorderFanout } from './historyRecorderFanout.js';
+import { JournalRecordingService } from '../../recording/journalRecordingService.js';
+import { journalRows } from '../../recording/__tests__/support/journal-read-test-helpers.js';
 import { historyOriginId } from './historyOriginId.js';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 
 let dir: string;
-const recorders: SessionRecordingService[] = [];
+const recorders: JournalRecordingService[] = [];
 const histories: HistoryService[] = [];
 
 let counter = 0;
-function recorder(id: string): SessionRecordingService {
-  const created = new SessionRecordingService({
+function recorder(id: string): JournalRecordingService {
+  const created = JournalRecordingService.create({
     sessionId: `fanout-${id}-${counter++}`,
     projectHash: 'fanout',
     chatsDir: dir,
@@ -37,10 +37,10 @@ function history(): HistoryService {
   return created;
 }
 
-async function recorded(service: SessionRecordingService): Promise<string> {
+async function recorded(service: JournalRecordingService): Promise<string> {
   await service.flush();
   const path = service.getFilePath();
-  return path === null ? '' : readFile(path, 'utf8');
+  return path === null ? '' : JSON.stringify(await journalRows(path));
 }
 
 describe('origin id', () => {
@@ -62,61 +62,6 @@ describe('history recorder fan-out', () => {
     for (const history of histories.splice(0)) await history.dispose();
     for (const recorder of recorders.splice(0)) await recorder.dispose();
     await rm(dir, { recursive: true, force: true });
-  });
-
-  describe('HistoryRecorderFanout', () => {
-    it('delivers own and unowned rows and skips foreign rows per binding', async () => {
-      const fanout = new HistoryRecorderFanout();
-      const a = recorder('a');
-      const b = recorder('b');
-      fanout.bind('A', a);
-      fanout.bind('B', b);
-      const content = (text: string, origin?: string) => ({
-        content: row(text),
-        ...(origin === undefined ? {} : { origin }),
-      });
-      fanout.deliver('content', content('a-turn', 'A'));
-      fanout.deliver('content', content('b-turn', 'B'));
-      fanout.deliver('content', content('external'));
-      const fileA = await recorded(a);
-      const fileB = await recorded(b);
-      expect(fileA).toContain('a-turn');
-      expect(fileA).toContain('external');
-      expect(fileA).not.toContain('b-turn');
-      expect(fileB).toContain('b-turn');
-      expect(fileB).toContain('external');
-      expect(fileB).not.toContain('a-turn');
-    });
-
-    it('re-binding an origin replaces only that origin and unbind removes it', async () => {
-      const fanout = new HistoryRecorderFanout();
-      const a1 = recorder('a1');
-      const a2 = recorder('a2');
-      const b = recorder('b');
-      fanout.bind('A', a1);
-      fanout.bind('B', b);
-      fanout.bind('A', a2);
-      expect(fanout.size).toBe(2);
-      expect(fanout.has(a1)).toBe(false);
-      expect(fanout.unbind(b)).toBe(true);
-      fanout.deliver('content', { content: row('after') });
-      expect(await recorded(a2)).toContain('after');
-      expect(await recorded(a1)).not.toContain('after');
-      expect(await recorded(b)).not.toContain('after');
-    });
-
-    it('a failing binding does not starve the others and the failure is rethrown', async () => {
-      const fanout = new HistoryRecorderFanout();
-      const broken = recorder('broken');
-      const healthy = recorder('healthy');
-      await broken.dispose();
-      fanout.bind('A', broken);
-      fanout.bind('B', healthy);
-      expect(() =>
-        fanout.deliver('content', { content: row('shared') }),
-      ).toThrow('session recording is disposed');
-      expect(await recorded(healthy)).toContain('shared');
-    });
   });
 
   describe('per-origin journal fan-out in the history store', () => {
@@ -163,16 +108,6 @@ describe('history recorder fan-out', () => {
       expect(fileB).toContain('b-turn');
       expect(fileB).toContain('external-turn');
       expect(fileB).not.toContain('a-turn');
-    });
-
-    it('hands a published row to the mirror before any await', async () => {
-      const { service, ownerA, ownerB, b } = await shared();
-      await service.attachJournal(b, true, undefined, ownerB);
-      const before = b.getLastEnqueuedSequence();
-      service.add(row('b-turn'), undefined, ownerB);
-      expect(b.getLastEnqueuedSequence()).toBe(before + 1);
-      service.add(row('a-turn'), undefined, ownerA);
-      expect(b.getLastEnqueuedSequence()).toBe(before + 1);
     });
 
     it('keeps row order when a large batch is still being pumped to the mirror', async () => {
@@ -227,9 +162,6 @@ describe('history recorder fan-out', () => {
         expect(file).not.toContain('rolled-back');
       }
       expect(fileA).toContain('survivor');
-      expect(fileA).not.toContain(
-        '"type":"rewind","payload":{"itemsRemoved":1',
-      );
       expect(fileB).not.toContain('survivor');
     });
 

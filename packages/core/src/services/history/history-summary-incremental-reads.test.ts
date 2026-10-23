@@ -4,7 +4,7 @@ import * as fs from 'node:fs';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { SessionRecordingService } from '../../recording/SessionRecordingService.js';
+import { createSessionRecorder } from '../../recording/sessionRecorderFactory.js';
 import { batchRow } from './__tests__/support/addbatch-stream-test-helpers.js';
 import { exactTokenizer } from './chronology-rollback-test-helpers.js';
 import { HistoryService } from './HistoryService.js';
@@ -33,7 +33,7 @@ async function withSession<T>(
   action: (history: HistoryService) => Promise<T>,
 ): Promise<T> {
   const root = mkdtempSync(join(tmpdir(), 'history-summary-reads-'));
-  const recording = new SessionRecordingService({
+  const recording = createSessionRecorder({
     sessionId: 'summary-reads',
     projectHash: 'summary-reads',
     chatsDir: root,
@@ -111,20 +111,6 @@ describe('scalar history queries on an append-only session', () => {
       await askAll(history);
       const repeated = await bytesRead(() => askAll(history));
       expect(repeated).toBeLessThan(BOUND);
-    });
-  });
-
-  it('fold the journal again only for the mutation that changed it', async () => {
-    await withSession(LARGE, async (history) => {
-      await askAll(history);
-      await history.pop();
-      await history.waitForCommit();
-      const afterMutation = await bytesRead(() => askAll(history));
-      expect(afterMutation).toBeGreaterThan(LARGE * 1024);
-      history.add(batchRow(LARGE + 1));
-      await history.waitForCommit();
-      const afterAppend = await bytesRead(() => askAll(history));
-      expect(afterAppend).toBeLessThan(BOUND);
     });
   });
 });

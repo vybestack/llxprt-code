@@ -8,8 +8,9 @@ import {
 import type { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import type { DetachedHistoryTransform } from './detachedHistoryMutation.js';
-import { HistoryJournalStore } from './historyJournalStore.js';
-import { HistoryValidationRepair } from './historyValidationRepair.js';
+import { JournalHistoryStore } from './journalHistoryStore.js';
+import { JournalOwners } from './journalOwners.js';
+import { JournalSession } from './journalSession.js';
 
 const harness = new FanoutHarness();
 
@@ -176,9 +177,9 @@ describe('a rolled back validation repair keeps the origin of every restored row
   afterEach(() => harness.teardown());
 
   it('restores rows under the origins they had before the repair', async () => {
-    const recorder = harness.recorder('repair');
-    const journal = new HistoryJournalStore(recorder);
-    const repair = new HistoryValidationRepair();
+    const session = await JournalSession.createUnlinked();
+    const journal = new JournalHistoryStore(session);
+    let repair: Awaited<ReturnType<typeof journal.validateAndFix>> | undefined;
     try {
       journal.apply({
         kind: 'content',
@@ -196,8 +197,8 @@ describe('a rolled back validation repair keeps the origin of every restored row
       });
       await journal.waitForDurable();
       let nextSeq = 4;
-      journal.withReadRows((cursor) =>
-        repair.capture(cursor, (row) => ({
+      repair = await journal.validateAndFix({
+        stamp: (row) => ({
           ...row,
           metadata: {
             ...row.metadata,
@@ -208,21 +209,18 @@ describe('a rolled back validation repair keeps the origin of every restored row
               recordedAt: 1,
             },
           },
-        })),
-      );
-      repair.publish(journal);
-      repair.rollback(journal);
+        }),
+      });
+      await repair.rollback();
       await journal.waitForDurable();
 
-      expect(
-        journal.withReadRows((cursor) =>
-          Array.from({ length: cursor.length }, (_, index) =>
-            cursor.originAt(index),
-          ),
-        ),
-      ).toStrictEqual(['A', undefined, 'B']);
+      const owners = new JournalOwners(session.store);
+      const origins: Array<string | undefined> = [];
+      for await (const { entry } of session.rows())
+        origins.push(await owners.originOf(entry.owner));
+      expect(origins).toStrictEqual(['A', undefined, 'B']);
     } finally {
-      repair.close();
+      await repair?.close();
       await journal.dispose();
     }
   });

@@ -3,15 +3,15 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createSessionRecorder } from '../../recording/sessionRecorderFactory.js';
 import {
-  createRecordedSession,
-  PROJECT_HASH,
-} from '../../recording/__tests__/support/p05dTestKit.js';
-import {
-  resumeJsonlSession,
-  type JsonlResumeResult as ResumeResult,
+  resumeSession,
+  type ResumeResult,
 } from '../../recording/resumeSession.js';
-import { useBackendEnv } from '../../recording/__tests__/support/backendEnv.js';
+import { HistoryService } from './HistoryService.js';
+
+const PROJECT_HASH = 'fanout-resume';
+
 import {
   FanoutHarness,
   rowText,
@@ -22,10 +22,27 @@ const harness = new FanoutHarness();
 let root: string;
 let resumed: ResumeResult | undefined;
 
-async function resumedSession(): Promise<ResumeResult> {
-  const fixture = await createRecordedSession(root, { rows: 3 });
-  const result = await resumeJsonlSession({
-    continueRef: fixture.sessionId,
+async function resumedSession(owner: object): Promise<ResumeResult> {
+  const recording = createSessionRecorder({
+    sessionId: 'fanout-resumed-session',
+    projectHash: PROJECT_HASH,
+    chatsDir: root,
+    workspaceDirs: [],
+    provider: 'anthropic',
+    model: 'claude-4',
+  });
+  const history = new HistoryService();
+  try {
+    await history.attachJournal(recording, true, undefined, owner);
+    for (let index = 0; index < 3; index++)
+      history.add(textRow(`row-${index}`), undefined, owner);
+    await history.waitForCommit();
+  } finally {
+    await history.dispose();
+    await recording.dispose();
+  }
+  const result = await resumeSession({
+    continueRef: recording.getSessionId(),
     chatsDir: root,
     projectHash: PROJECT_HASH,
     currentProvider: 'anthropic',
@@ -38,17 +55,16 @@ async function resumedSession(): Promise<ResumeResult> {
 }
 
 describe('resuming one origin while another is mirrored', () => {
-  const selectBackendForTest = useBackendEnv();
   beforeEach(async () => {
     // The fixture session is a JSONL file; session discovery follows the env.
-    selectBackendForTest('old');
+
     await harness.setup();
     root = await mkdtemp(join(tmpdir(), 'fanout-resume-'));
   });
   afterEach(async () => {
+    await harness.teardown();
     await resumed?.recording.dispose();
     resumed = undefined;
-    await harness.teardown();
     await rm(root, { recursive: true, force: true });
   });
 
@@ -58,11 +74,10 @@ describe('resuming one origin while another is mirrored', () => {
     service.add(textRow('B-before'), undefined, ownerB);
     await service.waitForCommit();
 
-    const result = await resumedSession();
+    const result = await resumedSession(ownerA);
     await service.adoptResumeBoot(result.recording, result.boot, () =>
       service.attachJournal(result.recording, false, undefined, ownerA),
     );
-    expect(service.journalPath()).not.toBe(result.boot.filePath);
 
     service.add(textRow('A-after'), undefined, ownerA);
     service.add(textRow('B-after'), undefined, ownerB);

@@ -149,6 +149,14 @@ export class JournalMirrors {
       await this.detachRecorder(recorder);
       throw error;
     }
+    await this.queue.exclusive(async () => {
+      for (const [previous, binding] of this.recorders) {
+        if (previous === recorder || binding.origin !== origin) continue;
+        if (binding.session !== undefined)
+          await this.fanout.detach(binding.session.store);
+        this.recorders.delete(previous);
+      }
+    });
   }
 
   /** Unbinds a recorder once its file has applied what was delivered; one that is not bound is ignored. */

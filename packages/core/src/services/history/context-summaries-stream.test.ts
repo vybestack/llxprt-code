@@ -6,7 +6,8 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { createRowCounters } from '../../recording/journalCounters.js';
 import { RowOwnership } from '../../recording/rowOwnership.js';
-import { SessionRecordingService } from '../../recording/SessionRecordingService.js';
+import { createSessionRecorder } from '../../recording/sessionRecorderFactory.js';
+import type { SessionRecordingPort } from '../../recording/recordingPort.js';
 import { resumeSession } from '../../recording/resumeSession.js';
 import type { IContent } from './IContent.js';
 import type { ContextSummaryInfo } from './historyEventTypes.js';
@@ -61,8 +62,8 @@ function row(index: number, summary = false): IContent {
   };
 }
 
-function recorder(root: string): SessionRecordingService {
-  return new SessionRecordingService({
+function recorder(root: string): SessionRecordingPort {
+  return createSessionRecorder({
     sessionId: 'context-summary-stream',
     projectHash: 'context-summary-stream',
     chatsDir: root,
@@ -74,7 +75,7 @@ function recorder(root: string): SessionRecordingService {
 }
 
 async function withJournal(
-  action: (recording: SessionRecordingService) => Promise<void>,
+  action: (recording: SessionRecordingPort) => Promise<void>,
 ): Promise<void> {
   const root = fs.mkdtempSync(
     path.join(os.tmpdir(), 'context-summary-stream-'),
@@ -206,11 +207,19 @@ describe('context summary cancellation and resume', () => {
     const summary = row(40, true);
     let resumed: Awaited<ReturnType<typeof resumeSession>> | undefined;
     try {
-      for (let i = 0; i < 3; i++) original.recordContent(row(i));
-      original.recordCompressed(summary, 3);
-      original.recordContent(row(41));
-      await original.flush();
-      await original.dispose();
+      const originalHistory = new HistoryService({ recording: original });
+      try {
+        for (let i = 0; i < 3; i++) originalHistory.add(row(i));
+        originalHistory.startCompression();
+        await originalHistory.replaceAll([summary]);
+        originalHistory.endCompression(summary, 3);
+        originalHistory.add(row(41));
+        await originalHistory.waitForCommit();
+        await original.flush();
+      } finally {
+        await originalHistory.dispose();
+        await original.dispose();
+      }
       resumed = await resumeSession({
         continueRef: 'context-summary-stream',
         projectHash: 'context-summary-stream',

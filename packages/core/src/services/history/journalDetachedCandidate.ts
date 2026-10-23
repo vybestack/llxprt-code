@@ -225,7 +225,7 @@ export class JournalCandidate {
     if (this.feed === undefined) {
       if (entry !== undefined) {
         const stored = await this.ctx.snapshot.readRow(entry);
-        if (draftEqualsStored(draft, stored)) {
+        if (draftEqualsStored({ ...draft, owner: entry.owner }, stored)) {
           this.head++;
           return;
         }

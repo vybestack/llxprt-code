@@ -25,7 +25,19 @@ export class RecordingPrimary {
 
   constructor(private readonly host: AdoptionHost) {}
 
-  attach(recorder: JournalRecordingService, origin: string | undefined): void {
+  async attach(
+    recorder: JournalRecordingService,
+    origin: string | undefined,
+  ): Promise<void> {
+    const current = this.host.state();
+    if (
+      current.adopted !== undefined &&
+      current.adopted !== recorder &&
+      current.mirrors.primaryOriginId() === origin
+    ) {
+      await releaseAdoptedPrimary(this.host);
+      this.selected = undefined;
+    }
     const { session, mirrors } = this.host.state();
     if (
       session.named ||
@@ -62,6 +74,11 @@ export class RecordingPrimary {
     const state = this.host.state();
     if (this.selected !== undefined && state.adopted !== this.selected.recorder)
       this.selected = undefined;
+    if (this.selected === undefined && state.adopted !== undefined) {
+      const origin = state.mirrors.primaryOriginId();
+      const { id: owner } = await state.owners.resolve(origin);
+      this.selected = { recorder: state.adopted, origin, owner };
+    }
     const selected = this.selected;
     if (selected !== undefined) {
       const streams = await state.owners.hasOnly(selected.origin);

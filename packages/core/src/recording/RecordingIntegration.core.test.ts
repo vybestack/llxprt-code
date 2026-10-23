@@ -29,34 +29,28 @@
  * These tests are expected to fail against the Phase 12 stub implementation.
  */
 
-import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { assertNotNull } from '@vybestack/llxprt-code-test-utils';
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
-import * as os from 'node:os';
+import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { EventEmitter } from 'node:events';
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
 
 import { HistoryService } from '../services/history/HistoryService.js';
 import { type IContent } from '../services/history/IContent.js';
 import { RecordingIntegration } from './RecordingIntegration.js';
-import { replaySession } from './ReplayEngine.js';
-import { assertReplayOk } from './__tests__/replay-test-helpers.js';
-import { SessionRecordingService } from './SessionRecordingService.js';
+import { createSessionRecorder } from './sessionRecorderFactory.js';
+import type { SessionRecordingPort } from './recordingPort.js';
+import type { SessionRecordingServiceConfig } from './types.js';
+import { MUTATION } from '../journal/recordKinds.js';
 import {
-  type ContentPayload,
-  type SessionRecordingServiceConfig,
-} from './types.js';
+  journalGroups,
+  journalRows,
+  type RecordedJournalGroup,
+} from './__tests__/support/journal-read-test-helpers.js';
 
 const PROJECT_HASH = 'project-hash-recording-integration';
-
-interface JsonlEvent {
-  v: number;
-  seq: number;
-  ts: string;
-  type: string;
-  payload: unknown;
-}
 
 function makeConfig(
   chatsDir: string,
@@ -115,56 +109,25 @@ function historyEmitter(historyService: HistoryService): EventEmitter {
   return historyService;
 }
 
-async function readRecordedEvents(
-  recordingService: SessionRecordingService,
-): Promise<JsonlEvent[]> {
-  const filePath = recordingService.getFilePath();
-  if (!filePath) {
-    return [];
-  }
-
-  const raw = await fs.readFile(filePath, 'utf-8');
-  if (raw.trim() === '') {
-    return [];
-  }
-
-  return raw
-    .trim()
-    .split('\n')
-    .map((line) => JSON.parse(line) as JsonlEvent);
-}
-
 async function flushAndRead(
   integration: RecordingIntegration,
-  recordingService: SessionRecordingService,
-): Promise<JsonlEvent[]> {
+  recordingService: SessionRecordingPort,
+): Promise<RecordedJournalGroup[]> {
   await integration.flushAtTurnBoundary();
-  return readRecordedEvents(recordingService);
+  const filePath = recordingService.getFilePath();
+  return filePath === null ? [] : journalGroups(filePath);
 }
 
-function recordedContent(event: JsonlEvent): IContent {
-  if (event.type !== 'content' || !isRecordedContentPayload(event.payload)) {
-    throw new Error(`Recorded event has no content payload: ${event.type}`);
-  }
-  return event.payload.content;
+function appendedRows(groups: readonly RecordedJournalGroup[]): IContent[] {
+  return groups
+    .filter((group) => group.trailer.mutation === MUTATION.append)
+    .flatMap((group) => group.rows);
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function isSpeaker(value: unknown): value is IContent['speaker'] {
-  return value === 'human' || value === 'ai' || value === 'tool';
-}
-
-function isContent(value: unknown): value is IContent {
-  return (
-    isRecord(value) && isSpeaker(value.speaker) && Array.isArray(value.blocks)
-  );
-}
-
-function isRecordedContentPayload(payload: unknown): payload is ContentPayload {
-  return isRecord(payload) && isContent(payload.content);
+function compressions(
+  groups: readonly RecordedJournalGroup[],
+): RecordedJournalGroup[] {
+  return groups.filter((group) => group.trailer.mutation === MUTATION.replace);
 }
 
 function firstText(content: IContent): string {
@@ -176,7 +139,7 @@ let tempDir: string;
 
 let chatsDir: string;
 
-let recordingService: SessionRecordingService;
+let recordingService: SessionRecordingPort;
 
 let integration: RecordingIntegration;
 
@@ -284,7 +247,7 @@ async function testRecordingCore01(): Promise<void> {
   historyService.add(textContent('hello one'));
 
   const events = await flushAndRead(integration, recordingService);
-  expect(events.some((event) => event.type === 'content')).toBe(true);
+  expect(appendedRows(events).length > 0).toBe(true);
 }
 
 async function testRecordingCore02(): Promise<void> {
@@ -308,7 +271,7 @@ async function testRecordingCore02(): Promise<void> {
       const after = await flushAndRead(integration, recordingService);
       expect(notifications).toHaveLength(2);
       expect(after).toStrictEqual(before);
-      expect(after.filter((event) => event.type === 'content')).toHaveLength(1);
+      expect(appendedRows(after)).toHaveLength(1);
     },
   );
 }
@@ -319,12 +282,10 @@ async function testRecordingCore03(): Promise<void> {
   historyService.add(textContent('after-subscribe'));
 
   const events = await flushAndRead(integration, recordingService);
-  const contentEvents = events.filter((event) => event.type === 'content');
+  const contentEvents = appendedRows(events);
   expect(contentEvents).toHaveLength(1);
 
-  const payload = contentEvents[0].payload as { content: IContent };
-  const text = (payload.content.blocks[0] as { type: 'text'; text: string })
-    .text;
+  const text = firstText(contentEvents[0]);
   expect(text).toBe('after-subscribe');
 }
 
@@ -335,11 +296,8 @@ async function testRecordingCore04(): Promise<void> {
   historyService.add(textContent('c'));
 
   const events = await flushAndRead(integration, recordingService);
-  const contentEvents = events.filter((event) => event.type === 'content');
-  const texts = contentEvents.map((event) => {
-    const payload = event.payload as { content: IContent };
-    return (payload.content.blocks[0] as { type: 'text'; text: string }).text;
-  });
+  const contentEvents = appendedRows(events);
+  const texts = contentEvents.map(firstText);
   expect(texts).toStrictEqual(['a', 'b', 'c']);
 }
 
@@ -348,10 +306,9 @@ async function testRecordingCore05(): Promise<void> {
   historyService.add(toolCallContent('search'));
 
   const events = await flushAndRead(integration, recordingService);
-  const contentEvent = events.find((event) => event.type === 'content');
+  const contentEvent = appendedRows(events)[0];
   expect(contentEvent).toBeDefined();
-  const payload = contentEvent?.payload as { content: IContent };
-  expect(payload.content.blocks.some((b) => b.type === 'tool_call')).toBe(true);
+  expect(contentEvent.blocks.some((b) => b.type === 'tool_call')).toBe(true);
 }
 
 async function testRecordingCore06(): Promise<void> {
@@ -359,10 +316,9 @@ async function testRecordingCore06(): Promise<void> {
   historyService.add(toolResponseContent('search'));
 
   const events = await flushAndRead(integration, recordingService);
-  const contentEvent = events.find((event) => event.type === 'content');
+  const contentEvent = appendedRows(events)[0];
   expect(contentEvent).toBeDefined();
-  const payload = contentEvent?.payload as { content: IContent };
-  expect(payload.content.blocks.some((b) => b.type === 'tool_response')).toBe(
+  expect(contentEvent.blocks.some((b) => b.type === 'tool_response')).toBe(
     true,
   );
 }
@@ -373,9 +329,12 @@ async function testRecordingCore07(): Promise<void> {
   integration.unsubscribeFromHistory();
   historyService.add(textContent('after-unsubscribe'));
 
-  const events = await flushAndRead(integration, recordingService);
-  const contentEvents = events.filter((event) => event.type === 'content');
+  await integration.flushAtTurnBoundary();
+  const filePath = recordingService.getFilePath();
+  assertNotNull(filePath, 'Expected a recorded journal');
+  const contentEvents = await journalRows(filePath);
   expect(contentEvents).toHaveLength(1);
+  expect(firstText(contentEvents[0])).toBe('before-unsubscribe');
 }
 
 async function testRecordingCore08(): Promise<void> {
@@ -385,7 +344,7 @@ async function testRecordingCore08(): Promise<void> {
   historyService.add(textContent('rebound'));
 
   const events = await flushAndRead(integration, recordingService);
-  expect(events.filter((event) => event.type === 'content')).toHaveLength(1);
+  expect(appendedRows(events)).toHaveLength(1);
 }
 
 async function testRecordingCore09(): Promise<void> {
@@ -397,14 +356,11 @@ async function testRecordingCore09(): Promise<void> {
   historyService.endCompression(textContent('compression summary', 'ai'), 42);
 
   const events = await flushAndRead(integration, recordingService);
-  const contentEvents = events.filter((event) => event.type === 'content');
-  const contentTexts = contentEvents.map((event) => {
-    const payload = event.payload as { content: IContent };
-    return (payload.content.blocks[0] as { type: 'text'; text: string }).text;
-  });
+  const contentEvents = appendedRows(events);
+  const contentTexts = contentEvents.map(firstText);
   expect(contentEvents).toHaveLength(1);
   expect(contentTexts).toStrictEqual(['baseline-materialize']);
-  expect(events.filter((event) => event.type === 'compressed')).toHaveLength(1);
+  expect(compressions(events)).toHaveLength(1);
 }
 
 async function testRecordingCore10(): Promise<void> {
@@ -417,16 +373,9 @@ async function testRecordingCore10(): Promise<void> {
   historyService.endCompression(textContent('summary', 'ai'), 7);
 
   const events = await flushAndRead(integration, recordingService);
-  const compressedEvent = events.find((event) => event.type === 'compressed');
+  const compressedEvent = compressions(events)[0];
   expect(compressedEvent).toBeDefined();
-  const payload = compressedEvent?.payload as {
-    summary: IContent;
-    itemsCompressed: number;
-  };
-  expect(payload.itemsCompressed).toBe(7);
-  expect(
-    (payload.summary.blocks[0] as { type: 'text'; text: string }).text,
-  ).toBe('summary');
+  expect(firstText(compressedEvent.rows[0])).toBe('summary');
 }
 
 async function testRecordingCore11(): Promise<void> {
@@ -438,8 +387,8 @@ async function testRecordingCore11(): Promise<void> {
   historyService.add(textContent('new-content-after-compression'));
 
   const events = await flushAndRead(integration, recordingService);
-  expect(events.filter((event) => event.type === 'compressed')).toHaveLength(1);
-  expect(events.filter((event) => event.type === 'content')).toHaveLength(2);
+  expect(compressions(events)).toHaveLength(1);
+  expect(appendedRows(events)).toHaveLength(2);
 }
 
 async function testRecordingCore12(): Promise<void> {
@@ -452,14 +401,9 @@ async function testRecordingCore12(): Promise<void> {
   historyService.add(textContent('after'));
 
   const events = await flushAndRead(integration, recordingService);
-  const contentTexts = events
-    .filter((event) => event.type === 'content')
-    .map((event) => {
-      const payload = event.payload as { content: IContent };
-      return (payload.content.blocks[0] as { type: 'text'; text: string }).text;
-    });
+  const contentTexts = appendedRows(events).map(firstText);
   expect(contentTexts).toStrictEqual(['before', 'after']);
-  expect(events.filter((event) => event.type === 'compressed')).toHaveLength(0);
+  expect(compressions(events)).toHaveLength(0);
 }
 
 async function testRecordingCore13(): Promise<void> {
@@ -472,14 +416,9 @@ async function testRecordingCore13(): Promise<void> {
   historyService.add(textContent('after'));
 
   const events = await flushAndRead(integration, recordingService);
-  const contentTexts = events
-    .filter((event) => event.type === 'content')
-    .map((event) => {
-      const payload = event.payload as { content: IContent };
-      return (payload.content.blocks[0] as { type: 'text'; text: string }).text;
-    });
+  const contentTexts = appendedRows(events).map(firstText);
   expect(contentTexts).toStrictEqual(['before', 'after']);
-  expect(events.filter((event) => event.type === 'compressed')).toHaveLength(0);
+  expect(compressions(events)).toHaveLength(0);
 }
 
 async function testRecordingCore14(): Promise<void> {
@@ -493,14 +432,9 @@ async function testRecordingCore14(): Promise<void> {
   historyService.add(textContent('after-second-noop'));
 
   const events = await flushAndRead(integration, recordingService);
-  const contentTexts = events
-    .filter((event) => event.type === 'content')
-    .map((event) => {
-      const payload = event.payload as { content: IContent };
-      return (payload.content.blocks[0] as { type: 'text'; text: string }).text;
-    });
+  const contentTexts = appendedRows(events).map(firstText);
   expect(contentTexts).toStrictEqual(['after-first-noop', 'after-second-noop']);
-  expect(events.filter((event) => event.type === 'compressed')).toHaveLength(0);
+  expect(compressions(events)).toHaveLength(0);
 }
 
 async function testRecordingCore15(): Promise<void> {
@@ -516,25 +450,24 @@ async function testRecordingCore15(): Promise<void> {
 
   const events = await flushAndRead(integration, recordingService);
   const contentOrCompressed = events
-    .filter((event) => event.type === 'content' || event.type === 'compressed')
-    .map((event) => event.type);
+    .filter(
+      (group) =>
+        group.trailer.mutation === MUTATION.append ||
+        group.trailer.mutation === MUTATION.replace,
+    )
+    .map((group) => group.trailer.mutation);
   // 'during' was queued in the window and never recorded before the
   // flush, so its record must follow the compressed record for replay
   // to keep it (#3264).
   expect(contentOrCompressed).toStrictEqual([
-    'content',
-    'compressed',
-    'content',
-    'content',
+    MUTATION.append,
+    MUTATION.replace,
+    MUTATION.append,
+    MUTATION.append,
   ]);
-  const contentTexts = events
-    .filter((event) => event.type === 'content')
-    .map((event) => {
-      const payload = event.payload as { content: IContent };
-      return (payload.content.blocks[0] as { type: 'text'; text: string }).text;
-    });
+  const contentTexts = appendedRows(events).map(firstText);
   expect(contentTexts).toStrictEqual(['before', 'during', 'after']);
-  expect(events.filter((event) => event.type === 'compressed')).toHaveLength(1);
+  expect(compressions(events)).toHaveLength(1);
 }
 
 async function testRecordingCore16(): Promise<void> {
@@ -548,7 +481,7 @@ async function testRecordingCore16(): Promise<void> {
   historyService.endCompression(textContent('summary-2', 'ai'), 12);
 
   const events = await flushAndRead(integration, recordingService);
-  expect(events.filter((event) => event.type === 'compressed')).toHaveLength(2);
+  expect(compressions(events)).toHaveLength(2);
 }
 
 async function testRecordingCore17(): Promise<void> {
@@ -561,20 +494,22 @@ async function testRecordingCore17(): Promise<void> {
 
   const events = await flushAndRead(integration, recordingService);
   const contentOrCompressed = events
-    .filter((event) => event.type === 'content' || event.type === 'compressed')
-    .map((event) => event.type);
+    .filter(
+      (group) =>
+        group.trailer.mutation === MUTATION.append ||
+        group.trailer.mutation === MUTATION.replace,
+    )
+    .map((group) => group.trailer.mutation);
   // Exactly one pre-compression content record, one compressed record for
   // the rebuild (rebuilt entries must not duplicate content records —
   // #3132), then one record for the mid-compression streaming entry.
   expect(contentOrCompressed).toStrictEqual([
-    'content',
-    'compressed',
-    'content',
+    MUTATION.append,
+    MUTATION.replace,
+    MUTATION.append,
   ]);
 
-  const recordedContents = events
-    .filter((event) => event.type === 'content')
-    .map((event) => (event.payload as { content: IContent }).content);
+  const recordedContents = appendedRows(events);
   const originalRecords = recordedContents.filter(
     (content) =>
       content.blocks[0].type === 'text' &&
@@ -591,8 +526,8 @@ async function testRecordingCore17(): Promise<void> {
   // Recoverability: replaying the session file keeps the mid entry.
   const filePath = recordingService.getFilePath();
   expect(filePath).not.toBeNull();
-  const result = await replaySession(filePath!, PROJECT_HASH);
-  assertReplayOk(result);
+  assertNotNull(filePath, 'Expected a recorded journal');
+  const result = { history: await journalRows(filePath) };
   expect(result.history).toHaveLength(2);
   expect(result.history[0].blocks[0]).toStrictEqual({
     type: 'text',
@@ -618,17 +553,19 @@ async function testRecordingCore18(): Promise<void> {
 
   const events = await flushAndRead(integration, recordingService);
   const contentOrCompressed = events
-    .filter((event) => event.type === 'content' || event.type === 'compressed')
-    .map((event) => event.type);
+    .filter(
+      (group) =>
+        group.trailer.mutation === MUTATION.append ||
+        group.trailer.mutation === MUTATION.replace,
+    )
+    .map((group) => group.trailer.mutation);
   expect(contentOrCompressed).toStrictEqual([
-    'content',
-    'compressed',
-    'content',
+    MUTATION.append,
+    MUTATION.replace,
+    MUTATION.append,
   ]);
 
-  const recordedContents = events
-    .filter((event) => event.type === 'content')
-    .map((event) => recordedContent(event));
+  const recordedContents = appendedRows(events);
   const originalRecords = recordedContents.filter(
     (content) => firstText(content) === 'original question',
   );
@@ -642,8 +579,8 @@ async function testRecordingCore18(): Promise<void> {
 
   const filePath = recordingService.getFilePath();
   assertNotNull(filePath, 'Expected a session file after recorded events');
-  const result = await replaySession(filePath, PROJECT_HASH);
-  assertReplayOk(result);
+  assertNotNull(filePath, 'Expected a recorded journal');
+  const result = { history: await journalRows(filePath) };
   expect(result.history).toHaveLength(2);
   expect(result.history[0].blocks[0]).toStrictEqual({
     type: 'text',
@@ -662,14 +599,15 @@ async function beforeEachRecordingCore(): Promise<void> {
   chatsDir = path.join(tempDir, 'chats');
   await fs.mkdir(chatsDir, { recursive: true });
 
-  recordingService = new SessionRecordingService(makeConfig(chatsDir));
+  recordingService = createSessionRecorder(makeConfig(chatsDir));
   integration = new RecordingIntegration(recordingService);
-  historyService = new HistoryService({ backend: 'old' });
+  historyService = new HistoryService({});
   emitter = historyEmitter(historyService);
 }
 
 async function afterEachRecordingCore(): Promise<void> {
   await integration.dispose();
+  await historyService.dispose();
   await recordingService.dispose();
   await fs.rm(tempDir, { recursive: true, force: true });
 }

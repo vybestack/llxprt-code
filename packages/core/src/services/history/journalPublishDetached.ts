@@ -81,6 +81,7 @@ export async function publishDetachedOnJournal(
     throw historyMutationFailure(failure.error, failures);
   if (failures.length > 0)
     throw new AggregateError(failures, 'Detached publication cleanup failed');
+  await store.settleFanout();
 }
 
 async function publishOver(

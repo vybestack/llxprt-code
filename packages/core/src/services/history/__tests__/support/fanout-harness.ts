@@ -1,11 +1,18 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
-import { replaySession } from '../../../../recording/ReplayEngine.js';
-import { SessionRecordingService } from '../../../../recording/SessionRecordingService.js';
-import type { RecordingWriterIo } from '../../../../recording/types.js';
+import { JournalRecordingService } from '../../../../recording/journalRecordingService.js';
+import type { JournalSessionOptions } from '../../journalSession.js';
+import type { SessionRecordingPort } from '../../../../recording/recordingPort.js';
+import { openJournalReadOnly } from '../../../../journal/journalReader.js';
+import {
+  iterateRowEntries,
+  rowTreeRootOf,
+} from '../../../../journal/rowTreeReader.js';
+import { readStoredRow } from '../../../../journal/rowReads.js';
+import { decodeStoredRow } from '../../journalRowCodec.js';
 import { HistoryService } from '../../HistoryService.js';
 import type { IContent } from '../../IContent.js';
 
@@ -35,7 +42,7 @@ export function rowText(row: IContent): string {
 export class FanoutHarness {
   private dir = '';
   private counter = 0;
-  private readonly recorders: SessionRecordingService[] = [];
+  private readonly recorders: JournalRecordingService[] = [];
   private readonly histories: HistoryService[] = [];
 
   async setup(): Promise<void> {
@@ -48,22 +55,25 @@ export class FanoutHarness {
     await rm(this.dir, { recursive: true, force: true });
   }
 
-  recorder(id: string, io?: RecordingWriterIo): SessionRecordingService {
-    const created = new SessionRecordingService({
+  recorder(
+    id: string,
+    journal?: JournalSessionOptions,
+  ): JournalRecordingService {
+    const created = JournalRecordingService.create({
       sessionId: `harness-${id}-${this.counter++}`,
       projectHash: FANOUT_PROJECT_HASH,
       chatsDir: this.dir,
       workspaceDirs: [this.dir],
       provider: 'test',
       model: 'test',
-      ...(io === undefined ? {} : { io }),
+      journal,
     });
     this.recorders.push(created);
     return created;
   }
 
   history(): HistoryService {
-    const created = new HistoryService({ backend: 'old' });
+    const created = new HistoryService({});
     this.histories.push(created);
     return created;
   }
@@ -73,8 +83,8 @@ export class FanoutHarness {
     service: HistoryService;
     ownerA: object;
     ownerB: object;
-    a: SessionRecordingService;
-    b: SessionRecordingService;
+    a: JournalRecordingService;
+    b: JournalRecordingService;
   }> {
     const service = this.history();
     const ownerA = {};
@@ -88,20 +98,28 @@ export class FanoutHarness {
   }
 
   /** The history a replay of the recording yields, as row texts. */
-  async replayed(recorder: SessionRecordingService): Promise<string[]> {
+  async replayed(recorder: SessionRecordingPort): Promise<string[]> {
     return (await this.replayedRows(recorder)).map(rowText);
   }
 
   /** The rows a replay of the recording yields. */
-  async replayedRows(recorder: SessionRecordingService): Promise<IContent[]> {
+  async replayedRows(recorder: SessionRecordingPort): Promise<IContent[]> {
     await recorder.flush();
     const path = recorder.getFilePath();
     if (path === null) return [];
-    const replay = await replaySession(path, recorder.getProjectHash());
-    if (!replay.ok) throw new Error(`replay failed: ${replay.error}`);
-    if (replay.warnings.length > 0)
-      throw new Error(`replay warned: ${replay.warnings.join('; ')}`);
-    return replay.history;
+    const reader = await openJournalReadOnly(path);
+    try {
+      const rows: IContent[] = [];
+      const root = rowTreeRootOf(reader.trailer);
+      if (root !== undefined) {
+        for await (const entry of iterateRowEntries(reader, root)) {
+          rows.push(decodeStoredRow(await readStoredRow(reader, entry)));
+        }
+      }
+      return rows;
+    } finally {
+      await reader.close();
+    }
   }
 
   async shared(service: HistoryService): Promise<IContent[]> {
