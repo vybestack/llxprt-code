@@ -1306,6 +1306,35 @@ interface BatchHarnessResult {
   readonly later: string;
 }
 
+// Fixed fixture sources for runBatchHarness. They sit in `<root>/src`, so they
+// derive the `<root>/attempts` and `<root>/later` paths themselves instead of
+// having those paths spliced into generated code.
+const TIMEOUT_FIRST_ATTEMPT_FIXTURE = [
+  "import { it } from 'bun:test';",
+  "import { appendFileSync, existsSync } from 'node:fs';",
+  "import { join } from 'node:path';",
+  "const marker = join(import.meta.dir, '..', 'attempts');",
+  'const retry = existsSync(marker);',
+  "appendFileSync(marker, 'attempt');",
+  "it('timeout then retry', async () => { if (!retry) await new Promise(() => {}); });",
+].join('\n');
+
+const TIMEOUT_EVERY_ATTEMPT_FIXTURE = [
+  "import { it } from 'bun:test';",
+  "import { appendFileSync } from 'node:fs';",
+  "import { join } from 'node:path';",
+  "const marker = join(import.meta.dir, '..', 'attempts');",
+  "appendFileSync(marker, 'attempt');",
+  "it('timeout then retry', async () => { await new Promise(() => {}); });",
+].join('\n');
+
+const LATER_BATCH_FIXTURE = [
+  "import { it } from 'bun:test';",
+  "import { writeFileSync } from 'node:fs';",
+  "import { join } from 'node:path';",
+  "it('later batch', () => writeFileSync(join(import.meta.dir, '..', 'later'), 'ran'));",
+].join('\n');
+
 /**
  * Runs a relocated copy of the core runner over two fixture files. `a` times
  * out on its first attempt (and on its retry too when `retryTimesOut`), and
@@ -1324,23 +1353,11 @@ async function runBatchHarness(
   const later = join(root, 'later');
   writeFileSync(
     join(sourceDir, 'a.test.ts'),
-    [
-      "import { it } from 'bun:test';",
-      "import { appendFileSync, existsSync } from 'node:fs';",
-      `const marker = ${JSON.stringify(marker)};`,
-      'const retry = existsSync(marker);',
-      "appendFileSync(marker, 'attempt');",
-      `it('timeout then retry', async () => { if (${retryTimesOut} || !retry) await new Promise(() => {}); });`,
-    ].join('\n'),
+    retryTimesOut
+      ? TIMEOUT_EVERY_ATTEMPT_FIXTURE
+      : TIMEOUT_FIRST_ATTEMPT_FIXTURE,
   );
-  writeFileSync(
-    join(sourceDir, 'b.test.ts'),
-    [
-      "import { it } from 'bun:test';",
-      "import { writeFileSync } from 'node:fs';",
-      `it('later batch', () => writeFileSync(${JSON.stringify(later)}, 'ran'));`,
-    ].join('\n'),
-  );
+  writeFileSync(join(sourceDir, 'b.test.ts'), LATER_BATCH_FIXTURE);
   const runnerPath = join(import.meta.dir, '..', 'run-bun-tests.ts');
   const scriptsRoot = join(import.meta.dir, '..', '..', '..', 'scripts', 'lib');
   const source = relocateCoreRunnerImports(
