@@ -1,25 +1,29 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { batchRow } from './__tests__/support/addbatch-stream-test-helpers.js';
 import {
-  withRemovalFixture,
-  removalReferences,
-  removalRow,
   assertRemovalRows,
   recordRemovalOwners,
+  removalReferences,
+  removalRow,
+  withRemovalFixture,
 } from './history-removals-test-helpers.js';
-import { batchRow } from './__tests__/support/addbatch-stream-test-helpers.js';
-import type { IContent, ChronologyMarker } from './IContent.js';
+import type { ChronologyMarker, IContent } from './IContent.js';
 
 function registerRemovalScale(size: number): void {
   describe('settled media removals', () => {
     it(`settles shared and removed media through pop and matching removal over ${size} mixed rows`, async () => {
-      await withRemovalFixture(async ({ history, recorder, owners }, store) => {
+      await withRemovalFixture(async ({ history, owners }, store) => {
         const [shared, removed] = await removalReferences(store);
         const input = Array.from({ length: size }, (_, index) =>
           removalRow(index, index === size - 1 ? removed : shared),
         );
-        for (const content of input)
-          await recorder.commit('content', { content });
+        await history.detachedValues.append(
+          (async function* () {
+            for (let index = 0; index < size; index++)
+              yield removalRow(index, index === size - 1 ? removed : shared);
+          })(),
+        );
         await history.settleMediaOwnership();
         const tail = await history.pop();
         expect(tail).toStrictEqual(input[size - 1]);
@@ -53,7 +57,10 @@ describe('disk history removals and real media ownership', () => {
 
   it('returns detached values for pending caller rows, keeps caller markers and queued append order', async () => {
     await withRemovalFixture(
-      async ({ history, pauseWriter, waitForPausedWrite }, store) => {
+      async (
+        { history, pauseWriter, waitForPausedWrite, releaseWriter },
+        store,
+      ) => {
         const [reference] = await removalReferences(store);
         const first = removalRow(0, reference);
         const marker: ChronologyMarker = {
@@ -70,6 +77,7 @@ describe('disk history removals and real media ownership', () => {
         history.add(first);
         history.add(tail);
         await waitForPausedWrite;
+        releaseWriter();
         await history.waitForTokenUpdates();
         const popping = history.pop();
         const queued = batchRow(2);
@@ -96,6 +104,7 @@ describe('pending clear and large-row identity', () => {
         pauseWriter();
         history.addAll(input);
         await waitForPausedWrite;
+        releaseWriter();
         await history.waitForTokenUpdates();
         await history.settleMediaOwnership();
         await history.clear();
@@ -129,6 +138,7 @@ describe('pending clear and large-row identity', () => {
         pauseWriter();
         history.add(large);
         await waitForPausedWrite;
+        releaseWriter();
         await history.waitForTokenUpdates();
         expect(await history.pop()).toMatchObject(large);
         releaseWriter();
