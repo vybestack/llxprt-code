@@ -157,6 +157,9 @@ export class JournalHistoryStore
     restoreTo: (saved) => this.restoreTo(saved),
     waitForDurable: () => this.waitForDurable(),
     lastAck: () => this.ack,
+    captureCompensation: () => this.captureCompensation(),
+    compensate: (mark, held) => this.compensate(mark, held),
+    releaseCompensation: (mark) => this.releaseCompensation(mark),
   });
   private adopted: JournalRecordingService | undefined;
   protected boundary: bigint | undefined;

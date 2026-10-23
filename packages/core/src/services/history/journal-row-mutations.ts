@@ -9,7 +9,11 @@ import type {
   HistoryClearRequest,
   HistoryRepairRequest,
 } from './historyStorePort.js';
-import type { EditBuilder } from './journalPublication.js';
+import type {
+  EditBuilder,
+  JournalCompensationMark,
+} from './journalPublication.js';
+import { historyMutationFailure } from './historyMutationEffects.js';
 import { applyOperation, type JournalWriteHost } from './journalOps.js';
 import { planToolPairingRepair } from './journalHistoryRepair.js';
 import {
@@ -36,6 +40,9 @@ interface JournalRowMutationHost {
   restoreTo(saved: VersionSnapshot): Promise<void>;
   waitForDurable(): Promise<void>;
   lastAck(): CommitAck | undefined;
+  captureCompensation(): JournalCompensationMark;
+  compensate(mark: JournalCompensationMark, held: unknown): Promise<void>;
+  releaseCompensation(mark: JournalCompensationMark): Promise<void>;
 }
 
 export class JournalRowMutations {
@@ -105,12 +112,24 @@ export class JournalRowMutations {
       this.host.assertSettled(snapshot, 'cleared');
       const spans = await spansAfterClear(snapshot, request.spans);
       if (snapshot.rows > 0) {
-        applyOperation(this.host.writes, {
-          kind: 'rewind',
-          itemsRemoved: snapshot.rows,
-        });
-        // The service publishes after the ack, so what its observers read is the emptied version.
-        await this.host.waitForDurable();
+        const mark = this.host.captureCompensation();
+        try {
+          applyOperation(this.host.writes, {
+            kind: 'rewind',
+            itemsRemoved: snapshot.rows,
+          });
+          await this.host.waitForDurable();
+        } catch (error) {
+          const failures: unknown[] = [];
+          try {
+            await this.host.compensate(mark, error);
+          } catch (failure) {
+            failures.push(failure);
+          }
+          throw historyMutationFailure(error, failures);
+        } finally {
+          await this.host.releaseCompensation(mark);
+        }
       }
       await publishClear(request, spans, () => this.host.restoreTo(snapshot));
     });
