@@ -4,7 +4,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { crc32 } from 'node:zlib';
 import { JournalFormatError, RetiredJournalError } from './errors.js';
-import { encodeJournalHeader } from './fileHeader.js';
+import { encodeJournalHeader, JOURNAL_FORMAT_VERSION } from './fileHeader.js';
 import {
   readJournalHeaderOrRefuse,
   retiredJournalMessage,
@@ -95,17 +95,24 @@ describe('old-journal refusal', () => {
     expect(message).toBe(retiredJournalMessage(file));
   });
 
-  it('refuses a file with the wrong version, even when the CRC no longer matches', async () => {
-    const bytes = validHeaderBytes();
-    new DataView(bytes.buffer).setUint32(8, 2, true);
-    const { message, file } = await refusalFor(
-      tempDir(),
-      'session-c.llxj',
-      bytes,
-    );
+  for (const validCrc of [true, false]) {
+    it(`names the incompatible binary version with a ${validCrc ? 'valid' : 'stale'} header CRC`, async () => {
+      const bytes = validHeaderBytes();
+      const foundVersion = JOURNAL_FORMAT_VERSION - 1;
+      const view = new DataView(bytes.buffer);
+      view.setUint32(8, foundVersion, true);
+      if (validCrc) view.setUint32(60, crc32(bytes.subarray(0, 60)), true);
+      const { message, file } = await refusalFor(
+        tempDir(),
+        'session-c.llxj',
+        bytes,
+      );
 
-    expect(message).toBe(retiredJournalMessage(file));
-  });
+      expect(message).toBe(
+        `Session file ${file} was written by an incompatible journal format version (found ${foundVersion}, supported ${JOURNAL_FORMAT_VERSION}) and cannot be resumed. Start a new session.`,
+      );
+    });
+  }
 
   it('refuses an empty file and a file shorter than the magic', async () => {
     const empty = await refusalFor(tempDir(), 'empty.llxj', new Uint8Array(0));

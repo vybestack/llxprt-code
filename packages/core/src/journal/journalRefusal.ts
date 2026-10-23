@@ -12,7 +12,7 @@ import type { PositionalReader } from './positionalFile.js';
 
 const VERSION_END = 12;
 
-/** The one message for every file that is not a current journal (design 2.1). */
+/** The refusal for retired JSONL files and files without the binary magic. */
 export function retiredJournalMessage(path: string): string {
   return `Session file ${path} was recorded in the retired JSONL journal format (versions 1 and 2) and cannot be resumed. Start a new session.`;
 }
@@ -43,11 +43,12 @@ export function parseJournalHeaderOrRefuse(
       `Session file ${path} ends inside its header (${head.length} bytes)`,
     );
   }
-  if (
-    viewOf(head).getUint32(JOURNAL_MAGIC.length, true) !==
-    JOURNAL_FORMAT_VERSION
-  ) {
-    throw new RetiredJournalError(path, retiredJournalMessage(path));
+  const foundVersion = viewOf(head).getUint32(JOURNAL_MAGIC.length, true);
+  if (foundVersion !== JOURNAL_FORMAT_VERSION) {
+    throw new RetiredJournalError(
+      path,
+      `Session file ${path} was written by an incompatible journal format version (found ${foundVersion}, supported ${JOURNAL_FORMAT_VERSION}) and cannot be resumed. Start a new session.`,
+    );
   }
   return decodeJournalHeader(head);
 }
