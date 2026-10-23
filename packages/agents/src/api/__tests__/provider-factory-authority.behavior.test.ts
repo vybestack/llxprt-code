@@ -22,6 +22,7 @@ import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-ow
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import { ProviderContentGenerator } from '@vybestack/llxprt-code-providers/ProviderContentGenerator.js';
+import { NativeChatEstimateProjection } from '@vybestack/llxprt-code-providers/openai/native-chat-estimate.js';
 import { fromConfig } from '../fromConfig.js';
 import type { Agent } from '../agent.js';
 import { z } from 'zod';
@@ -32,21 +33,27 @@ import {
 } from './turn-revision-capture.fixture.js';
 
 function tokenizerForBudget(scale: number): RuntimeTokenizerFactory {
-  return {
+  const factory: RuntimeTokenizerFactory = {
     getTokenizer: () => ({
       countTokens: (text) => Math.ceil(String(text).length / 4),
     }),
-    estimatePrompt: async (request) => ({
-      count:
-        Math.ceil(JSON.stringify(request.finalizedProjection).length / 4) *
-        scale,
-      method: 'exact',
-      family: 'owner-text',
-      estimatorVersion: '1',
-      assetRevision: '1',
-      projectionRevision: request.projectionRevision,
-    }),
+    estimatePrompt: async (request) => {
+      if (request.finalizedProjection instanceof NativeChatEstimateProjection) {
+        return request.finalizedProjection.estimate(request, factory);
+      }
+      return {
+        count:
+          Math.ceil(JSON.stringify(request.finalizedProjection).length / 4) *
+          scale,
+        method: 'calibrated',
+        family: 'legacy-owner-text',
+        estimatorVersion: '1',
+        assetRevision: '1',
+        projectionRevision: request.projectionRevision,
+      };
+    },
   };
+  return factory;
 }
 
 async function budgetWire(): Promise<{
@@ -184,6 +191,7 @@ describe('public provider factory authority', () => {
           settingsService: new SettingsService(),
           policyOwner: policy,
           messageBus: policy.session.messageBus,
+          tokenizerFactory: tokenizerForBudget(1),
           activation: {
             provider: 'openai',
             model: 'gpt-5.6',
