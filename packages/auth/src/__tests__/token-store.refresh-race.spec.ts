@@ -60,6 +60,8 @@ describe('KeyringTokenStore - Token Refresh Race Condition (Issue #1159)', () =>
     readonly refreshedClientCount: number;
     readonly refreshCallCount: number;
     readonly allClientsHaveToken: boolean;
+    readonly clientErrors: readonly string[];
+    readonly clientSummary: string;
   }> {
     let refreshCallCount = 0;
     const refresh = async (): Promise<OAuthToken> => {
@@ -95,6 +97,20 @@ describe('KeyringTokenStore - Token Refresh Race Condition (Issue #1159)', () =>
 
     const results = await Promise.all(clients);
     return {
+      clientErrors: results.flatMap((result) =>
+        'error' in result ? [`client ${result.client}: ${result.error}`] : [],
+      ),
+      clientSummary: JSON.stringify(
+        results.map((result) =>
+          'error' in result
+            ? result
+            : {
+                client: result.client,
+                refreshed: result.refreshed,
+                hasToken: result.token?.access_token !== undefined,
+              },
+        ),
+      ),
       refreshedClientCount: results.filter(
         (result) => 'refreshed' in result && result.refreshed === true,
       ).length,
@@ -248,9 +264,21 @@ describe('KeyringTokenStore - Token Refresh Race Condition (Issue #1159)', () =>
 
     const observation = await runConcurrentRefreshRace(originalToken);
 
-    expect(observation.refreshedClientCount).toBe(1);
-    expect(observation.refreshCallCount).toBe(1);
-    expect(observation.allClientsHaveToken).toBe(true);
+    // One structural assertion so a failure prints the per-client results and
+    // any captured client errors, not just the first mismatching counter.
+    expect({
+      clientErrors: observation.clientErrors,
+      refreshedClientCount: observation.refreshedClientCount,
+      refreshCallCount: observation.refreshCallCount,
+      allClientsHaveToken: observation.allClientsHaveToken,
+      clientSummary: observation.clientSummary,
+    }).toStrictEqual({
+      clientErrors: [],
+      refreshedClientCount: 1,
+      refreshCallCount: 1,
+      allClientsHaveToken: true,
+      clientSummary: expect.any(String),
+    });
   });
 
   it('should integrate lock mechanism with existing saveToken/getToken', async () => {

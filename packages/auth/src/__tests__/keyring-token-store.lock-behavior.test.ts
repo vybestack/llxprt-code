@@ -438,6 +438,108 @@ describe('KeyringTokenStore advisory lock behavior', () => {
     }
   });
 
+  describe('Windows release contention', () => {
+    let platform: PropertyDescriptor | undefined;
+
+    beforeEach(() => {
+      platform = Object.getOwnPropertyDescriptor(process, 'platform');
+      Object.defineProperty(process, 'platform', { value: 'win32' });
+    });
+
+    afterEach(() => {
+      if (platform) Object.defineProperty(process, 'platform', platform);
+    });
+
+    function contentionError(code: string): Error {
+      return Object.assign(new Error('delete pending'), { code });
+    }
+
+    it('releases the lock when reading it first hits a delete-pending EPERM', async () => {
+      const store = createStore();
+      const lockFile = path.join(lockDir, 'codex-refresh.lock');
+      expect(await store.acquireRefreshLock('codex', { waitMs: 500 })).toBe(
+        true,
+      );
+      const read = vi
+        .spyOn(fs, 'readFile')
+        .mockRejectedValueOnce(contentionError('EPERM'));
+
+      try {
+        await store.releaseRefreshLock('codex');
+        expect(read).toHaveBeenCalledTimes(2);
+      } finally {
+        read.mockRestore();
+      }
+      await expect(fs.stat(lockFile)).rejects.toMatchObject({ code: 'ENOENT' });
+      expect(await store.acquireRefreshLock('codex', { waitMs: 500 })).toBe(
+        true,
+      );
+      await store.releaseRefreshLock('codex');
+    });
+
+    it('releases the lock when unlinking it first hits EBUSY', async () => {
+      const store = createStore();
+      const lockFile = path.join(lockDir, 'codex-refresh.lock');
+      expect(await store.acquireRefreshLock('codex', { waitMs: 500 })).toBe(
+        true,
+      );
+      const unlink = vi
+        .spyOn(fs, 'unlink')
+        .mockRejectedValueOnce(contentionError('EBUSY'));
+
+      try {
+        await store.releaseRefreshLock('codex');
+        expect(unlink).toHaveBeenCalledTimes(2);
+      } finally {
+        unlink.mockRestore();
+      }
+      await expect(fs.stat(lockFile)).rejects.toMatchObject({ code: 'ENOENT' });
+    });
+
+    it('treats a lock that vanishes while delete-pending as released', async () => {
+      const store = createStore();
+      expect(await store.acquireRefreshLock('codex', { waitMs: 500 })).toBe(
+        true,
+      );
+      const read = vi
+        .spyOn(fs, 'readFile')
+        .mockRejectedValueOnce(contentionError('EACCES'))
+        .mockRejectedValueOnce(
+          Object.assign(new Error('gone'), { code: 'ENOENT' }),
+        );
+
+      try {
+        await expect(
+          store.releaseRefreshLock('codex'),
+        ).resolves.toBeUndefined();
+      } finally {
+        read.mockRestore();
+      }
+      await fs.unlink(path.join(lockDir, 'codex-refresh.lock'));
+    });
+
+    it('surfaces persistent contention instead of hiding it, and still clears ownership', async () => {
+      const store = createStore();
+      expect(await store.acquireRefreshLock('codex', { waitMs: 500 })).toBe(
+        true,
+      );
+      const read = vi
+        .spyOn(fs, 'readFile')
+        .mockRejectedValue(contentionError('EPERM'));
+
+      try {
+        await expect(store.releaseRefreshLock('codex')).rejects.toMatchObject({
+          code: 'EPERM',
+        });
+      } finally {
+        read.mockRestore();
+      }
+      // Ownership was cleared so a later release is a harmless no-op.
+      await expect(store.releaseRefreshLock('codex')).resolves.toBeUndefined();
+      await fs.unlink(path.join(lockDir, 'codex-refresh.lock'));
+    });
+  });
+
   describe.skipIf(!['darwin', 'linux', 'freebsd'].includes(process.platform))(
     'OS-observed subprocess owner identity',
     () => {
