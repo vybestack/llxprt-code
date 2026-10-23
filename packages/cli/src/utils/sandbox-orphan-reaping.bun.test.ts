@@ -41,6 +41,7 @@ const ENGINE_ENV_KEYS = [
   'LLXPRT_TEST_REMOVE_FAILURE_ID',
   'LLXPRT_TEST_LIST_HANG',
   'LLXPRT_TEST_REMOVE_HANG_ID',
+  'LLXPRT_TEST_REMOVE_HANG_GATE',
   'LLXPRT_TEST_PROCESS_STARTS',
   'LLXPRT_TEST_PS_HANG',
   'LLXPRT_TEST_PS_OUTPUT',
@@ -116,7 +117,7 @@ function engineLogPath(): string {
 
 function engineExecutableSource(command: SandboxConfig['command']): string {
   return `#!/usr/bin/env bun
-import { appendFileSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 
 const engine = ${JSON.stringify(command)};
 const stateKey = engine === 'docker'
@@ -170,7 +171,16 @@ if (args[0] === 'rm' && args[1] === '-f') {
   const containerId = args[2];
   if (containerId === undefined) process.exit(45);
   if (process.env.LLXPRT_TEST_REMOVE_HANG_ID === containerId) {
-    await new Promise((resolve) => setTimeout(resolve, 7000));
+    // Hangs until the test creates the gate file, which it only does after
+    // asserting the engine call was terminated. Releasing means the test is
+    // over, so a late wake-up must not mutate the engine state.
+    const gatePath = process.env.LLXPRT_TEST_REMOVE_HANG_GATE;
+    if (gatePath === undefined) process.exit(46);
+    writeFileSync(gatePath + '.pid', String(process.pid));
+    while (!existsSync(gatePath)) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    process.exit(47);
   }
   if (process.env.LLXPRT_TEST_REMOVE_FAILURE_ID === containerId) process.exit(44);
   const remainingRows = readFileSync(statePath, 'utf8')
@@ -237,6 +247,16 @@ function stopChild(child: ChildProcess): Promise<void> {
     child.once('close', () => resolve());
     child.kill('SIGKILL');
   });
+}
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ESRCH') return false;
+    throw error;
+  }
 }
 
 function rerunInNonUtcTimezone(testName: string): void {
@@ -783,28 +803,37 @@ describe('sandbox orphan recovery startup', () => {
     ]);
     const metadata = ownerFor(owner);
     await stopChild(owner);
+    const gatePath = path.join(fixtureDir, 'hung-removal.gate');
     process.env.LLXPRT_TEST_REMOVE_HANG_ID = 'hung-removal';
+    process.env.LLXPRT_TEST_REMOVE_HANG_GATE = gatePath;
     const statePath = engineStatePath('docker');
     const hungRow = row('hung-removal', metadata);
     fs.writeFileSync(
       statePath,
       [hungRow, row('later-removal', metadata), ''].join('\n'),
     );
-    const startedAt = Date.now();
 
-    const startupResult = await runRecoveryStartup('docker');
+    try {
+      const startupResult = await runRecoveryStartup('docker');
 
-    const elapsedMs = Date.now() - startedAt;
-    expect({
-      startupResult,
-      state: fs.readFileSync(statePath, 'utf8'),
-    }).toStrictEqual({
-      startupResult: expect.stringContaining(
-        `Sandbox image '${TEST_IMAGE}' is missing`,
-      ),
-      state: `${hungRow}\n`,
-    });
-    expect(elapsedMs).toBeLessThan(6_500);
+      // The removal never completes on its own: it waits on the gate, which
+      // stays closed until the assertions are done, so it can only have been
+      // ended by the per-operation deadline.
+      const hungPid = Number(fs.readFileSync(`${gatePath}.pid`, 'utf8'));
+      expect(isProcessAlive(hungPid)).toBe(false);
+      expect(fs.existsSync(gatePath)).toBe(false);
+      expect({
+        startupResult,
+        state: fs.readFileSync(statePath, 'utf8'),
+      }).toStrictEqual({
+        startupResult: expect.stringContaining(
+          `Sandbox image '${TEST_IMAGE}' is missing`,
+        ),
+        state: `${hungRow}\n`,
+      });
+    } finally {
+      fs.writeFileSync(gatePath, '');
+    }
   }, 10_000);
 
   it('retains a live owner when the process start probe exceeds 250 ms', async () => {
