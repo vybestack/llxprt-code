@@ -32,6 +32,7 @@ export interface MediaAdmissionContext {
   readonly source: string;
   readonly preserveLegacyMimeParameters?: boolean;
   readonly reservationOwnerScope?: string;
+  readonly captureSources?: boolean;
   /**
    * Content ids the caller already admitted and reserved under this exact
    * `reservationOwnerScope` and has not released. Admission takes their
@@ -423,6 +424,7 @@ export class MediaAdmissionService {
         );
       }
       if (
+        context.captureSources !== false &&
         context.reservationOwnerScope !== undefined &&
         context.heldReservations?.has(block.contentId) !== true
       )
@@ -545,7 +547,9 @@ export class MediaAdmissionService {
           ownerId,
         });
       }
-      return context.reservationOwnerScope !== undefined && !alreadyHeld
+      return context.captureSources !== false &&
+        context.reservationOwnerScope !== undefined &&
+        !alreadyHeld
         ? captureAdmittedMediaSource(
             presented,
             this.store,

@@ -8,7 +8,6 @@ import type {
   DetachedHistorySink,
   DetachedHistoryTransform,
 } from '@vybestack/llxprt-code-core/services/history/detachedHistoryAPI.js';
-import { sanitizeProviderContentForSerialization } from '@vybestack/llxprt-code-core/services/history/historyCloneUtils.js';
 import type { ChatSession } from './chatSession.js';
 
 export async function clearClientHistoryForDisposal(
@@ -51,7 +50,7 @@ async function appendAdmittedRows(
     options.ownership?.retain(content);
     try {
       indexMediaReferences(content, references);
-      await sink.appendValue(sanitizeProviderContentForSerialization(content));
+      await sink.appendValue(content);
     } finally {
       options.ownership?.release(content);
     }
@@ -117,6 +116,7 @@ export function admitDeferredHistorySource(
     turnId: scope,
     source: scope,
     reservationOwnerScope: scope,
+    captureSources: false,
     heldReservations: references,
   };
   const release = async (): Promise<void> => {
