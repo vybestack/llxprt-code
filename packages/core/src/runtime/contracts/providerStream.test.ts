@@ -55,8 +55,12 @@ import type { IContent } from '../../services/history/IContent.js';
 import { buildCuratedHistory } from '../../services/history/historyCuration.js';
 import { buildProviderContent } from '../../services/history/historyProviderPipeline.js';
 import { DebugLogger } from '../../debug/index.js';
-import { SessionRecordingService } from '../../recording/SessionRecordingService.js';
-import { JournalResolver } from '../../recording/journalResolver.js';
+import { JournalRecordingService } from '../../recording/journalRecordingService.js';
+import {
+  JournalResumeBoot,
+  resumePointOf,
+} from '../../recording/journalResume.js';
+import { JournalSession } from '../../services/history/journalSession.js';
 
 const PROJECT_HASH = 'p05b3-provider-stream-hash';
 
@@ -109,8 +113,11 @@ function project(contents: readonly IContent[]): ProjectedRow[] {
 let tempDir: string;
 const logger = new DebugLogger('llxprt:test:providerStream');
 
-function makeRecorder(id: string): SessionRecordingService {
-  return new SessionRecordingService({
+const histories: HistoryService[] = [];
+const recordings: JournalRecordingService[] = [];
+
+function makeRecorder(id: string): JournalRecordingService {
+  const recorder = JournalRecordingService.create({
     sessionId: `p05b3-stream-${id}`,
     projectHash: PROJECT_HASH,
     chatsDir: tempDir,
@@ -118,37 +125,46 @@ function makeRecorder(id: string): SessionRecordingService {
     provider: 'test-provider',
     model: 'test-model',
   });
+  recordings.push(recorder);
+  return recorder;
 }
 
-/**
- * Seed a journal through the durable write path and return the recorder.
- * The rows land as real `content` envelopes in a session-*.jsonl file.
- */
+async function resumedHistory(
+  recorder: JournalRecordingService,
+): Promise<HistoryService> {
+  const service = new HistoryService({});
+  histories.push(service);
+  await service.adoptResumeBoot(
+    recorder,
+    new JournalResumeBoot(recorder, await resumePointOf(recorder)),
+  );
+  return service;
+}
+
+/** Seeds native rows through the durable write path. */
 async function seedJournal(
   id: string,
   contents: readonly IContent[],
-): Promise<SessionRecordingService> {
+): Promise<JournalRecordingService> {
   const recorder = makeRecorder(id);
-  for (const content of contents) {
-    await recorder.commit('content', { content });
-  }
+  await (await recorder.session()).append(contents);
   await recorder.flush();
   expect(recorder.getFilePath()).not.toBeNull();
   return recorder;
 }
 
-/** Eager reference: full JournalResolver fold + today's assembly helpers. */
+/** Reads the durable rows independently before applying the assembly helpers. */
 async function eagerReference(
   filePath: string,
 ): Promise<{ readonly rows: ProjectedRow[]; readonly contents: IContent[] }> {
-  const resolver = await JournalResolver.open(filePath);
+  const session = await JournalSession.open(filePath);
   const rows: IContent[] = [];
   try {
-    for await (const entry of resolver.resolve()) {
+    for await (const entry of session.rows()) {
       rows.push(entry.content);
     }
   } finally {
-    await resolver.close();
+    await session.close();
   }
   // Exactly the chain getCuratedForProvider() runs today over the array.
   const curated = buildCuratedHistory(logger, rows, false);
@@ -309,6 +325,8 @@ describe('getCuratedForProviderStream equivalence (P05b3)', () => {
   });
 
   afterEach(async () => {
+    for (const history of histories.splice(0)) await history.dispose();
+    for (const recorder of recordings.splice(0)) await recorder.dispose();
     await fs.rm(tempDir, { recursive: true, force: true });
   });
 
@@ -322,7 +340,7 @@ describe('getCuratedForProviderStream equivalence (P05b3)', () => {
     ];
     const recorder = await seedJournal('equivalence', seeded);
 
-    const service = new HistoryService({ recording: recorder });
+    const service = await resumedHistory(recorder);
     await service.waitForCommit();
 
     const streamed: IContent[] = [];
@@ -330,14 +348,16 @@ describe('getCuratedForProviderStream equivalence (P05b3)', () => {
       streamed.push(row);
     }
 
-    const reference = await eagerReference(recorder.getFilePath() as string);
+    const file = recorder.getFilePath();
+    if (file === null) throw new Error('Missing native recording');
+    const reference = await eagerReference(file);
     expect(project(streamed)).toStrictEqual(reference.rows);
     // Sanity: the journal actually carried the seeded conversation.
     expect(reference.rows.length).toBeGreaterThanOrEqual(seeded.length);
   }, 20000);
 
   it('sanitizes cyclic tool-call parameters in the stream without mutating stored rows', async () => {
-    const service = new HistoryService({ recording: makeRecorder('cyclic') });
+    const service = await resumedHistory(makeRecorder('cyclic'));
     interface CyclicValue {
       label: string;
       self?: CyclicValue;
