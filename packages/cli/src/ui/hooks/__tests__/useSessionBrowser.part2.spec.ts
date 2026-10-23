@@ -3,6 +3,8 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { seedSessionRows } from '../../../__tests__/journal-recording.js';
+
 import { displayBoot } from '../../../__tests__/resumeRows.js';
 
 /**
@@ -35,7 +37,8 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
-  SessionRecordingService,
+  createSessionRecorder,
+  createLockedSessionRecorder,
   type IContent,
   type SessionRecordingServiceConfig,
 } from '@vybestack/llxprt-code-core';
@@ -76,7 +79,7 @@ function makeContent(
 }
 
 /**
- * Create a real session file using SessionRecordingService.
+ * Create a real session file using createSessionRecorder.
  */
 async function createTestSession(
   chatsDir: string,
@@ -98,11 +101,11 @@ async function createTestSession(
     provider: opts.provider,
     model: opts.model,
   });
-  const svc = new SessionRecordingService(config);
+  const svc = createSessionRecorder(config);
 
   const contents = opts.contents ?? [makeContent('hello')];
   for (const content of contents) {
-    svc.recordContent(content);
+    await seedSessionRows(svc, [content]);
   }
   await svc.flush();
 
@@ -629,10 +632,10 @@ function registerSearchName1(): void {
        * THEN: The named session is retained and non-matching sessions drop
        */
       it('search filters by session name', async () => {
-        const namedSvc = new SessionRecordingService(
+        const namedSvc = createSessionRecorder(
           makeConfig(chatsDir, { sessionId: 'named-session' }),
         );
-        namedSvc.recordContent(makeContent('hello'));
+        await seedSessionRows(namedSvc, [makeContent('hello')]);
         await namedSvc.setSessionName('my-unique-project-name');
         await namedSvc.dispose();
         await createTestSession(chatsDir, {
@@ -675,10 +678,10 @@ function registerSearchName2(): void {
        * THEN: The checkpoint row is retained and plain session rows drop
        */
       it('search filters by checkpoint name', async () => {
-        const recording = await SessionRecordingService.createLocked(
+        const recording = await createLockedSessionRecorder(
           makeConfig(chatsDir, { sessionId: 'checkpoint-source' }),
         );
-        recording.recordContent(makeContent('checkpoint body'));
+        await seedSessionRows(recording, [makeContent('checkpoint body')]);
         await recording.createCheckpoint('release-cut-branch');
         try {
           const { result } = renderHook(() =>
@@ -759,10 +762,10 @@ function registerSearchName3(): void {
        * THEN: The session is still retained
        */
       it('search matches session names case-insensitively', async () => {
-        const mixedSvc = new SessionRecordingService(
+        const mixedSvc = createSessionRecorder(
           makeConfig(chatsDir, { sessionId: 'case-named-session' }),
         );
-        mixedSvc.recordContent(makeContent('hello'));
+        await seedSessionRows(mixedSvc, [makeContent('hello')]);
         await mixedSvc.setSessionName('QuantumKernelBuild');
         await mixedSvc.dispose();
         await createTestSession(chatsDir, {

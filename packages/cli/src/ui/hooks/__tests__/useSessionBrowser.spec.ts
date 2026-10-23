@@ -3,6 +3,9 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { readJournalCheckpoints } from '@vybestack/llxprt-code-core/recording/journalSessionListing.js';
+import { seedSessionRows } from '../../../__tests__/journal-recording.js';
+
 import { displayBoot } from '../../../__tests__/resumeRows.js';
 
 /**
@@ -35,9 +38,9 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
-  SessionRecordingService,
+  createSessionRecorder,
+  createLockedSessionRecorder,
   SessionLockManager,
-  replaySession,
   type IContent,
   type SessionRecordingServiceConfig,
 } from '@vybestack/llxprt-code-core';
@@ -77,17 +80,8 @@ function makeContent(
   return { speaker, blocks: [{ type: 'text', text }] };
 }
 
-function requireReplaySuccess(
-  result: Awaited<ReturnType<typeof replaySession>>,
-): asserts result is Extract<
-  Awaited<ReturnType<typeof replaySession>>,
-  { ok: true }
-> {
-  if (!result.ok) throw new Error(result.error);
-}
-
 /**
- * Create a real session file using SessionRecordingService.
+ * Create a real session file using createSessionRecorder.
  */
 async function createTestSession(
   chatsDir: string,
@@ -109,11 +103,11 @@ async function createTestSession(
     provider: opts.provider,
     model: opts.model,
   });
-  const svc = new SessionRecordingService(config);
+  const svc = createSessionRecorder(config);
 
   const contents = opts.contents ?? [makeContent('hello')];
   for (const content of contents) {
-    svc.recordContent(content);
+    await seedSessionRows(svc, [content]);
   }
   await svc.flush();
 
@@ -275,7 +269,8 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13', () => {
     it('empty sessions are excluded', async () => {
       // Create a session with no user content
       const emptyConfig = makeConfig(chatsDir, { sessionId: 'empty-session' });
-      const emptySvc = new SessionRecordingService(emptyConfig);
+      const emptySvc = createSessionRecorder(emptyConfig);
+      await seedSessionRows(emptySvc, []);
       emptySvc.recordSessionEvent('info', 'session started');
       await emptySvc.flush();
       await emptySvc.dispose();
@@ -304,10 +299,10 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13 (part 2)', ()
   describe('Loading & Listing @requirement:REQ-SB-009', () => {
     it('lists session and checkpoint rows and tombstones only the checkpoint', async () => {
       const sessionId = 'checkpoint-source-session';
-      const recording = await SessionRecordingService.createLocked(
+      const recording = await createLockedSessionRecorder(
         makeConfig(chatsDir, { sessionId }),
       );
-      recording.recordContent(makeContent('branch content'));
+      await seedSessionRows(recording, [makeContent('branch content')]);
       const checkpoint = await recording.createCheckpoint('branch-point');
 
       try {
@@ -353,15 +348,14 @@ describe('useSessionBrowser @plan:PLAN-20260214-SESSIONBROWSER.P13 (part 2)', ()
           expect(result.current.sessions).toHaveLength(1);
         });
         expect(result.current.sessions[0].target.kind).toBe('session');
-        const replay = await replaySession(
+        const checkpoints = await readJournalCheckpoints(
           recording.getFilePath()!,
-          PROJECT_HASH,
         );
-        requireReplaySuccess(replay);
-        const deleted = replay.checkpoints?.find(
-          (candidate) => candidate.checkpointId === checkpoint.checkpointId,
-        );
-        expect(deleted?.deleted).toBe(true);
+        expect(
+          checkpoints.find(
+            (candidate) => candidate.checkpointId === checkpoint.checkpointId,
+          ),
+        ).toBeUndefined();
       } finally {
         await recording.dispose();
       }

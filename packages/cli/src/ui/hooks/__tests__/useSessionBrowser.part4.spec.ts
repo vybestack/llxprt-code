@@ -3,6 +3,8 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { seedSessionRows } from '../../../__tests__/journal-recording.js';
+
 import { displayBoot } from '../../../__tests__/resumeRows.js';
 
 /**
@@ -35,7 +37,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
-  SessionRecordingService,
+  createSessionRecorder,
   SessionLockManager,
   type IContent,
   type SessionRecordingServiceConfig,
@@ -77,7 +79,7 @@ function makeContent(
 }
 
 /**
- * Create a real session file using SessionRecordingService.
+ * Create a real session file using createSessionRecorder.
  */
 async function createTestSession(
   chatsDir: string,
@@ -99,11 +101,11 @@ async function createTestSession(
     provider: opts.provider,
     model: opts.model,
   });
-  const svc = new SessionRecordingService(config);
+  const svc = createSessionRecorder(config);
 
   const contents = opts.contents ?? [makeContent('hello')];
   for (const content of contents) {
-    svc.recordContent(content);
+    await seedSessionRows(svc, [content]);
   }
   await svc.flush();
 

@@ -27,7 +27,7 @@ import {
   makeResumeContext,
   SessionBrowserTestState,
 } from './sessionBrowserE2E.helpers.js';
-import { requireJsonlRecorder } from '@vybestack/llxprt-code-core';
+import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 
 type ResumeLockHandle = SessionBrowserTestState['lockHandles'][number];
 
@@ -81,9 +81,9 @@ describe('Two-phase swap #3', () => {
     state.recordingsToDispose.push(newRecording!);
 
     // Record new event
-    requireJsonlRecorder(newRecording!).recordContent(
+    await recordRowsForTest(newRecording!, [
       makeContent('new event after resume'),
-    );
+    ]);
     await newRecording!.flush();
 
     // Verify the content is in the file

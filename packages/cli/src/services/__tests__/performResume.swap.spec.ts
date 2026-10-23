@@ -558,12 +558,14 @@ async function testLatestAllEmpty(): Promise<void> {
 
   const emptyConfig1 = makeConfig(chatsDir, { sessionId: emptySessionId1 });
   const emptySvc1 = createSessionRecorder(emptyConfig1);
+  await recordRowsForTest(emptySvc1, []);
   emptySvc1.recordSessionEvent('info', 'session started');
   await emptySvc1.flush();
   await emptySvc1.dispose();
 
   const emptyConfig2 = makeConfig(chatsDir, { sessionId: emptySessionId2 });
   const emptySvc2 = createSessionRecorder(emptyConfig2);
+  await recordRowsForTest(emptySvc2, []);
   emptySvc2.recordSessionEvent('info', 'session started');
   await emptySvc2.flush();
   await emptySvc2.dispose();

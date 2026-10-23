@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { seedSessionRows } from './journal-recording.js';
 
 /**
  * @plan PLAN-20260214-SESSIONBROWSER.P30
@@ -18,7 +19,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import {
-  SessionRecordingService,
+  createSessionRecorder,
   type SessionRecordingPort,
   type RecordingIntegration,
   type SessionRecordingServiceConfig,
@@ -102,8 +103,7 @@ export function makeContent(
 }
 
 /**
- * Create a minimal JSONL session file for testing.
- * Uses real SessionRecordingService to write session_start header + content events.
+ * Create a native session file and its preview facts for testing.
  *
  * @param dir - Directory to write the session file to
  * @param opts - Session configuration options
@@ -127,12 +127,12 @@ export async function createTestSession(
     model: opts.model,
     projectHash: opts.projectHash,
   });
-  const svc = new SessionRecordingService(config);
+  const svc = createSessionRecorder(config);
 
   // If contents are provided, use those directly
   if (opts.contents) {
     for (const content of opts.contents) {
-      svc.recordContent(content);
+      await seedSessionRows(svc, [content]);
     }
   } else {
     // Convert simple messages to IContent and record them
@@ -142,7 +142,7 @@ export async function createTestSession(
     for (const msg of messages) {
       const speaker: IContent['speaker'] =
         msg.speaker === 'user' ? 'human' : 'ai';
-      svc.recordContent(makeContent(msg.text, speaker));
+      await seedSessionRows(svc, [makeContent(msg.text, speaker)]);
     }
   }
 
@@ -162,8 +162,8 @@ export async function createEmptySession(
   projectHash: string = PROJECT_HASH,
 ): Promise<{ filePath: string; sessionId: string }> {
   const config = makeConfig(dir, { sessionId, projectHash });
-  const svc = new SessionRecordingService(config);
-  // Record a session event to materialize the file (but not a content event)
+  const svc = createSessionRecorder(config);
+  await seedSessionRows(svc, []);
   svc.recordSessionEvent('info', 'session initialized');
   await svc.flush();
   const filePath = svc.getFilePath()!;
