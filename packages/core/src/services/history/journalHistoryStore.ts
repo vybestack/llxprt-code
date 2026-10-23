@@ -129,6 +129,7 @@ export class JournalHistoryStore
   private failure: { readonly error: unknown; reported?: boolean } | undefined;
   private ack: CommitAck | undefined;
   private disposed = false;
+  private disposal: Promise<void> | undefined;
   readonly checkpointLifetime = new JournalCheckpointLifetime();
   private readonly publication = new JournalPublication();
   protected journal: StoreTypes.OpenJournal | undefined;
@@ -647,8 +648,11 @@ export class JournalHistoryStore
   }
 
   /** Settles the queue, then closes the journal. */
-  async dispose(): Promise<void> {
-    if (this.disposed) return;
+  dispose(): Promise<void> {
+    return (this.disposal ??= this.disposeInternal());
+  }
+
+  private async disposeInternal(): Promise<void> {
     this.disposed = true;
     await this.queue;
     await this.startup;
