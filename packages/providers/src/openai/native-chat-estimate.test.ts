@@ -340,7 +340,7 @@ describe('stored native Chat estimates through production preparation', () => {
             await estimate(displaced, 'mistral-large-latest', {}, factory);
             expect(
               projections.filter((value) => value.includes('holder-')),
-            ).toHaveLength(holders * 4);
+            ).toHaveLength(holders * 2);
             expect(
               projections.some((value) => value.includes('unaffected-')),
             ).toBe(false);

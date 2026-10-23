@@ -4,6 +4,7 @@ import { writeChatMessages } from './OpenAIChatBodyBuilder.js';
 import { createHash } from 'node:crypto';
 import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
 import { IndexedJournalRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/indexed-journal-request-snapshot.js';
+import { foldChatUnits } from './journal-chat-length.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   rowFormatKey,
@@ -168,6 +169,90 @@ async function verifyClone(session: JournalSession): Promise<void> {
 }
 
 describe('stored plain chat tools', () => {
+  it('counts identical thinking variants once per converted unit', async () => {
+    const rows: readonly IContent[] = [
+      { speaker: 'human', blocks: [{ type: 'text', text: 'question' }] },
+      { speaker: 'ai', blocks: [{ type: 'text', text: 'answer' }] },
+      {
+        speaker: 'ai',
+        blocks: [
+          { type: 'thinking', thought: 'reason' },
+          { type: 'text', text: 'conclusion' },
+        ],
+      },
+    ];
+    const inputs: string[] = [];
+    async function* source(): AsyncGenerator<IContent> {
+      yield* rows;
+    }
+    const { summary } = await foldChatUnits(source(), SETTINGS, {
+      count: async (messages) => {
+        const input = JSON.stringify(messages);
+        inputs.push(input);
+        return Buffer.byteLength(input);
+      },
+    });
+    expect(inputs).toHaveLength(4);
+    if (summary.kind !== 'chat') throw new Error('Expected Chat summary');
+    expect(summary.tokens).toStrictEqual([
+      Buffer.byteLength(inputs[0]) +
+        Buffer.byteLength(inputs[1]) +
+        Buffer.byteLength(inputs[2]),
+      Buffer.byteLength(inputs[0]) +
+        Buffer.byteLength(inputs[1]) +
+        Buffer.byteLength(inputs[3]),
+    ]);
+  });
+  it.each(['excluded reasoning', 'strict OpenAI tool call'])(
+    'counts identical converted messages once with %s',
+    async (scenario) => {
+      const toolCall = scenario === 'strict OpenAI tool call';
+      const answer: IContent['blocks'] = toolCall
+        ? [
+            {
+              type: 'tool_call',
+              id: 'call_x',
+              name: 'lookup',
+              parameters: {},
+            },
+          ]
+        : [{ type: 'text', text: 'answer' }];
+      const row: IContent = {
+        speaker: 'ai',
+        blocks: [{ type: 'thinking', thought: 'reason' }, ...answer],
+      };
+      async function* source(): AsyncGenerator<IContent> {
+        yield row;
+      }
+      let counts = 0;
+      const { summary } = await foldChatUnits(
+        source(),
+        {
+          ...SETTINGS,
+          chat: { toolFormat: 'openai', includeInContext: toolCall },
+        },
+        {
+          count: async (messages) => {
+            counts++;
+            return Buffer.byteLength(JSON.stringify(messages));
+          },
+        },
+      );
+      const message = processAssistantMessage(
+        row,
+        toolCall,
+        'openai',
+        (call) => normalizeToOpenAIToolId(call.id),
+        normalizeToolCallArguments,
+      );
+      const tokens = Buffer.byteLength(JSON.stringify([message]));
+      if (summary.kind !== 'chat') throw new Error('Expected Chat summary');
+      expect({ counts, tokens: summary.tokens }).toStrictEqual({
+        counts: 1,
+        tokens: [tokens, tokens],
+      });
+    },
+  );
   it('measures tool pairs, escaped names, relocated image media and updated best responses', async () => {
     const session = await JournalSession.createUnlinked();
     try {

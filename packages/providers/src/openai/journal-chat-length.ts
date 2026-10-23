@@ -254,7 +254,12 @@ async function chatUnit(
         )
       : kept;
   const keptTokens = await count?.(kept.messages);
-  const removedTokens = await count?.(removed.messages);
+  const removedTokens =
+    removed === kept ||
+    (count !== undefined &&
+      JSON.stringify(removed.messages) === JSON.stringify(kept.messages))
+      ? keptTokens
+      : await count?.(removed.messages);
   return {
     unit: {
       kind: 'chat',
