@@ -27,7 +27,10 @@ export function bindChatHistoryTail(
 ): { readonly tailReads: () => number } {
   let tailReads = 0;
   chat.waitForIdle = () => Promise.resolve();
+  chat.clearHistoryForDisposal = async (): Promise<void> => undefined;
   chat.getHistoryService = (() => ({
+    waitForOwnershipSettlement: async (): Promise<void> => undefined,
+    dispose: async (): Promise<void> => undefined,
     getLastContent: (): Promise<IContent | undefined> => {
       tailReads += 1;
       const rows = readRows();

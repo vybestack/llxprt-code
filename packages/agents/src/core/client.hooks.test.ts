@@ -21,6 +21,7 @@ import {
 } from 'bun:test';
 import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { AgentClient } from './client.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from './chatSession.js';
 import { AgentEventType } from './turn.js';
@@ -252,7 +253,12 @@ async function checkBlockingHook(): Promise<string | undefined> {
   })();
   mockTurnRunFn.mockReturnValue(mockStream);
 
+  const history = new HistoryService();
   const mockChat: Partial<ChatSession> = {
+    clearHistoryForDisposal: async (): Promise<void> => {
+      await history.clear();
+    },
+    getHistoryService: () => history,
     addHistory: vi.fn(),
     getHistory: vi.fn().mockReturnValue([]),
     getLastPromptTokenCount: vi.fn().mockReturnValue(0),
@@ -330,7 +336,12 @@ const observeAppendAdditionalContextFromBeforeAgentHookToRequest = async () => {
     return mockStream;
   });
 
+  const history = new HistoryService();
   const mockChat: Partial<ChatSession> = {
+    clearHistoryForDisposal: async (): Promise<void> => {
+      await history.clear();
+    },
+    getHistoryService: () => history,
     addHistory: vi.fn(),
     getHistory: vi.fn().mockReturnValue([]),
     getLastPromptTokenCount: vi.fn().mockReturnValue(0),
