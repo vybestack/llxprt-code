@@ -2,7 +2,7 @@
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { describe, expect, it } from 'bun:test';
-import { EagerSemanticPurgeOracle } from '../../../core/src/services/history/__tests__/support/semantic-purge-eager-test-helpers.js';
+import { expectedSemanticPurge } from './__tests__/support/semantic-purge-row-oracle.js';
 import { exactTokenizer } from '../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import { operationFileCreates } from '../compression/__tests__/support/operation-file-creates.js';
 import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
@@ -113,8 +113,8 @@ async function collect(
 }
 
 function requireCandidate(
-  value: ReturnType<EagerSemanticPurgeOracle['begin']>,
-): NonNullable<ReturnType<EagerSemanticPurgeOracle['begin']>> {
+  value: readonly IContent[] | undefined,
+): readonly IContent[] {
   if (value === undefined) throw new Error('Missing eager candidate');
   return value;
 }
@@ -153,32 +153,28 @@ describe('native semantic purge independent eager policy parity', () => {
       try {
         await oracleHistory.detachedValues.replace(fixture());
         await history.detachedValues.replace(fixture());
-        const oracle = new EagerSemanticPurgeOracle(oracleHistory, {
-          enabled: true,
-          explicitCacheWriteRequired: false,
-        });
+        let oracleRows: readonly IContent[] = fixture();
         const session = new SemanticMediaPurgeSession({
           history,
           mode: () => mode,
           persist: async () => undefined,
         });
         for (let round = 0; round < 3; round++) {
-          const expected = oracle.begin({ mode });
+          const expected = expectedSemanticPurge(oracleRows, mode);
           const candidate = requireCandidate(expected);
           const receipt = await operationFileCreates(
-            () => commitExpected(session, candidate.candidateHistory),
+            () => commitExpected(session, candidate),
             true,
           );
           expect(receipt).toStrictEqual({ directories: [], files: [] });
-          await oracleHistory.detachedValues.replace(
-            candidate.candidateHistory,
-          );
+          oracleRows = candidate;
+          await oracleHistory.detachedValues.replace(candidate);
           expect(await collect(history.streamRawHistory())).toStrictEqual(
             await collect(oracleHistory.streamRawHistory()),
           );
           expect(history.getTotalTokens()).toBe(oracleHistory.getTotalTokens());
         }
-        expect(oracle.begin({ mode })).toBeUndefined();
+        expect(expectedSemanticPurge(oracleRows, mode)).toBeUndefined();
         const noOp = await operationFileCreates(async () => {
           expect(await session.begin(false)).toBeUndefined();
         }, true);

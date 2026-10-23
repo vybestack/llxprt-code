@@ -4,7 +4,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { historyOriginId } from '@vybestack/llxprt-code-core/services/history/historyOriginId.js';
 import { describe, expect, it } from 'bun:test';
 import { withNativePurgeFixture } from '../../../core/src/services/history/__tests__/support/native-purge-fixture.js';
-import { EagerSemanticPurgeOracle } from '../../../core/src/services/history/__tests__/support/semantic-purge-eager-test-helpers.js';
+import { expectedSemanticPurge } from './__tests__/support/semantic-purge-row-oracle.js';
 import { exactTokenizer } from '../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import { operationFileCreates } from '../compression/__tests__/support/operation-file-creates.js';
 import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
@@ -61,11 +61,7 @@ describe('actual native purge independent scale parity below provider preparatio
       eager.setTokenizerFactory(exactTokenizer());
       try {
         await eager.detachedValues.replace(input);
-        const oracle = new EagerSemanticPurgeOracle(eager, {
-          enabled: true,
-          explicitCacheWriteRequired: false,
-        });
-        const expected = oracle.begin({ mode: 'remove' });
+        const expected = expectedSemanticPurge(input, 'remove');
         if (expected === undefined)
           throw new Error('Missing independent eager purge');
         const expectedEvents: unknown[] = [];
@@ -75,8 +71,8 @@ describe('actual native purge independent scale parity below provider preparatio
         eager.on('contextRangeChanged', (event) =>
           expectedEvents.push({ type: 'range', event }),
         );
-        await eager.detachedValues.replace(expected.candidateHistory);
-        const expectedBytes = JSON.stringify(expected.candidateHistory);
+        await eager.detachedValues.replace(expected);
+        const expectedBytes = JSON.stringify(expected);
         const origin = {};
         await withNativePurgeFixture(async ({ history, assertDurable }) => {
           await history.detachedValues.replace(input, undefined, { origin });
@@ -119,7 +115,7 @@ describe('actual native purge independent scale parity below provider preparatio
             JSON.stringify(await collect(history.streamRawHistory())),
           ).toBe(expectedBytes);
           expect(history.getTotalTokens()).toBe(eager.getTotalTokens());
-          await assertDurable(expected.candidateHistory);
+          await assertDurable(expected);
           await history.detachedValues.host().journal.readRows(async (view) => {
             const origins: Array<string | undefined> = [];
             for (let index = 0; index < view.length; index++)
