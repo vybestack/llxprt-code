@@ -32,7 +32,10 @@ import type {
   MediaReferenceBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
-import { MediaAdmissionService } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
+import {
+  historyOwnerIdFor,
+  MediaAdmissionService,
+} from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
 import type {
   GenerateChatOptions,
   IProvider,
@@ -63,7 +66,9 @@ interface TurnMediaFixture {
 class ReleaseReportingStore extends LocalMediaStore {
   override async release(contentId: string, ownerId: string): Promise<void> {
     await super.release(contentId, ownerId);
-    throw new Error('induced media cleanup failure');
+    if (ownerId !== historyOwnerIdFor(contentId)) {
+      throw new Error('induced media cleanup failure');
+    }
   }
 }
 
