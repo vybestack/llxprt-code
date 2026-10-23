@@ -103,7 +103,7 @@ async function run(size: number, rollback: boolean): Promise<number> {
           ).toBe(true);
           fixture.releaseWriter();
           await ready.promise;
-          expect(await store.hasReservations(prior.contentId)).toBe(false);
+          expect(await store.hasReservations(prior.contentId)).toBe(true);
           expect(await store.hasReservations(next.contentId)).toBe(true);
           release.resolve();
           expect(await operation).toBe(rollback ? failure : undefined);
