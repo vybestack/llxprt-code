@@ -151,7 +151,12 @@ export class JournalMirrors {
     }
     await this.queue.exclusive(async () => {
       for (const [previous, binding] of this.recorders) {
-        if (previous === recorder || binding.origin !== origin) continue;
+        if (
+          origin === undefined ||
+          previous === recorder ||
+          binding.origin !== origin
+        )
+          continue;
         if (binding.session !== undefined)
           await this.fanout.detach(binding.session.store);
         this.recorders.delete(previous);
