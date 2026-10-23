@@ -22,7 +22,12 @@ describe('disk media index resources', () => {
         mimeType: 'application/octet-stream',
         semanticMetadata: { description: 'nested payload' },
       });
+      expect(index.matches(reference)).toBe(false);
       index.set(reference);
+      expect(index.matches(structuredClone(reference))).toBe(true);
+      expect(index.matches({ ...reference, mimeType: 'image/png' })).toBe(
+        false,
+      );
       index.set({ ...reference });
       expect(
         (await readdir(directory)).filter((name) =>
