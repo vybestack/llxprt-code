@@ -9,17 +9,103 @@ import {
   expectedMixedSummary,
   providerDigest,
   useDiagnosticSink,
+  type Diagnostic,
 } from './__tests__/support/provider-diagnostics-test-helpers.js';
+
+function expectedDiagnostics(
+  size: number,
+  pending = false,
+  compressing = false,
+): Diagnostic[] {
+  const groups = size / 8;
+  const events: Diagnostic[] = compressing
+    ? [
+        {
+          level: 'debug',
+          message: 'getCurated called during compression - returning snapshot',
+        },
+      ]
+    : [];
+  for (let group = 0; group < groups; group++) {
+    for (const [index, type] of ['empty', 'tool_call', 'thinking'].entries()) {
+      events.push({
+        level: 'debug',
+        message: 'Analyzing AI message:',
+        args: [
+          {
+            messageIndex: group * 3 + index + 1,
+            hasValidContent: type !== 'empty',
+            blockCount: type === 'empty' ? 0 : 1,
+            blocks:
+              type === 'empty'
+                ? []
+                : [
+                    {
+                      type,
+                      textLength: null,
+                      textPreview: null,
+                      isEmpty: false,
+                    },
+                  ],
+            metadata: { hasUsage: false },
+          },
+        ],
+      });
+      if (type === 'empty')
+        events.push({
+          level: 'debug',
+          message: 'EXCLUDED AI message - no valid content',
+        });
+    }
+  }
+  events.push({
+    level: 'debug',
+    message: '=== CURATED HISTORY SUMMARY ===',
+    args: [{ ...expectedMixedSummary(size), isCompressing: compressing }],
+  });
+  for (let group = 0; group < groups; group++)
+    events.push({
+      level: 'warn',
+      message: 'Synthesizing missing tool_call for responses',
+      args: [{ callIds: [`orphan-${group}`], toolNames: ['lost'] }],
+    });
+  if (pending)
+    events.push({
+      level: 'warn',
+      message: 'Tool response missing matching tool call',
+      args: [{ callId: 'dangling', toolName: 'lost' }],
+    });
+  events.push({
+    level: 'warn',
+    message: 'Provider history normalization removed a cache anchor',
+    args: [
+      {
+        inputAnchorIndexes: Array.from(
+          { length: Math.min(32, groups) },
+          (_, i) => i * 7 + 5,
+        ),
+        ...(groups > 32
+          ? { inputAnchorCount: groups, inputAnchorIndexesTruncated: true }
+          : {}),
+        inputContentCount: groups * 7 + Number(pending),
+        outputContentCount: size,
+      },
+    ],
+  });
+  return events;
+}
 
 describe('observable provider curation diagnostics', () => {
   const take = useDiagnosticSink();
   it.each([512, 8192])(
     'matches eager event names, counts, order and safe details for %i rows',
     async (size) => {
-      const { actual, expected, oldEvents, newEvents } =
-        await captureMixedDiagnostics(size, take);
+      const { actual, expected, newEvents } = await captureMixedDiagnostics(
+        size,
+        take,
+      );
       expect(actual).toBe(expected);
-      expect(newEvents).toStrictEqual(oldEvents);
+      expect(newEvents).toStrictEqual(expectedDiagnostics(size, true));
       expect(
         newEvents.filter((e) => e.message === 'Analyzing AI message:'),
       ).toHaveLength((size / 8) * 3);
@@ -88,7 +174,9 @@ describe('request override curation diagnostics', () => {
             streamed.getCuratedForProviderStream([], undefined, input),
           ),
         ).toBe(expected);
-        expect(take()).toStrictEqual(reference.events);
+        expect(take()).toStrictEqual(
+          expectedDiagnostics(16, false, compressing),
+        );
         expect(reference.events[0]?.message).toBe(
           compressing
             ? 'getCurated called during compression - returning snapshot'
@@ -114,7 +202,7 @@ describe('pre-output diagnostics', () => {
       const first = await cursor.next();
       expect(first.done).toBe(false);
       expect(first.value).toStrictEqual(reference.rows[0]);
-      expect(take()).toStrictEqual(reference.events);
+      expect(take()).toStrictEqual(expectedDiagnostics(16));
       expect(reference.events[reference.events.length - 1]?.message).toBe(
         'Provider history normalization removed a cache anchor',
       );

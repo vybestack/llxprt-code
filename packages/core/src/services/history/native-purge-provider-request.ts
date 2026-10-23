@@ -40,6 +40,7 @@ export function prepareJournalProviderRequest(
         store.nativePreparation.format(snapshot, registration),
       pinnedMediaStore(),
       (snapshot) => store.nativePreparation.kimi(snapshot),
+      { logger: request.logger, isCompressing: request.isCompressing },
     );
   };
 }

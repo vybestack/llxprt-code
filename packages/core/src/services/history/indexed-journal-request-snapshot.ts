@@ -1,5 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { NativeFactIndexReader } from '../../journal/nativeFactIndex.js';
+import type { DebugLogger } from '../../debug/index.js';
+import { logJournalRequestDiagnostics } from './journal-request-diagnostics.js';
 import type { SlotSummary } from '../../journal/slotSummary.js';
 import { composeSlotSummaries } from '../../journal/summaryComposition.js';
 import type { JournalStore } from '../../journal/journalStore.js';
@@ -92,11 +94,30 @@ export class IndexedJournalRequestSnapshot {
     tail: readonly IContent[] = [],
     projection?: JournalRequestProjection,
     mediaReferences?: WeakSet<MediaReferenceBlock>,
+    diagnostics?: {
+      readonly logger: DebugLogger;
+      readonly isCompressing: boolean;
+      readonly signal?: AbortSignal;
+    },
   ): Promise<IndexedJournalRequestSnapshot> {
     const release = snapshot.hold();
     try {
       const source = await JournalTailSource.create(snapshot, tail, projection);
       const overlay = await indexedOverlay(snapshot, source);
+      const hasAnchor =
+        (snapshot.version?.aggregate.firstAnchor ?? 0n) !== 0n ||
+        tail.some((row) => row.metadata?.cacheAnchor === true);
+      if (
+        diagnostics !== undefined &&
+        (diagnostics.logger.enabled || hasAnchor)
+      )
+        await logJournalRequestDiagnostics(
+          source,
+          overlay.count,
+          diagnostics.logger,
+          diagnostics.isCompressing,
+          diagnostics.signal,
+        );
       return new IndexedJournalRequestSnapshot(
         snapshot,
         source,

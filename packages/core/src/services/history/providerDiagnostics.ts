@@ -7,7 +7,7 @@ const diagnosticStringLimit = 256;
 
 export function logReconstructedCalls(
   logger: DebugLogger,
-  blocks: Readonly<IContent['blocks']>,
+  blocks: Iterable<IContent['blocks'][number]>,
 ): void {
   let callCount = 0;
   const sample: ToolCallBlock[] = [];
@@ -66,8 +66,8 @@ export class ProviderAnchorDiagnostics {
     this.inputCount++;
   }
 
-  output(hasAnchor: boolean): void {
-    this.outputCount++;
+  output(hasAnchor: boolean, count = 1): void {
+    this.outputCount += count;
     this.outputHasAnchor ||= hasAnchor;
   }
 

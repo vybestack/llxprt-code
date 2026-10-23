@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
+import type { DebugLogger } from '../../debug/index.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 import type { JournalRequestProjection } from './journal-request-projection.js';
 import type { IContent, MediaReferenceBlock } from './IContent.js';
@@ -139,6 +140,10 @@ export class JournalProviderRequestSnapshot implements ProviderRequestSnapshot {
     prepareFormat?: PrepareNativeRequestFormat,
     mediaStore?: LocalMediaStore,
     prepareKimi?: PrepareNativeRequestKimi,
+    diagnostics?: {
+      readonly logger: DebugLogger;
+      readonly isCompressing: boolean;
+    },
   ): Promise<JournalProviderRequestSnapshot> {
     const mediaReferences = new WeakSet<MediaReferenceBlock>();
     let indexed: IndexedJournalRequestSnapshot | undefined;
@@ -149,6 +154,9 @@ export class JournalProviderRequestSnapshot implements ProviderRequestSnapshot {
         tail,
         projection,
         mediaStore === undefined ? undefined : mediaReferences,
+        diagnostics === undefined
+          ? undefined
+          : { ...diagnostics, signal: options.signal },
       );
       options.signal?.throwIfAborted();
       return new JournalProviderRequestSnapshot(
