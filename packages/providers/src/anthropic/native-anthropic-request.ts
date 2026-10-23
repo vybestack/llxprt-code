@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { UnsupportedMediaEntry } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { readAnthropicMediaLedger } from './anthropic-media-ledger.js';
-import type { IndexedJournalRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/indexed-journal-request-snapshot.js';
+import { IndexedJournalRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/indexed-journal-request-snapshot.js';
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { VersionSnapshot } from '@vybestack/llxprt-code-core/journal/versionSnapshot.js';
 import type { RepairPolicy } from './anthropic-repair-source.js';
@@ -51,14 +51,10 @@ import {
 import type { MediaStage } from './message-table/wire-builder.js';
 import { NativeAnthropicEstimateProjection } from './native-anthropic-estimate.js';
 
-import {
-  anthropicTailIndex,
-  planAnthropicTail,
-} from './anthropic-tail-plan.js';
-import {
-  supportsAnthropicPendingTail,
-  anthropicPendingPrefix,
-} from './anthropic-pending-tail.js';
+import { AnthropicRepairSource } from './anthropic-repair-source.js';
+import { AnthropicSpanPlan } from './anthropic-span-plan.js';
+import { AnthropicDecisionOverlay } from './anthropic-decision-overlay.js';
+import { measureAnthropicSpans } from './anthropic-span-measure.js';
 
 export class NativeAnthropicBody {
   private readonly body: ProgressiveJsonBody;
@@ -260,34 +256,48 @@ async function nativeEnginePlan(
 ): Promise<{
   readonly engine: AnthropicStreamRepair;
   readonly measured: StoredAnthropicRequestPlan;
+  readonly release?: () => void | Promise<void>;
+  readonly spans?: AnthropicSpanPlan;
 }> {
-  const engine = await AnthropicStreamRepair.create(
-    query,
-    settings,
-    policy,
-    changed
-      ? await anthropicTailIndex(snapshot, query, settings)
-      : await AnthropicRepairIndex.read(
-          await snapshot.nativeFacts(anthropicRepairScope(settings)),
-        ),
+  const index = await AnthropicRepairIndex.read(
+    await snapshot.nativeFacts(anthropicRepairScope(settings)),
   );
-  if (!changed) return { engine, measured: base };
-  const prefix = await anthropicPendingPrefix(
-    snapshot,
-    query,
-    settings,
-    policy,
-    engine,
-  );
-  const measured = await planAnthropicTail(
-    snapshot,
-    query,
-    settings,
-    policy,
-    base,
-    prefix,
-  );
-  return { engine, measured };
+  if (!changed)
+    return {
+      engine: await AnthropicStreamRepair.create(
+        query,
+        settings,
+        policy,
+        index,
+      ),
+      measured: base,
+    };
+  const persisted = await IndexedJournalRequestSnapshot.create(snapshot);
+  try {
+    const spans = new AnthropicSpanPlan(
+      snapshot,
+      query,
+      persisted,
+      index,
+      new AnthropicRepairSource(query, settings),
+    );
+    await spans.prepare();
+    if (base.cache !== undefined) await spans.prepareCache();
+    const overlay = new AnthropicDecisionOverlay(spans);
+    await overlay.prepare();
+    spans.affected = (id, at, kind) => overlay.affected(id, at, kind);
+    const engine = await AnthropicStreamRepair.create(
+      query,
+      settings,
+      policy,
+      overlay,
+    );
+    const measured = await measureAnthropicSpans(spans, engine, base);
+    return { engine, measured, spans, release: () => persisted.close() };
+  } catch (error) {
+    await persisted.close();
+    throw error;
+  }
 }
 
 async function requestFromStored(
@@ -299,6 +309,7 @@ async function requestFromStored(
   measured: StoredAnthropicRequestPlan,
   options: SpooledRequestOptions,
   mediaStage: MediaStage | undefined,
+  spans?: AnthropicSpanPlan,
 ): Promise<NativeAnthropicRequest> {
   const query = engine.source.query;
   const settings = measured.settings;
@@ -307,6 +318,7 @@ async function requestFromStored(
     engine,
     measured,
     options.recoveryBudget,
+    spans,
   );
   const unsupportedMedia =
     options.estimate === true
@@ -366,25 +378,7 @@ async function prepareNativeAnthropicRequest(
           { ...small, model: settings.model },
           { cache: plan.wantCaching ? plan.requestSettings.ttl : undefined },
         );
-        if (
-          changed &&
-          !(await supportsAnthropicPendingTail(
-            snapshot,
-            query,
-            settings,
-            base,
-            options.recoveryBudget !== undefined,
-          ))
-        ) {
-          await query.close();
-          return await prepareSpooledAnthropicRequest(
-            params,
-            rows,
-            mediaStage,
-            options,
-          );
-        }
-        const { engine, measured } = await nativeEnginePlan(
+        const { engine, measured, release, spans } = await nativeEnginePlan(
           snapshot,
           query,
           settings,
@@ -392,16 +386,32 @@ async function prepareNativeAnthropicRequest(
           base,
           changed,
         );
-        return await requestFromStored(
-          params,
-          plan,
-          envelope,
-          snapshot,
-          engine,
-          measured,
-          { ...options, estimate },
-          mediaStage,
-        );
+        try {
+          const request = await requestFromStored(
+            params,
+            plan,
+            envelope,
+            snapshot,
+            engine,
+            measured,
+            { ...options, estimate },
+            mediaStage,
+            spans,
+          );
+          return {
+            ...request,
+            async release() {
+              try {
+                await request.release();
+              } finally {
+                await release?.();
+              }
+            },
+          };
+        } catch (error) {
+          await release?.();
+          throw error;
+        }
       } catch (error) {
         await query.close();
         throw error;

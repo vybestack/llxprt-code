@@ -73,6 +73,13 @@ async function appendUnit(
     },
     version,
   );
+  if (unit.speaker === 'ai' && unit.thinking) {
+    const count = await writer.get(['thinking-count']);
+    if (count === undefined)
+      throw new Error('Missing Anthropic thinking index');
+    await writer.set(['thinking', count[0]], [at]);
+    await writer.set(['thinking-count'], [count[0] + 1]);
+  }
   return {
     chain: unit.chain,
     messages: messages + 1,

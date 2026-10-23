@@ -112,9 +112,11 @@ export async function* anthropicRecoveryEvents(
   engine: AnthropicStreamRepair,
   initial: AnthropicCacheState = {},
   from = 0,
+  to = Infinity,
 ): AsyncGenerator<RecoveryEvent> {
   let state = initial;
   for await (const atom of engine.atoms(from)) {
+    if (atom.key >= to) break;
     if (state.run !== undefined && state.run.role !== atom.role)
       yield { kind: 'run', run: state.run };
     state = beginAnthropicCacheAtom(state, atom.role);

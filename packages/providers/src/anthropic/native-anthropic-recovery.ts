@@ -16,6 +16,8 @@ import {
   readAnthropicCacheFacts,
   type AnthropicCacheState,
 } from './anthropic-cache-facts.js';
+import type { AnthropicSpanPlan } from './anthropic-span-plan.js';
+import { planAnthropicSpanRecovery } from './anthropic-span-recovery.js';
 import {
   anthropicRecoveryEvents,
   recoveryImageSize,
@@ -164,11 +166,16 @@ export async function planAnthropicImageRecovery(
   engine: AnthropicStreamRepair,
   measured: StoredAnthropicRequestPlan,
   budget: ImageDimensionBudget | undefined,
+  spans?: AnthropicSpanPlan,
 ): Promise<AnthropicRecoveryAdjustment> {
   if (budget === undefined) return none;
   const facts = await snapshot.nativeFacts(
     anthropicRepairScope(measured.settings),
   );
+  if (spans !== undefined)
+    return planAnthropicSpanRecovery(spans, engine, facts, (fact, run) =>
+      adjustment(fact, run, measured, budget),
+    );
   const stored = await persistedAdjustment(facts, engine, measured, budget);
   const pending = await pendingAdjustment(snapshot, engine, measured, budget);
   return {

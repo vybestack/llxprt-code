@@ -19,6 +19,12 @@ import { projectAnthropicUnit } from './anthropic-unit-facts.js';
 import { appendAnthropicFacts } from './anthropic-append-facts.js';
 import { anthropicMediaLedgerWriter } from './anthropic-media-ledger.js';
 import { writeAnthropicRecoveryFacts } from './anthropic-recovery-facts.js';
+import { decideAnthropicTool } from './anthropic-tool-decision.js';
+import { AnthropicStreamRepair } from './anthropic-stream-repair.js';
+import { writeAnthropicCacheWindows } from './anthropic-cache-windows.js';
+import type { VersionSnapshot } from '@vybestack/llxprt-code-core/journal/versionSnapshot.js';
+import type { Version } from '@vybestack/llxprt-code-core/journal/version.js';
+import type { VersionEdit } from '@vybestack/llxprt-code-core/journal/groupEdits.js';
 
 interface Consumed {
   readonly ordinal: number;
@@ -85,19 +91,12 @@ async function decide(
   )
     return;
   const state = await consumed(writer, id, index.version);
-  let taken: number | undefined;
-  let missing = false;
-  await source.query.withNormalized(2, 1, id, async (results) => {
-    if (next?.role === 'user') {
-      const before = await results.countBefore(next.start);
-      const end = await results.countBefore(next.end + 1);
-      if (Math.max(before + 1, state.ordinal + 1) > end) {
-        const later = Math.max(end + 1, state.ordinal + 1);
-        taken = later <= results.count ? later : undefined;
-        missing = taken === undefined;
-      }
-    } else missing = results.count === 0 && !state.inserted;
-  });
+  const { taken, missing } = await source.query.withNormalized(
+    2,
+    1,
+    id,
+    (results) => decideAnthropicTool(results, state, next),
+  );
   await writer.set(
     ['decision', message.start, id],
     [
@@ -121,6 +120,30 @@ async function decide(
       [...index.version, message.start + 1],
     );
 }
+async function appendIndexedFacts(
+  snapshot: VersionSnapshot,
+  writer: NativeFactIndexWriter,
+  previous: Version,
+  edits: readonly VersionEdit[],
+  settings: RowFormatSettings,
+): Promise<boolean> {
+  if (
+    !(await appendAnthropicFacts(snapshot, writer, previous, edits, settings))
+  )
+    return false;
+  const query = await IndexedJournalRequestSnapshot.create(snapshot);
+  try {
+    const index = await AnthropicRepairIndex.read(writer);
+    await writeAnthropicCacheWindows(
+      await AnthropicStreamRepair.create(query, settings, {}, index),
+      writer,
+      previous.aggregate.units,
+    );
+    return true;
+  } finally {
+    await query.close();
+  }
+}
 export function anthropicRepairFactIndex(
   input: RowFormatSettings,
 ): NativeFactIndexRegistration {
@@ -129,7 +152,7 @@ export function anthropicRepairFactIndex(
   return {
     scope: anthropicRepairScope(settings),
     append: (snapshot, writer, previous, edits) =>
-      appendAnthropicFacts(snapshot, writer, previous, edits, settings),
+      appendIndexedFacts(snapshot, writer, previous, edits, settings),
     async write(snapshot, writer, generation) {
       const query = await IndexedJournalRequestSnapshot.create(snapshot);
       try {
@@ -142,14 +165,18 @@ export function anthropicRepairFactIndex(
         );
         let messages = 0;
         let last = -1;
+        let thinking = 0;
         for await (const message of source.messages()) {
           await writeRepairMessage(writer, ++messages, message, generation);
           if (
             message.role === 'assistant' &&
             (await source.describe(message.start))?.thinking === true
-          )
+          ) {
             last = message.start;
+            await writer.set(['thinking', thinking++], [last]);
+          }
         }
+        await writer.set(['thinking-count'], [thinking]);
         await ledger.finish();
         await writer.set(['messages'], [messages, last + 1]);
         const index = await AnthropicRepairIndex.prepared(writer, generation);
@@ -170,6 +197,10 @@ export function anthropicRepairFactIndex(
           for await (const call of source.calls(message))
             await decide(source, writer, index, message, next, call.id);
         }
+        await writeAnthropicCacheWindows(
+          await AnthropicStreamRepair.create(query, settings, {}, index),
+          writer,
+        );
         await writeAnthropicRecoveryFacts(
           query,
           writer,

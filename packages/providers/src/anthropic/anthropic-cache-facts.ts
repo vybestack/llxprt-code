@@ -214,6 +214,14 @@ export function addAnthropicCachePiece(
   } else for (const block of atom.blocks) run = addBlock(run, block);
   return { ...state, run };
 }
+export function firstAnthropicCacheAnchor(
+  state: AnthropicCacheState,
+): Target | undefined {
+  return (
+    state.anchor ??
+    (state.run === undefined ? undefined : firstAnchor(state.run))
+  );
+}
 export function anthropicCachePlan(
   state: AnthropicCacheState,
   settings: Pick<RowFormatSettings, 'reasoningEnabled' | 'model'>,

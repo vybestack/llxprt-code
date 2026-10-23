@@ -12,7 +12,7 @@ import type { RepairMessage } from './anthropic-repair-source.js';
 import type { ToolRepairOverlay } from './anthropic-tool-repair.js';
 
 export const anthropicRepairScope = (settings: RowFormatSettings): string =>
-  `anthropic-repair:4:${rowFormatKey(settings)}`;
+  `anthropic-repair:5:${rowFormatKey(settings)}`;
 export interface ScalarFacts {
   get(
     key: ReadonlyArray<string | number>,
@@ -72,6 +72,26 @@ export class AnthropicRepairIndex {
       slot: values[4] < 2 ? 'results' : slot,
       role: values[4] % 2 === 0 ? 'user' : 'assistant',
     };
+  }
+  async previousThinking(before: number): Promise<number | undefined> {
+    const count = await this.facts.get(['thinking-count']);
+    if (count === undefined)
+      throw new JournalFormatError('Missing Anthropic thinking index');
+    let low = 0;
+    let high = count[0];
+    while (low < high) {
+      const mid = Math.floor((low + high) / 2);
+      const fact = await this.facts.get(['thinking', mid]);
+      if (fact === undefined)
+        throw new JournalFormatError('Missing Anthropic thinking holder');
+      if (fact[0] <= before) low = mid + 1;
+      else high = mid;
+    }
+    if (low === 0) return undefined;
+    const fact = await this.facts.get(['thinking', low - 1]);
+    if (fact === undefined)
+      throw new JournalFormatError('Missing Anthropic thinking holder');
+    return fact[0];
   }
   async before(start: number): Promise<RepairMessage | undefined> {
     let low = 1;
