@@ -12,7 +12,7 @@ import { recordedRows } from './support/recorded-rows.js';
 
 import { withRecordingLifetimeFixture } from './helpers/recording-owner-lifetime-fixture.js';
 
-for (const selected of ['old', 'journal'] as const) {
+for (const selected of ['journal']) {
   describe(`public session package export on ${selected}`, () => {
     it('exports active resumed history and imports it without changing the source owner', async () =>
       (async () => {
@@ -47,13 +47,9 @@ for (const selected of ['old', 'journal'] as const) {
               new Uint8Array(await readFile(blob.sourcePath)),
             ).toStrictEqual(bytes);
             expect(validated.references).toContainEqual(reference);
-            expect(validated.manifest.recording).toBe(
-              selected === 'journal' ? 'session.llxj' : 'session.jsonl',
-            );
+            expect(validated.manifest.recording).toBe('session.llxj');
             expect(agent.session.getRecording().enabled).toBe(true);
-            expect(agent.session.getRecording().format).toBe(
-              selected === 'journal' ? 'journal' : 'jsonl',
-            );
+            expect(agent.session.getRecording().format).toBe('journal');
             expect(await agent.session.getHistory()).toStrictEqual(expected);
             const imported = await agent.session.importSession(directory);
             expect(imported.id).not.toBe(source.id);

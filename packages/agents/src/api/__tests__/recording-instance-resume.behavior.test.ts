@@ -3,12 +3,11 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { replaySession } from '@vybestack/llxprt-code-core';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { describe, expect, it, vi } from 'bun:test';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { basename, join } from 'node:path';
+import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { buildAgent, drain, internalConfig } from './helpers/agentHarness.js';
 import {
@@ -22,8 +21,8 @@ function content(text: string): IContent {
   return { speaker: 'human', blocks: [{ type: 'text', text }] };
 }
 
-describe('old adopted recording instance path', () => {
-  it('restarts an adopted recording on its original path with one header and monotonic replacement history across different timestamps', async () => {
+describe('adopted recording instance path', () => {
+  it('restarts an adopted recording on its original path with stable identity and replacement history across different timestamps', async () => {
     const workingDir = await mkdtemp(
       join(tmpdir(), 'recording-instance-resume-'),
     );
@@ -57,32 +56,14 @@ describe('old adopted recording instance path', () => {
         const restartedPath = owner.agent.session.getRecording().path;
         await owner.agent.session.setRecording({ enabled: false });
         expect(restartedPath).toBe(originalPath);
-        const replay = await replaySession(originalPath, basename(projectTemp));
-        if (!replay.ok) throw new Error(replay.error);
-        expect(replay.sequenceCorrupt).toBe(false);
-        // Journal rows additionally carry their chronology stamp.
-        expect(replay.history).toMatchObject([
+        const rows = await nativeRows(originalPath);
+        expect(rows).toMatchObject([
           content('changed while recording stopped'),
         ]);
-        expect(replay.history).toHaveLength(1);
-        const records: unknown[] = (await readFile(originalPath, 'utf8'))
-          .trim()
-          .split('\n')
-          .map((line): unknown => JSON.parse(line));
-        expect(records).toMatchObject([
-          {
-            seq: 1,
-            type: 'session_start',
-            payload: { sessionId: 'recording-source-label' },
-          },
-          { seq: 2, type: 'content' },
-          { seq: 3, type: 'session_event' },
-          // Resume leaves the one source row unchanged, so it writes no
-          // chronology_bind for it.
-          { seq: 4, type: 'replace_begin' },
-          { seq: 5, type: 'content', payload: { tx: expect.any(String) } },
-          { seq: 6, type: 'replace_commit', payload: { rowCount: 1 } },
-        ]);
+        expect(rows).toHaveLength(1);
+        expect(
+          (await readJournalFileFacts(originalPath))?.facts.sessionId,
+        ).toBe('recording-source-label');
         expect(await owner.agent.session.listSessions()).toHaveLength(1);
         expect(chatsDir).toBe(internalConfig(owner.agent).projectChatsDir);
       } finally {

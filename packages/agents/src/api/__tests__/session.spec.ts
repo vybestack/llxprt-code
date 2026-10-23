@@ -121,9 +121,8 @@ const observeCreatesAndListsRecordingNativeCheckpointsWithoutLegacyCheckpointFil
         await agent.session.createCheckpoint('milestone-1');
 
       const listed = await agent.session.listCheckpoints();
-      const recordingRaw = readFileSync(
+      const recordingCheckpoints = await readJournalCheckpoints(
         agent.session.getRecording().path ?? '',
-        'utf8',
       );
       const legacyCheckpointDirExists = existsSync(
         join(storageTempDirFor(workingDir), 'checkpoints'),
@@ -132,7 +131,7 @@ const observeCreatesAndListsRecordingNativeCheckpointsWithoutLegacyCheckpointFil
       return {
         checkpoint,
         listed,
-        recordingRaw,
+        recordingCheckpoints,
         legacyCheckpointDirExists,
       };
     });
@@ -169,35 +168,22 @@ const observeDurablyClearsRecordedHistoryWithoutReRecordingRestoredEntries =
       await agent.setHistory(history);
       await agent.session.setRecording({ enabled: true });
       const recordingPath = agent.session.getRecording().path ?? '';
-      const before = readFileSync(recordingPath, 'utf8');
-
+      const before = readFileSync(recordingPath);
       await agent.resetChat();
       const historyAfterReset = (await collectAgentHistory(agent)).map(
         messageText,
       );
-      const after = readFileSync(recordingPath, 'utf8');
-
+      const after = readFileSync(recordingPath);
       await agent.session.setRecording({ enabled: false });
-      expect(readFileSync(recordingPath, 'utf8')).toBe(after);
-      expect(after.startsWith(before)).toBe(true);
-      const appended = after
-        .slice(before.length)
-        .trim()
-        .split('\n')
-        .map((line) => {
-          const event = JSON.parse(line) as {
-            type: string;
-            payload: unknown;
-          };
-          return { type: event.type, payload: event.payload };
-        });
-
+      expect(readFileSync(recordingPath)).toStrictEqual(after);
+      expect(after.subarray(0, before.length)).toStrictEqual(before);
+      const persisted = rowTexts(await nativeRows(recordingPath));
       await agent.session.resume('latest');
       const historyAfterResume = (await collectAgentHistory(agent)).map(
         messageText,
       );
 
-      return { appended, historyAfterReset, historyAfterResume };
+      return { persisted, historyAfterReset, historyAfterResume };
     });
 
 const observeResetsAnAlreadyEmptyChatWhileRecordingIsEnabled = async () =>
@@ -275,33 +261,32 @@ const observeMaterializedRecording = async () =>
     const recording = agent.session.getRecording();
     const recordingPath = recording.path ?? '';
 
-    // The materialized file is non-empty JSONL whose lines parse and whose
-    // content events carry the seeded text — proof the swap wrote real data.
-    const raw = readFileSync(recordingPath, 'utf8');
-    const lines = raw.split(/\r?\n/).filter((line) => line.trim().length > 0);
-    const allLinesParse = lines.every((line) => {
-      try {
-        JSON.parse(line);
-        return true;
-      } catch {
-        return false;
-      }
-    });
-
+    const rows = await nativeRows(recordingPath);
+    const facts = await readJournalFileFacts(recordingPath);
     await agent.session.setRecording({ enabled: false });
-    return { recording, recordingPath, raw, lines, allLinesParse };
+    return { recording, recordingPath, rows, facts };
   });
 
 describe('Session control @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010: recording checkpoints', () => {
   it('creates and lists recording-native checkpoints without legacy checkpoint files @plan:2026-07-28-issue-2625', async () => {
-    const { checkpoint, listed, recordingRaw, legacyCheckpointDirExists } =
+    const {
+      checkpoint,
+      listed,
+      recordingCheckpoints,
+      legacyCheckpointDirExists,
+    } =
       await observeCreatesAndListsRecordingNativeCheckpointsWithoutLegacyCheckpointFiles();
     expect(checkpoint.name).toBe('milestone-1');
     expect(checkpoint.sessionId.length).toBeGreaterThan(0);
     expect(checkpoint.sequence).toBeGreaterThan(0);
     expect(Number.isNaN(Date.parse(checkpoint.createdAt))).toBe(false);
     expect(listed).toContainEqual(checkpoint);
-    expect(recordingRaw).toContain('checkpoint_created');
+    expect(recordingCheckpoints).toContainEqual(
+      expect.objectContaining({
+        checkpointId: checkpoint.checkpointId,
+        name: checkpoint.name,
+      }),
+    );
     expect(legacyCheckpointDirExists).toBe(false);
   });
 
@@ -319,15 +304,13 @@ describe('Session control @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010: 
 
 describe('Session control @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010: recorded history reset', () => {
   it('durably clears recorded history without re-recording restored entries @plan:2026-07-28-issue-2625', async () => {
-    const { appended, historyAfterReset, historyAfterResume } =
+    const { persisted, historyAfterReset, historyAfterResume } =
       await observeDurablyClearsRecordedHistoryWithoutReRecordingRestoredEntries();
     expect(historyAfterReset).toStrictEqual([
       'initial question',
       'initial answer',
     ]);
-    expect(appended).toStrictEqual([
-      { type: 'rewind', payload: { itemsRemoved: 2, cutSeq: 3 } },
-    ]);
+    expect(persisted).toStrictEqual(['initial question', 'initial answer']);
     expect(historyAfterResume).toStrictEqual([
       'initial question',
       'initial answer',
@@ -356,14 +339,9 @@ describe('Session control @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010: 
       );
       const afterTurn = readFileSync(path, 'utf8');
       expect(afterTurn.startsWith(afterClear)).toBe(true);
-      expect(
-        afterTurn
-          .slice(afterClear.length)
-          .trim()
-          .split('\n')
-          .map((line) => JSON.parse(line) as { type: string })
-          .filter((line) => line.type === 'rewind'),
-      ).toStrictEqual([]);
+      expect(rowTexts(await nativeRows(path))).not.toContain(
+        'discarded question',
+      );
     });
   });
 
@@ -388,7 +366,7 @@ describe('Session control @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010: 
     expect(active.enabled).toBe(true);
     expect(typeof active.path).toBe('string');
     expect(activePathLength).toBeGreaterThan(0);
-    expect(active.format).toBe('jsonl');
+    expect(active.format).toBe('journal');
     expect(stopped.enabled).toBe(false);
   });
 
@@ -400,16 +378,16 @@ describe('Session control @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010: 
     expect(message.toLowerCase()).toContain('session');
   });
 
-  it('setRecording(enabled:true) materializes a real JSONL session file containing the seeded content @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010', async () => {
+  it('setRecording(enabled:true) materializes a real journal session file containing the seeded content @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010', async () => {
     const observation = await observeMaterializedRecording();
     expect(observation.recording.enabled).toBe(true);
     expect(typeof observation.recording.path).toBe('string');
     expect(observation.recordingPath.length).toBeGreaterThan(0);
-    expect(observation.raw.trim().length).toBeGreaterThan(0);
-    expect(observation.lines.length).toBeGreaterThan(0);
-    expect(observation.allLinesParse).toBe(true);
-    expect(observation.raw).toContain('persist this sentinel: capybara');
-    expect(observation.raw).toContain('recorded the sentinel: capybara');
+    expect(observation.facts?.rows).toBe(2);
+    expect(rowTexts(observation.rows)).toStrictEqual([
+      'persist this sentinel: capybara',
+      'recorded the sentinel: capybara',
+    ]);
   });
 });
 
