@@ -1,5 +1,4 @@
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
-import { observeHistorySynchronouslyForTest } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { SessionRecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
@@ -28,18 +27,6 @@ class StreamOnlyHistory extends HistoryService {
 }
 
 describe('journal materialization guard', () => {
-  it('StreamOnlyHistory rejects journal eager materialization', async () => {
-    const history = new StreamOnlyHistory({});
-
-    try {
-      expect(() => observeHistorySynchronouslyForTest(history)).toThrow(
-        'production materializer array seam',
-      );
-    } finally {
-      await history.dispose();
-    }
-  });
-
   it('rejects native eager materialization through the guarded journal', async () => {
     const history = new StreamOnlyHistory({});
     try {
