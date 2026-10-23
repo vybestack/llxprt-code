@@ -1,6 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { withRetainedClient } from './__tests__/support/retained-array-test-helpers.js';
 import { describe, expect, it } from 'bun:test';
+import {
+  exactTokenizer,
+  expectedRange,
+  journalMediaParticipant as mediaParticipant,
+  rejectedValue,
+} from '../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import {
   detachedDigest,
   detachedDurableDigest,
@@ -9,21 +14,16 @@ import {
   type DetachedFixture,
 } from '../../../core/src/services/history/detached-rollback-test-helpers.js';
 import {
-  exactTokenizer,
-  expectedRange,
-  mediaParticipant,
-  rejectedValue,
-} from '../../../core/src/services/history/chronology-rollback-test-helpers.js';
-import {
   clientArrayRows,
   forbidClientArrayRollback,
 } from './__tests__/support/client-array-test-helpers.js';
+import { withRetainedClient } from './__tests__/support/retained-array-test-helpers.js';
 const stages = [
   'tokenizer',
   'prepare',
   'publish',
-  'admission-zero',
-  'admission-prefix',
+  'records',
+  'trailer',
   'tokens',
   'finalize',
   'range',
@@ -33,7 +33,9 @@ async function installFault(
   stage: string,
   failure: Error,
 ): Promise<void> {
-  const { history, recorder } = fixture;
+  const { history, io } = fixture;
+  if (stage === 'records' || stage === 'trailer')
+    io.rejectNextWrite(failure, stage);
   if (stage === 'tokenizer')
     history.setTokenizerFactory(
       exactTokenizer(() => {
@@ -63,8 +65,6 @@ async function installFault(
       if (stage === label) throw failure;
     });
   }
-  if (stage === 'admission-zero') recorder.failAdmissionAfter(0);
-  if (stage === 'admission-prefix') recorder.failAdmissionAfter(2);
 }
 function registerFailure(size: number, stage: string): void {
   describe('registerFailure', () => {
@@ -72,8 +72,7 @@ function registerFailure(size: number, stage: string): void {
       await withDetachedFixture((fixture) =>
         withRetainedClient(fixture, async ({ client }) => {
           const { history, recorder, owners } = fixture;
-          for await (const row of detachedRows(size))
-            await recorder.commit('content', { content: row });
+          await history.detachedValues.replace(detachedRows(size));
           await history.recalculateTotalTokens();
           history.setBaseTokenOffset(17);
           history.setCacheAnchorSeq(1);
@@ -96,14 +95,11 @@ function registerFailure(size: number, stage: string): void {
           expect(error).toBeInstanceOf(Error);
           if (!(error instanceof Error))
             throw new Error('Missing restore failure');
-          expect(error.message).toContain(
-            stage.startsWith('admission')
-              ? recorder.failure.message
-              : failure.message,
-          );
+          expect(error.message).toContain(failure.message);
           expect(
             await detachedDigest(history.streamRawHistory()),
           ).toStrictEqual(expected);
+          await history.waitForCommit();
           expect(await detachedDurableDigest(recorder)).toStrictEqual(expected);
           expect(history.getTotalTokens()).toBe(tokens);
           expect(history.getContextRange()).toStrictEqual(range);

@@ -1,11 +1,14 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { buildAgent } from '../../../api/__tests__/helpers/agentHarness.js';
+import type { AgentClientContract } from '../../../../../core/src/core/clientContract.js';
+import type { RowOwnership } from '../../../../../core/src/recording/rowOwnership.js';
 import type { DetachedFixture } from '../../../../../core/src/services/history/detached-rollback-test-helpers.js';
 import type { LocalMediaStore } from '../../../../../core/src/storage/local-media-store.js';
-import type { AgentClientContract } from '../../../../../core/src/core/clientContract.js';
+import { buildAgent } from '../../../api/__tests__/helpers/agentHarness.js';
 
 export async function withRetainedClient<T>(
-  fixture: DetachedFixture,
+  fixture: Pick<DetachedFixture, 'history' | 'recorder' | 'releaseWriter'> & {
+    readonly owners: RowOwnership;
+  },
   action: (value: {
     client: AgentClientContract;
     store: LocalMediaStore;
