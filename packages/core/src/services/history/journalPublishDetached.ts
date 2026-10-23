@@ -77,11 +77,16 @@ export async function publishDetachedOnJournal(
   } catch (error) {
     failures.push(error);
   }
+  try {
+    await store.settleFanout();
+  } catch (error) {
+    if (failure === undefined && failures.length === 0) throw error;
+    failures.push(error);
+  }
   if (failure !== undefined)
     throw historyMutationFailure(failure.error, failures);
   if (failures.length > 0)
     throw new AggregateError(failures, 'Detached publication cleanup failed');
-  await store.settleFanout();
 }
 
 async function publishOver(
