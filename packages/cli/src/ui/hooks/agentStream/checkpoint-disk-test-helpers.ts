@@ -189,8 +189,13 @@ export function gateJournalRowCommit(
       const observed = instrument(edits);
       if (observedRow.candidate && beforeCommit) await acknowledge();
       const result = await commit.call(this, observed);
-      if (observedRow.candidate && !beforeCommit) await acknowledge();
-      return result;
+      try {
+        if (observedRow.candidate && !beforeCommit) await acknowledge();
+        return result;
+      } catch (error) {
+        await result.close();
+        throw error;
+      }
     },
   );
 }

@@ -13,6 +13,7 @@ import {
   checkpointUiHistory,
   checkpointTool,
   failDurableWrite,
+  gateJournalRowCommit,
 } from '../hooks/agentStream/checkpoint-disk-test-helpers.js';
 import { restoreCommand } from './restoreCommand.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
@@ -36,6 +37,7 @@ async function digest(rows: AsyncIterable<IContent>): Promise<string> {
 type Fault =
   | 'snapshot'
   | 'abort'
+  | 'acknowledgement'
   | 'write'
   | 'corrupt'
   | 'missing-ui'
@@ -107,6 +109,10 @@ async function failure(fault: Fault, active: boolean): Promise<boolean> {
       context.services.git = git;
     }
     if (fault === 'write') failDurableWrite();
+    if (fault === 'acknowledgement')
+      gateJournalRowCommit('checkpoint-candidate', async () => {
+        throw new Error('checkpoint acknowledgement failure');
+      });
     try {
       const outcome = await restoreCommand(runtime)?.action?.(
         context,
@@ -131,6 +137,7 @@ describe('CLI checkpoint restoration atomic recovery', () => {
       'snapshot',
       'abort',
       'write',
+      'acknowledgement',
       'corrupt',
       'missing-ui',
       'truncated',
