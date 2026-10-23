@@ -18,7 +18,7 @@ async function appendDensityValue(
   replacement: IContent | undefined,
 ): Promise<void> {
   const [clean] = invalidateResponsesStatefulChain([replacement ?? row]);
-  if (replacement === undefined) await sink.appendValue(clean);
+  if (replacement === undefined) await sink.appendDerived(index, clean);
   else await sink.appendReplacement(index, clean);
 }
 

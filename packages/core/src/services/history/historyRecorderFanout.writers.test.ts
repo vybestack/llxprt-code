@@ -24,21 +24,6 @@ function toolResponse(id: string, result: string): IContent {
   };
 }
 
-/** Failing at the media owner makes the history undo the mutation it just admitted. */
-function failingMediaOwner(message: string) {
-  return {
-    adopt: () => undefined,
-    releaseAll: async () => undefined,
-    reconcile: async () => undefined,
-    prepareReplacement: () => ({
-      publish: () => {
-        throw new Error(message);
-      },
-      rollback: () => undefined,
-    }),
-  };
-}
-
 describe('journal writers keep every row with its owner', () => {
   beforeEach(() => harness.setup());
   afterEach(() => harness.teardown());
@@ -68,9 +53,13 @@ describe('journal writers keep every row with its owner', () => {
     service.add(textRow('A1'), undefined, ownerA);
     service.add(textRow('B1'), undefined, ownerB);
     await service.waitForCommit();
-    await service.registerMediaOwner(failingMediaOwner('removal failed'));
+    let armed = true;
+    service.on('tokensUpdated', () => {
+      if (armed) throw new Error('removal failed');
+    });
 
     await expect(service.pop()).rejects.toThrow('removal failed');
+    armed = false;
     await service.waitForCommit();
 
     expect((await harness.shared(service)).map(rowText)).toStrictEqual([
