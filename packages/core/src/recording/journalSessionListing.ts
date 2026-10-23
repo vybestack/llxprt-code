@@ -95,7 +95,7 @@ export async function readJournalCheckpoints(
         createdAtMs: descriptor.createdAtMs,
       });
     }
-    return found;
+    return found.sort((left, right) => left.sequence - right.sequence);
   } finally {
     await reader.close();
   }
