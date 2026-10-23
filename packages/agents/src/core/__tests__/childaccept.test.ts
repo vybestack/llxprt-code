@@ -2,7 +2,7 @@
 import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { readFile, readdir, rm, stat } from 'node:fs/promises';
+import { readFile, readdir, realpath, rm, stat } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { readJournalFileFacts } from '@vybestack/llxprt-code-core/recording/journalSessionListing.js';
@@ -27,7 +27,7 @@ async function verifyNativeLaunch(
     start: {
       kind: 'subagent',
       parentSessionId: 'childaccept-parent',
-      workspaceDirs: [directory],
+      workspaceDirs: [await realpath(directory)],
     },
   });
   expect(await Array.fromAsync(nativeFileRows(path))).toMatchObject([

@@ -56,6 +56,7 @@ import { SessionControl } from '../control/sessionControl.js';
 import { AgentSessionPersistence } from '../control/recordedHistoryPersistence.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { JournalHistoryStore } from '@vybestack/llxprt-code-core/services/history/journalHistoryStore.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { SessionControlDeps } from '../control/sessionControl.js';
@@ -146,7 +147,8 @@ function buildFakeClient(seed: readonly IContent[] = []): FakeClient {
   let replacementCalls = 0;
   const contract = {
     async *getHistory() {
-      yield* history;
+      if (historyService !== null) yield* historyService.streamRawHistory();
+      else yield* history;
     },
     getHistoryService: () => historyService,
     setHistory: async (nextHistory: IContent[]) => {
@@ -169,6 +171,7 @@ function buildFakeClient(seed: readonly IContent[] = []): FakeClient {
       await historyService?.replaceBatch(next);
       await historyService?.waitForCommit();
       history = [...next];
+      replacementCalls += 1;
     },
     discardDeferredHistory: async () => undefined,
     restoreHistory: async (nextHistory: IContent[]) => {
@@ -808,6 +811,16 @@ describe('SessionControl checkpoints', () => {
   });
 });
 
+function clearControl(
+  config: FakeConfig,
+  client: FakeClient,
+  sessionId: string,
+): SessionControl {
+  return new SessionControl(
+    buildDeps(config, client.contract, sessionId, config.getLocalMediaStore()),
+  );
+}
+
 describe('SessionControl clear rollback', () => {
   it('reports both a live clear failure and rollback failure', async () => {
     await withProjectRoot(async (projectRoot) => {
@@ -818,33 +831,32 @@ describe('SessionControl clear rollback', () => {
         { speaker: 'ai', blocks: [{ type: 'text', text: 'response' }] },
         humanText('later turn'),
       ]);
-      const control = new SessionControl(
-        buildDeps(
-          config,
-          client.contract,
-          sessionId,
-          config.getLocalMediaStore(),
-        ),
-      );
+      const control = clearControl(config, client, sessionId);
       await control.setRecording({ enabled: true });
 
       client.contract.resetChat = async () => {
         throw new Error('clear failed');
       };
-      client.contract.setHistoryFromSource = async () => {
-        throw new Error('rollback failed');
-      };
+      const rollback = spyOn(
+        JournalHistoryStore.prototype,
+        'compensate',
+      ).mockRejectedValue(new Error('rollback failed'));
 
       let thrown: unknown;
       try {
         await control.clearHistory();
       } catch (error: unknown) {
         thrown = error;
+      } finally {
+        rollback.mockRestore();
       }
 
       expect(thrown).toBeInstanceOf(AggregateError);
+      if (!(thrown instanceof AggregateError)) {
+        throw new Error('Expected aggregate clear and rollback failure');
+      }
       expect(
-        (thrown as AggregateError).errors.map((error) => errorMessage(error)),
+        thrown.errors.map((error: unknown) => errorMessage(error)),
       ).toStrictEqual(['clear failed', 'rollback failed']);
       await control.dispose();
     });
@@ -860,14 +872,7 @@ describe('SessionControl clear rollback', () => {
       ];
       const config = buildFakeConfig(projectRoot);
       const client = buildFakeClient(originalHistory);
-      const control = new SessionControl(
-        buildDeps(
-          config,
-          client.contract,
-          sessionId,
-          config.getLocalMediaStore(),
-        ),
-      );
+      const control = clearControl(config, client, sessionId);
       await control.setRecording({ enabled: true });
       const recordingPath = control.getRecording().path;
       if (typeof recordingPath !== 'string')
@@ -908,14 +913,7 @@ describe('SessionControl recording reattachment', () => {
       // is committed but left unsubscribed (continuous recording dead).
       const client = buildFakeClient([humanText('seed turn')]);
       client.setHistoryService(null);
-      const control = new SessionControl(
-        buildDeps(
-          config,
-          client.contract,
-          sessionId,
-          config.getLocalMediaStore(),
-        ),
-      );
+      const control = clearControl(config, client, sessionId);
 
       await control.setRecording({ enabled: true });
       expect(control.getRecording().enabled).toBe(true);

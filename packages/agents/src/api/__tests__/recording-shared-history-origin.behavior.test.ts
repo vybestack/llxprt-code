@@ -4,17 +4,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, test, expect } from 'bun:test';
-import { readFile } from 'node:fs/promises';
 import { withRecordingLifetimeFixture } from './helpers/recording-owner-lifetime-fixture.js';
 import { drain } from './helpers/agentHarness.js';
 import { collectHistoryFixture } from '../../core/__tests__/support/collect-history-test-fixture.js';
 import {
-  withOldRecordingFixture,
   withNativeRecordingFixture,
   nativeRows,
   requireRecordingPath,
   rowTexts,
 } from './helpers/native-session-fixture.js';
+
+async function recordingText(path: string): Promise<string> {
+  return rowTexts(await nativeRows(path)).join('\n');
+}
 
 describe('shared history recording origin', () => {
   test('two recording facades on the same history append only their own turns', async () => {
@@ -31,8 +33,8 @@ describe('shared history recording origin', () => {
       if (!pathA || !pathB) throw new Error('Missing journal');
       await drain(agent.stream('A-only-content-marker'));
       await drain(sibling.stream('B-only-content-marker'));
-      const a = await readFile(pathA, 'utf8');
-      const b = await readFile(pathB, 'utf8');
+      const a = await recordingText(pathA);
+      const b = await recordingText(pathB);
       expect(a).toContain('A-only-content-marker');
       expect(a).not.toContain('B-only-content-marker');
       expect(b).toContain('B-only-content-marker');
@@ -52,7 +54,7 @@ describe('shared history recording origin', () => {
       await sibling.session.setRecording({ enabled: true });
       const bPath = sibling.session.getRecording().path;
       if (!bPath) throw new Error('Missing B journal');
-      expect(await readFile(bPath, 'utf8')).not.toContain(
+      expect(await recordingText(bPath)).not.toContain(
         'A-before-B-start-marker',
       );
     });
@@ -89,7 +91,7 @@ describe('shared history recording origin', () => {
       await sibling.session.setRecording({ enabled: true });
       const bPath = sibling.session.getRecording().path;
       if (!bPath) throw new Error('Missing B journal');
-      expect(await readFile(bPath, 'utf8')).not.toContain(
+      expect(await recordingText(bPath)).not.toContain(
         'A-before-profile-marker',
       );
     });
@@ -120,7 +122,7 @@ describe('shared history recording origin', () => {
       await sibling.session.setRecording({ enabled: true });
       const path = sibling.session.getRecording().path;
       if (!path) throw new Error('Missing B journal');
-      expect(await readFile(path, 'utf8')).toContain('external-reuse-marker');
+      expect(await recordingText(path)).toContain('external-reuse-marker');
     });
   }, 30000);
 
@@ -150,8 +152,8 @@ describe('shared history recording origin', () => {
       if (!aPath || !bPath) throw new Error('Missing journal');
       await agent.session.setRecording({ enabled: false });
       await sibling.session.setRecording({ enabled: false });
-      const a = await readFile(aPath, 'utf8');
-      const b = await readFile(bPath, 'utf8');
+      const a = await recordingText(aPath);
+      const b = await recordingText(bPath);
       expect(a).toContain('external-batch-marker');
       expect(b).toContain('external-batch-marker');
       expect(a).toContain('external-sync-marker');
@@ -178,17 +180,13 @@ describe('shared history recording origin', () => {
       const resumedPath = agent.session.getRecording().path;
       if (!resumedPath) throw new Error('Missing restarted journal');
       await drain(agent.stream('A-after-A-restart'));
-      const a = await readFile(aPath, 'utf8');
-      const b = await readFile(bPath, 'utf8');
+      const a = await recordingText(aPath);
+      const b = await recordingText(bPath);
       expect(a).not.toContain('B-after-A-stop');
       expect(b).toContain('B-after-A-stop');
       expect(b).not.toContain('A-after-A-restart');
-      expect(await readFile(resumedPath, 'utf8')).toContain(
-        'A-after-A-restart',
-      );
-      expect(await readFile(resumedPath, 'utf8')).not.toContain(
-        'B-after-A-stop',
-      );
+      expect(await recordingText(resumedPath)).toContain('A-after-A-restart');
+      expect(await recordingText(resumedPath)).not.toContain('B-after-A-stop');
     });
   }, 30000);
 
@@ -213,10 +211,8 @@ describe('shared history recording origin', () => {
       await drain(agent.stream('A-resumed-content-marker'));
       const aPath = agent.session.getRecording().path;
       if (!aPath) throw new Error('Missing resumed journal');
-      expect(await readFile(aPath, 'utf8')).toContain(
-        'A-resumed-content-marker',
-      );
-      expect(await readFile(bPath, 'utf8')).not.toContain(
+      expect(await recordingText(aPath)).toContain('A-resumed-content-marker');
+      expect(await recordingText(bPath)).not.toContain(
         'A-resumed-content-marker',
       );
     });
@@ -236,13 +232,13 @@ describe('shared history recording origin', () => {
       if (!aPath || !bPath) throw new Error('Missing journal');
       await agent.dispose();
       await drain(sibling.stream('B-after-A-dispose'));
-      expect(await readFile(bPath, 'utf8')).toContain('B-after-A-dispose');
-      expect(await readFile(aPath, 'utf8')).not.toContain('B-after-A-dispose');
+      expect(await recordingText(bPath)).toContain('B-after-A-dispose');
+      expect(await recordingText(aPath)).not.toContain('B-after-A-dispose');
     });
   }, 30000);
 
   test('failed shared history publication rolls back both prepared recording effects', async () => {
-    await withOldRecordingFixture(async ({ agent, borrow }) => {
+    await withNativeRecordingFixture(async ({ agent, borrow }) => {
       const sibling = await borrow();
       await agent.setHistory([
         { speaker: 'human', blocks: [{ type: 'text', text: 'seed' }] },
@@ -290,14 +286,10 @@ describe('shared history recording origin', () => {
       if (!aPath || !bPath) throw new Error('Missing journal');
       await agent.session.setRecording({ enabled: false });
       await sibling.session.setRecording({ enabled: false });
-      expect(await readFile(aPath, 'utf8')).not.toContain('rolled-back-marker');
-      expect(await readFile(bPath, 'utf8')).not.toContain('rolled-back-marker');
-      expect(await readFile(aPath, 'utf8')).not.toContain(
-        'owned-rollback-marker',
-      );
-      expect(await readFile(bPath, 'utf8')).not.toContain(
-        'owned-rollback-marker',
-      );
+      expect(await recordingText(aPath)).not.toContain('rolled-back-marker');
+      expect(await recordingText(bPath)).not.toContain('rolled-back-marker');
+      expect(await recordingText(aPath)).not.toContain('owned-rollback-marker');
+      expect(await recordingText(bPath)).not.toContain('owned-rollback-marker');
     });
   }, 30000);
 });
