@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { setImmediate } from 'node:timers/promises';
 import { useTempDir as tempDirectory } from '../journal/__tests__/support/useTempDir.js';
 import { JournalMediaPins } from '../journal/journalMediaPins.js';
+import { JournalRecordingService } from '../recording/journalRecordingService.js';
 import { batchGate } from '../services/history/__tests__/support/addbatch-stream-test-helpers.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import type { IContent } from '../services/history/IContent.js';
@@ -19,6 +20,54 @@ import {
 import { RequestMediaResolver } from './request-media-resolver.js';
 
 const directory = tempDirectory('native-media-gate-');
+describe('rollback checkpoint media release', () => {
+  it('releases candidate media after restoring and closing the checkpoint', async () => {
+    const recording = JournalRecordingService.create({
+      sessionId: 'rollback-media',
+      projectHash: 'test',
+      chatsDir: join(directory(), 'chats'),
+      workspaceDirs: ['/work'],
+      provider: 'test',
+      model: 'test',
+    });
+    const history = new HistoryService({ recording });
+    await history.waitForCommit();
+    const media = new LocalMediaStore({
+      rootDirectory: join(directory(), 'rollback-checkpoint'),
+      quotaBytes: 1024,
+    });
+    const prior = await media.admit({
+      bytes: new Uint8Array([1]),
+      mimeType: 'image/png',
+      semanticMetadata: {},
+    });
+    const candidate = await media.admit({
+      bytes: new Uint8Array([2]),
+      mimeType: 'image/png',
+      semanticMetadata: {},
+    });
+    await history.registerMediaOwner(new HistoryMediaOwnership(media));
+    try {
+      await history.detachedValues.replace([
+        { speaker: 'human', blocks: [prior] },
+      ]);
+      await history.detachedValues.withRollbackCheckpoint(async (restore) => {
+        await history.detachedValues.replace([
+          { speaker: 'human', blocks: [candidate] },
+        ]);
+        expect(await media.hasReservations(prior.contentId)).toBe(true);
+        expect(await media.hasReservations(candidate.contentId)).toBe(true);
+        await restore();
+      });
+      expect(await media.hasReservations(prior.contentId)).toBe(true);
+      expect(await media.hasReservations(candidate.contentId)).toBe(false);
+    } finally {
+      await history.dispose();
+      await recording.dispose();
+      await media.close();
+    }
+  });
+});
 
 describe('media release while the gate is draining', () => {
   it('drains a newly queued release when its old pin closes before the queue commit returns', async () => {

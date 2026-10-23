@@ -186,6 +186,7 @@ export async function withRollbackCheckpointOnJournal<T>(
         throw new Error('Detached rollback checkpoint is closed');
       const before = host.snapshot();
       await restoreCheckpointVersion(store, host, mark);
+      await store.waitForCommit();
       const range = new ContextRangeAccumulator();
       for await (const row of store.streamRows()) range.add(row);
       host.chronology.restore(state.chronology);
