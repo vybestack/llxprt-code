@@ -3,6 +3,7 @@ import type { PreparedGroup } from '../../journal/preparedGroup.js';
 import { BoundedIdNodeCache } from '../../journal/idTrieCache.js';
 import { mergeIdTrie } from '../../journal/idTrieMerge.js';
 import { IdTrieReader } from '../../journal/idTrieReader.js';
+import { compareIdHashes, type IdEntry } from '../../journal/idTrieNode.js';
 import type { RemovedInteriorSpan } from './historyEventTypes.js';
 import {
   encodeJournalSpanWindow,
@@ -34,14 +35,9 @@ export class JournalDensitySpans {
   constructor(private readonly group: PreparedGroup) {}
 
   async append(span: RemovedInteriorSpan): Promise<void> {
-    if (this.root === 0 && this.pending.length < SPAN_WINDOW_CAPACITY) {
-      this.pending.push(span);
-      this.peak = Math.max(this.peak, this.pending.length);
-      return;
-    }
-    for (const held of this.pending) await this.write(held);
-    this.pending = [];
-    await this.write(span);
+    if (this.pending.length === SPAN_WINDOW_CAPACITY) await this.writePending();
+    this.pending.push(span);
+    this.peak = Math.max(this.peak, this.pending.length);
   }
 
   private reader(): IdTrieReader {
@@ -51,7 +47,7 @@ export class JournalDensitySpans {
     );
   }
 
-  private async write(span: RemovedInteriorSpan): Promise<void> {
+  private encode(span: RemovedInteriorSpan): IdEntry {
     const key = new Uint8Array(16);
     const view = new DataView(key.buffer);
     view.setBigUint64(0, BigInt(span.start));
@@ -60,35 +56,42 @@ export class JournalDensitySpans {
     const value = new Uint8Array(9);
     new DataView(value.buffer).setBigUint64(0, BigInt(span.end));
     value[8] = reasons.indexOf(span.reason);
+    return { hash: key, value };
+  }
+
+  private async writePending(): Promise<void> {
+    const entries = this.pending
+      .map((span) => this.encode(span))
+      .sort((left, right) => compareIdHashes(left.hash, right.hash));
+    this.pending = [];
     await this.group.appender.drain();
     const before = this.group.appender.nextOffset;
     this.root = await mergeIdTrie(
       this.group.appender,
       this.reader(),
       this.root,
-      [{ hash: key, value }],
+      entries,
     );
     this.writtenBytes += this.group.appender.nextOffset - before;
     await this.group.appender.drain();
   }
 
   private async *ordered(): AsyncGenerator<RemovedInteriorSpan> {
-    if (this.root === 0) {
-      const sorted = this.pending.map((span, ordinal) => ({ span, ordinal }));
-      sorted.sort((a, b) => {
-        const start = a.span.start - b.span.start;
-        if (start !== 0) return start;
-        const reason =
-          Number(a.span.reason !== 'density-removed') -
-          Number(b.span.reason !== 'density-removed');
-        return reason !== 0 ? reason : a.ordinal - b.ordinal;
-      });
-      for (const { span } of sorted) yield span;
-      return;
-    }
+    const compare = (
+      left: RemovedInteriorSpan,
+      right: RemovedInteriorSpan,
+    ): number => {
+      const start = left.start - right.start;
+      return start !== 0
+        ? start
+        : Number(left.reason !== 'density-removed') -
+            Number(right.reason !== 'density-removed');
+    };
+    const sorted = [...this.pending].sort(compare);
+    let index = 0;
     await this.group.appender.drain();
     for await (const entry of this.reader().entries(this.root)) {
-      yield {
+      const span: RemovedInteriorSpan = {
         start: Number(
           new DataView(
             entry.hash.buffer,
@@ -105,7 +108,11 @@ export class JournalDensitySpans {
         ),
         reason: reasons[entry.value[8]],
       };
+      while (index < sorted.length && compare(sorted[index], span) < 0)
+        yield sorted[index++];
+      yield span;
     }
+    while (index < sorted.length) yield sorted[index++];
   }
 
   async project(
