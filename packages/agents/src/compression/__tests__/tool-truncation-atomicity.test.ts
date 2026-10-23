@@ -1,21 +1,21 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { createHash } from 'node:crypto';
-import { describe, it, expect } from 'bun:test';
-import { withRollbackFixture } from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import {
   invalidateResponsesStatefulChainForRetainedRewrite,
   type ContentBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { describe, expect, it } from 'bun:test';
+import { createHash } from 'node:crypto';
+import { withRollbackFixture } from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import {
-  truncateLargestToolResponses,
-  rankToolResponses,
   createTruncationStub,
+  rankToolResponses,
+  truncateLargestToolResponses,
 } from '../toolResultTruncator.js';
 import {
-  toolRankingRow,
-  toolDeps,
   digestRows,
   expectedToolDigest,
+  toolDeps,
+  toolRankingRow,
 } from './tool-truncation-stream-helpers.js';
 
 async function preferAssistantResponses(block: ContentBlock): Promise<number> {
@@ -57,21 +57,26 @@ async function retryDigest(size: number): Promise<string> {
 
 describe('ranked tool replacement transaction', () => {
   it.each([512, 8192])(
-    'restores exact %i-row history and cache anchor after partial admission then permits retry',
+    'restores exact %i-row history and cache anchor after publication rejection then permits retry',
     async (size) => {
       await withRollbackFixture(async (history, recorder) => {
-        await history.addBatch(
-          Array.from({ length: size }, (_, index) => toolRankingRow(index)),
+        await history.detachedValues.replace(
+          (function* () {
+            for (let index = 0; index < size; index++)
+              yield toolRankingRow(index);
+          })(),
         );
         await recorder.flush();
         history.setCacheAnchorSeq(1);
-        recorder.failAdmissionAfter(2);
+        history.once('tokensUpdated', () => {
+          throw new Error('injected journal publication failure');
+        });
         const deps = {
           ...toolDeps(history, async () => 0),
           estimateBlockTokensAsync: preferAssistantResponses,
         };
         await expect(truncateLargestToolResponses(deps, 100)).rejects.toThrow(
-          'injected journal admission failure',
+          'injected journal publication failure',
         );
         expect(await digestRows(history.streamRawHistory())).toBe(
           expectedToolDigest(size, 0),
