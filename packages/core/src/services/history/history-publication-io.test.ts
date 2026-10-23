@@ -1,64 +1,53 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it, vi } from 'bun:test';
-import * as fs from 'node:fs';
-import {
-  withSuffixFixture,
-  suffixRow,
-} from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
-import {
-  exactTokenizer,
-  withRollbackFixture,
-} from './chronology-rollback-test-helpers.js';
-import { HistoryJournalStore } from './historyJournalStore.js';
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
+import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+import { describe, expect, it } from 'bun:test';
+import { withNativeDetachedFixture } from './__tests__/support/detached-contract-fixture.js';
+import type { DetachedIOFaults } from './__tests__/support/detached-io-faults.js';
 
-async function measuredReads(action: () => Promise<void>): Promise<number> {
-  const original = fs.readSync;
-  let bytes = 0;
-  function measure(
-    fd: number,
-    buffer: NodeJS.ArrayBufferView,
-    options?: fs.ReadOptions,
-  ): number;
-  function measure(
-    fd: number,
-    buffer: NodeJS.ArrayBufferView,
-    offset: number,
-    length: number,
-    position: fs.ReadPosition | null,
-  ): number;
-  function measure(
-    fd: number,
-    buffer: NodeJS.ArrayBufferView,
-    offset: number | fs.ReadOptions = {},
-    length?: number,
-    position: fs.ReadPosition | null = null,
-  ): number {
-    let count: number;
-    if (typeof offset === 'number') {
-      if (length === undefined) throw new Error('Missing read length');
-      count = original(fd, buffer, offset, length, position);
-    } else count = original(fd, buffer, offset);
-    bytes += count;
-    return count;
-  }
-  const read = vi.spyOn(fs, 'readSync').mockImplementation(measure);
-  try {
-    await action();
-    const output = process.env.PUBLICATION_IO_OUTPUT;
-    if (output !== undefined)
-      fs.appendFileSync(output, JSON.stringify({ readBytes: bytes }) + '\n');
-    return bytes;
-  } finally {
-    read.mockRestore();
-  }
+import { JournalCorruptionError } from '../../journal/errors.js';
+import { JournalShortReadError } from '../../journal/positionalFile.js';
+import { rejectedValue } from './chronology-rollback-test-helpers.js';
+interface DescriptorWork {
+  readonly reads: number;
+  readonly readBytes: number;
+  readonly writes: number;
+}
+
+async function measuredWork(
+  io: DetachedIOFaults,
+  action: () => Promise<void>,
+): Promise<DescriptorWork> {
+  const reads = io.descriptorReads;
+  const readBytes = io.descriptorReadBytes;
+  const writes = io.descriptorWrites;
+  await action();
+  return {
+    reads: io.descriptorReads - reads,
+    readBytes: io.descriptorReadBytes - readBytes,
+    writes: io.descriptorWrites - writes,
+  };
+}
+
+function expectBoundedWork(work: DescriptorWork, first: DescriptorWork): void {
+  expect(work.readBytes).toBeGreaterThan(64 * 1024);
+  expect(work.reads).toBeGreaterThan(0);
+  expect(work.writes).toBeGreaterThan(0);
+  expect(work.reads).toBeLessThanOrEqual(512 * 16);
+  expect(work.writes).toBeLessThanOrEqual(512 * 4);
+  expect(work.reads).toBeLessThanOrEqual(first.reads + 16);
+  expect(work.writes).toBeLessThanOrEqual(first.writes + 4);
 }
 
 describe('bounded disk publication work', () => {
   it('does not replay the growing durable density prefix for every removal batch', async () => {
-    await withSuffixFixture(512, async (history) => {
-      history.setTokenizerFactory(exactTokenizer());
-      const readBytes = await measuredReads(async () => {
+    await withNativeDetachedFixture(async ({ history, io }) => {
+      await history.detachedValues.replace(
+        (function* () {
+          for (let index = 0; index < 512; index++) yield suffixRow(index);
+        })(),
+      );
+      const removeBatch = async (): Promise<void> => {
         await history.optimizeDensityRows(() => ({
           removalCount: 256,
           replacementCount: 0,
@@ -72,192 +61,169 @@ describe('bounded disk publication work', () => {
           close: (): void => {},
         }));
         await history.waitForCommit();
+      };
+      await history.detachedValues.withRollbackCheckpoint(async (restore) => {
+        const initial = await measuredWork(io, removeBatch);
+        expectBoundedWork(initial, initial);
+        await restore();
+        let first: DescriptorWork | undefined;
+        for (let batch = 0; batch < 4; batch++) {
+          const work = await measuredWork(io, removeBatch);
+          expect(await collectRawHistory(history)).toStrictEqual(
+            Array.from({ length: 256 }, (_, index) => suffixRow(index * 2 + 1)),
+          );
+          first ??= work;
+          expectBoundedWork(work, first);
+          await restore();
+          expect(await collectRawHistory(history)).toStrictEqual(
+            Array.from({ length: 512 }, (_, index) => suffixRow(index)),
+          );
+        }
       });
-      expect(await collectRawHistory(history)).toStrictEqual(
-        Array.from({ length: 256 }, (_, index) => suffixRow(index * 2 + 1)),
-      );
-      expect(readBytes).toBeGreaterThan(64 * 1024);
-      expect(readBytes).toBeLessThan(2 * 1024 * 1024);
     });
   });
 
   it('publishes changed detached values without quadratic singleton-density replay', async () => {
-    await withSuffixFixture(512, async (history) => {
-      history.setTokenizerFactory(exactTokenizer());
-      const readBytes = await measuredReads(async () => {
-        await history.detachedValues.transform(
-          async (source, sink) => {
-            for await (const row of source.streamRows())
-              await sink.appendValue({
-                ...row,
-                metadata: { ...row.metadata, responsesStored: false },
-              });
-          },
-          undefined,
-          { publishTokens: true },
-        );
-        await history.waitForCommit();
+    await withNativeDetachedFixture(async ({ history, io }) => {
+      await history.detachedValues.replace(
+        (function* () {
+          for (let index = 0; index < 512; index++) yield suffixRow(index);
+        })(),
+      );
+      let first: DescriptorWork | undefined;
+      for (let batch = 0; batch < 4; batch++) {
+        const responsesStored = batch % 2 !== 0;
+        const work = await measuredWork(io, async () => {
+          await history.detachedValues.transform(
+            async (source, sink) => {
+              let ordinal = 0;
+              for await (const row of source.streamRows())
+                await sink.appendDerived(ordinal++, {
+                  ...row,
+                  metadata: { ...row.metadata, responsesStored },
+                });
+            },
+            undefined,
+            { publishTokens: true },
+          );
+          await history.waitForCommit();
+        });
         expect(await collectRawHistory(history)).toStrictEqual(
           Array.from({ length: 512 }, (_, index) => {
             const row = suffixRow(index);
             return {
               ...row,
-              metadata: { ...row.metadata, responsesStored: false },
+              metadata: { ...row.metadata, responsesStored },
             };
           }),
         );
+        first ??= work;
+        expectBoundedWork(work, first);
+      }
+    });
+  });
+});
+
+describe('journal publication addressing and cleanup', () => {
+  it('preserves duplicate-marker membership and replacement precedence between batches', async () => {
+    await withNativeDetachedFixture(async ({ history }) => {
+      await history.addBatch([0, 1, 1, 2].map((index) => suffixRow(index)));
+      await history.detachedValues.transform(async (source, sink) => {
+        let ordinal = 0;
+        for await (const row of source.streamRows()) {
+          const at = ordinal++;
+          if (row.metadata?.chronology?.seq === 2) await sink.removeValue(at);
+          else await sink.appendDerived(at, row);
+        }
       });
-      expect(readBytes).toBeGreaterThan(64 * 1024);
-      expect(readBytes).toBeLessThan(2 * 1024 * 1024);
-    });
-  });
-});
-
-describe('publication ordinal lifetime and addressing', () => {
-  it('projects duplicate markers and replacement precedence exactly while admitting content between batches', async () => {
-    await withRollbackFixture(async (_history, recorder) => {
-      const journal = new HistoryJournalStore(recorder);
-      try {
-        for (const index of [0, 1, 1, 2])
-          journal.apply({ kind: 'content', content: suffixRow(index) });
-        await journal.waitForDurable();
-        await journal.withPublicationOrdinals(async () => {
-          journal.apply({
-            kind: 'density',
-            payload: { removedSeqs: [2, 2], replacements: [] },
-          });
-          expect(journal.getLength()).toBe(2);
-          await journal.waitForDurable();
-          journal.apply({ kind: 'content', content: suffixRow(1) });
-          journal.apply({
-            kind: 'density',
-            payload: {
-              removedSeqs: [3],
-              replacements: [{ replacedSeq: 3, replacement: suffixRow(1) }],
-            },
-          });
-          expect(journal.getLength()).toBe(3);
-          await journal.waitForDurable();
-          journal.apply({
-            kind: 'density',
-            payload: { removedSeqs: [2], replacements: [] },
-          });
-          expect(journal.getLength()).toBe(1);
-          await journal.waitForDurable();
-        });
-        expect(
-          journal.withReadRows((cursor) => [...cursor.rows()]),
-        ).toStrictEqual([suffixRow(0)]);
-      } finally {
-        await journal.dispose();
-      }
-    });
-  });
-});
-
-describe('publication ordinal admission and foreign writes', () => {
-  it('discards the ordinal scope after an admission error and permits a correct retry', async () => {
-    await withRollbackFixture(async (_history, recorder) => {
-      const journal = new HistoryJournalStore(recorder);
-      try {
-        journal.apply({ kind: 'content', content: suffixRow(0) });
-        journal.apply({ kind: 'content', content: suffixRow(1) });
-        await journal.waitForDurable();
-        recorder.failAdmissionAfter(0);
-        await expect(
-          journal.withPublicationOrdinals(async () => {
-            journal.apply({
-              kind: 'density',
-              payload: { removedSeqs: [1], replacements: [] },
-            });
-          }),
-        ).rejects.toBe(recorder.failure);
-        expect(journal.getLength()).toBe(2);
-        await journal.withPublicationOrdinals(async () => {
-          journal.apply({
-            kind: 'density',
-            payload: { removedSeqs: [2], replacements: [] },
-          });
-          await journal.waitForDurable();
-        });
-        expect(
-          journal.withReadRows((cursor) => [...cursor.rows()]),
-        ).toStrictEqual([suffixRow(0)]);
-      } finally {
-        await journal.dispose();
-      }
-    });
-  });
-
-  it('rebinds cardinality when an external recorder admission interrupts the local stream', async () => {
-    await withRollbackFixture(async (_history, recorder) => {
-      const journal = new HistoryJournalStore(recorder);
-      try {
-        for (const index of [0, 1, 2])
-          journal.apply({ kind: 'content', content: suffixRow(index) });
-        await journal.waitForDurable();
-        await journal.withPublicationOrdinals(async () => {
-          journal.apply({
-            kind: 'density',
-            payload: { removedSeqs: [2], replacements: [] },
-          });
-          await journal.waitForDurable();
-          await recorder.commit('content', { content: suffixRow(9) });
-          journal.apply({
-            kind: 'density',
-            payload: { removedSeqs: [3], replacements: [] },
-          });
-          await journal.waitForDurable();
-        });
-        expect(journal.getLength()).toBe(2);
-        expect(
-          journal.withReadRows((cursor) => [...cursor.rows()]),
-        ).toStrictEqual([suffixRow(0), suffixRow(9)]);
-      } finally {
-        await journal.dispose();
-      }
-    });
-  });
-});
-
-describe('publication ordinal acquisition failure', () => {
-  it('closes its pinned journal when ordinal scratch acquisition fails', async () => {
-    await withRollbackFixture(async (_history, recorder) => {
-      const journal = new HistoryJournalStore(recorder);
-      const failure = new Error('ordinal acquisition failed');
-      const opened = new Set<number>();
-      const originalOpen = fs.openSync;
-      const originalClose = fs.closeSync;
-      journal.apply({ kind: 'content', content: suffixRow(0) });
-      await journal.waitForDurable();
-      const open = vi
-        .spyOn(fs, 'openSync')
-        .mockImplementation((path, flags, mode) => {
-          if (String(path).includes('llxprt-row-directory-')) throw failure;
-          const fd = originalOpen(path, flags, mode);
-          opened.add(fd);
-          return fd;
-        });
-      const close = vi.spyOn(fs, 'closeSync').mockImplementation((fd) => {
-        originalClose(fd);
-        opened.delete(fd);
+      expect(history.length()).toBe(2);
+      await history.addBatch([suffixRow(1)]);
+      await history.detachedValues.transform(async (source, sink) => {
+        let ordinal = 0;
+        for await (const row of source.streamRows()) {
+          const at = ordinal++;
+          if (row.metadata?.chronology?.seq === 3)
+            await sink.appendDerived(at, suffixRow(1));
+          else await sink.appendDerived(at, row);
+        }
       });
-      try {
-        await expect(
-          journal.withPublicationOrdinals(async () => {
-            journal.apply({
-              kind: 'density',
-              payload: { removedSeqs: [1], replacements: [] },
-            });
-          }),
-        ).rejects.toBe(failure);
-        expect(opened.size).toBe(0);
-      } finally {
-        for (const fd of opened) originalClose(fd);
-        open.mockRestore();
-        close.mockRestore();
-        await journal.dispose();
-      }
+      expect(history.length()).toBe(3);
+      await history.detachedValues.transform(async (source, sink) => {
+        let ordinal = 0;
+        for await (const row of source.streamRows()) {
+          const at = ordinal++;
+          if (row.metadata?.chronology?.seq === 2) await sink.removeValue(at);
+          else await sink.appendDerived(at, row);
+        }
+      });
+      expect(history.length()).toBe(1);
+      expect(await collectRawHistory(history)).toStrictEqual([suffixRow(0)]);
+    });
+  });
+
+  it('restores membership after rejected publication and permits a correct retry', async () => {
+    await withNativeDetachedFixture(async ({ history }) => {
+      await history.addBatch([suffixRow(0), suffixRow(1)]);
+      const failure = new Error('publication observer failed');
+      history.once('tokensUpdated', () => {
+        throw failure;
+      });
+      await expect(history.pop()).rejects.toBe(failure);
+      expect(history.length()).toBe(2);
+      expect(await collectRawHistory(history)).toStrictEqual([
+        suffixRow(0),
+        suffixRow(1),
+      ]);
+      expect(await history.pop()).toStrictEqual(suffixRow(1));
+      expect(await collectRawHistory(history)).toStrictEqual([suffixRow(0)]);
+    });
+  });
+
+  it('rebinds cardinality when another admission interrupts consecutive publications', async () => {
+    await withNativeDetachedFixture(async ({ history }) => {
+      await history.addBatch([suffixRow(0), suffixRow(1), suffixRow(2)]);
+      await history.detachedValues.transform(async (source, sink) => {
+        let ordinal = 0;
+        for await (const row of source.streamRows()) {
+          const at = ordinal++;
+          if (at === 1) await sink.removeValue(at);
+          else await sink.appendDerived(at, row);
+        }
+      });
+      await history.addBatch([suffixRow(9)]);
+      await history.detachedValues.transform(async (source, sink) => {
+        let ordinal = 0;
+        for await (const row of source.streamRows()) {
+          const at = ordinal++;
+          if (row.metadata?.chronology?.seq === 3) await sink.removeValue(at);
+          else await sink.appendDerived(at, row);
+        }
+      });
+      expect(history.length()).toBe(2);
+      expect(await collectRawHistory(history)).toStrictEqual([
+        suffixRow(0),
+        suffixRow(9),
+      ]);
+    });
+  });
+
+  it('releases its pinned version when publication row acquisition fails', async () => {
+    await withNativeDetachedFixture(async ({ history, io, session }) => {
+      await history.addBatch([suffixRow(0)]);
+      io.zeroNext('read');
+      const failure = await rejectedValue(
+        history.detachedValues.transform(async (source, sink) => {
+          for await (const row of source.streamRows())
+            await sink.appendDerived(0, row);
+        }),
+      );
+      expect(failure).toBeInstanceOf(JournalCorruptionError);
+      if (!(failure instanceof JournalCorruptionError))
+        throw new Error('Missing journal acquisition failure');
+      expect(failure.cause).toBeInstanceOf(JournalShortReadError);
+      expect(await collectRawHistory(history)).toStrictEqual([suffixRow(0)]);
+      await session.store.compact();
+      expect(await collectRawHistory(history)).toStrictEqual([suffixRow(0)]);
     });
   });
 });

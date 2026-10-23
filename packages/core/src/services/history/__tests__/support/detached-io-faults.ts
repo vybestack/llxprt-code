@@ -6,6 +6,20 @@ export class DetachedIOFaults {
   private writeStage: 'records' | 'trailer' | undefined;
   reads = 0;
   writes = 0;
+  descriptorReads = 0;
+  descriptorReadBytes = 0;
+  descriptorWrites = 0;
+  descriptorWrittenBytes = 0;
+
+  recordRead(bytes: number): void {
+    this.descriptorReads++;
+    this.descriptorReadBytes += bytes;
+  }
+
+  recordWrite(bytes: number): void {
+    this.descriptorWrites++;
+    this.descriptorWrittenBytes += bytes;
+  }
 
   zeroNext(kind: 'read' | 'write'): void {
     if (kind === 'read') this.readZero = true;

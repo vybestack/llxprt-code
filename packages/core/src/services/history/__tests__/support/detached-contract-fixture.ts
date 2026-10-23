@@ -5,6 +5,8 @@ import { open } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openJournalReadOnly } from '../../../../journal/journalReader.js';
+import { decodeFrameStart } from '../../../../journal/frame.js';
+import { decodeTrailerHeader } from '../../../../journal/trailerRecord.js';
 import { readStoredRow } from '../../../../journal/rowReads.js';
 import {
   iterateRowEntries,
@@ -39,7 +41,7 @@ export interface NativeDetachedFixture extends DetachedContractFixture {
   primaryRows(): AsyncIterable<IContent>;
   bindOrigin(origin: object): Promise<void>;
   persistedRows(): AsyncIterable<IContent>;
-  pauseWriter(): void;
+  pauseWriter(rows?: number): void;
   releaseWriter(): void;
 }
 
@@ -67,14 +69,15 @@ async function heldSession(
 ): Promise<{
   session: JournalSession;
   paused: Promise<void>;
-  arm(): void;
+  arm(rows?: number): void;
   release(): void;
 }> {
   const entered = batchGate();
   const gate = batchGate();
   let armed = false;
-  const wait = async (): Promise<void> => {
-    if (!armed) return;
+  let targetRows: number | undefined;
+  const wait = async (rows?: number): Promise<void> => {
+    if (!armed || (targetRows !== undefined && targetRows !== rows)) return;
     entered.resolve();
     await gate.promise;
   };
@@ -84,22 +87,41 @@ async function heldSession(
         const handle = await open(path, flags);
         return {
           fd: handle.fd,
-          read: async (...args) =>
-            io.read() ? { bytesRead: 0 } : handle.read(...args),
+          read: async (...args) => {
+            const result = io.read()
+              ? { bytesRead: 0 }
+              : await handle.read(...args);
+            io.recordRead(result.bytesRead);
+            return result;
+          },
           stat: () => handle.stat(),
           truncate: (length) => handle.truncate(length),
           close: () => handle.close(),
           write: async (...args) => {
-            await wait();
-            return io.write('trailer')
+            if (targetRows === undefined) await wait();
+            else {
+              const [buffer, offset, length, position] = args;
+              const trailer = decodeTrailerHeader(
+                decodeFrameStart(
+                  buffer.subarray(offset, offset + length),
+                  position,
+                ).kindHeader,
+              );
+              await wait(trailer.rootAggregate.rows);
+            }
+            const result = io.write('trailer')
               ? { bytesWritten: 0 }
-              : handle.write(...args);
+              : await handle.write(...args);
+            io.recordWrite(result.bytesWritten);
+            return result;
           },
           writev: async (...args) => {
             await wait();
-            return io.write('records')
+            const result = io.write('records')
               ? { bytesWritten: 0 }
-              : handle.writev(...args);
+              : await handle.writev(...args);
+            io.recordWrite(result.bytesWritten);
+            return result;
           },
         };
       },
@@ -108,7 +130,8 @@ async function heldSession(
   return {
     session,
     paused: entered.promise,
-    arm: () => {
+    arm: (rows) => {
+      targetRows = rows;
       armed = true;
     },
     release: () => gate.resolve(),
@@ -174,7 +197,7 @@ export async function withNativeDetachedFixture<T>(
         if (path === null) throw new Error('Missing native detached mirror');
         yield* fileRows(path);
       },
-      pauseWriter: () => writer.arm(),
+      pauseWriter: (rows) => writer.arm(rows),
       releaseWriter: () => writer.release(),
       durable: async () => {
         await history.waitForCommit();

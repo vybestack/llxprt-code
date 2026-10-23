@@ -77,7 +77,7 @@ export async function withBatchFixture<T>(
     reads: RowCounters;
     io: DetachedIOFaults;
     session: JournalSession;
-    pauseWriter(): void;
+    pauseWriter(rows?: number): void;
     waitForPausedWrite: Promise<void>;
     releaseWriter(): void;
   }) => Promise<T>,

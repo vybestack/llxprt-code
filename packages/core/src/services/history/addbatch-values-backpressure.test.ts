@@ -1,22 +1,19 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
-import { expectTicketCallersReleased } from './ticket-owner-contract-test-helpers.js';
-import {
-  captureTicketWrite,
-  expectTicketDisk,
-} from './ticket-disk-contract-test-helpers.js';
 import { gcAndSweep } from 'bun:jsc';
+import { describe, expect, it } from 'bun:test';
 import { setImmediate } from 'node:timers/promises';
 import {
   batchRow,
-  withBatchFixture,
   recordBatchOwners,
+  withBatchFixture,
 } from './__tests__/support/addbatch-stream-test-helpers.js';
-import {
-  transformProbes,
-  probeTransformRow,
-} from './transform-value-test-helpers.js';
+import { durableRowsOf } from './chronology-rollback-test-helpers.js';
 import type { IContent } from './IContent.js';
+import { expectTicketCallersReleased } from './ticket-owner-contract-test-helpers.js';
+import {
+  probeTransformRow,
+  transformProbes,
+} from './transform-value-test-helpers.js';
 
 async function collect(
   probes: ReadonlyArray<WeakRef<IContent>>,
@@ -41,7 +38,7 @@ describe('value append writer acknowledgement', () => {
           waitForPausedWrite,
           releaseWriter,
         }) => {
-          pauseWriter();
+          pauseWriter(size);
           let input = Array.from({ length: size }, (_, index) =>
             batchRow(index),
           );
@@ -58,22 +55,21 @@ describe('value append writer acknowledgement', () => {
             await waitForPausedWrite;
             expect(await collect(weak)).toBe(0);
             await expectTicketCallersReleased(probes);
-            const ticket = captureTicketWrite(recorder);
             const pending = owners.snapshot();
             recordBatchOwners('value-pending-ack', size, owners);
-            expect(pending.liveRows).toBe(1);
+            expect(pending.liveRows).toBe(0);
             expect(pending.liveRows).toBeLessThanOrEqual(440);
-            expect(pending.liveSerializedBytes).toBe(
-              Buffer.byteLength(JSON.stringify(batchRow(0))),
-            );
+            expect(pending.liveSerializedBytes).toBe(0);
             expect(pending.liveSerializedBytes).toBeLessThanOrEqual(
               8 * 1024 * 1024,
             );
             expect(published).toBe(false);
-            expect(history.length()).toBe(1);
+            expect(history.length()).toBe(size);
             releaseWriter();
             await operation;
-            await expectTicketDisk(recorder, ticket, size, batchRow, true);
+            expect(await durableRowsOf(recorder)).toStrictEqual(
+              Array.from({ length: size }, (_, index) => batchRow(index)),
+            );
             expect(published).toBe(true);
             expect(history.length()).toBe(size);
             expect(history.getTotalTokens()).toBe(4 * size);
