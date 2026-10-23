@@ -60,7 +60,9 @@ await withSuffixFixture(
       }),
     );
     const before = await settleHeap();
-    const retained = trap ? retainHistoryForMemoryTrap(service) : undefined;
+    const retained = trap
+      ? await retainHistoryForMemoryTrap(service)
+      : undefined;
     const operation = recalculate(service, method);
     await entered.promise;
     try {

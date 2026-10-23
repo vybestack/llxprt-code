@@ -20,7 +20,7 @@ async function settleHeap(): Promise<NodeJS.MemoryUsage> {
 async function* eagerTrap(
   service: HistoryService,
 ): AsyncGenerator<IContent, void, unknown> {
-  const rows = retainHistoryForMemoryTrap(service);
+  const rows = await retainHistoryForMemoryTrap(service);
   yield* rows;
 }
 

@@ -32,10 +32,22 @@ describe('test-only eager memory trap source', () => {
             }
             const owners = ownership.snapshot();
             const reads = counters.snapshot();
-            const rows = retainHistoryForMemoryTrap(service);
+            const rows = await retainHistoryForMemoryTrap(service);
             expect(rows).toHaveLength(size);
-            expect(ownership.snapshot()).toStrictEqual({ ...owners });
-            expect(counters.snapshot()).toStrictEqual({ ...reads });
+            expect(ownership.snapshot()).toStrictEqual({
+              ...owners,
+              acquisitions: owners.acquisitions + size,
+              peakRows: Math.max(owners.peakRows, 1),
+              peakSerializedBytes: Math.max(
+                owners.peakSerializedBytes,
+                Buffer.byteLength(JSON.stringify(suffixRow(size - 1, 2048))),
+              ),
+            });
+            expect(counters.snapshot()).toStrictEqual({
+              ...reads,
+              rowsDecoded: reads.rowsDecoded + size,
+              peakDecodedRows: 1,
+            });
             const first = new WeakRef(rows[0]);
             const last = new WeakRef(rows[size - 1]);
             await service.replaceAll([suffixRow(size)], 'test');
