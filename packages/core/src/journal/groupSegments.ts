@@ -15,6 +15,7 @@ import { labelBetween } from './labels.js';
 import type { RecordAccess } from './recordAccess.js';
 import type { RowEntry } from './rowEntry.js';
 import { countRowsBelow } from './rowTreeQueries.js';
+import { indexedEntriesByLabels } from './row-label-queries.js';
 import { entryAt, type RowTreeRootRef } from './rowTreeReader.js';
 import type { Version } from './version.js';
 
@@ -150,12 +151,15 @@ async function splitExisting(
     .filter(([label]) => label >= first && label <= last)
     .sort(([left], [right]) => compareLabels(left, right));
   let from = segment.from;
-  for (const [label, transform] of inside) {
-    const live = await liveRowIn(access, root, label, {
-      from,
-      to: segment.to,
-    });
-    if (live === undefined) continue;
+  let index = 0;
+  for await (const live of indexedEntriesByLabels(
+    access,
+    root,
+    inside.map(([label]) => label),
+  )) {
+    const [label, transform] = inside[index++];
+    if (live === undefined || live.ordinal < from || live.ordinal >= segment.to)
+      continue;
     pending.delete(label);
     if (live.ordinal > from) {
       out.push({ ...segment, from, to: live.ordinal });

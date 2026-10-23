@@ -8,7 +8,8 @@ import type { JournalStore } from './journalStore.js';
 import { acceptedRows } from './mirrorSeed.js';
 import { accepts } from './ownerRules.js';
 import type { RowEntry } from './rowEntry.js';
-import { countRowsBelow, entryByLabel } from './rowTreeQueries.js';
+import { countRowsBelow } from './rowTreeQueries.js';
+import { entriesByLabels } from './row-label-queries.js';
 import { entryAt, iterateRowEntries } from './rowTreeReader.js';
 import type { Version } from './version.js';
 
@@ -167,14 +168,21 @@ async function labelChanges(
   const afterRoot = rootRef(delta.after);
   const dropped: bigint[] = [];
   const copied: SourceRow[] = [];
-  for (const label of delta.touched) {
-    const was = await entryByLabel(delta.access, beforeRoot, label);
-    const now = await entryByLabel(delta.access, afterRoot, label);
-    const change = changeFor(delta, owner, label, was, now);
-    if (change.drop) dropped.push(label);
-    if (change.copy !== undefined) {
-      copied.push({ source: delta.access, entry: change.copy });
+  const before = entriesByLabels(delta.access, beforeRoot, delta.touched);
+  const after = entriesByLabels(delta.access, afterRoot, delta.touched);
+  try {
+    for (const label of delta.touched) {
+      const was = await before.next();
+      const now = await after.next();
+      const change = changeFor(delta, owner, label, was.value, now.value);
+      if (change.drop) dropped.push(label);
+      if (change.copy !== undefined) {
+        copied.push({ source: delta.access, entry: change.copy });
+      }
     }
+  } finally {
+    await before.return(undefined);
+    await after.return(undefined);
   }
   return { dropped, copied };
 }
