@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { mkdir, mkdtemp } from 'node:fs/promises';
+import type { LocalMediaStore } from '../../../../storage/local-media-store.js';
 import { join, resolve } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import {
@@ -180,9 +181,10 @@ export async function atomicRig(name: string): Promise<AtomicRig> {
 
 export async function reopenedRows(
   recorder: AtomicRecorder,
+  mediaStore?: LocalMediaStore,
 ): Promise<PersistedMutationRow[]> {
   const recording = await JournalRecordingService.open(
-    { ...recorder.config, journal: undefined },
+    { ...recorder.config, journal: undefined, mediaStore },
     fileOf(recorder.recording),
   );
   const history = new HistoryService({});

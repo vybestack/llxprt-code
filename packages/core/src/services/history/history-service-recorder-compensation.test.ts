@@ -159,8 +159,14 @@ describe('HistoryService replacement compensation with real primary and mirror',
         expect(await media.hasReservations(candidateMedia.contentId)).toBe(
           false,
         );
+        const releasedCandidate = stage !== 'tokenizer' && stage !== 'prepare';
+        const session = await primary.recording.session();
+        for (const key of ['rel:head', 'rel:tail'])
+          expect(await session.store.getState(key)).toStrictEqual(
+            releasedCandidate ? Buffer.from('1') : undefined,
+          );
         expect(await diskVersion(fileOf(primary.recording))).toBe(
-          before.version + (afterAck ? 2 : 0),
+          before.version + (afterAck ? 2 : 0) + (releasedCandidate ? 2 : 0),
         );
         await history.addBatch([atomicRow('D')]);
         await rig.flush();
@@ -173,8 +179,8 @@ describe('HistoryService replacement compensation with real primary and mirror',
           continued,
         );
         await rig.close();
-        expect(await reopenedRows(primary)).toStrictEqual(continued);
-        expect(await reopenedRows(mirror)).toStrictEqual(continued);
+        expect(await reopenedRows(primary, media)).toStrictEqual(continued);
+        expect(await reopenedRows(mirror, media)).toStrictEqual(continued);
         expect(await media.hasReservations(previousMedia.contentId)).toBe(
           false,
         );
