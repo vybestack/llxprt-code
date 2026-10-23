@@ -46,7 +46,9 @@ import {
   type IContent,
   type JournalReadCounters,
 } from '@vybestack/llxprt-code-core';
-import { ProjectedJournalCursor as JournalCursor } from './projected-journal-cursor.js';
+import { ProjectedJournalCursor } from './projected-journal-cursor.js';
+import { NativeJournalCursor } from './native-journal-cursor.js';
+type JournalCursor = ProjectedJournalCursor | NativeJournalCursor;
 import type { DisplayJournalEntry as JournalEntry } from './journal-page-file.js';
 import type { HistoryItem } from '../../types.js';
 
@@ -830,11 +832,15 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
     if (this.cursor !== null) return this.cursor;
     if (this.openPromise === null || this.openGeneration !== gen) {
       this.openGeneration = gen;
-      this.openPromise = JournalCursor.open(this.filePath, {
+      const options = {
         chunkBytes: this.chunkBytes,
         counters: this.counters,
         signal: this.controller.signal,
-      }).then(
+      };
+      const opening = this.filePath.endsWith('.llxj')
+        ? NativeJournalCursor.open(this.filePath, options, this.pageRows)
+        : ProjectedJournalCursor.open(this.filePath, options);
+      this.openPromise = opening.then(
         async (cursor): Promise<JournalCursor | null> => {
           if (this.closed || gen !== this.generation) {
             await cursor.close();
