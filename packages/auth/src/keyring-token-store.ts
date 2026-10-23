@@ -256,7 +256,7 @@ export class KeyringTokenStore implements TokenStore {
       try {
         await fs.link(temporaryPath, targetPath);
       } catch (error) {
-        if (isErrnoCode(error, 'EEXIST')) {
+        if (isErrnoCode(error, 'EEXIST') || isWindowsLockContention(error)) {
           return false;
         }
         throw error;
@@ -317,7 +317,7 @@ export class KeyringTokenStore implements TokenStore {
     try {
       existingContent = await fs.readFile(lockPath, 'utf8');
     } catch (error) {
-      if (isErrnoCode(error, 'ENOENT')) {
+      if (isErrnoCode(error, 'ENOENT') || isWindowsLockContention(error)) {
         return false;
       }
       throw error;
@@ -800,6 +800,20 @@ function errorMessageOf(error: unknown): string {
 
 function isErrnoCode(error: unknown, expected: string): boolean {
   return errnoCodeOf(error) === expected;
+}
+
+/**
+ * On Windows a lock file that another process just unlinked stays in a
+ * delete-pending state: opening or hard-linking it fails with EPERM/EBUSY/
+ * EACCES instead of ENOENT/EEXIST. For a contender that means "the owner is
+ * releasing right now", so the acquire loop must poll again, not throw.
+ */
+function isWindowsLockContention(error: unknown): boolean {
+  const code = errnoCodeOf(error);
+  return (
+    process.platform === 'win32' &&
+    (code === 'EPERM' || code === 'EBUSY' || code === 'EACCES')
+  );
 }
 
 function errnoCodeOf(error: unknown): string | undefined {

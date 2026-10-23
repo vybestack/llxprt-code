@@ -417,6 +417,27 @@ describe('KeyringTokenStore advisory lock behavior', () => {
     }
   });
 
+  it('keeps polling when Windows reports a delete-pending lock as EPERM', async () => {
+    const store = createStore();
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform');
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    const link = vi
+      .spyOn(fs, 'link')
+      .mockRejectedValueOnce(
+        Object.assign(new Error('operation not permitted'), { code: 'EPERM' }),
+      );
+
+    try {
+      await expect(
+        store.acquireRefreshLock('codex', { waitMs: 1000 }),
+      ).resolves.toBe(true);
+      await store.releaseRefreshLock('codex');
+    } finally {
+      link.mockRestore();
+      if (platform) Object.defineProperty(process, 'platform', platform);
+    }
+  });
+
   describe.skipIf(!['darwin', 'linux', 'freebsd'].includes(process.platform))(
     'OS-observed subprocess owner identity',
     () => {
