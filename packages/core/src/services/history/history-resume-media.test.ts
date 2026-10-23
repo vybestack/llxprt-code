@@ -9,10 +9,13 @@ import type { IContent, MediaReferenceBlock } from './IContent.js';
 import { LocalMediaStore } from '../../storage/local-media-store.js';
 import { MediaAdmissionService } from '../../storage/media-admission-service.js';
 import { HistoryMediaOwnership } from '../../storage/history-media-ownership.js';
-import { SessionRecordingService } from '../../recording/SessionRecordingService.js';
 import {
-  resumeJsonlSession,
-  type JsonlResumeResult as ResumeResult,
+  createRecorderForTest,
+  recordRowsForTest,
+} from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
+import {
+  resumeSession,
+  type ResumeResult,
 } from '../../recording/resumeSession.js';
 
 let root: string;
@@ -55,7 +58,7 @@ describe('resume media lifecycle', () => {
     oldReference = reference;
     await admission.releaseContents(old, context);
     await history.replaceBatch(old);
-    const recording = new SessionRecordingService({
+    const recording = createRecorderForTest({
       sessionId: 'next',
       projectHash: 'project',
       chatsDir: root,
@@ -63,13 +66,15 @@ describe('resume media lifecycle', () => {
       provider: 'test',
       model: 'test',
     });
-    recording.recordContent({
-      speaker: 'human',
-      blocks: [{ type: 'text', text: 'next' }],
-    });
+    await recordRowsForTest(recording, [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'next' }],
+      },
+    ]);
     await recording.flush();
     await recording.dispose();
-    const result = await resumeJsonlSession({
+    const result = await resumeSession({
       continueRef: 'next',
       chatsDir: root,
       projectHash: 'project',
@@ -100,7 +105,7 @@ describe('resume media lifecycle', () => {
   );
 
   it(
-    'keeps inline-media projections on adopted reads without releasing an existing live owner',
+    'keeps admitted media references on adopted reads without releasing an existing live owner',
     verifyKeepsInlineMediaProjectionsOnAdoptedReadsWithoutReleasingAnExistingLive,
   );
 
@@ -137,7 +142,7 @@ async function verifyReleasesThePreviousRealReservationOnlyAfterASuccessfulSwitc
 
 async function verifyKeepsInlineMediaProjectionsOnAdoptedReadsWithoutReleasingAnExistingLive(): Promise<void> {
   await resumed.recording.dispose();
-  const recording = new SessionRecordingService({
+  const recording = createRecorderForTest({
     sessionId: 'inline',
     projectHash: 'project',
     chatsDir: root,
@@ -145,10 +150,18 @@ async function verifyKeepsInlineMediaProjectionsOnAdoptedReadsWithoutReleasingAn
     provider: 'test',
     model: 'test',
   });
-  recording.recordContent(inline);
+  await recordRowsForTest(recording, [
+    {
+      speaker: 'human',
+      blocks: [oldReference],
+      metadata: {
+        chronology: { seq: 1, userTurn: 1, step: 1, recordedAt: 1 },
+      },
+    },
+  ]);
   await recording.flush();
   await recording.dispose();
-  const result = await resumeJsonlSession({
+  const result = await resumeSession({
     continueRef: 'inline',
     chatsDir: root,
     projectHash: 'project',
@@ -188,7 +201,7 @@ async function verifyReportsCommittedRetirementFailureAndLeavesOwnershipAvailabl
       resumed.boot,
     );
     expect(warnings.join(' ')).toContain('release fault');
-    expect(history.journalPath()).toBe(resumed.boot.filePath);
+    expect(history.journalPath()).toBe(resumed.recording.getFilePath());
     expect(await store.hasReservations(oldReference.contentId)).toBe(true);
   } finally {
     release.mockRestore();

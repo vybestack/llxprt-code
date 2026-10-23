@@ -31,10 +31,10 @@ describe('indexed clear chronology boundaries', () => {
       name: 'unmarked first',
       size: 3,
       makeRow: unmarkedFirst,
-      start: 0,
+      start: 1,
       end: 12,
     },
-    { name: 'legacy', size: 3, makeRow: legacyRow, start: 0, end: 0 },
+    { name: 'unstamped input', size: 3, makeRow: legacyRow, start: 1, end: 3 },
     { name: 'empty', size: 0, makeRow: markedRow, start: 0, end: 0 },
   ]) {
     it(`clears ${fixture.name} rows without decoding bodies and preserves the removed span`, async () => {

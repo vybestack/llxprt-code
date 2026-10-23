@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it, spyOn } from 'bun:test';
-import { HistoryJournalStore } from './historyJournalStore.js';
+import { describe, expect, it } from 'bun:test';
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 
@@ -9,26 +9,23 @@ function row(speaker: 'human' | 'ai', text: string): IContent {
 }
 
 describe('detached history API publishes through the store port', () => {
-  it('hands an append and a replacement to the store, which publishes them', async () => {
-    const publish = spyOn(HistoryJournalStore.prototype, 'publishDetached');
+  it('appends without losing prior rows and replaces the committed history', async () => {
+    const history = new HistoryService();
     try {
-      const history = new HistoryService({});
-
       await history.detachedValues.append([row('human', 'one')]);
+      expect(
+        (await collectRawHistory(history)).map((entry) => entry.blocks),
+      ).toStrictEqual([row('human', 'one').blocks]);
+      await history.detachedValues.append([row('ai', 'reply')]);
+      expect(
+        (await collectRawHistory(history)).map((entry) => entry.blocks),
+      ).toStrictEqual([row('human', 'one').blocks, row('ai', 'reply').blocks]);
       await history.detachedValues.replace([row('human', 'two')]);
-
-      expect(publish).toHaveBeenCalledTimes(2);
-      expect(publish.mock.calls[0][0].append).toBe(true);
-      expect(publish.mock.calls[1][0].append).toBe(false);
-      const texts: string[] = [];
-      for await (const content of history.streamRawHistory()) {
-        texts.push(
-          content.blocks.map((b) => (b.type === 'text' ? b.text : '')).join(''),
-        );
-      }
-      expect(texts).toStrictEqual(['two']);
+      expect(
+        (await collectRawHistory(history)).map((entry) => entry.blocks),
+      ).toStrictEqual([row('human', 'two').blocks]);
     } finally {
-      publish.mockRestore();
+      await history.dispose();
     }
   });
 });

@@ -61,6 +61,8 @@ describe('hypothetical token estimate input lifetime', () => {
     await withSuffixFixture(
       512,
       async (service, ownership, counters) => {
+        const committedTokens = service.getTotalTokens();
+        expect(committedTokens).toBeGreaterThan(0);
         async function* failingRows(): AsyncGenerator<IContent, void, unknown> {
           for await (const row of service.streamRawHistory()) {
             yield row;
@@ -73,7 +75,7 @@ describe('hypothetical token estimate input lifetime', () => {
         ).rejects.toThrow('row source failed');
         expect(counters.snapshot().rowsDecoded).toBe(1);
         expect(ownership.snapshot().liveRows).toBe(0);
-        expect(service.getTotalTokens()).toBe(0);
+        expect(service.getTotalTokens()).toBe(committedTokens);
       },
       2048,
       accountingRow,

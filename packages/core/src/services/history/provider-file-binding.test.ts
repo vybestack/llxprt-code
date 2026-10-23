@@ -5,13 +5,20 @@
  */
 
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
-import { describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import type {
   MediaReferenceBlock,
   ProviderFileReferenceMetadata,
 } from './IContent.js';
 import { createHistoryProviderFileBindingStore } from './provider-file-binding.js';
+
+const services: HistoryService[] = [];
+function createService(): HistoryService {
+  const history = new HistoryService();
+  services.push(history);
+  return history;
+}
 
 const CONTENT_ID =
   'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -59,6 +66,9 @@ const PROVIDER_FILE: ProviderFileReferenceMetadata = {
 };
 
 describe('HistoryService provider file binding', () => {
+  afterEach(async () => {
+    for (const service of services.splice(0)) await service.dispose();
+  });
   it('persists stable provider file metadata on every matching media reference', async () => {
     const { actual, expected0 } = await observeDensityCase1();
     expect(actual).toStrictEqual(expected0);
@@ -86,7 +96,7 @@ describe('HistoryService provider file binding', () => {
 });
 
 async function observeDensityCase1() {
-  const history = new HistoryService();
+  const history = createService();
   history.add({
     speaker: 'human',
     blocks: [mediaReference(), { type: 'text', text: 'read it' }],
@@ -111,7 +121,7 @@ async function observeDensityCase1() {
 }
 
 async function observeDensityCase2() {
-  const history = new HistoryService();
+  const history = createService();
   history.add({ speaker: 'human', blocks: [mediaReference()] });
 
   await createHistoryProviderFileBindingStore(history).bind(
@@ -138,7 +148,7 @@ async function observeDensityCase2() {
 }
 
 async function observeDensityCase3() {
-  const history = new HistoryService();
+  const history = createService();
   history.add({ speaker: 'human', blocks: [mediaReference()] });
   const bindings = createHistoryProviderFileBindingStore(history);
   await bindings.bind(CONTENT_ID, PROVIDER_FILE);
@@ -163,7 +173,7 @@ async function observeDensityCase3() {
 }
 
 async function observeDensityCase4() {
-  const history = new HistoryService();
+  const history = createService();
   const mediaContent = {
     speaker: 'human' as const,
     blocks: [mediaReference()],
@@ -208,9 +218,7 @@ async function observeDensityCase4() {
 }
 
 async function observeDensityCase5() {
-  // Frozen retained objects are the old store's layout; the journal store
-  // decodes a copy per read (provider-file-binding.journal.test.ts).
-  const history = new HistoryService({});
+  const history = createService();
   history.add({ speaker: 'human', blocks: [mediaReference()] });
   const callerOwned = { ...PROVIDER_FILE };
 
@@ -230,21 +238,20 @@ async function observeDensityCase5() {
       ? block.providerFiles?.[0]
       : undefined;
 
+  if (retained === undefined) throw new Error('Missing persisted binding');
+  const firstRead = { fileId: retained.fileId, expiresAt: retained.expiresAt };
+  Object.assign(retained, { fileId: 'reader-mutated', expiresAt: 100_000 });
+  const reread = (await collectRawHistory(history))[0].blocks[0];
+  if (reread.type !== 'media' || reread.encoding !== 'reference')
+    throw new Error('Missing persisted media reference');
   return {
     actual: {
-      fileId: retained?.fileId,
-      expiresAt: retained?.expiresAt,
-      metadataFrozen: Object.isFrozen(retained),
-      collectionFrozen:
-        block?.type === 'media' && block.encoding === 'reference'
-          ? Object.isFrozen(block.providerFiles)
-          : false,
+      firstRead,
+      reread: reread.providerFiles,
     },
     expected0: {
-      fileId: 'file-stable',
-      expiresAt: 61_000,
-      metadataFrozen: true,
-      collectionFrozen: true,
+      firstRead: { fileId: 'file-stable', expiresAt: 61_000 },
+      reread: [PROVIDER_FILE],
     },
   };
 }

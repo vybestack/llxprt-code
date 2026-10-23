@@ -1,7 +1,7 @@
 import { withCuratedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
-import { expect } from 'bun:test';
+import { afterEach, expect } from 'bun:test';
 import { isDeepStrictEqual } from 'node:util';
 import * as fc from 'fast-check';
 import { HistoryService } from '../HistoryService.js';
@@ -15,6 +15,19 @@ import type {
   DensityResultMetadata,
 } from '../../../core/compression/types.js';
 import { CompressionStrategyError } from '../../../core/compression/types.js';
+
+const densityServices: HistoryService[] = [];
+
+function createDensityService(): HistoryService {
+  const service = new HistoryService();
+  densityServices.push(service);
+  return service;
+}
+
+afterEach(async () => {
+  for (const service of densityServices.splice(0)) await service.dispose();
+});
+
 export function makeEntry(
   speaker: IContent['speaker'],
   text: string,
@@ -103,7 +116,7 @@ export async function observeReplacementCase(
   historySize: number,
   rawReplacements: readonly number[],
 ): Promise<readonly ReplacementObservation[]> {
-  const service = new HistoryService();
+  const service = createDensityService();
   seedHistory(service, historySize);
   await service.waitForTokenUpdates();
   const replacements = validReplacementMap(
@@ -127,7 +140,7 @@ export async function conflictApplications(
   conflictIndex: number,
 ): Promise<ReadonlyArray<Promise<void>>> {
   if (conflictIndex >= historySize) return [];
-  const service = new HistoryService();
+  const service = createDensityService();
   seedHistory(service, historySize);
   await service.waitForTokenUpdates();
   const result = makeDensityResult(
@@ -408,7 +421,7 @@ export async function observeDensityCase18() {
         maxLength: 5,
       }),
       async (histSize, rawRemovals) => {
-        const svc = new HistoryService();
+        const svc = createDensityService();
         seedHistory(svc, histSize);
         await svc.waitForTokenUpdates();
 
@@ -442,7 +455,7 @@ export async function observeDensityCase19() {
         maxLength: 3,
       }),
       async (histSize, rawRemovals, rawReplacements) => {
-        const svc = new HistoryService();
+        const svc = createDensityService();
         const entries = seedHistory(svc, histSize);
         await svc.waitForTokenUpdates();
 
@@ -521,7 +534,7 @@ export async function observeDensityCase21() {
 export async function observeDensityCase22() {
   return {
     property0: fc.asyncProperty(fc.integer({ min: 0, max: 10 }), async (n) => {
-      const svc = new HistoryService();
+      const svc = createDensityService();
       for (let i = 0; i < n; i++) {
         svc.add(makeEntry('human', `msg-${i}`));
       }
@@ -537,7 +550,7 @@ export async function observeDensityCase23() {
       fc.integer({ min: 1, max: 8 }),
       fc.integer({ min: 0, max: 4 }),
       async (histSize, offset) => {
-        const svc = new HistoryService();
+        const svc = createDensityService();
         seedHistory(svc, histSize);
         await svc.waitForTokenUpdates();
 
@@ -562,7 +575,7 @@ export async function observeDensityCase24() {
         maxLength: 4,
       }),
       async (histSize, rawRemovals) => {
-        const svc = new HistoryService();
+        const svc = createDensityService();
         seedHistory(svc, histSize);
         await svc.waitForTokenUpdates();
 
@@ -581,7 +594,7 @@ export async function observeDensityCase24() {
   };
 }
 export function initializeDensityService(): void {
-  densityFixture1_service = new HistoryService();
+  densityFixture1_service = createDensityService();
 }
 
 interface ReplacementObservation {

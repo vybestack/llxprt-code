@@ -13,10 +13,20 @@
  */
 
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
-import { describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import { computeHistorySizeBreakdown } from './contentSize.js';
 import type { IContent } from './IContent.js';
+
+const services: HistoryService[] = [];
+async function disposeServices(): Promise<void> {
+  for (const service of services.splice(0)) await service.dispose();
+}
+function createService(): HistoryService {
+  const service = new HistoryService();
+  services.push(service);
+  return service;
+}
 
 async function sizeOf(service: HistoryService) {
   return computeHistorySizeBreakdown(await collectRawHistory(service));
@@ -45,6 +55,7 @@ function densityFixture1_asContent(raw: unknown): IContent {
 }
 
 describe('retained-history accounting — item metadata', () => {
+  afterEach(disposeServices);
   it('counts large ContentMetadata (usage, providerMetadata) retained on items', async () => {
     const { actual, expected0 } = await observeDensityCase2();
     expect(actual).toBeGreaterThan(expected0);
@@ -101,6 +112,7 @@ describe('retained-history accounting — shared objects across items', () => {
 });
 
 describe('retained-history accounting — attribution consistency', () => {
+  afterEach(disposeServices);
   it('per-block-type and per-tool attributions never exceed the total', async () => {
     const { actual, expected0 } = await observeDensityCase13();
     expect(actual).toBeLessThanOrEqual(expected0);
@@ -131,6 +143,7 @@ describe('retained-history accounting — null runtime strings from external JSO
 });
 
 describe('retained-history accounting — bounded top-N working storage', () => {
+  afterEach(disposeServices);
   it('ranks only the heaviest topN responses regardless of history volume', async () => {
     const { actual, expected0 } = await observeDensityCase20();
     expect(actual).toBeLessThanOrEqual(expected0);
@@ -142,7 +155,7 @@ describe('retained-history accounting — bounded top-N working storage', () => 
 });
 
 async function observeDensityCase2() {
-  const service = new HistoryService();
+  const service = createService();
   const item: IContent = {
     speaker: 'ai',
     blocks: [{ type: 'text', text: 'answer' }],
@@ -169,7 +182,7 @@ async function observeDensityCase2() {
 }
 
 async function observeDensityCase3() {
-  const service = new HistoryService();
+  const service = createService();
   for (let i = 0; i < 5; i++) {
     service.add({
       speaker: 'ai',
@@ -450,7 +463,7 @@ function observeDensityCase12() {
 }
 
 async function observeDensityCase13() {
-  const service = new HistoryService();
+  const service = createService();
   service.add({
     speaker: 'human',
     blocks: [{ type: 'text', text: 'q'.repeat(500) }],
@@ -500,7 +513,7 @@ async function observeDensityCase13() {
 }
 
 async function observeDensityCase14() {
-  const service = new HistoryService();
+  const service = createService();
   const first = (await sizeOf(service)).totalBytes;
   for (let i = 0; i < 10; i++) {
     service.add({
@@ -560,7 +573,7 @@ function observeDensityCase19() {
 }
 
 async function observeDensityCase20() {
-  const service = new HistoryService();
+  const service = createService();
   // 500 tool responses of varied size — far beyond the default top-10 cut.
   for (let i = 0; i < 500; i++) {
     service.add({
@@ -595,7 +608,7 @@ async function observeDensityCase20() {
 }
 
 async function observeDensityCase21() {
-  const service = new HistoryService();
+  const service = createService();
   service.add({
     speaker: 'tool',
     blocks: [
