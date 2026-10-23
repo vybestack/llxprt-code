@@ -77,23 +77,32 @@ export async function enforceProviderSourceSelectionForTest(
       sourcePendingMembership(snapshot),
     );
   };
-  const open = (): Promise<PendingAwareRequestSelection> =>
-    openSelection(realOpen);
+  const opened = new Set<ProviderRequestSelection>();
+  const open = async (): Promise<PendingAwareRequestSelection> => {
+    const selection = await openSelection(realOpen);
+    opened.add(selection);
+    return selection;
+  };
   const pending: SourcePendingRows = {
     read: async () => pendingRows,
     replace: (rows) => {
       pendingRows = rows;
     },
   };
-  const source = await open();
-  const enforced = await handler.enforceProviderSource(
-    provider ?? ({ name: 'test-provider' } as unknown as RuntimeProvider),
-    promptId,
-    source,
-    estimateSelection,
-    open,
-    pendingRecoverable,
-    pending,
-  );
-  return collectSelection(enforced);
+  try {
+    const source = await open();
+    const enforced = await handler.enforceProviderSource(
+      provider ?? ({ name: 'test-provider' } as unknown as RuntimeProvider),
+      promptId,
+      source,
+      estimateSelection,
+      open,
+      pendingRecoverable,
+      pending,
+    );
+    opened.add(enforced);
+    return await collectSelection(enforced);
+  } finally {
+    for (const selection of opened) await selection.close();
+  }
 }
