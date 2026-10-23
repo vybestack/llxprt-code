@@ -287,13 +287,19 @@ async function planKimiChat(
   system: string,
   signal: AbortSignal | undefined,
   rowIds: NativeRowIds,
+  rowInput: ChatRowInput,
   count?: ChatUnitTokenMeasurer,
 ): Promise<StoredChatMessagePlan> {
-  const fold = await foldChatUnits(rows.openReader(signal), settings, {
-    rowIds,
-    count,
-    lastThinkingOnly: selected === 2,
-  });
+  const source = rows.openReader(signal);
+  const fold = await foldChatUnits(
+    rowInput.mediaStage?.(source) ?? source,
+    settings,
+    {
+      rowIds,
+      count,
+      lastThinkingOnly: selected === 2,
+    },
+  );
   return kimiChatPlan(fold, settings, selected, system);
 }
 
@@ -302,6 +308,7 @@ function kimiChatPlanner(
   rows: ProviderRequestRows,
   settings: RowFormatSettings,
   signal: AbortSignal | undefined,
+  rowInput: ChatRowInput,
 ): ChatPlanner {
   return async (selected, system) => {
     const { rowIds, release } = await acquireKimiRowIds(native);
@@ -314,6 +321,7 @@ function kimiChatPlanner(
           system,
           signal,
           rowIds,
+          rowInput,
         ),
         rowIds,
         releaseMapping: release,
@@ -331,6 +339,7 @@ function kimiStreamedPlan(
   selected: 0 | 1 | 2,
   system: string,
   signal: AbortSignal | undefined,
+  rowInput: ChatRowInput,
 ): StreamedChatPlan {
   return async (settings, count) => {
     const { rowIds, release } = await acquireKimiRowIds(native);
@@ -342,6 +351,7 @@ function kimiStreamedPlan(
         system,
         signal,
         rowIds,
+        rowInput,
         count,
       );
     } finally {
@@ -571,6 +581,7 @@ async function chatPlanning(
   rows: ProviderRequestRows,
   options: NormalizedGenerateChatOptions,
   settings: RowFormatSettings,
+  rowInput: ChatRowInput,
   request: {
     readonly activeProvider: string;
     readonly signal: AbortSignal | undefined;
@@ -579,7 +590,13 @@ async function chatPlanning(
   const toolFormat = settings.chat?.toolFormat;
   if (toolFormat === 'kimi')
     return {
-      planner: kimiChatPlanner(native, rows, settings, request.signal),
+      planner: kimiChatPlanner(
+        native,
+        rows,
+        settings,
+        request.signal,
+        rowInput,
+      ),
       bodySettings: settings,
       streamedPlan: kimiStreamedPlan(
         native,
@@ -587,6 +604,7 @@ async function chatPlanning(
         selectedVariant(reasoningStrip(options)),
         options.systemInstruction ?? '',
         request.signal,
+        rowInput,
       ),
     };
   const measured =
@@ -630,10 +648,6 @@ export async function prepareNativePlainRequest(
   const native = rows.native;
   if (native === undefined)
     throw new Error('Native Chat requires indexed request rows');
-  if ((rowInput.uploadedMedia ?? 0) > 0)
-    throw new Error(
-      'Kimi provider-file uploads are not supported on the journal history backend',
-    );
   const settings = nativeChatSettings(options, toolFormat);
   const signal = getRequestSignal(options);
   const system = options.systemInstruction ?? '';
@@ -642,6 +656,7 @@ export async function prepareNativePlainRequest(
     rows,
     options,
     settings,
+    rowInput,
     { activeProvider: providerName, signal },
   );
   const body = await prepareNativeChatBody(
