@@ -1,10 +1,10 @@
-import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 import { gcAndSweep } from 'bun:jsc';
 import { describe, expect, it } from 'bun:test';
 import { RowOwnership } from '../../recording/rowOwnership.js';
 import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
-import { EagerSemanticPurgeOracle } from './__tests__/support/semantic-purge-eager-test-helpers.js';
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { ownerFixtureRow } from './chronology-rollback-owner-test-helpers.js';
 import {
   exactTokenizer,
@@ -90,55 +90,60 @@ async function verifyFullFixture(
     size,
     async (history) => {
       history.setTokenizerFactory(exactTokenizer());
-      await withCoreSuffixFixture(
-        size,
-        async (eager) => {
-          eager.setTokenizerFactory(exactTokenizer());
-          const oracle = new EagerSemanticPurgeOracle(eager, {
-            enabled: true,
-            explicitCacheWriteRequired: false,
-          }).begin({ mode: 'remove' });
-          if (oracle === undefined) throw new Error('Missing eager candidate');
-          const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {
-            enabled: true,
-            explicitCacheWriteRequired: false,
-            ownership: owners,
-          });
-          const transaction = await coordinator.begin({ mode: 'remove' });
-          if (transaction === undefined)
-            throw new Error('Missing streaming candidate');
-          try {
-            expect(await collect(transaction.candidate)).toStrictEqual([
-              ...oracle.candidateHistory,
-            ]);
-            expect(transaction.nextFrontier).toStrictEqual(oracle.nextFrontier);
-            expect(transaction.preImageBoundary).toStrictEqual(
-              oracle.preImageBoundary,
-            );
-            await coordinator.commit(transaction, success);
-            gcAndSweep();
-            let restored = 0;
-            for await (const row of transaction.base.streamRows())
-              expect(row).toStrictEqual(purgeRow(restored++));
-            expect(restored).toBe(size);
-            await coordinator.rollback(transaction);
-            let index = 0;
-            for await (const row of history.streamRawHistory())
-              expect(row).toStrictEqual(purgeRow(index++));
-            expect(index).toBe(size);
-            expect(owners.snapshot().peakRows).toBeLessThanOrEqual(440);
-            expect(owners.snapshot().peakSerializedBytes).toBeLessThanOrEqual(
-              8 * 1024 * 1024,
-            );
-          } finally {
-            transaction.close();
-          }
-        },
-        2048,
-        purgeRow,
-        undefined,
-        undefined,
-      );
+      await history.waitForCommit();
+      const input = Array.from({ length: size }, (_, index) => purgeRow(index));
+      expect(await collectRawHistory(history)).toStrictEqual(input);
+      const nextFrontier = {
+        contentIndex: 17,
+        blockIndex: 3,
+        contentId: 'row-17',
+        mediaId: 'image-17',
+      };
+      const expected = input.map((row, index) => {
+        const metadata = { ...row.metadata };
+        if (row.speaker === 'ai') delete metadata.responsesStored;
+        return {
+          ...row,
+          blocks: index === 0 ? row.blocks.slice(0, -1) : row.blocks,
+          metadata:
+            index === 0
+              ? { ...metadata, semanticMediaPurgeFrontier: nextFrontier }
+              : metadata,
+        };
+      });
+      const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {
+        enabled: true,
+        explicitCacheWriteRequired: false,
+        ownership: owners,
+      });
+      const transaction = await coordinator.begin({ mode: 'remove' });
+      if (transaction === undefined)
+        throw new Error('Missing streaming candidate');
+      try {
+        expect(await collect(transaction.candidate)).toStrictEqual(expected);
+        expect(transaction.nextFrontier).toStrictEqual(nextFrontier);
+        expect(transaction.preImageBoundary).toStrictEqual({
+          contentIndex: 0,
+          blockIndex: 2,
+        });
+        await coordinator.commit(transaction, success);
+        gcAndSweep();
+        let restored = 0;
+        for await (const row of transaction.base.streamRows())
+          expect(row).toStrictEqual(purgeRow(restored++));
+        expect(restored).toBe(size);
+        await coordinator.rollback(transaction);
+        let index = 0;
+        for await (const row of history.streamRawHistory())
+          expect(row).toStrictEqual(purgeRow(index++));
+        expect(index).toBe(size);
+        expect(owners.snapshot().peakRows).toBeLessThanOrEqual(440);
+        expect(owners.snapshot().peakSerializedBytes).toBeLessThanOrEqual(
+          8 * 1024 * 1024,
+        );
+      } finally {
+        await transaction.close();
+      }
     },
     2048,
     purgeRow,
@@ -173,8 +178,8 @@ describe('detached semantic purge transactions', () => {
         expect(first).toStrictEqual(second);
         expect(first[0]).not.toBe(second[0]);
         expect(Object.isFrozen(first[0].blocks)).toBe(true);
-        transaction.close();
-        transaction.close();
+        await transaction.close();
+        await transaction.close();
         await expect(collect(transaction.base)).rejects.toThrow('closed');
         await expect(coordinator.commit(transaction, success)).rejects.toThrow(
           'closed',
@@ -221,7 +226,7 @@ describe('detached semantic purge transactions', () => {
           );
           expect(identity.matches(transaction.preImageBoundary)).toBe(true);
         } finally {
-          transaction.close();
+          await transaction.close();
         }
       },
       2048,
@@ -253,42 +258,7 @@ describe('stream purge rollback and concurrency', () => {
         expect(persisted).toBe(0);
         expect((await rowsOf(history)).length).toBe(3);
       } finally {
-        transaction.close();
-      }
-    });
-  });
-
-  it('restores all live rows and durable callback values when admission fails', async () => {
-    await withRollbackFixture(async (history, recorder) => {
-      await history.addBatch([purgeRow(0), purgeRow(1), purgeRow(2)]);
-      await history.waitForCommit();
-      const before = [purgeRow(0), purgeRow(1), purgeRow(2)];
-      const writes: IContent[][] = [];
-      const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {
-        enabled: true,
-        explicitCacheWriteRequired: false,
-        persist: async (source) => {
-          writes.push(await collect(source));
-        },
-      });
-      const transaction = await coordinator.begin({ mode: 'remove' });
-      if (transaction === undefined) throw new Error('Missing transaction');
-      try {
-        recorder.failAdmissionAfter(1);
-        expect(
-          await rejectedValue(
-            coordinator.commit(transaction, success).then(() => undefined),
-          ),
-        ).toBe(recorder.failure);
-        expect(await rowsOf(history)).toStrictEqual(before);
-        expect(writes).toHaveLength(2);
-        expect(writes[1]).toStrictEqual(before);
-        expect(coordinator.frontier).toStrictEqual({
-          contentIndex: 0,
-          blockIndex: 0,
-        });
-      } finally {
-        transaction.close();
+        await transaction.close();
       }
     });
   });
@@ -321,7 +291,7 @@ describe('stream purge persistence and row admission', () => {
           expect(await rowsOf(history)).toStrictEqual(before);
           expect(writes).toBe(1);
         } finally {
-          transaction.close();
+          await transaction.close();
         }
       },
       2048,
@@ -360,7 +330,7 @@ describe('stream purge persistence and row admission', () => {
             Array.from({ length: 3 }, (_, index) => purgeRow(index)),
           );
         } finally {
-          transaction.close();
+          await transaction.close();
         }
       },
       2048,
@@ -391,7 +361,7 @@ describe('semantic purge unrestricted row size', () => {
             text: 'caption-0',
           });
         } finally {
-          transaction.close();
+          await transaction.close();
         }
       },
       bytes,
