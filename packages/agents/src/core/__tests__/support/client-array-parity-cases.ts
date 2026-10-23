@@ -2,55 +2,24 @@
 import { describe, expect, it } from 'bun:test';
 import type { HistoryService } from '../../../../../core/src/services/history/HistoryService.js';
 import type { IContent } from '../../../../../core/src/services/history/IContent.js';
+import { withRetainedClient } from './retained-array-test-helpers.js';
 import {
-  detachedDigest,
-  detachedDurableDigest,
-  detachedRows,
-  withDetachedFixture,
-} from '../../../../../core/src/services/history/detached-rollback-test-helpers.js';
-import {
-  mediaParticipant,
+  journalMediaParticipant as mediaParticipant,
   rejectedValue,
 } from '../../../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import {
+  detachedDigest,
+  detachedDurableDigest,
+  withDetachedFixture,
+} from '../../../../../core/src/services/history/detached-rollback-test-helpers.js';
+import {
   clientArrayRows,
+  expectedClientArrayOutcome,
   forbidClientArrayRollback,
+  seedClientArrayHistory,
   withArrayClient,
 } from './client-array-test-helpers.js';
-import { LegacyArrayAdmissions } from './legacy-array-admission-oracle.js';
 
-async function legacyRestore(
-  history: HistoryService,
-  admissions: LegacyArrayAdmissions,
-  rows: readonly IContent[],
-): Promise<void> {
-  const retained = await admissions.admitRetainedHistory(
-    rows,
-    'restore-history',
-  );
-  try {
-    await history.validateAndFix();
-    await history.replaceBatch(retained?.history ?? rows, undefined, {
-      afterPublication: async () => {
-        const failures = await admissions.release(
-          retained === undefined ? [] : [retained],
-        );
-        if (failures.length > 0)
-          throw new AggregateError(
-            failures,
-            'Restored history publication cleanup failed',
-          );
-      },
-    });
-    history.resetCacheAnchorSeq();
-  } catch (error) {
-    await admissions.releaseAfterFailure(
-      error,
-      retained === undefined ? [] : [retained],
-      'History restoration failed and admitted media cleanup was incomplete',
-    );
-  }
-}
 async function participant(
   history: HistoryService,
   stage: string,
@@ -90,36 +59,31 @@ async function participant(
 async function outcome(
   size: number,
   stage: string,
-  migrated: boolean,
+  batch: boolean,
 ): Promise<object> {
+  const withClient = batch ? withArrayClient : withRetainedClient;
   return withDetachedFixture((fixture) =>
-    withArrayClient(fixture, async ({ client, store }) => {
+    withClient(fixture, async ({ client }) => {
       const { history, recorder } = fixture;
-      for await (const row of detachedRows(size))
-        await recorder.commit('content', { content: row });
-      await history.recalculateTotalTokens();
+      await seedClientArrayHistory(fixture, size);
       history.setBaseTokenOffset(17);
       history.setCacheAnchorSeq(1);
       const order: string[] = [];
       const failure = new Error(stage);
       await participant(history, stage, failure, order);
-      const input = clientArrayRows(size).map((row, index) =>
+      const input = clientArrayRows(size).map<IContent>((row, index) =>
         index === size - 1
           ? {
               ...row,
-              blocks: [{ type: 'text' as const, text: `replacement-${index}` }],
+              blocks: [{ type: 'text', text: `replacement-${index}` }],
             }
           : row,
       );
-      if (migrated) forbidClientArrayRollback(fixture);
+      forbidClientArrayRollback(fixture);
       const error = await rejectedValue(
-        migrated
+        batch
           ? client.restoreHistory(input)
-          : legacyRestore(
-              history,
-              new LegacyArrayAdmissions(() => store),
-              input,
-            ),
+          : client.storeHistoryForLaterUse(input),
       );
       if (stage === 'success') expect(error).toBeUndefined();
       else {
@@ -128,13 +92,14 @@ async function outcome(
           throw new Error('Missing parity failure');
         expect(error.message).toContain(stage);
       }
+      await history.waitForCommit();
       return {
         live: await detachedDigest(history.streamRawHistory()),
         durable: await detachedDurableDigest(recorder),
         tokens: history.getTotalTokens(),
         range: history.getContextRange(),
         anchor: history.getCacheAnchorSeq(),
-        order,
+        order: [...order],
       };
     }),
   );
@@ -150,21 +115,35 @@ export const PARITY_STAGES = [
   'range',
 ] as const;
 
-/**
- * Registers the old-engine versus admitted-client restore comparison. The
- * 8192-row cases are heavy, so the test files split them across stages to keep
- * each file within the runner's per-file budget without trimming any case.
- */
+export const RETAINED_PARITY_STAGES = PARITY_STAGES.filter(
+  (stage) => stage !== 'batch',
+);
+
 export function registerParityCases(
   sizes: readonly number[],
   stages: readonly string[],
 ): void {
-  describe('independent old engine versus real admitted client restore', () => {
+  registerCases(sizes, stages, true);
+}
+
+export function registerRetainedParityCases(
+  sizes: readonly number[],
+  stages: readonly string[],
+): void {
+  registerCases(sizes, stages, false);
+}
+
+function registerCases(
+  sizes: readonly number[],
+  stages: readonly string[],
+  batch: boolean,
+): void {
+  describe(`journal ${batch ? 'client restore' : 'retained deferred array'} matches independent expected outcomes`, () => {
     for (const size of sizes)
       for (const stage of stages) {
         it(`matches every ${size} value/scalar and observer ordering after ${stage}`, async () => {
-          expect(await outcome(size, stage, true)).toStrictEqual(
-            await outcome(size, stage, false),
+          expect(await outcome(size, stage, batch)).toStrictEqual(
+            await expectedClientArrayOutcome(size, stage, batch),
           );
         }, 180_000);
       }
