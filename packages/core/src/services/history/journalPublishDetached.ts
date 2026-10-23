@@ -376,7 +376,7 @@ interface FinishInput {
   readonly completion: { finalized: boolean };
 }
 
-/** After the ack: observers, the caller's hooks, media finalization, then the context range. */
+/** After the ack: observers and caller hooks run before media finalization. */
 async function finishPublication(
   store: JournalHistoryStore,
   host: DetachedHistoryHost,
@@ -397,13 +397,13 @@ async function finishPublication(
   options.signal?.throwIfAborted();
   await options.afterPublication?.();
   options.signal?.throwIfAborted();
-  await finalizeMutationEffects(effects);
-  completion.finalized = true;
-  options.signal?.throwIfAborted();
   const range = store.contextRange(spans);
   if (options.publishBatch === true || options.publishTokens === true)
     host.notifyRange(range);
   else host.notify(delta, range);
+  options.signal?.throwIfAborted();
+  await finalizeMutationEffects(effects);
+  completion.finalized = true;
 }
 
 interface CompensationInput {
