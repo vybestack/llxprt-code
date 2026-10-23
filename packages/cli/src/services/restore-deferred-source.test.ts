@@ -1,9 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
+
 import {
-  SessionRecordingService,
-  resumeJsonlSession,
+  createSessionRecorder,
+  resumeSession,
   type IContent,
-  type JsonlResumeResult as ResumeResult,
+  type ResumeResult,
 } from '@vybestack/llxprt-code-core';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { createRowCounters } from '@vybestack/llxprt-code-core/recording/journalCounters.js';
@@ -18,12 +20,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildAgent } from '../../../agents/src/api/__tests__/helpers/agentHarness.js';
 import { bindClientTokenization } from '../../../agents/src/session/session-client-binding.js';
-import {
-  admitResumeHistorySource,
-  restoreResumeBoot,
-} from './restoreResumeBoot.js';
-
-// The fixtures are JSONL recordings of the old store.
+import { restoreResumeBoot } from './restoreResumeBoot.js';
 
 function phase(
   size: number,
@@ -68,7 +65,7 @@ async function withDiskResume(
   ) => Promise<void>,
 ): Promise<void> {
   const root = await mkdtemp(join(tmpdir(), 'deferred-restore-'));
-  const recording = new SessionRecordingService({
+  const recording = createSessionRecorder({
     chatsDir: root,
     sessionId: 'source',
     projectHash: 'project',
@@ -77,12 +74,12 @@ async function withDiskResume(
     workspaceDirs: [],
   });
   for (let index = 0; index < size; index++)
-    await recording.commit('content', { content: suffixRow(index, 2048) });
+    await recordRowsForTest(recording, [suffixRow(index, 2048)]);
   await recording.dispose();
   phase(size, 'recorded');
   const owners = new RowOwnership();
   const counters = createRowCounters();
-  const result = await resumeJsonlSession({
+  const result = await resumeSession({
     continueRef: 'source',
     chatsDir: root,
     projectHash: 'project',
@@ -137,7 +134,7 @@ describe('real disk resume deferred caller', () => {
         phase(size, 'started', owners, { startupMs });
         expect(client.hasChatInitialized()).toBe(true);
         expect(chat.getHistoryService()).toBe(history);
-        expect(history.journalPath()).toBe(result.boot.filePath);
+        expect(history.journalPath()).toBe(result.recording.getFilePath());
         expect(history.getTotalTokens() - history.getBaseTokenOffset()).toBe(
           before.tokens,
         );
@@ -163,11 +160,18 @@ describe('real disk resume deferred caller', () => {
   }
 });
 
-describe('production resume source admission before journal attachment', () => {
+describe('production journal resume source admission', () => {
   for (const size of [512, 8192]) {
-    it(`admits ${size} real resume cursor rows and keeps the paused returned row charged`, async () => {
+    it(`admits ${size} real journal rows and keeps the paused returned row charged`, async () => {
       await withDiskResume(size, async (client, result, owners) => {
-        const history = await admitResumeHistorySource(client, result.boot);
+        await restoreResumeBoot(
+          client,
+          result.recording,
+          result.boot,
+          () => {},
+        );
+        const history = client.getHistoryService();
+        if (history === null) throw new Error('Missing resumed history');
         expect(client.hasChatInitialized()).toBe(false);
         expect(owners.snapshot().liveRows).toBe(0);
         expect(history.getContextRange().totalEntries).toBe(size);
