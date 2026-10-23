@@ -127,6 +127,7 @@ export class JournalHistoryStore
   private tentativeRows = 0;
   private queue: Promise<void>;
   private failure: { readonly error: unknown; reported?: boolean } | undefined;
+  private restoreFailed = false;
   private ack: CommitAck | undefined;
   private disposed = false;
   private disposal: Promise<void> | undefined;
@@ -660,7 +661,11 @@ export class JournalHistoryStore
     await this.queue;
     await this.startup;
     const failures: unknown[] = [];
-    if (this.failure !== undefined) failures.push(this.failure.error);
+    if (
+      this.failure !== undefined &&
+      (this.restoreFailed || this.failure.reported !== true)
+    )
+      failures.push(this.failure.error);
     for (const close of [
       ...[...this.openDumps].map((dump) => () => dump.close()),
       () => this.publication.close(),
@@ -766,9 +771,14 @@ export class JournalHistoryStore
   /** Puts the version of `saved` back as the current one (design 4.5) and waits for its ack. */
   private async restoreTo(saved: VersionSnapshot): Promise<void> {
     const edit = this.session.store.restorationOf(saved);
-    await this.requireAck(
-      this.enqueueTurn(saved.rows, () => Promise.resolve([edit])),
-    );
+    try {
+      await this.requireAck(
+        this.enqueueTurn(saved.rows, () => Promise.resolve([edit])),
+      );
+    } catch (error) {
+      this.restoreFailed = true;
+      throw error;
+    }
   }
 
   private async runStep(
