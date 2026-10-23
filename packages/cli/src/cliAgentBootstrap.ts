@@ -106,13 +106,43 @@ export async function createForegroundAgent({
   activationPreflightIntent,
 }: ForegroundAgentOptions): Promise<Agent> {
   const activation = foregroundActivationIntent(config, settingsOwner);
-  const mcpRuntime = await createForegroundMcpRuntime({
+
+  const feedback = emitForegroundFeedback;
+  const mcpRuntime = await McpRuntimeOwner.create(
+    {
+      getAuthProviderFactory: getMcpAuthProviderFactory,
+      tokenStorage: new MCPOAuthTokenStorage(
+        new KeychainTokenStorage('llxprt-cli-mcp-oauth', feedback),
+      ),
+      openBrowser: openBrowserSecurely,
+    },
     config,
-    settingsOwner,
+    policyOwner?.session.messageBus,
+    { emitFeedback: feedback },
+    undefined,
+    undefined,
     policyOwner,
-    getMcpAuthProviderFactory,
-    activationPreflight,
-  });
+    policyOwner === undefined ? 'runtime' : 'caller',
+    undefined,
+    'runtime',
+    activationPreflight?.operation.workspaceFilesystem,
+    'runtime',
+    activationPreflight === undefined
+      ? undefined
+      : {
+          owner: activationPreflight.operation.workspaceMemory,
+          ownership: 'runtime',
+        },
+    undefined,
+    undefined,
+    activationPreflight?.operation.workspaceTrust,
+    undefined,
+    activationPreflight?.operation.trustCleanup,
+    cliSkillOperations(config),
+    // The session MCP settings binding lets /mcp reload re-read persisted
+    // settings; without it the runtime rejects reload (issue #3937).
+    settingsOwner.readMcpSettingsBinding(),
+  );
   const agent = await fromConfig({
     githubBrokerClient: githubBrokerClient ?? createGitHubBrokerClient(),
     oauthManager,
@@ -150,61 +180,10 @@ export async function createForegroundAgent({
   return agent;
 }
 
-/**
- * Builds the foreground MCP runtime. The session settings owner's MCP
- * binding is what lets `/mcp reload` re-read persisted settings; without it
- * the runtime rejects reload (issue #3937).
- */
-function createForegroundMcpRuntime({
-  config,
-  settingsOwner,
-  policyOwner,
-  getMcpAuthProviderFactory,
-  activationPreflight,
-}: Pick<
-  ForegroundAgentOptions,
-  | 'config'
-  | 'settingsOwner'
-  | 'policyOwner'
-  | 'getMcpAuthProviderFactory'
-  | 'activationPreflight'
->): Promise<McpRuntimeOwner> {
-  const feedback = (
-    ...args: Parameters<typeof coreEvents.emitFeedback>
-  ): void => coreEvents.emitFeedback(...args);
-  return McpRuntimeOwner.create(
-    {
-      getAuthProviderFactory: getMcpAuthProviderFactory,
-      tokenStorage: new MCPOAuthTokenStorage(
-        new KeychainTokenStorage('llxprt-cli-mcp-oauth', feedback),
-      ),
-      openBrowser: openBrowserSecurely,
-    },
-    config,
-    policyOwner?.session.messageBus,
-    { emitFeedback: feedback },
-    undefined,
-    undefined,
-    policyOwner,
-    policyOwner === undefined ? 'runtime' : 'caller',
-    undefined,
-    'runtime',
-    activationPreflight?.operation.workspaceFilesystem,
-    'runtime',
-    activationPreflight === undefined
-      ? undefined
-      : {
-          owner: activationPreflight.operation.workspaceMemory,
-          ownership: 'runtime',
-        },
-    undefined,
-    undefined,
-    activationPreflight?.operation.workspaceTrust,
-    undefined,
-    activationPreflight?.operation.trustCleanup,
-    cliSkillOperations(config),
-    settingsOwner.readMcpSettingsBinding(),
-  );
+function emitForegroundFeedback(
+  ...args: Parameters<typeof coreEvents.emitFeedback>
+): void {
+  coreEvents.emitFeedback(...args);
 }
 
 function foregroundActivationIntent(

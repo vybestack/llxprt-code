@@ -26,6 +26,14 @@ The regression came from #3842, which moved MCP settings ownership to
 Pass `settingsOwner.readMcpSettingsBinding()` as the `mcpSettings` input
 when `createForegroundAgent` constructs the foreground `McpRuntimeOwner`.
 
+To stay within the 80-line function limit, the feedback forwarder moves to
+a module-level function (`emitForegroundFeedback`). A first attempt that
+extracted the runtime construction into a helper taking a
+`Pick<ForegroundAgentOptions, ...>` failed the runtime-boundary audit
+(`npm run check:runtime-boundary`), because that options object bundles
+several services. The forwarder carries no services and adds no audit
+findings.
+
 A local prototype of this change was verified in tmux. It handled four
 cases: an empty startup config with a server added later, a renamed server,
 removal of all servers, and `/mcp list` parity after each step.

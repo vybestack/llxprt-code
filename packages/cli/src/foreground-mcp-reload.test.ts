@@ -201,11 +201,15 @@ describe('foreground /mcp reload (issue #3937)', () => {
     await agent.mcp.reload();
     await waitFor(() => expect(existsSync(alpha.pidFile)).toBe(true));
     const alphaPid = Number(readFileSync(alpha.pidFile, 'utf8'));
+    await waitFor(() =>
+      expect(toolNames(agent, 'alpha')).toContain('mcp__alpha__alpha_tool'),
+    );
 
     persisted.current = settingsFor({});
     await agent.mcp.reload();
 
     expect(serverNames(agent)).toStrictEqual([]);
+    expect(toolNames(agent, 'alpha')).toStrictEqual([]);
     await waitFor(() => expect(isAlive(alphaPid)).toBe(false));
   });
 });
