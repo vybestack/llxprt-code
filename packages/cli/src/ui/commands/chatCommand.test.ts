@@ -3,11 +3,17 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import {
+  readJournalCheckpoints,
+  readJournalFileFacts,
+} from '@vybestack/llxprt-code-core/recording/journalSessionListing.js';
+import { readRecordedRows } from '../../__tests__/journal-recording.js';
+import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 
 import {
   LocalMediaStore,
-  SessionRecordingService,
-  replaySession,
+  createLockedSessionRecorder,
+  type SessionRecordingPort,
   type IContent,
 } from '@vybestack/llxprt-code-core';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -23,15 +29,13 @@ import { chatCommand } from './chatCommand.js';
 import { createCompletionHandler } from './schema/index.js';
 import type { CommandContext, SlashCommand } from './types.js';
 
-// The fixtures are JSONL recordings; chatCommand.backends.test.ts covers both backends.
-
 const PROJECT_HASH = 'chat-command-checkpoints';
 
 function content(speaker: 'human' | 'ai', text: string): IContent {
   return { speaker, blocks: [{ type: 'text', text }] };
 }
 
-function recordingPath(recording: SessionRecordingService): string {
+function recordingPath(recording: SessionRecordingPort): string {
   return recording.getFilePath() ?? '';
 }
 
@@ -39,7 +43,7 @@ let root: string;
 
 let chatsDir: string;
 
-let recording: SessionRecordingService;
+let recording: SessionRecordingPort;
 
 let mediaStore: LocalMediaStore;
 
@@ -114,7 +118,7 @@ async function chatCommandCase0(): Promise<void> {
     rootDirectory: join(root, 'media'),
     quotaBytes: 1024 * 1024,
   });
-  recording = await SessionRecordingService.createLocked({
+  recording = await createLockedSessionRecorder({
     sessionId: crypto.randomUUID(),
     projectHash: PROJECT_HASH,
     chatsDir,
@@ -123,8 +127,8 @@ async function chatCommandCase0(): Promise<void> {
     provider: 'fake',
     model: 'fake-model',
   });
-  recording.recordContent(content('human', 'A'));
-  recording.recordContent(content('ai', 'B'));
+  await recordRowsForTest(recording, [content('human', 'A')]);
+  await recordRowsForTest(recording, [content('ai', 'B')]);
   await recording.flush();
   context = createMockCommandContext({
     recordingSwapCallbacks: {
@@ -155,8 +159,8 @@ async function chatCommandCase1(): Promise<void> {
 }
 
 function chatCommandCase2(): void {
-  describe('creates, lists, renames, and tombstones checkpoints in the active JSONL recording', () => {
-    it('creates, lists, renames, and tombstones checkpoints in the active JSONL recording', async () => {
+  describe('creates, lists, renames, and tombstones checkpoints in the active journal recording', () => {
+    it('creates, lists, renames, and tombstones checkpoints in the active journal recording', async () => {
       expect(
         await command('save').action?.(context, 'milestone'),
       ).toMatchObject({
@@ -181,16 +185,9 @@ function chatCommandCase2(): void {
         messageType: 'info',
       });
 
-      const replay = await replaySession(
-        recordingPath(recording),
-        PROJECT_HASH,
-      );
-      expect(replay).toMatchObject({
-        ok: true,
-        checkpoints: [
-          expect.objectContaining({ name: 'renamed', deleted: true }),
-        ],
-      });
+      expect(
+        await readJournalCheckpoints(recordingPath(recording)),
+      ).toStrictEqual([]);
     });
   });
 }
@@ -217,16 +214,10 @@ function chatCommandCase4(): void {
         type: 'message',
         messageType: 'info',
       });
-      const replay = await replaySession(
-        recordingPath(recording),
-        PROJECT_HASH,
-      );
-      expect(replay.ok).toBe(true);
-      if (!replay.ok) throw new Error(replay.error);
-      expect(replay.sessionName).toBe('living-branch');
-      expect(replay.metadata).toStrictEqual(
-        expect.not.objectContaining({ title: expect.anything() }),
-      );
+      const facts = await readJournalFileFacts(recordingPath(recording));
+      expect(facts).toBeDefined();
+      expect(facts?.facts.name).toBe('living-branch');
+      expect(facts?.facts.title).toBeUndefined();
     });
   });
 }
@@ -316,26 +307,20 @@ function chatCommandCase11(): void {
       context.overwriteConfirmed = true;
 
       const result = await command('save').action?.(context, 'dupe');
-      const replay = await replaySession(
+      const checkpoints = await readJournalCheckpoints(
         recordingPath(recording),
-        PROJECT_HASH,
       );
-      if (!replay.ok) throw new Error(replay.error);
 
       expect({
         result,
-        checkpoints: replay.checkpoints?.filter(
-          (checkpoint) => checkpoint.deleted !== true,
-        ),
+        checkpoints,
       }).toStrictEqual({
         result: {
           type: 'message',
           messageType: 'info',
           content: 'Checkpoint saved: dupe.',
         },
-        checkpoints: [
-          expect.objectContaining({ name: 'dupe', deleted: false }),
-        ],
+        checkpoints: [expect.objectContaining({ name: 'dupe' })],
       });
     });
   });
@@ -345,7 +330,7 @@ function chatCommandCase12(): void {
   describe('reports an error when saving an empty recording', () => {
     it('reports an error when saving an empty recording', async () => {
       await recording.dispose();
-      recording = await SessionRecordingService.createLocked({
+      recording = await createLockedSessionRecorder({
         sessionId: crypto.randomUUID(),
         projectHash: PROJECT_HASH,
         chatsDir,
@@ -404,14 +389,10 @@ function chatCommandCase14(): void {
       expect(remaining.map((row) => row.blocks)).toStrictEqual(
         history.slice(0, 2).map((row) => row.blocks),
       );
-      const replay = await replaySession(
-        recordingPath(recording),
-        PROJECT_HASH,
-      );
-      expect(replay).toMatchObject({
-        ok: true,
-        history: [content('human', 'A'), content('ai', 'B')],
-      });
+      expect(await readRecordedRows(recordingPath(recording))).toMatchObject([
+        content('human', 'A'),
+        content('ai', 'B'),
+      ]);
     });
   });
 }

@@ -1,4 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { readRecordedRows } from '../__tests__/journal-recording.js';
+import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 
 /**
  * #854: a resume that fails after the new recording was published must hand
@@ -9,11 +11,11 @@
 import {
   RecordingIntegration,
   SessionLockManager,
-  SessionRecordingService,
-  requireJsonlRecorder,
+  createSessionRecorder,
+  createLockedSessionRecorder,
   type IContent,
   type LockHandle,
-  type ResumeCursorBoot,
+  type ResumeBootHandle,
   type SessionMetadata,
   type SessionRecordingPort,
 } from '@vybestack/llxprt-code-core';
@@ -24,8 +26,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { performResume, type ResumeContext } from './performResume.js';
 
-// The fixtures are JSONL recordings of the old store.
-
 const PROJECT_HASH = 'perform-resume-rollback';
 const CURRENT_SESSION = 'current-session-0001';
 const TARGET_SESSION = 'target-session-0001';
@@ -33,7 +33,7 @@ const TARGET_SESSION = 'target-session-0001';
 class PublishThenFailHistory extends HistoryService {
   override adoptResumeBoot(
     recording: SessionRecordingPort,
-    boot: ResumeCursorBoot,
+    boot: ResumeBootHandle,
     afterPublication?: () => void | Promise<void>,
   ): Promise<string[]> {
     return super.adoptResumeBoot(recording, boot, async () => {
@@ -79,17 +79,17 @@ describe('performResume rollback after the new recording was published', () => {
     chatsDir = join(root, 'chats');
     await mkdir(chatsDir, { recursive: true });
 
-    const target = new SessionRecordingService(
+    const target = createSessionRecorder(
       recordingConfig(chatsDir, TARGET_SESSION),
     );
-    target.recordContent(text('target row'));
+    await recordRowsForTest(target, [text('target row')]);
     await target.flush();
     await target.dispose();
 
-    const recording = await SessionRecordingService.createLocked(
+    const recording = await createLockedSessionRecorder(
       recordingConfig(chatsDir, CURRENT_SESSION),
     );
-    recording.recordContent(text('current row'));
+    await recordRowsForTest(recording, [text('current row')]);
     await recording.flush();
     previous = {
       recording,
@@ -155,14 +155,14 @@ describe('performResume rollback after the new recording was published', () => {
     expect(state.integration).toBe(previous.integration);
     expect(state.lock).toBe(previous.lock);
     expect(state.metadata).toBe(previous.metadata);
-    // The previous recording still accepts durable writes.
-    await expect(
-      previous.recording === null
-        ? undefined
-        : requireJsonlRecorder(previous.recording).commit('content', {
-            content: text('after'),
-          }),
-    ).resolves.toBeDefined();
+    const recording = previous.recording;
+    if (recording === null) throw new Error('Missing prior recording');
+    await recordRowsForTest(recording, [text('after')]);
+    const path = recording.getFilePath();
+    if (path === null) throw new Error('Missing prior journal');
+    expect((await readRecordedRows(path)).at(-1)?.blocks).toStrictEqual(
+      text('after').blocks,
+    );
   });
 
   it('reports a restore that itself fails instead of swallowing it', async () => {

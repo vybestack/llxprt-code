@@ -3,7 +3,6 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { requireJsonlRecorder } from '@vybestack/llxprt-code-core';
 import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
 import {
   afterAll,
@@ -40,9 +39,9 @@ import {
   runExitCleanup,
 } from './utils/cleanup.js';
 
-describe.each(['old', 'journal'] as const)(
+describe.each(['journal'] as const)(
   'CLI session client bootstrap ownership on %s',
-  (backend) => {
+  () => {
     let suiteDirectory: string;
     let directory: string;
     beforeAll(async () => {
@@ -156,23 +155,18 @@ describe.each(['old', 'journal'] as const)(
           null,
           boot.activationOperation.sessionClient,
         );
-        if (backend === 'old') {
-          requireJsonlRecorder(recording.recordingService).recordContent({
-            speaker: 'human',
-            blocks: [{ type: 'text', text: 'pre-agent content' }],
-          });
-        } else {
-          const history = boot.activationOperation.sessionClient
-            .getAgentClient()
-            .getHistoryService();
-          if (history === null) throw new Error('Missing pre-Agent history');
-          await recording.recordingIntegration.subscribeToJournal(history);
-          history.add({
-            speaker: 'human',
-            blocks: [{ type: 'text', text: 'pre-agent content' }],
-          });
-          await history.waitForCommit();
-        }
+
+        const history = boot.activationOperation.sessionClient
+          .getAgentClient()
+          .getHistoryService();
+        if (history === null) throw new Error('Missing pre-Agent history');
+        await recording.recordingIntegration.subscribeToJournal(history);
+        history.add({
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'pre-agent content' }],
+        });
+        await history.waitForCommit();
+
         await recording.recordingService.flush();
         const recorded = await transcript(
           recording.recordingService.getFilePath() ?? '',
@@ -206,12 +200,6 @@ describe.each(['old', 'journal'] as const)(
       historyHumanCount: z.number().optional(),
       firstEvents: z.array(eventSchema).optional(),
       firstOwnerClosed: z.boolean().optional(),
-    });
-    const contentSchema = z.object({
-      type: z.string(),
-      payload: z
-        .object({ content: z.object({ speaker: z.string() }) })
-        .optional(),
     });
     const requestSchema = z.object({
       model: z.string(),
@@ -249,28 +237,18 @@ describe.each(['old', 'journal'] as const)(
     }
 
     async function transcript(path: string) {
-      if (backend === 'journal') {
-        const session = await JournalSession.open(path);
-        try {
-          let text = '';
-          const speakers: string[] = [];
-          for await (const { content } of session.rows()) {
-            text += JSON.stringify(content);
-            speakers.push(content.speaker);
-          }
-          return { text, speakers };
-        } finally {
-          await session.close();
+      const session = await JournalSession.open(path);
+      try {
+        let text = '';
+        const speakers: string[] = [];
+        for await (const { content } of session.rows()) {
+          text += JSON.stringify(content);
+          speakers.push(content.speaker);
         }
+        return { text, speakers };
+      } finally {
+        await session.close();
       }
-      const text = await readFile(path, 'utf8');
-      const speakers = text
-        .trim()
-        .split('\n')
-        .map((line): unknown => JSON.parse(line))
-        .filter((event) => eventSchema.parse(event).type === 'content')
-        .map((event) => contentSchema.parse(event).payload?.content.speaker);
-      return { text, speakers };
     }
 
     function expectStopped(

@@ -3,12 +3,14 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { JournalResumeBoot } from '@vybestack/llxprt-code-core/recording/journalResume.js';
+import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
+
 import { collectResumeRows } from './__tests__/resumeRows.js';
 
 import {
   Config,
-  ResumeCursorBoot,
-  SessionRecordingService,
+  createSessionRecorder,
   type SessionRecordingServiceConfig,
 } from '@vybestack/llxprt-code-core';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
@@ -69,18 +71,20 @@ describe('recording bootstrap checkpoint resolution', () => {
 });
 
 async function verifyReturnsTheCheckpointChildBootDirectlyAndKeepsThePrefixIndependent(): Promise<void> {
-  const source = new SessionRecordingService(
-    recordingConfig(chatsDir, 'parent'),
-  );
-  source.recordContent({
-    speaker: 'human',
-    blocks: [{ type: 'text', text: 'prefix' }],
-  });
+  const source = createSessionRecorder(recordingConfig(chatsDir, 'parent'));
+  await recordRowsForTest(source, [
+    {
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'prefix' }],
+    },
+  ]);
   await source.createCheckpoint('startup-cut');
-  source.recordContent({
-    speaker: 'human',
-    blocks: [{ type: 'text', text: 'excluded' }],
-  });
+  await recordRowsForTest(source, [
+    {
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'excluded' }],
+    },
+  ]);
   await source.dispose();
   const config = new Config({
     cwd: root,
@@ -100,7 +104,7 @@ async function verifyReturnsTheCheckpointChildBootDirectlyAndKeepsThePrefixIndep
     sessionClientFor(config),
   );
   try {
-    if (!(result.resumedBoot instanceof ResumeCursorBoot))
+    if (!(result.resumedBoot instanceof JournalResumeBoot))
       throw new Error('Missing checkpoint boot');
     expect(result.discardOnFailure).toBe(true);
     expect(result.resumedSessionId).not.toBe('parent');
@@ -111,25 +115,27 @@ async function verifyReturnsTheCheckpointChildBootDirectlyAndKeepsThePrefixIndep
     ).toStrictEqual([[{ type: 'text', text: 'prefix' }]]);
     const childPath = result.recordingService.getFilePath();
     if (childPath === null) throw new Error('Missing child path');
-    expect(result.resumedBoot.filePath).toBe(childPath);
+    expect(childPath.endsWith('.llxj')).toBe(true);
   } finally {
     await result.recordingService.dispose();
   }
   await expect(
     collectResumeRows(result.resumedBoot.streamRows()),
-  ).rejects.toThrow('closed');
+  ).rejects.toThrow('disposed');
 }
 
 async function verifyReportsAnAmbiguousCheckpointReferenceInsteadOfStartingAFreshSession(): Promise<void> {
   for (const sessionId of ['source-one', 'source-two']) {
-    const recording = new SessionRecordingService(
+    const recording = createSessionRecorder(
       recordingConfig(chatsDir, sessionId),
     );
     try {
-      recording.recordContent({
-        speaker: 'human',
-        blocks: [{ type: 'text', text: sessionId }],
-      });
+      await recordRowsForTest(recording, [
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: sessionId }],
+        },
+      ]);
       await recording.createCheckpoint('duplicate-name');
       await recording.flush();
     } finally {

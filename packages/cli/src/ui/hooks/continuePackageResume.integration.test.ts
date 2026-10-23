@@ -1,12 +1,13 @@
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { SettingsService, Storage } from '@vybestack/llxprt-code-settings';
-import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
-import { buildSettingsRuntime } from '../../runtime/createRuntimeOwnerFeatures.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SettingsService, Storage } from '@vybestack/llxprt-code-settings';
+import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
+import { buildSettingsRuntime } from '../../runtime/createRuntimeOwnerFeatures.js';
+
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
@@ -52,7 +53,14 @@ import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-provid
 import { assertDefined } from '@vybestack/llxprt-code-test-utils';
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { randomUUID } from 'node:crypto';
-import { mkdir, mkdtemp, readdir, rm } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  writeFile,
+  rm,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SessionClientOwner } from '../../../../agents/src/session/session-client-owner.js';
@@ -75,7 +83,7 @@ import {
   __resetCleanupStateForTesting,
   runExitCleanup,
 } from '../../utils/cleanup.js';
-import type { Message } from '../types.js';
+import { MessageType, type Message } from '../types.js';
 
 interface ActiveRecordingState {
   recording: SessionRecordingPort | null;
@@ -338,7 +346,19 @@ function createHandlerDeps(
     sessionPersistence: persistence,
     commandContext,
     actions: createActions(),
-    addItem: commandContext.ui.addItem,
+    addItem: (item) => {
+      commandContext.ui.addItem(item);
+      if (item.type === MessageType.ERROR || item.type === MessageType.INFO) {
+        messages.push({
+          type:
+            item.type === MessageType.ERROR
+              ? MessageType.ERROR
+              : MessageType.INFO,
+          content: item.text,
+          timestamp: new Date(),
+        });
+      }
+    },
     addMessage: (message) => messages.push(message),
     setIsProcessing: () => {},
     setLocalIsProcessing: () => {},
@@ -593,6 +613,14 @@ describe('continue package perform_resume integration', () => {
 
     const source = await createPackage(root, [new Uint8Array([8, 6, 7])]);
 
+    const manifestPath = join(source.directory, 'manifest.json');
+    const manifest: unknown = JSON.parse(await readFile(manifestPath, 'utf8'));
+    if (typeof manifest !== 'object' || manifest === null)
+      throw new Error('Missing package manifest');
+    await writeFile(
+      manifestPath,
+      JSON.stringify({ ...manifest, recording: 'session.jsonl' }),
+    );
     const history = new HistoryService();
     history.add({
       speaker: 'human',

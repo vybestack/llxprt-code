@@ -3,8 +3,11 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { readRecordedRows } from '../../__tests__/journal-recording.js';
+import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
+
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
-import { HistoryJournalStore } from '../../../../core/src/services/history/historyJournalStore.js';
+import { JournalHistoryStore } from '@vybestack/llxprt-code-core/services/history/journalHistoryStore.js';
 import { collectResumeRows } from '../../__tests__/resumeRows.js';
 
 /**
@@ -16,10 +19,7 @@ import { collectResumeRows } from '../../__tests__/resumeRows.js';
  * compliance.
  */
 
-import {
-  RecordingIntegration,
-  requireJsonlRecorder,
-} from '@vybestack/llxprt-code-core';
+import { RecordingIntegration } from '@vybestack/llxprt-code-core';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import {
@@ -33,16 +33,12 @@ import {
   makeResumeContext,
   performResume,
   PROJECT_HASH,
-  readJsonlFile,
   ResumeTestSetup,
   SessionLockManager,
-  SessionRecordingService,
-  type IContent,
+  createSessionRecorder,
   type LockHandle,
   type SessionRecordingPort,
 } from './performResume-test-helpers.js';
-
-// The fixtures are JSONL recordings of the old store.
 
 let chatsDir: string;
 let lockHandles: LockHandle[];
@@ -132,8 +128,8 @@ async function testSwapPhaseOne(): Promise<void> {
     sessionId: 'old-current-session',
     projectHash: PROJECT_HASH,
   });
-  const oldRecording = new SessionRecordingService(oldConfig);
-  oldRecording.recordContent(makeContent('old message'));
+  const oldRecording = createSessionRecorder(oldConfig);
+  await recordRowsForTest(oldRecording, [makeContent('old message')]);
   await oldRecording.flush();
   const oldFilePath = oldRecording.getFilePath()!;
   recordingsToDispose.push(oldRecording);
@@ -156,7 +152,9 @@ async function testSwapPhaseOne(): Promise<void> {
   const result = await performResume(targetId, context);
   expect(result.ok).toBe(false);
 
-  oldRecording.recordContent(makeContent('new message after failed resume'));
+  await recordRowsForTest(oldRecording, [
+    makeContent('new message after failed resume'),
+  ]);
   await oldRecording.flush();
 
   const oldEventCountAfter = await countFileEvents(oldFilePath);
@@ -168,8 +166,8 @@ async function testSwapOldFileClosed(): Promise<void> {
     sessionId: 'old-session-to-close',
     projectHash: PROJECT_HASH,
   });
-  const oldRecording = new SessionRecordingService(oldConfig);
-  oldRecording.recordContent(makeContent('old message'));
+  const oldRecording = createSessionRecorder(oldConfig);
+  await recordRowsForTest(oldRecording, [makeContent('old message')]);
   await oldRecording.flush();
   const oldFilePath = oldRecording.getFilePath()!;
   recordingsToDispose.push(oldRecording);
@@ -190,8 +188,9 @@ async function testSwapOldFileClosed(): Promise<void> {
   const result = await performResume(targetId, context);
   expect(result.ok).toBe(true);
 
-  oldRecording.recordContent(makeContent('should not appear'));
-  await oldRecording.flush();
+  await expect(
+    recordRowsForTest(oldRecording, [makeContent('should not appear')]),
+  ).rejects.toThrow('disposed');
 
   const oldEventCountAfter = await countFileEvents(oldFilePath);
   expect(oldEventCountAfter).toBe(oldEventCountBefore);
@@ -218,18 +217,16 @@ async function testSwapNewFileEvents(): Promise<void> {
 
   const eventCountBefore = await countFileEvents(targetFilePath);
 
-  requireJsonlRecorder(newRecording!).recordContent(
+  await recordRowsForTest(newRecording!, [
     makeContent('new event after resume'),
-  );
+  ]);
   await newRecording!.flush();
 
   const eventCountAfter = await countFileEvents(targetFilePath);
   expect(eventCountAfter).toBeGreaterThan(eventCountBefore);
 
-  const events = await readJsonlFile(targetFilePath);
-  const lastContentEvent = events.filter((e) => e.type === 'content').pop();
-  const payload = lastContentEvent?.payload as { content: IContent };
-  expect(payload.content.blocks[0]).toStrictEqual({
+  const rows = await readRecordedRows(targetFilePath);
+  expect(rows.at(-1)?.blocks[0]).toStrictEqual({
     type: 'text',
     text: 'new event after resume',
   });
@@ -478,15 +475,15 @@ async function verifyCleansThePreparedRecordingWhenRollbackHistoryRestorationThr
 
   const historyService = new HistoryService();
   historyService.add(makeContent('previous history'));
-  const adoptJournal = HistoryJournalStore.prototype.adoptJournal;
+  const adoptJournal = JournalHistoryStore.prototype.adoptJournal;
   const rollbackFailure = vi
-    .spyOn(HistoryJournalStore.prototype, 'adoptJournal')
-    .mockImplementation(function (this: HistoryJournalStore, ...args) {
-      const adoption = adoptJournal.apply(this, args);
+    .spyOn(JournalHistoryStore.prototype, 'adoptJournal')
+    .mockImplementation(async function (this: JournalHistoryStore, ...args) {
+      const adoption = await adoptJournal.apply(this, args);
       return {
         ...adoption,
-        rollback() {
-          adoption.rollback();
+        async rollback() {
+          await adoption.rollback();
           throw new Error('rollback restore failed');
         },
       };
@@ -560,13 +557,13 @@ async function testLatestAllEmpty(): Promise<void> {
   const emptySessionId2 = 'empty-session-2';
 
   const emptyConfig1 = makeConfig(chatsDir, { sessionId: emptySessionId1 });
-  const emptySvc1 = new SessionRecordingService(emptyConfig1);
+  const emptySvc1 = createSessionRecorder(emptyConfig1);
   emptySvc1.recordSessionEvent('info', 'session started');
   await emptySvc1.flush();
   await emptySvc1.dispose();
 
   const emptyConfig2 = makeConfig(chatsDir, { sessionId: emptySessionId2 });
-  const emptySvc2 = new SessionRecordingService(emptyConfig2);
+  const emptySvc2 = createSessionRecorder(emptyConfig2);
   emptySvc2.recordSessionEvent('info', 'session started');
   await emptySvc2.flush();
   await emptySvc2.dispose();

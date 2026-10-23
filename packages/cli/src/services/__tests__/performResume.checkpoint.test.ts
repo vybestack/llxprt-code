@@ -1,5 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { createRowCounters, replaySession } from '@vybestack/llxprt-code-core';
+import { readRecordedRows } from '../../__tests__/journal-recording.js';
+import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
+
+import { createRowCounters } from '@vybestack/llxprt-code-core';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
@@ -11,12 +14,9 @@ import {
   makeContent,
   makeResumeContext,
   performResume,
-  PROJECT_HASH,
   ResumeTestSetup,
-  SessionRecordingService,
+  createSessionRecorder,
 } from './performResume-test-helpers.js';
-
-// The fixtures are JSONL recordings of the old store.
 
 describe('checkpoint resume adoption', () => {
   const setup = new ResumeTestSetup();
@@ -26,12 +26,12 @@ describe('checkpoint resume adoption', () => {
     await setup.beforeEach();
     history = new HistoryService();
     context = { ...makeResumeContext(setup.chatsDir), historyService: history };
-    const source = new SessionRecordingService(
+    const source = createSessionRecorder(
       makeConfig(setup.chatsDir, { sessionId: 'checkpoint-source' }),
     );
-    source.recordContent(makeContent('prefix'));
+    await recordRowsForTest(source, [makeContent('prefix')]);
     await source.createCheckpoint('checkpoint-cut');
-    source.recordContent(makeContent('after checkpoint'));
+    await recordRowsForTest(source, [makeContent('after checkpoint')]);
     await source.dispose();
   });
   afterEach(async () => {
@@ -49,7 +49,7 @@ describe('checkpoint resume adoption', () => {
       counters: kit.counters,
     });
     if (!result.ok) throw new Error(result.error);
-    expect(kit.snapshot().recordsDecoded).toBeGreaterThan(0);
+    expect(kit.snapshot().recordsDecoded).toBe(0);
     expect(kit.snapshot().peakDecodedRows).toBeLessThanOrEqual(256);
     expect(
       (await collectResumeRows(result.history)).map((row) => row.blocks),
@@ -58,13 +58,14 @@ describe('checkpoint resume adoption', () => {
     await history.waitForCommit();
     const path = history.journalPath();
     if (path === null) throw new Error('No adopted journal');
-    const replay = await replaySession(path, PROJECT_HASH);
-    if (!replay.ok) throw new Error(replay.error);
-    expect(replay.history.map((row) => row.blocks)).toStrictEqual([
+    const rows = await readRecordedRows(path);
+    expect(rows.map((row) => row.blocks)).toStrictEqual([
       makeContent('prefix').blocks,
       makeContent('continued').blocks,
     ]);
-    expect(replay.metadata.sessionId).toBe(result.metadata.sessionId);
+    expect(
+      context.recordingCallbacks.getCurrentRecording()?.getSessionId(),
+    ).toBe(result.metadata.sessionId);
   });
 
   it('restores prior history and removes the prepared child when publication fails', async () => {

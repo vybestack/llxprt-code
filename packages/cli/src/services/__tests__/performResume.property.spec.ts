@@ -3,6 +3,9 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { readRecordedRows } from '../../__tests__/journal-recording.js';
+import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
+
 import { collectResumeRows } from '../../__tests__/resumeRows.js';
 
 /**
@@ -14,7 +17,6 @@ import { collectResumeRows } from '../../__tests__/resumeRows.js';
  * tests use fast-check (≥30% of total tests).
  */
 
-import { requireJsonlRecorder } from '@vybestack/llxprt-code-core';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import fc from 'fast-check';
 import * as fs from 'node:fs/promises';
@@ -24,14 +26,12 @@ import {
   assertResumeError,
   assertResumeOk,
   collectLock,
-  createSessionWithCorruptLine,
   createTestSession,
   expectResultDiscriminated,
   makeContent,
   makeResumeContext,
   performResume,
   PROJECT_HASH,
-  readJsonlFile,
   releaseLock,
   ResumeTestSetup,
   SessionLockManager,
@@ -39,8 +39,6 @@ import {
   type LockHandle,
   type SessionRecordingPort,
 } from './performResume-test-helpers.js';
-
-// The fixtures are JSONL recordings of the old store.
 
 let chatsDir: string;
 let lockHandles: LockHandle[];
@@ -73,10 +71,6 @@ describe('performResume validation and property tests @plan:PLAN-20260214-SESSIO
     /**
      * Test 22a: Warnings from resumeSession are propagated (REQ-RS-012)
      */
-    it(
-      'propagates warnings from resume (REQ-RS-012)',
-      testValidationPropagatedWarnings,
-    );
     /**
      * Test 22b: Empty warnings array when no issues
      */
@@ -230,37 +224,6 @@ async function testValidationWarnings(): Promise<void> {
   collectLock(lockHandles, newLock);
 }
 
-async function verifyPropagatesWarningsFromResumeREQRS012() {
-  const targetId = 'session-with-corruption';
-  await createSessionWithCorruptLine(chatsDir, targetId);
-
-  const context = makeResumeContext(chatsDir, {
-    currentSessionId: 'other-session',
-  });
-
-  const result = await performResume(targetId, context);
-  const hasParseWarning = result.ok
-    ? result.warnings.some(
-        (warning) => warning.includes('parse') || warning.includes('JSON'),
-      )
-    : false;
-
-  return { result, hasParseWarning, context };
-}
-
-async function testValidationPropagatedWarnings(): Promise<void> {
-  const behaviorResult = await verifyPropagatesWarningsFromResumeREQRS012();
-
-  expect(behaviorResult.result.ok).toBe(true);
-  assertResumeOk(behaviorResult.result);
-  expect(behaviorResult.result.warnings.length).toBeGreaterThan(0);
-  expect(behaviorResult.hasParseWarning).toBe(true);
-
-  const newLock =
-    behaviorResult.context.recordingCallbacks.getCurrentLockHandle();
-  collectLock(lockHandles, newLock);
-}
-
 async function testValidationCleanWarnings(): Promise<void> {
   const targetId = 'clean-session-no-warnings';
   await createTestSession(chatsDir, {
@@ -301,18 +264,14 @@ async function testValidationNewRecording(): Promise<void> {
   expect(newRecording).not.toBeNull();
   recordingsToDispose.push(newRecording!);
 
-  requireJsonlRecorder(newRecording!).recordContent(
+  await recordRowsForTest(newRecording!, [
     makeContent('new content via result'),
-  );
+  ]);
   await newRecording!.flush();
 
-  const events = await readJsonlFile(targetFilePath);
-  const contentEvents = events.filter((e) => e.type === 'content');
-  const texts = contentEvents.map((e) => {
-    const payload = e.payload as { content: IContent };
-    const textBlock = payload.content.blocks[0] as { text: string };
-    return textBlock.text;
-  });
+  const texts = (await readRecordedRows(targetFilePath)).flatMap((row) =>
+    row.blocks.flatMap((block) => (block.type === 'text' ? [block.text] : [])),
+  );
   expect(texts).toContain('new content via result');
 
   const newLock = context.recordingCallbacks.getCurrentLockHandle();

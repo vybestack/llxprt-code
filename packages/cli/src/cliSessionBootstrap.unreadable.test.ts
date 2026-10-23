@@ -6,19 +6,18 @@
  * Issue #3732: startup --continue with an unreadable recording in the project,
  * and recordings written when the CLI started with no provider configured.
  */
+import { readJournalFileFacts } from '@vybestack/llxprt-code-core/recording/journalSessionListing.js';
+import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 
 import {
   Config,
   getProjectHash,
-  readSessionHeader,
-  requireJsonlRecorder,
-  SessionRecordingService,
+  createSessionRecorder,
   type AgentClientContract,
-  type ResumeCursorBoot,
+  type ResumeBootHandle,
   type SessionRecordingPort,
   type SessionRecordingServiceConfig,
 } from '@vybestack/llxprt-code-core';
-import type { RecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdir, mkdtemp, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -32,11 +31,9 @@ import {
   type ResolvedRecording,
 } from './cliSessionBootstrap.js';
 
-// The fixtures read and write JSONL headers; a journal twin belongs to the discovery/recording suites (W21).
-
 let projectHash = '';
 const CORRUPT_REASON =
-  'Invalid session_start: missing or malformed required fields';
+  'was recorded in the retired JSONL journal format (versions 1 and 2) and cannot be resumed. Start a new session.';
 
 function recordingConfig(
   chatsDir: string,
@@ -66,14 +63,14 @@ async function writeHealthySession(
   sessionId: string,
   modified: string,
 ): Promise<void> {
-  const recording = new SessionRecordingService(
-    recordingConfig(chatsDir, sessionId),
-  );
+  const recording = createSessionRecorder(recordingConfig(chatsDir, sessionId));
   try {
-    recording.recordContent({
-      speaker: 'human',
-      blocks: [{ type: 'text', text: `hello from ${sessionId}` }],
-    });
+    await recordRowsForTest(recording, [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: `hello from ${sessionId}` }],
+      },
+    ]);
     await recording.flush();
     const when = new Date(modified);
     await utimes(recording.getFilePath()!, when, when);
@@ -158,7 +155,7 @@ function sessionClientFor(root: string, restoreError?: Error) {
   const historyService = {
     adoptResumeBoot: async (
       _recording: unknown,
-      boot: ResumeCursorBoot,
+      boot: ResumeBootHandle,
       publish: () => void,
     ) => {
       const rows: unknown[] = [];
@@ -261,11 +258,15 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
     recording.recordProviderSwitch(provider, model);
   }
 
-  async function recordFirstMessage(recording: RecordingPort): Promise<string> {
-    recording.recordContent({
-      speaker: 'human',
-      blocks: [{ type: 'text', text: 'first message' }],
-    });
+  async function recordFirstMessage(
+    recording: SessionRecordingPort,
+  ): Promise<string> {
+    await recordRowsForTest(recording, [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'first message' }],
+      },
+    ]);
     await recording.flush();
     return recording.getFilePath()!;
   }
@@ -278,12 +279,10 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
       chatsDir,
       sessionClientFor(root).client,
     );
-    let header: Awaited<ReturnType<typeof readSessionHeader>>;
+    let header: Awaited<ReturnType<typeof readJournalFileFacts>>;
     try {
       loadProfile(noProviderConfig, first, 'codex', 'gpt-6-luna');
-      header = await readSessionHeader(
-        await recordFirstMessage(requireJsonlRecorder(first)),
-      );
+      header = await readJournalFileFacts(await recordFirstMessage(first));
     } finally {
       await first.dispose();
     }
@@ -291,7 +290,7 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
     const entry = await startup(true);
 
     expect({
-      header: { provider: header?.provider, model: header?.model },
+      header: { provider: header?.facts.provider, model: header?.facts.model },
       resumedSessionId: entry.resumedSessionId,
       historyLength: await resumedRowCount(entry),
       warnings,
@@ -314,13 +313,13 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
     try {
       liveConfig.setProvider('anthropic');
       liveConfig.setModel('claude-opus-5-5');
-      const header = await readSessionHeader(
-        await recordFirstMessage(requireJsonlRecorder(recording)),
+      const header = await readJournalFileFacts(
+        await recordFirstMessage(recording),
       );
 
       expect({
-        provider: header?.provider,
-        model: header?.model,
+        provider: header?.facts.provider,
+        model: header?.facts.model,
       }).toStrictEqual({ provider: 'anthropic', model: 'claude-opus-5-5' });
     } finally {
       await recording.dispose();
@@ -359,7 +358,7 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
       '2026-10-08T00:00:00Z',
     );
 
-    const { setup } = await startupViaSetup('corrupt-0009');
+    const { setup } = await startupViaSetup(corruptPath);
 
     expect({
       resumedSessionId: setup.resumedSessionId,
@@ -467,7 +466,7 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
       '2026-10-08T00:00:00Z',
     );
 
-    const entry = await startup('corrupt-0004');
+    const entry = await startup(corruptPath);
 
     expect({
       resumedSessionId: entry.resumedSessionId,
@@ -520,21 +519,19 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
         label: 'is not valid JSON',
         fileName: 'session-2026-10-08T21-18-08-badjson00001.jsonl',
         text: '{"type":"session_start", oops\n',
-        reason:
-          'Missing or corrupt session_start event: first line is not valid JSON',
+        reason: CORRUPT_REASON,
       },
       {
         label: 'is empty',
         fileName: 'session-2026-10-08T21-18-08-emptyfile001.jsonl',
         text: '',
-        reason: 'Empty file or unreadable first line',
+        reason: CORRUPT_REASON,
       },
       {
         label: 'is another event type',
         fileName: 'session-2026-10-08T21-18-08-notstart0001.jsonl',
         text: `${JSON.stringify({ v: 1, seq: 1, ts: 'x', type: 'content', payload: {} })}\n`,
-        reason:
-          'Missing or corrupt session_start event: first line is not a session_start event',
+        reason: CORRUPT_REASON,
       },
     ];
 
@@ -560,8 +557,9 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
         warningCount: warnings.length,
         listed: MALFORMED.map(
           (malformed, index) =>
-            warnings[0]?.includes(`${paths[index]}: ${malformed.reason}`) ===
-            true,
+            warnings[0]?.includes(
+              `${paths[index]}: Session file ${paths[index]} ${malformed.reason}`,
+            ) === true,
         ),
       }).toStrictEqual({
         resumedSessionId: 'healthy-0006',
