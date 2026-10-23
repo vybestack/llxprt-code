@@ -4,7 +4,7 @@ import { batchRowSource } from '../../../core/src/services/history/batch-event-t
 import type { IContent } from '../../../core/src/services/history/IContent.js';
 import { withDetachedFixture } from '../../../core/src/services/history/detached-rollback-test-helpers.js';
 import {
-  mediaParticipant,
+  journalMediaParticipant as mediaParticipant,
   rejectedValue,
 } from '../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import {

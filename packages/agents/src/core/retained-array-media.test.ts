@@ -7,7 +7,7 @@ import {
 } from '../../../core/src/services/history/detached-rollback-test-helpers.js';
 import {
   exactTokenizer,
-  mediaParticipant,
+  journalMediaParticipant as mediaParticipant,
   rejectedValue,
 } from '../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import type {
