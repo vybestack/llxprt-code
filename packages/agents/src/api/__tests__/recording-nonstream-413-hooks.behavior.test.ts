@@ -29,6 +29,7 @@ import {
   HookType,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { OneShotStrategy } from '../../compression/OneShotStrategy.js';
+import { summaryOutput } from '../../compression/summaryOutput.js';
 import { createRecordingExecution } from '../recordingExecution.js';
 import { SessionControl } from '../control/sessionControl.js';
 import { withRecordingLifetimeFixture } from './helpers/recording-owner-lifetime-fixture.js';
@@ -71,15 +72,15 @@ async function inputsAt(path: string): Promise<CommandInput[]> {
  * provider would write is injected at the strategy's disk entry point.
  */
 function spyOnSummaryStrategy() {
-  return spyOn(OneShotStrategy.prototype, 'compressDisk').mockImplementation(
-    async (_context, candidate) => {
-      candidate.append({
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'short summary' }],
-        metadata: { reason: 'compression-state-snapshot' },
-      });
-      return { kind: 'applied', top: 0 };
-    },
+  return spyOn(OneShotStrategy.prototype, 'prepareDisk').mockImplementation(
+    async (context) =>
+      summaryOutput(context.history, 0, context.history.length, [
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'short summary' }],
+          metadata: { reason: 'compression-state-snapshot' },
+        },
+      ]),
   );
 }
 
@@ -104,13 +105,14 @@ async function exerciseFacades(
         ]);
         await a.session.setRecording({ enabled: true });
         const aPath = pathOf(a);
+        const aSession = a.session.getSessionId();
         await b.session.setRecording({ enabled: true });
         const bPath = pathOf(b);
         await drive(a, config);
         await drive(b, config);
         await a.session.setRecording({ enabled: false });
         await drive(a, config);
-        await a.session.resume('latest');
+        await a.session.resume(aSession);
         const resumedPath = pathOf(a);
         await drive(a, config);
         const matched = (await inputsAt(output)).filter(
