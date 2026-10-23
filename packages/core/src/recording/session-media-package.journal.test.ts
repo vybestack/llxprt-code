@@ -161,6 +161,7 @@ describe('native session package validation and import', () => {
     const result = await resumeSession({
       chatsDir: chats,
       projectHash: 'moved-project',
+      mediaStore: media,
       continueRef: imported.sessionId,
       currentProvider: 'test',
       currentModel: 'test',

@@ -118,6 +118,7 @@ describe('native recording export', () => {
     const resumed = await resumeSession({
       chatsDir: chats,
       projectHash: 'moved',
+      mediaStore: target,
       continueRef: imported.sessionId,
       currentProvider: 'test',
       currentModel: 'test',
