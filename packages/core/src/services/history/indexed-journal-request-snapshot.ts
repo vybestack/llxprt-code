@@ -332,7 +332,13 @@ export class IndexedJournalRequestSnapshot {
   }
 
   async readAt(index: number, signal?: AbortSignal): Promise<IContent> {
-    const plan = await this.planAt(index, signal);
+    return this.readPlan(await this.planAt(index, signal), signal);
+  }
+
+  private async readPlan(
+    plan: JournalResponsePlan,
+    signal?: AbortSignal,
+  ): Promise<IContent> {
     const blocks: IContent['blocks'] = [];
     for await (const block of plan.openBlocks()) {
       this.requireOpen();
@@ -348,14 +354,7 @@ export class IndexedJournalRequestSnapshot {
     for await (const plan of streamResponsePlans(this.source)) {
       this.requireOpen();
       signal?.throwIfAborted();
-      const blocks: IContent['blocks'] = [];
-      for await (const block of plan.openBlocks()) {
-        this.requireOpen();
-        signal?.throwIfAborted();
-        this.captureMedia(plan, blocks.length, block);
-        blocks.push(block);
-      }
-      yield { ...plan.header, blocks };
+      yield await this.readPlan(plan, signal);
     }
   }
 

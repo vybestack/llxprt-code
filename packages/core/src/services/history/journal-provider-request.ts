@@ -242,13 +242,18 @@ export class JournalProviderRequestSnapshot implements ProviderRequestSnapshot {
   private async *rows(
     signal?: AbortSignal,
   ): AsyncGenerator<IContent, void, unknown> {
+    if (this.ownership === undefined) {
+      yield* this.indexed.openReader(signal ?? this.signal);
+      this.requireOpen(signal);
+      return;
+    }
     for await (const row of this.indexed.openReader(signal ?? this.signal)) {
       this.requireOpen(signal);
-      this.ownership?.retain(row);
+      this.ownership.retain(row);
       try {
         yield row;
       } finally {
-        this.ownership?.release(row);
+        this.ownership.release(row);
       }
     }
     this.requireOpen(signal);
