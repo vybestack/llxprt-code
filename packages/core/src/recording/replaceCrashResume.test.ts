@@ -1,129 +1,146 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-/**
- * A process that stops inside a replacement leaves `replace_begin` (and maybe
- * tagged rows) at the end of the journal. Resuming must close that transaction
- * in the file, so a later replacement is a legal journal for every reader.
- */
 import { afterEach, describe, expect, it } from 'bun:test';
+import { truncate } from 'node:fs/promises';
+import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
+import { HistoryService } from '../services/history/HistoryService.js';
+import { encodeContentRow } from '../services/history/journalRowCodec.js';
+import { JournalRecordingService } from './journalRecordingService.js';
+import { resumeSession } from './resumeSession.js';
+import { readJournalSnapshot } from './__tests__/support/journalSnapshot.js';
 import {
-  CrashedReplaceSession,
-  allReadersSee,
-  row,
-} from './__tests__/support/crashedReplaceFixture.js';
+  PROJECT_HASH,
+  recordingConfig,
+  requireBoot,
+  rowTexts,
+  seedRecording,
+  textRow,
+} from './__tests__/support/journalRecordingFixture.js';
 
-let session: CrashedReplaceSession | undefined;
-
-async function crashed(
-  taggedRows: readonly string[],
-  commit = false,
-): Promise<CrashedReplaceSession> {
-  session = await CrashedReplaceSession.create({ taggedRows, commit });
-  return session;
-}
-
-describe('replacement after resuming an unfinished replacement', () => {
+describe('replacement after resuming an interrupted commit group', () => {
+  const directory = useTempDir('replace-crash-journal-');
+  const histories: HistoryService[] = [];
+  const recordings: JournalRecordingService[] = [];
   afterEach(async () => {
-    await session?.cleanup();
-    session = undefined;
+    for (const history of histories.splice(0)) await history.dispose();
+    for (const recording of recordings.splice(0)) await recording.dispose();
   });
 
-  it('replaces after a begin with no rows written', async () => {
-    const crash = await crashed([]);
-    const { history } = await crash.resumeHistory();
-
-    await history.replaceBatch([row('restored', 3), row('restored again', 4)]);
-    await crash.stop();
-
-    expect(await crash.readEveryWay()).toStrictEqual(
-      allReadersSee(['restored', 'restored again']),
+  async function crashed(
+    stage: 'start' | 'rows' | 'committed',
+  ): Promise<{ file: string; id: string }> {
+    const seed = await seedRecording(directory(), 0);
+    const id = seed.recording.getSessionId();
+    const recording = await JournalRecordingService.open(
+      recordingConfig(directory(), { sessionId: id }),
+      seed.filePath,
     );
-  });
-
-  it('replaces after a partially written transaction', async () => {
-    const crash = await crashed(['incomplete-0', 'incomplete-1']);
-    const { history } = await crash.resumeHistory();
-
-    await history.replaceBatch([row('restored', 4), row('restored again', 5)]);
-    await crash.stop();
-
-    expect(await crash.readEveryWay()).toStrictEqual(
-      allReadersSee(['restored', 'restored again']),
-    );
-  });
-
-  it('aborts the unfinished transaction before anything else is recorded', async () => {
-    const crash = await crashed(['incomplete']);
-    const { resumed } = await crash.resumeHistory('another-model');
-    await resumed.recording.flush();
-
-    const records = await crash.records();
-    const begin = records.findIndex(
-      (record) => record.type === 'replace_begin',
-    );
-    expect(records.slice(begin).map((record) => record.type)).toStrictEqual([
-      'replace_begin',
-      'content',
-      'replace_abort',
-      'session_event',
-      'provider_switch',
-      'session_event',
+    const session = await recording.session();
+    await session.append([textRow('old')]);
+    const baseline = session.store.published;
+    if (baseline === undefined) throw new Error('Missing baseline');
+    await session.store.commit([
+      {
+        kind: 'replace',
+        rows: ['new-0', 'new-1'].map((text) =>
+          encodeContentRow(textRow(text), { owner: 0 }),
+        ),
+      },
     ]);
-    expect(records[begin + 2].payload).toStrictEqual({ txId: 'crashed' });
-  });
+    const replacement = session.store.published;
+    if (replacement === undefined) throw new Error('Missing replacement');
+    await recording.dispose();
+    if (stage !== 'committed')
+      await truncate(
+        seed.filePath,
+        stage === 'start' ? baseline.durableEnd + 1 : replacement.selfOffset,
+      );
+    return { file: seed.filePath, id };
+  }
 
-  it('keeps the prior history when nothing is replaced after the resume', async () => {
-    const crash = await crashed(['incomplete']);
-    const { resumed } = await crash.resumeHistory();
-    await resumed.recording.flush();
-    await crash.stop();
-
-    expect(await crash.readEveryWay()).toStrictEqual(allReadersSee(['old']));
-  });
-
-  it('aborts once across repeated restarts', async () => {
-    const crash = await crashed(['incomplete']);
-    await crash.resume();
-    await crash.stop();
-    await crash.resume();
-    await crash.stop();
-    const { history } = await crash.resumeHistory();
-    await history.replaceBatch([row('restored', 4)]);
-    await crash.stop();
-
-    const types = await crash.recordTypes();
-    expect(types.filter((type) => type === 'replace_abort')).toHaveLength(1);
-    expect(await crash.readEveryWay()).toStrictEqual(
-      allReadersSee(['restored']),
-    );
-    await crash.resume();
-    await crash.stop();
-    expect(await crash.readEveryWay()).toStrictEqual(
-      allReadersSee(['restored']),
-    );
-  });
-
-  it('adds no abort to a journal whose replacement committed', async () => {
-    const crash = await crashed(['new-0', 'new-1'], true);
-    await crash.resume();
-    await crash.stop();
-
-    expect(await crash.recordTypes()).not.toContain('replace_abort');
-    expect(await crash.readEveryWay()).toStrictEqual(
-      allReadersSee(['new-0', 'new-1']),
-    );
-  });
-
-  it('adds no abort when a later record already abandoned the transaction', async () => {
-    session = await CrashedReplaceSession.create({
-      taggedRows: ['incomplete'],
-      abandonedBy: 'after',
+  async function resume(
+    id: string,
+  ): Promise<{ history: HistoryService; recording: JournalRecordingService }> {
+    const result = await resumeSession({
+      continueRef: id,
+      projectHash: PROJECT_HASH,
+      chatsDir: directory(),
+      currentProvider: 'test',
+      currentModel: 'model',
+      workspaceDirs: [],
     });
-    await session.resume();
-    await session.stop();
+    const boot = requireBoot(result);
+    if (!result.ok || !(result.recording instanceof JournalRecordingService))
+      throw new Error('Expected journal resume');
+    const history = new HistoryService();
+    recordings.push(result.recording);
+    histories.push(history);
+    await history.adoptResumeBoot(result.recording, boot);
+    return { history, recording: result.recording };
+  }
 
-    expect(await session.recordTypes()).not.toContain('replace_abort');
-    expect(await session.readEveryWay()).toStrictEqual(
-      allReadersSee(['old', 'after']),
-    );
+  for (const stage of ['start', 'rows'] satisfies Array<'start' | 'rows'>) {
+    it(`replaces after a crash at ${stage} without exposing incomplete rows`, async () => {
+      const crash = await crashed(stage);
+      expect(
+        rowTexts((await readJournalSnapshot(crash.file, PROJECT_HASH)).history),
+      ).toStrictEqual(['old']);
+      const { history } = await resume(crash.id);
+      expect(
+        rowTexts(await Array.fromAsync(history.streamRawHistory())),
+      ).toStrictEqual(['old']);
+      await history.replaceBatch([
+        textRow('restored'),
+        textRow('restored again'),
+      ]);
+      await history.waitForCommit();
+      expect(
+        rowTexts((await readJournalSnapshot(crash.file, PROJECT_HASH)).history),
+      ).toStrictEqual(['restored', 'restored again']);
+    });
+  }
+
+  it('keeps the prior history when nothing is replaced after resume', async () => {
+    const crash = await crashed('rows');
+    const { history, recording } = await resume(crash.id);
+    expect(
+      rowTexts(await Array.fromAsync(history.streamRawHistory())),
+    ).toStrictEqual(['old']);
+    await history.dispose();
+    await recording.dispose();
+    expect(
+      rowTexts((await readJournalSnapshot(crash.file, PROJECT_HASH)).history),
+    ).toStrictEqual(['old']);
+  });
+
+  it('keeps the previous version across repeated restarts and accepts a later replacement', async () => {
+    const crash = await crashed('rows');
+    for (let restart = 0; restart < 2; restart++) {
+      const { history, recording } = await resume(crash.id);
+      expect(
+        rowTexts(await Array.fromAsync(history.streamRawHistory())),
+      ).toStrictEqual(['old']);
+      await history.dispose();
+      await recording.dispose();
+    }
+    const { history, recording } = await resume(crash.id);
+    await history.replaceBatch([textRow('restored')]);
+    await history.waitForCommit();
+    await history.dispose();
+    await recording.dispose();
+    const next = await resume(crash.id);
+    expect(
+      rowTexts(await Array.fromAsync(next.history.streamRawHistory())),
+    ).toStrictEqual(['restored']);
+  });
+
+  it('resumes the new version when the replacement trailer completed', async () => {
+    const crash = await crashed('committed');
+    const { history } = await resume(crash.id);
+    expect(
+      rowTexts(await Array.fromAsync(history.streamRawHistory())),
+    ).toStrictEqual(['new-0', 'new-1']);
+    expect(
+      rowTexts((await readJournalSnapshot(crash.file, PROJECT_HASH)).history),
+    ).toStrictEqual(['new-0', 'new-1']);
   });
 });
