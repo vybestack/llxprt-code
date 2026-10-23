@@ -100,11 +100,11 @@ describe('borrowed source pending selection', () => {
     const setup = await selection();
     try {
       const rows = pendingRows(setup.source);
-      expect(rows.readAt(0)).toStrictEqual((await collect(rows))[0]);
+      expect(await rows.readAt(0)).toStrictEqual((await collect(rows))[0]);
       expect(() => rows.readAt(1)).toThrow(RangeError);
       const all = await collect(setup.source);
       for (let index = 0; index < setup.source.count; index++)
-        expect(setup.source.readAt(index)).toStrictEqual(all[index]);
+        expect(await setup.source.readAt(index)).toStrictEqual(all[index]);
       expect(() => setup.source.readAt(setup.source.count)).toThrow(RangeError);
     } finally {
       await setup.source.close();
