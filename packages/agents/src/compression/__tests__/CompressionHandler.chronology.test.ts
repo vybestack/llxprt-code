@@ -54,10 +54,28 @@ function summaryContent(text: string): IContent {
  * HistoryService, and chronology stamping are all real.
  */
 function installStrategyReturning(newHistory: IContent[]): void {
-  vi.spyOn(OneShotStrategy.prototype, 'compressDisk').mockImplementation(
-    async (_context, candidate) => {
-      for (const row of newHistory) candidate.append(row);
-      return { kind: 'applied', top: 0 };
+  vi.spyOn(OneShotStrategy.prototype, 'prepareDisk').mockImplementation(
+    async (context) => {
+      const origins = new Map<number, number | undefined>();
+      for (let index = 0; index < context.history.length; index++) {
+        const row = await context.history.readRow(index);
+        const seq = row.metadata?.chronology?.seq;
+        if (seq !== undefined)
+          origins.set(seq, await context.history.sourceOrdinalAt(index));
+      }
+      return {
+        kind: 'applied',
+        top: 0,
+        candidate: {
+          length: newHistory.length,
+          readRow: (index) => newHistory[index],
+          sourceOrdinalAt: (index) => {
+            const seq = newHistory[index].metadata?.chronology?.seq;
+            return seq === undefined ? undefined : origins.get(seq);
+          },
+          [Symbol.iterator]: () => newHistory[Symbol.iterator](),
+        },
+      };
     },
   );
 }
