@@ -2,32 +2,38 @@
 import { describe, expect, it } from 'bun:test';
 import { appendFileSync } from 'node:fs';
 import type { IContent } from './IContent.js';
+import type { HistoryBatchRowSource } from './history-batch-values.js';
 import {
   withValueTransformFixture,
   sweepTransformRows,
 } from './transform-value-test-helpers.js';
-import {
-  batchValues,
-  eventRows,
-  type BatchTestCursor,
-  type BatchTestValues,
-} from './batch-event-test-helpers.js';
+import { batchRowSource, eventRows } from './batch-event-test-helpers.js';
 
 async function heldHandleProbes(size: number): Promise<void> {
   await withValueTransformFixture(async ({ history, owners }) => {
     const probes: Array<WeakRef<IContent>> = [];
-    const handles: { view?: BatchTestValues; cursor?: BatchTestCursor } = {};
+    const handles: {
+      view?: HistoryBatchRowSource;
+      cursor?: AsyncGenerator<IContent, void, unknown>;
+    } = {};
+    let reading: Promise<void> | undefined;
     history.once('contentBatchAdded', (value) => {
-      handles.view = batchValues(value);
-      handles.view.withRows((cursor) => {
-        handles.cursor = cursor;
-        for (let item = cursor.next(); item.done !== true; item = cursor.next())
+      handles.view = batchRowSource(value);
+      const cursor = handles.view.rows();
+      handles.cursor = cursor;
+      reading = (async (): Promise<void> => {
+        let item = await cursor.next();
+        while (item.done !== true) {
           probes.push(new WeakRef(item.value));
-      });
+          item = await cursor.next();
+        }
+      })();
     });
     await history.detachedValues.replace(eventRows(size), undefined, {
       publishBatch: true,
     });
+    await reading;
+    reading = undefined;
     await sweepTransformRows();
     const liveOrdinals = probes.flatMap((probe, index) =>
       probe.deref() === undefined ? [] : [index],
@@ -42,15 +48,20 @@ async function heldHandleProbes(size: number): Promise<void> {
     expect(probes.length).toBe(size);
     expect(liveOrdinals).toStrictEqual([]);
     expect(owners.snapshot().liveRows).toBe(0);
-    expect(() => handles.view?.withRows(() => undefined)).toThrow('closed');
-    expect(() => handles.cursor?.next()).toThrow('closed');
+    if (handles.view === undefined || handles.cursor === undefined)
+      throw new Error('Missing published batch handles');
+    await expect(handles.view.rows().next()).rejects.toThrow('retired');
+    expect(await handles.cursor.next()).toStrictEqual({
+      done: true,
+      value: undefined,
+    });
   });
 }
 describe('retained closed batch handles do not pin decoded history', () => {
   it.each([512, 8192])(
     'releases all %i event row probes while the handles remain reachable',
     async (size) => {
-      await expect(heldHandleProbes(size)).resolves.toBeUndefined();
+      expect(await heldHandleProbes(size)).toBeUndefined();
     },
     120000,
   );
