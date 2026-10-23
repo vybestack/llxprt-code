@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { oauthUIBridge } from '@vybestack/llxprt-code-auth';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { hasDialogRequest } from '../../__tests__/dialogStore.js';
 import { renderHook } from '../../__tests__/render.js';
@@ -36,6 +37,8 @@ describe('useOAuthOrchestration', () => {
   });
 
   afterEach(() => {
+    const attempt = oauthUIBridge.getDialog();
+    if (attempt) oauthUIBridge.dismissDialog(attempt.id);
     vi.useRealTimers();
     delete (global as Record<string, unknown>).__oauth_needs_code;
     delete (global as Record<string, unknown>).__oauth_provider;
@@ -153,9 +156,10 @@ describe('useOAuthOrchestration', () => {
     });
   });
 
-  describe('auto-dismiss on browser auth complete', () => {
-    it('closes the dialog when it is open and __oauth_browser_auth_complete is true', () => {
-      (global as Record<string, unknown>).__oauth_browser_auth_complete = true;
+  describe('independent dialog attempt completion', () => {
+    it('closes the dialog after persisted authentication completes', () => {
+      oauthUIBridge.beginDialog('persisted-hook-attempt', 'claudecode');
+      oauthUIBridge.settleDialog('persisted-hook-attempt');
       dialogs.oauthCode.open({});
 
       renderHook(() =>
@@ -171,5 +175,40 @@ describe('useOAuthOrchestration', () => {
 
       expect(hasDialogRequest(store, 'oauthCode')).toBe(false);
     });
+  });
+  it('keeps a Gemini code dialog open when an older Claude Code attempt succeeds', () => {
+    oauthUIBridge.beginDialog('older-claude', 'claudecode');
+    Object.assign(globalThis, { __oauth_provider: 'gemini' });
+    dialogs.oauthCode.open({});
+    renderHook(() =>
+      useOAuthOrchestration({
+        appDispatch,
+        dialogs,
+        isOAuthCodeDialogOpen: true,
+        setAuthError,
+      }),
+    );
+    oauthUIBridge.settleDialog('older-claude');
+    vi.advanceTimersByTime(OAUTH_POLL_MS * 3);
+    expect(hasDialogRequest(store, 'oauthCode')).toBe(true);
+  });
+
+  it('preserves Gemini command completion when a Claude Code dialog snapshot remains', () => {
+    oauthUIBridge.beginDialog('older-claude', 'claudecode');
+    Object.assign(globalThis, {
+      __oauth_provider: 'gemini',
+      __oauth_auth_complete: true,
+    });
+    dialogs.oauthCode.open({});
+    renderHook(() =>
+      useOAuthOrchestration({
+        appDispatch,
+        dialogs,
+        isOAuthCodeDialogOpen: true,
+        setAuthError,
+      }),
+    );
+    vi.advanceTimersByTime(OAUTH_POLL_MS * 3);
+    expect(hasDialogRequest(store, 'oauthCode')).toBe(false);
   });
 });

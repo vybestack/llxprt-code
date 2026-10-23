@@ -6,6 +6,7 @@
 
 interface OAuthGlobalState {
   __oauth_auth_complete?: boolean;
+  __oauth_auth_error?: string;
   __oauth_browser_auth_complete?: boolean;
   __oauth_needs_code?: boolean;
   __oauth_provider?: string;

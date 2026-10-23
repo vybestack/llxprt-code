@@ -105,7 +105,10 @@ export class AnthropicDeviceFlow {
   /**
    * Exchange authorization code for access token (PKCE flow)
    */
-  async exchangeCodeForToken(authCodeWithState: string): Promise<OAuthToken> {
+  async exchangeCodeForToken(
+    authCodeWithState: string,
+    redirectUri: string = this.redirectUri,
+  ): Promise<OAuthToken> {
     if (!this.codeVerifier) {
       throw new Error(
         'No PKCE code verifier found - OAuth flow not initialized',
@@ -123,7 +126,7 @@ export class AnthropicDeviceFlow {
       code: authCode,
       state: stateFromResponse, // Include state in the request
       client_id: this.config.clientId,
-      redirect_uri: this.redirectUri,
+      redirect_uri: redirectUri,
       code_verifier: this.codeVerifier,
     };
 
@@ -166,7 +169,6 @@ export class AnthropicDeviceFlow {
       );
     }
 
-    this.redirectUri = redirectUri;
     const params = new URLSearchParams({
       code: 'true',
       client_id: this.config.clientId,
