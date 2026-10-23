@@ -177,17 +177,20 @@ describe('Legacy truncateLargestToolResponses history guard (issue #1321)', () =
       await historyService.waitForTokenUpdates();
 
       let estimateCallCount = 0;
+      let cleared: Promise<void> | undefined;
       const deps = buildTruncatorDeps(historyService, {
         estimateBlockTokensAsync: async (block: ContentBlock) => {
           estimateCallCount++;
           if (estimateCallCount === 1) {
-            await historyService.clear();
+            cleared = historyService.clear();
           }
           return estimateBlockByLength(block);
         },
       });
 
       const result = await truncateLargestToolResponses(deps, 50);
+      await cleared;
+      expect(historyService.length()).toBe(0);
 
       return { result };
     };
