@@ -9,7 +9,7 @@
  * session journal's path on the CompressionContext it builds.
  *
  * These drive the real CompressionHandler against a real HistoryService and a
- * real SessionRecordingService writing to a real temp directory. The injected
+ * real SessionRecordingPort writing to a real temp directory. The injected
  * execution path follows a mutable recorder through materialization and swap.
  */
 
@@ -18,7 +18,11 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
+import type { SessionRecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
+import {
+  createRecorderForTest,
+  recordRowsForTest,
+} from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type {
   CompressionContext,
@@ -80,7 +84,7 @@ function textContent(text: string): IContent {
 }
 
 /** Narrows the recorder's nullable path after materialization. */
-function requireFilePath(service: SessionRecordingService): string {
+function requireFilePath(service: SessionRecordingPort): string {
   const filePath = service.getFilePath();
   if (filePath === null) {
     throw new Error('expected the recording service to have materialized');
@@ -90,10 +94,10 @@ function requireFilePath(service: SessionRecordingService): string {
 
 async function newRecordingService(
   name: string,
-): Promise<SessionRecordingService> {
+): Promise<SessionRecordingPort> {
   const chatsDir = path.join(tempDir, name);
   await fs.mkdir(chatsDir, { recursive: true });
-  const service = new SessionRecordingService({
+  const service = createRecorderForTest({
     sessionId: `session-${name}`,
     projectHash: 'abc123def456',
     chatsDir,
@@ -106,19 +110,19 @@ async function newRecordingService(
   return service;
 }
 
-/** A recorder that has actually written its JSONL file to disk. */
+/** A recorder that has actually written its journal file to disk. */
 async function materializedRecordingService(
   name: string,
-): Promise<SessionRecordingService> {
+): Promise<SessionRecordingPort> {
   const service = await newRecordingService(name);
-  service.recordContent(textContent('hello'));
+  await recordRowsForTest(service, [textContent('hello')]);
   await service.flush();
   return service;
 }
 
 function installLiveProvider(
   handler: CompressionHandler,
-  getInstalled: () => SessionRecordingService | undefined,
+  getInstalled: () => SessionRecordingPort | undefined,
 ): void {
   handler.setTranscriptPathProvider(() => {
     const recording = getInstalled();
@@ -131,8 +135,8 @@ function installLiveProvider(
 let tempDir: string;
 let historyService: HistoryService;
 let handler: CompressionHandler;
-let installed: SessionRecordingService | undefined;
-const created: SessionRecordingService[] = [];
+let installed: SessionRecordingPort | undefined;
+const created: SessionRecordingPort[] = [];
 
 describe('CompressionHandler transcriptPath wiring (#2933)', () => {
   beforeEach(async () => {
@@ -260,11 +264,11 @@ describe('ChatSession forwards the journal path into compression (#2933)', () =>
     );
 
     let seenContext: Omit<CompressionContext, 'history'> | undefined;
-    const compressDisk = OneShotStrategy.prototype.compressDisk;
-    vi.spyOn(OneShotStrategy.prototype, 'compressDisk').mockImplementation(
-      function (this: OneShotStrategy, context, candidate) {
+    const prepareDisk = OneShotStrategy.prototype.prepareDisk;
+    vi.spyOn(OneShotStrategy.prototype, 'prepareDisk').mockImplementation(
+      function (this: OneShotStrategy, context) {
         seenContext = context;
-        return compressDisk.call(this, context, candidate);
+        return prepareDisk.call(this, context);
       },
     );
 
@@ -291,11 +295,11 @@ describe('ChatSession forwards the journal path into compression (#2933)', () =>
       [],
     );
     let seenContext: Omit<CompressionContext, 'history'> | undefined;
-    const compressDisk = OneShotStrategy.prototype.compressDisk;
-    vi.spyOn(OneShotStrategy.prototype, 'compressDisk').mockImplementation(
-      function (this: OneShotStrategy, context, candidate) {
+    const prepareDisk = OneShotStrategy.prototype.prepareDisk;
+    vi.spyOn(OneShotStrategy.prototype, 'prepareDisk').mockImplementation(
+      function (this: OneShotStrategy, context) {
         seenContext = context;
-        return compressDisk.call(this, context, candidate);
+        return prepareDisk.call(this, context);
       },
     );
 
