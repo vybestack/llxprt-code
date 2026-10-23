@@ -9,7 +9,11 @@ import type {
 import type { RowFormatSettings } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
 import { JournalFormatError } from '@vybestack/llxprt-code-core/journal/errors.js';
 import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-tools';
-import { jsonValueChunks } from '../utils/boundedJsonBody.js';
+import {
+  nativeDumpLiteral,
+  nativeDumpValue,
+  type NativeDumpPiece,
+} from '../utils/native-dump-body.js';
 import { classifyMediaBlock } from '../utils/mediaUtils.js';
 import { removeThinkingFromContent } from '../reasoning/reasoningUtils.js';
 import {
@@ -20,13 +24,6 @@ import {
   buildToolResponseContent,
   convertBlockToPart,
 } from './OpenAIRequestBuilder.js';
-
-export function* nativeChatValue(value: unknown): Generator<Uint8Array> {
-  const chunks = jsonValueChunks(value);
-  if (chunks === undefined)
-    throw new TypeError('Native Chat value is not JSON');
-  yield* chunks;
-}
 
 function messagesOf(
   row: IContent,
@@ -57,9 +54,11 @@ function messagesOf(
   );
 }
 
-function* mediaMessage(pending: readonly MediaBlock[]): Generator<Uint8Array> {
-  yield Buffer.from(',{"role":"user","content":[');
-  yield* nativeChatValue({
+function* mediaMessage(
+  pending: readonly MediaBlock[],
+): Generator<NativeDumpPiece> {
+  yield nativeDumpLiteral(',{"role":"user","content":[');
+  yield* nativeDumpValue({
     type: 'text',
     text: pending.some((block) => classifyMediaBlock(block) === 'video')
       ? '[Media from tool response]'
@@ -68,11 +67,11 @@ function* mediaMessage(pending: readonly MediaBlock[]): Generator<Uint8Array> {
   for (const block of pending) {
     const part = convertBlockToPart(block);
     if (part !== null) {
-      yield Buffer.from(',');
-      yield* nativeChatValue(part);
+      yield nativeDumpLiteral(',');
+      yield* nativeDumpValue(part);
     }
   }
-  yield Buffer.from(']}');
+  yield nativeDumpLiteral(']}');
 }
 
 function nextCallIds(
@@ -84,13 +83,13 @@ function nextCallIds(
   return message.role === 'tool' ? previous : [];
 }
 
-export async function* nativeChatMessages(
+export async function* nativeChatPieces(
   rows: AsyncIterable<IContent>,
   settings: RowFormatSettings,
   strip: unknown,
   lastThinking: number,
   rowIds?: NativeRowIds,
-): AsyncGenerator<Uint8Array> {
+): AsyncGenerator<NativeDumpPiece> {
   let lastIds: readonly string[] = [];
   let pending: MediaBlock[] = [];
   let index = 0;
@@ -116,9 +115,15 @@ export async function* nativeChatMessages(
       )
         continue;
       lastIds = nextCallIds(message, lastIds);
-      yield Buffer.from(',');
-      yield* nativeChatValue(message);
+      yield nativeDumpLiteral(',');
+      yield* nativeDumpValue(message);
     }
   }
   if (pending.length !== 0) yield* mediaMessage(pending);
+}
+
+export async function* nativeChatMessages(
+  ...args: Parameters<typeof nativeChatPieces>
+): AsyncGenerator<Uint8Array> {
+  for await (const piece of nativeChatPieces(...args)) yield piece.wire;
 }

@@ -29,11 +29,7 @@ const rows: readonly IContent[] = [
         type: 'tool_call',
         id: 'call_lookup',
         name: 'lookup',
-        parameters: {
-          path: '雪',
-          password: 'omit-me',
-          nested: { token: 'omit-too' },
-        },
+        parameters: { path: '雪' },
       },
     ],
   },
@@ -84,6 +80,25 @@ async function send(
       description: 'native dump',
       rows: [],
       systemInstruction: 'Answer precisely 雪.',
+      tools: [
+        {
+          name: 'lookup',
+          description: 'Look up a path',
+          parametersJsonSchema: {
+            type: 'object',
+            properties: {
+              path: { type: 'string' },
+              password: { type: 'string', description: 'omit-me' },
+              nested: {
+                type: 'object',
+                properties: {
+                  token: { type: 'string', description: 'omit-too' },
+                },
+              },
+            },
+          },
+        },
+      ],
       ephemerals: {
         dumpcontext: mode,
         'responses-stateful': false,

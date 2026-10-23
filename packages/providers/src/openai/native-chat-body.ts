@@ -33,7 +33,15 @@ import {
 import { StreamedSegment, writeEnvelope } from '../utils/envelope-writer.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
-import { nativeChatMessages, nativeChatValue } from './native-chat-messages.js';
+import { nativeChatPieces } from './native-chat-messages.js';
+import {
+  NativeDumpBody,
+  nativeDumpLiteral,
+  nativeDumpValue,
+  nativeDumpEnvelope,
+  type NativeDumpPiece,
+} from '../utils/native-dump-body.js';
+import type { StreamedDumpBody } from '../utils/dumpSDKContext.js';
 import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { ChatContinuation } from './OpenAIChatContinuation.js';
 import { buildContinuationTail } from './OpenAIRequestBuilder.js';
@@ -53,19 +61,30 @@ import type {
 
 export class NativeChatBody {
   private readonly body: ProgressiveJsonBody;
+  private readonly capture: NativeDumpBody;
+  readonly dump: StreamedDumpBody;
   constructor(
-    bytes: () => AsyncIterable<Uint8Array>,
+    bytes: () => AsyncIterable<NativeDumpPiece>,
     readonly byteLength: number,
   ) {
     if (byteLength > DEFAULT_HTTP_JSON_ENVELOPE_BYTES)
       throw envelopeTooLargeError(DEFAULT_HTTP_JSON_ENVELOPE_BYTES, byteLength);
-    this.body = new ProgressiveJsonBody(bytes, byteLength);
+    this.capture = new NativeDumpBody(bytes);
+    this.dump = this.capture.dump;
+    this.body = new ProgressiveJsonBody(
+      () => this.capture.stream(),
+      byteLength,
+    );
   }
   openStream(): ReturnType<ProgressiveJsonBody['createStreamHandle']> {
     return this.body.createStreamHandle();
   }
-  dispose(): Promise<void> {
-    return this.body.dispose();
+  async dispose(): Promise<void> {
+    try {
+      await this.body.dispose();
+    } finally {
+      await this.capture.dispose();
+    }
   }
 }
 
@@ -111,19 +130,19 @@ function initialNativeChatBody(
   return new NativeChatBody(
     async function* () {
       signal?.throwIfAborted();
-      yield head;
-      yield Buffer.from('[');
-      yield* nativeChatValue({ role: 'system', content: system });
+      yield nativeDumpLiteral(head, captured.diagnostic.head);
+      yield nativeDumpLiteral('[');
+      yield* nativeDumpValue({ role: 'system', content: system });
       const source = rows.openReader(signal);
-      yield* nativeChatMessages(
+      yield* nativeChatPieces(
         rowInput.mediaStage?.(source) ?? source,
         settings,
         strip,
         plan.lastThinking,
         captured.rowIds,
       );
-      yield Buffer.from(']');
-      yield tail;
+      yield nativeDumpLiteral(']');
+      yield nativeDumpLiteral(tail, captured.diagnostic.tail);
     },
     head.byteLength + plan.bytes + tail.byteLength,
   );
@@ -140,6 +159,7 @@ interface CapturedNativeChatPlan {
   readonly head: Buffer;
   readonly tail: Buffer;
   readonly continuationEnvelope: { head: Buffer; tail: Buffer };
+  readonly diagnostic: { head: Buffer; tail: Buffer };
   readonly signal: AbortSignal | undefined;
 }
 
@@ -369,6 +389,7 @@ async function captureChatPlan(
       head,
       tail,
       continuationEnvelope,
+      diagnostic: await envelopeParts(nativeDumpEnvelope(envelope)),
       signal: getRequestSignal(options),
     };
   } catch (error) {
@@ -389,11 +410,11 @@ function continuationNativeChatBody(
   return new NativeChatBody(
     async function* () {
       signal?.throwIfAborted();
-      yield continuationEnvelope.head;
-      yield Buffer.from('[');
-      yield* nativeChatValue({ role: 'system', content: system });
+      yield nativeDumpLiteral(continuationEnvelope.head);
+      yield nativeDumpLiteral('[');
+      yield* nativeDumpValue({ role: 'system', content: system });
       const source = rows.openReader(signal);
-      yield* nativeChatMessages(
+      yield* nativeChatPieces(
         rowInput.mediaStage?.(source) ?? source,
         continuationSettings,
         strip,
@@ -401,11 +422,11 @@ function continuationNativeChatBody(
         captured.rowIds,
       );
       for (const message of messages) {
-        yield Buffer.from(',');
-        yield* nativeChatValue(message);
+        yield nativeDumpLiteral(',');
+        yield* nativeDumpValue(message);
       }
-      yield Buffer.from(']');
-      yield continuationEnvelope.tail;
+      yield nativeDumpLiteral(']');
+      yield nativeDumpLiteral(continuationEnvelope.tail);
     },
     continuationEnvelope.head.byteLength +
       bytes +
@@ -606,8 +627,6 @@ export async function prepareNativePlainRequest(
     'spool' | 'messageCount' | 'release' | 'estimate' | 'dump' | 'continuation'
   >
 > {
-  if (use.dump)
-    throw new Error('Native plain Chat dump projection is not installed');
   const native = rows.native;
   if (native === undefined)
     throw new Error('Native Chat requires indexed request rows');
@@ -657,6 +676,6 @@ export async function prepareNativePlainRequest(
               void projection.dispose();
             },
           },
-    dump: undefined,
+    dump: use.dump ? body.spool.dump : undefined,
   };
 }
