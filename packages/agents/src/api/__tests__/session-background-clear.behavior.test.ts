@@ -219,13 +219,17 @@ describe('new sessions exclude background work', () => {
       const off = shell.onJobCompleted(() => terminal.resolve());
       const dir = mkdtempSync(join(tmpdir(), 'shell-held-'));
       const pidFile = join(dir, 'inner.pid');
+      const pendingPidFile = join(dir, 'inner.pid.tmp');
       const releaseFile = join(dir, 'release');
       const quoted = (value: string): string =>
         `'${value.replaceAll("'", "''")}'`;
       try {
+        // Publish by rename: Windows rejects opening a file Set-Content still
+        // has open, so the reader only ever sees a complete inner.pid.
         const job = shell.launch({
           command:
-            `Set-Content -LiteralPath ${quoted(pidFile)} -Value $PID; ` +
+            `Set-Content -LiteralPath ${quoted(pendingPidFile)} -Value $PID; ` +
+            `Move-Item -LiteralPath ${quoted(pendingPidFile)} -Destination ${quoted(pidFile)}; ` +
             `while (-not (Test-Path -LiteralPath ${quoted(releaseFile)})) ` +
             '{ Start-Sleep -Milliseconds 20 }',
           cwd: process.cwd(),

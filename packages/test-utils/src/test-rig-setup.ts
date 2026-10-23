@@ -175,14 +175,33 @@ function buildProfile(): Record<string, unknown> {
     version: 1,
     provider: profileProvider,
     model: profileModel,
-    modelParams:
-      env['LLXPRT_LOCAL_MODEL_E2E'] === 'true' &&
-      env['LLXPRT_LOCAL_MODEL_THINKING'] === 'none'
-        ? { reasoning_effort: 'none' }
-        : {},
+    modelParams: buildModelParams(),
     ephemeralSettings: Object.fromEntries(
       ephemeralEntries.filter(([, value]) => value !== undefined),
     ),
+  };
+}
+
+/**
+ * Fixed seed for the local model, so reruns sample identically.
+ */
+const LOCAL_MODEL_SEED = 20260101;
+
+/**
+ * The local model samples greedily with a fixed seed. Free sampling let it
+ * occasionally print a tool call as text instead of invoking the tool, which
+ * made tool-using E2E and eval cases fail one run in five.
+ */
+function buildModelParams(): Record<string, unknown> {
+  if (env['LLXPRT_LOCAL_MODEL_E2E'] !== 'true') {
+    return {};
+  }
+  return {
+    temperature: 0,
+    seed: LOCAL_MODEL_SEED,
+    ...(env['LLXPRT_LOCAL_MODEL_THINKING'] === 'none'
+      ? { reasoning_effort: 'none' }
+      : {}),
   };
 }
 

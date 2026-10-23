@@ -214,7 +214,9 @@ The local-model E2E profile sets a 32,768-token context and reserves 8,192
 output tokens. The E2E run steps set `LLXPRT_LOCAL_MODEL_THINKING=none`, which
 adds `reasoning_effort: none` to the profile so the CPU model does not spend a
 thinking pass (and does not write a tool call as text inside it) before each
-native tool call. Real-model tests declare only the tools they exercise
+native tool call. The profile also pins `temperature: 0` and a fixed `seed` so
+reruns sample identically; free sampling once let the model print a tool call
+as text instead of invoking it. Real-model tests declare only the tools they exercise
 (`integration-tests/helpers/focusedToolSettings.ts`), which shortens each
 request by about 750 prompt tokens. Only when `LLXPRT_LOCAL_MODEL_E2E=true`, the generated inline
 profile extends first-response, SDK request and transport headers deadlines

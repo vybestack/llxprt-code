@@ -35,8 +35,11 @@ describe('save_memory', () => {
     prompt: [
       'Follow these instructions exactly.',
       '',
-      '1. Call the save_memory tool with the fact argument set exactly to:',
+      '1. Invoke the save_memory tool provided to you, using the native',
+      '   tool-calling mechanism, with the fact argument set exactly to:',
       '   "My favorite color is blue"',
+      '   Do not print, quote, or describe the tool call as text or JSON;',
+      '   actually invoke the tool.',
       '   Do not add, rephrase, qualify, or correct the fact in any way.',
       '   Write no text before the tool call.',
       '',

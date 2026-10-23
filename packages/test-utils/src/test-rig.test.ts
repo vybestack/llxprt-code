@@ -103,6 +103,7 @@ describe('TestRig setup and cleanup behavior', () => {
         'openai-request-timeout-ms': 850_000,
         'openai-headers-timeout-ms': 900_000,
       },
+      modelParams: { temperature: 0, seed: 20260101 },
     });
   });
 
@@ -121,6 +122,7 @@ describe('TestRig setup and cleanup behavior', () => {
         'utf8',
       ),
     );
+    expect(profile.modelParams).toStrictEqual({});
     expect(profile.ephemeralSettings).not.toHaveProperty(
       'stream-first-response-timeout-ms',
     );
@@ -189,10 +191,20 @@ describe('TestRig setup and cleanup behavior', () => {
           completionRequest === undefined
             ? undefined
             : JSON.parse(completionRequest.body).reasoning_effort,
+        temperature:
+          completionRequest === undefined
+            ? undefined
+            : JSON.parse(completionRequest.body).temperature,
+        seed:
+          completionRequest === undefined
+            ? undefined
+            : JSON.parse(completionRequest.body).seed,
       }).toStrictEqual({
         path: '/v1/chat/completions',
         model: 'qwen3.5:2b',
         reasoningEffort: 'none',
+        temperature: 0,
+        seed: 20260101,
       });
     } finally {
       server.closeAllConnections();
