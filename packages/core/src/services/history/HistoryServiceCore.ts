@@ -19,6 +19,8 @@ import {
   createDetachedHistoryAPI,
   type DetachedHistoryAPI,
 } from './detachedHistoryAPI.js';
+import type { HistoryStorePort } from './historyStorePort.js';
+import type { TokenRowSource } from './history-token-tickets.js';
 import { finalizeHistoryMutation } from './finalizeHistoryMutation.js';
 import { HistoryTokenTickets } from './history-token-tickets.js';
 import { CompressionOperationQueue } from './historyCompressionQueue.js';
@@ -77,7 +79,6 @@ import { HistoryMutationFifo } from './historyMutationFifo.js';
 import { HistoryMutationPublication } from './historyMutationPublication.js';
 import type { HistoryMutationSnapshot } from './historyMutationSnapshot.js';
 import { SpanWindow } from './historySpanWindow.js';
-import type { HistoryStorePort } from './historyStorePort.js';
 import {
   estimateContentTokens as estimateContentTokensImpl,
   estimateTokensForContents as estimateTokensForContentsImpl,
@@ -146,6 +147,7 @@ export abstract class HistoryServiceCore
    * @plan PLAN-20260917-ISSUE854.P05b3
    */
   protected readonly journal: HistoryStorePort;
+  private readonly captureTokenRow: () => TokenRowSource;
   readonly detachedValues: DetachedHistoryAPI;
 
   /**
@@ -247,7 +249,9 @@ export abstract class HistoryServiceCore
   protected constructor(options: HistoryServiceJournalOptions = {}) {
     super();
     this.mutationOwnership = options.mutationOwnership;
-    this.journal = createHistoryStore(options);
+    const journal = createHistoryStore(options);
+    this.journal = journal;
+    this.captureTokenRow = () => journal.captureTokenRow();
     this.detachedValues = createDetachedHistoryAPI(
       this,
       this.journal,
@@ -537,7 +541,6 @@ export abstract class HistoryServiceCore
   protected runSerializedTokenOperation<T>(
     operation: () => T | Promise<T>,
   ): Promise<T> {
-    this.tokenTickets.seal();
     return this.serializeTokenOperation(operation);
   }
 
@@ -687,7 +690,7 @@ export abstract class HistoryServiceCore
 
     const generation = this.syncGeneration;
     const wasEmpty = this.journal.getLength() === 0;
-    const token = this.tokenTickets.prepare(content, modelName, generation);
+    let token: ReturnType<HistoryTokenTickets['prepare']> | undefined;
     let tokenPublished = false;
     const scope = this.journal.openPublication();
     try {
@@ -696,6 +699,11 @@ export abstract class HistoryServiceCore
       const originId =
         origin === undefined ? undefined : historyOriginId(origin);
       this.journal.apply({ kind: 'content', content, origin: originId });
+      token = this.tokenTickets.prepare(
+        this.captureTokenRow(),
+        modelName,
+        generation,
+      );
 
       try {
         this.emit('contentAdded', content, origin);
@@ -731,7 +739,8 @@ export abstract class HistoryServiceCore
       tokenPublished = true;
     } finally {
       scope.close(false);
-      if (!tokenPublished) this.tokenTickets.cancel(token);
+      if (!tokenPublished && token !== undefined)
+        this.tokenTickets.cancel(token);
     }
   }
 

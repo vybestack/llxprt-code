@@ -1,4 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { decodeStoredRow } from './journalRowCodec.js';
+import type { TokenRowSource } from './history-token-tickets.js';
 import { JournalHistoryStoreReads } from './journal-history-store-reads.js';
 import { JournalRowMutations } from './journal-row-mutations.js';
 import { openJournalSemanticPurge } from './journalSemanticPurge.js';
@@ -306,6 +308,24 @@ export class JournalHistoryStore
   getLength = (): number => this.tentativeRows;
 
   readonly compressionRowCount = this.getLength;
+
+  captureTokenRow(): TokenRowSource {
+    this.assertUsable();
+    const index = this.tentativeRows - 1;
+    const saved = this.exclusive(() => this.session.store.snapshot());
+    let closing: Promise<void> | undefined;
+    return {
+      read: async () => {
+        const snapshot = await saved;
+        const entry = await snapshot.entryAt(index);
+        return decodeStoredRow(await snapshot.readRow(entry));
+      },
+      close: () => {
+        closing ??= saved.then((snapshot) => snapshot.close());
+        return closing;
+      },
+    };
+  }
 
   apply(op: HistoryJournalOp): void {
     this.assertUsable();

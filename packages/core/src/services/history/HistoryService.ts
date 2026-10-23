@@ -343,7 +343,7 @@ export class HistoryService extends HistoryServiceReads {
     const journalDisposal = this.journal.dispose(() =>
       this.waitForOwnershipSettlement(),
     );
-    this.tokenTickets.close();
+    await this.tokenTickets.close();
     this.totalTokens = 0;
     this.baseTokenOffset = 0;
     this.isCompressing = false;
