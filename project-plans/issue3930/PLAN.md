@@ -774,3 +774,110 @@ followed by `node scripts/link-bun-runtime.ts` and `node scripts/postinstall.cjs
 global install of the nightly package uses `--ignore-scripts`, as Luther's does. Note that a job
 with no `permissions` anywhere falls back to the repository default token scope, which this guard
 cannot see.
+
+## CI round 4
+
+CI on `238b8ad0e` (a docs-only commit) failed one Linux test that passed in the previous run:
+`DiscoveredTool bounded acquisition > handles multibyte UTF-8 content without replacement
+characters` (`packages/tools/src/__tests__/discovered-tool-bounded-acquisition.test.ts`, job
+120161922176). The script is `printf "café 世界 ..."` and never reads stdin. The result carried
+`discovered_tool_execution_error` with `Stdout: café 世界 ...`, `Error: Error: EPIPE: broken pipe,
+write` and `Exit Code: (none)`.
+
+### Cause
+
+`DiscoveredTool.awaitProcessSettlement` (`packages/tools/src/tools/tool-registry.ts`) wrote the
+parameters JSON to the child's stdin and registered the same `captureFirstError` handler on
+`child.stdin` and on the child itself. That handler records the first error and calls `settle()`
+immediately, which resolves before `exit`/`close`. An `EPIPE` on stdin therefore did two things at
+once: it turned a child that exited 0 with the right output into an execution error, and it
+resolved before the exit code was known, which is why the message says `Exit Code: (none)`. The
+output was still present because stdout had been read before the error arrived.
+
+A discovered tool that does not read its parameters is legitimate, and Node expects a writer to a
+child's stdin to tolerate `EPIPE` and `ERR_STREAM_DESTROYED`. The result must come from the child's
+exit status and output.
+
+### Bun 1.4.4 role
+
+Probe: `tmp/ci3932/fix5/probe.mjs` (not committed) spawns `sh -c 'printf x'` through
+`node:child_process`, writes a payload to stdin, and counts `EPIPE` events on `child.stdin` and
+their order against `exit`/`close`. 200 runs per row unless noted; every child exited 0.
+
+| Payload | Load | Bun 1.4.4 EPIPE | Bun 1.3.14 EPIPE |
+| --- | --- | --- | --- |
+| 2 bytes (`{}`) | idle | 0 / 200 | 0 / 200 |
+| 100 KB | idle | 0 / 200 | 1 / 200 |
+| 2 MB | idle | 199 / 200 | 199 / 200 |
+| 2 bytes, 4 probes in parallel plus 10 busy loops | loaded | 7 / 800 | 0 / 800 |
+
+Every EPIPE arrived before the child's `exit` event; none arrived after `exit` or `close`. Large
+payloads behave the same on both versions. The difference is the small payload under CPU load: when
+the child exits before the parent's write reaches the pipe, 1.4.4 reports `EPIPE` on stdin where
+1.3.14 reported nothing in 800 runs. That matches the Bun 1.4 note that socket and request errors
+are emitted the way Node emits them. The mechanism inside Bun is inferred from this measurement;
+I did not read Bun's source. The test sits at the intersection of an `{}` payload and a child that
+exits at once, which is why it failed once in CI and passed in the neighbouring run. The code was
+wrong on 1.3.14 as well, but only large payloads exposed it there.
+
+### Fix
+
+`isChildClosedStdinError` matches `EPIPE` and `ERR_STREAM_DESTROYED` by `code`. `writeParamsToStdin`
+now owns the stdin `error` listener (`onStdinError`), which also handles the synchronous catch
+around `write`/`end`: it ignores those two codes and forwards every other stdin error to
+`captureFirstError`. The listener stays attached after settlement, so a late stdin error cannot
+become an unhandled `error` event. Spawn errors on the child still use
+`captureFirstError` directly and still fail. Settlement now waits for `exit`/`close` as for any
+other child, so the exit code and signal are real. The first-failure semantics for real errors are
+unchanged.
+
+Other sites that write to a child's stdin were reviewed:
+
+| Site | Outcome |
+| --- | --- |
+| `packages/core/src/hooks/hookRunner.ts` `writeToStdin` | Already ignores `EPIPE`; result comes from exit. No change. |
+| `packages/core/src/services/shellJobGroup.ts` supervisor stdin | Already ignores `EPIPE`. No change. |
+| `packages/core/src/services/ClipboardService.ts` | The clipboard program has to consume stdin, so a broken pipe is a real failure. No change. |
+| `packages/lsp/src/service/lsp-client.ts` | Persistent protocol connection; a broken stdin means the server is gone. No change. |
+| `packages/test-utils/src/process-run.ts`, CLI integration helpers | Test harnesses, not product paths. No change. |
+
+### Tests
+
+Two tests join `DiscoveredTool stdin EPIPE during early child exit`. Each child runs `exec 0<&-`
+to close stdin, then prints; the parent writes 2 MiB, which cannot fit in any pipe buffer, so the
+stdin write fails with `EPIPE` every time. One child exits 0 and the test expects no error and
+`llmContent` exactly `unread-ok`. The other exits 3 and the test expects the exact message
+`Stdout: unread-out ... Error: (none) / Exit Code: 3 / Signal: (none)`. Both failed 3 of 3 runs on
+the previous implementation (`Exit Code: (none)` and an `EPIPE` error) and pass with the fix. The
+existing multibyte test is unchanged.
+
+### Signal test hang under load
+
+With the fix applied, `a process killed by an unexpected signal is reported as failure, not success`
+failed in 2 of 60 full-file loop runs while the machine load average was about 20. The test hit its
+10 s timeout. Bun printed `killed 1 dangling process` and the tool then resolved with
+`Stdout: (empty) / Error: (none) / Exit Code: (none) / Signal: SIGTERM`. The child's `echo` never
+reached the parent, and no `exit` or `close` arrived for 10 s. The SIGTERM came from the runner's
+cleanup, not from `DiscoveredTool`, which has no timeout of its own.
+
+Listener placement: `execute()` calls `spawn()` and `awaitProcessSettlement` attaches the `data`,
+`exit` and `close` listeners after `spawn()` returns. That is the structure described in #3934
+(output and `close` emitted before listeners attach), so the failure looks like that issue. The
+mechanism is not proved for `DiscoveredTool`.
+
+Does the fix cause or worsen it? The change touches only the stdin `error` listener and the
+settlement on stdin errors. The `data`/`exit`/`close` listeners and the settlement conditions are
+unchanged, and a stdin error with a `{}` payload would have produced a wrong result on the old code
+rather than hiding a hang. Runs, logs in `tmp/ci3932/fix6/`:
+
+| Code | Runs | Load | Failures |
+| --- | --- | --- | --- |
+| original, signal test only | 300 (10 and 16 parallel workers) | parallel workers | 0 |
+| original, full file | 18 (6 parallel, 6 busy loops) | high | 0 |
+| fix, full file | 30 (6 parallel, 6 busy loops) | high | 0 |
+| fix, full file (earlier, `fix5`) | 60 sequential | load average about 20 | 2 |
+
+The rate is too low to compare the two versions. I did not reproduce the hang on the original code,
+so I cannot say it fails there at the same rate. The hang is not in anything the fix changed, so the
+fix stays as is and the lifecycle change is not widened into this PR. I commented on #3934 that
+`DiscoveredTool.execute` is another affected site (issuecomment-6354812520).

@@ -45,6 +45,18 @@ import {
 
 const STREAM_DRAIN_TIMEOUT_MS = 2000;
 
+/**
+ * Errors Node emits on a child's stdin when the child closed its read end
+ * (exited, or closed stdin) before the parameters were fully written. A child
+ * may legitimately never read its parameters, so these say nothing about the
+ * call's outcome, which comes from the child's exit status and output. Other
+ * stdin errors are genuine failures and are not matched.
+ */
+function isChildClosedStdinError(err: Error): boolean {
+  const code = (err as NodeJS.ErrnoException).code;
+  return code === 'EPIPE' || code === 'ERR_STREAM_DESTROYED';
+}
+
 export const DISCOVERED_TOOL_PREFIX = 'discovered_tool_';
 
 type ToolParams = Record<string, unknown>;
@@ -234,11 +246,16 @@ Signal: Signal number or \`(none)\` if no signal was received.
     onError: (err: Error) => void,
   ): void {
     if (child.stdin === null) return;
+    const onStdinError = (err: Error) => {
+      if (!isChildClosedStdinError(err)) onError(err);
+    };
+    // Stays attached after settlement so a late stdin error is never unhandled.
+    child.stdin.on('error', onStdinError);
     try {
       child.stdin.write(JSON.stringify(params));
       child.stdin.end();
     } catch (e) {
-      onError(e instanceof Error ? e : new Error(String(e)));
+      onStdinError(e instanceof Error ? e : new Error(String(e)));
     }
   }
 
@@ -271,7 +288,6 @@ Signal: Signal number or \`(none)\` if no signal was received.
         if (drainTimer !== null) clearTimeout(drainTimer);
         child.stdout?.removeListener('data', onStdout);
         child.stderr?.removeListener('data', onStderr);
-        child.stdin?.removeListener('error', captureFirstError);
         child.removeListener('error', captureFirstError);
         child.removeListener('exit', onExit);
         child.removeListener('close', onClose);
@@ -317,7 +333,6 @@ Signal: Signal number or \`(none)\` if no signal was received.
 
       child.stdout?.on('data', onStdout);
       child.stderr?.on('data', onStderr);
-      child.stdin?.on('error', captureFirstError);
       child.on('error', captureFirstError);
       child.on('exit', onExit);
       child.on('close', onClose);

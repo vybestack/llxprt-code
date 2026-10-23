@@ -17,6 +17,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { ChildProcess } from 'node:child_process';
 import { DiscoveredTool } from '../tools/tool-registry.js';
+import { ToolErrorType } from '../types/tool-error.js';
 import {
   BoundedCombinedCollector,
   createDefaultByteBudget,
@@ -540,6 +541,53 @@ describe('DiscoveredTool process and acquisition behavior', () => {
           expect(result.returnDisplay).toBe(content);
           expect(errorMessageOrEmpty(result)).toBe(content);
           expect(reportsExitCodeWhenFailed(result, content)).toBe(true);
+        },
+        { timeout: 15000 },
+      );
+
+      // The child closes stdin without reading it, so a payload far larger
+      // than any pipe buffer can never be fully written and the parent's
+      // stdin write must fail with EPIPE. The call's outcome is still the
+      // child's own exit status and output.
+      it(
+        'succeeds with the child output when a zero-exit child never reads a large stdin payload',
+        async () => {
+          const script = createScript(
+            tempDir,
+            'ignores-stdin-ok.sh',
+            '#!/bin/sh\nexec 0<&-\nprintf "unread-ok"',
+          );
+          const tool = createDiscoveredTool(script);
+          const result = await executeTool(tool, {
+            data: 'C'.repeat(2 * 1024 * 1024),
+          });
+
+          expect(result.error).toBeUndefined();
+          expect(result.llmContent).toBe('unread-ok');
+          expect(result.returnDisplay).toBe('unread-ok');
+        },
+        { timeout: 15000 },
+      );
+
+      it(
+        'reports the real exit code, not a stdin error, when a failing child never reads a large stdin payload',
+        async () => {
+          const script = createScript(
+            tempDir,
+            'ignores-stdin-fail.sh',
+            '#!/bin/sh\nexec 0<&-\nprintf "unread-out"\nexit 3',
+          );
+          const tool = createDiscoveredTool(script);
+          const result = await executeTool(tool, {
+            data: 'D'.repeat(2 * 1024 * 1024),
+          });
+
+          expect(result.error?.type).toBe(
+            ToolErrorType.DISCOVERED_TOOL_EXECUTION_ERROR,
+          );
+          expect(result.llmContent).toBe(
+            'Stdout: unread-out\nStderr: (empty)\nError: (none)\nExit Code: 3\nSignal: (none)',
+          );
         },
         { timeout: 15000 },
       );
