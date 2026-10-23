@@ -12,7 +12,6 @@ import type {
   TextBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { classifyMediaBlock } from '../utils/mediaUtils.js';
-import type { KeyedRowIndex } from '../utils/keyed-row-index.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import {
   uploadKimiFiles,
@@ -34,6 +33,11 @@ export type KimiMediaReplacement =
       readonly filename: string;
       readonly fileId: string;
     };
+
+export interface KimiUploadRecord {
+  get(key: string): unknown;
+  set(key: string, value: KimiMediaReplacement): void;
+}
 
 /**
  * The key of one media block in a request's upload record: the position of its
@@ -111,7 +115,7 @@ export async function uploadKimiRowMedia(
   client: OpenAI,
   row: IContent,
   rowOrdinal: number,
-  uploads: KeyedRowIndex,
+  uploads: KimiUploadRecord,
   cache?: BoundedCache<string>,
   options: KimiUploadOptions = {},
 ): Promise<number> {
@@ -146,7 +150,7 @@ export async function uploadKimiRowMedia(
 export function applyKimiRowMedia(
   row: IContent,
   rowOrdinal: number,
-  uploads: KeyedRowIndex,
+  uploads: KimiUploadRecord,
 ): IContent {
   let blocks: ContentBlock[] | undefined;
   row.blocks.forEach((block, blockIndex) => {

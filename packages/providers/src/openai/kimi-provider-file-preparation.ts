@@ -15,7 +15,6 @@ import { readOpenAIMediaSupport } from './OpenAIPromptProjectionPreparation.js';
 import type { ChatRowInput } from './OpenAIRequestPreparation.js';
 import { providerRowsOf } from '../utils/providerRows.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
-import { KeyedRowIndex } from '../utils/keyed-row-index.js';
 import {
   resolveRowsMedia,
   type RowsMediaInput,
@@ -27,6 +26,8 @@ import {
 import {
   applyKimiRowMedia,
   uploadKimiRowMedia,
+  type KimiMediaReplacement,
+  type KimiUploadRecord,
 } from '../kimi/kimiMediaProcessing.js';
 import type { KimiUploadOptions } from '../kimi/kimiFileUpload.js';
 import { ProviderFileLifecycle } from '../providerFilePolicy.js';
@@ -108,7 +109,7 @@ async function* resolvedRows(
 async function uploadCallMedia(
   rows: AsyncIterable<IContent>,
   client: OpenAI,
-  uploads: KeyedRowIndex,
+  uploads: KimiUploadRecord,
   uploadOptions: KimiUploadOptions,
 ): Promise<number> {
   let rowOrdinal = 0;
@@ -129,7 +130,7 @@ async function uploadCallMedia(
 /** Replaces each uploaded block of the rows passing through with its reference. */
 async function* withUploadedReferences(
   rows: AsyncIterable<IContent>,
-  uploads: KeyedRowIndex,
+  uploads: KimiUploadRecord,
 ): AsyncGenerator<IContent, void> {
   let rowOrdinal = 0;
   for await (const row of rows) {
@@ -141,23 +142,20 @@ async function* withUploadedReferences(
  * Creates the request's upload record. The media request closes it when the
  * call ends, on any outcome.
  */
-function createUploadRecord(mediaRequest: ResolvedMediaRequest): KeyedRowIndex {
-  const uploads = KeyedRowIndex.create('kimi-media');
-  try {
-    mediaRequest.registerCleanup(() => uploads.close());
-  } catch (error) {
-    uploads.close();
-    throw error;
-  }
+function createUploadRecord(
+  mediaRequest: ResolvedMediaRequest,
+): Map<string, KimiMediaReplacement> {
+  const uploads = new Map<string, KimiMediaReplacement>();
+  mediaRequest.registerCleanup(() => uploads.clear());
   return uploads;
 }
 
 /**
  * Kimi-only media pre-pass. For a Kimi file-upload request it uploads the
- * call's media row by row, records the results in a request-scoped disk
- * index, and returns the media stage the chat body is written through: each
+ * call's media row by row, records the references in a request-owned map,
+ * and returns the media stage the chat body is written through: each
  * row's stored media is resolved and then its uploaded blocks are replaced
- * from the index. It returns `undefined` when the request has no pre-pass.
+ * from the map. It returns `undefined` when the request has no pre-pass.
  */
 export async function prepareKimiProviderFiles(
   options: NormalizedGenerateChatOptions,

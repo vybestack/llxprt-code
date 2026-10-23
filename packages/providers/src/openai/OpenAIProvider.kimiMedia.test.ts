@@ -6,7 +6,8 @@
 
 import { bindProviderFiles } from '@vybestack/llxprt-code-core/runtime/bindProviderFiles.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { describe, expect, it, vi } from 'bun:test';
+import { describe, expect, it, spyOn, vi } from 'bun:test';
+import * as fs from 'node:fs';
 import type OpenAI from 'openai';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -22,6 +23,7 @@ import { ProviderFileLifecycle } from '../providerFilePolicy.js';
 import { rowsSelection } from '../__tests__/support/wireBodyCapture.js';
 import type { ChatRowInput } from './OpenAIRequestPreparation.js';
 import type { RowsMediaInput } from '../openai-responses/responses-row-media.js';
+import { prepareKimiProviderFiles } from './kimi-provider-file-preparation.js';
 
 function createProvider(): OpenAIProvider {
   const provider = new OpenAIProvider(
@@ -141,7 +143,7 @@ describe('OpenAIProvider Kimi media preprocessing', () => {
     expect(result).toBeUndefined();
   });
 
-  it('uploads enabled video and creates a Moonshot file reference', async () => {
+  it('uploads enabled video and creates a Moonshot file reference without scratch files', async () => {
     const filesCreate = vi.fn().mockResolvedValue({
       id: 'video-file',
       bytes: 5,
@@ -193,18 +195,35 @@ describe('OpenAIProvider Kimi media preprocessing', () => {
     });
 
     const mediaRequest = await resolveRequestMedia(MEDIA_INPUT, [], undefined);
-    const result = await (
-      provider as unknown as KimiMediaProcessor
-    ).maybeProcessKimiMedia(
-      options,
-      client,
-      new DebugLogger('test:kimi-media'),
-      mediaRequest,
-      MEDIA_INPUT,
-    );
-    // The upload record lives as long as the request that owns it.
-    const rows = await stagedRows(result, createContents());
-    await mediaRequest.release();
+    const denied = (): never => {
+      throw new Error('Kimi upload attempted scratch file creation');
+    };
+    const guards = [
+      spyOn(fs, 'mkdtempSync').mockImplementation(denied),
+      spyOn(fs, 'openSync').mockImplementation(denied),
+      spyOn(fs.promises, 'mkdtemp').mockImplementation(denied),
+      spyOn(fs.promises, 'open').mockImplementation(denied),
+    ];
+    let rows: IContent[];
+    try {
+      const result = await prepareKimiProviderFiles(
+        options,
+        client,
+        new DebugLogger('test:kimi-media'),
+        mediaRequest,
+        provider.name,
+        declaredMediaTransportCapabilities('kimi'),
+        undefined,
+        lifecycle,
+        '/workspace/kimi-media',
+        MEDIA_INPUT,
+      );
+      rows = await stagedRows(result, createContents());
+      expect(await stagedRows(result, createContents())).toStrictEqual(rows);
+    } finally {
+      await mediaRequest.release();
+      for (const guard of guards) guard.mockRestore();
+    }
 
     expect(filesCreate).toHaveBeenCalledTimes(1);
     expect(filesCreate.mock.calls[0][0].purpose).toBe('video');
