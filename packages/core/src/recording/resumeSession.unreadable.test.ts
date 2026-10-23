@@ -8,11 +8,10 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { execFile } from 'node:child_process';
+import { chmodSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { promisify } from 'node:util';
 import { SessionRecordingService } from './SessionRecordingService.js';
 import { SessionDiscovery } from './SessionDiscovery.js';
 import { SessionLockManager } from './SessionLockManager.js';
@@ -21,6 +20,7 @@ import {
   CONTINUE_LATEST,
   type ResumeResult,
 } from './resumeSession.js';
+import { denyWindowsAccess } from '@vybestack/llxprt-code-test-utils/windows-filesystem-denial.js';
 import {
   writeCorruptHeaderSession,
   writeLegacyUnknownProviderSession,
@@ -51,75 +51,41 @@ async function createHealthySession(
   return filePath;
 }
 
-const execFileAsync = promisify(execFile);
-
-/**
- * Absolute path of a Windows system tool. A bare name resolves through PATH,
- * where Git-for-Windows' GNU coreutils `whoami` precedes System32 and rejects
- * the Windows switches.
- */
-function system32Tool(name: string): string {
-  const windowsDirectory = process.env.SystemRoot ?? process.env.windir;
-  if (windowsDirectory === undefined) {
-    throw new Error(
-      `Windows test requires SystemRoot or windir to locate System32\\${name}.`,
-    );
-  }
-  return path.join(windowsDirectory, 'System32', name);
+interface NewEntryDenial {
+  readonly restore: () => void;
+  /** Lifts the denial, then rethrows `failure` (with token and ACL details on Windows). */
+  readonly abort: (failure: unknown) => never;
 }
 
 /**
- * The SID of the account running this process. Naming the deny entry by SID
- * avoids resolving a display name that can differ between the account that
- * `os.userInfo()` reports and the one in the process token.
+ * Makes `directory` refuse new entries for the current user. chmod(0500) does
+ * nothing on Windows, where access is decided by the ACL, so Windows gets a
+ * real deny entry instead, with the token's backup/restore privileges
+ * switched off for as long as it is in place: an open that holds them skips
+ * the directory checks that the lock path depends on.
+ *
+ * WD/AD are "add file" / "add subdirectory" on a directory, applied to this
+ * directory only so the existing recording stays readable. FILE_ADD_FILE on
+ * the directory is the right the lock path needs for both of its creating
+ * operations: a CREATE_NEW open of the temp file (MS-FSA 2.1.5.1.1,
+ * "Creation of a New File") and the hard link that publishes it (MS-FSA
+ * FileLinkInformation, which opens the destination directory with
+ * FILE_ADD_FILE). Callers verify the denial with those same operations
+ * instead of assuming it.
  */
-async function currentUserSid(): Promise<string> {
-  const { stdout } = await execFileAsync(system32Tool('whoami.exe'), [
-    '/user',
-    '/fo',
-    'csv',
-    '/nh',
-  ]);
-  const sid = /"(S-1-[\d-]+)"/.exec(stdout)?.[1];
-  if (sid === undefined) {
-    throw new Error(`whoami did not report a SID: ${stdout}`);
+function denyNewEntries(directory: string): NewEntryDenial {
+  if (process.platform === 'win32') {
+    return denyWindowsAccess([{ target: directory, rights: 'WD,AD' }]);
   }
-  return sid;
-}
-
-/**
- * Makes `directory` refuse new entries for the current user and returns the
- * function that restores access. chmod(0500) does nothing on Windows, where
- * access is decided by the ACL, so Windows gets a real deny entry instead.
- */
-async function denyNewEntries(directory: string): Promise<() => Promise<void>> {
-  if (process.platform !== 'win32') {
-    await fs.chmod(directory, 0o500);
-    return () => fs.chmod(directory, 0o700);
-  }
-  const principal = `*${await currentUserSid()}`;
-  // WD/AD are "add file" / "add subdirectory" on a directory, applied to this
-  // directory only so the existing recording stays readable. FILE_ADD_FILE on
-  // the directory is the right the lock path needs for both of its creating
-  // operations: a CREATE_NEW open of the temp file (MS-FSA 2.1.5.1.1,
-  // "Creation of a New File") and the hard link that publishes it (MS-FSA
-  // FileLinkInformation, which opens the destination directory with
-  // FILE_ADD_FILE). An open that holds backup/restore access skips both
-  // checks, so the callers verify the denial with those same operations
-  // instead of assuming it.
-  const icacls = system32Tool('icacls.exe');
-  await execFileAsync(icacls, [directory, '/deny', `${principal}:(WD,AD)`]);
-  const restore = async (): Promise<void> => {
-    await execFileAsync(icacls, [directory, '/remove:d', principal]);
+  chmodSync(directory, 0o500);
+  const restore = (): void => chmodSync(directory, 0o700);
+  return {
+    restore,
+    abort: (failure) => {
+      restore();
+      throw failure;
+    },
   };
-  try {
-    const { stdout: dacl } = await execFileAsync(icacls, [directory]);
-    expect(dacl).toContain('(DENY)');
-  } catch (error: unknown) {
-    await restore();
-    throw error;
-  }
-  return restore;
 }
 
 // libuv reports ERROR_ACCESS_DENIED as EPERM, POSIX reports EACCES.
@@ -142,6 +108,9 @@ async function expectLockPublicationDenied(
   expect(exclusive).toMatchObject({ rejected: { code: DENIED_CODE } });
   expect(
     await settle(fs.link(existingFile, path.join(directory, 'probe-link'))),
+  ).toMatchObject({ rejected: { code: DENIED_CODE } });
+  expect(
+    await settle(fs.mkdir(path.join(directory, 'probe-directory'))),
   ).toMatchObject({ rejected: { code: DENIED_CODE } });
 }
 
@@ -420,10 +389,10 @@ describe('resumeSession with legacy and unreadable recordings (issue #3732)', ()
   });
 
   describe('when the chats directory cannot be written', () => {
-    let restoreAccess: (() => Promise<void>) | undefined;
+    let restoreAccess: (() => void) | undefined;
 
-    afterEach(async () => {
-      await restoreAccess?.();
+    afterEach(() => {
+      restoreAccess?.();
       restoreAccess = undefined;
     });
 
@@ -432,11 +401,16 @@ describe('resumeSession with legacy and unreadable recordings (issue #3732)', ()
         chatsDir,
         'locked-out-0010',
       );
-      restoreAccess = await denyNewEntries(chatsDir);
-      await expect(
-        fs.writeFile(path.join(chatsDir, 'probe'), ''),
-      ).rejects.toMatchObject({ code: DENIED_CODE });
-      await expectLockPublicationDenied(chatsDir, recordingPath);
+      const denial = denyNewEntries(chatsDir);
+      restoreAccess = denial.restore;
+      try {
+        await expect(
+          fs.writeFile(path.join(chatsDir, 'probe'), ''),
+        ).rejects.toMatchObject({ code: DENIED_CODE });
+        await expectLockPublicationDenied(chatsDir, recordingPath);
+      } catch (error: unknown) {
+        denial.abort(error);
+      }
 
       // The denial covers new entries only, so the healthy recording stays
       // discoverable and the lock file is what cannot be created.

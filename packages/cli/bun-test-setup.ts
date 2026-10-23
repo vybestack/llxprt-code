@@ -31,8 +31,15 @@ import {
 } from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { traceNativePreloadPhase } from './test-utils/native-preload-phase.js';
+import {
+  installStallReporter,
+  markStallStage,
+} from './test-utils/stall-report.js';
 
 traceNativePreloadPhase('cli.body-after-static-imports');
+// Lets the runner ask a file that finished its tests but will not exit what it
+// still holds. Inert unless the runner started this process.
+installStallReporter();
 traceNativePreloadPhase('cli.jsdom.entry');
 
 // ---------------------------------------------------------------------------
@@ -44,6 +51,14 @@ const dom = new JSDOM('<!doctype html><html><body></body></html>', {
   url: 'http://localhost/',
 });
 traceNativePreloadPhase('cli.jsdom.exit');
+
+// A Bun test file is the whole process, so the window lives exactly as long as
+// the file. Closing it at the end stops its timers and event loops rather than
+// leaving them for process teardown to find.
+afterAll(() => {
+  dom.window.close();
+  markStallStage('preload-afterAll-finished');
+});
 
 Object.assign(globalThis, {
   window: dom.window,

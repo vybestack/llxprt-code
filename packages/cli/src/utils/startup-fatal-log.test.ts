@@ -26,7 +26,7 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { FatalError, FatalSandboxError } from '@vybestack/llxprt-code-core';
-import { denyEntryCreation } from '../../test-utils/filesystem-denial.js';
+import { denyEntryCreation } from '../test-utils/filesystem-denial.js';
 import {
   appendStartupFatalLog,
   buildStartupFatalRecord,

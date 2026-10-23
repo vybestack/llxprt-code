@@ -6,7 +6,10 @@
 
 import { describe, expect, it } from 'bun:test';
 import { setImmediate as nextTurn } from 'node:timers/promises';
-import { startPeriodicSampler } from '../../memory/periodic-sampler.ts';
+import {
+  APP_TIME_PER_SAMPLE_TIME,
+  startPeriodicSampler,
+} from '../../memory/periodic-sampler.ts';
 
 function spin(durationMs: number): void {
   const end = performance.now() + durationMs;
@@ -49,6 +52,34 @@ describe('startPeriodicSampler', () => {
     for (let i = 1; i < startedAt.length; i += 1) {
       // Timers may fire slightly early relative to performance.now().
       expect(startedAt[i] - finishedAt[i - 1]).toBeGreaterThanOrEqual(25);
+    }
+  });
+
+  it('bounds sampling to a share of wall time when the interval is tiny', async () => {
+    const startedAt: number[] = [];
+    const finishedAt: number[] = [];
+    const sampler = startPeriodicSampler(1, () => {
+      startedAt.push(performance.now());
+      spin(10);
+      finishedAt.push(performance.now());
+    });
+    await Bun.sleep(400);
+    sampler.stop();
+
+    expect(startedAt.length).toBeGreaterThan(2);
+    let sampling = 0;
+    for (let i = 0; i < finishedAt.length; i += 1) {
+      sampling += finishedAt[i] - startedAt[i];
+    }
+    const wall = finishedAt[finishedAt.length - 1] - startedAt[0];
+    const share = sampling / wall;
+    expect(share).toBeLessThanOrEqual(
+      1 / (1 + APP_TIME_PER_SAMPLE_TIME) + 0.05,
+    );
+    for (let i = 1; i < startedAt.length; i += 1) {
+      expect(startedAt[i] - finishedAt[i - 1]).toBeGreaterThanOrEqual(
+        (finishedAt[i - 1] - startedAt[i - 1]) * APP_TIME_PER_SAMPLE_TIME - 5,
+      );
     }
   });
 

@@ -39,9 +39,15 @@ function gitRoot(dir: string, env: NodeJS.ProcessEnv): string {
   }).trim();
 }
 
+// Git prints forward-slash, long-name Windows paths while Node may report
+// 8.3 short names. The native resolver yields one spelling per directory.
+function canonicalDir(dir: string): string {
+  return realpathSync.native(dir);
+}
+
 describe('TestRig Git discovery boundary', () => {
   it('blocks discovery of the host checkout from a nested test directory', () => {
-    const root = realpathSync(
+    const root = canonicalDir(
       mkdtempSync(join(tmpdir(), 'llxprt-git-ceiling-')),
     );
     const ceiling = join(root, '.integration-tests');
@@ -51,7 +57,7 @@ describe('TestRig Git discovery boundary', () => {
       execFileSync('git', ['init', '-q', root]);
       const env = { ...process.env };
       delete env.GIT_CEILING_DIRECTORIES;
-      expect(gitRoot(testDir, env)).toBe(root);
+      expect(canonicalDir(gitRoot(testDir, env))).toBe(canonicalDir(root));
       expect(() =>
         gitRoot(testDir, { ...env, GIT_CEILING_DIRECTORIES: ceiling }),
       ).toThrow();

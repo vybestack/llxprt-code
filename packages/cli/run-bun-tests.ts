@@ -54,6 +54,10 @@ import {
   installRunnerSignalHandlers,
   trackRunnerChild,
 } from '../../scripts/lib/bespoke-runner-isolation.js';
+import {
+  collectStallDiagnostics,
+  createStallProbe,
+} from './runner-stall-inspector.js';
 
 process.env.LLXPRT_RUNNING_TESTS = 'true';
 
@@ -295,7 +299,7 @@ export async function runTestFileWithTimeoutRetry<
 
 export async function runTestFile(
   file: string,
-  env: NodeJS.ProcessEnv = { ...process.env },
+  inheritedEnv: NodeJS.ProcessEnv = { ...process.env },
   onTimeout?: () => void,
   onTimedOutAttempt?: (attempt: TestResult) => void,
 ): Promise<TestResult> {
@@ -303,6 +307,8 @@ export async function runTestFile(
   // Resolve the budget before spawning so an invalid override fails fast
   // instead of stranding an already-started child without a timeout.
   const timeoutMs = fileTimeoutForFile(file);
+  const stallProbe = createStallProbe();
+  const env = { ...inheritedEnv, ...stallProbe.env };
   return new Promise((resolve) => {
     let settled = false;
     let output = '';
@@ -336,20 +342,41 @@ export async function runTestFile(
     // which is how a timeout on one file turns into timeouts on others.
     let killedByTimeout = false;
 
-    const timer = setTimeout(() => {
-      killedByTimeout = true;
-      killTimedOutChild({ runner: 'cli', child });
+    const reapTimedOutChild = async (): Promise<void> => {
+      // A process that already printed its summary and still did not exit holds
+      // something nothing has named; ask it before the kill destroys the
+      // evidence. A hang before the summary is an ordinary test hang.
+      if (TESTS_FINISHED_PATTERN.test(stripAnsi(output)) && child.pid) {
+        try {
+          console.error(
+            await collectStallDiagnostics(stallProbe, child.pid, file),
+          );
+        } catch (error) {
+          // Diagnostics are best effort and must never keep the kill from
+          // happening.
+          console.error(
+            `Stall diagnostics for ${file} failed: ${String(error)}`,
+          );
+        }
+      }
+      if (!settled) killTimedOutChild({ runner: 'cli', child });
       try {
         onTimeout?.();
       } catch (error) {
         console.error(`Test timeout callback failed: ${String(error)}`);
       }
+    };
+
+    const timer = setTimeout(() => {
+      killedByTimeout = true;
+      void reapTimedOutChild();
     }, timeoutMs);
 
     child.on('exit', (code) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      stallProbe.dispose();
       const result: TestResult = {
         file,
         passed: classifyAttempt({
@@ -371,6 +398,7 @@ export async function runTestFile(
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      stallProbe.dispose();
       resolve({
         file,
         passed: false,

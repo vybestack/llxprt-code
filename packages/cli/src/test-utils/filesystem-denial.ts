@@ -11,13 +11,13 @@
  *
  * POSIX drops the owner's write bit on the directory. Windows ignores mode
  * bits entirely, so it gets explicit deny ACEs for the current user's SID
- * (icacls), which also bind an elevated token. Every denial is proven with a
+ * (icacls), with the token's backup/restore privileges switched off because
+ * they let an elevated process skip the ACL check. Every denial is proven with a
  * probe that attempts the refused operation before the code under test runs,
  * so a fixture that silently denies nothing fails here with a clear message
  * instead of surfacing later as a confusing assertion.
  */
 
-import { execFileSync } from 'node:child_process';
 import {
   chmodSync,
   closeSync,
@@ -27,59 +27,9 @@ import {
   rmSync,
 } from 'node:fs';
 import path from 'node:path';
+import { denyWindowsAccess } from '@vybestack/llxprt-code-test-utils/windows-filesystem-denial.js';
 
 const IS_WINDOWS = process.platform === 'win32';
-
-/**
- * Absolute path of a Windows system tool. A bare name resolves through PATH,
- * where Git-for-Windows' GNU coreutils `whoami` precedes System32 and rejects
- * the Windows switches.
- */
-function system32Tool(name: string): string {
-  const windowsDirectory = process.env.SystemRoot ?? process.env.windir;
-  if (windowsDirectory === undefined) {
-    throw new Error(
-      `Windows filesystem denial requires SystemRoot or windir to locate System32\\${name}.`,
-    );
-  }
-  return path.join(windowsDirectory, 'System32', name);
-}
-
-let cachedSid: string | undefined;
-
-/** SID of the user running the tests, as `whoami /user` reports it. */
-function currentUserSid(): string {
-  if (cachedSid !== undefined) return cachedSid;
-  const output = execFileSync(
-    system32Tool('whoami.exe'),
-    ['/user', '/fo', 'csv', '/nh'],
-    { encoding: 'utf8' },
-  );
-  const match = /S-1-\d+(?:-\d+)+/.exec(output);
-  if (match === null) {
-    throw new Error(`whoami /user returned no SID: ${output}`);
-  }
-  cachedSid = match[0];
-  return cachedSid;
-}
-
-function icaclsDeny(target: string, rights: string): void {
-  execFileSync(
-    system32Tool('icacls.exe'),
-    [target, '/deny', `*${currentUserSid()}:(${rights})`],
-    {
-      stdio: 'pipe',
-    },
-  );
-}
-
-function icaclsRemoveDeny(target: string): void {
-  execFileSync(
-    system32Tool('icacls.exe'),
-    [target, '/remove:d', `*${currentUserSid()}`],
-    { stdio: 'pipe' },
-  );
-}
 
 /**
  * Renaming needs the same DELETE access as removing the file (DELETE on the
@@ -136,19 +86,16 @@ export function denyDeletion(file: string, parent: string): () => void {
   }
   // Windows lets either DELETE on the file or DELETE_CHILD on the parent
   // authorise a removal, so both must be denied.
-  const restore = (): void => {
-    icaclsRemoveDeny(file);
-    icaclsRemoveDeny(parent);
-  };
+  const denial = denyWindowsAccess([
+    { target: file, rights: 'DE' },
+    { target: parent, rights: 'DC' },
+  ]);
   try {
-    icaclsDeny(file, 'DE');
-    icaclsDeny(parent, 'DC');
     assertDeletionDenied(file);
   } catch (error) {
-    restore();
-    throw error;
+    return denial.abort(error);
   }
-  return restore;
+  return denial.restore;
 }
 
 /**
@@ -169,13 +116,11 @@ export function denyEntryCreation(directory: string): () => void {
   }
   // WD/AD are "add file" / "add subdirectory" on a directory. No inheritance
   // flags, so only this directory is affected.
-  const restore = (): void => icaclsRemoveDeny(directory);
+  const denial = denyWindowsAccess([{ target: directory, rights: 'WD,AD' }]);
   try {
-    icaclsDeny(directory, 'WD,AD');
     assertCreationDenied(directory);
   } catch (error) {
-    restore();
-    throw error;
+    return denial.abort(error);
   }
-  return restore;
+  return denial.restore;
 }

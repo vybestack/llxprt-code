@@ -19,7 +19,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
-import { denyDeletion } from '../../test-utils/filesystem-denial.js';
+import { denyDeletion } from '../test-utils/filesystem-denial.js';
 import {
   setupCredentialProxy,
   wireCleanupHandlers,
@@ -52,6 +52,25 @@ const NO_SSH = {
   entrypointPrefix: undefined,
 } as const;
 
+const ISOLATED_ENVIRONMENT_KEYS = ['HOME', 'USERPROFILE', 'XDG_RUNTIME_DIR'];
+
+/**
+ * Puts back only the keys a case mutated, in the live `process.env`. Swapping
+ * in a plain-object snapshot would drop Windows' case-insensitive lookup,
+ * which the filesystem-denial fixture needs to find SystemRoot.
+ */
+function restoreIsolatedEnvironment(
+  original: ReadonlyMap<string, string | undefined>,
+): void {
+  for (const [key, value] of original) {
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
+}
+
 interface LaunchedCredentialProxy {
   readonly handshake: () => void;
   readonly exitCleanup: () => void;
@@ -81,7 +100,7 @@ function isTimer(value: unknown): value is NodeJS.Timeout {
 }
 
 describe('#3524 capability env-file early release', () => {
-  let environmentSnapshot: NodeJS.ProcessEnv;
+  let originalEnvironment: ReadonlyMap<string, string | undefined>;
   let tmpDir = '';
   let isolatedHome = '';
   let capabilityRuntimeRoot = '';
@@ -90,7 +109,9 @@ describe('#3524 capability env-file early release', () => {
   let activeLaunchCleanup: (() => void) | undefined;
 
   beforeEach(() => {
-    environmentSnapshot = { ...process.env };
+    originalEnvironment = new Map(
+      ISOLATED_ENVIRONMENT_KEYS.map((key) => [key, process.env[key]]),
+    );
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cap-envfile-3524-'));
     isolatedHome = path.join(tmpDir, 'home');
     capabilityRuntimeRoot = path.join(tmpDir, 'runtime');
@@ -128,7 +149,7 @@ describe('#3524 capability env-file early release', () => {
     }
     sandboxStandin?.kill();
     vi.restoreAllMocks();
-    process.env = environmentSnapshot;
+    restoreIsolatedEnvironment(originalEnvironment);
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
