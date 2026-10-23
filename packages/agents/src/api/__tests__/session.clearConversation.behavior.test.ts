@@ -130,6 +130,16 @@ async function verifyJournalSessionLayout(
 }
 
 describe('starting a new conversation session', () => {
+  it('retires an empty client journal when starting another session', async () => {
+    await withRecordedConversation(async (agent) => {
+      await agent.session.startNewSession();
+      const retired = agent.agentClient.getHistoryService();
+      if (retired === null) throw new Error('Missing empty session history');
+      await agent.session.startNewSession();
+      await expect(retired.getLastContent()).rejects.toThrow('disposed');
+    });
+  });
+
   it('rejects foreground turns and settings while recording retirement is paused', async () => {
     await withRecordedConversation(async (agent, oldPath) => {
       const entered = deferred();

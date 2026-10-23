@@ -129,7 +129,6 @@ export class AgentClient
   private sessionContentGeneratorConfig?: ContentGeneratorConfig;
   private _deferredHistoryAdmission?: RetainedHistoryAdmission;
   private _releaseDeferredSource?: () => Promise<void>;
-  private streamedDeferredHistory = false;
   private readonly historyAdmissions: RetainedHistoryAdmissions;
   private readonly deferredHistory: DeferredHistoryPort;
   private _storedHistoryService?: HistoryService;
@@ -350,12 +349,9 @@ export class AgentClient
       this.handleModelChanged,
       this.handleModelProfileChanged,
     );
-    if (this.chat !== undefined && this.streamedDeferredHistory) {
+    if (this.chat !== undefined) {
       try {
-        await clearClientHistoryForDisposal(
-          this.chat,
-          this.streamedDeferredHistory,
-        );
+        await clearClientHistoryForDisposal(this.chat, true);
         this.chat = undefined;
       } catch (error: unknown) {
         failures.push(error);
@@ -363,8 +359,7 @@ export class AgentClient
     }
     try {
       await releaseDeferredSource(this.deferredHistory);
-      if (this.streamedDeferredHistory)
-        await this._storedHistoryService?.dispose();
+      await this._storedHistoryService?.dispose();
     } catch (error) {
       failures.push(error);
     }
@@ -397,7 +392,6 @@ export class AgentClient
           publish: (candidate) => {
             this._storedHistoryService = candidate.journal;
             this._releaseDeferredSource = candidate.release;
-            this.streamedDeferredHistory = true;
             this._deferredHistoryAdmission = undefined;
             this.contentGenerator = undefined;
             this.chat = undefined;
@@ -573,9 +567,6 @@ export class AgentClient
       stored: () => this._storedHistoryService,
       setStored: (journal) => {
         this._storedHistoryService = journal;
-      },
-      markStreamed: () => {
-        this.streamedDeferredHistory = true;
       },
       resetIdeContext: () => this.ideContextTracker.resetContext(),
     };

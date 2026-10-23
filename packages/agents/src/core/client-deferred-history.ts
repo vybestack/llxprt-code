@@ -44,7 +44,6 @@ export interface DeferredHistoryPort {
   setRelease(release: (() => Promise<void>) | undefined): void;
   stored(): HistoryService | undefined;
   setStored(journal: HistoryService | undefined): void;
-  markStreamed(): void;
   resetIdeContext(): void;
 }
 
@@ -72,9 +71,7 @@ export async function setClientHistory(
     port.admissions,
     port.admission(),
     (rows) => replaceDeferredHistory(port, rows),
-    () => {
-      port.markStreamed();
-    },
+    () => {},
     stripThoughts,
     historyOrigin,
   );
@@ -108,7 +105,6 @@ export async function setHistoryFromSource(
       port.setAdmission(undefined);
       if (port.chat() === undefined) {
         port.setStored(journal);
-        port.markStreamed();
       }
       port.resetIdeContext();
     },
@@ -134,7 +130,6 @@ export async function storeHistoryForLaterUse(
     priorRelease: port.release(),
     publish: (journal, release) => {
       port.setStored(journal);
-      port.markStreamed();
       port.setAdmission(undefined);
       port.setRelease(release);
     },
@@ -175,7 +170,6 @@ function replaceDeferredHistory(
     port.setAdmission(next.retained);
     port.setStored(next.journal);
     port.setRelease(undefined);
-    port.markStreamed();
     await priorRelease?.();
   });
 }
@@ -235,7 +229,6 @@ export async function startChatWithDeferredHistory(
     );
   }
   port.setChat(chat);
-  port.markStreamed();
   await releaseDeferredArray(
     port.admissions,
     deferredAdmission,
