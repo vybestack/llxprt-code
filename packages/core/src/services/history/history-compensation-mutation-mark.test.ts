@@ -23,7 +23,8 @@ describe('history mutation identity after compensation', () => {
       expect(original()).toBe(true);
       expect(abandoned()).toBe(false);
       const rows: IContent[] = [];
-      for await (const content of history.streamRawHistory()) rows.push(content);
+      for await (const content of history.streamRawHistory())
+        rows.push(content);
       expect(rows.map((content) => content.blocks)).toStrictEqual([
         row('original').blocks,
       ]);

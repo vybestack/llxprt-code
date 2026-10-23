@@ -39,7 +39,7 @@ export class JournalCompensationMark implements HistoryCompensationMark {
   constructor(
     readonly store: JournalHistoryStore,
     readonly saved: Promise<VersionSnapshot>,
-    readonly mutation: HistoryMutationMark,
+    readonly mutationSequence: number,
   ) {}
 }
 
@@ -57,7 +57,7 @@ export class JournalPublication {
     store: JournalHistoryStore,
     saved: Promise<VersionSnapshot>,
   ): JournalCompensationMark {
-    const mark = new JournalCompensationMark(store, saved, this.mark(store));
+    const mark = new JournalCompensationMark(store, saved, this.current);
     this.compensation.add(mark);
     return mark;
   }
@@ -80,7 +80,7 @@ export class JournalPublication {
   }
 
   compensated(mark: JournalCompensationMark): void {
-    this.current = mark.mutation.lastSeq;
+    this.current = mark.mutationSequence;
   }
 
   open(): HistoryPublicationScope {
