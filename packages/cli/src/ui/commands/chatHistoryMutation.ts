@@ -195,29 +195,39 @@ export async function mutateChatHistory(
 ): Promise<MessageActionReturn | void> {
   const native = nativeHistoryPrefixOwner(client.getHistoryService());
   if (native !== undefined) {
-    return native.withPrefix(
-      turns ?? 2,
-      turns !== undefined,
-      clientMediaStore(client),
-      async (selected) => {
-        if (selected.removed === 0)
-          return {
-            type: 'message',
-            messageType: 'info',
-            content:
-              turns === undefined
-                ? 'No conversation to clear.'
-                : 'Not enough history to restore the requested number of turns.',
-          };
-        signal.throwIfAborted();
-        await assertRecordingWritable(recording);
-        await client.setHistoryFromSource(selected);
-        client.getHistoryService()?.resetCacheAnchorSeq();
-        await displayPrefix(ui, emojiSettings, selected, turns !== undefined);
-        return undefined;
-      },
-      signal,
-    );
+    try {
+      return await native.withPrefix(
+        turns ?? 2,
+        turns !== undefined,
+        clientMediaStore(client),
+        async (selected) => {
+          if (selected.removed === 0)
+            return {
+              type: 'message',
+              messageType: 'info',
+              content:
+                turns === undefined
+                  ? 'No conversation to clear.'
+                  : 'Not enough history to restore the requested number of turns.',
+            };
+          signal.throwIfAborted();
+          await assertRecordingWritable(recording);
+          await client.setHistoryFromSource(selected);
+          client.getHistoryService()?.resetCacheAnchorSeq();
+          await displayPrefix(ui, emojiSettings, selected, turns !== undefined);
+          return undefined;
+        },
+        signal,
+      );
+    } catch (error) {
+      signal.throwIfAborted();
+      const detail = error instanceof Error ? error.message : String(error);
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: `Failed to ${turns === undefined ? 'clear' : 'restore'} history: ${detail}`,
+      };
+    }
   }
   return mutateOldChatHistory(
     client,
