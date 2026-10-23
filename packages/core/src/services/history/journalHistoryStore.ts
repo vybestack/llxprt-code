@@ -475,12 +475,11 @@ export class JournalHistoryStore
   detachJournal(recorder: SessionRecordingPort): Promise<void> {
     const journalRecorder = requireJournalRecorder(recorder);
     return this.opened.then(() =>
-      !this.disposed && this.adopted === journalRecorder
-        ? this.exclusive(
-            () => this.topology.detach(this.adoptedWrites, this.failure),
-            true,
-          )
-        : this.mirrors.detachRecorder(journalRecorder),
+      this.exclusive(async () => {
+        if (!this.disposed && this.adopted === journalRecorder)
+          await this.topology.detach(this.adoptedWrites, this.failure);
+        await this.mirrors.unbindRecorder(journalRecorder);
+      }, true),
     );
   }
 
