@@ -1,5 +1,5 @@
-import { observeHistorySynchronouslyForTest as testHistory } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
 import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
+import { observeHistorySynchronouslyForTest as testHistory } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
 /**
  * Test to reproduce duplicate tool call IDs during compression
  *
@@ -13,14 +13,14 @@ import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/cu
  * structurally compatible Content shape, so the compression round-trip under
  * test is unchanged.
  */
-import { describe, it, expect, afterEach } from 'bun:test';
-import { HistoryService } from '../services/history/HistoryService.js';
+import { afterEach, describe, expect, it } from 'bun:test';
 import { ContentConverters } from '../services/history/ContentConverters.js';
+import { HistoryService } from '../services/history/HistoryService.js';
 import { encodeForProvider } from './__tests__/support/compression-wire-fixture.js';
 const histories: HistoryService[] = [];
 
 function createOldHistory(): HistoryService {
-  const history = new HistoryService({ backend: 'old' });
+  const history = new HistoryService({});
   histories.push(history);
   return history;
 }

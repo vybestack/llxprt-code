@@ -4,13 +4,13 @@ import { observeHistorySynchronouslyForTest } from '@vybestack/llxprt-code-test-
 /**
  * Test that compression locking prevents race conditions
  */
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import {
   createBlockedTokenizerFactory,
   rebuildAfterClear,
 } from './compression-locking-test-helpers.js';
-import { HistoryService } from './HistoryService.js';
 import { CompressionOperationQueue } from './historyCompressionQueue.js';
+import { HistoryService } from './HistoryService.js';
 
 /**
  * Render helpers for block assertions. Hoisted so the text/non-text choice
@@ -726,7 +726,7 @@ function legacyTest25() {
   expect(reports).toStrictEqual([2, 2]);
 }
 const legacyHook0 = () => {
-  legacySuite0_historyService = new HistoryService({ backend: 'old' });
+  legacySuite0_historyService = new HistoryService({});
 };
 async function disposeHistory(): Promise<void> {
   await legacySuite0_historyService.dispose();

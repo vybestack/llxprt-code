@@ -1,11 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import createDebug from 'debug';
-import { debugLogger } from '../utils/debugLogger.js';
+import { sha256KeyHash } from '../journal/idKeys.js';
 import { openJournalReadOnly } from '../journal/journalReader.js';
 import { stateReaderOf } from '../journal/journalReaderState.js';
-import { sha256KeyHash } from '../journal/idKeys.js';
 import { HistoryService } from '../services/history/HistoryService.js';
+import { debugLogger } from '../utils/debugLogger.js';
 import {
   nativeText,
   useNativeIntegration,
@@ -304,7 +304,7 @@ describe('native recording integration lifecycle', () => {
       (event) => event.type === 'write',
     ).length;
     history.add(nativeText('failed mirror'));
-    const replacement = new HistoryService({ backend: 'journal' });
+    const replacement = new HistoryService({});
     histories.push(replacement);
     const failure = await rejected(integration.subscribeToJournal(replacement));
     expect(failure).toHaveProperty('message', 'injected write failure');

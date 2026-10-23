@@ -3,10 +3,10 @@ import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
 import { createSessionRecorder } from '../../recording/sessionRecorderFactory.js';
-import { HistoryService } from './HistoryService.js';
-import { JournalSession } from './journalSession.js';
 import { exactTokenizer } from './chronology-rollback-test-helpers.js';
+import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
+import { JournalSession } from './journalSession.js';
 import {
   JOURNAL_SPAN_WINDOW,
   encodeJournalSpanWindow,
@@ -106,22 +106,19 @@ describe('annotated append summary spans are independent of the density window',
   it.each([512, 8192])(
     'retains the summary, exact latest window and nonempty cache anchors at %i rows in both mirrors',
     async (size) => {
-      const history = new HistoryService({ backend: 'journal' });
-      const old = new HistoryService({ backend: 'old' });
+      const history = new HistoryService({});
+      const old = new HistoryService({});
       history.setTokenizerFactory(exactTokenizer());
       old.setTokenizerFactory(exactTokenizer());
       const mirrors = [0, 1].map((index) =>
-        createSessionRecorder(
-          {
-            sessionId: `summary-${size}-${index}`,
-            projectHash: 'summary-parity',
-            chatsDir: directory(),
-            workspaceDirs: [directory()],
-            provider: 'test',
-            model: 'test',
-          },
-          { LLXPRT_HISTORY_BACKEND: 'journal' },
-        ),
+        createSessionRecorder({
+          sessionId: `summary-${size}-${index}`,
+          projectHash: 'summary-parity',
+          chatsDir: directory(),
+          workspaceDirs: [directory()],
+          provider: 'test',
+          model: 'test',
+        }),
       );
       const initial = Array.from({ length: size }, (_, index) => row(index));
       const appended = Array.from({ length: size }, (_, index) => {

@@ -1,16 +1,15 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { assertNotNull } from '@vybestack/llxprt-code-test-utils';
 import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
-import { createSessionRecorder } from '../../sessionRecorderFactory.js';
-import type { SessionRecordingServiceConfig } from '../../types.js';
-import type { SessionRecordingPort } from '../../recordingPort.js';
 import { rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { IContent } from '../../../services/history/IContent.js';
 import { JournalSession } from '../../../services/history/journalSession.js';
-import { replaySession } from '../../ReplayEngine.js';
 import type { LocalMediaStore } from '../../../storage/local-media-store.js';
-import { selectBackend } from '../../../services/history/historyBackendSelect.js';
+import type { SessionRecordingPort } from '../../recordingPort.js';
+import { replaySession } from '../../ReplayEngine.js';
+import { createSessionRecorder } from '../../sessionRecorderFactory.js';
+import type { SessionRecordingServiceConfig } from '../../types.js';
 
 export function createPackageRecorder(
   config: Partial<SessionRecordingServiceConfig> &
@@ -27,7 +26,7 @@ export function createPackageRecorder(
 }
 
 export function packageRecordingName(): 'session.jsonl' | 'session.llxj' {
-  return selectBackend() === 'journal' ? 'session.llxj' : 'session.jsonl';
+  return 'session.llxj';
 }
 
 export async function writePackageRecording(

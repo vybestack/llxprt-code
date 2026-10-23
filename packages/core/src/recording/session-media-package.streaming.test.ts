@@ -9,8 +9,8 @@ import { createHash } from 'node:crypto';
 import {
   appendFile,
   mkdir,
-  open,
   mkdtemp,
+  open,
   readFile,
   readdir,
   rm,
@@ -19,22 +19,21 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { selectBackend } from '../services/history/historyBackendSelect.js';
-import { useBackendEnv } from './__tests__/support/backendEnv.js';
+
+import type { IContent } from '../services/history/IContent.js';
+import { JournalSession } from '../services/history/journalSession.js';
+import { LocalMediaStore } from '../storage/local-media-store.js';
 import {
   packageRecordingName,
-  writePackageRecording,
   readPackageRows,
+  writePackageRecording,
 } from './__tests__/support/packageRecording.js';
-import { JournalSession } from '../services/history/journalSession.js';
 import { readJournalFileFacts } from './journalSessionListing.js';
-import type { IContent } from '../services/history/IContent.js';
-import { LocalMediaStore } from '../storage/local-media-store.js';
+import { HASH_CHUNK_BYTES } from './session-media-package-validation.js';
 import {
   importSessionMediaPackage,
   validateSessionMediaPackage,
 } from './session-media-package.js';
-import { HASH_CHUNK_BYTES } from './session-media-package-validation.js';
 
 const PROJECT_HASH = 'streaming-project';
 const ROW_TEXT = 'x'.repeat(4096);
@@ -87,25 +86,6 @@ async function assertNativeIdentity(
   expect(facts?.facts.start.projectHash).toBe(PROJECT_HASH);
   expect(facts?.facts.start.cwd).toBeUndefined();
   expect(facts?.facts.directories).toStrictEqual([]);
-}
-
-async function assertLegacyIdentity(
-  path: string,
-  sessionId: string,
-): Promise<void> {
-  const lines = (await readFile(path, 'utf8'))
-    .trimEnd()
-    .split('\n')
-    .map((line) => JSON.parse(line) as Record<string, unknown>);
-  expect(lines).toHaveLength(301);
-  const start = lines[0]['payload'] as Record<string, unknown>;
-  expect(start['sessionId']).toBe(sessionId);
-  expect(start['projectHash']).toBe(PROJECT_HASH);
-  expect(start['cwd']).toBeUndefined();
-  const last = lines[300]['payload'] as {
-    content: { blocks: Array<{ text: string }> };
-  };
-  expect(last.content.blocks[0].text.startsWith('299:')).toBe(true);
 }
 
 async function peakExternalBuffers(work: () => Promise<void>): Promise<number> {
@@ -190,7 +170,6 @@ async function countFileHandleReads(
 }
 
 describe('streamed portable session import', () => {
-  const backend = useBackendEnv();
   let tempDirectory = '';
   let store: LocalMediaStore;
 
@@ -218,10 +197,7 @@ describe('streamed portable session import', () => {
       store,
     );
 
-    const assertIdentity =
-      selectBackend() === 'journal'
-        ? assertNativeIdentity
-        : assertLegacyIdentity;
+    const assertIdentity = assertNativeIdentity;
     await assertIdentity(imported.recordingPath, imported.sessionId);
     const rows = await readPackageRows(imported.recordingPath, PROJECT_HASH);
     expect(rows).toHaveLength(300);
@@ -234,7 +210,7 @@ describe('streamed portable session import', () => {
       sha256(await readFile(imported.recordingPath)),
     );
     expect((await readdir(chats)).sort()).toStrictEqual([
-      `session-imported-${imported.sessionId}${selectBackend() === 'journal' ? '.llxj' : '.jsonl'}`,
+      `session-imported-${imported.sessionId}${'.llxj'}`,
     ]);
   });
 
@@ -280,7 +256,6 @@ describe('streamed portable session import', () => {
   });
 
   it('rejects a recording line above the finite line limit', async () => {
-    backend('old');
     const packageDirectory = join(tempDirectory, 'package');
     const { recordingPath } = await writePackage(packageDirectory, 1);
     await appendFile(recordingPath, `${'y'.repeat(65 * 1024 * 1024)}\n`);
@@ -291,7 +266,6 @@ describe('streamed portable session import', () => {
   });
 
   it('validates native chunk boundaries and short state keys without changing recording digests', async () => {
-    backend('journal');
     const directory = join(tempDirectory, 'boundaries');
     await mkdir(directory);
     const rows: IContent[] = [
@@ -355,7 +329,6 @@ describe('streamed portable session import', () => {
   });
 
   it('rejects a native recording with an uncommitted oversized tail before publication', async () => {
-    backend('journal');
     const directory = join(tempDirectory, 'native-tail');
     const { recordingPath } = await writePackage(directory, 1);
     await appendFile(recordingPath, Buffer.alloc(65 * 1024 * 1024, 121));

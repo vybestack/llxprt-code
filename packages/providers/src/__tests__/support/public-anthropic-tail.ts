@@ -1,14 +1,14 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { mkdirSync, mkdtempSync } from 'node:fs';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { RequestMediaResolver } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
+import type { RequestMediaResolver } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { mkdirSync, mkdtempSync } from 'node:fs';
 import {
   operationFileCreates,
   type OperationFileCreates,
@@ -18,14 +18,14 @@ import {
   readLoggingChatStream,
 } from '../../../../agents/src/core/__tests__/support/chat-session-logging-fixture.js';
 import { AnthropicProvider } from '../../anthropic/AnthropicProvider.js';
-import type { GenerateChatOptions } from '../../IProvider.js';
 import { createRuntimeTokenizerFactory } from '../../composition/runtimeTokenizerFactory.js';
+import type { GenerateChatOptions } from '../../IProvider.js';
 import { TEST_PROVIDER_CONFIG } from '../providerTestConfig.js';
-import { rowsSelection } from './wireBodyCapture.js';
 import {
   anthropicJournalSink,
   type AnthropicCapturedRequest,
 } from './anthropic-journal-case.js';
+import { rowsSelection } from './wireBodyCapture.js';
 
 class ObservedAnthropicProvider extends AnthropicProvider {
   readonly changedSources: number[] = [];
@@ -133,7 +133,7 @@ export async function publicAnthropicTailCase(
     provider: 'anthropic',
     model,
   });
-  const history = new HistoryService({ backend: 'journal', recording });
+  const history = new HistoryService({ recording });
   const settings = new SettingsService();
   settings.setProviderSetting('anthropic', 'model', model);
   settings.setProviderSetting('anthropic', 'base-url', sink.route.baseURL);

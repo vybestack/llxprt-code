@@ -1,12 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { afterEach, describe, expect, it } from 'bun:test';
 import * as path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { openJournalReadOnly } from '../../journal/journalReader.js';
 import { testJournalSeams } from '../../journal/__tests__/support/journalFixtures.js';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
+import { openJournalReadOnly } from '../../journal/journalReader.js';
 import { JournalRecordingService } from '../../recording/journalRecordingService.js';
 import type { ContextRange } from './historyEventTypes.js';
-import { HISTORY_BACKEND_ENV } from './historyBackendSelect.js';
+
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 
@@ -27,16 +27,8 @@ async function texts(history: HistoryService): Promise<string[]> {
 }
 
 /** The service reads the backend from the environment when it is constructed. */
-const savedBackend = process.env[HISTORY_BACKEND_ENV];
 
-function selectBackendForTest(backend: 'old' | 'journal'): void {
-  process.env[HISTORY_BACKEND_ENV] = backend;
-}
-
-function restoreBackend(): void {
-  if (savedBackend === undefined) delete process.env[HISTORY_BACKEND_ENV];
-  else process.env[HISTORY_BACKEND_ENV] = savedBackend;
-}
+function restoreBackend(): void {}
 
 const SUMMARY_FROM_SEQ = 1;
 const SUMMARY_TO_SEQ = 3;
@@ -68,11 +60,11 @@ async function compressOldestThree(history: HistoryService): Promise<void> {
   );
 }
 
-describe.each(['old', 'journal'] as const)(
+describe.each(['journal'] as const)(
   'HistoryService scalars after the commit boundary (%s store)',
-  (backend) => {
+  () => {
     const created: HistoryService[] = [];
-    beforeEach(() => selectBackendForTest(backend));
+
     afterEach(async () => {
       restoreBackend();
       for (const history of created.splice(0)) await history.dispose();
@@ -180,7 +172,7 @@ describe('HistoryService commit boundary with a journal recorder', () => {
   const directory = useTempDir('history-commit-boundary-');
   const histories: HistoryService[] = [];
   const recorders: JournalRecordingService[] = [];
-  beforeEach(() => selectBackendForTest('journal'));
+
   afterEach(async () => {
     restoreBackend();
     for (const history of histories.splice(0)) await history.dispose();

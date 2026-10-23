@@ -1,11 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { selectBackend } from '../services/history/historyBackendSelect.js';
+
 import {
   JournalRecordingService,
   type JournalRecordingConfig,
 } from './journalRecordingService.js';
 import type { SessionRecordingPort } from './recordingPort.js';
-import { SessionRecordingService } from './SessionRecordingService.js';
 import type { SessionRecordingServiceConfig } from './types.js';
 
 /**
@@ -37,19 +36,13 @@ function journalConfig(
 /** A recorder for a new session; its file is created when first needed. */
 export function createSessionRecorder(
   config: SessionRecordingServiceConfig,
-  env: Readonly<Record<string, string | undefined>> = process.env,
 ): SessionRecordingPort {
-  return selectBackend(env) === 'journal'
-    ? JournalRecordingService.create(journalConfig(config))
-    : new SessionRecordingService(config);
+  return JournalRecordingService.create(journalConfig(config));
 }
 
 /** `createSessionRecorder`, holding the session lock. */
 export function createLockedSessionRecorder(
   config: SessionRecordingServiceConfig,
-  env: Readonly<Record<string, string | undefined>> = process.env,
 ): Promise<SessionRecordingPort> {
-  return selectBackend(env) === 'journal'
-    ? JournalRecordingService.createLocked(journalConfig(config))
-    : SessionRecordingService.createLocked(config);
+  return JournalRecordingService.createLocked(journalConfig(config));
 }

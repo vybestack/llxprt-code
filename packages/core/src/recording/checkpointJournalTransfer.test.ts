@@ -1,22 +1,22 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
-import { mkdtemp, rm, writeFile, readdir } from 'node:fs/promises';
+import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SessionTransitionService } from './SessionTransitionService.js';
-import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
+
+import { HistoryService } from '../services/history/HistoryService.js';
+import type { IContent } from '../services/history/IContent.js';
+import { HistoryMediaOwnership } from '../storage/history-media-ownership.js';
+import { LocalMediaStore } from '../storage/local-media-store.js';
+import { MediaAdmissionService } from '../storage/media-admission-service.js';
 import {
   requireJsonlFork,
   type JsonlFork,
 } from './__tests__/support/jsonlFork.js';
-import { SessionLockManager } from './SessionLockManager.js';
-import { replaySession, replaySessionThroughSequence } from './ReplayEngine.js';
-import { LocalMediaStore } from '../storage/local-media-store.js';
-import { MediaAdmissionService } from '../storage/media-admission-service.js';
-import { HistoryMediaOwnership } from '../storage/history-media-ownership.js';
-import { HistoryService } from '../services/history/HistoryService.js';
 import { createRowCounters } from './journalCounters.js';
-import type { IContent } from '../services/history/IContent.js';
+import { replaySession, replaySessionThroughSequence } from './ReplayEngine.js';
+import { SessionLockManager } from './SessionLockManager.js';
 import type { ContinueTarget } from './types.js';
 
 const time = '2026-09-21T00:00:00.000Z';
@@ -27,8 +27,6 @@ function row(text: string, seq: number): IContent {
     metadata: { chronology: { seq, userTurn: seq, step: 1, recordedAt: 1 } },
   };
 }
-
-pinHistoryBackend('old');
 
 let root: string;
 

@@ -12,19 +12,23 @@
  */
 
 import { afterEach, describe, expect, it } from 'bun:test';
-import { readFile } from 'node:fs/promises';
-import { selectBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
-import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+
 import {
   decodeSessionFact,
   SESSION_KEYS,
 } from '@vybestack/llxprt-code-core/recording/sessionMetaKeys.js';
+import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+import { withRecordingLifetimeFixture } from '../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
+import {
+  buildFakeAgent,
+  buildScriptedAgent,
+  createSession,
+  editConfirmation,
+  RecordingConnection,
+} from './__tests__/zed-test-helpers.js';
+import type { Session } from './zedIntegration.js';
 
 async function assertDurableTitle(path: string): Promise<void> {
-  if (selectBackend() === 'old') {
-    await assertJsonlTitle(path);
-    return;
-  }
   const session = await JournalSession.open(path);
   try {
     const bytes = await session.store.getState(SESSION_KEYS.title);
@@ -34,21 +38,6 @@ async function assertDurableTitle(path: string): Promise<void> {
     await session.close();
   }
 }
-
-async function assertJsonlTitle(path: string): Promise<void> {
-  expect(await readFile(path, 'utf8')).toContain(
-    '"title":"/tools owner title"',
-  );
-}
-import { withRecordingLifetimeFixture } from '../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
-import type { Session } from './zedIntegration.js';
-import {
-  buildFakeAgent,
-  buildScriptedAgent,
-  RecordingConnection,
-  createSession,
-  editConfirmation,
-} from './__tests__/zed-test-helpers.js';
 
 describe('Zed Session recording title owner', () => {
   it('writes a durable title and hydrates only the owning facade when Config is borrowed', async () => {

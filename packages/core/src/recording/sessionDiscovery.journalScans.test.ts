@@ -1,11 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { describe, expect, it } from 'bun:test';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
-import { describe, expect, it } from 'bun:test';
 import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
 import { retiredJournalMessage } from '../journal/journalRefusal.js';
 import { SessionDiscovery } from './SessionDiscovery.js';
-import { useBackendEnv } from './__tests__/support/backendEnv.js';
+
 import {
   PROJECT,
   chatsDirIn,
@@ -15,10 +15,8 @@ import {
 
 describe('the bounded discovery scans on the journal backend', () => {
   const directory = useTempDir('session-discovery-scans-');
-  const setBackend = useBackendEnv();
 
   it('reads the session header of a journal file from its facts', async () => {
-    setBackend('journal');
     const { filePath } = await recordJournal(
       chatsDirIn(directory()),
       'sess-h',
@@ -39,7 +37,6 @@ describe('the bounded discovery scans on the journal backend', () => {
   });
 
   it('gives no header for a damaged journal and never opens a retired JSONL file', async () => {
-    setBackend('journal');
     const chats = chatsDirIn(directory());
     await fsp.mkdir(chats, { recursive: true });
     const damaged = path.join(chats, 'session-damaged.llxj');
@@ -68,7 +65,6 @@ describe('the bounded discovery scans on the journal backend', () => {
   });
 
   it('builds continue targets from the journal facts without scanning rows, and reports a retired file', async () => {
-    setBackend('journal');
     const chats = chatsDirIn(directory());
     await recordJournal(chats, 'sess-n', {
       rows: [userRow('named one')],
@@ -103,7 +99,6 @@ describe('the bounded discovery scans on the journal backend', () => {
   });
 
   it('lists the live checkpoints of each journal session as continue targets', async () => {
-    setBackend('journal');
     const chats = chatsDirIn(directory());
     const recorded = await recordJournal(chats, 'sess-c', {
       rows: [userRow('one'), userRow('two')],

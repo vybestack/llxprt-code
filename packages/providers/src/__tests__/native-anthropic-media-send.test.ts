@@ -1,26 +1,26 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
+import { batchGate } from '@vybestack/llxprt-code-core/services/history/__tests__/support/addbatch-stream-test-helpers.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import { HistoryMediaOwnership } from '@vybestack/llxprt-code-core/storage/history-media-ownership.js';
+import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
+import { RequestMediaResolver } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { describe, expect, it, spyOn } from 'bun:test';
 import { mkdirSync, mkdtempSync } from 'node:fs';
 import { join } from 'node:path';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
-import { HistoryMediaOwnership } from '@vybestack/llxprt-code-core/storage/history-media-ownership.js';
-import { RequestMediaResolver } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
-import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
-import { batchGate } from '@vybestack/llxprt-code-core/services/history/__tests__/support/addbatch-stream-test-helpers.js';
 import { operationFileCreates } from '../../../agents/src/compression/__tests__/support/operation-file-creates.js';
 import { AnthropicProvider } from '../anthropic/AnthropicProvider.js';
 import { TEST_PROVIDER_CONFIG } from './providerTestConfig.js';
+import { anthropicJournalSink } from './support/anthropic-journal-case.js';
 import { normalizedRows } from './support/frozenWire/normalizedRows.js';
 import {
   buildHistoryCallOptions,
   rowsSelection,
   type WireRoute,
 } from './support/wireBodyCapture.js';
-import { anthropicJournalSink } from './support/anthropic-journal-case.js';
 
 async function sendMedia(
   route: WireRoute,
@@ -116,7 +116,7 @@ async function mediaFixture(
         { speaker: 'ai', blocks: [{ type: 'text', text: 'seen' }] },
         { speaker: 'human', blocks: [{ type: 'text', text: 'continue' }] },
       ];
-  const history = new HistoryService({ backend: 'journal' });
+  const history = new HistoryService({});
   await history.registerMediaOwner(new HistoryMediaOwnership(store));
   await history.addBatch(rows);
   const selection = await history.prepareCuratedForProviderSnapshot();

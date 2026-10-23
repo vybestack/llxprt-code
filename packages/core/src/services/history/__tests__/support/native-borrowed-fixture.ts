@@ -1,15 +1,15 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { createRecorderForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 import { expect } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createRecorderForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 import { createRowCounters } from '../../../../recording/journalCounters.js';
 import { RowOwnership } from '../../../../recording/rowOwnership.js';
-import { HistoryService } from '../../HistoryService.js';
-import type { HistoryRowView } from '../../historyRowView.js';
 import { borrowedRow } from '../../borrowed-snapshot-test-helpers.js';
 import { exactTokenizer } from '../../chronology-rollback-test-helpers.js';
+import type { HistoryRowView } from '../../historyRowView.js';
+import { HistoryService } from '../../HistoryService.js';
 import type { IContent } from '../../IContent.js';
 
 export class NativeBorrowedHistory extends HistoryService {
@@ -62,15 +62,15 @@ export async function withNativeBorrowedFixture(
   ) => Promise<void>,
 ): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), 'native-borrowed-'));
-  const recording = createRecorderForTest(
-    { sessionId: 'borrowed', projectHash: 'borrowed', chatsDir: root },
-    { LLXPRT_HISTORY_BACKEND: 'journal' },
-  );
+  const recording = createRecorderForTest({
+    sessionId: 'borrowed',
+    projectHash: 'borrowed',
+    chatsDir: root,
+  });
   const owners = new BorrowedCensus();
   const counters = createRowCounters();
   let released = 0;
   const history = new NativeBorrowedHistory({
-    backend: 'journal',
     recording,
     attachmentCounters: {
       ...counters.counters,

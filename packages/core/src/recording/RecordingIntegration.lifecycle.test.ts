@@ -29,28 +29,27 @@
  * These tests are expected to fail against the Phase 12 stub implementation.
  */
 
-import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import {
   assertDefined,
   blockTextOrEmpty,
 } from '@vybestack/llxprt-code-test-utils';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
-import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
-pinHistoryBackend('old');
-import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
-import * as os from 'node:os';
+import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
+
+import { Storage } from '@vybestack/llxprt-code-settings';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { type IContent } from '../services/history/IContent.js';
-import { RecordingIntegration } from './RecordingIntegration.js';
-import { withRecordingFailureReport } from './recording-failure-consumer.js';
-import { replaySession } from './ReplayEngine.js';
+import { SessionPersistenceService } from '../storage/SessionPersistenceService.js';
 import { assertReplayOk } from './__tests__/replay-test-helpers.js';
+import { withRecordingFailureReport } from './recording-failure-consumer.js';
+import { RecordingIntegration } from './RecordingIntegration.js';
+import { replaySession } from './ReplayEngine.js';
 import { SessionRecordingService } from './SessionRecordingService.js';
 import { type SessionRecordingServiceConfig } from './types.js';
-import { SessionPersistenceService } from '../storage/SessionPersistenceService.js';
-import { Storage } from '@vybestack/llxprt-code-settings';
 
 function persistencePaths(storage: Storage): {
   readonly projectRoot: string;

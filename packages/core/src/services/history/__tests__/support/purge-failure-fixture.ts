@@ -1,13 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { collectJournalRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import {
-  withRollbackFixture,
   durableRowsOf,
+  withRollbackFixture,
 } from '../../chronology-rollback-test-helpers.js';
 import type { HistoryService } from '../../HistoryService.js';
-import type { HistoryBackend } from '../../historyBackendSelect.js';
 import type { IContent } from '../../IContent.js';
 import { withNativePurgeFixture } from './native-purge-fixture.js';
+type HistoryBackend = 'old' | 'journal';
 
 type Action = (
   history: HistoryService,

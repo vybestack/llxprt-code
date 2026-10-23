@@ -34,15 +34,15 @@
  */
 
 import * as acp from '@agentclientprotocol/sdk';
-import { selectBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
-import { sessionFileExtension } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
+
 import {
   DebugLogger,
   RESUME_NO_SESSIONS_FOUND,
-  RESUME_SESSION_NOT_FOUND_PREFIX,
   RESUME_SESSION_INDEX_OUT_OF_RANGE_RE,
+  RESUME_SESSION_NOT_FOUND_PREFIX,
   SESSION_FILE_ID_PREFIX_LENGTH,
 } from '@vybestack/llxprt-code-core';
+import { SESSION_FILE_EXTENSION } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
 
 /** JSON-RPC code ACP assigns to resourceNotFound. */
 const RESOURCE_NOT_FOUND_CODE = -32002;
@@ -268,7 +268,7 @@ export function findMatchingSessionFile(
  * failure probe and the load-session reattachment probe use this suffix.
  */
 function sessionFileSuffix(sessionId: string): string {
-  return `-${sessionId.substring(0, SESSION_FILE_ID_PREFIX_LENGTH)}${sessionFileExtension(selectBackend())}`;
+  return `-${sessionId.substring(0, SESSION_FILE_ID_PREFIX_LENGTH)}${SESSION_FILE_EXTENSION}`;
 }
 
 /**

@@ -1,24 +1,24 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { expect } from 'bun:test';
-import { mkdtemp, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { createHash } from 'node:crypto';
 import { createAgent, type Agent } from '@vybestack/llxprt-code-agents';
 import {
   DebugLogger,
   type MediaReferenceBlock,
 } from '@vybestack/llxprt-code-core';
 import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
-import { createMockCommandContext } from './mockCommandContext.js';
+import { expect } from 'bun:test';
+import { createHash } from 'node:crypto';
+import { mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { chatOwnerCommand } from '../ui/commands/chatOwnerCommand.js';
 import { continueCommand } from '../ui/commands/continueCommand.js';
-import type { HistoryItemWithoutId, Message } from '../ui/types.js';
-import type { SlashCommandProcessorActions } from '../ui/hooks/slashCommandProcessor.js';
 import {
   processSlashCommand,
   type SlashCommandHandlerDeps,
 } from '../ui/hooks/slashCommandHandlers.js';
+import type { SlashCommandProcessorActions } from '../ui/hooks/slashCommandProcessor.js';
+import type { HistoryItemWithoutId, Message } from '../ui/types.js';
+import { createMockCommandContext } from './mockCommandContext.js';
 const actions: SlashCommandProcessorActions = {
   openAuthDialog: () => {},
   openThemeDialog: () => {},
@@ -121,7 +121,7 @@ export async function nativeCommandFixture(): Promise<NativeCommandFixture> {
       }) + '\n'
     ).repeat(6),
   );
-  process.env.LLXPRT_HISTORY_BACKEND = 'journal';
+
   process.env.LLXPRT_FAKE_RESPONSES = fixture;
   process.env.LLXPRT_LOG_HOME = join(root, 'logs');
   async function agent(sessionId: string): Promise<Agent> {
@@ -172,11 +172,7 @@ export async function nativeCommandFixture(): Promise<NativeCommandFixture> {
       try {
         await live.dispose();
       } finally {
-        for (const key of [
-          'LLXPRT_HISTORY_BACKEND',
-          'LLXPRT_FAKE_RESPONSES',
-          'LLXPRT_LOG_HOME',
-        ]) {
+        for (const key of ['LLXPRT_FAKE_RESPONSES', 'LLXPRT_LOG_HOME']) {
           if (saved[key] === undefined) delete process.env[key];
           else process.env[key] = saved[key];
         }

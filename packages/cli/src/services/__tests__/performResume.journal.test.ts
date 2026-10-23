@@ -1,8 +1,4 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import {
   RecordingIntegration,
   SessionLockManager,
@@ -12,18 +8,20 @@ import {
   type SessionMetadata,
   type SessionRecordingPort,
 } from '@vybestack/llxprt-code-core';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   performResume,
   type RecordingSwapCallbacks,
   type ResumeContext,
 } from '../performResume.js';
-import { pinHistoryBackend } from './support/pinHistoryBackend.js';
 
 const PROJECT = 'journal-project';
-pinHistoryBackend('journal');
 
 function row(text: string, speaker: IContent['speaker'] = 'human'): IContent {
   return { speaker, blocks: [{ type: 'text', text }] };
@@ -76,7 +74,7 @@ describe('performResume on the journal backend with the live recorder bound', ()
       provider: 'anthropic',
       model: 'claude-4',
     });
-    history = new HistoryService({ backend: 'journal' });
+    history = new HistoryService({});
     const integration = new RecordingIntegration(liveRecording);
     await integration.subscribeToJournal(history);
     history.add(row('live-row'));

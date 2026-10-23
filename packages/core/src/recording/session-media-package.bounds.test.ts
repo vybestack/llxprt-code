@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { createPackageRecorder } from './__tests__/support/packageRecording.js';
 import { assertNotNull } from '@vybestack/llxprt-code-test-utils';
 import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
@@ -26,19 +25,20 @@ import type {
 } from '../services/history/IContent.js';
 import { LocalMediaStore } from '../storage/local-media-store.js';
 import {
-  writePackageRecording,
+  createPackageRecorder,
   packageRecordingName,
+  writePackageRecording,
 } from './__tests__/support/packageRecording.js';
-import { useBackendEnv } from './__tests__/support/backendEnv.js';
+
+import { readPackageRows } from './__tests__/support/packageRecording.js';
+import { JournalRecordingService } from './journalRecordingService.js';
+import { readJournalCheckpoints } from './journalSessionListing.js';
+import { MAX_PERSISTED_STATE_BYTES } from './session-media-package-validation.js';
 import {
   exportSessionMediaPackage,
   importSessionMediaPackage,
   validateSessionMediaPackage,
 } from './session-media-package.js';
-import { JournalRecordingService } from './journalRecordingService.js';
-import { readPackageRows } from './__tests__/support/packageRecording.js';
-import { readJournalCheckpoints } from './journalSessionListing.js';
-import { MAX_PERSISTED_STATE_BYTES } from './session-media-package-validation.js';
 
 const PROJECT_HASH = 'package-bounds-project';
 
@@ -163,7 +163,6 @@ async function writeLegacySidecars(
 }
 
 describe('session media package bounded validation', () => {
-  const backend = useBackendEnv();
   let tempDirectory = '';
 
   beforeEach(async () => {
@@ -309,7 +308,6 @@ describe('session media package bounded validation', () => {
   });
 
   it('bounds export persisted states by count before reading their contents', async () => {
-    backend('old');
     const chatsDirectory = join(tempDirectory, 'state-count-chats');
     const store = new LocalMediaStore({
       rootDirectory: join(tempDirectory, 'state-count-media'),
@@ -355,7 +353,6 @@ describe('session media package bounded validation', () => {
   });
 
   it('bounds each export persisted state and aggregate bytes before materialization', async () => {
-    backend('old');
     const chatsDirectory = join(tempDirectory, 'state-bytes-chats');
     const store = new LocalMediaStore({
       rootDirectory: join(tempDirectory, 'state-bytes-media'),
@@ -428,7 +425,6 @@ describe('session media package bounded validation', () => {
   const sidecarCases: readonly SidecarKind[] = ['count', 'bytes'];
   for (const kind of sidecarCases) {
     it(`exports native checkpoint state without reading legacy sidecars exceeding ${kind} bounds`, async () => {
-      backend('journal');
       const chats = join(tempDirectory, 'native-chats');
       const media = new LocalMediaStore({
         rootDirectory: join(tempDirectory, 'native-media'),

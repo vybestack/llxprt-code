@@ -1,9 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { createRowCounters } from '../../recording/journalCounters.js';
+import { RowOwnership } from '../../recording/rowOwnership.js';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
-import { RowOwnership } from '../../recording/rowOwnership.js';
-import { createRowCounters } from '../../recording/journalCounters.js';
 
 function row(index: number): IContent {
   return {
@@ -14,7 +14,7 @@ function row(index: number): IContent {
 
 describe('dump snapshot scoped values', () => {
   it('captures pending values before returning control to the caller', async () => {
-    const history = new HistoryService({ backend: 'old' });
+    const history = new HistoryService({});
     const original = row(0);
     try {
       history.add(original);
@@ -73,7 +73,6 @@ describe('dump snapshot scoped reader closure', () => {
     const ownership = new RowOwnership();
     const counters = createRowCounters();
     const history = new HistoryService({
-      backend: 'old',
       attachmentCounters: { ...counters.counters, ownership },
     });
     try {

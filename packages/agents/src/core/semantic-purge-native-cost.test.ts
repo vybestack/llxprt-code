@@ -1,9 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it, spyOn } from 'bun:test';
+import { VersionSnapshot } from '@vybestack/llxprt-code-core/journal/versionSnapshot.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { VersionSnapshot } from '@vybestack/llxprt-code-core/journal/versionSnapshot.js';
 import { JournalDumpSnapshot } from '@vybestack/llxprt-code-core/services/history/journalDumpSnapshot.js';
+import { describe, expect, it, spyOn } from 'bun:test';
 import { exactTokenizer } from '../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
 
@@ -30,7 +30,7 @@ function row(index: number): IContent {
 describe('native semantic purge one-pass mutation reads', () => {
   for (const size of [40, 4000]) {
     it(`decodes each retained source row once during publication at ${size} rows`, async () => {
-      const history = new HistoryService({ backend: 'journal' });
+      const history = new HistoryService({});
       history.setTokenizerFactory(exactTokenizer());
       try {
         await history.detachedValues.replace(

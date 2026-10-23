@@ -1,34 +1,36 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { suffixSeeder } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
-import { withGpt56DiskSources } from '../tokenizers/gpt56-disk-tokenizer-factory.js';
-import { describe, expect, it } from 'bun:test';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { testJournalSeams } from '@vybestack/llxprt-code-core/journal/__tests__/support/journalFixtures.js';
 import { useTempDir } from '@vybestack/llxprt-code-core/journal/__tests__/support/useTempDir.js';
+import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import { suffixSeeder } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+import { describe, expect, it } from 'bun:test';
 import { operationFileCreates } from '../../../agents/src/compression/__tests__/support/operation-file-creates.js';
-import { createRuntimeTokenizerFactory } from '../composition/runtimeTokenizerFactory.js';
+import { ProviderSourceEnforcer } from '../../../agents/src/compression/provider-source-enforcement.js';
+import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { estimatorCorpus } from '../__tests__/support/estimatorCorpus.js';
 import { normalizedRows } from '../__tests__/support/frozenWire/normalizedRows.js';
 import { rowsSelection } from '../__tests__/support/wireBodyCapture.js';
-import { projectOpenAIChatPromptEnvelopeFromSource } from '../runtime/promptEnvelopeProjections.js';
+import { createRuntimeTokenizerFactory } from '../composition/runtimeTokenizerFactory.js';
+import {
+  projectOpenAIChatPromptEnvelope,
+  projectOpenAIChatPromptEnvelopeFromSource,
+} from '../runtime/promptEnvelopeProjections.js';
+import { withGpt56DiskSources } from '../tokenizers/gpt56-disk-tokenizer-factory.js';
 import { prepareRequest } from './OpenAIRequestPreparation.js';
+import { mistralAcceptanceCases } from './__tests__/support/mistral-acceptance-cases.js';
+import { assertMistralDomain } from './__tests__/support/mistral-domain-projection.js';
+import type { MistralStrip } from './__tests__/support/mistral-unit-token-oracle.js';
 import {
   prepareRequestBody,
   readPreparedChatBody,
 } from './__tests__/support/prepareRequestBody.js';
-import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
-import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
-import { ProviderSourceEnforcer } from '../../../agents/src/compression/provider-source-enforcement.js';
-import { projectOpenAIChatPromptEnvelope } from '../runtime/promptEnvelopeProjections.js';
-import type { MistralStrip } from './__tests__/support/mistral-unit-token-oracle.js';
-import { assertMistralDomain } from './__tests__/support/mistral-domain-projection.js';
-import { mistralAcceptanceCases } from './__tests__/support/mistral-acceptance-cases.js';
 
 const logger = new DebugLogger('native-chat-estimate-test');
 const textRow = (text: string): IContent => ({
@@ -133,7 +135,7 @@ describe('stored native Chat estimates through production preparation', () => {
           .dependencies,
       },
     });
-    const history = new HistoryService({ backend: 'journal', recording });
+    const history = new HistoryService({ recording });
     try {
       await suffixSeeder(recording, history)(rows);
       await consume(history, counter);

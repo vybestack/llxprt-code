@@ -3,13 +3,13 @@ import { describe, expect, it } from 'bun:test';
 import { RowOwnership } from '../../recording/rowOwnership.js';
 import type { HistoryService } from './HistoryService.js';
 import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
-import { exactTokenizer } from './chronology-rollback-test-helpers.js';
 import {
   MergeRowHistory,
   mergeRow,
   oracleDigest,
   streamDigest,
 } from './__tests__/support/history-merge-test-helpers.js';
+import { exactTokenizer } from './chronology-rollback-test-helpers.js';
 
 describe.each(['old', 'journal'] as const)(
   'transactional history merge rows (%s)',
@@ -51,14 +51,12 @@ describe.each(['old', 'journal'] as const)(
               () => mergeRow(20000),
               owners,
               createHistory,
-              backend,
             );
           },
           2048,
           mergeRow,
           owners,
           createHistory,
-          backend,
         );
       }, 600_000);
     }

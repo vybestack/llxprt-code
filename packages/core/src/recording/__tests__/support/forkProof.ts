@@ -10,8 +10,8 @@ import {
   SessionTransitionService,
   type ForkResult,
 } from '../../SessionTransitionService.js';
-import { PROJECT, journalSeams } from './recordedJournals.js';
 import type { ContinueTarget } from '../../types.js';
+import { PROJECT, journalSeams } from './recordedJournals.js';
 
 export interface OwnedContent {
   readonly content: IContent;
@@ -33,7 +33,7 @@ export function useForkProof(): {
   });
   return {
     keep,
-    history: () => keep(new HistoryService({ backend: 'journal' })),
+    history: () => keep(new HistoryService({})),
     recorder: (chatsDir, sessionId) =>
       keep(
         JournalRecordingService.create({

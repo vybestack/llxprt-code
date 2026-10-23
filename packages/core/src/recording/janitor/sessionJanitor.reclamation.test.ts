@@ -22,17 +22,17 @@
  * mocks.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as zlib from 'node:zlib';
-import { runSessionCleanup } from './sessionJanitor.js';
-import { resolveRetentionConfig } from './retentionPolicy.js';
-import { setUnlinkFaultForTest } from './reclamationEngine.js';
-import { SessionRecordingService } from '../SessionRecordingService.js';
+import { JournalRecordingService } from '../journalRecordingService.js';
 import { SessionLockManager } from '../SessionLockManager.js';
 import type { SessionRecordingServiceConfig } from '../types.js';
+import { setUnlinkFaultForTest } from './reclamationEngine.js';
+import { resolveRetentionConfig } from './retentionPolicy.js';
+import { runSessionCleanup } from './sessionJanitor.js';
 import { ARCHIVE_DIR_NAME } from './sessionScanner.js';
 
 async function makeTempDir(): Promise<string> {
@@ -68,11 +68,15 @@ async function createSession(
     ...makeConfig(chatsDir),
     sessionId,
   };
-  const svc = new SessionRecordingService(config);
-  svc.recordContent({
-    speaker: 'human',
-    blocks: [{ type: 'text', text: opts.content ?? 'test message' }],
-  });
+  const svc = JournalRecordingService.create(config);
+  await (
+    await svc.session()
+  ).append([
+    {
+      speaker: 'human',
+      blocks: [{ type: 'text', text: opts.content ?? 'test message' }],
+    },
+  ]);
   await svc.flush();
   await svc.dispose();
   const filePath = svc.getFilePath();

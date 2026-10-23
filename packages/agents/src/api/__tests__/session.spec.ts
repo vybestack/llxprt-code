@@ -29,28 +29,27 @@
  * suite leaves no stray artifacts under the repo or the shared global temp dir.
  */
 
-import { collectAgentHistory } from './helpers/collect-agent-history.js';
-import {
-  withHistoryBackend,
-  withNativeRecordingFixture,
-  nativeRows,
-  rowTexts,
-  requireRecordingPath,
-  readJournalCheckpoints,
-  readJournalFileFacts,
-} from './helpers/native-session-fixture.js';
-import { describe, it, expect } from 'bun:test';
-import { existsSync, mkdtempSync, rmSync, readFileSync } from 'node:fs';
-import { tmpdir, homedir } from 'node:os';
-import { join } from 'node:path';
-import { createHash } from 'node:crypto';
 import type {
   Agent,
-  AgentMessage,
   AgentHistoryItem,
+  AgentMessage,
   CheckpointInfo,
 } from '@vybestack/llxprt-code-agents';
+import { describe, expect, it } from 'bun:test';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { buildAgent, drain, isDoneEvent } from './helpers/agentHarness.js';
+import { collectAgentHistory } from './helpers/collect-agent-history.js';
+import {
+  nativeRows,
+  readJournalCheckpoints,
+  readJournalFileFacts,
+  requireRecordingPath,
+  rowTexts,
+  withNativeRecordingFixture,
+} from './helpers/native-session-fixture.js';
 
 /** Builds a public AgentMessage (Content) with role + a single text part. */
 function textMessage(role: 'user' | 'model', text: string): AgentMessage {
@@ -96,7 +95,7 @@ async function withIsolatedAgent<T>(
   fixture: string,
   fn: (agent: Agent, workingDir: string) => Promise<T>,
 ): Promise<T> {
-  return withHistoryBackend('old', async () => {
+  return (async () => {
     const workingDir = mkdtempSync(join(tmpdir(), 'llxprt-session-spec-'));
     const { agent, cleanup } = await buildAgent(fixture, { workingDir });
     try {
@@ -106,7 +105,7 @@ async function withIsolatedAgent<T>(
       rmSync(workingDir, { recursive: true, force: true });
       rmSync(storageTempDirFor(workingDir), { recursive: true, force: true });
     }
-  });
+  })();
 }
 
 const observeCreatesAndListsRecordingNativeCheckpointsWithoutLegacyCheckpointFiles =

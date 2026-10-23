@@ -1,11 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { historyOriginId } from '@vybestack/llxprt-code-core/services/history/historyOriginId.js';
+import { describe, expect, it } from 'bun:test';
 import { exactTokenizer } from '../../../core/src/services/history/chronology-rollback-test-helpers.js';
-import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
 import { operationFileCreates } from '../compression/__tests__/support/operation-file-creates.js';
+import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
 
 function row(index: number): IContent {
   if (index === 1)
@@ -40,7 +40,7 @@ async function origins(
 describe('native semantic purge current source ownership', () => {
   for (const size of [3, 64, 65, 5000]) {
     it(`preserves current owned and unowned source rows after a removed row at ${size}`, async () => {
-      const history = new HistoryService({ backend: 'journal' });
+      const history = new HistoryService({});
       history.setTokenizerFactory(exactTokenizer());
       const a = {};
       const b = {};

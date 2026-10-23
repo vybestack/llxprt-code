@@ -4,26 +4,26 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { SessionLockManager } from '@vybestack/llxprt-code-core/recording/SessionLockManager.js';
 import { describe, expect, it, spyOn } from 'bun:test';
 import { promises as fs } from 'node:fs';
 import * as recordingFs from 'node:fs/promises';
 import { setImmediate } from 'node:timers/promises';
-import { SessionLockManager } from '@vybestack/llxprt-code-core/recording/SessionLockManager.js';
 import { drain } from './helpers/agentHarness.js';
 import {
   gate,
   withRecordingFinalizerFixture as withSelectedFinalizerFixture,
 } from './helpers/recording-finalizer-join-fixture.js';
-import { withHistoryBackend } from './helpers/native-session-fixture.js';
+
 import {
-  joinNativePublicTurn,
-  joinNativePersistence,
   disposeLazyNativeRecording,
+  joinNativePersistence,
+  joinNativePublicTurn,
 } from './helpers/native-finalizer-contracts.js';
 
 const withRecordingFinalizerFixture: typeof withSelectedFinalizerFixture = (
   scenario,
-) => withHistoryBackend('old', () => withSelectedFinalizerFixture(scenario));
+) => (() => withSelectedFinalizerFixture(scenario))();
 
 function containsCause(error: unknown, cause: Error): boolean {
   if (error === cause) return true;

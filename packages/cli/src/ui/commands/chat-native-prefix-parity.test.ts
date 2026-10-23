@@ -2,13 +2,13 @@
 import { describe, expect, it } from 'bun:test';
 import { exactTokenizer } from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import {
-  withCLI,
-  row,
   contents,
-  runCommand,
-  persistedContents,
   operationFileCreates,
+  persistedContents,
+  row,
+  runCommand,
   useTempDir,
+  withCLI,
 } from './native-prefix-test-helpers.js';
 
 async function states(
@@ -16,8 +16,6 @@ async function states(
   size: number,
   backend: 'old' | 'journal',
 ): Promise<unknown[]> {
-  const previous = process.env.LLXPRT_HISTORY_BACKEND;
-  process.env.LLXPRT_HISTORY_BACKEND = backend;
   const captures: unknown[] = [];
   const seed = Array.from({ length: size }, (_, index) => ({
     ...row(index),
@@ -31,7 +29,7 @@ async function states(
       },
     },
   }));
-  try {
+  {
     await withCLI(
       root,
       size,
@@ -74,9 +72,6 @@ async function states(
       seed,
     );
     return captures;
-  } finally {
-    if (previous === undefined) delete process.env.LLXPRT_HISTORY_BACKEND;
-    else process.env.LLXPRT_HISTORY_BACKEND = previous;
   }
 }
 

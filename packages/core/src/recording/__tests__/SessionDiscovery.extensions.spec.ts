@@ -15,21 +15,18 @@
  * NO mocking of fs/fs-promises is permitted.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fc from 'fast-check';
 import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
 import * as os from 'node:os';
+import * as path from 'node:path';
+import type { IContent } from '../../services/history/IContent.js';
 import { SessionDiscovery } from '../SessionDiscovery.js';
 import type {
+  ContentPayload,
   SessionRecordLine,
   SessionStartPayload,
-  ContentPayload,
 } from '../types.js';
-import type { IContent } from '../../services/history/IContent.js';
-import { pinHistoryBackend } from './support/backendEnv.js';
-
-pinHistoryBackend('old');
 
 const bunIt = it;
 

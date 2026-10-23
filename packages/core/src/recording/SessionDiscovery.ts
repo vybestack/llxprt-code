@@ -24,46 +24,32 @@
  * for the resume flow.
  */
 
-import { createReadStream } from 'node:fs';
-import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
-import * as readline from 'node:readline';
 import { readBoundedFirstLine } from './boundedHeaderReader.js';
-import { scanSessionMetadata } from './boundedSessionScan.js';
-import {
-  scanFirstUserMessage,
-  type FirstUserMessageScanOptions,
-} from './firstUserMessageScan.js';
-import { readMetadataJsonLines } from './metadataJsonLines.js';
-import { MetadataJsonProjection } from './metadataJsonProjection.js';
-import {
-  SESSION_TITLE_MAX_LENGTH,
-  type ContinueResolution,
-  type ContinueTarget,
-  type SessionSummary,
-  type SessionStartPayload,
-  type UnreadableRecording,
-} from './types.js';
-import { readSessionHeader } from './ReplayEngine.js';
-import {
-  INVALID_SESSION_START_MESSAGE,
-  isSessionStartHeader,
-} from './sessionStartHeader.js';
+import { type FirstUserMessageScanOptions } from './firstUserMessageScan.js';
 import type { JournalReadCounters } from './journalCounters.js';
+import { MetadataJsonProjection } from './metadataJsonProjection.js';
 import {
   resumeSessionIndexOutOfRangeMessage,
   resumeSessionNotFoundMessage,
 } from './resumeNotFoundMessages.js';
-import { debugLogger } from '../utils/debugLogger.js';
-import { selectBackend } from '../services/history/historyBackendSelect.js';
+import { INVALID_SESSION_START_MESSAGE } from './sessionStartHeader.js';
+import {
+  SESSION_TITLE_MAX_LENGTH,
+  type ContinueResolution,
+  type ContinueTarget,
+  type SessionStartPayload,
+  type SessionSummary,
+  type UnreadableRecording,
+} from './types.js';
+
+import type { LocalMediaStore } from '../storage/local-media-store.js';
 import {
   listJournalSessions,
-  readJournalSessionHeader,
   readJournalCheckpoints,
   readJournalFileFacts,
+  readJournalSessionHeader,
 } from './journalSessionListing.js';
 import { describeUnreadableRecording } from './unreadableRecordings.js';
-import type { LocalMediaStore } from '../storage/local-media-store.js';
 
 /**
  * Result of successfully resolving a session reference.
@@ -170,15 +156,6 @@ interface SessionScan {
   unreadableRecordings: UnreadableRecording[];
 }
 
-/** Sort newest-first by modification time; ids are validated strings. */
-function sortNewestFirst(summaries: SessionSummary[]): void {
-  summaries.sort((a, b) => {
-    const mtimeDiff = b.lastModified.getTime() - a.lastModified.getTime();
-    if (mtimeDiff !== 0) return mtimeDiff;
-    return b.sessionId.localeCompare(a.sessionId);
-  });
-}
-
 async function journalContinueTargets(
   sessions: readonly SessionSummary[],
   unreadable: UnreadableRecording[],
@@ -281,51 +258,11 @@ export class SessionDiscovery {
       projectHash,
       options,
     );
-    const targets: ContinueTarget[] = [];
-    const checkpoints: ContinueTarget[] = [];
     const unreadable: UnreadableRecording[] = [
       ...detailed.unreadableRecordings,
     ];
-    if (selectBackend() === 'journal') {
-      return journalContinueTargets(detailed.sessions, unreadable);
-    }
-    for (const summary of detailed.sessions) {
-      const scan = await scanSessionMetadata(
-        summary.filePath,
-        projectHash,
-        options.counters ?? null,
-      );
-      if (!scan.ok || scan.sequenceCorrupt) {
-        const reason = scan.ok ? 'non-monotonic sequences' : scan.error;
-        debugLogger.debug(
-          `Skipping unreadable session recording ${summary.filePath}: ${reason}`,
-        );
-        unreadable.push({
-          sessionId: summary.sessionId,
-          filePath: summary.filePath,
-          reason,
-        });
-        continue;
-      }
-      const namedSummary = { ...summary, name: scan.sessionName };
-      targets.push({ kind: 'session', session: namedSummary });
-      for (const checkpoint of scan.checkpoints) {
-        if (checkpoint.deleted) continue;
-        checkpoints.push({
-          kind: 'checkpoint',
-          source: namedSummary,
-          checkpointId: checkpoint.checkpointId,
-          checkpointName: checkpoint.name,
-          sequence: checkpoint.sequence,
-        });
-      }
-    }
-    return {
-      targets: [...targets, ...checkpoints],
-      skippedCount: unreadable.length,
-      recordingErrors: unreadable.map(describeUnreadableRecording),
-      unreadableRecordings: unreadable,
-    };
+
+    return journalContinueTargets(detailed.sessions, unreadable);
   }
 
   static resolveContinueRef(
@@ -452,9 +389,7 @@ export class SessionDiscovery {
   static async readSessionHeader(
     filePath: string,
   ): Promise<SessionStartPayload | null> {
-    if (selectBackend() === 'journal')
-      return readJournalSessionHeader(filePath);
-    return readSessionHeader(filePath);
+    return readJournalSessionHeader(filePath);
   }
 
   /**
@@ -497,27 +432,10 @@ export class SessionDiscovery {
    */
   static async hasContentEvents(
     filePath: string,
-    counters?: JournalReadCounters,
+    _counters?: JournalReadCounters,
   ): Promise<boolean> {
-    if (selectBackend() === 'journal') {
-      const found = await readJournalFileFacts(filePath).catch(() => undefined);
-      return (found?.rows ?? 0) > 0;
-    }
-    try {
-      for await (const line of readMetadataJsonLines(filePath)) {
-        if (line.parsed === null) continue;
-        counters?.recordDecoded();
-        if (
-          typeof line.parsed === 'object' &&
-          'type' in line.parsed &&
-          line.parsed.type === 'content'
-        )
-          return true;
-      }
-      return false;
-    } catch {
-      return false;
-    }
+    const found = await readJournalFileFacts(filePath).catch(() => undefined);
+    return (found?.rows ?? 0) > 0;
   }
 
   /**
@@ -532,13 +450,10 @@ export class SessionDiscovery {
   static async readFirstUserMessage(
     filePath: string,
     maxLength: number = SESSION_TITLE_MAX_LENGTH,
-    options: FirstUserMessageScanOptions = {},
+    _options: FirstUserMessageScanOptions = {},
   ): Promise<string | null> {
-    if (selectBackend() === 'journal') {
-      const found = await readJournalFileFacts(filePath).catch(() => undefined);
-      return found?.preview?.slice(0, maxLength) ?? null;
-    }
-    return scanFirstUserMessage(filePath, maxLength, options);
+    const found = await readJournalFileFacts(filePath).catch(() => undefined);
+    return found?.preview?.slice(0, maxLength) ?? null;
   }
 
   /**
@@ -551,36 +466,8 @@ export class SessionDiscovery {
   static async readSessionMetadataTitle(
     filePath: string,
   ): Promise<string | null | undefined> {
-    if (selectBackend() === 'journal') {
-      const found = await readJournalFileFacts(filePath).catch(() => undefined);
-      return found?.facts.title;
-    }
-    let stream: ReturnType<typeof createReadStream> | undefined;
-    let reader: readline.Interface | undefined;
-    try {
-      stream = createReadStream(filePath, { encoding: 'utf8' });
-      reader = readline.createInterface({
-        input: stream,
-        crlfDelay: Infinity,
-      });
-      let title: string | null | undefined;
-      for await (const line of reader) {
-        const result = extractSessionMetadataTitle(line);
-        if (result !== undefined) {
-          title = result;
-        }
-      }
-      return title;
-    } catch (error) {
-      debugLogger.debug(
-        () =>
-          `readSessionMetadataTitle failed for ${filePath}: ${String(error)}`,
-      );
-      return undefined;
-    } finally {
-      reader?.close();
-      stream?.destroy();
-    }
+    const found = await readJournalFileFacts(filePath).catch(() => undefined);
+    return found?.facts.title;
   }
 }
 
@@ -592,144 +479,7 @@ export class SessionDiscovery {
 async function scanSessions(
   chatsDir: string,
   projectHash: string,
-  options: BoundedDiscoveryOptions = {},
+  _options: BoundedDiscoveryOptions = {},
 ): Promise<SessionScan> {
-  if (selectBackend() === 'journal') {
-    return listJournalSessions(chatsDir, projectHash);
-  }
-  let entries: string[];
-  try {
-    entries = await fs.readdir(chatsDir);
-  } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return { sessions: [], unreadableRecordings: [] };
-    }
-    throw error;
-  }
-
-  const sessions: SessionSummary[] = [];
-  const unreadableRecordings: UnreadableRecording[] = [];
-  const sessionFiles = entries.filter(
-    (f) => f.startsWith('session-') && f.endsWith('.jsonl'),
-  );
-  for (const fileName of sessionFiles) {
-    const filePath = path.join(chatsDir, fileName);
-    const result = await readSessionSummary(filePath, options.counters);
-    if (!result.ok) {
-      unreadableRecordings.push(result.unreadable);
-      continue;
-    }
-    // Subagent child journals are never resumable sessions: the filter runs
-    // BEFORE the sort/index so `--continue` latest resolution and every
-    // downstream picker index only main sessions (#854 P05c). Children are
-    // healthy files, not corruption, so they are not reported as unreadable.
-    if (
-      result.summary.projectHash === projectHash &&
-      result.summary.kind !== 'subagent'
-    ) {
-      sessions.push(result.summary);
-    }
-  }
-  sortNewestFirst(sessions);
-  return { sessions, unreadableRecordings };
-}
-
-async function readSessionSummary(
-  filePath: string,
-  counters?: JournalReadCounters,
-): Promise<
-  | { ok: true; summary: SessionSummary }
-  | { ok: false; unreadable: UnreadableRecording }
-> {
-  let stat: Awaited<ReturnType<typeof fs.stat>>;
-  try {
-    stat = await fs.stat(filePath);
-  } catch (error: unknown) {
-    return {
-      ok: false,
-      unreadable: {
-        filePath,
-        reason: `Cannot stat recording: ${error instanceof Error ? error.message : String(error)}`,
-      },
-    };
-  }
-
-  const first = await readSessionStartLine(filePath, counters);
-  if (!first.ok) {
-    return { ok: false, unreadable: { filePath, reason: first.reason } };
-  }
-  const header = first.payload;
-  if (!isSessionStartHeader(header)) {
-    const sessionId: unknown = Reflect.get(header, 'sessionId');
-    return {
-      ok: false,
-      unreadable: {
-        filePath,
-        reason: INVALID_SESSION_START_MESSAGE,
-        ...(typeof sessionId === 'string' && sessionId !== ''
-          ? { sessionId }
-          : {}),
-      },
-    };
-  }
-
-  return {
-    ok: true,
-    summary: {
-      sessionId: header.sessionId,
-      filePath,
-      projectHash: header.projectHash,
-      startTime: header.startTime,
-      lastModified: stat.mtime,
-      fileSize: stat.size,
-      provider: header.provider,
-      model: header.model,
-      // Legacy headers predate the lineage marker and read as `main`.
-      kind: header.kind === 'subagent' ? 'subagent' : 'main',
-      ...(typeof header.cwd === 'string' ? { cwd: header.cwd } : {}),
-      createdAt: header.startTime,
-    },
-  };
-}
-
-/**
- * Extract the title from a `session_metadata` JSONL line.
- * Returns:
- * - `undefined` when the line is not a valid `session_metadata` event (so
- *   callers can continue scanning).
- * - `null` when title is explicitly null (untitled).
- * - `string` when a concrete title is present.
- */
-function extractSessionMetadataTitle(line: string): string | null | undefined {
-  if (!line.trim()) {
-    return undefined;
-  }
-  let event: unknown;
-  try {
-    event = JSON.parse(line);
-  } catch {
-    return undefined;
-  }
-  if (event === null || typeof event !== 'object') {
-    return undefined;
-  }
-  const record = event as Record<string, unknown>;
-  if (record.type !== 'session_metadata') {
-    return undefined;
-  }
-  const payload = record.payload as Record<string, unknown> | undefined;
-  if (!payload || typeof payload !== 'object') {
-    return undefined;
-  }
-  if (!('title' in payload)) {
-    return undefined;
-  }
-  const title = payload.title;
-  if (title === null) {
-    return null;
-  }
-  if (typeof title === 'string') {
-    return title;
-  }
-  return undefined;
+  return listJournalSessions(chatsDir, projectHash);
 }

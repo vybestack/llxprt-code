@@ -5,26 +5,26 @@ import { open } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openJournalReadOnly } from '../../../../journal/journalReader.js';
+import { readStoredRow } from '../../../../journal/rowReads.js';
 import {
   iterateRowEntries,
   rowTreeRootOf,
 } from '../../../../journal/rowTreeReader.js';
-import { readStoredRow } from '../../../../journal/rowReads.js';
-import { decodeStoredRow } from '../../journalRowCodec.js';
-import { HistoryService } from '../../HistoryService.js';
-import { JournalSession } from '../../journalSession.js';
-import type { HistoryBackend } from '../../historyBackendSelect.js';
+import type { RowOwnership } from '../../../../recording/rowOwnership.js';
+import { exactTokenizer } from '../../chronology-rollback-test-helpers.js';
 import {
   detachedDigest,
   detachedDurableDigest,
   withDetachedFixture,
 } from '../../detached-rollback-test-helpers.js';
-import { exactTokenizer } from '../../chronology-rollback-test-helpers.js';
+import { HistoryService } from '../../HistoryService.js';
+import type { IContent } from '../../IContent.js';
+import { decodeStoredRow } from '../../journalRowCodec.js';
+import { JournalSession } from '../../journalSession.js';
 import { batchGate, BatchOwnerCensus } from './addbatch-stream-test-helpers.js';
 import { createCoreSuffixFixtureGraph } from './core-suffix-fixture-test-helpers.js';
-import type { RowOwnership } from '../../../../recording/rowOwnership.js';
-import type { IContent } from '../../IContent.js';
 import { DetachedIOFaults } from './detached-io-faults.js';
+type HistoryBackend = 'old' | 'journal';
 
 export interface DetachedContractFixture {
   readonly history: HistoryService;
@@ -125,22 +125,17 @@ function nativeGraph(
     session,
   );
   try {
-    return createCoreSuffixFixtureGraph(
-      root,
-      owners,
-      (options) => {
-        if (options.attachmentCounters === undefined)
-          throw new Error('Missing native attachment counters');
-        return new HistoryService({
-          ...options,
-          attachmentCounters: {
-            ...options.attachmentCounters,
-            ownership: owners,
-          },
-        });
-      },
-      'journal',
-    );
+    return createCoreSuffixFixtureGraph(root, owners, (options) => {
+      if (options.attachmentCounters === undefined)
+        throw new Error('Missing native attachment counters');
+      return new HistoryService({
+        ...options,
+        attachmentCounters: {
+          ...options.attachmentCounters,
+          ownership: owners,
+        },
+      });
+    });
   } finally {
     opener.mockRestore();
   }

@@ -1,22 +1,21 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { materializeCallOptions } from '@vybestack/llxprt-code-providers/BaseProviderNormalization.js';
+import { FakeProvider } from '@vybestack/llxprt-code-providers/fake/FakeProvider.js';
+import { providerRowsOf } from '@vybestack/llxprt-code-providers/utils/providerRows.js';
+import {
+  acquireRequestRows,
+  stagedRequestRows,
+} from '@vybestack/llxprt-code-providers/utils/requestRowsLease.js';
 import { describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'node:fs';
+import { useTempDir } from '../../../../core/src/journal/__tests__/support/useTempDir.js';
+import { operationFileCreates } from '../../compression/__tests__/support/operation-file-creates.js';
 import {
   buildAgent,
   drain,
   internalAgentClient,
 } from './helpers/agentHarness.js';
 import { collectAgentHistory } from './helpers/collect-agent-history.js';
-import { useNativePrefixBackend } from './helpers/native-prefix-backend.js';
-import { operationFileCreates } from '../../compression/__tests__/support/operation-file-creates.js';
-import { useTempDir } from '../../../../core/src/journal/__tests__/support/useTempDir.js';
-import { FakeProvider } from '@vybestack/llxprt-code-providers/fake/FakeProvider.js';
-import { materializeCallOptions } from '@vybestack/llxprt-code-providers/BaseProviderNormalization.js';
-import {
-  acquireRequestRows,
-  stagedRequestRows,
-} from '@vybestack/llxprt-code-providers/utils/requestRowsLease.js';
-import { providerRowsOf } from '@vybestack/llxprt-code-providers/utils/providerRows.js';
 
 function observeTransportRows(): ReturnType<
   typeof spyOn<typeof FakeProvider.prototype, 'generateChatCompletion'>
@@ -87,8 +86,6 @@ describe('native normalization through public chat', () => {
     }
     return guarded;
   }
-
-  useNativePrefixBackend();
   const directory = useTempDir('native-normalization-chat-');
   it.each([false, true])(
     'commits the model response without normalization files with purge=%s',

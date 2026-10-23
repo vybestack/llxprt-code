@@ -1,22 +1,22 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
-import { JournalRecordingService } from './journalRecordingService.js';
-import { SessionRecordingService } from './SessionRecordingService.js';
-import { JournalResumeBoot, resumePointOf } from './journalResume.js';
-import { RecordingIntegration } from './RecordingIntegration.js';
 import { historyOriginId } from '../services/history/historyOriginId.js';
 import { HistoryService } from '../services/history/HistoryService.js';
-import { selectBackend } from '../services/history/historyBackendSelect.js';
+import { JournalRecordingService } from './journalRecordingService.js';
+import { JournalResumeBoot, resumePointOf } from './journalResume.js';
+import { RecordingIntegration } from './RecordingIntegration.js';
+import { SessionRecordingService } from './SessionRecordingService.js';
+
 import type { IContent } from '../services/history/IContent.js';
 import {
   ExactReplayFixture,
+  PROJECT,
   diskRows,
   exactRow,
   expectWireRows,
   fixtureDirectory,
   rowsOf,
-  PROJECT,
 } from './__tests__/support/exact-replay-fixture.js';
 
 async function expectDistinctNativeRows(
@@ -33,7 +33,7 @@ async function expectDistinctNativeRows(
 }
 
 describe('exact replay identity contracts', () => {
-  const backend = selectBackend();
+  const backend = 'journal';
   it(`rebuilds distinct equal-text unstamped disk rows without duplication on ${backend}`, async () => {
     const fixture = new ExactReplayFixture(
       await fixtureDirectory(`${backend}-unstamped`),
@@ -60,9 +60,10 @@ describe('exact replay identity contracts', () => {
         expect(disk.map((row) => row.blocks)).toStrictEqual(
           input.map((row) => row.blocks),
         );
-        expect(disk.map((row) => row.metadata?.chronology?.seq)).toStrictEqual(
-          backend === 'journal' ? [undefined, undefined] : [1, 2],
-        );
+        expect(disk.map((row) => row.metadata?.chronology?.seq)).toStrictEqual([
+          undefined,
+          undefined,
+        ]);
         await expectDistinctNativeRows(fixture, input);
         await history.replaceAll(disk);
         await integration.flushAtTurnBoundary();
@@ -192,7 +193,7 @@ describe('exact replay identity contracts', () => {
           model: 'model-1',
         });
         const integration = new RecordingIntegration(mirror);
-        const replacement = new HistoryService({ backend: 'journal' });
+        const replacement = new HistoryService({});
         try {
           await integration.subscribeToJournal(history, selected);
           await integration.flushAtTurnBoundary();

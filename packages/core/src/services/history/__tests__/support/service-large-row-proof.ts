@@ -4,8 +4,8 @@ import {
   ageOutIdleCode,
   medianSettledHeap,
 } from '../../../../journal/__tests__/support/compactionMemory.js';
-import { resumeSession } from '../../../../recording/resumeSession.js';
 import { RecordingIntegration } from '../../../../recording/RecordingIntegration.js';
+import { resumeSession } from '../../../../recording/resumeSession.js';
 import { historyOriginId } from '../../historyOriginId.js';
 import type { IContent } from '../../IContent.js';
 import {
@@ -160,17 +160,14 @@ async function resumeAndContinue(
   const projectHash = rig.recording.getProjectHash();
   const originalPath = rig.recording.getFilePath();
   await rig.close();
-  const resumed = await resumeSession(
-    {
-      continueRef: sessionId,
-      projectHash,
-      chatsDir: rig.directory,
-      currentProvider: 'anthropic',
-      currentModel: 'large-row-model',
-      workspaceDirs: ['/work'],
-    },
-    { LLXPRT_HISTORY_BACKEND: 'journal' },
-  );
+  const resumed = await resumeSession({
+    continueRef: sessionId,
+    projectHash,
+    chatsDir: rig.directory,
+    currentProvider: 'anthropic',
+    currentModel: 'large-row-model',
+    workspaceDirs: ['/work'],
+  });
   if (!resumed.ok) throw new Error(resumed.error);
   const restored = largeHistory();
   const integration = new RecordingIntegration(resumed.recording);

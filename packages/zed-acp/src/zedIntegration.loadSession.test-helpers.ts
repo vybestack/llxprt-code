@@ -25,19 +25,19 @@
  * is asserted without a provider bootstrap.
  */
 
-import { vi } from 'bun:test';
-import * as path from 'node:path';
-import * as os from 'node:os';
 import type * as acp from '@agentclientprotocol/sdk';
 import { Config, type IContent } from '@vybestack/llxprt-code-core';
-import { selectBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
-import { sessionFileExtension } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { installZedDefinitionFixture } from './__tests__/definition-fixture.js';
-import { createConnectionProviderManager } from './__tests__/connection-provider-fixture.js';
-import { unusedProfileApplication } from './test-profile-application.js';
+import { vi } from 'bun:test';
+import * as os from 'node:os';
+import * as path from 'node:path';
+
 import type { Agent, AgentMessage } from '@vybestack/llxprt-code-agents';
+import { SESSION_FILE_EXTENSION } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createConnectionProviderManager } from './__tests__/connection-provider-fixture.js';
+import { installZedDefinitionFixture } from './__tests__/definition-fixture.js';
+import { unusedProfileApplication } from './test-profile-application.js';
 import type { ChatSessionFileLister } from './zed-session-loader.js';
 
 import type { RecordingConnection } from './__tests__/zed-test-helpers.js';
@@ -76,7 +76,7 @@ export function recordedFilesLister(
 ): ChatSessionFileLister {
   const names = sessionIds.map(
     (id) =>
-      `session-2026-07-11T10-00-00-${id.substring(0, 12)}${sessionFileExtension(selectBackend())}`,
+      `session-2026-07-11T10-00-00-${id.substring(0, 12)}${SESSION_FILE_EXTENSION}`,
   );
   return async () => names;
 }

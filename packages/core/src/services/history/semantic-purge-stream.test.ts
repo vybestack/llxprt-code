@@ -1,20 +1,20 @@
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
 import { gcAndSweep } from 'bun:jsc';
-import { HistoryService } from './HistoryService.js';
-import type { IContent } from './IContent.js';
-import { SemanticMediaPurgeStreamCoordinator } from './semantic-purge-stream.js';
-import { EagerSemanticPurgeOracle } from './__tests__/support/semantic-purge-eager-test-helpers.js';
-import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
-import { ownerFixtureRow } from './chronology-rollback-owner-test-helpers.js';
+import { describe, expect, it } from 'bun:test';
 import { RowOwnership } from '../../recording/rowOwnership.js';
+import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
+import { EagerSemanticPurgeOracle } from './__tests__/support/semantic-purge-eager-test-helpers.js';
+import { ownerFixtureRow } from './chronology-rollback-owner-test-helpers.js';
 import {
   exactTokenizer,
   rejectedValue,
   rowsOf,
   withRollbackFixture,
 } from './chronology-rollback-test-helpers.js';
+import { HistoryService } from './HistoryService.js';
+import type { IContent } from './IContent.js';
+import { SemanticMediaPurgeStreamCoordinator } from './semantic-purge-stream.js';
 
 export function purgeRow(index: number, bytes = 2048): IContent {
   const row = ownerFixtureRow(index, bytes);
@@ -138,7 +138,6 @@ async function verifyFullFixture(
         purgeRow,
         undefined,
         undefined,
-        'old',
       );
     },
     2048,

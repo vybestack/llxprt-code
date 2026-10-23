@@ -1,17 +1,17 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
-import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
 import {
   testJournalSeams,
   type Failures,
 } from '../../journal/__tests__/support/journalFixtures.js';
+import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
 import { JournalWriterPoisonedError } from '../../journal/errors.js';
-import { JournalSession } from './journalSession.js';
-import { JournalHistoryStore } from './journalHistoryStore.js';
-import { HistoryService } from './HistoryService.js';
 import { exactTokenizer } from './chronology-rollback-test-helpers.js';
+import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
+import { JournalHistoryStore } from './journalHistoryStore.js';
+import { JournalSession } from './journalSession.js';
 
 function row(text: string): IContent {
   return {
@@ -35,7 +35,7 @@ describe('annotated append failure boundaries', () => {
   it.each(['producer', 'acknowledged', 'abort'])(
     'compensates an earlier four-MiB append batch and the annotated tail on %s failure',
     async (stage) => {
-      const history = new HistoryService({ backend: 'journal' });
+      const history = new HistoryService({});
       history.setTokenizerFactory(exactTokenizer());
       const controller = new AbortController();
       const failure = new Error(`partial ${stage}`);
@@ -108,7 +108,7 @@ describe('annotated append failure boundaries', () => {
         { journal: seams.dependencies },
       );
       const store = new JournalHistoryStore(session);
-      const history = new HistoryService({ backend: 'journal' });
+      const history = new HistoryService({});
       history.setTokenizerFactory(exactTokenizer());
       const host = { ...history.detachedValues.host(), journal: store };
       try {

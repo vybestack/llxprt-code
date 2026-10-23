@@ -4,9 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
-import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
 
-pinHistoryBackend('old');
 import {
   mkdir,
   mkdtemp,
@@ -15,12 +13,12 @@ import {
   rm,
   writeFile,
 } from 'node:fs/promises';
-import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { SessionRecordingService } from './SessionRecordingService.js';
-import { SessionDiscovery } from './SessionDiscovery.js';
-import { replaySession } from './ReplayEngine.js';
+import { join } from 'node:path';
 import type { IContent } from '../services/history/IContent.js';
+import { replaySession } from './ReplayEngine.js';
+import { SessionDiscovery } from './SessionDiscovery.js';
+import { SessionRecordingService } from './SessionRecordingService.js';
 import type { SessionRecordingServiceConfig } from './types.js';
 
 const START_TIME = '2026-09-30T12:34:56.000Z';

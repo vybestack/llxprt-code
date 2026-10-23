@@ -1,10 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { mkdirSync, mkdtempSync } from 'node:fs';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { JournalProviderRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/journal-provider-request.js';
 import { nativeRequestResources } from '@vybestack/llxprt-code-core/services/history/native-provider-format.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { mkdirSync, mkdtempSync } from 'node:fs';
 
 export async function anthropicViewFixture(
   rows: Iterable<IContent>,
@@ -24,7 +24,7 @@ export async function anthropicViewFixture(
     provider: 'anthropic',
     model: 'claude-opus-5',
   });
-  const history = new HistoryService({ backend: 'journal', recording });
+  const history = new HistoryService({ recording });
   try {
     await history.addBatch(Array.from(rows));
     await history.waitForCommit();

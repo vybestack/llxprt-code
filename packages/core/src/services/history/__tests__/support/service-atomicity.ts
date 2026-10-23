@@ -1,34 +1,34 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { mkdir, mkdtemp } from 'node:fs/promises';
-import { resolve, join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
-import { loadFlushRecords } from '../../../../journal/flushRecords.js';
 import {
   testJournalSeams,
   type Failures,
   type TestJournalSeams,
 } from '../../../../journal/__tests__/support/journalFixtures.js';
+import { loadFlushRecords } from '../../../../journal/flushRecords.js';
 import { openJournalReadOnly } from '../../../../journal/journalReader.js';
+import type { RowEntry } from '../../../../journal/rowEntry.js';
+import {
+  iterateRowEntries,
+  rowTreeRootOf,
+} from '../../../../journal/rowTreeReader.js';
 import {
   JournalRecordingService,
   type JournalRecordingConfig,
 } from '../../../../recording/journalRecordingService.js';
-import { RecordingIntegration } from '../../../../recording/RecordingIntegration.js';
 import {
   JournalResumeBoot,
   resumePointOf,
 } from '../../../../recording/journalResume.js';
+import { RecordingIntegration } from '../../../../recording/RecordingIntegration.js';
 import { HistoryService } from '../../HistoryService.js';
 import type { IContent } from '../../IContent.js';
 import {
   persistedMutationRows,
   type PersistedMutationRow,
 } from './service-recorder-mutations.js';
-import type { RowEntry } from '../../../../journal/rowEntry.js';
-import {
-  iterateRowEntries,
-  rowTreeRootOf,
-} from '../../../../journal/rowTreeReader.js';
 
 export async function persistedEntries(file: string): Promise<RowEntry[]> {
   const reader = await openJournalReadOnly(file);
@@ -133,7 +133,7 @@ export async function atomicRig(name: string): Promise<AtomicRig> {
   const directory = await atomicDirectory(name);
   const primary = await atomicRecorder(directory, 'primary');
   const mirror = await atomicRecorder(directory, 'mirror');
-  const history = new HistoryService({ backend: 'journal' });
+  const history = new HistoryService({});
   await history.adoptResumeBoot(
     primary.recording,
     new JournalResumeBoot(
@@ -185,7 +185,7 @@ export async function reopenedRows(
     { ...recorder.config, journal: undefined },
     fileOf(recorder.recording),
   );
-  const history = new HistoryService({ backend: 'journal' });
+  const history = new HistoryService({});
   try {
     await history.adoptResumeBoot(
       recording,

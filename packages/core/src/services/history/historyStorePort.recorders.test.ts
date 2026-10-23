@@ -1,6 +1,8 @@
+import { HistoryJournalStore } from './historyJournalStore.js';
+import { requireJsonlRecorder } from './recorderBackend.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'bun:test';
+import * as path from 'node:path';
 import { testJournalSeams } from '../../journal/__tests__/support/journalFixtures.js';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
 import {
@@ -10,7 +12,6 @@ import {
 } from '../../recording/__tests__/support/recordedJournals.js';
 import { JournalRecordingService } from '../../recording/journalRecordingService.js';
 import { SessionRecordingService } from '../../recording/SessionRecordingService.js';
-import { createHistoryStore } from './historyBackend.js';
 import { HistoryService } from './HistoryService.js';
 import type {
   HistoryMergeRequest,
@@ -57,7 +58,7 @@ describe.each(['old', 'journal'] as const)(
     async function opened(): Promise<Store> {
       const store: Store =
         backend === 'old'
-          ? createHistoryStore({}, 'old')
+          ? new HistoryJournalStore()
           : new JournalHistoryStore(
               await JournalSession.create(
                 path.join(directory(), 'recorders.llxj'),
@@ -163,9 +164,9 @@ describe('the old store and a journal recorder', () => {
       journal: journalSeams(),
     });
     try {
-      expect(() => createHistoryStore({ recording: recorder }, 'old')).toThrow(
-        /Recorder\/backend mismatch/,
-      );
+      expect(
+        () => new HistoryJournalStore(requireJsonlRecorder(recorder)),
+      ).toThrow(/Recorder\/backend mismatch/);
     } finally {
       await recorder.dispose().catch(() => undefined);
     }
@@ -176,7 +177,7 @@ describe('merging into the old store', () => {
   const directory = useTempDir('history-port-merge-');
 
   it('refuses a source that is not an old store', async () => {
-    const target = createHistoryStore({}, 'old');
+    const target = new HistoryJournalStore();
     const source = new JournalHistoryStore(
       await JournalSession.create(path.join(directory(), 'source.llxj'), {
         journal: testJournalSeams({}).dependencies,

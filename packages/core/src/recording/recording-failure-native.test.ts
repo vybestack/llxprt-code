@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'bun:test';
 import { mkdir, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { HistoryService } from '../services/history/HistoryService.js';
 import {
   rejected,
   useNativeFailureIntegration,
@@ -10,16 +11,15 @@ import {
   nativeText,
   recordedRows,
 } from './__tests__/support/native-integration-fixture.js';
+import { JournalRecordingService } from './journalRecordingService.js';
+import { withRecordingFailureReport } from './recording-failure-consumer.js';
 import {
   RecordingFailureNotice,
   RecordingFailureReport,
   RecordingFailureStorageError,
 } from './recording-failure-report.js';
-import { withRecordingFailureReport } from './recording-failure-consumer.js';
-import { JournalRecordingService } from './journalRecordingService.js';
-import { resumeSession } from './resumeSession.js';
-import { HistoryService } from '../services/history/HistoryService.js';
 import { RecordingIntegration } from './RecordingIntegration.js';
+import { resumeSession } from './resumeSession.js';
 
 function reportsOf(error: unknown): RecordingFailureReport[] {
   if (error instanceof RecordingFailureReport) return [error];
@@ -60,22 +60,19 @@ describe('native recording failure report contracts', () => {
       const path = recording.getFilePath();
       if (path === null) throw new Error('Missing native journal');
       await recording.dispose();
-      const result = await resumeSession(
-        {
-          continueRef: 'native-failure',
-          projectHash: 'native-failure',
-          chatsDir: join(directory, 'chats'),
-          workspaceDirs: [],
-          currentProvider: 'test',
-          currentModel: 'test',
-        },
-        { LLXPRT_HISTORY_BACKEND: 'journal' },
-      );
+      const result = await resumeSession({
+        continueRef: 'native-failure',
+        projectHash: 'native-failure',
+        chatsDir: join(directory, 'chats'),
+        workspaceDirs: [],
+        currentProvider: 'test',
+        currentModel: 'test',
+      });
       if (!result.ok) throw new Error(result.error);
       const resumed = result.recording;
       if (!(resumed instanceof JournalRecordingService))
         throw new Error('Expected native recorder');
-      const nextHistory = new HistoryService({ backend: 'journal' });
+      const nextHistory = new HistoryService({});
       const next = new RecordingIntegration(resumed);
       try {
         await nextHistory.adoptResumeBoot(resumed, result.boot);

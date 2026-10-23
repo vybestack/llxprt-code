@@ -22,16 +22,13 @@
  * non-hash dirs, symlinks, unknown files, and archive scanning.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { scanGlobalSessions, ARCHIVE_DIR_NAME } from './sessionScanner.js';
-import { SessionRecordingService } from '../SessionRecordingService.js';
+import { JournalRecordingService } from '../journalRecordingService.js';
 import type { SessionRecordingServiceConfig } from '../types.js';
-import { pinHistoryBackend } from '../__tests__/support/backendEnv.js';
-
-pinHistoryBackend('old');
+import { ARCHIVE_DIR_NAME, scanGlobalSessions } from './sessionScanner.js';
 
 const bunIt = it;
 
@@ -59,12 +56,16 @@ async function createSessionFile(
   overrides: Partial<SessionRecordingServiceConfig> = {},
 ): Promise<{ filePath: string; sessionId: string }> {
   const config = { ...makeConfig(chatsDir), ...overrides };
-  const svc = new SessionRecordingService(config);
+  const svc = JournalRecordingService.create(config);
   try {
-    svc.recordContent({
-      speaker: 'human',
-      blocks: [{ type: 'text', text: 'test message' }],
-    });
+    await (
+      await svc.session()
+    ).append([
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'test message' }],
+      },
+    ]);
     await svc.flush();
   } finally {
     await svc.dispose();

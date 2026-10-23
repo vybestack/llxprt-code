@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { useBackendEnv } from '../../recording/__tests__/support/backendEnv.js';
+import { createHash } from 'node:crypto';
+
 import { exportSummaryRow, sha256 } from './export-summary-test-helpers.js';
 import { HistoryService } from './HistoryService.js';
 
@@ -15,10 +15,8 @@ import { HistoryService } from './HistoryService.js';
  * rows as the history stores them.
  */
 describe('streamed history JSON export on the journal store', () => {
-  const selectBackendForTest = useBackendEnv();
   let history: HistoryService;
   beforeEach(() => {
-    selectBackendForTest('journal');
     history = new HistoryService();
   });
   afterEach(async () => {

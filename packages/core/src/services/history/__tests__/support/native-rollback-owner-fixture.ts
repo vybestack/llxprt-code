@@ -1,19 +1,19 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { collectJournalFileRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { expect } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { collectJournalFileRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
+import { RowOwnership } from '../../../../recording/rowOwnership.js';
 import { HistoryMediaOwnership } from '../../../../storage/history-media-ownership.js';
 import { LocalMediaStore } from '../../../../storage/local-media-store.js';
-import { RowOwnership } from '../../../../recording/rowOwnership.js';
-import type { HistoryMediaOwner } from '../../historyBatchContracts.js';
-import type { IContent, MediaReferenceBlock } from '../../IContent.js';
+import { ownerFixtureRow } from '../../chronology-rollback-owner-test-helpers.js';
 import {
   exactTokenizer,
   rejectedValue,
 } from '../../chronology-rollback-test-helpers.js';
-import { ownerFixtureRow } from '../../chronology-rollback-owner-test-helpers.js';
+import type { HistoryMediaOwner } from '../../historyBatchContracts.js';
+import type { IContent, MediaReferenceBlock } from '../../IContent.js';
 import { batchGate } from './addbatch-stream-test-helpers.js';
 import { createCoreSuffixFixtureGraph } from './core-suffix-fixture-test-helpers.js';
 
@@ -89,12 +89,7 @@ async function runRollback(
   kind: 'density' | 'transform',
 ): Promise<NativeOwnerResult> {
   const transaction = new RowOwnership();
-  const graph = createCoreSuffixFixtureGraph(
-    directory,
-    transaction,
-    undefined,
-    'journal',
-  );
+  const graph = createCoreSuffixFixtureGraph(directory, transaction, undefined);
   const { service: history, recording, ownership: previous } = graph;
   const rowAt = (index: number): IContent => {
     const row = ownerFixtureRow(index, 2048);

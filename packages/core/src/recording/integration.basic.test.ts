@@ -25,29 +25,27 @@ import { collectRows } from './__tests__/support/p05dTestKit.js';
  * Property-based tests use fast-check (≥30% of total).
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-pinHistoryBackend('old');
 import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
 import * as os from 'node:os';
+import * as path from 'node:path';
 
-import { SessionRecordingService } from './SessionRecordingService.js';
+import { type IContent } from '../services/history/IContent.js';
 import { replaySession } from './ReplayEngine.js';
-import type { ReplayResult } from './types.js';
 import { SessionDiscovery } from './SessionDiscovery.js';
+import { SessionRecordingService } from './SessionRecordingService.js';
 import {
-  resumeSession,
   CONTINUE_LATEST,
+  resumeSession,
   type ResumeRequest,
 } from './resumeSession.js';
 import { deleteSession } from './sessionManagement.js';
+import type { ReplayResult } from './types.js';
 import {
   type SessionRecordingServiceConfig,
   type SessionRecordLine,
 } from './types.js';
-import { type IContent } from '../services/history/IContent.js';
 
 // ---------------------------------------------------------------------------
 // Constants

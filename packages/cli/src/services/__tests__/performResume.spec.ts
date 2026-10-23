@@ -13,23 +13,21 @@ import { collectResumeRows } from '../../__tests__/resumeRows.js';
  * Split from the original performResume.spec.ts for max-lines compliance.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import {
-  performResume,
-  SessionLockManager,
-  type LockHandle,
+  assertResumeError,
+  assertResumeOk,
+  collectLock,
+  createTestSession,
   makeContent,
   makeResumeContext,
-  createTestSession,
-  assertResumeOk,
-  assertResumeError,
-  collectLock,
+  performResume,
   ResumeTestSetup,
+  SessionLockManager,
+  type LockHandle,
 } from './performResume-test-helpers.js';
-import { pinHistoryBackend } from './support/pinHistoryBackend.js';
 
 // The fixtures are JSONL recordings of the old store.
-pinHistoryBackend('old');
 
 let chatsDir: string;
 let lockHandles: LockHandle[];

@@ -14,13 +14,13 @@
  * logic is mocked.
  */
 
-import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
-import { selectBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
-import { sessionFileExtension } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
+
 import { Config } from '@vybestack/llxprt-code-core';
-import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+import { SESSION_FILE_EXTENSION } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
 import { accountingRow } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
+import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { replayClient } from './__tests__/support/zed-history-stream-test-helpers.js';
 import {
   hasRecordedSessionFile,
@@ -46,7 +46,7 @@ const FIXED_SESSION_TIMESTAMP = '2026-07-11T10-00-00';
 
 /** The real recorded-file name shape for a session id. */
 function recordedName(sessionId: string): string {
-  return `session-${FIXED_SESSION_TIMESTAMP}-${sessionId.substring(0, 12)}${sessionFileExtension(selectBackend())}`;
+  return `session-${FIXED_SESSION_TIMESTAMP}-${sessionId.substring(0, 12)}${SESSION_FILE_EXTENSION}`;
 }
 
 function probeFailure(code: string, message: string): Error & { code: string } {

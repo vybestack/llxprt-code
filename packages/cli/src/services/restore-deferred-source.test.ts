@@ -1,31 +1,29 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { appendFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { createHash } from 'node:crypto';
 import {
   SessionRecordingService,
   resumeJsonlSession,
   type IContent,
   type JsonlResumeResult as ResumeResult,
 } from '@vybestack/llxprt-code-core';
-import { buildAgent } from '../../../agents/src/api/__tests__/helpers/agentHarness.js';
-import {
-  restoreResumeBoot,
-  admitResumeHistorySource,
-} from './restoreResumeBoot.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import { bindClientTokenization } from '../../../agents/src/session/session-client-binding.js';
-import { accountingFactory } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
-import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { createRowCounters } from '@vybestack/llxprt-code-core/recording/journalCounters.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
-import { pinHistoryBackend } from './__tests__/support/pinHistoryBackend.js';
+import { accountingFactory } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
+import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+import { describe, expect, it } from 'bun:test';
+import { createHash } from 'node:crypto';
+import { appendFileSync } from 'node:fs';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { buildAgent } from '../../../agents/src/api/__tests__/helpers/agentHarness.js';
+import { bindClientTokenization } from '../../../agents/src/session/session-client-binding.js';
+import {
+  admitResumeHistorySource,
+  restoreResumeBoot,
+} from './restoreResumeBoot.js';
 
 // The fixtures are JSONL recordings of the old store.
-pinHistoryBackend('old');
 
 function phase(
   size: number,

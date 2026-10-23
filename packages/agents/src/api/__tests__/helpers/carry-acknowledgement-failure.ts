@@ -1,9 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { vi } from 'bun:test';
 import * as writerOpen from '@vybestack/llxprt-code-core/journal/journalWriterOpen.js';
 import { RECORD_KIND } from '@vybestack/llxprt-code-core/journal/recordKinds.js';
-import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
-import { selectBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
+import { vi } from 'bun:test';
 
 export function carryAcknowledgementFailure(message: string): {
   arm(): void;
@@ -11,25 +9,7 @@ export function carryAcknowledgementFailure(message: string): {
   readonly rejectedTrailer:
     | { readonly path: string; readonly position: number }
     | undefined;
-  readonly oldAcknowledgement:
-    | ReturnType<typeof oldAcknowledgementFailure>
-    | undefined;
 } {
-  if (selectBackend() === 'old') {
-    let failure: ReturnType<typeof oldAcknowledgementFailure> | undefined;
-    return {
-      arm: () => {
-        failure = oldAcknowledgementFailure(message);
-      },
-      restore: () => {
-        failure?.mockRestore();
-      },
-      rejectedTrailer: undefined,
-      get oldAcknowledgement() {
-        return failure;
-      },
-    };
-  }
   let armed = false;
   let rejectedTrailer: { path: string; position: number } | undefined;
   const resolve = writerOpen.resolveJournalDependencies;
@@ -72,18 +52,5 @@ export function carryAcknowledgementFailure(message: string): {
     get rejectedTrailer() {
       return rejectedTrailer;
     },
-    oldAcknowledgement: undefined,
   };
-}
-
-function oldAcknowledgementFailure(
-  message: string,
-): ReturnType<
-  typeof vi.spyOn<SessionRecordingService, 'waitForCommitSequence'>
-> {
-  return vi
-    .spyOn(SessionRecordingService.prototype, 'waitForCommitSequence')
-    .mockImplementationOnce(async () => {
-      throw new Error(message);
-    });
 }

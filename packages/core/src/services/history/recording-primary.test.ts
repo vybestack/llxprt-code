@@ -1,18 +1,18 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 import { join } from 'node:path';
-import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
 import { testJournalSeams } from '../../journal/__tests__/support/journalFixtures.js';
-import { JournalRecordingService } from '../../recording/journalRecordingService.js';
-import { RecordingIntegration } from '../../recording/RecordingIntegration.js';
-import { HistoryService } from './HistoryService.js';
-import { JournalHistoryStore } from './journalHistoryStore.js';
-import { JournalSession } from './journalSession.js';
-import type { IContent } from './IContent.js';
+import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
 import {
   checkpointKey,
   parseCheckpointEntry,
 } from '../../journal/checkpointDescriptor.js';
+import { JournalRecordingService } from '../../recording/journalRecordingService.js';
+import { RecordingIntegration } from '../../recording/RecordingIntegration.js';
+import { HistoryService } from './HistoryService.js';
+import type { IContent } from './IContent.js';
+import { JournalHistoryStore } from './journalHistoryStore.js';
+import { JournalSession } from './journalSession.js';
 
 function row(text: string): IContent {
   return { speaker: 'ai', blocks: [{ type: 'text', text }] };
@@ -345,7 +345,7 @@ describe('recording as the native primary', () => {
 
   it('uses real history and integration attachment for foreground selection', async () => {
     const recorder = recording('integration');
-    const history = new HistoryService({ backend: 'journal' });
+    const history = new HistoryService({});
     const integration = new RecordingIntegration(recorder);
     cleanup.push(
       () => recorder.dispose(),

@@ -1,7 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { selectBackend } from '../services/history/historyBackendSelect.js';
-import type { LocalMediaStore } from '../storage/local-media-store.js';
-import { CheckpointService } from './CheckpointService.js';
+
+import type { CheckpointService } from './CheckpointService.js';
 import { JournalCheckpointService } from './journalCheckpointService.js';
 
 /**
@@ -27,11 +26,6 @@ export type CheckpointServicePort = Pick<
  * `createSessionRecorder`. A service is used with recorders of its own kind;
  * the journal service refuses any other.
  */
-export function createCheckpointService(
-  mediaStore?: LocalMediaStore,
-  env: Readonly<Record<string, string | undefined>> = process.env,
-): CheckpointServicePort {
-  return selectBackend(env) === 'journal'
-    ? new JournalCheckpointService()
-    : new CheckpointService(mediaStore);
+export function createCheckpointService(): CheckpointServicePort {
+  return new JournalCheckpointService();
 }

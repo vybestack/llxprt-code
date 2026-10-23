@@ -7,13 +7,20 @@
  * @plan PLAN-20260214-SESSIONBROWSER.P19
  */
 
-import { createPortablePackage } from '../../../__tests__/support/portable-package.js';
-import { recordedRows } from '../../../../../agents/src/api/__tests__/support/recorded-rows.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { createSessionRecorder } from '@vybestack/llxprt-code-core/recording/sessionRecorderFactory.js';
-import { selectBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
-import { sessionFileExtension } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
-import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { recordedRows } from '../../../../../agents/src/api/__tests__/support/recorded-rows.js';
+import { createPortablePackage } from '../../../__tests__/support/portable-package.js';
+
+import {
+  getProjectHash,
+  LocalMediaStore,
+  SessionDiscovery,
+  validateSessionMediaPackage,
+} from '@vybestack/llxprt-code-core';
+import { SESSION_FILE_EXTENSION } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import * as fc from 'fast-check';
 import { randomUUID } from 'node:crypto';
 import {
@@ -28,28 +35,21 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { withRecordingLifetimeFixture } from '../../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
-import { continueCommand } from '../continueCommand.js';
+import { assertDefined, assertType } from '../../../__tests__/assertions.js';
 import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
-import {
-  validateSessionMediaPackage,
-  getProjectHash,
-  LocalMediaStore,
-  SessionDiscovery,
-} from '@vybestack/llxprt-code-core';
+import { continueCommand } from '../continueCommand.js';
+import type {
+  LiteralArgument,
+  TokenInfo,
+  ValueArgument,
+} from '../schema/types.js';
 import type {
   CommandContext,
-  SlashCommandActionReturn,
   MessageActionReturn,
   OpenDialogActionReturn,
   PerformResumeActionReturn,
+  SlashCommandActionReturn,
 } from '../types.js';
-import type {
-  TokenInfo,
-  ValueArgument,
-  LiteralArgument,
-} from '../schema/types.js';
-import { assertDefined, assertType } from '../../../__tests__/assertions.js';
-import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 
 /**
  * Helper to narrow a command argument to the ValueArgument variant.
@@ -493,7 +493,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
         await mkdir(chatsDir, { recursive: true });
         const brokenPath = join(
           chatsDir,
-          `session-2026-10-08T21-18-08-broken000001${sessionFileExtension(selectBackend())}`,
+          `session-2026-10-08T21-18-08-broken000001${SESSION_FILE_EXTENSION}`,
         );
         await writeFile(brokenPath, '', 'utf-8');
 
@@ -631,11 +631,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
         );
         assertType(result, isMessageAction);
         expect(result.messageType).toBe('error');
-        expect(result.content).toBe(
-          selectBackend() === 'journal'
-            ? 'Native package export and cleanup failed'
-            : 'Session package export and cleanup failed',
-        );
+        expect(result.content).toBe('Native package export and cleanup failed');
         await expect(stat(destination)).rejects.toMatchObject({
           code: 'ENOTDIR',
         });

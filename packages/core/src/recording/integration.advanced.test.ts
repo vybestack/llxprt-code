@@ -25,32 +25,30 @@
  */
 
 import { describe, expect } from 'bun:test';
-import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
 
-pinHistoryBackend('old');
 import * as fc from 'fast-check';
 import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
 import * as os from 'node:os';
-import { SessionRecordingService } from './SessionRecordingService.js';
+import * as path from 'node:path';
+import type { IContent } from '../services/history/IContent.js';
 import { replaySession } from './ReplayEngine.js';
 import { SessionDiscovery } from './SessionDiscovery.js';
-import { resumeSession } from './resumeSession.js';
-import { deleteSession } from './sessionManagement.js';
+import { SessionRecordingService } from './SessionRecordingService.js';
 import { collectRows } from './__tests__/support/p05dTestKit.js';
-import type { IContent } from '../services/history/IContent.js';
 import {
   PROJECT_HASH,
-  itProp,
-  assertReplayOk,
-  makeContent,
-  makeConfig,
   alternatingSpeaker,
+  assertReplayOk,
   createAndRecordSession,
-  readJsonlLines,
+  itProp,
+  makeConfig,
+  makeContent,
   makeResumeRequest,
+  readJsonlLines,
   useIntegrationDirs,
 } from './integration-advanced.test.helpers.js';
+import { resumeSession } from './resumeSession.js';
+import { deleteSession } from './sessionManagement.js';
 
 describe('integration: full session recording lifecycle', () => {
   const dirs = useIntegrationDirs();

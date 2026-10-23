@@ -1,32 +1,32 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { RecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
+import { requireJsonlRecorder } from '@vybestack/llxprt-code-core/services/history/recorderBackend.js';
 import {
-  checkpointSourceFault,
+  rowIndex,
+  withSuffixFixture,
+} from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+import { describe, expect, it } from 'bun:test';
+import { withCoreSuffixFixture } from '../../../../core/src/services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
+import {
+  exactTokenizer,
+  withRollbackFixture,
+} from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
+import { buildRuntimeContext } from '../../core/__tests__/chatSession-density-helpers.js';
+import { runDiskTruncation } from '../diskTruncation.js';
+import {
   checkpointScratch,
+  checkpointSourceFault,
   checkpointState,
   expectedCheckpointState,
 } from './checkpoint-source-fault-helpers.js';
-import type { RecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
-import { requireJsonlRecorder } from '@vybestack/llxprt-code-core/services/history/recorderBackend.js';
-import { withCoreSuffixFixture } from '../../../../core/src/services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
-import {
-  withSuffixFixture,
-  rowIndex,
-} from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
-import {
-  withRollbackFixture,
-  exactTokenizer,
-} from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import {
   TruncationStreamHistory,
+  collectRows,
   truncationHandler,
   truncationRow,
-  collectRows,
 } from './truncation-stream-helpers.js';
-import { buildRuntimeContext } from '../../core/__tests__/chatSession-density-helpers.js';
-import { runDiskTruncation } from '../diskTruncation.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 
 class FaultHistory extends TruncationStreamHistory {
   readonly failure = new Error('injected curated producer failure');
@@ -123,7 +123,6 @@ async function producerFailure(size: number): Promise<number> {
       created = new FaultHistory(options);
       return created;
     },
-    'old',
   );
 }
 

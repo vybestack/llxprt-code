@@ -1,16 +1,15 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it, spyOn } from 'bun:test';
+import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
 import { batchGate } from '@vybestack/llxprt-code-core/services/history/__tests__/support/addbatch-stream-test-helpers.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { HistoryMediaOwnership } from '@vybestack/llxprt-code-core/storage/history-media-ownership.js';
+import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
+import { RequestMediaResolver } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { describe, expect, it, spyOn } from 'bun:test';
 import { mkdirSync, mkdtempSync } from 'node:fs';
 import { join } from 'node:path';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
-import { HistoryMediaOwnership } from '@vybestack/llxprt-code-core/storage/history-media-ownership.js';
-import { RequestMediaResolver } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
-import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
 import { operationFileCreates } from '../../../agents/src/compression/__tests__/support/operation-file-creates.js';
-import { buildHistoryCases } from './support/wireBodyHistories.js';
 import { localWireHashSink } from './support/local-wire-hash-sink.js';
 import {
   buildHistoryCallOptions,
@@ -18,6 +17,7 @@ import {
   sendThroughRoute,
   WIRE_ROUTES,
 } from './support/wireBodyCapture.js';
+import { buildHistoryCases } from './support/wireBodyHistories.js';
 
 describe('native plain Chat history media lease', () => {
   it('keeps a blob through concurrent clear while an actual HTTP body is paused before its read', async () => {
@@ -48,7 +48,7 @@ describe('native plain Chat history media lease', () => {
         budgetBytes: 1024,
       }),
     );
-    const history = new HistoryService({ backend: 'journal' });
+    const history = new HistoryService({});
     await history.registerMediaOwner(new HistoryMediaOwnership(store));
     await history.addBatch(input.rows);
     const selection = await history.prepareCuratedForProviderSnapshot();
@@ -133,7 +133,7 @@ describe('native plain Chat history media lease', () => {
     const expected = recordOf(
       await sendThroughRoute(route, input, 'rows', media),
     );
-    const history = new HistoryService({ backend: 'journal' });
+    const history = new HistoryService({});
     await history.registerMediaOwner(new HistoryMediaOwnership(store));
     await history.addBatch(input.rows);
     const selection = await history.prepareCuratedForProviderSnapshot();

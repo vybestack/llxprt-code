@@ -1,20 +1,21 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { expect } from 'bun:test';
-import { appendFileSync } from 'node:fs';
-import { isDeepStrictEqual } from 'node:util';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { withCoreSuffixFixture } from '@vybestack/llxprt-code-core/services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
+import { buildCuratedHistory } from '@vybestack/llxprt-code-core/services/history/historyCuration.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { prepareProviderContentSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-curated-stream.js';
 import type {
   ProviderRequestSelection,
   ProviderRequestSnapshot,
 } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
-import type { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import { buildCuratedHistory } from '@vybestack/llxprt-code-core/services/history/historyCuration.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
+import { expect } from 'bun:test';
+import { appendFileSync } from 'node:fs';
+import { isDeepStrictEqual } from 'node:util';
+import { closeInOrder } from './close-in-order.js';
 import {
   rawHistoryOf,
   settingsOf,
@@ -22,20 +23,19 @@ import {
   type FrozenSettings,
 } from './frozenWire/frozenCases.js';
 import {
-  fixtureCaseOf,
   describeCaseDifference,
+  fixtureCaseOf,
   readFrozenFixture,
 } from './frozenWire/frozenFixture.js';
-import { normalizedRows } from './frozenWire/normalizedRows.js';
 import { recordBody, type CaseOutcome } from './frozenWire/frozenSend.js';
+import { normalizedRows } from './frozenWire/normalizedRows.js';
 import { eagerProviderOracle } from './journal-provider-fixture.js';
 import { referenceSeedOutcome } from './native-seed-reference.js';
-import { closeInOrder } from './close-in-order.js';
 import {
   buildRouteCallOptions,
   installFakeTransport,
-  singleModelRequest,
   recordOf,
+  singleModelRequest,
   type CapturedWireRequest,
 } from './wireBodyCapture.js';
 import type { HistoryCase } from './wireBodyHistories.js';
@@ -300,6 +300,5 @@ export async function checkNativeSeed(
     (index) => structuredClone(input.rows[index]),
     undefined,
     guardedSeedHistory,
-    'journal',
   );
 }

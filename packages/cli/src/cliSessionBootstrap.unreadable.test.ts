@@ -7,34 +7,32 @@
  * and recordings written when the CLI started with no provider configured.
  */
 
+import {
+  Config,
+  getProjectHash,
+  readSessionHeader,
+  requireJsonlRecorder,
+  SessionRecordingService,
+  type AgentClientContract,
+  type ResumeCursorBoot,
+  type SessionRecordingPort,
+  type SessionRecordingServiceConfig,
+} from '@vybestack/llxprt-code-core';
+import type { RecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdir, mkdtemp, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import {
-  Config,
-  SessionRecordingService,
-  type SessionRecordingPort,
-  requireJsonlRecorder,
-  getProjectHash,
-  type AgentClientContract,
-  type ResumeCursorBoot,
-  readSessionHeader,
-  type SessionRecordingServiceConfig,
-} from '@vybestack/llxprt-code-core';
-import type { RecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
-import type { ParsedCliArgs } from './cliBootstrap.js';
 import { LiveProviderConfig } from './__tests__/liveProviderConfig.js';
+import type { ParsedCliArgs } from './cliBootstrap.js';
 import {
   buildNewRecordingService,
   createOrResumeRecording,
   setupSessionRecording,
   type ResolvedRecording,
 } from './cliSessionBootstrap.js';
-import { pinHistoryBackend } from './services/__tests__/support/pinHistoryBackend.js';
 
 // The fixtures read and write JSONL headers; a journal twin belongs to the discovery/recording suites (W21).
-pinHistoryBackend('old');
 
 let projectHash = '';
 const CORRUPT_REASON =

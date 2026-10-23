@@ -1,13 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import * as fc from 'fast-check';
-import { selectBackend } from '../services/history/historyBackendSelect.js';
+
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
   ExactReplayFixture,
-  expectNativeRows,
   exactRow,
+  expectNativeRows,
   expectWireRows,
   fixtureDirectory,
   rowsOf,
@@ -57,7 +57,7 @@ const largeTexts = fc.sample(fc.string({ minLength: 1000, maxLength: 5000 }), {
   numRuns: 6,
 });
 
-const backend = selectBackend();
+const backend = 'journal';
 describe(`fixed generated public replay on ${backend}`, () => {
   for (const [
     sample,

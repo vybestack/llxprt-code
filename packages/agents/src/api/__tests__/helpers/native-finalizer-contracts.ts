@@ -1,17 +1,16 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { SessionLockManager } from '@vybestack/llxprt-code-core/recording/SessionLockManager.js';
 import { expect } from 'bun:test';
 import { readFile, readdir } from 'node:fs/promises';
 import { setImmediate } from 'node:timers/promises';
-import { SessionLockManager } from '@vybestack/llxprt-code-core/recording/SessionLockManager.js';
 import { drain } from './agentHarness.js';
-import { withRecordingFinalizerFixture } from './recording-finalizer-join-fixture.js';
-import {
-  withHistoryBackend,
-  nativeRows,
-  rowTexts,
-  requireRecordingPath,
-} from './native-session-fixture.js';
 import { nativeFinalizerFiles } from './native-finalizer-files.js';
+import {
+  nativeRows,
+  requireRecordingPath,
+  rowTexts,
+} from './native-session-fixture.js';
+import { withRecordingFinalizerFixture } from './recording-finalizer-join-fixture.js';
 
 type FinalizerFixture = Parameters<
   Parameters<typeof withRecordingFinalizerFixture>[0]
@@ -34,7 +33,7 @@ function containsCause(error: unknown, cause: Error): boolean {
 async function withNativeFinalizerFixture(
   scenario: (fixture: NativeFixture) => Promise<void>,
 ): Promise<void> {
-  await withHistoryBackend('journal', () =>
+  await (() =>
     withRecordingFinalizerFixture(async (fixture) => {
       const files = nativeFinalizerFiles(fixture.chatsDir);
       try {
@@ -44,8 +43,7 @@ async function withNativeFinalizerFixture(
         await Promise.allSettled([fixture.agent.dispose()]);
         files.restore();
       }
-    }),
-  );
+    }))();
 }
 
 function expectReleasedReaders(files: NativeFixture['files']): void {
@@ -267,7 +265,7 @@ export async function joinNativePersistence(
 }
 
 export async function disposeLazyNativeRecording(): Promise<void> {
-  await withHistoryBackend('journal', () =>
+  await (() =>
     withRecordingFinalizerFixture(async ({ agent, chatsDir, sessionId }) => {
       await agent.session.setRecording({ enabled: true });
       expect(agent.session.getRecording().path).toBeUndefined();
@@ -286,6 +284,5 @@ export async function disposeLazyNativeRecording(): Promise<void> {
           (file) => file.endsWith('.llxj') || file.endsWith('.lock'),
         ),
       ).toStrictEqual([]);
-    }),
-  );
+    }))();
 }

@@ -1,15 +1,15 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from './IContent.js';
-import type { ContextRange } from './historyEventTypes.js';
-import {
-  detachedRows,
-  detachedRow,
-  detachedDigest,
-} from './detached-rollback-test-helpers.js';
 import { withDetachedContractFixture } from './__tests__/support/detached-contract-fixture.js';
-import type { HistoryBackend } from './historyBackendSelect.js';
 import { rejectedValue, rowsOf } from './chronology-rollback-test-helpers.js';
+import {
+  detachedDigest,
+  detachedRow,
+  detachedRows,
+} from './detached-rollback-test-helpers.js';
+import type { ContextRange } from './historyEventTypes.js';
+type HistoryBackend = 'old' | 'journal';
 
 const backends: readonly HistoryBackend[] = ['old', 'journal'];
 

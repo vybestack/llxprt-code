@@ -1,9 +1,9 @@
+import { HistoryJournalStore } from './historyJournalStore.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'bun:test';
+import * as path from 'node:path';
 import { testJournalSeams } from '../../journal/__tests__/support/journalFixtures.js';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
-import { createHistoryStore } from './historyBackend.js';
 import type { HistoryStorePort } from './historyStorePort.js';
 import type { IContent } from './IContent.js';
 import { JournalHistoryStore } from './journalHistoryStore.js';
@@ -35,7 +35,7 @@ describe.each(['old', 'journal'] as const)(
     async function opened(): Promise<ReadsStore> {
       const store: ReadsStore =
         backend === 'old'
-          ? createHistoryStore({}, 'old')
+          ? new HistoryJournalStore()
           : new JournalHistoryStore(
               await JournalSession.create(
                 path.join(directory(), 'reads.llxj'),

@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import type { IContent } from './IContent.js';
 import { HistoryService } from './HistoryService.js';
+import type { IContent } from './IContent.js';
 import { exactTokenizer } from './chronology-rollback-test-helpers.js';
 
 function row(index: number): IContent {
@@ -36,7 +36,7 @@ describe('annotated native append backpressure and complete large values', () =>
   it.each([512, 8192])(
     'releases actual converted sink rows during %i annotated derived appends',
     async (size) => {
-      const history = new HistoryService({ backend: 'journal' });
+      const history = new HistoryService({});
       history.setTokenizerFactory(exactTokenizer());
       const refs: Array<WeakRef<IContent>> = [];
       let peak = 0;
@@ -86,7 +86,7 @@ describe('annotated native append backpressure and complete large values', () =>
   );
 
   it('preserves every character of a greater-than-nine-MiB annotated append and its pinned prefix', async () => {
-    const history = new HistoryService({ backend: 'journal' });
+    const history = new HistoryService({});
     history.setTokenizerFactory(exactTokenizer());
     const text = 'abcdefghijk'
       .repeat(Math.ceil((9 * 1024 * 1024 + 17) / 11))

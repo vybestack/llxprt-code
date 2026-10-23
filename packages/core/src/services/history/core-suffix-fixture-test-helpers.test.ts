@@ -5,31 +5,31 @@ import { dirname } from 'node:path';
 import { foldDurableRows } from '../../recording/durableRowFold.js';
 import { JournalRecordingService } from '../../recording/journalRecordingService.js';
 import { SessionRecordingService } from '../../recording/SessionRecordingService.js';
-import { selectBackend } from './historyBackendSelect.js';
+
+import {
+  suffixRow,
+  withSuffixFixtureGraph,
+} from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import type {
   RecordingPort,
   SessionRecordingPort,
 } from '../../recording/recordingPort.js';
-import { requireJsonlRecorder } from './recorderBackend.js';
-import {
-  HistoryService,
-  type HistoryServiceJournalOptions,
-} from './HistoryService.js';
 import {
   RowOwnership,
   type RowOwnershipStats,
 } from '../../recording/rowOwnership.js';
 import {
-  suffixRow,
-  withSuffixFixtureGraph,
-} from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
-import {
-  withCoreSuffixFixture,
   createCoreSuffixFixtureGraph,
+  withCoreSuffixFixture,
   type CoreSuffixFixtureGraph,
 } from './__tests__/support/core-suffix-fixture-test-helpers.js';
 import { pausedDensity } from './chronology-rollback-owner-test-helpers.js';
 import { rejectedValue } from './chronology-rollback-test-helpers.js';
+import {
+  HistoryService,
+  type HistoryServiceJournalOptions,
+} from './HistoryService.js';
+import { requireJsonlRecorder } from './recorderBackend.js';
 
 async function sourceObservation(
   history: HistoryService,
@@ -113,11 +113,7 @@ describe('source graph failure cleanup', () => {
           root = directory;
           graph = createCoreSuffixFixtureGraph(directory);
           expect(graph.service).toBeInstanceOf(HistoryService);
-          expect(graph.recording).toBeInstanceOf(
-            selectBackend() === 'journal'
-              ? JournalRecordingService
-              : SessionRecordingService,
-          );
+          expect(graph.recording).toBeInstanceOf(JournalRecordingService);
           expect(graph.ownership).toBeInstanceOf(RowOwnership);
           expect(graph.mutationOwnership).toBeInstanceOf(RowOwnership);
           return graph;
@@ -214,7 +210,6 @@ describe('source factory record and flush', () => {
         );
         return new FactoryHistory(options);
       },
-      'old',
     );
     const durableBytes: number = result;
     expect(durableBytes).toBeGreaterThan(3 * 64);
@@ -255,7 +250,6 @@ describe('source factory history publication', () => {
         captured = options.recording;
         return new FactoryHistory(options);
       },
-      'old',
     );
   });
 });
@@ -291,7 +285,6 @@ describe('source factory writer failure', () => {
         captured = options.recording;
         return new FactoryHistory(options);
       },
-      'old',
     );
     expect(sourceRecorder(captured).getPendingByteCount()).toBe(0);
   });
@@ -325,7 +318,6 @@ describe('source factory seed failure cleanup', () => {
           captured = options.recording;
           return new FactoryHistory(options);
         },
-        'old',
       ),
     ).rejects.toBe(failure);
     expect(sourceRecorder(captured).isActive()).toBe(false);

@@ -1,13 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it, spyOn } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core';
 import { JournalHistoryStore } from '@vybestack/llxprt-code-core/services/history/journalHistoryStore.js';
+import { describe, expect, it, spyOn } from 'bun:test';
 import {
-  withCLI,
-  runCommand,
   operationFileCreates,
+  runCommand,
   useTempDir,
-  pinHistoryBackend,
+  withCLI,
 } from './native-prefix-test-helpers.js';
 
 async function collectGarbage(): Promise<void> {
@@ -22,7 +21,6 @@ function assertBounded(rows: ReadonlyArray<WeakRef<IContent>>): void {
 }
 
 describe('actual CLI native prefix decoded-row lifetime', () => {
-  pinHistoryBackend('journal');
   const directory = useTempDir('cli-prefix-lifetime-');
   for (const size of [512, 8192]) {
     it(`releases converted prefix rows at sink backpressure over ${size} rows`, async () => {

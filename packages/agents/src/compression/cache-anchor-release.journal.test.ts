@@ -1,13 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { JournalDumpSnapshot } from '@vybestack/llxprt-code-core/services/history/journalDumpSnapshot.js';
+import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { describe, expect, it, spyOn } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
-import { JournalDumpSnapshot } from '@vybestack/llxprt-code-core/services/history/journalDumpSnapshot.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { applyCompressionWithAnchor } from './__tests__/support/cacheAnchor.js';
 
 function row(speaker: 'human' | 'ai', text: string): IContent {
@@ -101,7 +101,7 @@ describe('native cache-anchor publication under a compression lock (#3338)', () 
     const opener = spyOn(JournalSession, 'createUnlinked').mockResolvedValue(
       session,
     );
-    const history = new HistoryService({ backend: 'journal' });
+    const history = new HistoryService({});
     opener.mockRestore();
     try {
       expect(await assertRelease(history, session)).toBe(2);

@@ -1,21 +1,21 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { HistoryService } from './HistoryService.js';
-import {
-  mediaParticipant,
-  exactTokenizer,
-} from './chronology-rollback-test-helpers.js';
-import {
-  detachedRow,
-  detachedDigest,
-  detachedDurableDigest,
-} from './detached-rollback-test-helpers.js';
-import type { IContent } from './IContent.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 import {
+  exactTokenizer,
+  mediaParticipant,
+} from './chronology-rollback-test-helpers.js';
+import {
+  detachedDigest,
+  detachedDurableDigest,
+  detachedRow,
+} from './detached-rollback-test-helpers.js';
+import { HistoryService } from './HistoryService.js';
+import type { IContent } from './IContent.js';
+import {
+  envelopeCensus,
   envelopeGate,
   envelopeGC,
-  envelopeCensus,
   envelopeSurvivors,
   withEnvelopeFixture,
 } from './publication-envelope-test-helpers.js';
@@ -72,7 +72,6 @@ for (const [size, bytes] of [
     it('releases original and envelope values at ack while finalization, producer and storage remain held', async () => {
       await withEnvelopeFixture(async (fixture) => {
         const history = new HistoryService({
-          backend: 'old',
           recording: fixture.recorder,
           mutationOwnership: fixture.owners,
         });

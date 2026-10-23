@@ -1,13 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { HISTORY_BACKEND_ENV } from './historyBackendSelect.js';
+
 import { HistoryService } from './HistoryService.js';
-import { createHistoryProviderFileBindingStore } from './provider-file-binding.js';
 import type {
   MediaReferenceBlock,
   ProviderFileReferenceMetadata,
 } from './IContent.js';
+import { createHistoryProviderFileBindingStore } from './provider-file-binding.js';
 
 const CONTENT_ID =
   'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -62,15 +62,11 @@ const PROVIDER_FILE: ProviderFileReferenceMetadata = {
  * nor a row from an earlier read is shared with a later read.
  */
 describe('HistoryService provider file binding on the journal store', () => {
-  const saved = process.env[HISTORY_BACKEND_ENV];
   let history: HistoryService;
   beforeEach(() => {
-    process.env[HISTORY_BACKEND_ENV] = 'journal';
     history = new HistoryService();
   });
   afterEach(async () => {
-    if (saved === undefined) delete process.env[HISTORY_BACKEND_ENV];
-    else process.env[HISTORY_BACKEND_ENV] = saved;
     await history.dispose();
   });
 

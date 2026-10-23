@@ -1,18 +1,17 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { afterEach, describe, expect, it } from 'bun:test';
 import * as path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
-import { HISTORY_BACKEND_ENV } from '../services/history/historyBackendSelect.js';
+
 import type { IContent } from '../services/history/IContent.js';
 import { requireJsonlRecorder } from '../services/history/recorderBackend.js';
-import { CheckpointService } from './CheckpointService.js';
+
 import { createCheckpointService } from './checkpointServiceFactory.js';
 import { JournalCheckpointService } from './journalCheckpointService.js';
 import { JournalRecordingService } from './journalRecordingService.js';
 import type { SessionRecordingPort } from './recordingPort.js';
-import { createLockedSessionRecorder } from './sessionRecorderFactory.js';
 import { deleteSessionById } from './sessionManagement.js';
-import { useBackendEnv } from './__tests__/support/backendEnv.js';
+import { createLockedSessionRecorder } from './sessionRecorderFactory.js';
 
 const PROJECT = 'checkpoint-factory';
 
@@ -40,35 +39,26 @@ function fileOf(recorder: SessionRecordingPort): string {
 
 describe('checkpoint service factory', () => {
   const directory = useTempDir('checkpoint-factory-');
-  const setBackend = useBackendEnv();
+
   const live = new Set<SessionRecordingPort>();
   afterEach(async () => {
     for (const recorder of live) await recorder.dispose();
     live.clear();
   });
 
-  const backends = [
-    ['old', CheckpointService],
-    ['journal', JournalCheckpointService],
-  ] as const;
+  const backends = [['journal', JournalCheckpointService]] as const;
 
   for (const [backend, serviceClass] of backends) {
     describe(`backend ${backend}`, () => {
-      const env = { [HISTORY_BACKEND_ENV]: backend };
-      beforeEach(() => setBackend(backend));
-
       async function active(sessionId = 'live'): Promise<SessionRecordingPort> {
-        const recorder = await createLockedSessionRecorder(
-          {
-            sessionId,
-            projectHash: PROJECT,
-            chatsDir: path.join(directory(), 'chats'),
-            workspaceDirs: ['/work/a'],
-            provider: 'anthropic',
-            model: 'model-1',
-          },
-          env,
-        );
+        const recorder = await createLockedSessionRecorder({
+          sessionId,
+          projectHash: PROJECT,
+          chatsDir: path.join(directory(), 'chats'),
+          workspaceDirs: ['/work/a'],
+          provider: 'anthropic',
+          model: 'model-1',
+        });
         live.add(recorder);
         await recordRows(recorder, [row('one'), row('two')]);
         await recorder.flush();
@@ -76,14 +66,12 @@ describe('checkpoint service factory', () => {
       }
 
       it('builds that backend’s service', () => {
-        expect(createCheckpointService(undefined, env)).toBeInstanceOf(
-          serviceClass,
-        );
+        expect(createCheckpointService()).toBeInstanceOf(serviceClass);
       });
 
       it('creates, renames, lists and deletes a checkpoint of a live recorder through one interface', async () => {
         const recorder = await active();
-        const service = createCheckpointService(undefined, env);
+        const service = createCheckpointService();
         const created = await service.createCheckpoint(
           recorder,
           PROJECT,
@@ -128,7 +116,7 @@ describe('checkpoint service factory', () => {
 
       it('rejects duplicate names and overwrites only after confirmation', async () => {
         const recorder = await active();
-        const service = createCheckpointService(undefined, env);
+        const service = createCheckpointService();
         const first = await service.createCheckpoint(
           recorder,
           PROJECT,
@@ -159,7 +147,7 @@ describe('checkpoint service factory', () => {
 
       it('coordinates checkpoint and session names across closed sessions', async () => {
         const other = await active('other');
-        const service = createCheckpointService(undefined, env);
+        const service = createCheckpointService();
         await service.createCheckpoint(other, PROJECT, 'taken');
         await other.flush();
         await other.dispose();
@@ -210,7 +198,7 @@ describe('checkpoint service factory', () => {
 
       it('blocks session deletion until its live checkpoints are deleted', async () => {
         const recorder = await active();
-        const service = createCheckpointService(undefined, env);
+        const service = createCheckpointService();
         const checkpoint = await service.createCheckpoint(
           recorder,
           PROJECT,
@@ -252,7 +240,7 @@ describe('checkpoint service factory', () => {
         const chats = recorder.getChatsDir();
         await recorder.dispose();
         live.delete(recorder);
-        const service = createCheckpointService(undefined, env);
+        const service = createCheckpointService();
         const created = await service.createCheckpointClosed(
           file,
           PROJECT,
@@ -309,15 +297,7 @@ describe('checkpoint service factory', () => {
     });
   }
 
-  it('defaults to the old backend when no backend is selected', () => {
-    expect(createCheckpointService(undefined, {})).toBeInstanceOf(
-      CheckpointService,
-    );
-  });
-
-  it('an unknown backend value fails fast', () => {
-    expect(() =>
-      createCheckpointService(undefined, { [HISTORY_BACKEND_ENV]: 'both' }),
-    ).toThrow(HISTORY_BACKEND_ENV);
+  it('creates the journal service without backend selection', () => {
+    expect(createCheckpointService()).toBeInstanceOf(JournalCheckpointService);
   });
 });

@@ -4,28 +4,26 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import {
   LocalMediaStore,
   SessionRecordingService,
   replaySession,
   type IContent,
 } from '@vybestack/llxprt-code-core';
-import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { assertDefined } from '../../__tests__/assertions.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
+import { publicChat } from '../../__tests__/public-history-cursor.js';
+import { MessageType, type HistoryItemWithoutId } from '../types.js';
 import { chatCommand } from './chatCommand.js';
 import { createCompletionHandler } from './schema/index.js';
 import type { CommandContext, SlashCommand } from './types.js';
-import { MessageType, type HistoryItemWithoutId } from '../types.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { publicChat } from '../../__tests__/public-history-cursor.js';
-import { pinHistoryBackend } from '../../services/__tests__/support/pinHistoryBackend.js';
 
 // The fixtures are JSONL recordings; chatCommand.backends.test.ts covers both backends.
-pinHistoryBackend('old');
 
 const PROJECT_HASH = 'chat-command-checkpoints';
 

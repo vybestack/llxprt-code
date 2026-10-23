@@ -1,6 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
+import {
+  testJournalSeams,
+  type Failures,
+} from '../journal/__tests__/support/journalFixtures.js';
+import { loadFlushRecords } from '../journal/flushRecords.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import type {
   IContent,
@@ -8,22 +13,17 @@ import type {
 } from '../services/history/IContent.js';
 import { HistoryMediaOwnership } from '../storage/history-media-ownership.js';
 import { LocalMediaStore } from '../storage/local-media-store.js';
-import { loadFlushRecords } from '../journal/flushRecords.js';
-import {
-  testJournalSeams,
-  type Failures,
-} from '../journal/__tests__/support/journalFixtures.js';
-import { RecordingIntegration } from './RecordingIntegration.js';
-import { resumeSession, type ResumeResult } from './resumeSession.js';
 import {
   ExactReplayFixture,
+  PROJECT,
   diskRows,
   expectWireRows,
   fixtureDirectory,
   rowsOf,
-  PROJECT,
 } from './__tests__/support/exact-replay-fixture.js';
 import { JournalRecordingService } from './journalRecordingService.js';
+import { RecordingIntegration } from './RecordingIntegration.js';
+import { resumeSession, type ResumeResult } from './resumeSession.js';
 
 class FailableMediaStore extends LocalMediaStore {
   rejectedId: string | undefined;
@@ -60,27 +60,24 @@ async function openResume(
 ): Promise<ResumeResult> {
   const seams = testJournalSeams(failures);
   const flush = await loadFlushRecords();
-  const result = await resumeSession(
-    {
-      continueRef: fixture.sessionId,
-      projectHash: PROJECT,
-      chatsDir: fixture.chats,
-      currentProvider: 'test',
-      currentModel: 'model-1',
-      workspaceDirs: [],
-      mediaStore,
+  const result = await resumeSession({
+    continueRef: fixture.sessionId,
+    projectHash: PROJECT,
+    chatsDir: fixture.chats,
+    currentProvider: 'test',
+    currentModel: 'model-1',
+    workspaceDirs: [],
+    mediaStore,
+    journal: {
       journal: {
-        journal: {
-          ...seams.dependencies,
-          flush: (fd) => {
-            seams.dependencies.flush(fd);
-            flush(fd);
-          },
+        ...seams.dependencies,
+        flush: (fd) => {
+          seams.dependencies.flush(fd);
+          flush(fd);
         },
       },
     },
-    { LLXPRT_HISTORY_BACKEND: 'journal' },
-  );
+  });
   if (!result.ok) throw new Error(result.error);
   return result;
 }
@@ -135,7 +132,7 @@ describe('public native reference-media resume and adoption', () => {
       await seed(fixture, structuredClone(expected));
       for (let round = 0; round < 2; round++) {
         const resumed = await openResume(fixture, media);
-        const history = new HistoryService({ backend: 'journal' });
+        const history = new HistoryService({});
         const integration = new RecordingIntegration(resumed.recording);
         try {
           expectWireRows(await bootRows(resumed.boot), expected);
@@ -190,7 +187,7 @@ describe('public native reference-media resume and adoption', () => {
       const failures: Failures = {};
       await seed(fixture, [mediaRow([first, second])]);
       const resumed = await openResume(fixture, media, failures);
-      const history = new HistoryService({ backend: 'journal' });
+      const history = new HistoryService({});
       const recorder = JournalRecordingService.create({
         sessionId: 'prior-session',
         projectHash: PROJECT,

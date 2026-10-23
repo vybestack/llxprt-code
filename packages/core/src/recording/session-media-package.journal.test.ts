@@ -10,35 +10,33 @@ import {
   truncate,
   writeFile,
 } from 'node:fs/promises';
-import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { JournalRecordingService } from './journalRecordingService.js';
-import { LocalMediaStore } from '../storage/local-media-store.js';
+import { join } from 'node:path';
 import { JOURNAL_HEADER_BYTES } from '../journal/fileHeader.js';
-import { RECORD_KIND } from '../journal/recordKinds.js';
+import { sha256KeyHash } from '../journal/idKeys.js';
 import { openJournalReadOnly } from '../journal/journalReader.js';
 import { stateReaderOf } from '../journal/journalReaderState.js';
-import { sha256KeyHash } from '../journal/idKeys.js';
-import { SESSION_KEYS, encodeSessionFact } from './sessionMetaKeys.js';
+import { retiredJournalMessage } from '../journal/journalRefusal.js';
+import { RECORD_KIND } from '../journal/recordKinds.js';
+import { LocalMediaStore } from '../storage/local-media-store.js';
+import { JournalRecordingService } from './journalRecordingService.js';
 import {
   readJournalCheckpoints,
   readJournalFileFacts,
 } from './journalSessionListing.js';
-import { retiredJournalMessage } from '../journal/journalRefusal.js';
-import { useBackendEnv } from './__tests__/support/backendEnv.js';
+import { SESSION_KEYS, encodeSessionFact } from './sessionMetaKeys.js';
+
+import { resumeSession } from './resumeSession.js';
 import {
   importSessionMediaPackage,
   validateSessionMediaPackage,
 } from './session-media-package.js';
-import { resumeSession } from './resumeSession.js';
 
 const PROJECT = 'native-package-project';
 
 describe('native session package validation and import', () => {
-  const backend = useBackendEnv();
   let root = '';
   beforeEach(async () => {
-    backend('journal');
     root = await mkdtemp(join(tmpdir(), 'llxprt-native-package-'));
   });
   afterEach(async () => {
@@ -199,6 +197,9 @@ describe('native session package validation and import', () => {
         persistedStates: [],
       }),
     );
+    await expect(validateSessionMediaPackage(directory)).rejects.toThrow(
+      retiredJournalMessage(join(directory, 'session.jsonl')),
+    );
     await expect(
       importSessionMediaPackage(
         directory,
@@ -298,17 +299,18 @@ describe('native session package validation and import', () => {
     ).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
-  it('refuses a native package on the old backend rather than converting it', async () => {
+  it('imports a journal package without selecting a backend', async () => {
     const directory = await fixture();
-    backend('old');
-    await expect(
-      importSessionMediaPackage(
-        directory,
-        join(root, 'destination-chats'),
-        PROJECT,
-        destination(),
-      ),
-    ).rejects.toThrow(/backend/);
+    const imported = await importSessionMediaPackage(
+      directory,
+      join(root, 'destination-chats'),
+      PROJECT,
+      destination(),
+    );
+    expect(imported.recordingPath.endsWith('.llxj')).toBe(true);
+    const facts = await readJournalFileFacts(imported.recordingPath);
+    expect(facts?.rows).toBe(1);
+    expect(facts?.facts.title).toBe('Portable title');
   });
   it('rejects undeclared media in any stored journal row', async () => {
     const directory = await fixture();

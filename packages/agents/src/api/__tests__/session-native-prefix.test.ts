@@ -1,16 +1,15 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { describe, expect, it } from 'bun:test';
+import { useTempDir } from '../../../../core/src/journal/__tests__/support/useTempDir.js';
+import { exactTokenizer } from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
+import { operationFileCreates } from '../../compression/__tests__/support/operation-file-creates.js';
 import {
   buildAgent,
   drain,
   internalAgentClient,
 } from './helpers/agentHarness.js';
 import { collectAgentHistory } from './helpers/collect-agent-history.js';
-import { operationFileCreates } from '../../compression/__tests__/support/operation-file-creates.js';
-import { useTempDir } from '../../../../core/src/journal/__tests__/support/useTempDir.js';
-import { useNativePrefixBackend } from './helpers/native-prefix-backend.js';
-import { exactTokenizer } from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
 
 function fixtureRow(index: number): IContent {
   return {
@@ -20,7 +19,6 @@ function fixtureRow(index: number): IContent {
 }
 
 describe('native public session prefix mutations', () => {
-  useNativePrefixBackend();
   const directory = useTempDir('native-session-prefix-');
   for (const size of [3, 64, 65, 5000]) {
     it(`clears ${size} rows without operation files and preserves the initial turn`, async () => {
@@ -81,9 +79,7 @@ async function prefixStates(
   size: number,
   backend: 'old' | 'journal',
 ): Promise<PrefixState[]> {
-  const previous = process.env.LLXPRT_HISTORY_BACKEND;
-  process.env.LLXPRT_HISTORY_BACKEND = backend;
-  try {
+  {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
       workingDir: root,
     });
@@ -120,9 +116,6 @@ async function prefixStates(
     } finally {
       await cleanup();
     }
-  } finally {
-    if (previous === undefined) delete process.env.LLXPRT_HISTORY_BACKEND;
-    else process.env.LLXPRT_HISTORY_BACKEND = previous;
   }
 }
 

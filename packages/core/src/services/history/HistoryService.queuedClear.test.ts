@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { HISTORY_BACKEND_ENV } from './historyBackendSelect.js';
+import { afterEach, describe, expect, it } from 'bun:test';
+
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 
@@ -19,14 +19,9 @@ async function texts(history: HistoryService): Promise<string[]> {
 describe.each(['old', 'journal'] as const)(
   'a clear in the history mutation queue (%s store)',
   (backend) => {
-    const saved = process.env[HISTORY_BACKEND_ENV];
     const created: HistoryService[] = [];
-    beforeEach(() => {
-      process.env[HISTORY_BACKEND_ENV] = backend;
-    });
+
     afterEach(async () => {
-      if (saved === undefined) delete process.env[HISTORY_BACKEND_ENV];
-      else process.env[HISTORY_BACKEND_ENV] = saved;
       for (const history of created.splice(0)) await history.dispose();
     });
 

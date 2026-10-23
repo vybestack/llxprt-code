@@ -7,13 +7,13 @@ import { describe, expect, it, spyOn } from 'bun:test';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { selectBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
+
 import { readJournalFileFacts } from '@vybestack/llxprt-code-core/recording/journalSessionListing.js';
+import { basename } from 'node:path';
 import { buildAgent, internalConfig } from './helpers/agentHarness.js';
 import { collectAgentHistory } from './helpers/collect-agent-history.js';
-import { recordedRows } from './support/recorded-rows.js';
-import { basename } from 'node:path';
 import { withRecordingLifetimeFixture } from './helpers/recording-owner-lifetime-fixture.js';
+import { recordedRows } from './support/recorded-rows.js';
 
 async function withAgents(
   scenario: (input: {
@@ -166,13 +166,11 @@ describe('Agent recording identity transitions', () => {
         severity: 'info',
         message: 'after-failed-adoption',
       });
-      if (selectBackend() === 'journal') {
-        await agent.session.recordRecordingTitle('after-failed-adoption');
-      }
-      const durableFact =
-        selectBackend() === 'old'
-          ? await readFile(previousPath, 'utf8')
-          : (await readJournalFileFacts(previousPath))?.facts.title;
+
+      await agent.session.recordRecordingTitle('after-failed-adoption');
+
+      const durableFact = (await readJournalFileFacts(previousPath))?.facts
+        .title;
       expect(durableFact).toContain('after-failed-adoption');
       expect(
         JSON.stringify(await Array.fromAsync(agent.streamHistory())),

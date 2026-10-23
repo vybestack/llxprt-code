@@ -2,16 +2,16 @@
 import { describe, expect, it } from 'bun:test';
 import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
 import {
-  withRollbackFixture,
-  rowsOf,
-  durableRowsOf,
-  rejectedValue,
-  rollbackRow,
-} from './chronology-rollback-test-helpers.js';
-import {
   mergeRow,
   MergeRowHistory,
 } from './__tests__/support/history-merge-test-helpers.js';
+import {
+  durableRowsOf,
+  rejectedValue,
+  rollbackRow,
+  rowsOf,
+  withRollbackFixture,
+} from './chronology-rollback-test-helpers.js';
 
 describe('history merge scale partial admission', () => {
   for (const size of [512, 8192]) {
@@ -50,7 +50,6 @@ describe('history merge scale partial admission', () => {
         mergeRow,
         undefined,
         (options) => new MergeRowHistory(options),
-        'old',
       );
     }, 600_000);
   }
@@ -101,7 +100,6 @@ describe('history merge chronology stamping', () => {
       rollbackRow,
       undefined,
       undefined,
-      'old',
     );
   });
 });

@@ -1,21 +1,21 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
-import { readFileSync, writeFileSync } from 'node:fs';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { testJournalSeams } from '@vybestack/llxprt-code-core/journal/__tests__/support/journalFixtures.js';
 import { useTempDir } from '@vybestack/llxprt-code-core/journal/__tests__/support/useTempDir.js';
 import { RECORD_KIND } from '@vybestack/llxprt-code-core/journal/recordKinds.js';
-import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import { describe, expect, it } from 'bun:test';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { operationFileCreates } from '../../../agents/src/compression/__tests__/support/operation-file-creates.js';
+import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { createRuntimeTokenizerFactory } from '../composition/runtimeTokenizerFactory.js';
 import { projectOpenAIChatPromptEnvelopeFromSource } from '../runtime/promptEnvelopeProjections.js';
 import { prepareRequest } from './OpenAIRequestPreparation.js';
-import { operationFileCreates } from '../../../agents/src/compression/__tests__/support/operation-file-creates.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
-import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 
 interface PhysicalRead {
   readonly path: string;
@@ -152,7 +152,7 @@ describe('stored last-thinking physical descriptor reads', () => {
           },
         },
       });
-      const history = new HistoryService({ backend: 'journal', recording });
+      const history = new HistoryService({ recording });
       try {
         const rows: IContent[] = Array.from({ length: size }, (_, index) =>
           index === 0 || index === Math.floor(size / 2)

@@ -57,10 +57,6 @@ import {
   type RecordedSession,
 } from './__tests__/support/p05dTestKit.js';
 
-import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
-
-pinHistoryBackend('old');
-
 let chatsDir: string;
 let tempRoot: string;
 

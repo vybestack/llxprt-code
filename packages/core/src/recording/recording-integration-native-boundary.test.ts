@@ -1,17 +1,17 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
-import { HistoryService } from '../services/history/HistoryService.js';
+import { describe, expect, it } from 'bun:test';
 import { TRAILER_RECORD_BYTES } from '../journal/trailerRecord.js';
+import { HistoryService } from '../services/history/HistoryService.js';
 import type { IContent } from '../services/history/IContent.js';
 import {
   nativeText,
   useNativeIntegration,
   type NativeIntegrationFixture,
 } from './__tests__/support/native-integration-fixture.js';
-import { readJournalFileFacts } from './journalSessionListing.js';
-import { JournalResumeBoot, resumePointOf } from './journalResume.js';
 import { withResumed } from './__tests__/support/native-resume-fixture.js';
+import { JournalResumeBoot, resumePointOf } from './journalResume.js';
+import { readJournalFileFacts } from './journalSessionListing.js';
 
 function writeCount(fixture: NativeIntegrationFixture): number {
   return fixture.seams.events.filter((event) => event.type === 'write').length;
@@ -191,7 +191,7 @@ describe('native compression and replacement recording boundaries', () => {
   it('finishes detaching admitted writes before a replacement history attaches', async () => {
     const current = fixture();
     const { history, integration, histories, failures, seams, texts } = current;
-    const replacement = new HistoryService({ backend: 'journal' });
+    const replacement = new HistoryService({});
     histories.push(replacement);
     await integration.subscribeToJournal(history);
     history.add(nativeText('baseline'));

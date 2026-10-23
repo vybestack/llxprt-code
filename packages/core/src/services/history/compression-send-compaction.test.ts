@@ -1,13 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { createHash } from 'node:crypto';
-import { describe, expect, it } from 'bun:test';
 import { medianSettledDelta } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
+import { describe, expect, it } from 'bun:test';
+import { createHash } from 'node:crypto';
 import { createRowCounters } from '../../recording/journalCounters.js';
 import { RowOwnership } from '../../recording/rowOwnership.js';
+import { exactTokenizer } from './chronology-rollback-test-helpers.js';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import { JournalSession } from './journalSession.js';
-import { exactTokenizer } from './chronology-rollback-test-helpers.js';
 
 const MIB = 1024 * 1024;
 const ROW_BYTES = 70 * MIB;
@@ -75,7 +75,6 @@ describe('service send pin defers real compaction', () => {
     const reader = new RowOwnership();
     const counters = createRowCounters();
     const history = new HistoryService({
-      backend: 'journal',
       attachmentCounters: { ...counters.counters, ownership: reader },
     });
     history.setTokenizerFactory(exactTokenizer());

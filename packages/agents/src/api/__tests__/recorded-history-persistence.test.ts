@@ -1,17 +1,17 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { SemanticMediaPurgeStreamCoordinator } from '@vybestack/llxprt-code-core/services/history/semantic-purge-stream.js';
+import { collectJournalFileRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
-import { SemanticMediaPurgeStreamCoordinator } from '@vybestack/llxprt-code-core/services/history/semantic-purge-stream.js';
-import { collectJournalFileRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import {
   persistSemanticMediaPurge,
   restoreRecordedHistory,
 } from '../control/recordedHistoryPersistence.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 const image: IContent = {
   speaker: 'human',
@@ -43,7 +43,7 @@ async function withJournal(
     provider: 'fake',
     model: 'fake',
   });
-  const history = new HistoryService({ backend: 'journal' });
+  const history = new HistoryService({});
   try {
     history.add(image);
     await history.attachJournal(recording);
@@ -99,7 +99,7 @@ describe('journal history persistence', () => {
             );
           });
         } finally {
-          transaction.close();
+          await transaction.close();
         }
       });
     });

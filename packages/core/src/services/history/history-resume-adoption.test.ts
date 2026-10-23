@@ -3,17 +3,16 @@ import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core
 import {
   afterEach,
   beforeEach,
+  describe,
   expect,
   it,
-  describe,
   setSystemTime,
 } from 'bun:test';
-import { mkdtemp, rm, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { HistoryService } from './HistoryService.js';
-import { selectBackend } from './historyBackendSelect.js';
-import type { TextBlock } from './IContent.js';
+
 import { PROJECT_HASH } from '../../recording/__tests__/support/p05dTestKit.js';
 import {
   createResumableSession,
@@ -23,6 +22,7 @@ import {
   resumeSession,
   type ResumeResult,
 } from '../../recording/resumeSession.js';
+import type { TextBlock } from './IContent.js';
 
 let root: string;
 
@@ -258,10 +258,7 @@ async function verifyKeepsChronologyStableOnSubsequentReadsAndAppends(): Promise
   const adoptedAt = new Date('2026-09-21T12:00:00Z');
   // JSONL rows get their chronology bound at adoption; journal rows carry the
   // one they were written with.
-  const recordedAt =
-    selectBackend() === 'journal'
-      ? JOURNAL_FIXTURE_RECORDED_AT
-      : adoptedAt.getTime();
+  const recordedAt = JOURNAL_FIXTURE_RECORDED_AT;
   setSystemTime(adoptedAt);
   try {
     await service.adoptResumeBoot(result.recording, result.boot);

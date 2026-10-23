@@ -19,11 +19,11 @@
  * exercised as production runs it.
  */
 
-import { describe, it, expect } from 'bun:test';
-import { observeHistorySynchronouslyForTest as testHistory } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
-import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
+import { observeHistorySynchronouslyForTest as testHistory } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
+import { describe, expect, it } from 'bun:test';
 import { applyCompressionWithAnchor } from './__tests__/support/cacheAnchor.js';
 
 function human(text: string): IContent {
@@ -318,7 +318,7 @@ describe('applyCompressionWithAnchor atomic anchor publication (#3070)', () => {
 
 describe('applyCompressionWithAnchor under an active compression lock, old synchronous protocol (#3338)', () => {
   it('flushes rebuild content before the lock release and keeps ordinary streaming adds on both sides streaming after it', async () => {
-    const historyService = new HistoryService({ backend: 'old' });
+    const historyService = new HistoryService({});
     for (const c of [
       human('original-1'),
       ai('original-2'),

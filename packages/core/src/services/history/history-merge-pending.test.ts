@@ -1,13 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import {
-  withRollbackFixture,
-  rowsOf,
-  rejectedValue,
-  durableRowsOf,
-} from './chronology-rollback-test-helpers.js';
-import { mergeRow } from './__tests__/support/history-merge-test-helpers.js';
 import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
+import { mergeRow } from './__tests__/support/history-merge-test-helpers.js';
+import {
+  durableRowsOf,
+  rejectedValue,
+  rowsOf,
+  withRollbackFixture,
+} from './chronology-rollback-test-helpers.js';
 
 describe('history merge pending source identities', () => {
   it('appends the pending source row value and leaves the caller marker untouched', async () => {
@@ -113,7 +113,6 @@ describe('history merge source membership pinning', () => {
         mergeRow,
         undefined,
         undefined,
-        'old',
       );
     }, 600_000);
   }

@@ -1,22 +1,22 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
-import {
-  compressionInputSourceFault,
-  checkpointScratch,
-  checkpointState,
-  expectedCheckpointState,
-} from './checkpoint-source-fault-helpers.js';
+import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { RecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
 import { requireJsonlRecorder } from '@vybestack/llxprt-code-core/services/history/recorderBackend.js';
+import { describe, expect, it } from 'bun:test';
 import { withCoreSuffixFixture } from '../../../../core/src/services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
-import { nativeHighdensitySourceFailure } from './support/native-highdensity-source.js';
 import {
-  highdensitySetup,
-  highdensityRow,
+  checkpointScratch,
+  checkpointState,
+  compressionInputSourceFault,
+  expectedCheckpointState,
+} from './checkpoint-source-fault-helpers.js';
+import {
   HighdensityDiskHistory,
+  highdensityRow,
+  highdensitySetup,
 } from './highdensity-disk-helpers.js';
+import { nativeHighdensitySourceFailure } from './support/native-highdensity-source.js';
 import { collectRows } from './truncation-stream-helpers.js';
-import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 
 class FailingSourceHistory extends HighdensityDiskHistory {
   failure: Error | undefined;
@@ -82,7 +82,6 @@ async function sourceFailure(size: number, mode: string): Promise<number> {
       created = new FailingSourceHistory(options);
       return created;
     },
-    'old',
   );
 }
 const cases: Array<[number, string]> = [

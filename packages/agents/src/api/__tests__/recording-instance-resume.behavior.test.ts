@@ -3,20 +3,19 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { replaySession } from '@vybestack/llxprt-code-core';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { describe, expect, it, vi } from 'bun:test';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
-import { replaySession } from '@vybestack/llxprt-code-core';
 import { buildAgent, drain, internalConfig } from './helpers/agentHarness.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   nativeRows,
   readJournalFileFacts,
   requireRecordingPath,
   rowTexts,
-  withHistoryBackend,
 } from './helpers/native-session-fixture.js';
 
 function content(text: string): IContent {
@@ -24,16 +23,6 @@ function content(text: string): IContent {
 }
 
 describe('old adopted recording instance path', () => {
-  let priorBackend: string | undefined;
-  beforeEach(() => {
-    priorBackend = process.env.LLXPRT_HISTORY_BACKEND;
-    process.env.LLXPRT_HISTORY_BACKEND = 'old';
-  });
-  afterEach(() => {
-    if (priorBackend === undefined) delete process.env.LLXPRT_HISTORY_BACKEND;
-    else process.env.LLXPRT_HISTORY_BACKEND = priorBackend;
-  });
-
   it('restarts an adopted recording on its original path with one header and monotonic replacement history across different timestamps', async () => {
     const workingDir = await mkdtemp(
       join(tmpdir(), 'recording-instance-resume-'),
@@ -110,7 +99,7 @@ describe('old adopted recording instance path', () => {
 
 describe('native adopted recording instance path', () => {
   it('retains source identity and creation time across stopped replacement, public continuation and independent reopen', async () => {
-    await withHistoryBackend('journal', async () => {
+    await (async () => {
       const workingDir = await mkdtemp(
         join(tmpdir(), 'native-instance-resume-'),
       );
@@ -239,6 +228,6 @@ describe('native adopted recording instance path', () => {
         await source.cleanup();
         clock.mockRestore();
       }
-    });
+    })();
   }, 30000);
 });

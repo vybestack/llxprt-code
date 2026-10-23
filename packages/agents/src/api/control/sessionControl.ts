@@ -27,57 +27,31 @@
  *   restored IContent[] so callers (e.g. the Zed loadSession path) can replay it.
  */
 
-import { basename } from 'node:path';
-import { clearClientHistory } from './sessionHistoryClear.js';
-import { collectAsync } from './collectAsync.js';
+import type { LocalMediaStore } from '@vybestack/llxprt-code-core';
 import {
-  adoptSessionResume,
-  openSessionResume,
-} from './sessionResumeAdoption.js';
-import {
-  createCheckpointService,
-  type CheckpointServicePort,
   RecordingIntegration,
-  withRecordingFailureReport,
   SessionDiscovery,
   SessionTransitionService,
+  createCheckpointService,
   deleteSession as deleteRecordedSession,
   importSessionMediaPackage,
-  type SessionRecordingPort,
+  withRecordingFailureReport,
+  type CheckpointServicePort,
+  type ContinueTarget,
+  type LockHandle,
   type ResumeBootHandle,
   type ResumeResult,
-  type ContinueTarget,
+  type SessionRecordingPort,
   type SessionSummary,
-  type LockHandle,
 } from '@vybestack/llxprt-code-core';
-import type { SemanticPurgeRowSource } from '@vybestack/llxprt-code-core/services/history/semantic-purge-disk-rows.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { SemanticMediaPurgeFrontier } from '@vybestack/llxprt-code-core/services/history/semantic-media-purge.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { LocalMediaStore } from '@vybestack/llxprt-code-core';
-import type { AgentSessionPersistence } from './recordedHistoryPersistence.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import { HistoryAttachmentError } from '@vybestack/llxprt-code-core/services/history/attachHistoryJournal.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import {
-  captureRollbackFailure,
-  cleanupSessionResources,
-} from './sessionControlRollback.js';
-import { exportRecordedSession } from './sessionControlExport.js';
-import {
-  sessionInfoFromReplay,
-  readSessionInfo,
-} from './sessionControlInfo.js';
-import { recordSessionEvent } from './recordSessionEvent.js';
-import type { SessionRecordingEvent } from './recordSessionEvent.js';
-import {
-  persistSemanticMediaPurge as persistPurge,
-  requireActiveRecording,
-  restartRecording,
-} from './recordedHistoryPersistence.js';
-import { restoreOwnerTurns } from './sessionControlHistoryMutation.js';
-import { warnSkippedRecordings } from './skippedRecordings.js';
-import { startNewSessionTransition } from './new-session-transition.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { HistoryAttachmentError } from '@vybestack/llxprt-code-core/services/history/attachHistoryJournal.js';
+import type { SemanticMediaPurgeFrontier } from '@vybestack/llxprt-code-core/services/history/semantic-media-purge.js';
+import type { SemanticPurgeRowSource } from '@vybestack/llxprt-code-core/services/history/semantic-purge-disk-rows.js';
+import { basename } from 'node:path';
 import type { PreparedSessionClient } from '../../session/session-new-client.js';
 import type {
   AgentSessionControl,
@@ -85,8 +59,33 @@ import type {
   SessionInfo,
   SessionRecordingState,
 } from '../agent.js';
+import { collectAsync } from './collectAsync.js';
+import { startNewSessionTransition } from './new-session-transition.js';
+import type { SessionRecordingEvent } from './recordSessionEvent.js';
+import { recordSessionEvent } from './recordSessionEvent.js';
+import type { AgentSessionPersistence } from './recordedHistoryPersistence.js';
+import {
+  persistSemanticMediaPurge as persistPurge,
+  requireActiveRecording,
+  restartRecording,
+} from './recordedHistoryPersistence.js';
+import { exportRecordedSession } from './sessionControlExport.js';
+import { restoreOwnerTurns } from './sessionControlHistoryMutation.js';
+import {
+  readSessionInfo,
+  sessionInfoFromReplay,
+} from './sessionControlInfo.js';
+import {
+  captureRollbackFailure,
+  cleanupSessionResources,
+} from './sessionControlRollback.js';
+import { clearClientHistory } from './sessionHistoryClear.js';
+import {
+  adoptSessionResume,
+  openSessionResume,
+} from './sessionResumeAdoption.js';
+import { warnSkippedRecordings } from './skippedRecordings.js';
 
-import { selectBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
 import {
   readRecordingMetadata,
   type RecordingMetadata,
@@ -205,7 +204,7 @@ export class SessionControl implements AgentSessionControl {
   }
 
   private getCheckpointService(): CheckpointServicePort {
-    this.checkpointService ??= createCheckpointService(this.deps.mediaStore);
+    this.checkpointService ??= createCheckpointService();
     return this.checkpointService;
   }
 
@@ -728,7 +727,7 @@ export class SessionControl implements AgentSessionControl {
     const path = this.recording?.getFilePath() ?? null;
     return {
       enabled: this.recording?.isActive() ?? false,
-      format: selectBackend() === 'journal' ? 'journal' : 'jsonl',
+      format: 'journal',
       ...(path !== null ? { path } : {}),
     };
   }

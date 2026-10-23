@@ -1,12 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { HistoryService } from './HistoryService.js';
-import { JournalProviderRequestSnapshot } from './journal-provider-request.js';
-import { exactTokenizer } from './chronology-rollback-test-helpers.js';
-import { prepareProviderContentSnapshot } from './provider-curated-stream.js';
-import { streamCuratedProviderHistory } from './historyCuration.js';
 import { DebugLogger } from '../../debug/index.js';
+import { exactTokenizer } from './chronology-rollback-test-helpers.js';
+import { streamCuratedProviderHistory } from './historyCuration.js';
+import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
+import { JournalProviderRequestSnapshot } from './journal-provider-request.js';
+import { prepareProviderContentSnapshot } from './provider-curated-stream.js';
 import type { ProviderRequestRows } from './provider-request-snapshot.js';
 
 async function collect(rows: ProviderRequestRows): Promise<IContent[]> {
@@ -17,7 +17,7 @@ async function collect(rows: ProviderRequestRows): Promise<IContent[]> {
 
 describe('native backend provider normalization', () => {
   it('uses the indexed request and overlays pending results without publishing them', async () => {
-    const history = new HistoryService({ backend: 'journal' });
+    const history = new HistoryService({});
     history.setTokenizerFactory(exactTokenizer());
     const tail: IContent[] = [
       {

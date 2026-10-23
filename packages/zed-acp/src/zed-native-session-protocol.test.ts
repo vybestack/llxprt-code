@@ -1,9 +1,4 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
-import { mkdtemp, readdir, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { createHash } from 'node:crypto';
 import {
   Config,
   getProjectHash,
@@ -12,9 +7,14 @@ import {
 import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { ZedAgent } from './zedIntegration.js';
-import { unusedProfileApplication } from './test-profile-application.js';
+import { describe, expect, it } from 'bun:test';
+import { createHash } from 'node:crypto';
+import { mkdtemp, readdir, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { connectPeer } from './__tests__/support/acp-readable-stream-test-helpers.js';
+import { unusedProfileApplication } from './test-profile-application.js';
+import { ZedAgent } from './zedIntegration.js';
 
 async function transcript(
   path: string,
@@ -83,7 +83,7 @@ describe('native ACP session protocol', () => {
         .map((value) => JSON.stringify(value))
         .join('\n') + '\n',
     );
-    process.env.LLXPRT_HISTORY_BACKEND = 'journal';
+
     process.env.LLXPRT_FAKE_RESPONSES = fixture;
     process.env.LLXPRT_LOG_HOME = join(root, 'logs');
     const config = new Config({
@@ -209,11 +209,7 @@ describe('native ACP session protocol', () => {
       await peer.finish();
       manager.dispose();
       await config.dispose();
-      for (const key of [
-        'LLXPRT_HISTORY_BACKEND',
-        'LLXPRT_FAKE_RESPONSES',
-        'LLXPRT_LOG_HOME',
-      ]) {
+      for (const key of ['LLXPRT_FAKE_RESPONSES', 'LLXPRT_LOG_HOME']) {
         if (saved[key] === undefined) delete process.env[key];
         else process.env[key] = saved[key];
       }

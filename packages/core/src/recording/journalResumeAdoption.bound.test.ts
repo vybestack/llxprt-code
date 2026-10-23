@@ -1,16 +1,22 @@
+import { HistoryJournalStore } from '../services/history/historyJournalStore.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { afterEach, describe, expect, it } from 'bun:test';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
-import { afterEach, describe, expect, it } from 'bun:test';
 import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
-import { SessionRecordingService } from './SessionRecordingService.js';
-import { createHistoryStore } from '../services/history/historyBackend.js';
 import type { ResumeDerivedState } from '../services/history/historyResumeAdoption.js';
 import type { HistoryStorePort } from '../services/history/historyStorePort.js';
 import type { IContent } from '../services/history/IContent.js';
 import type { JournalAdoption } from '../services/history/journalAdoption.js';
 import { JournalHistoryStore } from '../services/history/journalHistoryStore.js';
 import { JournalSession } from '../services/history/journalSession.js';
+import {
+  PROJECT,
+  chatsDirIn,
+  journalSeams,
+  recordJournal,
+  userRow,
+} from './__tests__/support/recordedJournals.js';
 import {
   JournalRecordingService,
   type JournalRecordingConfig,
@@ -19,13 +25,7 @@ import {
   resumeJournalSession,
   type JournalResumeResult,
 } from './journalResume.js';
-import {
-  PROJECT,
-  chatsDirIn,
-  journalSeams,
-  recordJournal,
-  userRow,
-} from './__tests__/support/recordedJournals.js';
+import { SessionRecordingService } from './SessionRecordingService.js';
 
 function aiRow(text: string): IContent {
   return {
@@ -390,7 +390,7 @@ describe('adopting a resumed journal while recorders are bound', () => {
         provider: 'anthropic',
         model: 'model-1',
       });
-      const old = createHistoryStore({}, 'old');
+      const old = new HistoryJournalStore();
       try {
         await expect(
           old.adoptResume({ ...request(resumed, []), recording: jsonl }),
@@ -403,7 +403,7 @@ describe('adopting a resumed journal while recorders are bound', () => {
 
     it('is refused by the JSONL store, which resumes only from its own recorder and cursor', async () => {
       const resumed = await resumeRecorded([userRow('ask')]);
-      const old = createHistoryStore({}, 'old');
+      const old = new HistoryJournalStore();
       try {
         await expect(old.adoptResume(request(resumed, []))).rejects.toThrow(
           'Recorder/backend mismatch',
@@ -463,7 +463,7 @@ describe('adopting a resumed journal while recorders are bound', () => {
           true,
         ]);
       } finally {
-        batch.retire();
+        await batch.retire();
       }
     });
 

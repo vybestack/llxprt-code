@@ -1,18 +1,18 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
-import OpenAI from 'openai';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { batchGate } from '@vybestack/llxprt-code-core/services/history/__tests__/support/addbatch-stream-test-helpers.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import { describe, expect, it } from 'bun:test';
+import OpenAI from 'openai';
 import { localWireHashSink } from '../__tests__/support/local-wire-hash-sink.js';
 import { WIRE_ROUTES } from '../__tests__/support/wireBodyCapture.js';
-import { prepareRequest } from './OpenAIRequestPreparation.js';
-import { executeSpooledStreamingChatRequest } from './OpenAIApiExecution.js';
-import { withChatHttpBody } from '../utils/chat-http-body.js';
-import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import { withChatHttpBody } from '../utils/chat-http-body.js';
+import { executeSpooledStreamingChatRequest } from './OpenAIApiExecution.js';
+import { prepareRequest } from './OpenAIRequestPreparation.js';
 
 const route = WIRE_ROUTES.find((value) => value.id === 'openai-chat-plain');
 if (route === undefined) throw new Error('Missing plain Chat route');
@@ -78,7 +78,7 @@ async function failCallback(
 
 describe('captured continuation transport failures', () => {
   it('retries the same second body over HTTP after clear and replacement without selecting the new history', async () => {
-    const history = new HistoryService({ backend: 'journal' });
+    const history = new HistoryService({});
     await history.addBatch([
       {
         speaker: 'human',
@@ -162,7 +162,7 @@ describe('captured continuation transport failures', () => {
   });
 
   it('preserves a failing HTTP callback and independent awaited source-close failure in order', async () => {
-    const history = new HistoryService({ backend: 'journal' });
+    const history = new HistoryService({});
     await history.addBatch([
       {
         speaker: 'human',

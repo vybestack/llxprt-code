@@ -1,6 +1,4 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { expect } from 'bun:test';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import {
   JournalResumeBoot,
   resumeJournalSession,
@@ -9,6 +7,8 @@ import {
   SessionLockManager,
   SessionLockedError,
 } from '@vybestack/llxprt-code-core/recording/SessionLockManager.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { expect } from 'bun:test';
 import {
   diskToolState,
   projectHash,
@@ -18,12 +18,12 @@ import {
 } from './service-tool-recorders.js';
 import {
   localProvider,
+  modelName,
+  providerName,
   requestFacts,
   serviceToolChat,
   toolId,
   toolResult,
-  providerName,
-  modelName,
   type RequestFacts,
 } from './service-tool-runtime.js';
 
@@ -42,7 +42,7 @@ export async function proveToolResume(
     workspaceDirs: ['/work'],
   });
   if (!result.ok) throw new Error(result.error);
-  const history = new HistoryService({ backend: 'journal' });
+  const history = new HistoryService({});
   let captured: RequestFacts | undefined;
   const provider = localProvider((options) =>
     (async function* () {

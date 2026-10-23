@@ -1,23 +1,21 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
+import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 
+import {
+  SessionRecordingService,
+  replaySession,
+  resumeJsonlSession,
+  type JsonlResumeResult as ResumeResult,
+} from '@vybestack/llxprt-code-core';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import {
-  SessionRecordingService,
-  resumeJsonlSession,
-  replaySession,
-  type JsonlResumeResult as ResumeResult,
-} from '@vybestack/llxprt-code-core';
 import { restoreResumeBoot } from './restoreResumeBoot.js';
-import { pinHistoryBackend } from './__tests__/support/pinHistoryBackend.js';
 
 // The fixtures are JSONL recordings of the old store.
-pinHistoryBackend('old');
 
 let root: string;
 
@@ -51,7 +49,7 @@ describe('startup journal restoration', () => {
     });
     if (!result.ok) throw new Error(result.error);
     resumed = result;
-    history = new HistoryService({ backend: 'old' });
+    history = new HistoryService({});
   });
   afterEach(async () => {
     await history.dispose();

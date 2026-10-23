@@ -12,7 +12,7 @@ describe('detached history API publishes through the store port', () => {
   it('hands an append and a replacement to the store, which publishes them', async () => {
     const publish = spyOn(HistoryJournalStore.prototype, 'publishDetached');
     try {
-      const history = new HistoryService({ backend: 'old' });
+      const history = new HistoryService({});
 
       await history.detachedValues.append([row('human', 'one')]);
       await history.detachedValues.replace([row('human', 'two')]);

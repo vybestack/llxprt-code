@@ -1,10 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
 import { HistoryService } from '../services/history/HistoryService.js';
-import { HISTORY_BACKEND_ENV } from '../services/history/historyBackendSelect.js';
+
 import type { IContent } from '../services/history/IContent.js';
 import { SessionPersistenceService } from '../storage/SessionPersistenceService.js';
 import { JournalRecordingService } from './journalRecordingService.js';
@@ -25,7 +25,6 @@ function textOf(content: IContent): string {
 }
 
 /** The service picks its store from the environment when it is constructed. */
-const savedBackend = process.env[HISTORY_BACKEND_ENV];
 
 describe('RecordingIntegration over a journal recorder', () => {
   const directory = useTempDir('recording-integration-journal-');
@@ -35,19 +34,15 @@ describe('RecordingIntegration over a journal recorder', () => {
   let chatsDir: string;
 
   beforeEach(async () => {
-    process.env[HISTORY_BACKEND_ENV] = 'journal';
     chatsDir = path.join(directory(), 'chats');
-    const created = await createLockedSessionRecorder(
-      {
-        sessionId: SESSION_ID,
-        projectHash: 'project',
-        chatsDir,
-        workspaceDirs: ['/work'],
-        provider: 'anthropic',
-        model: 'model-1',
-      },
-      process.env,
-    );
+    const created = await createLockedSessionRecorder({
+      sessionId: SESSION_ID,
+      projectHash: 'project',
+      chatsDir,
+      workspaceDirs: ['/work'],
+      provider: 'anthropic',
+      model: 'model-1',
+    });
     if (!(created instanceof JournalRecordingService)) {
       throw new Error('the factory did not build a journal recorder');
     }
@@ -56,8 +51,6 @@ describe('RecordingIntegration over a journal recorder', () => {
   });
 
   afterEach(async () => {
-    if (savedBackend === undefined) delete process.env[HISTORY_BACKEND_ENV];
-    else process.env[HISTORY_BACKEND_ENV] = savedBackend;
     await integration?.dispose().catch(() => undefined);
     await history.dispose().catch(() => undefined);
     await recorder.dispose().catch(() => undefined);

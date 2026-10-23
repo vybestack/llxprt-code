@@ -1,12 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { describe, expect, it, spyOn } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import { HistoryJournalStore } from './historyJournalStore.js';
-import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 
 describe('old fold capture layout', () => {
   it('pins the journal once and takes the row origins from that pin', async () => {
-    const history = new HistoryService({ backend: 'old' });
+    const history = new HistoryService({});
     try {
       for (let index = 0; index < 12; index++)
         history.add(suffixRow(index, 64));

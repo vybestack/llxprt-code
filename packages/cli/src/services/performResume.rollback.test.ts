@@ -6,27 +6,25 @@
  * callbacks. The CLI must never be left holding a disposed recording.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import {
   RecordingIntegration,
   SessionLockManager,
   SessionRecordingService,
   requireJsonlRecorder,
-  type SessionRecordingPort,
   type IContent,
   type LockHandle,
   type ResumeCursorBoot,
   type SessionMetadata,
+  type SessionRecordingPort,
 } from '@vybestack/llxprt-code-core';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { performResume, type ResumeContext } from './performResume.js';
-import { pinHistoryBackend } from './__tests__/support/pinHistoryBackend.js';
 
 // The fixtures are JSONL recordings of the old store.
-pinHistoryBackend('old');
 
 const PROJECT_HASH = 'perform-resume-rollback';
 const CURRENT_SESSION = 'current-session-0001';

@@ -1,16 +1,17 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { describe, expect, it } from 'bun:test';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
-import { describe, expect, it } from 'bun:test';
 import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
 import { JournalRecordingService } from './journalRecordingService.js';
 import { JournalResumeBoot } from './journalResume.js';
 import { ResumeCursorBoot } from './resumeCursorBoot.js';
+import { SessionDiscovery } from './SessionDiscovery.js';
 import { SessionLockManager } from './SessionLockManager.js';
 import { SessionRecordingService } from './SessionRecordingService.js';
 import { SessionTransitionService } from './SessionTransitionService.js';
-import { SessionDiscovery } from './SessionDiscovery.js';
-import { useBackendEnv } from './__tests__/support/backendEnv.js';
+
+import type { IContent } from '../services/history/IContent.js';
 import {
   PROJECT,
   chatsDirIn,
@@ -19,7 +20,6 @@ import {
   userRow,
 } from './__tests__/support/recordedJournals.js';
 import type { ContinueTarget } from './types.js';
-import type { IContent } from '../services/history/IContent.js';
 
 type CheckpointTarget = Extract<ContinueTarget, { kind: 'checkpoint' }>;
 
@@ -36,7 +36,6 @@ async function lockIsFree(chats: string, sessionId: string): Promise<boolean> {
 
 describe('SessionTransitionService.forkFromCheckpoint dispatches by backend', () => {
   const directory = useTempDir('transition-front-door-');
-  const setBackend = useBackendEnv();
 
   async function journalTarget(chats: string): Promise<CheckpointTarget> {
     const found = await SessionDiscovery.listContinueTargetsDetailedBounded(
@@ -52,7 +51,6 @@ describe('SessionTransitionService.forkFromCheckpoint dispatches by backend', ()
   }
 
   it('on the journal backend returns a journal recorder and a boot that streams the cloned rows', async () => {
-    setBackend('journal');
     const chats = chatsDirIn(directory());
     await recordJournal(chats, 'src', {
       rows: [userRow('one'), userRow('two')],
@@ -81,7 +79,6 @@ describe('SessionTransitionService.forkFromCheckpoint dispatches by backend', ()
   });
 
   it('on the journal backend leaves no child file and no lock when the checkpoint is not live', async () => {
-    setBackend('journal');
     const chats = chatsDirIn(directory());
     const source = await recordJournal(chats, 'src', {
       rows: [userRow('one')],
@@ -120,7 +117,6 @@ describe('SessionTransitionService.forkFromCheckpoint dispatches by backend', ()
   });
 
   it('on the old backend returns the JSONL recorder and a cursor boot', async () => {
-    setBackend('old');
     const chats = chatsDirIn(directory());
     const parent = new SessionRecordingService({
       sessionId: 'old-src',

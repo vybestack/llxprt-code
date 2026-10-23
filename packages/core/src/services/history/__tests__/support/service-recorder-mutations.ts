@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach } from 'bun:test';
 import { join } from 'node:path';
+import { useTempDir } from '../../../../journal/__tests__/support/useTempDir.js';
 import { loadFlushRecords } from '../../../../journal/flushRecords.js';
 import { sha256KeyHash } from '../../../../journal/idKeys.js';
 import { openJournalReadOnly } from '../../../../journal/journalReader.js';
@@ -11,7 +12,6 @@ import {
   iterateRowEntries,
   rowTreeRootOf,
 } from '../../../../journal/rowTreeReader.js';
-import { useTempDir } from '../../../../journal/__tests__/support/useTempDir.js';
 import { JournalRecordingService } from '../../../../recording/journalRecordingService.js';
 import { RecordingIntegration } from '../../../../recording/RecordingIntegration.js';
 import type { SessionRecordingPort } from '../../../../recording/recordingPort.js';
@@ -77,7 +77,7 @@ export function useServiceRecorderMutations(): {
   });
   return {
     history: () => {
-      const history = new HistoryService({ backend: 'journal' });
+      const history = new HistoryService({});
       resources.push(history);
       return history;
     },

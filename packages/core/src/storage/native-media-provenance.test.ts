@@ -1,21 +1,21 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { readdir } from 'node:fs/promises';
-import { HistoryService } from '../services/history/HistoryService.js';
-import { LocalMediaStore } from './local-media-store.js';
-import { HistoryMediaOwnership } from './history-media-ownership.js';
-import { RequestMediaResolver } from './request-media-resolver.js';
+import { join } from 'node:path';
 import { useTempDir as tempDirectory } from '../journal/__tests__/support/useTempDir.js';
+import { HistoryService } from '../services/history/HistoryService.js';
 import {
   isMediaReferenceBlock,
   type IContent,
 } from '../services/history/IContent.js';
+import { HistoryMediaOwnership } from './history-media-ownership.js';
+import { LocalMediaStore } from './local-media-store.js';
 import {
   MediaAdmissionService,
   historyOwnerIdFor,
 } from './media-admission-service.js';
+import { RequestMediaResolver } from './request-media-resolver.js';
 
 const directory = tempDirectory('native-media-provenance-');
 
@@ -27,7 +27,7 @@ describe('native media reference provenance', () => {
         rootDirectory: join(directory(), 'pending'),
         quotaBytes: 1024,
       });
-      const history = new HistoryService({ backend: 'journal' });
+      const history = new HistoryService({});
       await history.registerMediaOwner(new HistoryMediaOwnership(store));
       const admission = new MediaAdmissionService(store);
       const context = {
@@ -181,7 +181,7 @@ describe('native media reference provenance', () => {
       rootDirectory: join(directory(), 'media'),
       quotaBytes: 1024,
     });
-    const history = new HistoryService({ backend: 'journal' });
+    const history = new HistoryService({});
     const reference = await store.admit({
       bytes: new Uint8Array([1, 2, 3]),
       mimeType: 'image/png',
@@ -276,7 +276,7 @@ describe('native media reference provenance', () => {
     };
     const reference = await left.admit(input);
     await right.admit(input);
-    const history = new HistoryService({ backend: 'journal' });
+    const history = new HistoryService({});
     await history.registerMediaOwner(new HistoryMediaOwnership(left));
     await history.addBatch([{ speaker: 'human', blocks: [reference] }]);
     const source = await history.prepareCuratedForProviderSnapshot();

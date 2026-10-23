@@ -1,14 +1,14 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { resumeSession } from '../../recording/resumeSession.js';
 import { RecordingIntegration } from '../../recording/RecordingIntegration.js';
+import { resumeSession } from '../../recording/resumeSession.js';
 import { HistoryService } from './HistoryService.js';
-import { historyOriginId } from './historyOriginId.js';
 import {
   mutationText,
   persistedMutationRows,
   useServiceRecorderMutations,
 } from './__tests__/support/service-recorder-mutations.js';
+import { historyOriginId } from './historyOriginId.js';
 
 describe('recorded HistoryService repeat-sequence pop', () => {
   const fixture = useServiceRecorderMutations();
@@ -57,19 +57,16 @@ describe('recorded HistoryService repeat-sequence pop', () => {
     await history.dispose();
     await recording.dispose();
 
-    const resumed = await resumeSession(
-      {
-        continueRef: recording.getSessionId(),
-        projectHash: recording.getProjectHash(),
-        chatsDir: recording.getChatsDir(),
-        currentProvider: 'anthropic',
-        currentModel: 'model-1',
-        workspaceDirs: ['/work'],
-      },
-      { LLXPRT_HISTORY_BACKEND: 'journal' },
-    );
+    const resumed = await resumeSession({
+      continueRef: recording.getSessionId(),
+      projectHash: recording.getProjectHash(),
+      chatsDir: recording.getChatsDir(),
+      currentProvider: 'anthropic',
+      currentModel: 'model-1',
+      workspaceDirs: ['/work'],
+    });
     if (!resumed.ok) throw new Error(resumed.error);
-    const restored = new HistoryService({ backend: 'journal' });
+    const restored = new HistoryService({});
     const resumedIntegration = new RecordingIntegration(resumed.recording);
     try {
       await restored.adoptResumeBoot(resumed.recording, resumed.boot);

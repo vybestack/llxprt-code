@@ -1,11 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach } from 'bun:test';
 import { join } from 'node:path';
-import { useTempDir } from '../../../journal/__tests__/support/useTempDir.js';
 import { testJournalSeams } from '../../../journal/__tests__/support/journalFixtures.js';
-import { TRAILER_RECORD_BYTES } from '../../../journal/trailerRecord.js';
-import type { JournalFileHandle } from '../../../journal/positionalFile.js';
+import { useTempDir } from '../../../journal/__tests__/support/useTempDir.js';
 import type { JournalOpenDependencies } from '../../../journal/journalWriterOpen.js';
+import type { JournalFileHandle } from '../../../journal/positionalFile.js';
+import { TRAILER_RECORD_BYTES } from '../../../journal/trailerRecord.js';
 import { HistoryService } from '../../../services/history/HistoryService.js';
 import { JournalRecordingService } from '../../journalRecordingService.js';
 import { RecordingIntegration } from '../../RecordingIntegration.js';
@@ -112,7 +112,7 @@ export function useNativeFailureIntegration(): () => NativeFailureFixture {
       model: 'test',
       journal: { journal: failingDependencies(control) },
     });
-    const history = new HistoryService({ backend: 'journal' });
+    const history = new HistoryService({});
     const reports = join(directory(), 'reports');
     const integration = new RecordingIntegration(recording, undefined, reports);
     fixture = {

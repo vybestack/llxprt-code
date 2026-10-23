@@ -23,35 +23,35 @@
  * recording for a previously saved session.
  */
 
-import { stat, open, appendFile } from 'node:fs/promises';
-import { ResumeCursorBoot } from './resumeCursorBoot.js';
-export { ResumeCursorBoot } from './resumeCursorBoot.js';
-import { JournalResumeBoot, resumeJournalSession } from './journalResume.js';
+import { appendFile, open, stat } from 'node:fs/promises';
 import type { JournalSessionOptions } from '../services/history/journalSession.js';
-import { selectBackend } from '../services/history/historyBackendSelect.js';
-import type { SessionRecordingPort } from './recordingPort.js';
-import {
-  type SessionMetadata,
-  type SessionSummary,
-  type UnreadableRecording,
-} from './types.js';
-import { SessionRecordingService } from './SessionRecordingService.js';
+import { JournalResumeBoot, resumeJournalSession } from './journalResume.js';
+import { ResumeCursorBoot } from './resumeCursorBoot.js';
+export { CONTINUE_LATEST } from './continueLatest.js';
+export { ResumeCursorBoot } from './resumeCursorBoot.js';
+
+import type { LocalMediaStore } from '../storage/local-media-store.js';
 import { SessionDiscovery } from './SessionDiscovery.js';
 import {
   SessionLockManager,
   SessionLockedError,
   type LockHandle,
 } from './SessionLockManager.js';
+import { SessionRecordingService } from './SessionRecordingService.js';
+import type { JournalReadCounters } from './journalCounters.js';
+import type { SessionRecordingPort } from './recordingPort.js';
 import { scanResumeMetadata } from './resumeMetadata.js';
+import {
+  type SessionMetadata,
+  type SessionSummary,
+  type UnreadableRecording,
+} from './types.js';
 import {
   matchUnreadableRecordings,
   noReadableSessionsError,
 } from './unreadableRecordings.js';
-import type { JournalReadCounters } from './journalCounters.js';
-import type { LocalMediaStore } from '../storage/local-media-store.js';
 
 import { CONTINUE_LATEST } from './continueLatest.js';
-export { CONTINUE_LATEST } from './continueLatest.js';
 
 /**
  * Input to the resume flow.
@@ -257,17 +257,9 @@ async function bootNewestReadableSession(
     : replayFailureError(firstFailure);
 }
 
-/**
- * The one resume front door: the backend `selectBackend(env)` names resumes
- * the session (a JSONL recording with a cursor boot, or a journal with the
- * version it was opened at). The history adopts either through
- * `HistoryService.adoptResumeBoot`.
- */
 export async function resumeSession(
   request: ResumeRequest,
-  env: Readonly<Record<string, string | undefined>> = process.env,
 ): Promise<ResumeResult | ResumeError> {
-  if (selectBackend(env) === 'old') return resumeJsonlSession(request);
   const result = await resumeJournalSession({
     mediaStore: request.mediaStore,
     continueRef: request.continueRef,

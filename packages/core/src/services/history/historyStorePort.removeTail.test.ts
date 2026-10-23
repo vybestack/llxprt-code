@@ -1,8 +1,9 @@
+import { HistoryJournalStore } from './historyJournalStore.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import * as path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import * as path from 'node:path';
 import { testJournalSeams } from '../../journal/__tests__/support/journalFixtures.js';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
 import { RowOwnership } from '../../recording/rowOwnership.js';
@@ -12,7 +13,6 @@ import type {
   HistoryMediaOwner,
   PreparedHistoryBatchEffect,
 } from './historyBatchContracts.js';
-import { createHistoryStore } from './historyBackend.js';
 import { RemovalObserverFailure } from './historyRemovalObserverFailure.js';
 import type { HistoryStorePort } from './historyStorePort.js';
 import type { IContent, MediaReferenceBlock } from './IContent.js';
@@ -122,7 +122,7 @@ describe.each(['old', 'journal'] as const)(
     async function opened(rows: readonly IContent[]): Promise<RemovalStore> {
       const store: RemovalStore =
         backend === 'old'
-          ? createHistoryStore({}, 'old')
+          ? new HistoryJournalStore()
           : new JournalHistoryStore(
               await JournalSession.create(
                 path.join(directory(), 'remove-tail.llxj'),

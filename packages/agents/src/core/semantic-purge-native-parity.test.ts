@@ -1,11 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { exactTokenizer } from '../../../core/src/services/history/chronology-rollback-test-helpers.js';
+import { describe, expect, it } from 'bun:test';
 import { EagerSemanticPurgeOracle } from '../../../core/src/services/history/__tests__/support/semantic-purge-eager-test-helpers.js';
-import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
+import { exactTokenizer } from '../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import { operationFileCreates } from '../compression/__tests__/support/operation-file-creates.js';
+import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
 
 function fixture(): IContent[] {
   const contents: IContent[] = [
@@ -146,8 +146,8 @@ describe('native semantic purge independent eager policy parity', () => {
     'remove' | 'summary'
   >) {
     it(`preserves complete history and token values across repeated ${mode} operations`, async () => {
-      const oracleHistory = new HistoryService({ backend: 'old' });
-      const history = new HistoryService({ backend: 'journal' });
+      const oracleHistory = new HistoryService({});
+      const history = new HistoryService({});
       oracleHistory.setTokenizerFactory(exactTokenizer());
       history.setTokenizerFactory(exactTokenizer());
       try {

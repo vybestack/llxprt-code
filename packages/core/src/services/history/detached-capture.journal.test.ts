@@ -1,10 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
-import { HistoryService } from './HistoryService.js';
-import { RowOwnership } from '../../recording/rowOwnership.js';
-import { createRowCounters } from '../../recording/journalCounters.js';
 import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+import { describe, expect, it } from 'bun:test';
+import { createRowCounters } from '../../recording/journalCounters.js';
+import { RowOwnership } from '../../recording/rowOwnership.js';
+import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import type { HistoryCheckpoint } from './historyCheckpointRows.js';
 
@@ -31,7 +31,6 @@ describe('native detached capture version and owner lifecycle', () => {
       const owners = new RowOwnership();
       const counters = createRowCounters();
       const history = new HistoryService({
-        backend: 'journal',
         mutationOwnership: owners,
         attachmentCounters: { ...counters.counters, ownership: owners },
       });

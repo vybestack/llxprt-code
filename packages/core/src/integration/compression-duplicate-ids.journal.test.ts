@@ -1,17 +1,17 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { rawHistoryAfterCommit } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
+import { collectJournalRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
+import { curatedHistoryAfterCommit } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
+import { createRecorderForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 import { describe, expect, it } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { HistoryService } from '../services/history/HistoryService.js';
 import { ContentConverters } from '../services/history/ContentConverters.js';
+import { HistoryService } from '../services/history/HistoryService.js';
 import type { IContent } from '../services/history/IContent.js';
-import type { HistoryBackend } from '../services/history/historyBackendSelect.js';
-import { createRecorderForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
-import { curatedHistoryAfterCommit } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
-import { rawHistoryAfterCommit } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
-import { collectJournalRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { encodeForProvider } from './__tests__/support/compression-wire-fixture.js';
+type HistoryBackend = 'old' | 'journal';
 
 function human(text: string): IContent {
   return { speaker: 'human', blocks: [{ type: 'text', text }] };
@@ -42,11 +42,11 @@ async function withHistory<T>(
   action: (history: HistoryService) => Promise<T>,
 ): Promise<T> {
   const root = mkdtempSync(join(tmpdir(), 'compression-ids-'));
-  const recording = createRecorderForTest(
-    { chatsDir: root, sessionId: 'compression-ids' },
-    { LLXPRT_HISTORY_BACKEND: backend },
-  );
-  const history = new HistoryService({ backend });
+  const recording = createRecorderForTest({
+    chatsDir: root,
+    sessionId: 'compression-ids',
+  });
+  const history = new HistoryService({});
   try {
     await history.attachJournal(recording, true);
     const result = await action(history);

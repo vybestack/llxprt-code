@@ -1,8 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
-import { JournalSession } from './journalSession.js';
 import type { IContent } from './IContent.js';
+import { JournalSession } from './journalSession.js';
 
 function summary(index: number): IContent {
   return {
@@ -26,7 +26,7 @@ function summary(index: number): IContent {
 
 describe('committed summary span attachment lifecycle', () => {
   it('does not apply the density cap to 1100 live summary annotations', async () => {
-    const history = new HistoryService({ backend: 'journal' });
+    const history = new HistoryService({});
     try {
       await history.detachedValues.append(
         (function* (): Generator<IContent> {

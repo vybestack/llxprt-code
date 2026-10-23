@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import { mediaParticipant } from './chronology-rollback-test-helpers.js';
@@ -15,7 +15,7 @@ function textRow(text: string): IContent {
 
 describe('HistoryService mutations that return promises', () => {
   it('clear() returns a promise and has already applied when it returns outside compression', async () => {
-    const history = new HistoryService({ backend: 'old' });
+    const history = new HistoryService({});
     history.add(textRow('one'));
     history.add(textRow('two'));
 
@@ -49,7 +49,7 @@ describe('HistoryService mutations that return promises', () => {
   });
 
   it('a queued clear rejects with the failure the flush reports', async () => {
-    const history = new HistoryService({ backend: 'old' });
+    const history = new HistoryService({});
     history.add(textRow('one'));
     const failure = new Error('clear observer failed');
     history.once('tokensUpdated', () => {

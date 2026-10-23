@@ -11,23 +11,21 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { SessionRecordingService } from './SessionRecordingService.js';
 import { SessionLockManager } from './SessionLockManager.js';
-import {
-  resumeSession,
-  CONTINUE_LATEST,
-  type ResumeResult,
-} from './resumeSession.js';
+import { SessionRecordingService } from './SessionRecordingService.js';
 import {
   writeCorruptHeaderSession,
   writeLegacyUnknownProviderSession,
   writeUnsupportedVersionSession,
 } from './__tests__/recording-file-fixtures.js';
+import {
+  CONTINUE_LATEST,
+  resumeSession,
+  type ResumeResult,
+} from './resumeSession.js';
 import { collectBootRows } from './resumeSession.test.helpers.js';
-import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
 
 // The fixtures are JSONL recordings; session discovery follows the environment.
-pinHistoryBackend('old');
 
 const PROJECT_HASH = 'resume-unreadable-project';
 

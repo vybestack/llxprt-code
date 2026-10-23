@@ -3,17 +3,17 @@ import { describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import { mergeRow } from './__tests__/support/history-merge-test-helpers.js';
 import {
-  withRollbackFixture,
-  rowsOf,
-  rejectedValue,
   durableRowsOf,
   exactTokenizer,
+  rejectedValue,
+  rowsOf,
+  withRollbackFixture,
 } from './chronology-rollback-test-helpers.js';
 
 async function withSource(
   action: (source: HistoryService) => Promise<void>,
 ): Promise<void> {
-  const source = new HistoryService({ backend: 'old' });
+  const source = new HistoryService({});
   source.setTokenizerFactory(exactTokenizer());
   source.addAll([mergeRow(10), mergeRow(11), mergeRow(12)]);
   await source.waitForCommit();

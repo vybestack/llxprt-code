@@ -1,7 +1,7 @@
+import { HistoryService } from './HistoryService.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { HISTORY_BACKEND_ENV } from './historyBackendSelect.js';
-import { HistoryService } from './HistoryService.js';
+
 import type { IContent } from './IContent.js';
 
 /**
@@ -20,15 +20,11 @@ function row(index: number): IContent {
 }
 
 describe('dump snapshot values on the journal store', () => {
-  const saved = process.env[HISTORY_BACKEND_ENV];
   let history: HistoryService;
   beforeEach(() => {
-    process.env[HISTORY_BACKEND_ENV] = 'journal';
     history = new HistoryService();
   });
   afterEach(async () => {
-    if (saved === undefined) delete process.env[HISTORY_BACKEND_ENV];
-    else process.env[HISTORY_BACKEND_ENV] = saved;
     await history.dispose();
   });
 

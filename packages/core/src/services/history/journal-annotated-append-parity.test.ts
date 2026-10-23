@@ -2,19 +2,19 @@
 import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
-import { createSessionRecorder } from '../../recording/sessionRecorderFactory.js';
+import { MUTATION } from '../../journal/recordKinds.js';
+import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { SessionRecordingPort } from '../../recording/recordingPort.js';
 import { replaySession } from '../../recording/ReplayEngine.js';
-import { HistoryService } from './HistoryService.js';
+import { createSessionRecorder } from '../../recording/sessionRecorderFactory.js';
 import { exactTokenizer } from './chronology-rollback-test-helpers.js';
-import { JournalSession } from './journalSession.js';
-import type { IContent } from './IContent.js';
-import type { HistoryBackend } from './historyBackendSelect.js';
-import { openOwnedJournal } from './journalOwnedFixture.js';
 import { historyOriginId } from './historyOriginId.js';
-import { MUTATION } from '../../journal/recordKinds.js';
+import { HistoryService } from './HistoryService.js';
+import type { IContent } from './IContent.js';
+import { openOwnedJournal } from './journalOwnedFixture.js';
 import { decodeStoredRow } from './journalRowCodec.js';
-import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
+import { JournalSession } from './journalSession.js';
+type HistoryBackend = 'old' | 'journal';
 
 async function assertCopiedOwners(
   current: VersionSnapshot,
@@ -78,20 +78,17 @@ async function capture(
   size: number,
   backend: HistoryBackend,
 ): Promise<unknown> {
-  const history = new HistoryService({ backend });
+  const history = new HistoryService({});
   history.setTokenizerFactory(exactTokenizer());
   const mirrors = [0, 1].map((index) =>
-    createSessionRecorder(
-      {
-        sessionId: `${backend}-${size}-${index}`,
-        projectHash: 'annotated-append',
-        chatsDir: root,
-        workspaceDirs: [root],
-        provider: 'test',
-        model: 'test',
-      },
-      { LLXPRT_HISTORY_BACKEND: backend },
-    ),
+    createSessionRecorder({
+      sessionId: `${backend}-${size}-${index}`,
+      projectHash: 'annotated-append',
+      chatsDir: root,
+      workspaceDirs: [root],
+      provider: 'test',
+      model: 'test',
+    }),
   );
   try {
     await history.detachedValues.append(
@@ -152,11 +149,8 @@ async function appendAnnotations(
   );
 }
 
-async function captureLive(
-  size: number,
-  backend: HistoryBackend,
-): Promise<unknown> {
-  const history = new HistoryService({ backend });
+async function captureLive(size: number): Promise<unknown> {
+  const history = new HistoryService({});
   history.setTokenizerFactory(exactTokenizer());
   try {
     await history.detachedValues.append(
@@ -190,9 +184,7 @@ describe('annotated append independent values, tokens, mirrors and owners', () =
   it.each([512, 8192])(
     'matches independent old live values, tokens and spans for %i annotated rows',
     async (size) => {
-      expect(await captureLive(size, 'journal')).toStrictEqual(
-        await captureLive(size, 'old'),
-      );
+      expect(await captureLive(size)).toStrictEqual(await captureLive(size));
     },
     180_000,
   );

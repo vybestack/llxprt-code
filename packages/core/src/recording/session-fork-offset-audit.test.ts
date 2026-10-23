@@ -1,7 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { describe, expect, it } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { describe, expect, it } from 'bun:test';
+import { mapContents } from '../journal/__tests__/support/copyFixtures.js';
 import {
   MISTRAL_SLOT,
   writeMistralSource,
@@ -13,31 +14,30 @@ import {
 } from '../journal/__tests__/support/mistralFixtures.js';
 import { OffsetAudit } from '../journal/__tests__/support/offsetAudit.js';
 import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
-import { mapContents } from '../journal/__tests__/support/copyFixtures.js';
 import { readValueBody } from '../journal/mapEntries.js';
 import { OwnerDictionary } from '../journal/ownerDictionary.js';
 import { readVersionAt } from '../journal/trailerAccess.js';
+import type { IContent } from '../services/history/IContent.js';
+import { JournalHistoryStore } from '../services/history/journalHistoryStore.js';
 import { encodeContentRow } from '../services/history/journalRowCodec.js';
 import { JournalSession } from '../services/history/journalSession.js';
-import { JournalHistoryStore } from '../services/history/journalHistoryStore.js';
-import type { IContent } from '../services/history/IContent.js';
 import { JournalRecordingService } from './journalRecordingService.js';
 import { resumePointOf } from './journalResume.js';
+import { sessionFactEdit } from './sessionEdits.js';
 import { journalSessionFileName } from './sessionFileName.js';
 import { SESSION_KEYS } from './sessionMetaKeys.js';
-import { sessionFactEdit } from './sessionEdits.js';
-import { useBackendEnv } from './__tests__/support/backendEnv.js';
+
+import {
+  forkCheckpoint,
+  ownedRows,
+  useForkProof,
+} from './__tests__/support/forkProof.js';
 import {
   PROJECT,
   chatsDirIn,
   journalSeams,
   userRow,
 } from './__tests__/support/recordedJournals.js';
-import {
-  forkCheckpoint,
-  ownedRows,
-  useForkProof,
-} from './__tests__/support/forkProof.js';
 
 function contentOf(row: MistralRow): IContent {
   return row.speaker === 'ai'
@@ -67,7 +67,7 @@ async function mappedId(session: JournalSession, id: string): Promise<string> {
       throw new Error(`Missing mapped fact ${id}`);
     ref = fact.mappedRef;
   } finally {
-    facts.close();
+    await facts.close();
   }
   const read = await session.store.openRead();
   try {
@@ -84,7 +84,7 @@ async function mappedId(session: JournalSession, id: string): Promise<string> {
     if (typeof mapped !== 'string') throw new Error('Missing mapped slot');
     return mapped;
   } finally {
-    read.close();
+    await read.close();
   }
 }
 
@@ -118,17 +118,16 @@ async function auditForkOffsets(child: JournalSession): Promise<void> {
     ])
       expect(met).toContain(field);
   } finally {
-    read.close();
+    await read.close();
   }
 }
 
 describe('service checkpoint forks have no source-file offsets', () => {
   const directory = useTempDir('service-fork-offsets-');
-  const setBackend = useBackendEnv();
+
   const proof = useForkProof();
 
   it('reopens and audits forks before and after retained-checkpoint compaction with the source deleted', async () => {
-    setBackend('journal');
     const chats = chatsDirIn(directory());
     await fs.mkdir(chats, { recursive: true });
     const sourcePath = path.join(chats, journalSessionFileName('mapped'));
@@ -229,7 +228,7 @@ describe('service checkpoint forks have no source-file offsets', () => {
         (await readVersionAt(read.access, copied.trailerOffset)).rows,
       ).toBe(rows.length);
     } finally {
-      read.close();
+      await read.close();
     }
     const second = await forkCheckpoint(chats, 'fork-point');
     proof.keep(second.recording);

@@ -4,14 +4,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ContinueTarget } from '@vybestack/llxprt-code-core';
 import {
   createCheckpointService,
+  deleteSession,
   SessionDiscovery,
   SessionLockManager,
-  deleteSession,
 } from '@vybestack/llxprt-code-core';
-import type { ContinueTarget } from '@vybestack/llxprt-code-core';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  deleteOwnerBrowserTarget,
+  listOwnerBrowserListing,
+  ownerBrowserSessionId,
+} from '../utils/ownerSessionUi.js';
+import { warnUnreadableRecordings } from '../utils/warnUnreadableRecordings.js';
+import { buildEnrichedSession } from './sessionBrowserTarget.js';
 import type { Key } from './useKeypress.js';
 import type {
   EnrichedSessionSummary,
@@ -20,13 +27,6 @@ import type {
   UseSessionBrowserResult,
 } from './useSessionBrowser.js';
 import { useSessionKeypressHandler } from './useSessionBrowserKeypress.js';
-import { buildEnrichedSession } from './sessionBrowserTarget.js';
-import {
-  deleteOwnerBrowserTarget,
-  listOwnerBrowserListing,
-  ownerBrowserSessionId,
-} from '../utils/ownerSessionUi.js';
-import { warnUnreadableRecordings } from '../utils/warnUnreadableRecordings.js';
 
 const PAGE_SIZE = 20;
 
@@ -682,14 +682,14 @@ async function deleteCheckpointTarget(
   props: UseSessionBrowserProps,
 ): Promise<void> {
   if (props.activeRecording?.getSessionId() === target.source.sessionId) {
-    await createCheckpointService(props.mediaStore).deleteCheckpoint(
+    await createCheckpointService().deleteCheckpoint(
       props.activeRecording,
       props.projectHash,
       target.checkpointId,
     );
     return;
   }
-  await createCheckpointService(props.mediaStore).deleteCheckpointClosed(
+  await createCheckpointService().deleteCheckpointClosed(
     target.source.filePath,
     props.projectHash,
     props.chatsDir,

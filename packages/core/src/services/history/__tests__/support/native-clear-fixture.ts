@@ -1,18 +1,18 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { collectJournalFileRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { expect, spyOn } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { open } from 'node:fs/promises';
-import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { collectJournalFileRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
+import { join } from 'node:path';
+import type { JournalOpenDependencies } from '../../../../journal/journalWriterOpen.js';
+import { HistoryMediaOwnership } from '../../../../storage/history-media-ownership.js';
+import { LocalMediaStore } from '../../../../storage/local-media-store.js';
+import { exactTokenizer } from '../../chronology-rollback-test-helpers.js';
 import { HistoryService } from '../../HistoryService.js';
+import type { IContent } from '../../IContent.js';
 import { JournalSession } from '../../journalSession.js';
 import { batchGate } from './addbatch-stream-test-helpers.js';
-import { exactTokenizer } from '../../chronology-rollback-test-helpers.js';
-import type { IContent } from '../../IContent.js';
-import type { JournalOpenDependencies } from '../../../../journal/journalWriterOpen.js';
-import { LocalMediaStore } from '../../../../storage/local-media-store.js';
-import { HistoryMediaOwnership } from '../../../../storage/history-media-ownership.js';
 
 export interface NativeClearFixture {
   readonly history: HistoryService;
@@ -56,7 +56,7 @@ export async function withNativeClearFixture(
   const opener = spyOn(JournalSession, 'createUnlinked').mockImplementation(
     () => JournalSession.create(path, { journal: { open: openHeld } }),
   );
-  const history = new HistoryService({ backend: 'journal' });
+  const history = new HistoryService({});
   opener.mockRestore();
   history.setTokenizerFactory(exactTokenizer());
   try {

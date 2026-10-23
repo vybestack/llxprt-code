@@ -1,31 +1,31 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
-import { appendFileSync } from 'node:fs';
-import { createHash } from 'node:crypto';
-import { StreamEventType } from '../chatSession.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
+import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { describe, expect, it } from 'bun:test';
+import { createHash } from 'node:crypto';
+import { appendFileSync } from 'node:fs';
 import { useTempDir } from '../../../../core/src/journal/__tests__/support/useTempDir.js';
+import { oldTailUnits } from '../../../../core/src/services/history/__tests__/support/tail-query-oracle.js';
+import { rowsSelection } from '../../../../providers/src/__tests__/support/wireBodyCapture.js';
+import { createRuntimeTokenizerFactory } from '../../../../providers/src/composition/runtimeTokenizerFactory.js';
+import { multiIdCase } from '../../../../providers/src/openai/__tests__/support/mistral-multi-id-cases.js';
+import { prepareRequestBody } from '../../../../providers/src/openai/__tests__/support/prepareRequestBody.js';
 import { OpenAIProvider } from '../../../../providers/src/openai/OpenAIProvider.js';
 import {
   buildContinuationMessages,
   type ContinuationToolCall,
 } from '../../../../providers/src/openai/OpenAIRequestBuilder.js';
-import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
-import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import { prepareRequestBody } from '../../../../providers/src/openai/__tests__/support/prepareRequestBody.js';
-import { rowsSelection } from '../../../../providers/src/__tests__/support/wireBodyCapture.js';
-import { createRuntimeTokenizerFactory } from '../../../../providers/src/composition/runtimeTokenizerFactory.js';
 import { operationFileCreates } from '../../compression/__tests__/support/operation-file-creates.js';
+import { StreamEventType } from '../chatSession.js';
 import { loggingChatSession } from './support/chat-session-logging-fixture.js';
 import { occupyMistralFormats } from './support/occupied-mistral-formats.js';
-import { multiIdCase } from '../../../../providers/src/openai/__tests__/support/mistral-multi-id-cases.js';
-import { oldTailUnits } from '../../../../core/src/services/history/__tests__/support/tail-query-oracle.js';
 
 const calls: ContinuationToolCall[] = [
   {
@@ -158,7 +158,7 @@ describe('public native plain Chat automatic continuation HTTP', () => {
         provider: 'openai',
         model,
       });
-      const history = new HistoryService({ backend: 'journal', recording });
+      const history = new HistoryService({ recording });
       const server = Bun.serve({
         hostname: '127.0.0.1',
         port: 0,

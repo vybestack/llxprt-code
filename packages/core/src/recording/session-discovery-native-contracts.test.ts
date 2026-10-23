@@ -1,22 +1,22 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { mkdir, writeFile, utimes, symlink } from 'node:fs/promises';
-import { join } from 'node:path';
 import { describe, expect, it } from 'bun:test';
+import { mkdir, symlink, utimes, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { SessionDiscovery } from './SessionDiscovery.js';
 import { SessionLockManager } from './SessionLockManager.js';
-import { JournalCheckpointService } from './journalCheckpointService.js';
-import { JournalRecordingService } from './journalRecordingService.js';
-import {
-  getAllJsonlSessionFiles,
-  shouldDeleteSession,
-} from './sessionCleanupUtils.js';
-import { scanGlobalSessions } from './janitor/sessionScanner.js';
-import { readJournalFileFacts } from './journalSessionListing.js';
 import {
   discoveryDirectory,
   replaceFact,
 } from './__tests__/support/native-discovery-fixture.js';
-import { useBackendEnv } from './__tests__/support/backendEnv.js';
+import { scanGlobalSessions } from './janitor/sessionScanner.js';
+import { JournalCheckpointService } from './journalCheckpointService.js';
+import { JournalRecordingService } from './journalRecordingService.js';
+import { readJournalFileFacts } from './journalSessionListing.js';
+import {
+  getAllJsonlSessionFiles,
+  shouldDeleteSession,
+} from './sessionCleanupUtils.js';
+
 import {
   PROJECT,
   chatsDirIn,
@@ -27,10 +27,7 @@ import {
 import { SESSION_KEYS } from './sessionMetaKeys.js';
 
 describe('native discovery behavioral contracts', () => {
-  const setBackend = useBackendEnv();
-
   it('filters project and child sessions before sorting and resolves real native targets by identity, name, prefix, index and checkpoint', async () => {
-    setBackend('journal');
     const chats = chatsDirIn(await discoveryDirectory('resolution'));
     const tied = new Date('2026-01-01T00:00:00Z');
     await recordJournal(chats, 'prefix-a', {
@@ -135,7 +132,6 @@ describe('native discovery behavioral contracts', () => {
   });
 
   it('validates available names and coordinates the native checkpoint namespace beside unreadable files', async () => {
-    setBackend('journal');
     const chats = chatsDirIn(await discoveryDirectory('names'));
     await recordJournal(chats, 'closed-id', {
       name: 'closed-name',
@@ -193,7 +189,6 @@ describe('native discovery behavioral contracts', () => {
   });
 
   it('keeps latest provider, directories, title and name facts separate from immutable session start facts', async () => {
-    setBackend('journal');
     const chats = chatsDirIn(await discoveryDirectory('facts'));
     const recorder = JournalRecordingService.create({
       sessionId: 'facts',
@@ -257,7 +252,6 @@ describe('native discovery behavioral contracts', () => {
   });
 
   it('counts locked native sessions once and applies native filename rules across discovery, cleanup and global raw/archive scanning', async () => {
-    setBackend('journal');
     const directory = await discoveryDirectory('matchers');
     const chats = join(directory, 'a'.repeat(64), 'chats');
     const source = await recordJournal(chats, 'source', {
@@ -322,7 +316,6 @@ describe('native discovery behavioral contracts', () => {
   });
 
   it('enforces native scanner file and aggregate byte limits, rejects symlinks and counts valid project directories', async () => {
-    setBackend('journal');
     const directory = await discoveryDirectory('scan-limits');
     const chats = join(directory, 'a'.repeat(64), 'chats');
     const first = await recordJournal(chats, 'one', { rows: [userRow('one')] });

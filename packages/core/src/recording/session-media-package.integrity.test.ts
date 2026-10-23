@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { createPackageRecorder } from './__tests__/support/packageRecording.js';
 import { assertNotNull } from '@vybestack/llxprt-code-test-utils';
 import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
@@ -25,8 +24,9 @@ import type {
   MediaStoredObject,
 } from '../services/history/IContent.js';
 import { LocalMediaStore } from '../storage/local-media-store.js';
+import { createPackageRecorder } from './__tests__/support/packageRecording.js';
 import { parseManifest } from './session-media-package-validation.js';
-import { selectBackend } from '../services/history/historyBackendSelect.js';
+
 import {
   exportSessionMediaPackage,
   importSessionMediaPackage,
@@ -227,9 +227,7 @@ describe('session media package integrity and cancellation', () => {
     const exported = await exportPackage();
     const destination = join(tempDirectory, 'cancelled-export');
     // Calls 1 and 2 verify each row during replay; call 3 is the first blob copy.
-    exported.sourceStore.cancelReadObjectAfter(
-      selectBackend() === 'journal' ? 1 : 3,
-    );
+    exported.sourceStore.cancelReadObjectAfter(1);
     const sourceBefore = await stat(exported.recordingPath);
 
     await expect(

@@ -7,16 +7,16 @@ import {
 } from '../journal/__tests__/support/journalFixtures.js';
 import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
 import { HistoryService } from '../services/history/HistoryService.js';
-import { LocalMediaStore } from '../storage/local-media-store.js';
 import { HistoryMediaOwnership } from '../storage/history-media-ownership.js';
+import { LocalMediaStore } from '../storage/local-media-store.js';
 import { MediaAdmissionService } from '../storage/media-admission-service.js';
-import { JournalRecordingService } from './journalRecordingService.js';
-import { RecordingIntegration } from './RecordingIntegration.js';
-import { SessionLockManager } from './SessionLockManager.js';
 import {
   nativeText,
   useNativeIntegration,
 } from './__tests__/support/native-integration-fixture.js';
+import { JournalRecordingService } from './journalRecordingService.js';
+import { RecordingIntegration } from './RecordingIntegration.js';
+import { SessionLockManager } from './SessionLockManager.js';
 
 function messages(error: unknown): string[] {
   if (error instanceof AggregateError) return error.errors.flatMap(messages);
@@ -65,7 +65,7 @@ describe('native recorder cleanup ownership', () => {
         if (failRelease) throw new Error('injected lock release failure');
       },
     });
-    const history = new HistoryService({ backend: 'journal' });
+    const history = new HistoryService({});
     const integration = new RecordingIntegration(recording);
     try {
       await integration.subscribeToJournal(history);

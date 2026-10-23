@@ -1,16 +1,15 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { createSessionRecorder } from '../../recording/sessionRecorderFactory.js';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
-import { HistoryService } from './HistoryService.js';
-import { JournalSession } from './journalSession.js';
+import { createSessionRecorder } from '../../recording/sessionRecorderFactory.js';
 import { exactTokenizer } from './chronology-rollback-test-helpers.js';
+import { HistoryService } from './HistoryService.js';
+import type { IContent } from './IContent.js';
+import { JournalSession } from './journalSession.js';
 import {
   JOURNAL_SPAN_WINDOW,
   encodeJournalSpanWindow,
 } from './journalSpanWindow.js';
-import type { IContent } from './IContent.js';
-import type { HistoryBackend } from './historyBackendSelect.js';
 
 function row(index: number): IContent {
   return {
@@ -81,11 +80,8 @@ async function assertDurableMirror(
   }
 }
 
-async function seeded(
-  size: number,
-  backend: HistoryBackend,
-): Promise<HistoryService> {
-  const history = new HistoryService({ backend });
+async function seeded(size: number): Promise<HistoryService> {
+  const history = new HistoryService({});
   history.setTokenizerFactory(exactTokenizer());
   await history.detachedValues.append(
     Array.from({ length: size }, (_, index) => row(index)),
@@ -99,20 +95,17 @@ describe('annotated append final metadata follows the native mirror FIFO', () =>
   it.each([512, 8192])(
     'matches independent old live values, tokens and annotations and both durable mirrors for %i rows',
     async (size) => {
-      const history = await seeded(size, 'journal');
-      const old = await seeded(size, 'old');
+      const history = await seeded(size);
+      const old = await seeded(size);
       const mirrors = [0, 1].map((index) =>
-        createSessionRecorder(
-          {
-            sessionId: `annotations-${size}-${index}`,
-            projectHash: 'annotated-fifo',
-            chatsDir: directory(),
-            workspaceDirs: [directory()],
-            provider: 'test',
-            model: 'test',
-          },
-          { LLXPRT_HISTORY_BACKEND: 'journal' },
-        ),
+        createSessionRecorder({
+          sessionId: `annotations-${size}-${index}`,
+          projectHash: 'annotated-fifo',
+          chatsDir: directory(),
+          workspaceDirs: [directory()],
+          provider: 'test',
+          model: 'test',
+        }),
       );
       try {
         for (const mirror of mirrors) await history.attachJournal(mirror, true);

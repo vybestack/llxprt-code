@@ -9,9 +9,6 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { scanGlobalSessions } from './sessionScanner.js';
-import { pinHistoryBackend } from '../__tests__/support/backendEnv.js';
-
-pinHistoryBackend('old');
 
 function recording(sessionId: string): string {
   return `${JSON.stringify({

@@ -1,23 +1,19 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { expect } from 'bun:test';
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
 import {
   createAgent,
   type Agent,
   type AgentEvent,
 } from '@vybestack/llxprt-code-agents';
 import { ApprovalMode } from '@vybestack/llxprt-code-core';
-import { createMockCommandContext } from '../mockCommandContext.js';
-import { commandDeps } from '../native-command-fixture.js';
+import { expect } from 'bun:test';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 import { processSlashCommand } from '../../ui/hooks/slashCommandHandlers.js';
 import type { HistoryItemWithoutId, Message } from '../../ui/types.js';
+import { createMockCommandContext } from '../mockCommandContext.js';
+import { commandDeps } from '../native-command-fixture.js';
 
-const environmentKeys = [
-  'LLXPRT_HISTORY_BACKEND',
-  'LLXPRT_FAKE_RESPONSES',
-  'LLXPRT_LOG_HOME',
-] as const;
+const environmentKeys = ['LLXPRT_FAKE_RESPONSES', 'LLXPRT_LOG_HOME'] as const;
 
 export interface WholeProductFixture {
   readonly root: string;
@@ -133,7 +129,7 @@ export async function wholeProductFixture(transport?: {
   await mkdir(base, { recursive: true });
   const root = await mkdtemp(join(base, 'whole-product-'));
   const responses = await responseFixture(root);
-  process.env.LLXPRT_HISTORY_BACKEND = 'journal';
+
   if (transport === undefined) process.env.LLXPRT_FAKE_RESPONSES = responses;
   else {
     delete process.env.LLXPRT_FAKE_RESPONSES;

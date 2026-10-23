@@ -1,28 +1,26 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { readdir, readFile, writeFile } from 'node:fs/promises';
-import { deleteSessionWithDiagnostics } from './sessionManagement.js';
+import { SessionDiscovery } from './SessionDiscovery.js';
 import { SessionLockManager } from './SessionLockManager.js';
 import { JournalRecordingService } from './journalRecordingService.js';
-import { SessionDiscovery } from './SessionDiscovery.js';
 import {
   readJournalCheckpoints,
   readJournalFileFacts,
 } from './journalSessionListing.js';
-import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
+import { deleteSessionWithDiagnostics } from './sessionManagement.js';
+
 import {
   remainderConfig,
   remainderDirectory,
   remainderRows,
 } from './__tests__/support/discovery-remainder-fixture.js';
+import { replaceFact } from './__tests__/support/native-discovery-fixture.js';
 import {
   PROJECT,
   recordJournal,
   userRow,
 } from './__tests__/support/recordedJournals.js';
-import { replaceFact } from './__tests__/support/native-discovery-fixture.js';
-
-pinHistoryBackend('journal');
 
 describe('native direct metadata lifecycle', () => {
   it('returns distinct saved sequences for concurrent checkpoints and preserves their timestamps through rename and delete', async () => {

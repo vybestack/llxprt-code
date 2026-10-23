@@ -33,22 +33,22 @@ import {
   assertDefined,
   assertNotNull,
 } from '@vybestack/llxprt-code-test-utils';
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fc from 'fast-check';
-import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
-import * as os from 'node:os';
 import type { EventEmitter } from 'node:events';
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
 
 import { HistoryService } from '../services/history/HistoryService.js';
 import { type IContent } from '../services/history/IContent.js';
 import { LocalMediaStore } from '../storage/local-media-store.js';
 import { RecordingIntegration } from './RecordingIntegration.js';
-import { SessionRecordingService } from './SessionRecordingService.js';
 import { replaySession } from './ReplayEngine.js';
+import { SessionRecordingService } from './SessionRecordingService.js';
 import {
-  type SessionRecordingServiceConfig,
   type ReplayResult,
+  type SessionRecordingServiceConfig,
 } from './types.js';
 
 const PROJECT_HASH = 'project-hash-recording-integration';
@@ -139,7 +139,7 @@ async function withFreshHarness(
     }),
   );
   const integration = new RecordingIntegration(recordingService);
-  const historyService = new HistoryService({ backend: 'old' });
+  const historyService = new HistoryService({});
   const emitter = historyEmitter(historyService);
 
   try {
@@ -746,7 +746,7 @@ async function r21(): Promise<void> {
       }),
       async (messages) => {
         await withFreshHarness(async (harness) => {
-          const secondHistory = new HistoryService({ backend: 'old' });
+          const secondHistory = new HistoryService({});
 
           await harness.integration.subscribeToJournal(harness.historyService);
           await harness.integration.subscribeToJournal(secondHistory);
@@ -921,7 +921,7 @@ async function beforeEachRecordingReplay(): Promise<void> {
 
   recordingService = new SessionRecordingService(makeConfig(chatsDir));
   integration = new RecordingIntegration(recordingService);
-  historyService = new HistoryService({ backend: 'old' });
+  historyService = new HistoryService({});
   emitter = historyEmitter(historyService);
 }
 

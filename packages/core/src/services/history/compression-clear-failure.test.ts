@@ -1,9 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { observeHistorySynchronouslyForTest } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
 import { describe, expect, it } from 'bun:test';
-import { appendFile } from 'node:fs/promises';
 import { mkdtempSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { appendFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { HistoryMediaOwnership } from '../../storage/history-media-ownership.js';
+import { LocalMediaStore } from '../../storage/local-media-store.js';
 import {
   batchGate,
   batchRow,
@@ -13,14 +16,11 @@ import {
   durableRowsOf,
   exactTokenizer,
 } from './chronology-rollback-test-helpers.js';
-import { HistoryService } from './HistoryService.js';
-import { LocalMediaStore } from '../../storage/local-media-store.js';
-import { HistoryMediaOwnership } from '../../storage/history-media-ownership.js';
 import {
   removalReferences,
   removalRow,
 } from './history-removals-test-helpers.js';
-import { observeHistorySynchronouslyForTest } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
+import { HistoryService } from './HistoryService.js';
 
 interface ClearFixture {
   readonly history: HistoryService;
@@ -54,7 +54,7 @@ async function withClearFixture(
       },
     },
   });
-  const history = new HistoryService({ recording: recorder, backend: 'old' });
+  const history = new HistoryService({ recording: recorder });
   history.setTokenizerFactory(exactTokenizer());
   try {
     await action({

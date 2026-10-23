@@ -1,13 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { historyOriginId } from '@vybestack/llxprt-code-core/services/history/historyOriginId.js';
-import { exactTokenizer } from '../../../core/src/services/history/chronology-rollback-test-helpers.js';
-import { EagerSemanticPurgeOracle } from '../../../core/src/services/history/__tests__/support/semantic-purge-eager-test-helpers.js';
+import { describe, expect, it } from 'bun:test';
 import { withNativePurgeFixture } from '../../../core/src/services/history/__tests__/support/native-purge-fixture.js';
-import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
+import { EagerSemanticPurgeOracle } from '../../../core/src/services/history/__tests__/support/semantic-purge-eager-test-helpers.js';
+import { exactTokenizer } from '../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import { operationFileCreates } from '../compression/__tests__/support/operation-file-creates.js';
+import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
 
 function seededRows(size: number): IContent[] {
   return Array.from(
@@ -57,7 +57,7 @@ describe('actual native purge independent scale parity below provider preparatio
   for (const size of [512, 8192]) {
     it(`matches old eager tokens, full values, owners, events and durable mirrors at ${size}`, async () => {
       const input = seededRows(size);
-      const eager = new HistoryService({ backend: 'old' });
+      const eager = new HistoryService({});
       eager.setTokenizerFactory(exactTokenizer());
       try {
         await eager.detachedValues.replace(input);

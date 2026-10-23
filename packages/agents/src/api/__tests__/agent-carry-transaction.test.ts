@@ -1,12 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { statSync } from 'node:fs';
 import { describe, expect, it } from 'bun:test';
-import { carryAcknowledgementFailure } from './helpers/carry-acknowledgement-failure.js';
+import { statSync } from 'node:fs';
 import {
   expectedDigest,
   historyDigest,
   withAgentCarry,
 } from './helpers/agent-carry-fixture.js';
+import { carryAcknowledgementFailure } from './helpers/carry-acknowledgement-failure.js';
 
 /** Size of the durable journal file: a rewrite of the source would change it. */
 function durableBytes(journalPath: string | null): number {
@@ -43,12 +43,8 @@ async function verifyUnchangedDurableSource(size: number): Promise<number> {
         await expect(started).rejects.toThrow(
           'Candidate durable acknowledgement failed',
         );
-        if (failure.oldAcknowledgement !== undefined) {
-          expect(failure.oldAcknowledgement).toHaveBeenCalledTimes(2);
-        } else {
-          expect(failure.rejectedTrailer?.position).toBeGreaterThan(0);
-          expect(failure.rejectedTrailer?.path).not.toBe(source.journalPath());
-        }
+        expect(failure.rejectedTrailer?.position).toBeGreaterThan(0);
+        expect(failure.rejectedTrailer?.path).not.toBe(source.journalPath());
       } finally {
         failure.restore();
         next.proceed.open();

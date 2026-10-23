@@ -9,44 +9,16 @@ import {
 } from './session-media-package-export-journal.js';
 
 import { randomUUID } from 'node:crypto';
-import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
   type MediaReferenceBlock,
   type MediaStoredObject,
 } from '../services/history/IContent.js';
 import type { LocalMediaStore } from '../storage/local-media-store.js';
-import { MediaAdmissionService } from '../storage/media-admission-service.js';
+import { collectMediaReferences } from '../storage/media-reference-lifecycle.js';
 import { stageRecordedMedia } from '../storage/recorded-media-transfer.js';
-import {
-  collectMediaReferences,
-  verifyHistoryMedia,
-} from '../storage/media-reference-lifecycle.js';
-import { selectBackend } from '../services/history/historyBackendSelect.js';
+
 import { retiredJournalMessage } from '../journal/journalRefusal.js';
-import {
-  validateJournalRecording,
-  writeImportedJournal,
-} from './session-media-package-journal.js';
-import { sessionFileExtension } from './sessionFileExtension.js';
-import { replaySessionRows } from './ReplayEngine.js';
-import {
-  MANIFEST_FILE,
-  MAX_MANIFEST_BYTES,
-  MAX_OBJECT_AGGREGATE_BYTES,
-  MAX_OBJECT_BYTES,
-  RECORDING_FILE,
-  JOURNAL_RECORDING_FILE,
-  boundedAggregate,
-  parseManifest,
-  readBoundedFile,
-  requiredObjects,
-  uniqueReferences,
-  verifyManifestObjectSet,
-  type MediaPackageManifest,
-  type PinnedPackageFile,
-  type VerifiedPackageBlob,
-} from './session-media-package-validation.js';
 import { verifyPackageBlobs } from './session-media-package-blobs.js';
 import {
   assertImportReservationsReleased,
@@ -57,127 +29,39 @@ import {
   type ImportReservation,
   type PublishedImportedSession,
 } from './session-media-package-import.js';
-import { ReservationLedger } from './session-media-package-ledger.js';
-import { streamPortableRecording } from './session-media-package-recording.js';
 import {
-  MediaReferenceIndex,
+  validateJournalRecording,
+  writeImportedJournal,
+} from './session-media-package-journal.js';
+import {
   createReferenceVerifier,
-  exportPersistedStates,
   importedStateFileName,
   pinPersistedStates,
   writeRewrittenPersistedState,
   type PinnedPersistedState,
 } from './session-media-package-state.js';
 import {
-  prepareSessionMediaPackageStaging,
-  publishStagedSessionMediaPackage,
-  stageSessionMediaPackageBlobs,
-  writeSessionMediaPackageManifest,
-} from './session-media-package-writer.js';
+  MANIFEST_FILE,
+  MAX_MANIFEST_BYTES,
+  MAX_OBJECT_AGGREGATE_BYTES,
+  MAX_OBJECT_BYTES,
+  RECORDING_FILE,
+  boundedAggregate,
+  parseManifest,
+  readBoundedFile,
+  requiredObjects,
+  uniqueReferences,
+  verifyManifestObjectSet,
+  type MediaPackageManifest,
+  type PinnedPackageFile,
+  type VerifiedPackageBlob,
+} from './session-media-package-validation.js';
+import { SESSION_FILE_EXTENSION } from './sessionFileExtension.js';
 
 export interface ImportedSessionMediaPackage {
   readonly recordingPath: string;
   readonly sessionId: string;
   readonly contentIds: readonly string[];
-}
-
-/**
- * Replays the staged recording row by row. Each row is admitted, verified
- * against the media store, and released before the next row is resolved.
- */
-async function verifyStagedReplay(
-  stagedRecording: string,
-  projectHash: string,
-  mediaStore: LocalMediaStore,
-  admission: MediaAdmissionService,
-  index: MediaReferenceIndex,
-): Promise<void> {
-  const context = {
-    turnId: 'session-package-replay',
-    source: 'session-package-export',
-    preserveLegacyMimeParameters: true,
-  };
-  const replay = await replaySessionRows(
-    stagedRecording,
-    projectHash,
-    async (row) => {
-      const [admitted] = await admission.admitContents([row], context);
-      try {
-        await verifyHistoryMedia([admitted], mediaStore, 'session-replay');
-      } catch (error) {
-        await admission.releaseContents([admitted], context);
-        throw error;
-      }
-      await admission.releaseContents([admitted], context);
-      index.add([admitted]);
-    },
-  );
-  if (!replay.ok) {
-    throw new Error(`Cannot export session media: ${replay.error}`);
-  }
-}
-
-async function writeSessionMediaPackage(
-  recordingPath: string,
-  projectHash: string,
-  mediaStore: LocalMediaStore,
-  temporaryDirectory: string,
-  admission: MediaAdmissionService,
-  ledger: ReservationLedger,
-): Promise<void> {
-  const index = new MediaReferenceIndex();
-  const onContents = (contents: Parameters<MediaReferenceIndex['add']>[0]) =>
-    index.add(contents);
-  await prepareSessionMediaPackageStaging(temporaryDirectory);
-  const stagedRecording = join(temporaryDirectory, RECORDING_FILE);
-  const recording = await streamPortableRecording({
-    source: recordingPath,
-    label: 'Session recording',
-    outputPath: stagedRecording,
-    exportAdmission: { mediaStore, service: admission, ledger },
-    onContents,
-  });
-  const persistedStateFiles = await exportPersistedStates({
-    recordingPath,
-    stateDirectory: join(temporaryDirectory, 'state'),
-    sessionId: recording.sessionId,
-    projectHash,
-    mediaStore,
-    admission,
-    ledger,
-    onContents,
-  });
-  await verifyStagedReplay(
-    stagedRecording,
-    projectHash,
-    mediaStore,
-    admission,
-    index,
-  );
-  const references = index.references();
-  const objects = requiredObjects(references);
-  await stageSessionMediaPackageBlobs(temporaryDirectory, mediaStore, objects);
-  await writeSessionMediaPackageManifest({
-    temporaryDirectory,
-    persistedStateFiles,
-    references,
-    objects,
-  });
-}
-
-async function cleanupFailedExport(
-  temporaryDirectory: string,
-  failures: readonly unknown[],
-  message: string,
-): Promise<never> {
-  const collected = [...failures];
-  try {
-    await rm(temporaryDirectory, { recursive: true, force: true });
-  } catch (cleanupError) {
-    collected.push(cleanupError);
-  }
-  if (collected.length === 1) throw collected[0];
-  throw new AggregateError(collected, message);
 }
 
 export async function exportSessionMediaPackage(
@@ -187,68 +71,14 @@ export async function exportSessionMediaPackage(
   packageDirectory: string,
   options: JournalPackageExportOptions = {},
 ): Promise<void> {
-  if (selectBackend() === 'journal') {
-    await exportJournalSessionMediaPackage(
-      recordingPath,
-      projectHash,
-      mediaStore,
-      packageDirectory,
-      options,
-    );
-    return;
-  }
-  const admission = new MediaAdmissionService(mediaStore);
-  const temporaryDirectory = `${packageDirectory}.${randomUUID()}.tmp`;
-  const ledger = new ReservationLedger(
-    `${temporaryDirectory}.reservations`,
-    admission,
+  await exportJournalSessionMediaPackage(
+    recordingPath,
+    projectHash,
+    mediaStore,
+    packageDirectory,
+    options,
   );
-  try {
-    await writeSessionMediaPackage(
-      recordingPath,
-      projectHash,
-      mediaStore,
-      temporaryDirectory,
-      admission,
-      ledger,
-    );
-  } catch (error) {
-    try {
-      await ledger.releaseAll();
-    } catch (releaseError) {
-      await cleanupFailedExport(
-        temporaryDirectory,
-        [error, releaseError],
-        'Session package export, owner release, and cleanup failed',
-      );
-    }
-    await cleanupFailedExport(
-      temporaryDirectory,
-      [error],
-      'Session package export and cleanup failed',
-    );
-  }
-  try {
-    await ledger.releaseAll();
-  } catch (releaseError) {
-    await cleanupFailedExport(
-      temporaryDirectory,
-      [releaseError],
-      'Session package owner release and cleanup failed',
-    );
-  }
-  try {
-    await publishStagedSessionMediaPackage(
-      temporaryDirectory,
-      packageDirectory,
-    );
-  } catch (publishError) {
-    await cleanupFailedExport(
-      temporaryDirectory,
-      [publishError],
-      'Session package publication and cleanup failed',
-    );
-  }
+  return;
 }
 
 export interface ValidatedSessionMediaPackage {
@@ -289,6 +119,7 @@ async function validatePackageContents(
   packageDirectory: string,
   manifest: MediaPackageManifest,
 ): Promise<ValidatedSessionMediaPackage> {
+  assertPackageBackend(manifest, packageDirectory);
   const references = uniqueReferences(manifest.references);
   const objects = requiredObjects(references);
   verifyManifestObjectSet(objects, manifest.objects);
@@ -303,22 +134,10 @@ async function validatePackageContents(
     'Session media package objects',
   );
   const verifyRecording = createReferenceVerifier('recording', references);
-  const recording =
-    manifest.recording === JOURNAL_RECORDING_FILE
-      ? await validateJournalRecording(
-          join(packageDirectory, manifest.recording),
-          (contents) => verifyRecording(collectMediaReferences(contents)),
-        )
-      : (
-          await streamPortableRecording({
-            source: join(packageDirectory, manifest.recording),
-            label: 'Session media package recording',
-            destinationProjectHash: 'package-validation-project',
-            destinationSessionId: 'package-validation-session',
-            onContents: (contents) =>
-              verifyRecording(collectMediaReferences(contents)),
-          })
-        ).pinned;
+  const recording = await validateJournalRecording(
+    join(packageDirectory, manifest.recording),
+    (contents) => verifyRecording(collectMediaReferences(contents)),
+  );
   const persistedStates = await pinPersistedStates(
     packageDirectory,
     manifest.persistedStates,
@@ -346,25 +165,13 @@ function importPublication(
   return {
     destinationChatsDirectory,
     recordingPath,
-    writeRecording: async (outputPath) => {
-      if (validated.manifest.recording === JOURNAL_RECORDING_FILE) {
-        await writeImportedJournal(
-          validated.recording,
-          outputPath,
-          projectHash,
-          sessionId,
-        );
-        return;
-      }
-      await streamPortableRecording({
-        source: validated.recording,
-        label: 'Session media package recording',
+    writeRecording: (outputPath) =>
+      writeImportedJournal(
+        validated.recording,
         outputPath,
-        destinationProjectHash: projectHash,
-        destinationSessionId: sessionId,
-        onContents: () => undefined,
-      });
-    },
+        projectHash,
+        sessionId,
+      ),
     persistedStates: validated.persistedStates.map((state, index) => ({
       fileName: importedStateFileName(sessionId, index),
       write: (outputPath: string) =>
@@ -444,14 +251,8 @@ function assertPackageBackend(
   manifest: MediaPackageManifest,
   directory: string,
 ): void {
-  const journal = selectBackend() === 'journal';
-  if (journal && manifest.recording === RECORDING_FILE) {
+  if (manifest.recording === RECORDING_FILE) {
     throw new Error(retiredJournalMessage(join(directory, manifest.recording)));
-  }
-  if (!journal && manifest.recording === JOURNAL_RECORDING_FILE) {
-    throw new Error(
-      'Session package recording/backend mismatch: journal package requires journal backend',
-    );
   }
 }
 
@@ -498,7 +299,7 @@ export async function importSessionMediaPackage<T>(
   const importedSessionId = randomUUID();
   const recordingPath = join(
     destinationChatsDirectory,
-    `session-imported-${importedSessionId}${sessionFileExtension(selectBackend())}`,
+    `session-imported-${importedSessionId}${SESSION_FILE_EXTENSION}`,
   );
   const imported: ImportedSessionMediaPackage = {
     recordingPath,

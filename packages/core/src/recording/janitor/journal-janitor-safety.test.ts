@@ -6,20 +6,19 @@ import {
   LocalMediaStore,
   MediaObjectMissingError,
 } from '../../storage/local-media-store.js';
-import { pinHistoryBackend } from '../__tests__/support/backendEnv.js';
+
 import { remainderDirectory } from '../__tests__/support/discovery-remainder-fixture.js';
 import {
   recordJournal,
   userRow,
 } from '../__tests__/support/recordedJournals.js';
+import { resolveRetentionConfig } from './retentionPolicy.js';
 import {
   runSessionCleanup,
   setRmdirFaultForTest,
   setScanToMutationHookForTest,
 } from './sessionJanitor.js';
-import { resolveRetentionConfig } from './retentionPolicy.js';
 
-pinHistoryBackend('journal');
 const HASH = 'a'.repeat(64);
 const OLD = new Date('2026-01-01T00:00:00.000Z');
 

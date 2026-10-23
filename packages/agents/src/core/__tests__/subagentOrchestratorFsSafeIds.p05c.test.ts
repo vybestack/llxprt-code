@@ -20,51 +20,41 @@
  * @requirement:G7
  */
 
-import {
-  beforeEach,
-  afterEach,
-  describe,
-  expect,
-  it,
-  vi,
-  setSystemTime,
-} from 'bun:test';
-import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import type { AgentRuntimeLoaderOptions } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
-import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import { isValidSafeSessionId } from '@vybestack/llxprt-code-core/recording/janitor/sessionSafety.js';
-import { SESSION_FILE_ID_PREFIX_LENGTH } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
+import {
+  SESSION_FILE_ID_PREFIX_LENGTH,
+  SessionRecordingService,
+} from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
+import type { AgentRuntimeLoaderOptions } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
+import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
+import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
+import { afterEach, describe, expect, it, setSystemTime, vi } from 'bun:test';
+import { mkdtempSync } from 'node:fs';
+import { readFile, readdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import {
+  createSessionSettingsFixture,
+  subagentSessionPorts,
+} from '../../api/__tests__/helpers/session-settings-fixture.js';
 import type { SubAgentScope } from '../subagent.js';
 import { SubagentOrchestrator } from '../subagentOrchestrator.js';
 import {
   createRuntimeBundle,
   fixtureToolSelection,
 } from './subagentOrchestrator-test-helpers.js';
-import {
-  createSessionSettingsFixture,
-  subagentSessionPorts,
-} from '../../api/__tests__/helpers/session-settings-fixture.js';
-import { mkdtempSync } from 'node:fs';
-import { readFile, readdir, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
 
-import { collectJournalRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { createLockedSessionRecorder } from '@vybestack/llxprt-code-core/recording/sessionRecorderFactory.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { collectJournalRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 
-const initialBackend = process.env.LLXPRT_HISTORY_BACKEND;
-function restoreBackend(): void {
-  if (initialBackend === undefined) delete process.env.LLXPRT_HISTORY_BACKEND;
-  else process.env.LLXPRT_HISTORY_BACKEND = initialBackend;
-}
+function restoreBackend(): void {}
 
 const PARENT_SESSION_ID = 'primary-session';
 
@@ -217,9 +207,7 @@ async function resetRuntimeAfterTest(): Promise<void> {
 
 describe('P05c orchestrator allocates fs-safe child ids @plan:PLAN-20260917-ISSUE854.P05c', () => {
   afterEach(restoreBackend);
-  beforeEach(() => {
-    process.env.LLXPRT_HISTORY_BACKEND = 'old';
-  });
+
   afterEach(resetRuntimeAfterTest);
 
   it('allocates a child sessionId that passes the safe-session lock grammar', async () => {
@@ -279,9 +267,7 @@ describe('P05c orchestrator allocates fs-safe child ids @plan:PLAN-20260917-ISSU
 
 describe('mandatory launch journal lifecycle', () => {
   afterEach(restoreBackend);
-  beforeEach(() => {
-    process.env.LLXPRT_HISTORY_BACKEND = 'old';
-  });
+
   afterEach(resetRuntimeAfterTest);
 
   it('keeps parallel and nested journals separate and preserves the parent', async () => {
@@ -361,9 +347,7 @@ describe('mandatory launch journal lifecycle', () => {
 
 describe('mandatory launch journal failure cleanup', () => {
   afterEach(restoreBackend);
-  beforeEach(() => {
-    process.env.LLXPRT_HISTORY_BACKEND = 'old';
-  });
+
   afterEach(resetRuntimeAfterTest);
 
   it('removes the child journal when scope startup fails after runtime creation', async () => {
@@ -418,9 +402,7 @@ describe.each(['old', 'journal'] as const)(
   'production child history on %s',
   (backend) => {
     afterEach(restoreBackend);
-    beforeEach(() => {
-      process.env.LLXPRT_HISTORY_BACKEND = backend;
-    });
+
     afterEach(resetRuntimeAfterTest);
 
     it.each(['normal', 'execution-failure', 'execution-cancel'] as const)(

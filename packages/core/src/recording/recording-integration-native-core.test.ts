@@ -231,7 +231,7 @@ describe('native recording integration core contracts', () => {
 
   it('switches history subscriptions and ignores the old instance', async () => {
     const { history, integration, histories, texts } = fixture();
-    const replacement = new HistoryService({ backend: 'journal' });
+    const replacement = new HistoryService({});
     histories.push(replacement);
     await integration.subscribeToJournal(history);
     await integration.subscribeToJournal(replacement);

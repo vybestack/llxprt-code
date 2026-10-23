@@ -1,22 +1,22 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { ContinuationRowObserver } from './support/continuation-row-observer.js';
-import { SemanticMediaPurgeSession } from '../../../agents/src/core/semanticMediaPurgeSession.js';
+import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
+import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
+import { batchGate } from '@vybestack/llxprt-code-core/services/history/__tests__/support/addbatch-stream-test-helpers.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { HistoryMediaOwnership } from '@vybestack/llxprt-code-core/storage/history-media-ownership.js';
+import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
+import { RequestMediaResolver } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { describe, expect, it, spyOn } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync } from 'node:fs';
 import { join } from 'node:path';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
-import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
-import { HistoryMediaOwnership } from '@vybestack/llxprt-code-core/storage/history-media-ownership.js';
-import { RequestMediaResolver } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
-import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
-import { batchGate } from '@vybestack/llxprt-code-core/services/history/__tests__/support/addbatch-stream-test-helpers.js';
+import { SemanticMediaPurgeSession } from '../../../agents/src/core/semanticMediaPurgeSession.js';
+import { ContinuationRowObserver } from './support/continuation-row-observer.js';
 import {
-  type HashedWireBody,
   localWireHashSink,
+  type HashedWireBody,
 } from './support/local-wire-hash-sink.js';
 import {
   WIRE_ROUTES,
@@ -196,7 +196,7 @@ describe('native continuation second HTTP body ownership', () => {
         restore();
       }
       expect(expected).toHaveLength(2);
-      const history = new HistoryService({ backend: 'journal' });
+      const history = new HistoryService({});
       await history.registerMediaOwner(new HistoryMediaOwnership(store));
       await history.addBatch(rows);
       const ownership = new RowOwnership();

@@ -27,13 +27,10 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { selectBackend } from '../services/history/historyBackendSelect.js';
+
 import { readSessionHeaderInfo } from './janitor/sessionHeaderReader.js';
+import { SESSION_FILE_EXTENSION } from './sessionFileExtension.js';
 import { SessionLockManager } from './SessionLockManager.js';
-import {
-  SESSION_FILE_EXTENSION,
-  sessionFileExtension,
-} from './sessionFileExtension.js';
 
 /**
  * Represents a .jsonl session file entry for cleanup evaluation.
@@ -154,7 +151,7 @@ export async function getAllJsonlSessionFiles(
 
   // Retired `.jsonl` files are not listed on the journal backend: this helper
   // deletes a file whose header cannot be read, and no age policy applies here.
-  const extension = sessionFileExtension(selectBackend());
+  const extension = SESSION_FILE_EXTENSION;
   const sessionFiles = files.filter(
     (f) => f.startsWith('session-') && f.endsWith(extension),
   );

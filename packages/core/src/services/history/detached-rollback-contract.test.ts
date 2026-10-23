@@ -1,6 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { readdirSync } from 'node:fs';
+import { getScratchRoot } from '../../storage/scratch-root.js';
+import { withDetachedContractFixture } from './__tests__/support/detached-contract-fixture.js';
 import {
   mediaParticipant,
   rejectedValue,
@@ -14,9 +16,7 @@ import {
   detachedRows,
   withDetachedFixture,
 } from './detached-rollback-test-helpers.js';
-import { getScratchRoot } from '../../storage/scratch-root.js';
-import { withDetachedContractFixture } from './__tests__/support/detached-contract-fixture.js';
-import type { HistoryBackend } from './historyBackendSelect.js';
+type HistoryBackend = 'old' | 'journal';
 
 function scratch(): string[] {
   return readdirSync(getScratchRoot()).filter((name) =>

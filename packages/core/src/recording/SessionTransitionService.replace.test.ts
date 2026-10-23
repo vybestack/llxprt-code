@@ -23,14 +23,13 @@ import {
 } from './__tests__/support/crashedReplaceFixture.js';
 import { CONTINUE_LATEST, resumeSession } from './resumeSession.js';
 import { SessionTransitionService } from './SessionTransitionService.js';
-import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
+
 import {
   requireJsonlFork,
   type JsonlFork,
 } from './__tests__/support/jsonlFork.js';
 
 const roots: string[] = [];
-pinHistoryBackend('old');
 
 const forks: JsonlFork[] = [];
 

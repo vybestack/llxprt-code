@@ -2,7 +2,7 @@
 import { JournalResolver } from '@vybestack/llxprt-code-core/recording/journalResolver.js';
 import { isJournalFileName } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
 import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
-import { selectBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
+
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 type AssertRows = (rows: readonly IContent[]) => void | Promise<void>;
@@ -45,8 +45,6 @@ async function* journalRowsForAssertions(
   await history.waitForCommit();
   const path = history.journalPath();
   if (path === null) {
-    if (selectBackend() !== 'journal')
-      throw new Error('Expected a committed test journal');
     yield* history.streamRawHistory();
     return;
   }

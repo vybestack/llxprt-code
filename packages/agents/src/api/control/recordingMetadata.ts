@@ -1,18 +1,14 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { stat } from 'node:fs/promises';
+import { type ReplayResult } from '@vybestack/llxprt-code-core';
 import { z } from 'zod';
-import {
-  scanResumeMetadata,
-  type ReplayResult,
-} from '@vybestack/llxprt-code-core';
-import { selectBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
-import {
-  readJournalFileFacts,
-  readJournalCheckpoints,
-} from '@vybestack/llxprt-code-core/recording/journalSessionListing.js';
+
+import { sha256KeyHash } from '@vybestack/llxprt-code-core/journal/idKeys.js';
 import { openJournalReadOnly } from '@vybestack/llxprt-code-core/journal/journalReader.js';
 import { stateReaderOf } from '@vybestack/llxprt-code-core/journal/journalReaderState.js';
-import { sha256KeyHash } from '@vybestack/llxprt-code-core/journal/idKeys.js';
+import {
+  readJournalCheckpoints,
+  readJournalFileFacts,
+} from '@vybestack/llxprt-code-core/recording/journalSessionListing.js';
 import {
   SESSION_KEYS,
   decodeSessionFact,
@@ -34,15 +30,6 @@ export async function readRecordingMetadata(
   filePath: string,
   projectHash: string,
 ): Promise<RecordingMetadata> {
-  if (selectBackend() === 'old') {
-    const { replay } = await scanResumeMetadata(
-      filePath,
-      projectHash,
-      (await stat(filePath)).size,
-    );
-    if (!replay.ok) throw new Error(replay.error);
-    return replay;
-  }
   const found = await readJournalFileFacts(filePath);
   if (found === undefined)
     throw new Error(`Session file ${filePath} holds no committed session`);

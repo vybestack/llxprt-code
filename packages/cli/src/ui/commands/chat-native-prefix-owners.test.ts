@@ -1,21 +1,20 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
 import {
   createLockedSessionRecorder,
   type SessionRecordingPort,
 } from '@vybestack/llxprt-code-core';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { historyOriginId } from '@vybestack/llxprt-code-core/services/history/historyOriginId.js';
+import { describe, expect, it } from 'bun:test';
 import {
-  withCLI,
-  row,
-  contents,
   blocks,
-  runCommand,
-  persistedContents,
+  contents,
   operationFileCreates,
+  persistedContents,
+  row,
+  runCommand,
   useTempDir,
-  pinHistoryBackend,
+  withCLI,
 } from './native-prefix-test-helpers.js';
 
 async function attachOwner(
@@ -54,7 +53,6 @@ async function assertOwners(
 }
 
 describe('actual native CLI prefix original owners and owner-filtered mirrors', () => {
-  pinHistoryBackend('journal');
   const directory = useTempDir('cli-native-prefix-owners-');
   for (const size of [3, 64, 65, 5000]) {
     it(`preserves alternating source owners and each recorder at ${size} rows`, async () => {

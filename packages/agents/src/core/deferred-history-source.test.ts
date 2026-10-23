@@ -1,24 +1,23 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it, vi } from 'bun:test';
-import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
-import { selectBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
-import { observeNativeDeferredAcknowledgement } from './__tests__/support/native-deferred-acknowledgement.js';
-import { appendFileSync } from 'node:fs';
-import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
-import {
-  withSuffixFixture,
-  rowIndex,
-} from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { buildAgent } from '../api/__tests__/helpers/agentHarness.js';
+import { describe, expect, it } from 'bun:test';
+
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import { accountingFactory } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { createRowCounters } from '@vybestack/llxprt-code-core/recording/journalCounters.js';
-import { bindClientTokenization } from '../session/session-client-binding.js';
+import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
+import { accountingFactory } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   requireMediaStore,
   type LocalMediaStore,
 } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
+import {
+  rowIndex,
+  withSuffixFixture,
+} from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+import { appendFileSync } from 'node:fs';
+import { buildAgent } from '../api/__tests__/helpers/agentHarness.js';
+import { bindClientTokenization } from '../session/session-client-binding.js';
+import { observeNativeDeferredAcknowledgement } from './__tests__/support/native-deferred-acknowledgement.js';
 
 async function buildDeferredClient(): Promise<{
   client: AgentClientContract;
@@ -289,34 +288,11 @@ describe('deferred disk commit acknowledgement', () => {
       reached();
       await gate;
     };
-    const native =
-      selectBackend() === 'journal'
-        ? observeNativeDeferredAcknowledgement({
-            armed: () => armed && !paused,
-            fail: () => fail,
-            pause,
-          })
-        : undefined;
-    const wait = SessionRecordingService.prototype.waitForCommitSequence;
-    const acknowledgement =
-      native === undefined
-        ? vi
-            .spyOn(SessionRecordingService.prototype, 'waitForCommitSequence')
-            .mockImplementation(async function (
-              this: SessionRecordingService,
-              ...args
-            ) {
-              const committed = await wait.call(this, ...args);
-              if (armed && !paused) {
-                if (fail) {
-                  armed = false;
-                  throw new Error('final write acknowledgement failed');
-                }
-                await pause();
-              }
-              return committed;
-            })
-        : undefined;
+    const native = observeNativeDeferredAcknowledgement({
+      armed: () => armed && !paused,
+      fail: () => fail,
+      pause,
+    });
     let completed = false;
     const admission = client
       .storeHistoryForLaterUse(source('durable row'))
@@ -332,7 +308,7 @@ describe('deferred disk commit acknowledgement', () => {
           );
         }),
       ]);
-      await native?.verifyDurable('previous row');
+      await native.verifyDurable('previous row');
       expect(completed).toBe(false);
       expect(
         (await Array.fromAsync(client.getHistory())).map((row) => row.blocks),
@@ -340,7 +316,7 @@ describe('deferred disk commit acknowledgement', () => {
       release();
       await admission;
       expect(completed).toBe(true);
-      await native?.verifyDurable('durable row');
+      await native.verifyDurable('durable row');
       const history = client.getHistoryService();
       if (history === null) throw new Error('Missing admitted journal');
       expect(history.getContextRange().totalEntries).toBe(1);
@@ -351,15 +327,14 @@ describe('deferred disk commit acknowledgement', () => {
         client.storeHistoryForLaterUse(source('durable row')),
       ).rejects.toThrow('final write acknowledgement failed');
       expect(history.getTotalTokens()).toBe('durable row'.length);
-      await native?.verifyDurable('durable row');
+      await native.verifyDurable('durable row');
       expect(
         (await Array.fromAsync(client.getHistory())).map((row) => row.blocks),
       ).toStrictEqual([[{ type: 'text', text: 'durable row' }]]);
     } finally {
       release();
       await admission.catch(() => {});
-      acknowledgement?.mockRestore();
-      native?.restore();
+      native.restore();
       await cleanup();
     }
   });

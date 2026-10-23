@@ -5,22 +5,20 @@
  */
 import { collectResumeRows } from './__tests__/resumeRows.js';
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import {
   Config,
   ResumeCursorBoot,
   SessionRecordingService,
   type SessionRecordingServiceConfig,
 } from '@vybestack/llxprt-code-core';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createUiSessionOwner } from './__tests__/uiSessionOwner.js';
 import { createOrResumeRecording } from './cliSessionBootstrap.js';
-import { pinHistoryBackend } from './services/__tests__/support/pinHistoryBackend.js';
 
 // The checkpoint fork still writes a JSONL child on every backend (W15 moves it).
-pinHistoryBackend('old');
 
 const PROJECT_HASH = 'startup-recording-test';
 

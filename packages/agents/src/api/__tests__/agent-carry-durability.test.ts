@@ -1,11 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { carryAcknowledgementFailure } from './helpers/carry-acknowledgement-failure.js';
 import {
   expectedDigest,
   historyDigest,
   withAgentCarry,
 } from './helpers/agent-carry-fixture.js';
+import { carryAcknowledgementFailure } from './helpers/carry-acknowledgement-failure.js';
 
 async function verifyAcknowledgementFailure(size: number): Promise<number> {
   return withAgentCarry(
@@ -32,12 +32,8 @@ async function verifyAcknowledgementFailure(size: number): Promise<number> {
         await expect(started).rejects.toThrow(
           'Carried write acknowledgement failed',
         );
-        if (failure.oldAcknowledgement !== undefined) {
-          expect(failure.oldAcknowledgement).toHaveBeenCalledTimes(2);
-        } else {
-          expect(failure.rejectedTrailer?.position).toBeGreaterThan(0);
-          expect(failure.rejectedTrailer?.path).not.toBe(history.journalPath());
-        }
+        expect(failure.rejectedTrailer?.position).toBeGreaterThan(0);
+        expect(failure.rejectedTrailer?.path).not.toBe(history.journalPath());
       } finally {
         failure.restore();
         next.proceed.open();

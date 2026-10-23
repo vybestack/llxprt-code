@@ -1,15 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { afterEach, describe, expect, it } from 'bun:test';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
 import { retiredJournalMessage } from '../journal/journalRefusal.js';
-import { HISTORY_BACKEND_ENV } from '../services/history/historyBackendSelect.js';
+
 import { JournalHistoryStore } from '../services/history/journalHistoryStore.js';
 import { JournalSession } from '../services/history/journalSession.js';
-import { JournalRecordingService } from './journalRecordingService.js';
-import { SessionDiscovery } from './SessionDiscovery.js';
-import { SESSION_PREVIEW_LENGTH } from './sessionMetaKeys.js';
 import {
   PROJECT,
   chatsDirIn,
@@ -17,18 +14,15 @@ import {
   recordJournal,
   userRow,
 } from './__tests__/support/recordedJournals.js';
+import { JournalRecordingService } from './journalRecordingService.js';
+import { SessionDiscovery } from './SessionDiscovery.js';
+import { SESSION_PREVIEW_LENGTH } from './sessionMetaKeys.js';
 
 describe('session discovery on the journal backend', () => {
   const directory = useTempDir('session-discovery-journal-');
-  let saved: string | undefined;
   const cleanups: Array<() => Promise<void>> = [];
-  beforeEach(() => {
-    saved = process.env[HISTORY_BACKEND_ENV];
-    process.env[HISTORY_BACKEND_ENV] = 'journal';
-  });
+
   afterEach(async () => {
-    if (saved === undefined) delete process.env[HISTORY_BACKEND_ENV];
-    else process.env[HISTORY_BACKEND_ENV] = saved;
     for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
   });
 

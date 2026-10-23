@@ -1,18 +1,16 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { JournalHistoryStore } from '@vybestack/llxprt-code-core/services/history/journalHistoryStore.js';
 import { describe, expect, it, spyOn } from 'bun:test';
 import { VersionSnapshot } from '../../../../core/src/journal/versionSnapshot.js';
-import { JournalHistoryStore } from '@vybestack/llxprt-code-core/services/history/journalHistoryStore.js';
 import {
-  withCLI,
   contents,
-  runCommand,
   persistedContents,
+  runCommand,
   useTempDir,
-  pinHistoryBackend,
+  withCLI,
 } from './native-prefix-test-helpers.js';
 
 describe('actual native CLI source and prepared publication errors', () => {
-  pinHistoryBackend('journal');
   const directory = useTempDir('cli-prefix-failures-');
   for (const stage of [
     'source',

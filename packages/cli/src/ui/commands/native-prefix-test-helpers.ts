@@ -1,13 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import {
   createLockedSessionRecorder,
-  replaySession,
-  type IContent,
   type AgentClientContract,
+  type IContent,
   type SessionRecordingPort,
 } from '@vybestack/llxprt-code-core';
-import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
 import {
   buildAgent,
   drain,
@@ -15,9 +14,9 @@ import {
   type Agent,
 } from '../../../../agents/src/api/__tests__/helpers/agentHarness.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
+import type { HistoryItem } from '../types.js';
 import { chatCommand } from './chatCommand.js';
 import type { CommandContext } from './types.js';
-import type { HistoryItem } from '../types.js';
 
 export function row(index: number): IContent {
   return {
@@ -126,11 +125,7 @@ export async function persistedContents(
 ): Promise<IContent[]> {
   const path = recording.getFilePath();
   if (path === null) throw new Error('Missing recording path');
-  if (process.env.LLXPRT_HISTORY_BACKEND !== 'journal') {
-    const replay = await replaySession(path, 'cli-native-prefix');
-    if (!replay.ok) throw new Error(replay.error);
-    return replay.history;
-  }
+
   const replay = await JournalSession.open(path);
   try {
     const persisted: IContent[] = [];
@@ -143,4 +138,3 @@ export async function persistedContents(
 
 export { operationFileCreates } from '../../../../agents/src/compression/__tests__/support/operation-file-creates.js';
 export { useTempDir } from '../../../../core/src/journal/__tests__/support/useTempDir.js';
-export { pinHistoryBackend } from '../../services/__tests__/support/pinHistoryBackend.js';

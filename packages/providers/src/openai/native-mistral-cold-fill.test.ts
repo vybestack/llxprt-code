@@ -1,24 +1,26 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
-import { appendFileSync } from 'node:fs';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { testJournalSeams } from '@vybestack/llxprt-code-core/journal/__tests__/support/journalFixtures.js';
 import { useTempDir } from '@vybestack/llxprt-code-core/journal/__tests__/support/useTempDir.js';
+import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import { createRuntimeTokenizerFactory } from '../composition/runtimeTokenizerFactory.js';
-import { projectOpenAIChatPromptEnvelopeFromSource } from '../runtime/promptEnvelopeProjections.js';
-import { prepareRequest } from './OpenAIRequestPreparation.js';
-import { readPreparedChatBody } from './__tests__/support/prepareRequestBody.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { buildMessagesWithReasoning } from './OpenAIRequestBuilder.js';
-import { oldMistralUnitTokens } from './__tests__/support/mistral-unit-token-oracle.js';
-import { projectOpenAIChatPromptEnvelope } from '../runtime/promptEnvelopeProjections.js';
+import { describe, expect, it } from 'bun:test';
+import { appendFileSync } from 'node:fs';
 import { oldTailUnits } from '../../../core/src/services/history/__tests__/support/tail-query-oracle.js';
-import { observeRowFormat } from './__tests__/support/observeRowFormat.js';
 import type { ProviderRequestSelection } from '../../../core/src/services/history/provider-request-snapshot.js';
+import { createRuntimeTokenizerFactory } from '../composition/runtimeTokenizerFactory.js';
+import {
+  projectOpenAIChatPromptEnvelope,
+  projectOpenAIChatPromptEnvelopeFromSource,
+} from '../runtime/promptEnvelopeProjections.js';
+import { buildMessagesWithReasoning } from './OpenAIRequestBuilder.js';
+import { prepareRequest } from './OpenAIRequestPreparation.js';
+import { oldMistralUnitTokens } from './__tests__/support/mistral-unit-token-oracle.js';
+import { observeRowFormat } from './__tests__/support/observeRowFormat.js';
+import { readPreparedChatBody } from './__tests__/support/prepareRequestBody.js';
 
 function observedRows(
   rows: ProviderRequestSelection,
@@ -180,7 +182,7 @@ describe('native Mistral cold fill', () => {
           },
         },
       });
-      const history = new HistoryService({ backend: 'journal', recording });
+      const history = new HistoryService({ recording });
       try {
         for (let index = 0; index < size; index++)
           await history.addBatch([rowAt(index, scenario)]);

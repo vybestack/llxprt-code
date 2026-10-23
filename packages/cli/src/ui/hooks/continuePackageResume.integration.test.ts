@@ -1,7 +1,7 @@
-import { buildSettingsRuntime } from '../../runtime/createRuntimeOwnerFeatures.js';
-import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService, Storage } from '@vybestack/llxprt-code-settings';
+import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
+import { buildSettingsRuntime } from '../../runtime/createRuntimeOwnerFeatures.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -9,12 +9,14 @@ import { SettingsService, Storage } from '@vybestack/llxprt-code-settings';
  */
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import {
   createTestFilesystem,
   installTestWorkspaceFilesystem,
   testConfigInitialization,
 } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import { afterEach, describe, expect, it } from 'bun:test';
+import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
 const makeFixtureFilesystem = installTestWorkspaceFilesystem();
 let fixtureFilesystem: ReturnType<typeof makeFixtureFilesystem> | undefined;
 function fixturePaths() {
@@ -24,58 +26,56 @@ function fixturePaths() {
   });
   return fixtureFilesystem.paths;
 }
-import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
 const composeFixtureRuntime = installWorkspaceRuntimeFixture();
-import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 
-import { SessionClientOwner } from '../../../../agents/src/session/session-client-owner.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
-import { ProviderManager } from '@vybestack/llxprt-code-providers';
+import {
+  Config,
+  DebugLogger,
+  emptyModelOutput,
+  getProjectHash,
+  LocalMediaStore,
+  PerformCompressionResult,
+  SessionDiscovery,
+  type AgentChatContract,
+  type AgentClientContract,
+  type IContent,
+  type LockHandle,
+  type RecordingIntegration,
+  type RuntimeProviderManager,
+  type SessionMetadata,
+  type SessionRecordingPort,
+} from '@vybestack/llxprt-code-core';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { requireMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
+import { ProviderManager } from '@vybestack/llxprt-code-providers';
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 import { assertDefined } from '@vybestack/llxprt-code-test-utils';
+import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import {
-  Config,
-  DebugLogger,
-  LocalMediaStore,
-  PerformCompressionResult,
-  SessionDiscovery,
-  type SessionRecordingPort,
-  emptyModelOutput,
-  getProjectHash,
-  type AgentChatContract,
-  type AgentClientContract,
-  type IContent,
-  type RuntimeProviderManager,
-  type LockHandle,
-  type RecordingIntegration,
-  type SessionMetadata,
-} from '@vybestack/llxprt-code-core';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
+import { SessionClientOwner } from '../../../../agents/src/session/session-client-owner.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
+import { createPortablePackage as createPackage } from '../../__tests__/support/portable-package.js';
 import { continueCommand } from '../commands/continueCommand.js';
-import type { SlashCommandProcessorActions } from './slashCommandProcessor.js';
 import {
   processSlashCommand,
   type SlashCommandHandlerDeps,
 } from './slashCommandHandlers.js';
-import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import { createPortablePackage as createPackage } from '../../__tests__/support/portable-package.js';
-import { selectBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
-import { sessionFileExtension } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
+import type { SlashCommandProcessorActions } from './slashCommandProcessor.js';
+
+import { SESSION_FILE_EXTENSION } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
 import { recordedRows } from '../../../../agents/src/api/__tests__/support/recorded-rows.js';
-import { useBackendEnv } from '../../../../core/src/recording/__tests__/support/backendEnv.js';
-import type { RecordingSwapCallbacks } from '../../services/performResume.js';
-import type { Message } from '../types.js';
-import { CliSessionPersistence } from '../../cliSessionPersistence.js';
+
 import { setupSessionRecording } from '../../cliSessionBootstrap.js';
+import { CliSessionPersistence } from '../../cliSessionPersistence.js';
+import type { RecordingSwapCallbacks } from '../../services/performResume.js';
 import {
   __resetCleanupStateForTesting,
   runExitCleanup,
 } from '../../utils/cleanup.js';
+import type { Message } from '../types.js';
 
 interface ActiveRecordingState {
   recording: SessionRecordingPort | null;
@@ -376,7 +376,6 @@ async function readHistoryText(history: HistoryService): Promise<string> {
 }
 
 describe('continue package perform_resume integration', () => {
-  const backend = useBackendEnv();
   afterEach(() => {
     fixtureFilesystem = undefined;
   });
@@ -439,16 +438,14 @@ describe('continue package perform_resume integration', () => {
       expect(sessions).toHaveLength(1);
       expect(sessions[0]).toMatchObject({
         projectHash: getProjectHash(config.getProjectRoot()),
-        ...(selectBackend() === 'journal'
-          ? { title: 'Portable title', name: 'portable-name' }
-          : {}),
+        ...{ title: 'Portable title', name: 'portable-name' },
       });
       expect(config.getSessionId()).toBe(sessions[0]?.sessionId);
       expect(state.recording?.getSessionId()).toBe(config.getSessionId());
       const path = state.recording?.getFilePath();
       if (path === undefined || path === null)
         throw new Error('Missing imported recording');
-      expect(path.endsWith(sessionFileExtension(selectBackend()))).toBe(true);
+      expect(path.endsWith(SESSION_FILE_EXTENSION)).toBe(true);
       const persisted = await recordedRows(
         path,
         getProjectHash(config.getProjectRoot()),
@@ -593,9 +590,9 @@ describe('continue package perform_resume integration', () => {
 
   it('rejects a retired JSONL package through the slash front door without changing history or media', async () => {
     const root = await mkdtemp(join(tmpdir(), 'continue-package-retired-'));
-    backend('old');
+
     const source = await createPackage(root, [new Uint8Array([8, 6, 7])]);
-    backend('journal');
+
     const history = new HistoryService();
     history.add({
       speaker: 'human',

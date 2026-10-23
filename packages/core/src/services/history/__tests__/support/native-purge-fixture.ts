@@ -1,20 +1,20 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { collectJournalFileRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
+import { createRecorderForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 import { expect, spyOn } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { collectJournalFileRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
-import { createRecorderForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
+import { RowOwnership } from '../../../../recording/rowOwnership.js';
+import { HistoryMediaOwnership } from '../../../../storage/history-media-ownership.js';
+import { LocalMediaStore } from '../../../../storage/local-media-store.js';
 import { HistoryService } from '../../HistoryService.js';
 import { JournalSession } from '../../journalSession.js';
-import { LocalMediaStore } from '../../../../storage/local-media-store.js';
-import { HistoryMediaOwnership } from '../../../../storage/history-media-ownership.js';
-import { RowOwnership } from '../../../../recording/rowOwnership.js';
-import { HISTORY_BACKEND_ENV } from '../../historyBackendSelect.js';
+
 import { exactTokenizer } from '../../chronology-rollback-test-helpers.js';
 import type { HistoryMediaOwner } from '../../historyBatchContracts.js';
-import type { IContent } from '../../IContent.js';
 import { historyMutationFailure } from '../../historyMutationEffects.js';
+import type { IContent } from '../../IContent.js';
 
 type ReferenceSource = Parameters<
   NonNullable<HistoryMediaOwner['prepareReferenceReplacement']>
@@ -75,14 +75,14 @@ export async function withNativePurgeFixture(
   );
   const owners = new RowOwnership();
   const history = new HistoryService({
-    backend: 'journal',
     mutationOwnership: owners,
   });
   opener.mockRestore();
-  const recording = createRecorderForTest(
-    { sessionId: 'purge-owner', projectHash: 'purge', chatsDir: root },
-    { [HISTORY_BACKEND_ENV]: 'journal' },
-  );
+  const recording = createRecorderForTest({
+    sessionId: 'purge-owner',
+    projectHash: 'purge',
+    chatsDir: root,
+  });
   const store = new PurgeReleaseStore({
     rootDirectory: join(root, 'media'),
     quotaBytes: 1024,

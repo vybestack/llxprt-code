@@ -1,24 +1,23 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
-import { readdir, readFile } from 'node:fs/promises';
-import { createHash } from 'node:crypto';
 import {
   clientMediaStore,
   type IContent,
   type MediaReferenceBlock,
 } from '@vybestack/llxprt-code-core';
 import { checkpointRows } from '@vybestack/llxprt-code-core/services/history/historyCheckpointRows.js';
-import { RequestMediaResolver } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
-import { historyOwnerIdFor } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
-import { parseReservationRecord } from '@vybestack/llxprt-code-core/storage/local-media-store-validation.js';
 import { parseInstanceLeaseRecord } from '@vybestack/llxprt-code-core/storage/local-media-store-reservations.js';
+import { parseReservationRecord } from '@vybestack/llxprt-code-core/storage/local-media-store-validation.js';
+import { historyOwnerIdFor } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
+import { RequestMediaResolver } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import { describe, expect, it } from 'bun:test';
+import { createHash } from 'node:crypto';
+import { readdir, readFile } from 'node:fs/promises';
 import {
-  withCLI,
+  contents,
   row,
   runCommand,
-  contents,
   useTempDir,
-  pinHistoryBackend,
+  withCLI,
 } from './native-prefix-test-helpers.js';
 
 function barrier(): { promise: Promise<void>; open(): void } {
@@ -94,7 +93,6 @@ async function consume(
 }
 
 describe('actual CLI clear with a pinned pending media consumer', () => {
-  pinHistoryBackend('journal');
   const directory = useTempDir('cli-pending-media-');
   it.each(
     [3, 64, 65].flatMap((size) =>

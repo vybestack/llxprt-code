@@ -1,14 +1,14 @@
-import { observeHistorySynchronouslyForTest } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
+import { observeHistorySynchronouslyForTest } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { DebugLogger } from '../../debug/index.js';
 import { HistoryService } from './HistoryService.js';
-import { buildProviderContent } from './historyProviderPipeline.js';
 import type { IContent } from './IContent.js';
 import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
 import { providerFixtureRow } from './__tests__/support/provider-curated-test-helpers.js';
+import { buildProviderContent } from './historyProviderPipeline.js';
 
 import { providerCurationRuleCases } from './__tests__/support/provider-curated-rule-cases.js';
 import { buildCuratedHistory } from './historyCuration.js';
@@ -25,7 +25,7 @@ class CursorOnlyProviderHistory extends HistoryService {
 
 describe('journal materialization guard', () => {
   it('preserves the synchronous old materialization trap', async () => {
-    const history = new CursorOnlyProviderHistory({ backend: 'old' });
+    const history = new CursorOnlyProviderHistory({});
     try {
       expect(() => observeHistorySynchronouslyForTest(history)).toThrow(
         'eager provider preparation',
@@ -193,7 +193,7 @@ describe('committed provider curation rules R1 through R8', () => {
             expect(owners.snapshot().liveRows).toBe(0);
             expect(counters.snapshot().peakDecodedRows).toBeLessThanOrEqual(1);
           } finally {
-            snapshot.close();
+            await snapshot.close();
           }
         },
         0,

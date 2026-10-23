@@ -1,16 +1,16 @@
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { providerFixtureRow } from '@vybestack/llxprt-code-core/services/history/__tests__/support/provider-curated-test-helpers.js';
+import { buildProviderContent } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   suffixSeeder,
   withSuffixFixtureGraph,
 } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { createRecorderForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
-import { providerFixtureRow } from '@vybestack/llxprt-code-core/services/history/__tests__/support/provider-curated-test-helpers.js';
-import { buildProviderContent } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { describe, expect, it } from 'bun:test';
 import { recomposeFixture } from './provider-curated-recomposition-helpers.js';
 
 class CursorOnlyHistory extends HistoryService {
@@ -54,15 +54,12 @@ describe('invoked provider-source reopening', () => {
         logger,
       );
       const backendBytes: string[] = [];
-      for (const backend of ['old', 'journal'] as const) {
+      for (const _backend of [0, 1]) {
         await withSuffixFixtureGraph(
           size,
           (root) => {
-            const recording = createRecorderForTest(
-              { chatsDir: root },
-              { LLXPRT_HISTORY_BACKEND: backend },
-            );
-            const service = new CursorOnlyHistory({ backend, recording });
+            const recording = createRecorderForTest({ chatsDir: root });
+            const service = new CursorOnlyHistory({ recording });
             return {
               service,
               recording,

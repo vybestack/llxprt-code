@@ -1,16 +1,15 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it, spyOn } from 'bun:test';
 import { checkpointRows } from '@vybestack/llxprt-code-core/services/history/historyCheckpointRows.js';
+import { describe, expect, it, spyOn } from 'bun:test';
 import {
-  withCLI,
-  row,
-  contents,
   blocks,
-  runCommand,
-  persistedContents,
+  contents,
   operationFileCreates,
+  persistedContents,
+  row,
+  runCommand,
   useTempDir,
-  pinHistoryBackend,
+  withCLI,
 } from './native-prefix-test-helpers.js';
 
 function barrier(): { promise: Promise<void>; open(): void } {
@@ -24,7 +23,6 @@ function barrier(): { promise: Promise<void>; open(): void } {
 }
 
 describe('actual native CLI prefix rollback and readers', () => {
-  pinHistoryBackend('journal');
   const directory = useTempDir('cli-prefix-lifecycle-');
   for (const command of ['clear', 'restore']) {
     for (const stage of [

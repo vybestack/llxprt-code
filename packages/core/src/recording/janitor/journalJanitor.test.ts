@@ -1,23 +1,23 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { describe, expect, it } from 'bun:test';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import { gzipSync } from 'node:zlib';
-import { describe, expect, it } from 'bun:test';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
 import type { MediaReferenceBlock } from '../../services/history/IContent.js';
 import { LocalMediaStore } from '../../storage/local-media-store.js';
-import { useBackendEnv } from '../__tests__/support/backendEnv.js';
+
 import {
   recordJournal,
   userRow,
 } from '../__tests__/support/recordedJournals.js';
 import { reclaimSessionMedia } from './mediaReclamation.js';
 import { resolveRetentionConfig } from './retentionPolicy.js';
-import { readSessionHeaderInfo } from './sessionHeaderReader.js';
 import {
   buildSessionGroups,
   evaluateGroupEligibility,
 } from './sessionGrouping.js';
+import { readSessionHeaderInfo } from './sessionHeaderReader.js';
 import { runSessionCleanup } from './sessionJanitor.js';
 import { scanGlobalSessions } from './sessionScanner.js';
 
@@ -26,7 +26,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 describe('the janitor on the journal backend', () => {
   const root = useTempDir('janitor-journal-');
-  const setBackend = useBackendEnv();
+
   const chatsDir = () => path.join(root(), PROJECT_DIR, 'chats');
   const archiveDir = () => path.join(chatsDir(), 'archive');
 
@@ -48,7 +48,6 @@ describe('the janitor on the journal backend', () => {
   });
 
   it('scans journal files and archives, and lists retired JSONL files as unreadable without opening them', async () => {
-    setBackend('journal');
     const { filePath } = await recordJournal(chatsDir(), 'sess-1', {
       rows: [userRow('hi')],
     });
@@ -87,7 +86,6 @@ describe('the janitor on the journal backend', () => {
   });
 
   it('keeps a retired JSONL file protected, the way every unreadable recording is', async () => {
-    setBackend('journal');
     await fsp.mkdir(chatsDir(), { recursive: true });
     await fsp.writeFile(path.join(chatsDir(), 'session-retired.jsonl'), '{}\n');
     const scan = await scanGlobalSessions(root());
@@ -99,7 +97,6 @@ describe('the janitor on the journal backend', () => {
   });
 
   it('pairs a journal file with its archive in one group', async () => {
-    setBackend('journal');
     await fsp.mkdir(archiveDir(), { recursive: true });
     await fsp.writeFile(path.join(chatsDir(), 'session-x.llxj'), 'a');
     await fsp.writeFile(path.join(archiveDir(), 'session-x.llxj.gz'), 'b');
@@ -112,15 +109,7 @@ describe('the janitor on the journal backend', () => {
     expect(groups[0].baseName).toBe('session-x.llxj');
   });
 
-  it('sees only the files of the old backend when the old backend is selected', async () => {
-    setBackend('old');
-    await recordJournal(chatsDir(), 'sess-1', { rows: [userRow('hi')] });
-    const scan = await scanGlobalSessions(root());
-    expect(scan.candidates).toStrictEqual([]);
-  });
-
   it('applies the existing age policy: a journal session ages out, a retired file stays', async () => {
-    setBackend('journal');
     const old = new Date(Date.now() - 5 * DAY_MS);
     const { filePath } = await recordJournal(chatsDir(), 'sess-old', {
       rows: [userRow('hi')],

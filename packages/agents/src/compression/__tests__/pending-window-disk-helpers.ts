@@ -1,25 +1,25 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { expect, spyOn } from 'bun:test';
-import { tmpdir } from 'node:os';
-import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { appendFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { exactTokenizer } from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
 import type { SessionRecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 import { createRecorderForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
-import { selectBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
-import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
-import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
+import { expect, spyOn } from 'bun:test';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { appendFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { exactTokenizer } from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
+
 import { createRowCounters } from '@vybestack/llxprt-code-core/recording/journalCounters.js';
-import { middleoutSetup, middleoutRow } from './middleout-disk-helpers.js';
+import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
+import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
+import { compressionValueDigest } from './compression-value-fixture.js';
+import { middleoutRow, middleoutSetup } from './middleout-disk-helpers.js';
 import { pausedWriter } from './support/native-fallback-fixture.js';
 import { nativeFileRows } from './support/native-file-rows.js';
-import { compressionValueDigest } from './compression-value-fixture.js';
-import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import { PendingPublicationOwner } from './support/pending-publication-owner.js';
 
 export function pendingGate(): { promise: Promise<void>; resolve: () => void } {
@@ -234,8 +234,7 @@ export async function withPendingFixture<T>(
   contextLimit = 30000,
 ): Promise<T> {
   const root = mkdtempSync(join(tmpdir(), 'pending-window-fixture-'));
-  const native =
-    selectBackend() === 'journal' ? await pausedWriter(root) : undefined;
+  const native = await pausedWriter(root);
   const control = pendingRecording(root, native);
   const { recorder } = control;
   const media = new LocalMediaStore({
@@ -266,10 +265,7 @@ export async function withPendingFixture<T>(
       reads,
       setup,
       assertCommitted,
-      publishedRows: () =>
-        native === undefined
-          ? history.streamRawHistory()
-          : nativeFileRows(native.session.path),
+      publishedRows: () => nativeFileRows(native.session.path),
       pausePublication: async (ready, release) => {
         const owner = new PendingPublicationOwner(
           media,

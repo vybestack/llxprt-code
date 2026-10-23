@@ -11,20 +11,18 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { SessionRecordingService } from './SessionRecordingService.js';
-import { SessionDiscovery } from './SessionDiscovery.js';
 import { CheckpointService } from './CheckpointService.js';
-import { matchUnreadableRecordings } from './unreadableRecordings.js';
 import { resumeSessionNotFoundMessage } from './resumeNotFoundMessages.js';
-import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
+import { SessionDiscovery } from './SessionDiscovery.js';
+import { SessionRecordingService } from './SessionRecordingService.js';
+import { matchUnreadableRecordings } from './unreadableRecordings.js';
+
 import {
   writeCorruptHeaderSession,
   writeLegacyUnknownProviderSession,
   writeRawRecordingFile,
   writeSessionWithHeaderPayload,
 } from './__tests__/recording-file-fixtures.js';
-
-pinHistoryBackend('old');
 
 const PROJECT_HASH = 'unreadable-discovery-project';
 

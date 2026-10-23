@@ -14,79 +14,81 @@
  * limitations under the License.
  */
 
-import type { NativeDensityPolicy } from './nativeDensityPolicy.js';
+import { EventEmitter } from 'events';
 import {
   createDetachedHistoryAPI,
   type DetachedHistoryAPI,
 } from './detachedHistoryAPI.js';
 import { finalizeHistoryMutation } from './finalizeHistoryMutation.js';
-import { historyOriginId } from './historyOriginId.js';
-import { CompressionOperationQueue } from './historyCompressionQueue.js';
 import { HistoryTokenTickets } from './history-token-tickets.js';
+import { CompressionOperationQueue } from './historyCompressionQueue.js';
+import { historyOriginId } from './historyOriginId.js';
 import { type IContent } from './IContent.js';
+import type { NativeDensityPolicy } from './nativeDensityPolicy.js';
 import type { ProviderCuratedStreamOptions } from './provider-curated-stream.js';
 import type { ProviderRequestSnapshot } from './provider-request-snapshot.js';
-import { EventEmitter } from 'events';
 // @plan:PLAN-20260603-ISSUE1584.P05 RuntimeTokenizerFactory used for injection path
-import type { RuntimeTokenizerFactory } from '../../runtime/contracts/RuntimeTokenizerFactory.js';
-import type { RuntimeTokenizer as ITokenizer } from '../../runtime/contracts/RuntimeTokenizer.js';
-import { DebugLogger } from '../../debug/index.js';
 import { randomUUID } from 'crypto';
+import { DebugLogger } from '../../debug/index.js';
+import type { RuntimeTokenizer as ITokenizer } from '../../runtime/contracts/RuntimeTokenizer.js';
+import type { RuntimeTokenizerFactory } from '../../runtime/contracts/RuntimeTokenizerFactory.js';
 
-import { canonicalizeToolCallId } from './canonicalToolIds.js';
 import type { DensityResult } from '../../core/compression/types.js';
+import type { SessionRecordingPort } from '../../recording/recordingPort.js';
+import type { RowOwnership } from '../../recording/rowOwnership.js';
+import { canonicalizeToolCallId } from './canonicalToolIds.js';
+import {
+  contextSummaryOfEntry,
+  firstEntryContextRange,
+} from './contextRange.js';
+import {
+  logContentAdded,
+  logQueuedDuringCompression,
+} from './curationDebugLogger.js';
+import { restorePendingChronologyFailure } from './historyArrayDensity.js';
+import { createHistoryStore } from './historyBackend.js';
+import type {
+  HistoryMutationInput,
+  HistoryServiceJournalOptions,
+} from './historyBatchContracts.js';
+import {
+  ChronologyStamper,
+  stampMutationChronology,
+} from './historyChronology.js';
+import {
+  projectDensityCommitSpans,
+  withDiskDensityMutation,
+  type DiskDensityOptimizer,
+} from './historyDiskDensity.js';
+import {
+  type CompressionConfig,
+  type ContextRange,
+  type ContextSummaryInfo,
+  type HistoryEventEmission,
+  type HistoryEventRegistration,
+  type HistoryServiceEventEmitter,
+} from './historyEventTypes.js';
+import {
+  historyMutationFailure,
+  prepareMutationEffects,
+  rollbackMutationEffects,
+} from './historyMutationEffects.js';
+import { HistoryMutationFifo } from './historyMutationFifo.js';
+import { HistoryMutationPublication } from './historyMutationPublication.js';
+import type { HistoryMutationSnapshot } from './historyMutationSnapshot.js';
+import { SpanWindow } from './historySpanWindow.js';
+import type { HistoryStorePort } from './historyStorePort.js';
 import {
   estimateContentTokens as estimateContentTokensImpl,
   estimateTokensForContents as estimateTokensForContentsImpl,
   simpleTokenEstimateForText,
   type TokenizerProvider,
 } from './historyTokenEstimation.js';
-import { restorePendingChronologyFailure } from './historyArrayDensity.js';
+import { getTokenizerForModel } from './historyTokenizerAdapter.js';
 import {
   acceptedHistoryValues,
   densityValueTransform,
 } from './historyValueEntries.js';
-import {
-  withDiskDensityMutation,
-  projectDensityCommitSpans,
-  type DiskDensityOptimizer,
-} from './historyDiskDensity.js';
-import {
-  logContentAdded,
-  logQueuedDuringCompression,
-} from './curationDebugLogger.js';
-import {
-  type HistoryServiceEventEmitter,
-  type HistoryEventRegistration,
-  type HistoryEventEmission,
-  type CompressionConfig,
-  type ContextRange,
-  type ContextSummaryInfo,
-} from './historyEventTypes.js';
-import {
-  contextSummaryOfEntry,
-  firstEntryContextRange,
-} from './contextRange.js';
-import { getTokenizerForModel } from './historyTokenizerAdapter.js';
-import {
-  ChronologyStamper,
-  stampMutationChronology,
-} from './historyChronology.js';
-import type { HistoryServiceJournalOptions } from './historyBatchContracts.js';
-import { createHistoryStore } from './historyBackend.js';
-import type { HistoryStorePort } from './historyStorePort.js';
-import type { SessionRecordingPort } from '../../recording/recordingPort.js';
-import { SpanWindow } from './historySpanWindow.js';
-import { HistoryMutationFifo } from './historyMutationFifo.js';
-import { HistoryMutationPublication } from './historyMutationPublication.js';
-import {
-  rollbackMutationEffects,
-  prepareMutationEffects,
-  historyMutationFailure,
-} from './historyMutationEffects.js';
-import type { HistoryMutationSnapshot } from './historyMutationSnapshot.js';
-import type { HistoryMutationInput } from './historyBatchContracts.js';
-import type { RowOwnership } from '../../recording/rowOwnership.js';
 import { QueuedClearFailures } from './queuedClearFailures.js';
 
 // Preserve the CompressionConfig type export from the same path for consumers.
@@ -98,16 +100,16 @@ export type { HistoryServiceJournalOptions } from './historyBatchContracts.js';
 // Batch/ownership contracts moved to historyBatchContracts.ts (size budget);
 // the public export surface of this module is unchanged.
 export type {
-  PreparedHistoryBatchEffect,
-  HistoryOwnedMediaReservation,
-  HistoryMediaOwner,
   HistoryBatchOptions,
+  HistoryMediaOwner,
+  HistoryOwnedMediaReservation,
+  PreparedHistoryBatchEffect,
 } from './historyBatchContracts.js';
 
 import type {
-  PreparedHistoryBatchEffect,
-  HistoryMediaOwner,
   HistoryBatchOptions,
+  HistoryMediaOwner,
+  PreparedHistoryBatchEffect,
 } from './historyBatchContracts.js';
 
 type HistoryTokenizerSelection = Pick<RuntimeTokenizerFactory, 'getTokenizer'>;
@@ -245,7 +247,7 @@ export abstract class HistoryServiceCore
   protected constructor(options: HistoryServiceJournalOptions = {}) {
     super();
     this.mutationOwnership = options.mutationOwnership;
-    this.journal = createHistoryStore(options, options.backend);
+    this.journal = createHistoryStore(options);
     this.detachedValues = createDetachedHistoryAPI(
       this,
       this.journal,

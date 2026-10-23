@@ -1,22 +1,22 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { basename } from 'node:path';
 import { describe, expect, it } from 'bun:test';
+import { basename } from 'node:path';
+import { resumeSession } from './resumeSession.js';
 import { SessionDiscovery } from './SessionDiscovery.js';
 import { SESSION_KEYS } from './sessionMetaKeys.js';
-import { resumeSession } from './resumeSession.js';
-import { useBackendEnv } from './__tests__/support/backendEnv.js';
-import {
-  PROJECT,
-  chatsDirIn,
-  journalSeams,
-  recordJournal,
-  userRow,
-} from './__tests__/support/recordedJournals.js';
+
 import {
   discoveryDirectory,
   replaceFact,
   START_FACT,
 } from './__tests__/support/native-discovery-fixture.js';
+import {
+  chatsDirIn,
+  journalSeams,
+  PROJECT,
+  recordJournal,
+  userRow,
+} from './__tests__/support/recordedJournals.js';
 
 interface MalformedFact {
   readonly label: string;
@@ -98,12 +98,9 @@ const malformedFacts: readonly MalformedFact[] = [
 ];
 
 describe('native discovery validates external session facts', () => {
-  const setBackend = useBackendEnv();
-
   it.each([...malformedFacts])(
     'rejects $label without hiding the healthy sibling',
     async ({ key, value }) => {
-      setBackend('journal');
       const chats = chatsDirIn(await discoveryDirectory('malformed'));
       const healthy = await recordJournal(chats, 'healthy', {
         rows: [userRow('safe')],
@@ -156,7 +153,6 @@ describe('native discovery validates external session facts', () => {
   );
 
   it('keeps unknown and empty provider/model strings and exact Unicode workspace paths readable', async () => {
-    setBackend('journal');
     const chats = chatsDirIn(await discoveryDirectory('valid-shape'));
     const recorded = await recordJournal(chats, 'valid', {
       provider: 'unknown',

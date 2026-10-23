@@ -1,20 +1,20 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'node:fs';
-import type { IContent } from './IContent.js';
-import { rejectedValue } from './chronology-rollback-test-helpers.js';
-import {
-  detachedDigest,
-  detachedRows,
-  detachedRow,
-  withDetachedFixture,
-} from './detached-rollback-test-helpers.js';
 import { getScratchRoot } from '../../storage/scratch-root.js';
+import type { IContent } from './IContent.js';
 import {
   withDetachedContractFixture,
   withNativeDetachedFixture,
 } from './__tests__/support/detached-contract-fixture.js';
-import type { HistoryBackend } from './historyBackendSelect.js';
+import { rejectedValue } from './chronology-rollback-test-helpers.js';
+import {
+  detachedDigest,
+  detachedRow,
+  detachedRows,
+  withDetachedFixture,
+} from './detached-rollback-test-helpers.js';
+type HistoryBackend = 'old' | 'journal';
 
 const backends: readonly HistoryBackend[] = ['old', 'journal'];
 

@@ -22,32 +22,30 @@
  * in real temp directories. No mock theater.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-pinHistoryBackend('old');
 import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
 import * as os from 'node:os';
-import { SessionRecordingService } from './SessionRecordingService.js';
+import * as path from 'node:path';
+import { type IContent } from '../services/history/IContent.js';
 import {
+  foldCheckpointMetadata,
   replaySession,
   replaySessionThroughSequence,
-  foldCheckpointMetadata,
   type CheckpointMetadataView,
 } from './ReplayEngine.js';
-import {
-  type SessionRecordingServiceConfig,
-  type SessionRecordLine,
-  type CheckpointCreatedPayload,
-  type CheckpointDeletedPayload,
-  type SessionForkedPayload,
-  type SessionNamedPayload,
-  type ContinueTarget,
-} from './types.js';
-import { type IContent } from '../services/history/IContent.js';
 import { SessionDiscovery } from './SessionDiscovery.js';
 import { SessionLockManager } from './SessionLockManager.js';
+import { SessionRecordingService } from './SessionRecordingService.js';
+import {
+  type CheckpointCreatedPayload,
+  type CheckpointDeletedPayload,
+  type ContinueTarget,
+  type SessionForkedPayload,
+  type SessionNamedPayload,
+  type SessionRecordingServiceConfig,
+  type SessionRecordLine,
+} from './types.js';
 
 function requireCheckpointTarget(
   target: ContinueTarget | undefined,

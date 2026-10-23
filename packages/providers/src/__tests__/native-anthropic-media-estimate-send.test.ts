@@ -1,26 +1,26 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it, spyOn } from 'bun:test';
-import { mkdirSync, mkdtempSync } from 'node:fs';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
-import { HistoryMediaOwnership } from '@vybestack/llxprt-code-core/storage/history-media-ownership.js';
-import { RequestMediaResolver } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
 import {
   estimatePromptEnvelope,
   type PromptEnvelopeEstimate,
 } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { HistoryMediaOwnership } from '@vybestack/llxprt-code-core/storage/history-media-ownership.js';
+import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
+import { RequestMediaResolver } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { describe, expect, it, spyOn } from 'bun:test';
+import { mkdirSync, mkdtempSync } from 'node:fs';
 import { operationFileCreates } from '../../../agents/src/compression/__tests__/support/operation-file-creates.js';
 import { readLoggingChatStream } from '../../../agents/src/core/__tests__/support/chat-session-logging-fixture.js';
 import { AnthropicProvider } from '../anthropic/AnthropicProvider.js';
-import type { GenerateChatOptions } from '../IProvider.js';
 import { createRuntimeTokenizerFactory } from '../composition/runtimeTokenizerFactory.js';
+import type { GenerateChatOptions } from '../IProvider.js';
 import { TEST_PROVIDER_CONFIG } from './providerTestConfig.js';
-import { rowsSelection } from './support/wireBodyCapture.js';
 import { anthropicJournalSink } from './support/anthropic-journal-case.js';
 import { publicChat } from './support/public-anthropic-tail.js';
+import { rowsSelection } from './support/wireBodyCapture.js';
 
 class ObservedMediaProvider extends AnthropicProvider {
   override requestMediaResolver: RequestMediaResolver | undefined = undefined;
@@ -108,7 +108,7 @@ async function publicMediaCase(
         semanticMetadata: {},
       })
     : undefined;
-  const history = new HistoryService({ backend: 'journal' });
+  const history = new HistoryService({});
   await history.registerMediaOwner(new HistoryMediaOwnership(store));
   const resolver = new RequestMediaResolver(store);
   const settings = new SettingsService();

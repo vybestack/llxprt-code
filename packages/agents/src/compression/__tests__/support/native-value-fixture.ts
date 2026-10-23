@@ -1,14 +1,14 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import type { SessionRecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
+import type { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
+import { exactTokenizer } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-test-helpers.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createCoreSuffixFixtureGraph } from '../../../../../core/src/services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
-import { exactTokenizer } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-test-helpers.js';
-import { nativeFileRows } from './native-file-rows.js';
-import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
-import type { SessionRecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
 import { compressionValueDigest } from '../compression-value-fixture.js';
+import { nativeFileRows } from './native-file-rows.js';
 
 export interface ValueFixture {
   readonly history: HistoryService;
@@ -28,7 +28,7 @@ export async function withNativeValueFixture(
     service: history,
     recording,
     ownership: owners,
-  } = createCoreSuffixFixtureGraph(root, undefined, undefined, 'journal');
+  } = createCoreSuffixFixtureGraph(root, undefined, undefined);
   history.setTokenizerFactory(exactTokenizer());
   try {
     await action({

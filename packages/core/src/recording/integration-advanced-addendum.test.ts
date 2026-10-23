@@ -15,28 +15,26 @@
  */
 /** @plan PLAN-20260211-SESSIONRECORDING.P25 */
 import { describe, expect, it } from 'bun:test';
-import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
 
-pinHistoryBackend('old');
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { SessionRecordingService } from './SessionRecordingService.js';
 import { replaySession } from './ReplayEngine.js';
 import { SessionDiscovery } from './SessionDiscovery.js';
 import { SessionLockManager } from './SessionLockManager.js';
-import { resumeSession } from './resumeSession.js';
+import { SessionRecordingService } from './SessionRecordingService.js';
 import {
   PROJECT_HASH,
-  assertReplayOk,
-  assertReplayError,
-  makeContent,
-  makeConfig,
   alternatingSpeaker,
+  assertReplayError,
+  assertReplayOk,
   createAndRecordSession,
-  readJsonlLines,
+  makeConfig,
+  makeContent,
   makeResumeRequest,
+  readJsonlLines,
   useIntegrationDirs,
 } from './integration-advanced.test.helpers.js';
+import { resumeSession } from './resumeSession.js';
 
 describe('integration: full session recording lifecycle', () => {
   const dirs = useIntegrationDirs();

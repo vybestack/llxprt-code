@@ -1,15 +1,15 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
+import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { HistoryMediaOwnership } from '@vybestack/llxprt-code-core/storage/history-media-ownership.js';
+import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import { expect } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { HistoryMediaOwnership } from '@vybestack/llxprt-code-core/storage/history-media-ownership.js';
-import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
-import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
-import { createCoreSuffixFixtureGraph } from '../../../../../core/src/services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
 import { batchGate } from '../../../../../core/src/services/history/__tests__/support/addbatch-stream-test-helpers.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
+import { createCoreSuffixFixtureGraph } from '../../../../../core/src/services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
 import {
   HighdensityDiskHistory,
   highdensityOracle,
@@ -238,20 +238,15 @@ export async function nativePublication(
     quotaBytes: 1024,
   });
   const transaction = new RowOwnership();
-  const graph = createCoreSuffixFixtureGraph(
-    root,
-    transaction,
-    (options) => {
-      const counters = options.attachmentCounters;
-      if (counters === undefined)
-        throw new Error('Native publication fixture requires read counters');
-      return new HighdensityDiskHistory({
-        ...options,
-        attachmentCounters: { ...counters, ownership: transaction },
-      });
-    },
-    'journal',
-  );
+  const graph = createCoreSuffixFixtureGraph(root, transaction, (options) => {
+    const counters = options.attachmentCounters;
+    if (counters === undefined)
+      throw new Error('Native publication fixture requires read counters');
+    return new HighdensityDiskHistory({
+      ...options,
+      attachmentCounters: { ...counters, ownership: transaction },
+    });
+  });
   const { service: history, recording } = graph;
   try {
     const reference = await media.admit({

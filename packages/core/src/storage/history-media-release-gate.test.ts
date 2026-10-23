@@ -1,20 +1,22 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
-import { join } from 'node:path';
-import { JournalSession } from '../services/history/journalSession.js';
-import { LocalMediaStore } from './local-media-store.js';
-import { HistoryMediaReleaseGate } from './history-media-release-gate.js';
-import { historyOwnerIdFor } from './media-admission-service.js';
-import { useTempDir as tempDirectory } from '../journal/__tests__/support/useTempDir.js';
-import { HistoryService } from '../services/history/HistoryService.js';
-import { HistoryMediaOwnership } from './history-media-ownership.js';
-import { RequestMediaResolver } from './request-media-resolver.js';
-import { MediaAdmissionService } from './media-admission-service.js';
-import { setImmediate } from 'node:timers/promises';
-import { batchGate } from '../services/history/__tests__/support/addbatch-stream-test-helpers.js';
-import type { IContent } from '../services/history/IContent.js';
 import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { setImmediate } from 'node:timers/promises';
+import { useTempDir as tempDirectory } from '../journal/__tests__/support/useTempDir.js';
 import { JournalMediaPins } from '../journal/journalMediaPins.js';
+import { batchGate } from '../services/history/__tests__/support/addbatch-stream-test-helpers.js';
+import { HistoryService } from '../services/history/HistoryService.js';
+import type { IContent } from '../services/history/IContent.js';
+import { JournalSession } from '../services/history/journalSession.js';
+import { HistoryMediaOwnership } from './history-media-ownership.js';
+import { HistoryMediaReleaseGate } from './history-media-release-gate.js';
+import { LocalMediaStore } from './local-media-store.js';
+import {
+  historyOwnerIdFor,
+  MediaAdmissionService,
+} from './media-admission-service.js';
+import { RequestMediaResolver } from './request-media-resolver.js';
 
 const directory = tempDirectory('native-media-gate-');
 
@@ -57,7 +59,7 @@ describe('version-pinned history media ownership', () => {
     ).rejects.toMatchObject({ errors: [reader, drain] });
   });
   it('rejects same-length corrupt blob bytes at the selected unit with its original verification cause', async () => {
-    const history = new HistoryService({ backend: 'journal' });
+    const history = new HistoryService({});
     const root = join(directory(), 'corrupt');
     const media = new LocalMediaStore({
       rootDirectory: root,
@@ -112,7 +114,7 @@ describe('version-pinned history media ownership', () => {
     }
   });
   it('retires an in-progress blob reader before releasing its history pin', async () => {
-    const history = new HistoryService({ backend: 'journal' });
+    const history = new HistoryService({});
     const media = new LocalMediaStore({
       rootDirectory: join(directory(), 'paused-read'),
       quotaBytes: 1024,
@@ -179,7 +181,7 @@ describe('version-pinned history media ownership', () => {
     }
   });
   it('does not remove a fresh history claim when an old pin drains', async () => {
-    const history = new HistoryService({ backend: 'journal' });
+    const history = new HistoryService({});
     const media = new LocalMediaStore({
       rootDirectory: join(directory(), 'readopted'),
       quotaBytes: 1024,
@@ -214,7 +216,7 @@ describe('version-pinned history media ownership', () => {
     }
   });
   it('gates admission history releases through the same native owner', async () => {
-    const history = new HistoryService({ backend: 'journal' });
+    const history = new HistoryService({});
     const media = new LocalMediaStore({
       rootDirectory: join(directory(), 'admission'),
       quotaBytes: 1024,
@@ -251,7 +253,7 @@ describe('version-pinned history media ownership', () => {
     }
   });
   it('reserves existing rows before granting a native lease to a newly registered owner', async () => {
-    const history = new HistoryService({ backend: 'journal' });
+    const history = new HistoryService({});
     const media = new LocalMediaStore({
       rootDirectory: join(directory(), 'adopted'),
       quotaBytes: 1024,
@@ -279,7 +281,7 @@ describe('version-pinned history media ownership', () => {
     }
   });
   it('reads a native historical reference after clear and reclaims after source close', async () => {
-    const history = new HistoryService({ backend: 'journal' });
+    const history = new HistoryService({});
     const media = new LocalMediaStore({
       rootDirectory: join(directory(), 'media'),
       quotaBytes: 1024,

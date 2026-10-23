@@ -1,21 +1,21 @@
-import { observeHistorySynchronouslyForTest } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
+import { observeHistorySynchronouslyForTest } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
-import { isDeepStrictEqual } from 'node:util';
+import type { SessionRecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
+import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { ownerFixtureRow } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-owner-test-helpers.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
-import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
-import type { SessionRecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
+import { describe, expect, it } from 'bun:test';
+import { isDeepStrictEqual } from 'node:util';
 import {
   observeNativeMaterializationGuard,
   persistPurgeFixture,
   verifyNativePurgeDurability,
 } from './__tests__/support/semantic-purge-fault-test-helpers.js';
-import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
 import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
+import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
 
 class StreamOnlyHistory extends HistoryService {
   constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
@@ -29,7 +29,7 @@ class StreamOnlyHistory extends HistoryService {
 
 describe('journal materialization guard', () => {
   it('StreamOnlyHistory rejects journal eager materialization', async () => {
-    const history = new StreamOnlyHistory({ backend: 'old' });
+    const history = new StreamOnlyHistory({});
 
     try {
       expect(() => observeHistorySynchronouslyForTest(history)).toThrow(
@@ -41,7 +41,7 @@ describe('journal materialization guard', () => {
   });
 
   it('rejects native eager materialization through the guarded journal', async () => {
-    const history = new StreamOnlyHistory({ backend: 'journal' });
+    const history = new StreamOnlyHistory({});
     try {
       await expect(observeNativeMaterializationGuard(history)).rejects.toThrow(
         'production materializer array seam',

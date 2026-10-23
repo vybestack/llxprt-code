@@ -3,9 +3,9 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { HistoryJournalStore } from '../../../../core/src/services/history/historyJournalStore.js';
 import { collectResumeRows } from '../../__tests__/resumeRows.js';
-import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 
 /**
  * @plan PLAN-20260214-SESSIONBROWSER.P10
@@ -16,35 +16,33 @@ import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core
  * compliance.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import {
   RecordingIntegration,
   requireJsonlRecorder,
 } from '@vybestack/llxprt-code-core';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import {
-  performResume,
-  SessionRecordingService,
-  type SessionRecordingPort,
-  SessionLockManager,
-  type LockHandle,
-  type IContent,
+  assertResumeError,
+  assertResumeOk,
+  collectLock,
+  countFileEvents,
+  createTestSession,
   makeConfig,
   makeContent,
   makeResumeContext,
-  createTestSession,
-  countFileEvents,
-  readJsonlFile,
+  performResume,
   PROJECT_HASH,
-  assertResumeOk,
-  assertResumeError,
-  collectLock,
+  readJsonlFile,
   ResumeTestSetup,
+  SessionLockManager,
+  SessionRecordingService,
+  type IContent,
+  type LockHandle,
+  type SessionRecordingPort,
 } from './performResume-test-helpers.js';
-import { pinHistoryBackend } from './support/pinHistoryBackend.js';
 
 // The fixtures are JSONL recordings of the old store.
-pinHistoryBackend('old');
 
 let chatsDir: string;
 let lockHandles: LockHandle[];

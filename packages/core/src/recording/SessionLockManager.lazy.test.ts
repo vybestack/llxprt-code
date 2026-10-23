@@ -35,9 +35,9 @@
  * @plan PLAN-20260211-SESSIONRECORDING.P11
  */
 
-import { describe, it, expect } from 'bun:test';
-import * as path from 'node:path';
+import { describe, expect, it } from 'bun:test';
 import { spawn } from 'node:child_process';
+import * as path from 'node:path';
 
 /**
  * Run a Bun subprocess with the given inline script and return stdout.
@@ -108,7 +108,7 @@ describe('SessionLockManager lazy loading @plan:PLAN-20260211-SESSIONRECORDING.P
     const result = await runBunScript(
       `const { SessionLockManager } = require(${JSON.stringify(FACADE_PATH)});` +
         `SessionLockManager.getLockPath('/tmp/chats', 'abc');` +
-        `SessionLockManager.getLockPathFromFilePath('/tmp/chats/session-abc.jsonl');` +
+        `SessionLockManager.getLockPathFromFilePath('/tmp/chats/session-abc.llxj');` +
         `process.stdout.write(Object.keys(require.cache).some((loadedPath) => loadedPath.includes('SessionLockManager.internals')) ? 'LOADED' : 'NOT_LOADED');`,
     );
     expect(result.trim()).toBe('NOT_LOADED');

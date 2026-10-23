@@ -1,16 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { CONTINUE_LATEST, resumeSession } from '@vybestack/llxprt-code-core';
+import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
+import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { describe, expect, it } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
-import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
-import {
-  HISTORY_BACKEND_ENV,
-  type HistoryBackend,
-} from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { CONTINUE_LATEST, resumeSession } from '@vybestack/llxprt-code-core';
 import { collectRawHistory } from './collect-raw-history.js';
 import { collectJournalRowsForAssertions } from './collect-rows-for-assertions.js';
 import { forbidHistoryMaterializationForTest } from './history-materialization-test-guard.js';
@@ -20,25 +16,13 @@ import {
   recordRowsForTest,
 } from './recorder-for-test.js';
 import { observeHistorySynchronouslyForTest } from './synchronous-history-test-observation.js';
+type HistoryBackend = 'old' | 'journal';
 
-const BACKENDS: readonly HistoryBackend[] = ['old', 'journal'];
+const BACKENDS: readonly HistoryBackend[] = ['journal'];
 
 describe('test infrastructure on both history backends', () => {
-  let saved: string | undefined;
-  beforeEach(() => {
-    saved = process.env[HISTORY_BACKEND_ENV];
-  });
-  afterEach(() => {
-    if (saved === undefined) delete process.env[HISTORY_BACKEND_ENV];
-    else process.env[HISTORY_BACKEND_ENV] = saved;
-  });
-
   for (const backend of BACKENDS) {
     describe(`${backend} backend`, () => {
-      beforeEach(() => {
-        process.env[HISTORY_BACKEND_ENV] = backend;
-      });
-
       it('creates the recorder of the backend with test defaults', async () => {
         const chatsDir = mkdtempSync(join(tmpdir(), 'recorder-for-test-'));
         const recorder = createRecorderForTest({ chatsDir });
@@ -157,16 +141,18 @@ describe('test infrastructure on both history backends', () => {
     });
   }
 
-  it('samples the old backend in the same turn', () => {
-    process.env[HISTORY_BACKEND_ENV] = 'old';
+  it('samples committed journal history after its pending append', async () => {
     const service = new HistoryService();
-    service.add(suffixRow(0));
-    expect(observeHistorySynchronouslyForTest(service)).toHaveLength(1);
-    return service.dispose();
+    try {
+      service.add(suffixRow(0));
+      await service.waitForCommit();
+      expect(await collectRawHistory(service)).toHaveLength(1);
+    } finally {
+      await service.dispose();
+    }
   });
 
   it('refuses a same-turn sample of the journal backend and names the replacement', async () => {
-    process.env[HISTORY_BACKEND_ENV] = 'journal';
     const service = new HistoryService();
     try {
       service.add(suffixRow(0));

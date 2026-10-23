@@ -3,42 +3,42 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { requireJsonlRecorder } from '@vybestack/llxprt-code-core';
+import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
 import {
   afterAll,
-  beforeAll,
   afterEach,
+  beforeAll,
   beforeEach,
   describe,
   expect,
   it,
   spyOn,
 } from 'bun:test';
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
-import { z } from 'zod';
 import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import OpenAI from 'openai';
+import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import {
   createServer,
-  type Server,
   type IncomingMessage,
+  type Server,
   type ServerResponse,
 } from 'node:http';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { promisify } from 'node:util';
+import OpenAI from 'openai';
+import { z } from 'zod';
+import { activateConfiguredProvider } from './cliProviderInit.js';
 import {
   bootstrapRuntimeAndConfig,
   setupSessionRecording,
 } from './cliSessionBootstrap.js';
-import { activateConfiguredProvider } from './cliProviderInit.js';
-import { loadSettings } from './config/settings.js';
 import { parseArguments } from './config/cliArgParser.js';
+import { loadSettings } from './config/settings.js';
 import {
-  runExitCleanup,
   __resetCleanupStateForTesting,
+  runExitCleanup,
 } from './utils/cleanup.js';
-import { requireJsonlRecorder } from '@vybestack/llxprt-code-core';
-import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
-import { tmpdir } from 'node:os';
 
 describe.each(['old', 'journal'] as const)(
   'CLI session client bootstrap ownership on %s',
@@ -61,7 +61,7 @@ describe.each(['old', 'journal'] as const)(
       directory = await mkdtemp(join(suiteDirectory, 'case-'));
       previousArgv = process.argv;
       previousEnv = { ...process.env };
-      process.env.LLXPRT_HISTORY_BACKEND = backend;
+
       requests = [];
       server = createServer((request, response) => {
         void serveRequest(request, response);

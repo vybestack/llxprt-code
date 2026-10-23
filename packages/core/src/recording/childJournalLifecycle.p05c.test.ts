@@ -20,7 +20,9 @@
  * @requirement:G7
  */
 
+import { afterEach, describe, expect, it } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import {
   appendFile as fsAppendFile,
   mkdtemp,
@@ -28,16 +30,14 @@ import {
   readdir,
   rm,
 } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { afterEach, describe, expect, it } from 'bun:test';
-import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
+
 import { requireJsonlRecorder } from '../services/history/recorderBackend.js';
-pinHistoryBackend('old');
+
 import { createChildSessionJournal } from './childJournal.js';
-import { SessionRecordingService } from './SessionRecordingService.js';
 import { SessionLockManager } from './SessionLockManager.js';
+import { SessionRecordingService } from './SessionRecordingService.js';
 import type { RecordingWriterIo } from './types.js';
 
 const PROJECT_HASH = 'p05c-lifecycle-hash';

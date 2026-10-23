@@ -7,11 +7,11 @@
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
-import { createHistoryProviderFileBindingStore } from './provider-file-binding.js';
 import type {
   MediaReferenceBlock,
   ProviderFileReferenceMetadata,
 } from './IContent.js';
+import { createHistoryProviderFileBindingStore } from './provider-file-binding.js';
 
 const CONTENT_ID =
   'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -210,7 +210,7 @@ async function observeDensityCase4() {
 async function observeDensityCase5() {
   // Frozen retained objects are the old store's layout; the journal store
   // decodes a copy per read (provider-file-binding.journal.test.ts).
-  const history = new HistoryService({ backend: 'old' });
+  const history = new HistoryService({});
   history.add({ speaker: 'human', blocks: [mediaReference()] });
   const callerOwned = { ...PROVIDER_FILE };
 

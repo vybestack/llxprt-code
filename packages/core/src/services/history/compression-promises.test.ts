@@ -1,21 +1,21 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { describe, expect, it } from 'bun:test';
 import { setImmediate } from 'node:timers/promises';
-import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { HistoryService } from './HistoryService.js';
-import type { HistoryBackend } from './historyBackendSelect.js';
 import type { IContent } from './IContent.js';
+type HistoryBackend = 'old' | 'journal';
 
-const backends: HistoryBackend[] = ['old', 'journal'];
+const backends: HistoryBackend[] = ['journal'];
 const row = (text: string): IContent => ({
   speaker: 'human',
   blocks: [{ type: 'text', text }],
   metadata: { chronology: { seq: 1, userTurn: 1, step: 1, recordedAt: 1 } },
 });
 
-describe.each(backends)('compression public promises on %s', (backend) => {
+describe.each(backends)('compression public promises on %s', () => {
   it('keeps clear pending until release and applies it between its FIFO neighbors', async () => {
-    const history = new HistoryService({ backend });
+    const history = new HistoryService({});
     try {
       await history.addBatch([row('initial')]);
       history.startCompression();
@@ -40,7 +40,7 @@ describe.each(backends)('compression public promises on %s', (backend) => {
   });
 
   it('keeps validation pending until its compression FIFO position is reached', async () => {
-    const history = new HistoryService({ backend });
+    const history = new HistoryService({});
     try {
       await history.addBatch([row('initial')]);
       history.startCompression();

@@ -4,11 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
+import { observeHistorySynchronouslyForTest as synchronousTestHistory } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
-import { observeHistorySynchronouslyForTest as synchronousTestHistory } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
 
 function compressSummary(text: string): {
   speaker: 'human';
@@ -97,7 +97,7 @@ describe.each([...backendCases])(
     let historyService: HistoryService;
 
     beforeEach(() => {
-      historyService = new HistoryService({ backend });
+      historyService = new HistoryService({});
     });
 
     afterEach(async () => {

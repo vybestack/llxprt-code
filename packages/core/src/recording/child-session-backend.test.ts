@@ -1,21 +1,20 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { collectJournalRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { describe, expect, it } from 'bun:test';
 import { readFile, readdir } from 'node:fs/promises';
 import { basename } from 'node:path';
-import { collectJournalRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { testJournalSeams } from '../journal/__tests__/support/journalFixtures.js';
 import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { createChildSessionJournal } from './childJournal.js';
-import { createLockedSessionRecorder } from './sessionRecorderFactory.js';
 import { readJournalFileFacts } from './journalSessionListing.js';
 import { SessionLockManager } from './SessionLockManager.js';
-import { useBackendEnv } from './__tests__/support/backendEnv.js';
+import { createLockedSessionRecorder } from './sessionRecorderFactory.js';
+
 import { userRow } from './__tests__/support/recordedJournals.js';
 
 describe.each(['old', 'journal'] as const)('child history on %s', (backend) => {
   const directory = useTempDir('child-backend-');
-  const setBackend = useBackendEnv();
 
   function options(): Parameters<typeof createChildSessionJournal>[0] {
     return {
@@ -30,7 +29,6 @@ describe.each(['old', 'journal'] as const)('child history on %s', (backend) => {
   }
 
   it('lazily attaches the child mirror, persists only child rows and removes its artifacts', async () => {
-    setBackend(backend);
     const parent = await createLockedSessionRecorder({
       ...options(),
       sessionId: 'parent-session',
@@ -85,7 +83,6 @@ describe.each(['old', 'journal'] as const)('child history on %s', (backend) => {
   });
 
   it('late attaches pre-existing child rows without a parent seed', async () => {
-    setBackend(backend);
     const child = await createChildSessionJournal(options());
     const history = new HistoryService();
     try {
@@ -111,7 +108,6 @@ describe.each(['old', 'journal'] as const)('child history on %s', (backend) => {
   });
 
   it('removes the partial file and lock when initialization fails', async () => {
-    setBackend(backend);
     const seams = testJournalSeams({ failWriteAt: 0 });
     await expect(
       createChildSessionJournal({
@@ -133,9 +129,8 @@ describe.each(['old', 'journal'] as const)('child history on %s', (backend) => {
 
 describe('journal child metadata at creation', () => {
   const directory = useTempDir('child-metadata-');
-  const setBackend = useBackendEnv();
+
   it('writes its allocated identity and parent before runtime initialization', async () => {
-    setBackend('journal');
     const child = await createChildSessionJournal({
       sessionId: 'allocated-child',
       parentSessionId: 'parent-session',

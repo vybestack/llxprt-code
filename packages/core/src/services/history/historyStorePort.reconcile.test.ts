@@ -1,13 +1,13 @@
+import { HistoryJournalStore } from './historyJournalStore.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import * as path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import * as path from 'node:path';
 import { testJournalSeams } from '../../journal/__tests__/support/journalFixtures.js';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
 import { HistoryMediaOwnership } from '../../storage/history-media-ownership.js';
 import { LocalMediaStore } from '../../storage/local-media-store.js';
-import { createHistoryStore } from './historyBackend.js';
 import type { HistoryMediaOwner } from './historyBatchContracts.js';
 import type { HistoryStorePort } from './historyStorePort.js';
 import type { IContent, MediaReferenceBlock } from './IContent.js';
@@ -69,7 +69,7 @@ describe.each(['old', 'journal'] as const)(
     async function opened(): Promise<ReconcileStore> {
       const store: ReconcileStore =
         backend === 'old'
-          ? createHistoryStore({}, 'old')
+          ? new HistoryJournalStore()
           : new JournalHistoryStore(
               await JournalSession.create(
                 path.join(directory(), 'reconcile.llxj'),

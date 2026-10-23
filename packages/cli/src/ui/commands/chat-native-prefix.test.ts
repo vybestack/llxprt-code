@@ -1,19 +1,17 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import {
-  withCLI,
-  row,
-  contents,
   blocks,
-  runCommand,
-  persistedContents,
+  contents,
   operationFileCreates,
+  persistedContents,
+  row,
+  runCommand,
   useTempDir,
-  pinHistoryBackend,
+  withCLI,
 } from './native-prefix-test-helpers.js';
 
 describe('actual native CLI clear and restore', () => {
-  pinHistoryBackend('journal');
   const directory = useTempDir('cli-native-prefix-');
   for (const size of [3, 64, 65, 5000]) {
     for (const command of ['clear', 'restore']) {

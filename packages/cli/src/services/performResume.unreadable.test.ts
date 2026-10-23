@@ -8,21 +8,19 @@
  * the reference points at it.
  */
 
+import {
+  SessionRecordingService,
+  type LockHandle,
+  type SessionMetadata,
+  type SessionRecordingPort,
+} from '@vybestack/llxprt-code-core';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import {
-  SessionRecordingService,
-  type SessionRecordingPort,
-  type LockHandle,
-  type SessionMetadata,
-} from '@vybestack/llxprt-code-core';
 import { performResume, type ResumeContext } from './performResume.js';
-import { pinHistoryBackend } from './__tests__/support/pinHistoryBackend.js';
 
 // The fixtures are JSONL recordings of the old store.
-pinHistoryBackend('old');
 
 const PROJECT_HASH = 'perform-resume-unreadable';
 const CORRUPT_REASON =

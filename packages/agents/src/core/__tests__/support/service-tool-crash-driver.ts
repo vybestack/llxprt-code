@@ -1,28 +1,28 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { z } from 'zod';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { RecordingIntegration } from '@vybestack/llxprt-code-core/recording/RecordingIntegration.js';
 import {
   JournalResumeBoot,
   resumePointOf,
 } from '@vybestack/llxprt-code-core/recording/journalResume.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { historyOriginId } from '@vybestack/llxprt-code-core/services/history/historyOriginId.js';
+import { z } from 'zod';
 import {
+  diskToolState,
   observedRecording,
   recordingFile,
-  diskToolState,
   report,
 } from './service-tool-recorders.js';
 import {
   completedTool,
   localProvider,
-  serviceToolChat,
-  requestFacts,
-  toolId,
   modelName,
+  requestFacts,
   resultBlock,
+  serviceToolChat,
   toolGate,
+  toolId,
 } from './service-tool-runtime.js';
 
 const directory = z.string().min(1).parse(process.argv[2]);
@@ -30,7 +30,7 @@ const role = z.enum(['primary', 'mirror', 'none']).parse(process.argv[3]);
 const exitMode = z.enum(['crash', 'clean']).parse(process.argv[4]);
 const primary = await observedRecording(directory, 'primary');
 const mirror = await observedRecording(directory, 'mirror');
-const history = new HistoryService({ backend: 'journal' });
+const history = new HistoryService({});
 await history.adoptResumeBoot(
   primary.recording,
   new JournalResumeBoot(

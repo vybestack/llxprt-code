@@ -2,10 +2,10 @@
 import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp } from 'node:fs/promises';
 import { join } from 'node:path';
-import { openJournalReadOnly } from '../../../../journal/journalReader.js';
 import { sha256KeyHash } from '../../../../journal/idKeys.js';
-import { ownerKey } from '../../../../journal/ownerDictionary.js';
+import { openJournalReadOnly } from '../../../../journal/journalReader.js';
 import { stateReaderOf } from '../../../../journal/journalReaderState.js';
+import { ownerKey } from '../../../../journal/ownerDictionary.js';
 import { readStoredRow } from '../../../../journal/rowReads.js';
 import {
   iterateRowEntries,
@@ -35,7 +35,7 @@ export interface RowDigest {
 }
 
 export function largeHistory(): HistoryService {
-  const history = new HistoryService({ backend: 'journal' });
+  const history = new HistoryService({});
   history.setTokenizerFactory(accountingFactory((text) => text.length));
   return history;
 }

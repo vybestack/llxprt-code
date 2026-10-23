@@ -4,31 +4,31 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
-import { dirname } from 'node:path';
-import { Text } from 'ink';
-import { Colors } from '../colors.js';
-import type {
-  CommandContext,
-  SlashCommand,
-  MessageActionReturn,
-  SlashCommandActionReturn,
-} from './types.js';
-import { CommandKind } from './types.js';
 import {
   createCheckpointService,
-  SessionDiscovery,
   getProjectHash,
+  SessionDiscovery,
   type ContinueTarget,
   type SessionRecordingPort,
 } from '@vybestack/llxprt-code-core';
-import { mutateChatHistory } from './chatHistoryMutation.js';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
+import { Text } from 'ink';
+import { dirname } from 'node:path';
+import React from 'react';
+import { Colors } from '../colors.js';
 import type { ChatDetail, HistoryItemChatList } from '../types.js';
 import { MessageType } from '../types.js';
-import { type CommandArgumentSchema } from './schema/types.js';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
-import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { warnUnreadableRecordings } from '../utils/warnUnreadableRecordings.js';
+import { mutateChatHistory } from './chatHistoryMutation.js';
+import { type CommandArgumentSchema } from './schema/types.js';
+import type {
+  CommandContext,
+  MessageActionReturn,
+  SlashCommand,
+  SlashCommandActionReturn,
+} from './types.js';
+import { CommandKind } from './types.js';
 
 function getProjectHashForContext(context: CommandContext): string | null {
   const recording = getRecording(context);
@@ -174,9 +174,7 @@ const saveCommand: SlashCommand = {
     }
 
     try {
-      await createCheckpointService(
-        context.services.agent?.agentClient.mediaStore,
-      ).createCheckpoint(
+      await createCheckpointService().createCheckpoint(
         recording,
         projectHash,
         tag,
@@ -291,9 +289,7 @@ const deleteCommand: SlashCommand = {
     const target = resolved.target;
 
     try {
-      const service = createCheckpointService(
-        context.services.agent?.agentClient.mediaStore,
-      );
+      const service = createCheckpointService();
       if (recording?.getSessionId() === target.source.sessionId) {
         await service.deleteCheckpoint(
           recording,
@@ -332,9 +328,7 @@ async function renameCheckpointTarget(
   projectHash: string,
 ): Promise<void> {
   const recording = getRecording(context);
-  const service = createCheckpointService(
-    context.services.agent?.agentClient.mediaStore,
-  );
+  const service = createCheckpointService();
   if (recording?.getSessionId() === target.source.sessionId) {
     await service.renameCheckpoint(
       recording,
@@ -559,9 +553,7 @@ const nameCommand: SlashCommand = {
     }
 
     try {
-      await createCheckpointService(
-        context.services.agent?.agentClient.mediaStore,
-      ).setSessionName(
+      await createCheckpointService().setSessionName(
         recording,
         projectHash,
         name,

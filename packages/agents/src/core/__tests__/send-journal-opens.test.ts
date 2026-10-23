@@ -1,14 +1,14 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 import { HistoryJournalStore } from '@vybestack/llxprt-code-core/services/history/historyJournalStore.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { selectBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
+import { afterEach, describe, expect, it, spyOn } from 'bun:test';
+
 import { measureJournalReadCost } from './support/journal-read-cost.js';
-import { sourceRootSetup } from './support/prompt-envelope-source-test-helpers.js';
 import {
   createWorkload,
   type Workload,
 } from './support/journal-retained-growth-workload.js';
+import { sourceRootSetup } from './support/prompt-envelope-source-test-helpers.js';
 
 const root = sourceRootSetup();
 const UNDER_LIMIT = 4_000_000;
@@ -30,38 +30,27 @@ async function countSend(
   );
   const captures = spyOn(HistoryJournalStore.prototype, 'capturePendingFold');
   try {
-    if (selectBackend() === 'journal') {
-      const before = workload.history.length();
-      const tokens = await measureJournalReadCost(async () =>
-        workload.history.getTotalTokens(),
-      );
-      expect(tokens.value).toBeGreaterThan(0);
-      expect(tokens.cost).toStrictEqual({ walks: 0, entries: 0, rows: 0 });
-      const last = await measureJournalReadCost(
-        async () => (await workload.history.getLastContent())?.speaker,
-      );
-      expect(last.value).toBe('ai');
-      expect(last.cost).toStrictEqual({ walks: 0, entries: 0, rows: 1 });
-      const { cost } = await measureJournalReadCost(() =>
-        workload.runTurn(turn),
-      );
-      const snapshots = opens.mock.calls.length;
-      if (snapshots === 1) {
-        expect(cost.entries).toBe(before + 2);
-        expect(cost.rows).toBe(before + 3);
-      }
-      process.stdout.write(
-        `${JSON.stringify({ before, snapshots, ...cost })}\n`,
-      );
-      return {
-        opens: snapshots,
-        captures: cost.walks,
-      };
+    const before = workload.history.length();
+    const tokens = await measureJournalReadCost(async () =>
+      workload.history.getTotalTokens(),
+    );
+    expect(tokens.value).toBeGreaterThan(0);
+    expect(tokens.cost).toStrictEqual({ walks: 0, entries: 0, rows: 0 });
+    const last = await measureJournalReadCost(
+      async () => (await workload.history.getLastContent())?.speaker,
+    );
+    expect(last.value).toBe('ai');
+    expect(last.cost).toStrictEqual({ walks: 0, entries: 0, rows: 1 });
+    const { cost } = await measureJournalReadCost(() => workload.runTurn(turn));
+    const snapshots = opens.mock.calls.length;
+    if (snapshots === 1) {
+      expect(cost.entries).toBe(before + 2);
+      expect(cost.rows).toBe(before + 3);
     }
-    await workload.runTurn(turn);
+    process.stdout.write(`${JSON.stringify({ before, snapshots, ...cost })}\n`);
     return {
-      opens: opens.mock.calls.length,
-      captures: captures.mock.calls.length,
+      opens: snapshots,
+      captures: cost.walks,
     };
   } finally {
     opens.mockRestore();
@@ -109,10 +98,7 @@ describe('journal snapshots per send', () => {
   it('opens one curated snapshot and three journal captures per send under the limit, at any history size', async () => {
     const small = await measure(40, false);
     const large = await measure(400, false);
-    const expected =
-      selectBackend() === 'journal'
-        ? { opens: 1, captures: 1 }
-        : { opens: 1, captures: 3 };
+    const expected = { opens: 1, captures: 1 };
     expect(small).toStrictEqual(expected);
     expect(large).toStrictEqual(small);
   }, 120_000);
@@ -124,7 +110,7 @@ describe('journal snapshots per send', () => {
       // each compression attempt (a retry follows an ineffective first one).
       expect(counts.opens).toBeGreaterThanOrEqual(3);
       expect(counts.opens).toBeLessThanOrEqual(4);
-      const initial = selectBackend() === 'journal' ? 2 : 3;
+      const initial = 2;
       expect(counts.captures).toBe(initial + 4 * (counts.opens - 1));
     }
   }, 120_000);

@@ -4,9 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, expect, it } from 'bun:test';
+import { JournalResolver } from '../../recording/journalResolver.js';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
-import { JournalResolver } from '../../recording/journalResolver.js';
 
 async function rawHistory(history: HistoryService) {
   return Array.fromAsync(history.streamRawHistory());
@@ -18,7 +18,7 @@ async function rawHistory(history: HistoryService) {
  * store has its own contract in history-profile-adoption.journal.test.ts.
  */
 function oldHistory(): HistoryService {
-  return new HistoryService({ backend: 'old' });
+  return new HistoryService({});
 }
 
 describe('profile history adoption', () => {

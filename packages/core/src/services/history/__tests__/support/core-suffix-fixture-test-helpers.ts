@@ -6,15 +6,11 @@ import {
 } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { createRecorderForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 import {
-  HISTORY_BACKEND_ENV,
-  type HistoryBackend,
-} from '../../historyBackendSelect.js';
-import {
   createRowCounters,
   type RowCounters,
 } from '../../../../recording/journalCounters.js';
-import { RowOwnership } from '../../../../recording/rowOwnership.js';
 import type { SessionRecordingPort } from '../../../../recording/recordingPort.js';
+import { RowOwnership } from '../../../../recording/rowOwnership.js';
 import {
   HistoryService,
   type HistoryServiceJournalOptions,
@@ -46,20 +42,15 @@ export function createCoreSuffixFixtureGraph(
   createService: (
     options: HistoryServiceJournalOptions,
   ) => HistoryService = createHistoryService,
-  backend?: HistoryBackend,
 ): CoreSuffixFixtureGraph {
-  const recording = createRecorderForTest(
-    {
-      sessionId: 'suffix-test',
-      projectHash: 'suffix-test',
-      chatsDir: root,
-    },
-    backend === undefined ? process.env : { [HISTORY_BACKEND_ENV]: backend },
-  );
+  const recording = createRecorderForTest({
+    sessionId: 'suffix-test',
+    projectHash: 'suffix-test',
+    chatsDir: root,
+  });
   const ownership = new RowOwnership();
   const counters = createRowCounters();
   const service = createService({
-    backend,
     recording,
     attachmentCounters: { ...counters.counters, ownership },
     mutationOwnership,
@@ -87,17 +78,11 @@ export async function withCoreSuffixFixture<T>(
   createService: (
     options: HistoryServiceJournalOptions,
   ) => HistoryService = createHistoryService,
-  backend?: HistoryBackend,
 ): Promise<T> {
   return withSuffixFixtureGraph(
     size,
     (root) =>
-      createCoreSuffixFixtureGraph(
-        root,
-        mutationOwnership,
-        createService,
-        backend,
-      ),
+      createCoreSuffixFixtureGraph(root, mutationOwnership, createService),
     action,
     payloadBytes,
     makeRow,

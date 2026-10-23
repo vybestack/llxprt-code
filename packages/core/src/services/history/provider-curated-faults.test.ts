@@ -1,16 +1,16 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
-import { VersionSnapshot } from '../../journal/versionSnapshot.js';
-import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
-import { rejectedValue } from './chronology-rollback-test-helpers.js';
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DebugLogger } from '../../debug/index.js';
-import { streamProviderContent } from './provider-curated-stream.js';
+import { VersionSnapshot } from '../../journal/versionSnapshot.js';
+import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
 import { providerFixtureRow } from './__tests__/support/provider-curated-test-helpers.js';
+import { rejectedValue } from './chronology-rollback-test-helpers.js';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
+import { streamProviderContent } from './provider-curated-stream.js';
 
 const logger = new DebugLogger('test:provider-faults');
 
@@ -129,7 +129,6 @@ describe('native public provider preparation faults', () => {
       undefined,
       undefined,
       undefined,
-      'journal',
     );
   });
 });

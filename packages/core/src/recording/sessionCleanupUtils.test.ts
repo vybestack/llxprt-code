@@ -27,21 +27,20 @@
  * against the Phase 15 stubs — that is correct TDD.
  */
 
-import { describe, expect, beforeEach, afterEach, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fc from 'fast-check';
 import * as fs from 'node:fs';
-import * as path from 'node:path';
 import * as os from 'node:os';
+import * as path from 'node:path';
+import { JournalRecordingService } from './journalRecordingService.js';
 import {
+  cleanupStaleLocks,
   getAllJsonlSessionFiles,
   shouldDeleteSession,
-  cleanupStaleLocks,
   type JsonlSessionFileEntry,
 } from './sessionCleanupUtils.js';
+import { SessionDiscovery } from './SessionDiscovery.js';
 import { SessionLockManager } from './SessionLockManager.js';
-import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
-
-pinHistoryBackend('old');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -86,51 +85,54 @@ function writeNonSessionFiles(
  * Write a valid .jsonl session file with a session_start event header.
  * Returns the absolute path to the created file.
  */
-function writeSessionFile(
+async function writeSessionFile(
   dir: string,
   sessionId: string,
   startTime?: string,
-): string {
-  const ts = startTime ?? new Date().toISOString();
-  const fileName = `session-${ts.replace(/[:.]/g, '-')}-${sessionId.slice(0, 8)}.jsonl`;
-  const filePath = path.join(dir, fileName);
-  const event = JSON.stringify({
-    v: 1,
-    seq: 1,
-    ts,
-    type: 'session_start',
-    payload: {
-      sessionId,
-      projectHash: 'test-hash',
-      workspaceDirs: ['/test'],
-      provider: 'test',
-      model: 'test-model',
-      startTime: ts,
-    },
+): Promise<string> {
+  const recording = JournalRecordingService.create({
+    sessionId,
+    projectHash: 'test-hash',
+    chatsDir: dir,
+    workspaceDirs: ['/test'],
+    provider: 'test',
+    model: 'test-model',
   });
-  fs.writeFileSync(filePath, event + '\n');
-  return filePath;
+  try {
+    await recording.session();
+    await recording.flush();
+    const filePath = recording.getFilePath();
+    if (filePath === null) throw new Error('No fixture file');
+    if (startTime !== undefined) {
+      const time = new Date(startTime);
+      fs.utimesSync(filePath, time, time);
+    }
+    return filePath;
+  } finally {
+    await recording.dispose();
+  }
 }
 
 /**
  * Write a .lock sidecar file with PID JSON content.
  * Returns the absolute path to the created lock file.
  */
-function writeLockFile(sessionFilePath: string, pid: number): string {
-  const firstLine = fs.readFileSync(sessionFilePath, 'utf-8').split('\n')[0];
-  const header = JSON.parse(firstLine) as {
-    payload: { sessionId: string };
-  };
+async function writeLockFile(
+  sessionFilePath: string,
+  pid: number,
+): Promise<string> {
+  const header = await SessionDiscovery.readSessionHeader(sessionFilePath);
+  if (header === null) throw new Error('No fixture header');
   const lockPath = SessionLockManager.getLockPath(
     path.dirname(sessionFilePath),
-    header.payload.sessionId,
+    header.sessionId,
   );
   fs.writeFileSync(
     lockPath,
     JSON.stringify({
       pid,
       timestamp: new Date().toISOString(),
-      sessionId: header.payload.sessionId,
+      sessionId: header.sessionId,
     }),
   );
   return lockPath;
@@ -193,16 +195,16 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P16
      * @requirement REQ-CLN-001
      */
-    it('finds .jsonl session files in the chats directory', async () => {
-      const file1 = writeSessionFile(
+    it('finds .llxj session files in the chats directory', async () => {
+      const file1 = await writeSessionFile(
         chatsDir,
         'aaa11111-0000-0000-0000-000000000001',
       );
-      const file2 = writeSessionFile(
+      const file2 = await writeSessionFile(
         chatsDir,
         'bbb22222-0000-0000-0000-000000000002',
       );
-      const file3 = writeSessionFile(
+      const file3 = await writeSessionFile(
         chatsDir,
         'ccc33333-0000-0000-0000-000000000003',
       );
@@ -222,15 +224,15 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
      * @requirement REQ-CLN-001
      */
     it('skips non-session files (.txt, random names)', async () => {
-      writeSessionFile(chatsDir, 'session-valid001');
+      await writeSessionFile(chatsDir, 'session-valid001');
       fs.writeFileSync(path.join(chatsDir, 'notes.txt'), 'some notes');
-      fs.writeFileSync(path.join(chatsDir, 'data.jsonl'), '{"not":"session"}');
+      fs.writeFileSync(path.join(chatsDir, 'data.llxj'), '{"not":"session"}');
       fs.writeFileSync(path.join(chatsDir, 'readme.md'), '# readme');
 
       const entries = await getAllJsonlSessionFiles(chatsDir);
 
       expect(entries).toHaveLength(1);
-      expect(entries[0].fileName).toMatch(/^session-.*\.jsonl$/);
+      expect(entries[0].fileName).toMatch(/^session-.*\.llxj$/);
     });
 
     /**
@@ -238,8 +240,8 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P16
      * @requirement REQ-CLN-001
      */
-    it('ignores old .json session files (only targets .jsonl)', async () => {
-      writeSessionFile(chatsDir, 'session-newformat');
+    it('ignores old .json session files (only targets .llxj)', async () => {
+      await writeSessionFile(chatsDir, 'session-newformat');
       fs.writeFileSync(
         path.join(
           chatsDir,
@@ -256,7 +258,7 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
 
       expect(entries).toHaveLength(1);
       const fileNames = entries.map((e) => e.fileName);
-      expect(fileNames.every((f) => f.endsWith('.jsonl'))).toBe(true);
+      expect(fileNames.every((f) => f.endsWith('.llxj'))).toBe(true);
     });
 
     /**
@@ -285,10 +287,10 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P16
      * @requirement REQ-CLN-001
      */
-    it('extracts session info from .jsonl header (session_start event)', async () => {
+    it('extracts session info from .llxj header (session_start event)', async () => {
       const sessionId = 'abc12345-6789-0000-aaaa-bbbbccccdddd';
       const startTime = '2025-06-15T10:30:00.000Z';
-      writeSessionFile(chatsDir, sessionId, startTime);
+      await writeSessionFile(chatsDir, sessionId, startTime);
 
       const entries = await getAllJsonlSessionFiles(chatsDir);
 
@@ -308,9 +310,9 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P16
      * @requirement REQ-CLN-002
      */
-    it('returns skip for a .jsonl with an active lock (current PID)', async () => {
-      const sessionPath = writeSessionFile(chatsDir, 'locked-session');
-      writeLockFile(sessionPath, process.pid);
+    it('returns skip for a .llxj with an active lock (current PID)', async () => {
+      const sessionPath = await writeSessionFile(chatsDir, 'locked-session');
+      await writeLockFile(sessionPath, process.pid);
       const entry = makeEntry(sessionPath, 'locked-session');
 
       const result = await shouldDeleteSession(entry);
@@ -323,8 +325,8 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P16
      * @requirement REQ-CLN-002
      */
-    it('returns delete for a .jsonl with no .lock file', async () => {
-      const sessionPath = writeSessionFile(chatsDir, 'unlocked-session');
+    it('returns delete for a .llxj with no .lock file', async () => {
+      const sessionPath = await writeSessionFile(chatsDir, 'unlocked-session');
       const entry = makeEntry(sessionPath, 'unlocked-session');
 
       const result = await shouldDeleteSession(entry);
@@ -337,9 +339,9 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P16
      * @requirement REQ-CLN-002, REQ-CLN-003
      */
-    it('returns stale-lock-only for a .jsonl with a stale lock (dead PID)', async () => {
-      const sessionPath = writeSessionFile(chatsDir, 'stale-session1');
-      writeLockFile(sessionPath, DEAD_PID);
+    it('returns stale-lock-only for a .llxj with a stale lock (dead PID)', async () => {
+      const sessionPath = await writeSessionFile(chatsDir, 'stale-session1');
+      await writeLockFile(sessionPath, DEAD_PID);
       const entry = makeEntry(sessionPath, 'stale-session1');
 
       const result = await shouldDeleteSession(entry);
@@ -358,7 +360,7 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P16
      * @requirement REQ-CLN-004
      */
-    it('removes orphaned .lock file with no matching .jsonl', async () => {
+    it('removes orphaned .lock file with no matching .llxj', async () => {
       const orphanedLockPath = path.join(chatsDir, 'orphan.lock');
       fs.writeFileSync(
         orphanedLockPath,
@@ -380,9 +382,9 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P16
      * @requirement REQ-CLN-004
      */
-    it('keeps .lock file that has matching .jsonl and live PID', async () => {
-      const sessionPath = writeSessionFile(chatsDir, 'active-sess1');
-      const lockPath = writeLockFile(sessionPath, process.pid);
+    it('keeps .lock file that has matching .llxj and live PID', async () => {
+      const sessionPath = await writeSessionFile(chatsDir, 'active-sess1');
+      const lockPath = await writeLockFile(sessionPath, process.pid);
 
       await cleanupStaleLocks(chatsDir);
 
@@ -411,9 +413,9 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P16
      * @requirement REQ-CLN-004
      */
-    it('removes stale .lock (dead PID) but preserves the .jsonl file', async () => {
-      const sessionPath = writeSessionFile(chatsDir, 'stale-lock01');
-      const lockPath = writeLockFile(sessionPath, DEAD_PID);
+    it('removes stale .lock (dead PID) but preserves the .llxj file', async () => {
+      const sessionPath = await writeSessionFile(chatsDir, 'stale-lock01');
+      const lockPath = await writeLockFile(sessionPath, DEAD_PID);
 
       await cleanupStaleLocks(chatsDir);
 
@@ -460,12 +462,12 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
       const recentTime = new Date(
         Date.now() - 1 * 60 * 60 * 1000,
       ).toISOString(); // 1 hour ago
-      const sessionPath = writeSessionFile(
+      const sessionPath = await writeSessionFile(
         chatsDir,
         'recent-stale1',
         recentTime,
       );
-      writeLockFile(sessionPath, DEAD_PID);
+      await writeLockFile(sessionPath, DEAD_PID);
       const entry = makeEntry(sessionPath, 'recent-stale1');
 
       const result = await shouldDeleteSession(entry);
@@ -493,8 +495,12 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
       const oldTime = new Date(
         Date.now() - 30 * 24 * 60 * 60 * 1000,
       ).toISOString(); // 30 days ago
-      const sessionPath = writeSessionFile(chatsDir, 'old-stale-001', oldTime);
-      writeLockFile(sessionPath, DEAD_PID);
+      const sessionPath = await writeSessionFile(
+        chatsDir,
+        'old-stale-001',
+        oldTime,
+      );
+      await writeLockFile(sessionPath, DEAD_PID);
       const entry = makeEntry(sessionPath, 'old-stale-001');
 
       const result = await shouldDeleteSession(entry);
@@ -516,7 +522,7 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P16
      * @requirement REQ-CLN-001
      */
-    it('all N .jsonl session files are discovered for any N @requirement:REQ-CLN-001', async () => {
+    it('all N .llxj session files are discovered for any N @requirement:REQ-CLN-001', async () => {
       await fc.assert(
         fc.asyncProperty(fc.nat({ max: 8 }), async (count) => {
           const localTemp = fs.mkdtempSync(
@@ -530,7 +536,7 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
             for (let i = 0; i < count; i++) {
               const id = `prop-sess-${i.toString().padStart(4, '0')}-${Date.now()}`;
               const ts = new Date(Date.now() - i * 1000).toISOString();
-              const filePath = writeSessionFile(localChats, id, ts);
+              const filePath = await writeSessionFile(localChats, id, ts);
               created.push(path.basename(filePath));
             }
 
@@ -592,8 +598,8 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
               for (let i = 0; i < pairedCount; i++) {
                 const id = `paired-${i}-${Date.now()}`;
                 const ts = new Date(Date.now() - i * 1000).toISOString();
-                const sessionPath = writeSessionFile(localChats, id, ts);
-                const lockPath = writeLockFile(sessionPath, process.pid);
+                const sessionPath = await writeSessionFile(localChats, id, ts);
+                const lockPath = await writeLockFile(sessionPath, process.pid);
                 pairedLockPaths.push(lockPath);
                 pairedSessionPaths.push(sessionPath);
               }
@@ -641,8 +647,8 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
             for (let i = 0; i < count; i++) {
               const id = `active-${i}-${Date.now()}`;
               const ts = new Date(Date.now() - i * 1000).toISOString();
-              const sessionPath = writeSessionFile(localChats, id, ts);
-              writeLockFile(sessionPath, process.pid);
+              const sessionPath = await writeSessionFile(localChats, id, ts);
+              await writeLockFile(sessionPath, process.pid);
               const entry = makeEntry(sessionPath, id);
 
               const result = await shouldDeleteSession(entry);
@@ -672,9 +678,9 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
 
           try {
             const id = `pid-test-${Date.now()}`;
-            const sessionPath = writeSessionFile(localChats, id);
+            const sessionPath = await writeSessionFile(localChats, id);
             const pid = pidForLiveness(useAlivePid);
-            writeLockFile(sessionPath, pid);
+            await writeLockFile(sessionPath, pid);
             const entry = makeEntry(sessionPath, id);
 
             const result = await shouldDeleteSession(entry);
@@ -710,8 +716,8 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
               'config.json',
               'data.csv',
               'readme.md',
-              'log.jsonl',
-              'backup.jsonl',
+              'log.llxj',
+              'backup.llxj',
               'temp.lock',
               'index.html',
             ];
@@ -768,16 +774,16 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
               for (let i = 0; i < staleCount; i++) {
                 const id = `stale-${i}-${Date.now()}`;
                 const ts = new Date(Date.now() - i * 1000).toISOString();
-                const sessionPath = writeSessionFile(localChats, id, ts);
-                writeLockFile(sessionPath, DEAD_PID);
+                const sessionPath = await writeSessionFile(localChats, id, ts);
+                await writeLockFile(sessionPath, DEAD_PID);
               }
 
               // Active locks (live PID with .jsonl) — should NOT be cleaned
               for (let i = 0; i < activeCount; i++) {
                 const id = `active-${i}-${Date.now()}`;
                 const ts = new Date(Date.now() - i * 1000).toISOString();
-                const sessionPath = writeSessionFile(localChats, id, ts);
-                writeLockFile(sessionPath, process.pid);
+                const sessionPath = await writeSessionFile(localChats, id, ts);
+                await writeLockFile(sessionPath, process.pid);
               }
 
               const count = await cleanupStaleLocks(localChats);
@@ -818,8 +824,12 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
               const recentTime = new Date(
                 Date.now() - (i + 1) * 60 * 60 * 1000,
               ).toISOString(); // hours ago
-              const sessionPath = writeSessionFile(localChats, id, recentTime);
-              const lockPath = writeLockFile(sessionPath, DEAD_PID);
+              const sessionPath = await writeSessionFile(
+                localChats,
+                id,
+                recentTime,
+              );
+              const lockPath = await writeLockFile(sessionPath, DEAD_PID);
               sessionPaths.push(sessionPath);
               lockPaths.push(lockPath);
             }
@@ -871,8 +881,12 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
               const oldTime = new Date(
                 Date.now() - (30 + i) * 24 * 60 * 60 * 1000,
               ).toISOString(); // 30+ days ago
-              const sessionPath = writeSessionFile(localChats, id, oldTime);
-              const lockPath = writeLockFile(sessionPath, DEAD_PID);
+              const sessionPath = await writeSessionFile(
+                localChats,
+                id,
+                oldTime,
+              );
+              const lockPath = await writeLockFile(sessionPath, DEAD_PID);
               sessionPaths.push(sessionPath);
               lockPaths.push(lockPath);
             }
@@ -924,12 +938,12 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
                 const recentTime = new Date(
                   Date.now() - (i + 1) * 60 * 60 * 1000,
                 ).toISOString(); // hours ago
-                const sessionPath = writeSessionFile(
+                const sessionPath = await writeSessionFile(
                   localChats,
                   id,
                   recentTime,
                 );
-                writeLockFile(sessionPath, DEAD_PID);
+                await writeLockFile(sessionPath, DEAD_PID);
                 withinRetentionPaths.push(sessionPath);
               }
 
@@ -939,8 +953,12 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
                 const oldTime = new Date(
                   Date.now() - (31 + i) * 24 * 60 * 60 * 1000,
                 ).toISOString();
-                const sessionPath = writeSessionFile(localChats, id, oldTime);
-                writeLockFile(sessionPath, DEAD_PID);
+                const sessionPath = await writeSessionFile(
+                  localChats,
+                  id,
+                  oldTime,
+                );
+                await writeLockFile(sessionPath, DEAD_PID);
                 outsideRetentionPaths.push(sessionPath);
               }
 
@@ -950,10 +968,11 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
                 ...withinRetentionPaths,
                 ...outsideRetentionPaths,
               ]) {
-                const header = JSON.parse(
-                  fs.readFileSync(sessionPath, 'utf-8').split('\n')[0],
-                ) as { payload: { sessionId: string } };
-                const entry = makeEntry(sessionPath, header.payload.sessionId);
+                const header =
+                  await SessionDiscovery.readSessionHeader(sessionPath);
+                if (header === null) throw new Error('No fixture header');
+                const entry = makeEntry(sessionPath, header.sessionId);
+
                 const result = await shouldDeleteSession(entry);
                 // stale-lock-only — not 'delete'. The retention policy decides deletion.
                 expect(result).toBe('stale-lock-only');
@@ -993,7 +1012,7 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
             for (let i = 0; i < count; i++) {
               const id = `struct-${i}-${Date.now()}`;
               const ts = new Date(Date.now() - i * 1000).toISOString();
-              writeSessionFile(localChats, id, ts);
+              await writeSessionFile(localChats, id, ts);
             }
 
             const entries = await getAllJsonlSessionFiles(localChats);
@@ -1033,7 +1052,7 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
             for (let i = 0; i < count; i++) {
               const id = `unlocked-${i}-${Date.now()}`;
               const ts = new Date(Date.now() - i * 1000).toISOString();
-              const sessionPath = writeSessionFile(localChats, id, ts);
+              const sessionPath = await writeSessionFile(localChats, id, ts);
               const entry = makeEntry(sessionPath, id);
 
               const result = await shouldDeleteSession(entry);
@@ -1065,7 +1084,7 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
             for (let i = 0; i < count; i++) {
               const id = `nolocks-${i}-${Date.now()}`;
               const ts = new Date(Date.now() - i * 1000).toISOString();
-              writeSessionFile(localChats, id, ts);
+              await writeSessionFile(localChats, id, ts);
             }
 
             const cleaned = await cleanupStaleLocks(localChats);

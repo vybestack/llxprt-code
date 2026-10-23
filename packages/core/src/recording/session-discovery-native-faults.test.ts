@@ -1,28 +1,28 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { readFile, writeFile, stat, readdir, chmod } from 'node:fs/promises';
-import { basename, join } from 'node:path';
 import { describe, expect, it, spyOn } from 'bun:test';
-import * as positionalFile from '../journal/positionalFile.js';
-import { openJournalReadOnly } from '../journal/journalReader.js';
+import { chmod, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { basename, join } from 'node:path';
+import { JournalCorruptionError } from '../journal/errors.js';
 import { JOURNAL_HEADER_BYTES } from '../journal/fileHeader.js';
 import { encodeFrameStart } from '../journal/frame.js';
+import { openJournalReadOnly } from '../journal/journalReader.js';
+import * as positionalFile from '../journal/positionalFile.js';
 import { iterateRowEntries, rowTreeRootOf } from '../journal/rowTreeReader.js';
-import { JournalCorruptionError } from '../journal/errors.js';
-import { SessionDiscovery } from './SessionDiscovery.js';
+import { discoveryDirectory } from './__tests__/support/native-discovery-fixture.js';
 import { readJournalFileFacts } from './journalSessionListing.js';
+import { resumeSessionNotFoundMessage } from './resumeNotFoundMessages.js';
 import {
-  resumeSession,
   CONTINUE_LATEST,
+  resumeSession,
   type ResumeRequest,
 } from './resumeSession.js';
+import { SessionDiscovery } from './SessionDiscovery.js';
 import { SessionLockManager } from './SessionLockManager.js';
 import {
   matchUnreadableRecordings,
   noReadableSessionsError,
 } from './unreadableRecordings.js';
-import { resumeSessionNotFoundMessage } from './resumeNotFoundMessages.js';
-import { discoveryDirectory } from './__tests__/support/native-discovery-fixture.js';
-import { useBackendEnv } from './__tests__/support/backendEnv.js';
+
 import {
   PROJECT,
   chatsDirIn,
@@ -56,10 +56,7 @@ async function bootRows(boot: {
 }
 
 describe('native discovery and resume fault boundaries', () => {
-  const setBackend = useBackendEnv();
-
   it('resumes and continues the healthy native file beside unreadable native and retired JSONL siblings', async () => {
-    setBackend('journal');
     const chats = chatsDirIn(await discoveryDirectory('siblings'));
     const healthy = await recordJournal(chats, 'healthy', {
       rows: [userRow('kept')],
@@ -109,7 +106,6 @@ describe('native discovery and resume fault boundaries', () => {
 
   for (const length of [8, 12, JOURNAL_HEADER_BYTES - 1]) {
     it(`rejects a current-format header truncated at ${length} bytes without blocking a native sibling`, async () => {
-      setBackend('journal');
       const chats = chatsDirIn(await discoveryDirectory('header-cut'));
       const broken = await recordJournal(chats, 'broken', {
         rows: [userRow('bad')],
@@ -157,7 +153,6 @@ describe('native discovery and resume fault boundaries', () => {
   );
   for (const { rootName, region } of damageCases) {
     it(`refuses an intact latest trailer with damaged ${rootName} ${region}, never an older committed version`, async () => {
-      setBackend('journal');
       const chats = chatsDirIn(await discoveryDirectory('root-corrupt'));
       const broken = await recordJournal(chats, 'broken', {
         rows: [userRow('older')],
@@ -280,7 +275,6 @@ describe('native discovery and resume fault boundaries', () => {
   });
 
   it('keeps healthy continue targets when the checkpoint metadata read fails after a successful summary read', async () => {
-    setBackend('journal');
     const chats = chatsDirIn(
       await discoveryDirectory('checkpoint-read-failure'),
     );
@@ -337,7 +331,6 @@ describe('native discovery and resume fault boundaries', () => {
   });
 
   it('lists metadata without decoding row bodies, but streaming resume rejects a corrupt committed body instead of returning an older history', async () => {
-    setBackend('journal');
     const chats = chatsDirIn(await discoveryDirectory('body-corrupt'));
     const recorded = await recordJournal(chats, 'body', {
       rows: [userRow('older')],

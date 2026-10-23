@@ -20,17 +20,14 @@
  * @requirement:G7
  */
 
+import { afterEach, describe, expect, it } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { appendFile, mkdir, mkdtemp, rm, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { afterEach, describe, expect, it } from 'bun:test';
 import { SessionDiscovery } from './SessionDiscovery.js';
 import { getAllJsonlSessionFiles } from './sessionCleanupUtils.js';
 import type { ContinueTarget, SessionSummary } from './types.js';
-import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
-
-pinHistoryBackend('old');
 
 /** Proposed P05c extension of SessionSummary (tmp/verify854/p05c/api_sketch.md). */
 type SummaryWithKind = SessionSummary & { kind?: 'main' | 'subagent' };

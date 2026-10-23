@@ -1,17 +1,15 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { useTempDir } from '../../../../core/src/journal/__tests__/support/useTempDir.js';
+import { operationFileCreates } from '../../compression/__tests__/support/operation-file-creates.js';
 import {
   buildAgent,
   drain,
   internalAgentClient,
 } from './helpers/agentHarness.js';
 import { collectAgentHistory } from './helpers/collect-agent-history.js';
-import { useNativePrefixBackend } from './helpers/native-prefix-backend.js';
-import { operationFileCreates } from '../../compression/__tests__/support/operation-file-creates.js';
-import { useTempDir } from '../../../../core/src/journal/__tests__/support/useTempDir.js';
 
 describe('native public chat semantic purge trigger', () => {
-  useNativePrefixBackend();
   const directory = useTempDir('native-purge-chat-');
   it('purges through the next model call and durable recording without operation files', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl', {

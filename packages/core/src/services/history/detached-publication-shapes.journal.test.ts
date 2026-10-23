@@ -1,15 +1,16 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
 import { collectJournalFileRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
+import { describe, expect, it } from 'bun:test';
 import { statSync } from 'node:fs';
-import {
-  withNativeDetachedFixture,
-  type NativeDetachedFixture,
-} from './__tests__/support/detached-contract-fixture.js';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
 import { recordJournal } from '../../recording/__tests__/support/recordedJournals.js';
 import { resumeSession } from '../../recording/resumeSession.js';
 import { HistoryService } from './HistoryService.js';
+import type { IContent } from './IContent.js';
+import {
+  withNativeDetachedFixture,
+  type NativeDetachedFixture,
+} from './__tests__/support/detached-contract-fixture.js';
 import {
   exactTokenizer,
   rejectedValue,
@@ -18,7 +19,6 @@ import {
   detachedDigest,
   detachedRow,
 } from './detached-rollback-test-helpers.js';
-import type { IContent } from './IContent.js';
 import type { DetachedHistoryOptions } from './detachedHistoryAPI.js';
 import type { HistoryBatchEvent } from './history-batch-values.js';
 
@@ -138,7 +138,7 @@ describe('native detached public shapes', () => {
           const offsets: number[] = [];
           for await (const entry of prior.entries())
             offsets.push(entry.recordOffset);
-          prior.close();
+          await prior.close();
           const receipts: Array<
             Promise<Awaited<ReturnType<typeof detachedDigest>>>
           > = [];
@@ -288,7 +288,7 @@ async function expectShapeLayout(
       keptOffsets.push(entry.recordOffset);
     expect(keptOffsets).toStrictEqual(offsets.slice(0, length));
   } finally {
-    current.close();
+    await current.close();
   }
 }
 
@@ -299,19 +299,16 @@ describe('native mixed marked persisted input', () => {
     const recorded = await recordJournal(directory(), crypto.randomUUID(), {
       rows,
     });
-    const resumed = await resumeSession(
-      {
-        continueRef: recorded.sessionId,
-        chatsDir: directory(),
-        projectHash: 'project-hash',
-        currentProvider: 'test',
-        currentModel: 'test',
-        workspaceDirs: [],
-      },
-      { LLXPRT_HISTORY_BACKEND: 'journal' },
-    );
+    const resumed = await resumeSession({
+      continueRef: recorded.sessionId,
+      chatsDir: directory(),
+      projectHash: 'project-hash',
+      currentProvider: 'test',
+      currentModel: 'test',
+      workspaceDirs: [],
+    });
     if (!resumed.ok) throw new Error(resumed.error);
-    const history = new HistoryService({ backend: 'journal' });
+    const history = new HistoryService({});
     history.setTokenizerFactory(exactTokenizer());
     try {
       await history.adoptResumeBoot(resumed.recording, resumed.boot);

@@ -1,31 +1,30 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { tmpdir } from 'node:os';
-import { mkdir, mkdtemp, stat } from 'node:fs/promises';
-import { ResumeCursorBoot } from '@vybestack/llxprt-code-core/recording/resumeCursorBoot.js';
 import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
-import { readJournalFileFacts } from '@vybestack/llxprt-code-core/recording/journalSessionListing.js';
 import {
   JournalResumeBoot,
   resumePointOf,
 } from '@vybestack/llxprt-code-core/recording/journalResume.js';
-import { selectBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { dirname, join } from 'node:path';
+import { readJournalFileFacts } from '@vybestack/llxprt-code-core/recording/journalSessionListing.js';
+import { mkdir, mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
-import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
+import { dirname, join } from 'node:path';
 import {
   createSessionSettingsFixture,
   subagentSessionPorts,
 } from '../../api/__tests__/helpers/session-settings-fixture.js';
-import { fixtureToolSelection } from './subagentOrchestrator-test-helpers.js';
 import {
   SubagentOrchestrator,
   type SubagentLaunchResult,
 } from '../subagentOrchestrator.js';
+import { fixtureToolSelection } from './subagentOrchestrator-test-helpers.js';
 
 const createWorkspaceFilesystem = installTestWorkspaceFilesystem();
 
@@ -103,15 +102,13 @@ export async function launchAcceptanceChild(
 }
 
 export function childJournalExtension(): '.jsonl' | '.llxj' {
-  return selectBackend() === 'journal' ? '.llxj' : '.jsonl';
+  return '.llxj';
 }
 
 export async function openChildResumeBoot(path: string): Promise<{
   streamRows(): AsyncIterable<IContent>;
   close(): Promise<void>;
 }> {
-  if (selectBackend() === 'old')
-    return ResumeCursorBoot.open(path, 10000, (await stat(path)).size);
   const found = await readJournalFileFacts(path);
   if (found === undefined) throw new Error('Missing committed child facts');
   const { facts } = found;

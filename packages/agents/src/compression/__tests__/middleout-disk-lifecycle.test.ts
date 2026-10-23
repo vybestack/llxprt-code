@@ -1,23 +1,19 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { selectBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
-import { nativeSummaryAdmissionRollback } from './support/native-summary-publication.js';
+
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
-import {
-  withRollbackFixture,
-  expectedRange,
-} from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
-import {
-  middleoutSetup,
-  middleoutRow,
-  middleoutOracle,
-  SummaryTransport,
-  MiddleoutDiskHistory,
-} from './middleout-disk-helpers.js';
-import { collectRows } from './truncation-stream-helpers.js';
 import { buildCompressionSystemInstruction } from '../compressionSystemPrompt.js';
+import {
+  MiddleoutDiskHistory,
+  middleoutOracle,
+  middleoutRow,
+  middleoutSetup,
+  SummaryTransport,
+} from './middleout-disk-helpers.js';
+import { nativeSummaryAdmissionRollback } from './support/native-summary-publication.js';
+import { collectRows } from './truncation-stream-helpers.js';
 
 async function failures(size: number): Promise<number> {
   await buildCompressionSystemInstruction('test-model', {
@@ -58,39 +54,7 @@ async function failures(size: number): Promise<number> {
 }
 
 async function rollback(size: number): Promise<number> {
-  if (selectBackend() === 'journal')
-    return nativeSummaryAdmissionRollback(size);
-  return withRollbackFixture(async (history, recorder) => {
-    const { handler, transport } = middleoutSetup(history);
-    const makeRow = (index: number): IContent => {
-      const row = middleoutRow(index, 64);
-      return row.blocks.length === 0
-        ? { ...row, blocks: [{ type: 'text', text: `empty-ai-${index}` }] }
-        : row;
-    };
-    const callers = Array.from({ length: size }, (_, index) => makeRow(index));
-    const markers = callers.map((row) => row.metadata?.chronology);
-    for (const row of callers) history.add(row);
-    await history.waitForTokenUpdates();
-    await recorder.flush();
-    history.setCacheAnchorSeq(1);
-    const expected = Array.from({ length: size }, (_, index) => makeRow(index));
-    recorder.failAdmissionAfter(2);
-    await expect(handler.performCompression('rollback')).rejects.toThrow(
-      'injected journal admission failure',
-    );
-    expect(await collectRows(history)).toStrictEqual(expected);
-    expect(history.getContextRange()).toStrictEqual(expectedRange(size));
-    expect(history.getCacheAnchorSeq()).toBe(1);
-    expect(
-      callers.every(
-        (row, index) => row.metadata?.chronology === markers[index],
-      ),
-    ).toBe(true);
-    const result = await handler.performCompression('retry');
-    expect(result).toBe(PerformCompressionResult.COMPRESSED);
-    return transport.requests.length;
-  });
+  return nativeSummaryAdmissionRollback(size);
 }
 
 async function pinned(size: number): Promise<number> {

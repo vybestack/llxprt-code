@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
-import { HISTORY_BACKEND_ENV } from './historyBackendSelect.js';
+
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import { JournalHistoryStore } from './journalHistoryStore.js';
@@ -11,15 +11,11 @@ function row(speaker: 'human' | 'ai', text: string): IContent {
 
 /** The journal twin of historyStorePort.detached.test.ts, which spies on the old store's `publishDetached`. */
 describe('detached history API publishes through the journal store port', () => {
-  const saved = process.env[HISTORY_BACKEND_ENV];
   let history: HistoryService;
   beforeEach(() => {
-    process.env[HISTORY_BACKEND_ENV] = 'journal';
     history = new HistoryService();
   });
   afterEach(async () => {
-    if (saved === undefined) delete process.env[HISTORY_BACKEND_ENV];
-    else process.env[HISTORY_BACKEND_ENV] = saved;
     await history.dispose();
   });
 

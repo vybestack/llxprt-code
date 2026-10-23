@@ -1,19 +1,19 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { exactTokenizer } from '../../../core/src/services/history/chronology-rollback-test-helpers.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { streamCuratedProviderHistory } from '@vybestack/llxprt-code-core/services/history/historyCuration.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { JournalProviderRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/journal-provider-request.js';
 import { prepareProviderContentSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-curated-stream.js';
 import type {
-  ProviderRequestSnapshot,
   ProviderRequestRows,
+  ProviderRequestSnapshot,
 } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
-import { JournalProviderRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/journal-provider-request.js';
+import { describe, expect, it } from 'bun:test';
+import { exactTokenizer } from '../../../core/src/services/history/chronology-rollback-test-helpers.js';
+import { operationFileCreates } from '../compression/__tests__/support/operation-file-creates.js';
 import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
 import { streamSemanticPurgeRequest } from './streamRequestHelpers.js';
-import { operationFileCreates } from '../compression/__tests__/support/operation-file-creates.js';
 
 async function collect(rows: ProviderRequestRows): Promise<IContent[]> {
   const output: IContent[] = [];
@@ -39,7 +39,7 @@ describe('native purge request normalization', () => {
   ])(
     'matches legacy units and pending membership for %j without scratch',
     async ({ mode, explicit }) => {
-      const history = new HistoryService({ backend: 'journal' });
+      const history = new HistoryService({});
       history.setTokenizerFactory(exactTokenizer());
       try {
         await history.replaceAll([

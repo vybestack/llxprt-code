@@ -14,7 +14,7 @@ import type { HistoryMutationSnapshot } from '../../historyMutationSnapshot.js';
  */
 export class SnapshotProbeHistory extends HistoryService {
   constructor(options: HistoryServiceJournalOptions = {}) {
-    super({ ...options, backend: 'old' });
+    super({ ...options });
   }
 
   withSnapshot<T>(

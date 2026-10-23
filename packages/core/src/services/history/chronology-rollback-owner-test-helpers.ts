@@ -10,9 +10,9 @@ import {
   rollbackRow,
 } from './chronology-rollback-test-helpers.js';
 import type { HistoryMediaOwner } from './historyBatchContracts.js';
-import type { HistoryBackend } from './historyBackendSelect.js';
-import type { IContent } from './IContent.js';
 import type { HistoryService } from './HistoryService.js';
+import type { IContent } from './IContent.js';
+type HistoryBackend = 'old' | 'journal';
 
 type MediaInput = Parameters<HistoryMediaOwner['prepareReplacement']>[0];
 interface OwnerObservation {
@@ -223,7 +223,6 @@ export async function pausedDensity(
     ownerFixtureRow,
     transaction,
     undefined,
-    backend,
   );
   const output = process.env.CHRONOLOGY_DENSITY_OWNER_OUTPUT;
   if (output !== undefined)

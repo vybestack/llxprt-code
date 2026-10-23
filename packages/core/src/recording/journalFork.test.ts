@@ -1,14 +1,14 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import * as fsp from 'node:fs/promises';
 import { describe, expect, it } from 'bun:test';
+import * as fsp from 'node:fs/promises';
 import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
 import { JournalSession } from '../services/history/journalSession.js';
 import { forkJournalFromCheckpoint } from './journalFork.js';
 import { JournalResumeBoot } from './journalResume.js';
+import { SessionDiscovery } from './SessionDiscovery.js';
 import { SessionLockManager } from './SessionLockManager.js';
 import { SESSION_KEYS, decodeSessionFact } from './sessionMetaKeys.js';
-import { SessionDiscovery } from './SessionDiscovery.js';
-import { useBackendEnv } from './__tests__/support/backendEnv.js';
+
 import {
   PROJECT,
   chatsDirIn,
@@ -31,7 +31,6 @@ async function texts(session: JournalSession): Promise<string[]> {
 
 describe('fork from a checkpoint on the journal (design 4.9)', () => {
   const directory = useTempDir('journal-fork-');
-  const setBackend = useBackendEnv();
 
   async function checkpointTarget(
     chats: string,
@@ -62,7 +61,6 @@ describe('fork from a checkpoint on the journal (design 4.9)', () => {
   }
 
   it('clones the saved version into a child file and leaves the source file as it was', async () => {
-    setBackend('journal');
     const chats = chatsDirIn(directory());
     const source = await recordJournal(chats, 'src', {
       rows: [userRow('one'), userRow('two')],
@@ -118,7 +116,6 @@ describe('fork from a checkpoint on the journal (design 4.9)', () => {
   });
 
   it('hands the child over as a resume point and a boot that streams the cloned rows', async () => {
-    setBackend('journal');
     const chats = chatsDirIn(directory());
     await recordJournal(chats, 'src', {
       rows: [userRow('one'), userRow('two')],
@@ -151,7 +148,6 @@ describe('fork from a checkpoint on the journal (design 4.9)', () => {
   });
 
   it('refuses a deleted checkpoint and leaves no child file or lock', async () => {
-    setBackend('journal');
     const chats = chatsDirIn(directory());
     await recordJournal(chats, 'src', {
       rows: [userRow('one')],
@@ -176,7 +172,6 @@ describe('fork from a checkpoint on the journal (design 4.9)', () => {
   });
 
   it('reports a source session that another holder has locked', async () => {
-    setBackend('journal');
     const chats = chatsDirIn(directory());
     await recordJournal(chats, 'src', {
       rows: [userRow('one')],

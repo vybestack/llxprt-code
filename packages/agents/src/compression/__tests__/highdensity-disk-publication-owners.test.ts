@@ -1,17 +1,17 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
+import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
+import { describe, expect, it } from 'bun:test';
 import { withCoreSuffixFixture } from '../../../../core/src/services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
-import { nativePublication } from './support/native-publication-owners.js';
 import { mediaParticipant } from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import {
-  highdensitySetup,
-  highdensityRow,
   HighdensityDiskHistory,
   highdensityOracle,
+  highdensityRow,
+  highdensitySetup,
 } from './highdensity-disk-helpers.js';
+import { nativePublication } from './support/native-publication-owners.js';
 import { collectRows } from './truncation-stream-helpers.js';
-import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 
 function deferred(): { promise: Promise<void>; resolve: () => void } {
   let resolve = (): void => {
@@ -99,7 +99,6 @@ async function publication(size: number): Promise<number> {
     highdensityRow,
     transaction,
     (options) => new HighdensityDiskHistory(options),
-    'old',
   );
 }
 describe('old invoked high-density publication owners', () => {

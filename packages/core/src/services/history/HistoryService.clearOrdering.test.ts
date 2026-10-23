@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { RuntimeTokenizerFactory } from '../../runtime/contracts/RuntimeTokenizerFactory.js';
-import { HISTORY_BACKEND_ENV } from './historyBackendSelect.js';
+
 import { HistoryService } from './HistoryService.js';
 import { createUserMessage } from './IContent.js';
 
@@ -55,18 +55,14 @@ function gatedTokenizer(): {
   };
 }
 
-describe.each(['old', 'journal'] as const)(
+describe.each(['journal'] as const)(
   'a clear and the mutations around it (%s store)',
-  (backend) => {
-    const saved = process.env[HISTORY_BACKEND_ENV];
+  () => {
     let history: HistoryService;
     beforeEach(() => {
-      process.env[HISTORY_BACKEND_ENV] = backend;
       history = new HistoryService();
     });
     afterEach(async () => {
-      if (saved === undefined) delete process.env[HISTORY_BACKEND_ENV];
-      else process.env[HISTORY_BACKEND_ENV] = saved;
       await history.dispose();
     });
 

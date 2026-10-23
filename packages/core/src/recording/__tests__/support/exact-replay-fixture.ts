@@ -1,26 +1,26 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { mkdir, mkdtemp } from 'node:fs/promises';
-import { resolve, join } from 'node:path';
 import { expect } from 'bun:test';
+import { mkdir, mkdtemp } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
+import { sha256KeyHash } from '../../../journal/idKeys.js';
 import { openJournalReadOnly } from '../../../journal/journalReader.js';
+import { stateReaderOf } from '../../../journal/journalReaderState.js';
+import { ownerKey } from '../../../journal/ownerDictionary.js';
+import { readStoredRow } from '../../../journal/rowReads.js';
 import {
   iterateRowEntries,
   rowTreeRootOf,
 } from '../../../journal/rowTreeReader.js';
-import { readStoredRow } from '../../../journal/rowReads.js';
-import { ownerKey } from '../../../journal/ownerDictionary.js';
-import { stateReaderOf } from '../../../journal/journalReaderState.js';
-import { sha256KeyHash } from '../../../journal/idKeys.js';
 import { HistoryService } from '../../../services/history/HistoryService.js';
 import type { IContent } from '../../../services/history/IContent.js';
 import { decodeStoredRow } from '../../../services/history/journalRowCodec.js';
-import { JournalRecordingService } from '../../journalRecordingService.js';
-import { SessionRecordingService } from '../../SessionRecordingService.js';
-import { RecordingIntegration } from '../../RecordingIntegration.js';
-import { resumeSession } from '../../resumeSession.js';
-import type { SessionRecordingPort } from '../../recordingPort.js';
-import type { SessionMetadata } from '../../types.js';
 import type { LocalMediaStore } from '../../../storage/local-media-store.js';
+import { JournalRecordingService } from '../../journalRecordingService.js';
+import { RecordingIntegration } from '../../RecordingIntegration.js';
+import type { SessionRecordingPort } from '../../recordingPort.js';
+import { resumeSession } from '../../resumeSession.js';
+import { SessionRecordingService } from '../../SessionRecordingService.js';
+import type { SessionMetadata } from '../../types.js';
 
 export type ReplayBackend = 'old' | 'journal';
 export const PROJECT = 'w21-exact-replay';
@@ -134,7 +134,7 @@ export class ExactReplayFixture {
       provider: 'test',
       model: 'model-1',
     };
-    this.history = new HistoryService({ backend });
+    this.history = new HistoryService({});
     this.recording =
       backend === 'journal'
         ? JournalRecordingService.create(config)
@@ -166,20 +166,17 @@ export class ExactReplayFixture {
     provider = 'test',
     model = 'model-1',
   ): Promise<void> {
-    const resumed = await resumeSession(
-      {
-        continueRef: this.sessionId,
-        projectHash: PROJECT,
-        chatsDir: this.chats,
-        currentProvider: provider,
-        currentModel: model,
-        workspaceDirs: ['/resume/default'],
-        ...(mediaStore === undefined ? {} : { mediaStore }),
-      },
-      { LLXPRT_HISTORY_BACKEND: this.backend },
-    );
+    const resumed = await resumeSession({
+      continueRef: this.sessionId,
+      projectHash: PROJECT,
+      chatsDir: this.chats,
+      currentProvider: provider,
+      currentModel: model,
+      workspaceDirs: ['/resume/default'],
+      ...(mediaStore === undefined ? {} : { mediaStore }),
+    });
     if (!resumed.ok) throw new Error(resumed.error);
-    const history = new HistoryService({ backend: this.backend });
+    const history = new HistoryService({});
     const integration = new RecordingIntegration(resumed.recording);
     try {
       await history.adoptResumeBoot(resumed.recording, resumed.boot);

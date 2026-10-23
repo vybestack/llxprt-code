@@ -1,24 +1,24 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { InMemoryTaskStore } from '@a2a-js/sdk/server';
+import type { Agent } from '@vybestack/llxprt-code-agents';
+import { getProjectHash, SessionDiscovery } from '@vybestack/llxprt-code-core';
+import { Storage } from '@vybestack/llxprt-code-storage';
 import { describe, expect, it } from 'bun:test';
+import { once } from 'node:events';
 import {
   mkdtemp,
-  readFile,
   readdir,
+  readFile,
   realpath,
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { once } from 'node:events';
-import { InMemoryTaskStore } from '@a2a-js/sdk/server';
-import type { Agent } from '@vybestack/llxprt-code-agents';
-import { getProjectHash, SessionDiscovery } from '@vybestack/llxprt-code-core';
-import { Storage } from '@vybestack/llxprt-code-storage';
-import { createTaskAgent } from '../config/config.js';
-import { CoderAgentExecutor } from '../agent/executor.js';
-import { createApp } from './app.js';
-import { createConfirmationMessageRequest } from '../utils/__tests__/testing_utils.js';
 import { collectJournalFileRowsForAssertions } from '../../../test-utils/src/core/collect-rows-for-assertions.js';
+import { CoderAgentExecutor } from '../agent/executor.js';
+import { createTaskAgent } from '../config/config.js';
+import { createConfirmationMessageRequest } from '../utils/__tests__/testing_utils.js';
+import { createApp } from './app.js';
 
 interface ObservedEvent {
   taskId: string | undefined;
@@ -143,7 +143,7 @@ describe('native A2A task protocol', () => {
         .map((value) => JSON.stringify(value))
         .join('\n') + '\n',
     );
-    process.env.LLXPRT_HISTORY_BACKEND = 'journal';
+
     process.env.LLXPRT_FAKE_RESPONSES = fixture;
     process.env.LLXPRT_LOG_HOME = join(root, 'logs');
     process.env.LLXPRT_DEFAULT_PROVIDER = 'fake';
@@ -345,7 +345,6 @@ describe('native A2A task protocol', () => {
       for (const task of executor.getAllTasks()) await task.task.dispose();
       process.chdir(cwd);
       for (const key of [
-        'LLXPRT_HISTORY_BACKEND',
         'LLXPRT_FAKE_RESPONSES',
         'LLXPRT_LOG_HOME',
         'LLXPRT_DEFAULT_PROVIDER',

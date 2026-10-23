@@ -3,19 +3,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { expect, beforeEach, afterEach } from 'bun:test';
+import { afterEach, beforeEach, expect } from 'bun:test';
 import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
 import * as os from 'node:os';
-import { SessionRecordingService } from './SessionRecordingService.js';
+import * as path from 'node:path';
+import { type IContent } from '../services/history/IContent.js';
 import { type LockHandle } from './SessionLockManager.js';
+import { SessionRecordingService } from './SessionRecordingService.js';
+import { JournalRecordingService } from './journalRecordingService.js';
+import type { SessionRecordingPort } from './recordingPort.js';
 import { CONTINUE_LATEST, type ResumeRequest } from './resumeSession.js';
 import {
   type SessionRecordingServiceConfig,
   type SessionRecordLine,
 } from './types.js';
-import { type IContent } from '../services/history/IContent.js';
-import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -96,6 +97,38 @@ export async function createTestSession(
   return { filePath, sessionId, service: svc };
 }
 
+export async function createJournalTestSession(
+  chatsDir: string,
+  opts: {
+    sessionId?: string;
+    projectHash?: string;
+    provider?: string;
+    model?: string;
+    contents?: IContent[];
+  } = {},
+): Promise<{
+  filePath: string;
+  sessionId: string;
+  service: JournalRecordingService;
+}> {
+  const sessionId = opts.sessionId ?? crypto.randomUUID();
+  const config = makeConfig(chatsDir, {
+    sessionId,
+    projectHash: opts.projectHash,
+    provider: opts.provider,
+    model: opts.model,
+  });
+  const svc = JournalRecordingService.create(config);
+
+  const contents = opts.contents ?? [makeContent('hello')];
+  await (await svc.session()).append(contents);
+  await svc.flush();
+
+  const filePath = svc.getFilePath()!;
+  await svc.dispose();
+  return { filePath, sessionId, service: svc };
+}
+
 /**
  * Build a ResumeRequest for the given chatsDir.
  */
@@ -163,18 +196,25 @@ export async function collectBootRows(
 export function useResumeFixture(): {
   chatsDir: () => string;
   lockHandles: LockHandle[];
+  recordings: SessionRecordingPort[];
 } {
   let tempDir = '';
   const lockHandles: LockHandle[] = [];
+  const recordings: SessionRecordingPort[] = [];
   // The fixtures are JSONL recordings; session discovery follows the environment.
-  pinHistoryBackend('old');
+
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'resume-session-test-'));
     await fs.mkdir(path.join(tempDir, 'chats'), { recursive: true });
   });
   afterEach(async () => {
+    for (const recording of recordings.splice(0)) await recording.dispose();
     for (const handle of lockHandles.splice(0)) await handle.release();
     await fs.rm(tempDir, { recursive: true, force: true });
   });
-  return { chatsDir: () => path.join(tempDir, 'chats'), lockHandles };
+  return {
+    chatsDir: () => path.join(tempDir, 'chats'),
+    lockHandles,
+    recordings,
+  };
 }

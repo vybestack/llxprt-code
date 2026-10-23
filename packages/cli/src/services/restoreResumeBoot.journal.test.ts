@@ -1,15 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { resumeSession, type ResumeResult } from '@vybestack/llxprt-code-core';
+import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
-import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
-import { resumeSession, type ResumeResult } from '@vybestack/llxprt-code-core';
 import { restoreResumeBoot } from './restoreResumeBoot.js';
-
-const JOURNAL = { LLXPRT_HISTORY_BACKEND: 'journal' };
 
 let root: string;
 let resumed: ResumeResult;
@@ -32,20 +30,17 @@ describe('startup restoration from a journal session', () => {
       { speaker: 'human', blocks: [{ type: 'text', text: 'original' }] },
     ]);
     await recording.dispose();
-    const result = await resumeSession(
-      {
-        continueRef: 'source',
-        chatsDir: root,
-        projectHash: 'project',
-        currentProvider: 'test',
-        currentModel: 'test',
-        workspaceDirs: [],
-      },
-      JOURNAL,
-    );
+    const result = await resumeSession({
+      continueRef: 'source',
+      chatsDir: root,
+      projectHash: 'project',
+      currentProvider: 'test',
+      currentModel: 'test',
+      workspaceDirs: [],
+    });
     if (!result.ok) throw new Error(result.error);
     resumed = result;
-    history = new HistoryService({ backend: 'journal' });
+    history = new HistoryService({});
   });
   afterEach(async () => {
     await history.dispose();

@@ -1,23 +1,23 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { testJournalSeams } from '@vybestack/llxprt-code-core/journal/__tests__/support/journalFixtures.js';
 import { useTempDir } from '@vybestack/llxprt-code-core/journal/__tests__/support/useTempDir.js';
-import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
+import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
-import { withChatHttpBody } from '../utils/chat-http-body.js';
+import { describe, expect, it } from 'bun:test';
+import { operationFileCreates } from '../../../agents/src/compression/__tests__/support/operation-file-creates.js';
 import { rowsSelection } from '../__tests__/support/wireBodyCapture.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
-import { operationFileCreates } from '../../../agents/src/compression/__tests__/support/operation-file-creates.js';
-import { prepareRequest } from './OpenAIRequestPreparation.js';
+import { withChatHttpBody } from '../utils/chat-http-body.js';
 import { observeRowFormat } from './__tests__/support/observeRowFormat.js';
 import {
   prepareRequestBody,
   readPreparedChatBody,
 } from './__tests__/support/prepareRequestBody.js';
+import { prepareRequest } from './OpenAIRequestPreparation.js';
 
 const logger = new DebugLogger('native-chat-preparation');
 function options(
@@ -107,7 +107,7 @@ describe('native Chat preparation ownership and planning', () => {
           .dependencies,
       },
     });
-    const history = new HistoryService({ backend: 'journal', recording });
+    const history = new HistoryService({ recording });
     try {
       await history.addBatch(
         Array.from({ length: size }, (_, index) => ({

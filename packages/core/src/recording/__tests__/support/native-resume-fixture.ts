@@ -15,19 +15,16 @@ export async function withResumed(
   await fixture.integration.dispose();
   await fixture.history.dispose();
   await fixture.recording.dispose();
-  const resumed = await resumeSession(
-    {
-      continueRef: fixture.recording.getSessionId(),
-      projectHash: fixture.recording.getProjectHash(),
-      chatsDir: fixture.recording.getChatsDir(),
-      currentProvider: 'anthropic',
-      currentModel: 'model-1',
-      workspaceDirs: ['/different/resume-default'],
-    },
-    { LLXPRT_HISTORY_BACKEND: 'journal' },
-  );
+  const resumed = await resumeSession({
+    continueRef: fixture.recording.getSessionId(),
+    projectHash: fixture.recording.getProjectHash(),
+    chatsDir: fixture.recording.getChatsDir(),
+    currentProvider: 'anthropic',
+    currentModel: 'model-1',
+    workspaceDirs: ['/different/resume-default'],
+  });
   if (!resumed.ok) throw new Error(resumed.error);
-  const history = new HistoryService({ backend: 'journal' });
+  const history = new HistoryService({});
   const integration = new RecordingIntegration(resumed.recording);
   try {
     await history.adoptResumeBoot(resumed.recording, resumed.boot);

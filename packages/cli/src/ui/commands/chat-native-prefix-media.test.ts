@@ -1,25 +1,23 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it, spyOn } from 'bun:test';
 import {
   clientMediaStore,
   type MediaReferenceBlock,
 } from '@vybestack/llxprt-code-core';
 import { JournalHistoryStore } from '@vybestack/llxprt-code-core/services/history/journalHistoryStore.js';
+import { describe, expect, it, spyOn } from 'bun:test';
 import {
-  withCLI,
-  row,
   contents,
-  runCommand,
-  persistedContents,
   operationFileCreates,
+  persistedContents,
+  row,
+  runCommand,
   useTempDir,
-  pinHistoryBackend,
+  withCLI,
 } from './native-prefix-test-helpers.js';
 
 const bytes = new Uint8Array([1, 3, 5, 7]);
 
 describe('actual CLI native prefix media reservations', () => {
-  pinHistoryBackend('journal');
   const directory = useTempDir('cli-prefix-media-');
   for (const command of ['clear', 'restore']) {
     it(`keeps removed blobs available for ${command} compensation without a history snapshot`, async () => {

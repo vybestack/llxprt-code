@@ -1,6 +1,6 @@
+import { HistoryJournalStore } from './historyJournalStore.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { createHistoryStore } from './historyBackend.js';
 import type { RemovedInteriorSpan } from './historyEventTypes.js';
 import type { IContent } from './IContent.js';
 
@@ -14,7 +14,7 @@ function row(speaker: 'human' | 'ai', text: string, seq: number): IContent {
 
 describe('HistoryStorePort whole operations on the old store', () => {
   it('clear empties the store and publishes the cleared span', async () => {
-    const store = createHistoryStore({}, 'old');
+    const store = new HistoryJournalStore();
     try {
       store.apply({ kind: 'content', content: row('human', 'one', 3) });
       store.apply({ kind: 'content', content: row('ai', 'two', 4) });
@@ -39,7 +39,7 @@ describe('HistoryStorePort whole operations on the old store', () => {
   });
 
   it('validateAndFix inserts the missing tool response and rollback removes it', async () => {
-    const store = createHistoryStore({}, 'old');
+    const store = new HistoryJournalStore();
     try {
       store.apply({
         kind: 'content',
@@ -69,7 +69,7 @@ describe('HistoryStorePort whole operations on the old store', () => {
       expect(store.getLength()).toBe(2);
 
       await repair.rollback();
-      repair.close();
+      await repair.close();
       expect(store.getLength()).toBe(1);
     } finally {
       await store.dispose();

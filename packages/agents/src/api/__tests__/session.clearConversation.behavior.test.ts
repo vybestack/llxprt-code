@@ -4,41 +4,40 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, spyOn } from 'bun:test';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { z } from 'zod';
-import { FakeProvider } from '@vybestack/llxprt-code-providers';
 import {
   AgentBusyError,
   type Agent,
   type AgentHistoryItem,
 } from '@vybestack/llxprt-code-agents';
 import {
+  RecordingIntegration,
   SessionLockManager,
   SessionLockedError,
-  SessionRecordingService,
   type SessionRecordingPort,
   type SessionRecordingServiceConfig,
-  RecordingIntegration,
 } from '@vybestack/llxprt-code-core';
 import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
 import { readJournalFileFacts } from '@vybestack/llxprt-code-core/recording/journalSessionListing.js';
-import { selectBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
-import { SessionClientOwner } from '../../session/session-client-owner.js';
-import { AgentClient } from '../../core/client.js';
+import { FakeProvider } from '@vybestack/llxprt-code-providers';
+import { describe, expect, it, spyOn } from 'bun:test';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { z } from 'zod';
+
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { AgentClient } from '../../core/client.js';
+import { SessionClientOwner } from '../../session/session-client-owner.js';
+import { ShellJobOwner } from '../../session/shell-job-owner.js';
+import { TaskLaunchOwner } from '../../session/task-launch-owner.js';
 import {
   buildAgent,
   drain,
-  isDoneEvent,
   internalSettingsOwner,
+  isDoneEvent,
 } from './helpers/agentHarness.js';
-import { TaskLaunchOwner } from '../../session/task-launch-owner.js';
-import { ShellJobOwner } from '../../session/shell-job-owner.js';
-import { withRecordingLifetimeFixture } from './helpers/recording-owner-lifetime-fixture.js';
 import { collectAgentHistory } from './helpers/collect-agent-history.js';
+import { withRecordingLifetimeFixture } from './helpers/recording-owner-lifetime-fixture.js';
 
 function clientOwner(agent: Agent): SessionClientOwner {
   if (
@@ -88,28 +87,12 @@ const RecordingService: {
   createLocked(
     config: SessionRecordingServiceConfig,
   ): Promise<SessionRecordingPort>;
-} =
-  selectBackend() === 'journal'
-    ? JournalRecordingService
-    : SessionRecordingService;
+} = JournalRecordingService;
 
 async function recordingSessionId(path: string): Promise<string> {
-  if (selectBackend() === 'journal') {
-    const found = await readJournalFileFacts(path);
-    if (found === undefined) throw new Error('Missing session facts');
-    return found.facts.sessionId;
-  }
-  return z
-    .object({ payload: z.object({ sessionId: z.string() }) })
-    .parse(JSON.parse(readFileSync(path, 'utf8').split('\n')[0])).payload
-    .sessionId;
-}
-
-function recordedLineTypes(path: string): string[] {
-  return readFileSync(path, 'utf8')
-    .trim()
-    .split('\n')
-    .map((line) => z.object({ type: z.string() }).parse(JSON.parse(line)).type);
+  const found = await readJournalFileFacts(path);
+  if (found === undefined) throw new Error('Missing session facts');
+  return found.facts.sessionId;
 }
 
 async function withRecordedConversation<T>(
@@ -135,22 +118,6 @@ async function withRecordedConversation<T>(
     await cleanup();
     rmSync(workingDir, { recursive: true, force: true });
   }
-}
-
-function verifyOldSessionLayout(
-  oldPath: string,
-  newPath: string,
-  nextId: string,
-): void {
-  expect(
-    JSON.parse(readFileSync(newPath, 'utf8').split('\n')[0]),
-  ).toMatchObject({ payload: { sessionId: nextId } });
-  expect(
-    recordedLineTypes(oldPath).filter((type) => type === 'rewind'),
-  ).toStrictEqual([]);
-  expect(
-    recordedLineTypes(oldPath).filter((type) => type === 'content'),
-  ).toHaveLength(4);
 }
 
 async function verifyJournalSessionLayout(
@@ -570,11 +537,9 @@ describe('starting a new conversation session', () => {
       if (newPath === undefined) throw new Error('Expected new recording');
       expect(newPath).not.toBe(oldPath);
       expect(readFileSync(oldPath, 'utf8')).toBe(oldContents);
-      if (selectBackend() === 'old') {
-        verifyOldSessionLayout(oldPath, newPath, nextId);
-      } else {
-        await verifyJournalSessionLayout(oldPath, newPath, nextId);
-      }
+
+      await verifyJournalSessionLayout(oldPath, newPath, nextId);
+
       expect(
         (await agent.session.listSessions()).map((session) => session.id),
       ).toHaveLength(2);

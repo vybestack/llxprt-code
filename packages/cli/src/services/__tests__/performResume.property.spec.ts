@@ -14,35 +14,33 @@ import { collectResumeRows } from '../../__tests__/resumeRows.js';
  * tests use fast-check (≥30% of total tests).
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { requireJsonlRecorder } from '@vybestack/llxprt-code-core';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import fc from 'fast-check';
 import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
 import * as os from 'node:os';
+import * as path from 'node:path';
 import {
-  performResume,
-  type SessionRecordingPort,
-  SessionLockManager,
-  type LockHandle,
-  type IContent,
+  assertResumeError,
+  assertResumeOk,
+  collectLock,
+  createSessionWithCorruptLine,
+  createTestSession,
+  expectResultDiscriminated,
   makeContent,
   makeResumeContext,
-  createTestSession,
-  createSessionWithCorruptLine,
-  readJsonlFile,
+  performResume,
   PROJECT_HASH,
-  assertResumeOk,
-  assertResumeError,
-  collectLock,
+  readJsonlFile,
   releaseLock,
-  expectResultDiscriminated,
   ResumeTestSetup,
+  SessionLockManager,
+  type IContent,
+  type LockHandle,
+  type SessionRecordingPort,
 } from './performResume-test-helpers.js';
-import { requireJsonlRecorder } from '@vybestack/llxprt-code-core';
-import { pinHistoryBackend } from './support/pinHistoryBackend.js';
 
 // The fixtures are JSONL recordings of the old store.
-pinHistoryBackend('old');
 
 let chatsDir: string;
 let lockHandles: LockHandle[];

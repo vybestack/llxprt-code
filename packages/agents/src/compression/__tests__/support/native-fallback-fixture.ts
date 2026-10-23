@@ -1,23 +1,23 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { spyOn } from 'bun:test';
+import { exactTokenizer } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-test-helpers.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { MediaReferenceBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+import { HistoryMediaOwnership } from '@vybestack/llxprt-code-core/storage/history-media-ownership.js';
+import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import { suffixSeeder } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+import { spyOn } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
+import { open } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createCoreSuffixFixtureGraph } from '../../../../../core/src/services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
 import {
   BatchOwnerCensus,
   batchGate,
 } from '../../../../../core/src/services/history/__tests__/support/addbatch-stream-test-helpers.js';
-import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { open } from 'node:fs/promises';
-import { HistoryMediaOwnership } from '@vybestack/llxprt-code-core/storage/history-media-ownership.js';
-import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
-import { exactTokenizer } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-test-helpers.js';
-import type { MediaReferenceBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { nativeFileRows } from './native-file-rows.js';
+import { createCoreSuffixFixtureGraph } from '../../../../../core/src/services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
 import { compressionValueDigest } from '../compression-value-fixture.js';
+import { nativeFileRows } from './native-file-rows.js';
 
 class FinalizationOwner extends HistoryMediaOwnership {
   readonly acknowledged = batchGate();
@@ -102,22 +102,17 @@ function nativeGraph(
     session,
   );
   try {
-    return createCoreSuffixFixtureGraph(
-      root,
-      owners,
-      (options) => {
-        if (options.attachmentCounters === undefined)
-          throw new Error('Missing native read counters');
-        return new HistoryService({
-          ...options,
-          attachmentCounters: {
-            ...options.attachmentCounters,
-            ownership: owners,
-          },
-        });
-      },
-      'journal',
-    );
+    return createCoreSuffixFixtureGraph(root, owners, (options) => {
+      if (options.attachmentCounters === undefined)
+        throw new Error('Missing native read counters');
+      return new HistoryService({
+        ...options,
+        attachmentCounters: {
+          ...options.attachmentCounters,
+          ownership: owners,
+        },
+      });
+    });
   } finally {
     opener.mockRestore();
   }

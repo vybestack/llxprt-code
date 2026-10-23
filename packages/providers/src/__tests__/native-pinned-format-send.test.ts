@@ -1,15 +1,15 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
+import { withCoreSuffixFixture } from '@vybestack/llxprt-code-core/services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
-import { withCoreSuffixFixture } from '@vybestack/llxprt-code-core/services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
+import { describe, expect, it } from 'bun:test';
 import { normalizedRows } from './support/frozenWire/normalizedRows.js';
 import {
   sendThroughRoute,
   WIRE_ROUTES,
-  type WireRoute,
   type CapturedWireRequest,
+  type WireRoute,
 } from './support/wireBodyCapture.js';
 
 const rows: readonly IContent[] = [
@@ -123,7 +123,6 @@ describe('native pinned request format fills', () => {
           (index) => structuredClone(rows[index]),
           undefined,
           undefined,
-          'journal',
         );
       },
     );
@@ -162,7 +161,6 @@ describe('native pinned request format fills', () => {
       (index) => structuredClone(rows[index]),
       undefined,
       undefined,
-      'journal',
     );
   });
 });

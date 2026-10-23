@@ -1,12 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { afterEach } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { HistoryBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
-  curatedHistoryForTest,
   curatedHistoryAfterCommit,
+  curatedHistoryForTest,
 } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
+import { afterEach } from 'bun:test';
+type HistoryBackend = 'old' | 'journal';
 
 export function compressionBackendFixture(backend: HistoryBackend): {
   createHistory(): HistoryService;
@@ -23,7 +23,7 @@ export function compressionBackendFixture(backend: HistoryBackend): {
   });
   return {
     createHistory: (): HistoryService => {
-      const history = new HistoryService({ backend });
+      const history = new HistoryService({});
       histories.push(history);
       return history;
     },

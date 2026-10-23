@@ -1,21 +1,21 @@
-import { observeHistorySynchronouslyForTest } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
+import { observeHistorySynchronouslyForTest } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
+import type { SessionRecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
+import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
+import { ownerFixtureRow } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-owner-test-helpers.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { SemanticMediaPurgeFrontier } from '@vybestack/llxprt-code-core/services/history/semantic-media-purge.js';
+import type { SemanticPurgeRowSource } from '@vybestack/llxprt-code-core/services/history/semantic-purge-disk-rows.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
-import { ownerFixtureRow } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-owner-test-helpers.js';
-import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
-import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
-import type { SessionRecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
+import { describe, expect, it } from 'bun:test';
 import {
   observeNativeMaterializationGuard,
   persistPurgeFixture,
   verifyNativePurgeDurability,
 } from './__tests__/support/semantic-purge-fault-test-helpers.js';
-import type { SemanticPurgeRowSource } from '@vybestack/llxprt-code-core/services/history/semantic-purge-disk-rows.js';
-import type { SemanticMediaPurgeFrontier } from '@vybestack/llxprt-code-core/services/history/semantic-media-purge.js';
+import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
 
 class StreamOnlyHistory extends HistoryService {
   constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
@@ -26,7 +26,7 @@ class StreamOnlyHistory extends HistoryService {
 
 describe('journal materialization guard', () => {
   it('StreamOnlyHistory rejects journal eager materialization', async () => {
-    const history = new StreamOnlyHistory({ backend: 'old' });
+    const history = new StreamOnlyHistory({});
 
     try {
       expect(() => observeHistorySynchronouslyForTest(history)).toThrow(
@@ -38,7 +38,7 @@ describe('journal materialization guard', () => {
   });
 
   it('rejects native eager materialization through the guarded journal', async () => {
-    const history = new StreamOnlyHistory({ backend: 'journal' });
+    const history = new StreamOnlyHistory({});
     try {
       await expect(observeNativeMaterializationGuard(history)).rejects.toThrow(
         'production materializer trap',
@@ -181,7 +181,7 @@ describe('invoked production streaming semantic purge session: cancels construct
         expect(ownership.snapshot().peakRows).toBe(0);
         const attempt = await session.begin(false);
         if (!attempt) throw new Error('Missing attempt after cancellation');
-        attempt.finalize();
+        await attempt.finalize();
         expect(ownership.snapshot().liveRows).toBe(0);
         await expect(
           attempt.requestHistory.streamRows().next(),

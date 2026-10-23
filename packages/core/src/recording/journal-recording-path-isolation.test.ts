@@ -2,12 +2,12 @@
 import { afterEach, describe, expect, it, spyOn, vi } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import { basename, join } from 'node:path';
+import { forkJournalFromCheckpoint } from './journalFork.js';
 import { JournalRecordingService } from './journalRecordingService.js';
 import { SessionDiscovery } from './SessionDiscovery.js';
-import { SessionLockManager } from './SessionLockManager.js';
-import { forkJournalFromCheckpoint } from './journalFork.js';
 import { journalSessionFileName } from './sessionFileName.js';
-import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
+import { SessionLockManager } from './SessionLockManager.js';
+
 import {
   remainderConfig,
   remainderDirectory,
@@ -20,7 +20,6 @@ import {
   userRow,
 } from './__tests__/support/recordedJournals.js';
 
-pinHistoryBackend('journal');
 const INSTANCE = '550e8400-e29b-41d4-a716-446655440000';
 const START = '2026-10-19T12:34:56.000Z';
 

@@ -1,7 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { readdir } from 'node:fs/promises';
-import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
+
+import type { IContent } from '../services/history/IContent.js';
 import {
   remainderDirectory,
   remainderRows,
@@ -12,13 +13,10 @@ import {
   recordJournal,
   userRow,
 } from './__tests__/support/recordedJournals.js';
-import type { IContent } from '../services/history/IContent.js';
 import { JournalRecordingService } from './journalRecordingService.js';
 import { resumeSession } from './resumeSession.js';
 import { SessionDiscovery } from './SessionDiscovery.js';
 import { SessionLockManager } from './SessionLockManager.js';
-
-pinHistoryBackend('journal');
 
 describe('discovery and continuation of a partial native tool turn', () => {
   it('resumes only committed call/results by original identity and appends on that file without inventing unfinished results', async () => {

@@ -4,10 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { createPackageRecorder } from './__tests__/support/packageRecording.js';
 import { assertNotNull } from '@vybestack/llxprt-code-test-utils';
 import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import {
   mkdir,
   mkdtemp,
@@ -19,22 +18,21 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { retiredJournalMessage } from '../journal/journalRefusal.js';
 import type {
   IContent,
   MediaReferenceBlock,
 } from '../services/history/IContent.js';
 import { LocalMediaStore } from '../storage/local-media-store.js';
+import { SessionLockManager } from './SessionLockManager.js';
 import { SessionRecordingService } from './SessionRecordingService.js';
-import { JournalRecordingService } from './journalRecordingService.js';
 import {
+  createPackageRecorder,
   packageRecordingName,
   readPackageRows,
 } from './__tests__/support/packageRecording.js';
-import { retiredJournalMessage } from '../journal/journalRefusal.js';
-import { SessionLockManager } from './SessionLockManager.js';
-import { spyOn } from 'bun:test';
-import { selectBackend } from '../services/history/historyBackendSelect.js';
-import { useBackendEnv } from './__tests__/support/backendEnv.js';
+import { JournalRecordingService } from './journalRecordingService.js';
+
 import {
   exportSessionMediaPackage,
   importSessionMediaPackage,
@@ -68,7 +66,6 @@ class ReleaseFailingMediaStore extends LocalMediaStore {
 }
 
 describe('internal session media package', () => {
-  const backend = useBackendEnv();
   let tempDirectory = '';
 
   beforeEach(async () => {
@@ -345,22 +342,19 @@ describe('internal session media package', () => {
       quotaBytes: 1024,
     });
     sourceStore.failOnReleaseAttempt(2);
-    const native = selectBackend() === 'journal';
     const acquire = SessionLockManager.acquire.bind(SessionLockManager);
-    const lockFailure = native
-      ? spyOn(SessionLockManager, 'acquire').mockImplementation(
-          async (chats, id) => {
-            const lock = await acquire(chats, id);
-            return {
-              ...lock,
-              release: async () => {
-                await lock.release();
-                throw new Error('injected export lock release failure');
-              },
-            };
+    const lockFailure = spyOn(SessionLockManager, 'acquire').mockImplementation(
+      async (chats, id) => {
+        const lock = await acquire(chats, id);
+        return {
+          ...lock,
+          release: async () => {
+            await lock.release();
+            throw new Error('injected export lock release failure');
           },
-        )
-      : undefined;
+        };
+      },
+    );
     const reference = await sourceStore.admit({
       bytes: new Uint8Array([65, 66, 67]),
       mimeType: 'application/octet-stream',
@@ -389,16 +383,12 @@ describe('internal session media package', () => {
           sourceStore,
           packageDirectory,
         ),
-      ).rejects.toThrow(
-        native
-          ? 'injected export lock release failure'
-          : /owner release|reservation release/i,
-      );
+      ).rejects.toThrow('injected export lock release failure');
       await expect(stat(packageDirectory)).rejects.toMatchObject({
         code: 'ENOENT',
       });
     } finally {
-      lockFailure?.mockRestore();
+      lockFailure.mockRestore();
       await recording.dispose().catch(() => undefined);
     }
   });
@@ -571,7 +561,6 @@ describe('internal session media package', () => {
   });
 
   it('packages media from rewound recording events and sibling persisted session state', async () => {
-    backend('old');
     const sourceRoot = join(tempDirectory, 'complete-source');
     const sourceStore = new LocalMediaStore({
       rootDirectory: join(sourceRoot, 'media'),
@@ -637,7 +626,6 @@ describe('internal session media package', () => {
   });
 
   it('packages media retained by native popped rows and checkpoint state', async () => {
-    backend('journal');
     const media = new LocalMediaStore({
       rootDirectory: join(tempDirectory, 'native-media'),
       quotaBytes: 1024,
@@ -672,7 +660,7 @@ describe('internal session media package', () => {
           },
         ]);
       } finally {
-        snapshot.close();
+        await snapshot.close();
       }
       await recordRowsForTest(recorder, [
         { speaker: 'human', blocks: [{ type: 'text', text: 'current' }] },
@@ -803,18 +791,11 @@ describe('internal session media package', () => {
       packageDirectory,
       packageRecordingName(),
     );
-    if (selectBackend() === 'journal') {
-      const bytes = await readFile(packagedRecordingPath);
-      bytes.writeUInt32LE(999, 8);
-      await writeFile(packagedRecordingPath, bytes);
-    } else {
-      const lines = (await readFile(packagedRecordingPath, 'utf8'))
-        .trim()
-        .split('\n');
-      const contentLine = JSON.parse(lines[1] ?? '{}');
-      lines[1] = JSON.stringify({ ...contentLine, v: 999 });
-      await writeFile(packagedRecordingPath, `${lines.join('\n')}\n`);
-    }
+
+    const bytes = await readFile(packagedRecordingPath);
+    bytes.writeUInt32LE(999, 8);
+    await writeFile(packagedRecordingPath, bytes);
+
     const destinationStore = new LocalMediaStore({
       rootDirectory: join(tempDirectory, 'rollback-destination-media'),
       quotaBytes: 1024,
@@ -828,11 +809,7 @@ describe('internal session media package', () => {
         PROJECT_HASH,
         destinationStore,
       ),
-    ).rejects.toThrow(
-      selectBackend() === 'journal'
-        ? retiredJournalMessage(packagedRecordingPath)
-        : /recording version/i,
-    );
+    ).rejects.toThrow(retiredJournalMessage(packagedRecordingPath));
     expect(await destinationStore.getStoredByteLength()).toBe(0);
     await expect(readdir(destinationChats)).rejects.toMatchObject({
       code: 'ENOENT',

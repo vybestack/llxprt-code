@@ -1,14 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { rowIndex } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'node:fs';
 import { join } from 'node:path';
+import { getScratchRoot } from '../../storage/scratch-root.js';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
-import { HistoryJournalStore } from './historyJournalStore.js';
-import { rowIndex } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
-import { getScratchRoot } from '../../storage/scratch-root.js';
-import { selectBackend } from './historyBackendSelect.js';
+import { HistoryJournalStore } from './historyJournalStore.js';
 
 type Query = 'recent' | 'tokens';
 type Exit = 'return' | 'break' | 'throw' | 'abort';
@@ -73,12 +72,11 @@ async function verifyExit(query: Query, exit: Exit): Promise<number> {
     const created = scratchDirectories().filter(
       (directory) => !before.includes(directory),
     );
-    if (selectBackend() === 'old') expect(created.length).toBeGreaterThan(0);
-    else {
-      expect(created).toHaveLength(0);
-      await service.clear();
-      expect(service.length()).toBe(0);
-    }
+
+    expect(created).toHaveLength(0);
+    await service.clear();
+    expect(service.length()).toBe(0);
+
     try {
       const failure = await exitStream(iterator, exit, controller);
       const expected: Record<Exit, string | undefined> = {

@@ -6,8 +6,8 @@
  * terms of the journal (a deleted checkpoint is absent from the live list,
  * the file only grows by one group).
  */
-import * as fsp from 'node:fs/promises';
 import { afterEach, describe, expect, it, spyOn } from 'bun:test';
+import * as fsp from 'node:fs/promises';
 import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
 import { JournalSession } from '../services/history/journalSession.js';
 import { CheckpointLockError } from './checkpointNaming.js';
@@ -15,7 +15,7 @@ import { JournalCheckpointService } from './journalCheckpointService.js';
 import { JournalRecordingService } from './journalRecordingService.js';
 import { readJournalFileFacts } from './journalSessionListing.js';
 import { SessionLockManager } from './SessionLockManager.js';
-import { useBackendEnv } from './__tests__/support/backendEnv.js';
+
 import {
   PROJECT,
   chatsDirIn,
@@ -26,7 +26,7 @@ import {
 
 describe('checkpoint lifecycle on the journal backend', () => {
   const directory = useTempDir('journal-checkpoints-');
-  const setBackend = useBackendEnv();
+
   const live: JournalRecordingService[] = [];
   afterEach(async () => {
     for (const recording of live.splice(0)) {
@@ -35,7 +35,6 @@ describe('checkpoint lifecycle on the journal backend', () => {
   });
 
   function chats(): string {
-    setBackend('journal');
     return chatsDirIn(directory());
   }
 

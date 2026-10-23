@@ -4,22 +4,21 @@ import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
 import { historyOriginId } from '../services/history/historyOriginId.js';
 import { JournalHistoryStore } from '../services/history/journalHistoryStore.js';
 import { JournalSession } from '../services/history/journalSession.js';
-import { useBackendEnv } from './__tests__/support/backendEnv.js';
-import { chatsDirIn, userRow } from './__tests__/support/recordedJournals.js';
+
 import {
   forkCheckpoint,
   ownedRows,
   primaryRows,
   useForkProof,
 } from './__tests__/support/forkProof.js';
+import { chatsDirIn, userRow } from './__tests__/support/recordedJournals.js';
 
 describe('late recorder and checkpoint fork use current row ownership', () => {
   const directory = useTempDir('fork-late-ownership-');
-  const setBackend = useBackendEnv();
+
   const proof = useForkProof();
 
   it('persists the accepted primary subset after rows move into and out of its origin', async () => {
-    setBackend('journal');
     const chats = chatsDirIn(directory());
     const history = proof.history();
     const a = {};

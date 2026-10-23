@@ -1,14 +1,14 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { describe, expect, it } from 'bun:test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { describe, expect, it } from 'bun:test';
 import { HistoryService } from '../services/history/HistoryService.js';
 import type { IContent } from '../services/history/IContent.js';
+import { discoveryDirectory } from './__tests__/support/native-discovery-fixture.js';
 import { JournalRecordingService } from './journalRecordingService.js';
 import { RecordingIntegration } from './RecordingIntegration.js';
 import { SessionDiscovery } from './SessionDiscovery.js';
-import { discoveryDirectory } from './__tests__/support/native-discovery-fixture.js';
-import { useBackendEnv } from './__tests__/support/backendEnv.js';
+
 import {
   PROJECT,
   journalSeams,
@@ -19,7 +19,7 @@ async function recordedHistory(
   chats: string,
   rows: readonly IContent[],
 ): Promise<string> {
-  const history = new HistoryService({ backend: 'journal' });
+  const history = new HistoryService({});
   const recording = JournalRecordingService.create({
     sessionId: 'extension',
     projectHash: PROJECT,
@@ -45,10 +45,7 @@ async function recordedHistory(
 }
 
 describe('native discovery extension behavior through real recording', () => {
-  const setBackend = useBackendEnv();
-
   it('selects the first nonempty human text and concatenates its text blocks without media or assistant text', async () => {
-    setBackend('journal');
     const chats = join(await discoveryDirectory('preview-parts'), 'chats');
     const file = await recordedHistory(chats, [
       { speaker: 'ai', blocks: [{ type: 'text', text: 'not the preview' }] },
@@ -86,7 +83,6 @@ describe('native discovery extension behavior through real recording', () => {
   it.each([119, 120, 121, 500])(
     'preserves the 120-character preview boundary for a %i-character user message',
     async (length) => {
-      setBackend('journal');
       const file = await recordedHistory(
         join(await discoveryDirectory(`preview-${length}`), 'chats'),
         [userRow('雪'.repeat(length))],
@@ -99,7 +95,6 @@ describe('native discovery extension behavior through real recording', () => {
   );
 
   it('has content but no user preview for assistant-only history', async () => {
-    setBackend('journal');
     const file = await recordedHistory(
       join(await discoveryDirectory('assistant-only'), 'chats'),
       [{ speaker: 'ai', blocks: [{ type: 'text', text: 'answer' }] }],
@@ -109,7 +104,6 @@ describe('native discovery extension behavior through real recording', () => {
   });
 
   it('returns empty or unreadable results for absent, empty and malformed external native files while propagating directory I/O failures', async () => {
-    setBackend('journal');
     const directory = await discoveryDirectory('external-files');
     const missing = join(directory, 'missing');
     expect(

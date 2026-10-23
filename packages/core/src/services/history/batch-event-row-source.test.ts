@@ -1,8 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { HISTORY_BACKEND_ENV } from './historyBackendSelect.js';
-import { HistoryService } from './HistoryService.js';
+import { afterEach, describe, expect, it } from 'bun:test';
+
 import type { HistoryBatchRowSource } from './history-batch-values.js';
+import { HistoryService } from './HistoryService.js';
 import { createUserMessage, type IContent } from './IContent.js';
 
 function textOf(row: IContent): string {
@@ -17,17 +17,12 @@ async function readTexts(source: HistoryBatchRowSource): Promise<string[]> {
 }
 
 /** One listener, written only against the row source, on both stores: the service reads the backend from the environment when it is constructed. */
-describe.each(['old', 'journal'] as const)(
+describe.each(['journal'] as const)(
   'contentBatchAdded row source (%s store)',
-  (backend) => {
-    const saved = process.env[HISTORY_BACKEND_ENV];
+  () => {
     const created: HistoryService[] = [];
-    beforeEach(() => {
-      process.env[HISTORY_BACKEND_ENV] = backend;
-    });
+
     afterEach(async () => {
-      if (saved === undefined) delete process.env[HISTORY_BACKEND_ENV];
-      else process.env[HISTORY_BACKEND_ENV] = saved;
       for (const history of created.splice(0)) await history.dispose();
     });
 
@@ -115,15 +110,6 @@ describe.each(['old', 'journal'] as const)(
 
 /** The old store's rows live in the publication's own scope, so its dispatcher waits for the passes it was handed. */
 describe('contentBatchAdded on the old store', () => {
-  const saved = process.env[HISTORY_BACKEND_ENV];
-  beforeEach(() => {
-    process.env[HISTORY_BACKEND_ENV] = 'old';
-  });
-  afterEach(() => {
-    if (saved === undefined) delete process.env[HISTORY_BACKEND_ENV];
-    else process.env[HISTORY_BACKEND_ENV] = saved;
-  });
-
   it('holds the publication until a pass started during dispatch has read its last row', async () => {
     const history = new HistoryService();
     let release: () => void = () => undefined;

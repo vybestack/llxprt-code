@@ -2,11 +2,11 @@
 import { describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'node:fs';
 import * as promises from 'node:fs/promises';
-import { HistoryService } from './HistoryService.js';
-import type { IContent } from './IContent.js';
 import { getScratchRoot } from '../../storage/scratch-root.js';
 import { mergeRemovedInteriorSpans } from './contextRange.js';
 import type { RemovedInteriorSpan } from './historyEventTypes.js';
+import { HistoryService } from './HistoryService.js';
+import type { IContent } from './IContent.js';
 import { JournalDensitySpans } from './journalDensitySpans.js';
 
 function row(index: number): IContent {
@@ -73,7 +73,7 @@ describe('native annotated append through the public history host', () => {
   it.each([3, 64, 65, 5000])(
     'appends %i unordered annotations without interval files and preserves the existing prefix',
     async (size) => {
-      const history = new HistoryService({ backend: 'journal' });
+      const history = new HistoryService({});
       try {
         await history.detachedValues.append(
           Array.from({ length: size }, (_, index) => row(index)),
@@ -129,7 +129,7 @@ describe('native annotated append through the public history host', () => {
   it.each(['producer', 'projection', 'acknowledged', 'abort'])(
     'restores annotated append metadata and the exact %s cause then continues',
     async (stage) => {
-      const history = new HistoryService({ backend: 'journal' });
+      const history = new HistoryService({});
       const failure = new Error(`failed ${stage}`);
       const controller = new AbortController();
       const projection = spyOn(JournalDensitySpans.prototype, 'project');

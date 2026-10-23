@@ -1,13 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { tmpdir } from 'node:os';
 import { expect } from 'bun:test';
-import { createRequire } from 'node:module';
 import { appendFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { appendFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setImmediate } from 'node:timers/promises';
 import { HistoryService } from './HistoryService.js';
-import type { IContent, ChronologyMarker } from './IContent.js';
+import type { ChronologyMarker, IContent } from './IContent.js';
 import {
   BatchOwnerCensus,
   batchGate,
@@ -153,7 +153,6 @@ export async function withValueTransformFixture<T>(
   });
   const owners = new BatchOwnerCensus();
   const history = new HistoryService({
-    backend: 'old',
     recording: recorder,
     mutationOwnership: owners,
   });

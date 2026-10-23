@@ -19,25 +19,25 @@
  * checkpoint-based branching. Uses real recording files in temp dirs.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
 import * as os from 'node:os';
+import * as path from 'node:path';
+import { CheckpointService } from './CheckpointService.js';
+import { replaySession } from './ReplayEngine.js';
+import { SessionLockManager } from './SessionLockManager.js';
 import { SessionRecordingService } from './SessionRecordingService.js';
 import {
   SessionTransitionService,
   type ContinueTarget,
 } from './SessionTransitionService.js';
-import { CheckpointService } from './CheckpointService.js';
-import { SessionLockManager } from './SessionLockManager.js';
-import { replaySession } from './ReplayEngine.js';
-import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
+
+import { type IContent } from '../services/history/IContent.js';
 import {
   requireJsonlFork,
   type JsonlFork,
 } from './__tests__/support/jsonlFork.js';
-
-pinHistoryBackend('old');
+import { type SessionRecordingServiceConfig } from './types.js';
 
 function requireReplaySuccess(
   result: Awaited<ReturnType<typeof replaySession>>,
@@ -53,8 +53,6 @@ function requireForkSuccess(
 ): asserts result is JsonlFork {
   requireJsonlFork(result);
 }
-import { type SessionRecordingServiceConfig } from './types.js';
-import { type IContent } from '../services/history/IContent.js';
 
 const PROJECT_HASH = 'fork-project-hash';
 

@@ -27,19 +27,16 @@
  * — that is correct TDD.
  */
 
-import { describe, expect, beforeEach, afterEach, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fc from 'fast-check';
-import * as fs from 'node:fs/promises';
 import * as fsSyncModule from 'node:fs';
-import * as path from 'node:path';
+import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
-import { SessionRecordingService } from './SessionRecordingService.js';
+import * as path from 'node:path';
+import { type IContent } from '../services/history/IContent.js';
+import { JournalRecordingService } from './journalRecordingService.js';
 import { SessionDiscovery } from './SessionDiscovery.js';
 import { type SessionRecordingServiceConfig } from './types.js';
-import { type IContent } from '../services/history/IContent.js';
-import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
-
-pinHistoryBackend('old');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -90,12 +87,10 @@ async function createTestSession(
     provider: opts.provider,
     model: opts.model,
   });
-  const svc = new SessionRecordingService(config);
+  const svc = JournalRecordingService.create(config);
 
   const contents = opts.contents ?? [makeContent('hello')];
-  for (const content of contents) {
-    svc.recordContent(content);
-  }
+  await (await svc.session()).append(contents);
   await svc.flush();
 
   const filePath = svc.getFilePath()!;
@@ -169,46 +164,6 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
 
   afterEach(async () => {
     await fs.rm(tempDir, { recursive: true, force: true });
-  });
-
-  it('reports an incompatible recording during continue-target discovery', async () => {
-    const created = await createTestSession(chatsDir, {
-      sessionId: 'incompatible-discovery-session',
-      projectHash: PROJECT_HASH,
-    });
-    const incompatibleLine = {
-      v: 999,
-      seq: 3,
-      ts: new Date().toISOString(),
-      type: 'session_event',
-      payload: { severity: 'info', message: 'future event' },
-    };
-    await fs.appendFile(
-      created.filePath,
-      `${JSON.stringify(incompatibleLine)}\n`,
-    );
-
-    const targets = await SessionDiscovery.listContinueTargets(
-      chatsDir,
-      PROJECT_HASH,
-    );
-    const detailed = await SessionDiscovery.listContinueTargetsDetailed(
-      chatsDir,
-      PROJECT_HASH,
-    );
-
-    expect(targets).toStrictEqual([]);
-    expect({
-      skippedCount: detailed.skippedCount,
-      reportedFile: detailed.recordingErrors.map((error) =>
-        error.startsWith(`${created.filePath}: `),
-      ),
-      reason: detailed.recordingErrors.join(';'),
-    }).toStrictEqual({
-      skippedCount: 1,
-      reportedFile: [true],
-      reason: expect.stringMatching(/unsupported recording version/i),
-    });
   });
 
   // -------------------------------------------------------------------------
@@ -352,60 +307,6 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
       expect(sessions[0].lastModified).toBeInstanceOf(Date);
       expect(sessions[0].fileSize).toBeGreaterThan(0);
       expect(typeof sessions[0].startTime).toBe('string');
-    });
-
-    /**
-     * Addendum test: First-line overflow falls back to streaming header reader
-     * GIVEN: A valid session file whose first line exceeds the 4096-byte fast-read buffer
-     * WHEN: listSessions is called
-     * THEN: Session is still discovered and metadata is parsed correctly
-     *
-     * @plan PLAN-20260211-SESSIONRECORDING.P19
-     * @requirement REQ-RSM-003
-     */
-    it('discovers sessions when session_start header exceeds fast-read buffer', async () => {
-      const sessionId = 'long-header-session-id';
-      const { filePath } = await createTestSession(chatsDir, {
-        sessionId,
-        projectHash: PROJECT_HASH,
-        provider: 'google',
-        model: 'gemini-3',
-      });
-
-      const raw = await fs.readFile(filePath, 'utf-8');
-      const [firstLine, ...restLines] = raw.split('\n');
-      const firstEvent = JSON.parse(firstLine) as {
-        v: number;
-        seq: number;
-        ts: string;
-        type: string;
-        payload: {
-          sessionId: string;
-          projectHash: string;
-          workspaceDirs: string[];
-          provider: string;
-          model: string;
-          startTime: string;
-        };
-      };
-
-      firstEvent.payload.workspaceDirs = ['/tmp/' + 'x'.repeat(5000)];
-      const oversizedFirstLine = JSON.stringify(firstEvent);
-      expect(oversizedFirstLine.length).toBeGreaterThan(4096);
-
-      await fs.writeFile(
-        filePath,
-        [oversizedFirstLine, ...restLines].join('\n'),
-      );
-
-      const sessions = await SessionDiscovery.listSessions(
-        chatsDir,
-        PROJECT_HASH,
-      );
-      expect(sessions).toHaveLength(1);
-      expect(sessions[0].sessionId).toBe(sessionId);
-      expect(sessions[0].provider).toBe('google');
-      expect(sessions[0].model).toBe('gemini-3');
     });
 
     /**
@@ -703,7 +604,7 @@ describe('SessionDiscovery @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P19
      * @requirement REQ-RSM-003
      */
-    it('reads session_start payload from valid JSONL file', async () => {
+    it('reads session metadata from a valid journal file', async () => {
       const sessionId = 'header-read-test';
       const { filePath } = await createTestSession(chatsDir, {
         sessionId,

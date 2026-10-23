@@ -29,28 +29,27 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import * as fs from 'node:fs/promises';
-import { SessionLockManager } from './SessionLockManager.js';
-import { resumeJsonlSession } from './resumeSession.js';
-import { SessionRecordingService } from './SessionRecordingService.js';
+import { HistoryService } from '../services/history/HistoryService.js';
 import { type IContent } from '../services/history/IContent.js';
+import { SessionLockManager } from './SessionLockManager.js';
+import { JournalRecordingService } from './journalRecordingService.js';
+import { readJournalFileFacts } from './journalSessionListing.js';
+import { resumeSession } from './resumeSession.js';
 import {
   PROJECT_HASH,
+  collectBootRows,
+  createJournalTestSession,
+  delay,
+  expectNotOk,
+  expectOk,
   makeConfig,
   makeContent,
-  isParseWarning,
-  createTestSession,
   makeResumeRequest,
-  readJsonlFile,
-  delay,
-  expectOk,
-  expectNotOk,
-  collectBootRows,
   useResumeFixture,
 } from './resumeSession.test.helpers.js';
 
 describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: resumes the most recent unlocked session', () => {
-  const { chatsDir, lockHandles } = useResumeFixture();
+  const { chatsDir, lockHandles, recordings } = useResumeFixture();
   describe('CONTINUE_LATEST @requirement:REQ-RSM-001 @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
     /**
      * Test 11: Resume most recent session
@@ -62,19 +61,20 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: resumes the mo
      * @requirement REQ-RSM-001
      */
     it('resumes the most recent unlocked session', async () => {
-      await createTestSession(chatsDir(), {
+      await createJournalTestSession(chatsDir(), {
         projectHash: PROJECT_HASH,
         contents: [makeContent('first session message')],
       });
       await delay(50);
-      await createTestSession(chatsDir(), {
+      await createJournalTestSession(chatsDir(), {
         projectHash: PROJECT_HASH,
         contents: [makeContent('second session message')],
       });
 
-      const result = await resumeJsonlSession(makeResumeRequest(chatsDir()));
+      const result = await resumeSession(makeResumeRequest(chatsDir()));
 
       const okResult = expectOk(result);
+      recordings.push(okResult.recording);
       expect(await collectBootRows(okResult.boot.streamRows())).toHaveLength(1);
       expect(
         (await collectBootRows(okResult.boot.streamRows()))[0].blocks[0],
@@ -90,7 +90,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: resumes the mo
 });
 
 describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: resumes a specific session by ID', () => {
-  const { chatsDir, lockHandles } = useResumeFixture();
+  const { chatsDir, lockHandles, recordings } = useResumeFixture();
   describe('Specific session @requirement:REQ-RSM-002 @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
     /**
      * Test 12: Resume specific session by ID
@@ -103,21 +103,22 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: resumes a spec
      */
     it('resumes a specific session by ID', async () => {
       const targetId = 'target-resume-session';
-      await createTestSession(chatsDir(), {
+      await createJournalTestSession(chatsDir(), {
         sessionId: targetId,
         projectHash: PROJECT_HASH,
         contents: [makeContent('target content')],
       });
-      await createTestSession(chatsDir(), {
+      await createJournalTestSession(chatsDir(), {
         projectHash: PROJECT_HASH,
         contents: [makeContent('other content')],
       });
 
-      const result = await resumeJsonlSession(
+      const result = await resumeSession(
         makeResumeRequest(chatsDir(), { continueRef: targetId }),
       );
 
       const okResult = expectOk(result);
+      recordings.push(okResult.recording);
       expect(await collectBootRows(okResult.boot.streamRows())).toHaveLength(1);
       expect(
         (await collectBootRows(okResult.boot.streamRows()))[0].blocks[0],
@@ -134,7 +135,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: resumes a spec
 });
 
 describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: reconstructs history with correct IContent items', () => {
-  const { chatsDir, lockHandles } = useResumeFixture();
+  const { chatsDir, lockHandles, recordings } = useResumeFixture();
   describe('History reconstruction @requirement:REQ-RSM-004 @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
     /**
      * Test 13: Resume reconstructs history correctly
@@ -152,14 +153,15 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: reconstructs h
         makeContent('question 2', 'human'),
       ];
 
-      await createTestSession(chatsDir(), {
+      await createJournalTestSession(chatsDir(), {
         projectHash: PROJECT_HASH,
         contents,
       });
 
-      const result = await resumeJsonlSession(makeResumeRequest(chatsDir()));
+      const result = await resumeSession(makeResumeRequest(chatsDir()));
 
       const okResult = expectOk(result);
+      recordings.push(okResult.recording);
       lockHandles.push(okResult.lockHandle);
       expect(await collectBootRows(okResult.boot.streamRows())).toHaveLength(3);
       expect(
@@ -194,7 +196,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: reconstructs h
 });
 
 describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: reconstructs history correctly for compressed sessions', () => {
-  const { chatsDir, lockHandles } = useResumeFixture();
+  const { chatsDir, lockHandles, recordings } = useResumeFixture();
   describe('Compressed history reconstruction', () => {
     /**
      * Test 14: Resume handles compressed session
@@ -211,12 +213,13 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: reconstructs h
         sessionId,
         projectHash: PROJECT_HASH,
       });
-      const svc = new SessionRecordingService(config);
+      const svc = JournalRecordingService.create(config);
+      const history = new HistoryService({ recording: svc });
 
       // Add initial content
-      svc.recordContent(makeContent('old msg 1', 'human'));
-      svc.recordContent(makeContent('old msg 2', 'ai'));
-      svc.recordContent(makeContent('old msg 3', 'human'));
+      history.add(makeContent('old msg 1', 'human'));
+      history.add(makeContent('old msg 2', 'ai'));
+      history.add(makeContent('old msg 3', 'human'));
 
       // Compress all prior content
       const summary: IContent = {
@@ -224,18 +227,22 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: reconstructs h
         blocks: [{ type: 'text', text: 'Summary of prior conversation' }],
         metadata: { isSummary: true },
       };
-      svc.recordCompressed(summary, 3);
+      history.startCompression();
+      history.endCompression(summary, 3);
 
       // Add new content after compression
-      svc.recordContent(makeContent('new msg after compression', 'human'));
-      svc.recordContent(makeContent('new response', 'ai'));
+      history.add(makeContent('new msg after compression', 'human'));
+      history.add(makeContent('new response', 'ai'));
 
+      await history.waitForCommit();
+      await history.dispose();
       await svc.flush();
       await svc.dispose();
 
-      const result = await resumeJsonlSession(makeResumeRequest(chatsDir()));
+      const result = await resumeSession(makeResumeRequest(chatsDir()));
 
       const okResult = expectOk(result);
+      recordings.push(okResult.recording);
       lockHandles.push(okResult.lockHandle);
       // After compression: summary + 2 new content items = 3
       expect(await collectBootRows(okResult.boot.streamRows())).toHaveLength(3);
@@ -262,7 +269,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: reconstructs h
 });
 
 describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: returns correct session metadata', () => {
-  const { chatsDir, lockHandles } = useResumeFixture();
+  const { chatsDir, lockHandles, recordings } = useResumeFixture();
   describe('Metadata @requirement:REQ-RSM-004 @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
     /**
      * Test 15: Resume returns correct metadata
@@ -275,14 +282,14 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: returns correc
      */
     it('returns correct session metadata', async () => {
       const sessionId = 'metadata-session-id';
-      await createTestSession(chatsDir(), {
+      await createJournalTestSession(chatsDir(), {
         sessionId,
         projectHash: PROJECT_HASH,
         provider: 'google',
         model: 'gemini-3',
       });
 
-      const result = await resumeJsonlSession(
+      const result = await resumeSession(
         makeResumeRequest(chatsDir(), {
           currentProvider: 'google',
           currentModel: 'gemini-3',
@@ -290,6 +297,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: returns correc
       );
 
       const okResult = expectOk(result);
+      recordings.push(okResult.recording);
       lockHandles.push(okResult.lockHandle);
       expect(okResult.metadata.sessionId).toBe(sessionId);
       expect(okResult.metadata.provider).toBe('google');
@@ -313,7 +321,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: returns error 
      * @requirement REQ-RSM-001
      */
     it('returns error when no sessions exist', async () => {
-      const result = await resumeJsonlSession(makeResumeRequest(chatsDir()));
+      const result = await resumeSession(makeResumeRequest(chatsDir()));
 
       const errResult = expectNotOk(result);
       expect(errResult.error.toLowerCase()).toContain('no session');
@@ -334,9 +342,9 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: returns error 
      * @requirement REQ-RSM-002
      */
     it('returns error when specific session ID is not found', async () => {
-      await createTestSession(chatsDir(), { projectHash: PROJECT_HASH });
+      await createJournalTestSession(chatsDir(), { projectHash: PROJECT_HASH });
 
-      const result = await resumeJsonlSession(
+      const result = await resumeSession(
         makeResumeRequest(chatsDir(), {
           continueRef: 'nonexistent-session-id',
         }),
@@ -362,7 +370,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: returns error 
      */
     it('returns error when target session is locked', async () => {
       const sessionId = 'locked-session';
-      await createTestSession(chatsDir(), {
+      await createJournalTestSession(chatsDir(), {
         sessionId,
         projectHash: PROJECT_HASH,
       });
@@ -370,7 +378,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: returns error 
       const handle = await SessionLockManager.acquire(chatsDir(), sessionId);
       lockHandles.push(handle);
 
-      const result = await resumeJsonlSession(
+      const result = await resumeSession(
         makeResumeRequest(chatsDir(), { continueRef: sessionId }),
       );
 
@@ -381,7 +389,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: returns error 
 });
 
 describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: CONTINUE_LATEST skips locked sessions and resumes next unlocked', () => {
-  const { chatsDir, lockHandles } = useResumeFixture();
+  const { chatsDir, lockHandles, recordings } = useResumeFixture();
   describe('Error cases @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
     /**
      * Test 19: CONTINUE_LATEST skips locked → resumes second newest
@@ -394,14 +402,14 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: CONTINUE_LATES
      */
     it('CONTINUE_LATEST skips locked sessions and resumes next unlocked', async () => {
       // Create older session
-      await createTestSession(chatsDir(), {
+      await createJournalTestSession(chatsDir(), {
         projectHash: PROJECT_HASH,
         contents: [makeContent('older unlocked content')],
       });
       await delay(100);
 
       // Create newer session and lock it
-      const newer = await createTestSession(chatsDir(), {
+      const newer = await createJournalTestSession(chatsDir(), {
         projectHash: PROJECT_HASH,
         contents: [makeContent('newer locked content')],
       });
@@ -412,9 +420,10 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: CONTINUE_LATES
       );
       lockHandles.push(handle);
 
-      const result = await resumeJsonlSession(makeResumeRequest(chatsDir()));
+      const result = await resumeSession(makeResumeRequest(chatsDir()));
 
       const okResult = expectOk(result);
+      recordings.push(okResult.recording);
       lockHandles.push(okResult.lockHandle);
       expect(
         (await collectBootRows(okResult.boot.streamRows()))[0].blocks[0],
@@ -439,10 +448,10 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: returns error 
      * @requirement REQ-RSM-001
      */
     it('returns error when all sessions are locked', async () => {
-      const s1 = await createTestSession(chatsDir(), {
+      const s1 = await createJournalTestSession(chatsDir(), {
         projectHash: PROJECT_HASH,
       });
-      const s2 = await createTestSession(chatsDir(), {
+      const s2 = await createJournalTestSession(chatsDir(), {
         projectHash: PROJECT_HASH,
       });
 
@@ -455,7 +464,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: returns error 
         lockHandles.push(handle);
       }
 
-      const result = await resumeJsonlSession(makeResumeRequest(chatsDir()));
+      const result = await resumeSession(makeResumeRequest(chatsDir()));
 
       const errResult = expectNotOk(result);
       expect(errResult.error.toLowerCase()).toContain('in use');
@@ -464,7 +473,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: returns error 
 });
 
 describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: records provider_switch when current provider differs from session', () => {
-  const { chatsDir, lockHandles } = useResumeFixture();
+  const { chatsDir, lockHandles, recordings } = useResumeFixture();
   describe('Provider mismatch @requirement:REQ-RSM-005 @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
     /**
      * Test 21: Provider mismatch records provider_switch event
@@ -476,14 +485,14 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: records provid
      * @requirement REQ-RSM-005
      */
     it('records provider_switch when current provider differs from session', async () => {
-      await createTestSession(chatsDir(), {
+      await createJournalTestSession(chatsDir(), {
         projectHash: PROJECT_HASH,
         provider: 'anthropic',
         model: 'claude-4',
         contents: [makeContent('original content')],
       });
 
-      const result = await resumeJsonlSession(
+      const result = await resumeSession(
         makeResumeRequest(chatsDir(), {
           currentProvider: 'openai',
           currentModel: 'gpt-5',
@@ -491,77 +500,16 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: records provid
       );
 
       const okResult = expectOk(result);
+      recordings.push(okResult.recording);
       lockHandles.push(okResult.lockHandle);
       // Flush the recording to ensure the provider_switch is written
       await okResult.recording.flush();
 
-      // Read the file and check for provider_switch event
-      const events = await readJsonlFile(okResult.recording.getFilePath()!);
-      const providerSwitchEvents = events.filter(
-        (e) => e.type === 'provider_switch',
+      const facts = await readJournalFileFacts(
+        okResult.recording.getFilePath()!,
       );
-      expect(providerSwitchEvents.length).toBeGreaterThanOrEqual(1);
-
-      const switchPayload = providerSwitchEvents[
-        providerSwitchEvents.length - 1
-      ].payload as { provider: string; model: string };
-      expect(switchPayload.provider).toBe('openai');
-      expect(switchPayload.model).toBe('gpt-5');
-
-      await okResult.recording.dispose();
-    });
-  });
-});
-
-describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: new events after resume have seq continuing from lastSeq', () => {
-  const { chatsDir, lockHandles } = useResumeFixture();
-  describe('Recording append @requirement:REQ-RSM-006 @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
-    /**
-     * Test 22: Recording initialized for append with monotonic seq
-     * GIVEN: Session file with events
-     * WHEN: resumeSession completes, then new content is recorded
-     * THEN: New events have seq > lastSeq from original session
-     *
-     * @plan PLAN-20260211-SESSIONRECORDING.P19
-     * @requirement REQ-RSM-006
-     */
-    it('new events after resume have seq continuing from lastSeq', async () => {
-      // Create session with 3 content events (session_start seq=1, content seq=2,3,4)
-      await createTestSession(chatsDir(), {
-        projectHash: PROJECT_HASH,
-        contents: [
-          makeContent('msg 1', 'human'),
-          makeContent('msg 2', 'ai'),
-          makeContent('msg 3', 'human'),
-        ],
-      });
-
-      const result = await resumeJsonlSession(makeResumeRequest(chatsDir()));
-
-      const okResult = expectOk(result);
-      lockHandles.push(okResult.lockHandle);
-      // Record new content
-      okResult.recording.recordContent(makeContent('resumed msg', 'human'));
-      await okResult.recording.flush();
-
-      // Read the file and check seq continuation
-      const events = await readJsonlFile(okResult.recording.getFilePath()!);
-
-      // Original: session_start(1), content(2), content(3), content(4)
-      // New events should have seq > 4
-      const originalLastSeq = 4;
-      const newEvents = events.filter((e) => e.seq > originalLastSeq);
-      expect(newEvents.length).toBeGreaterThanOrEqual(1);
-
-      // All new events have seq > originalLastSeq
-      for (const evt of newEvents) {
-        expect(evt.seq).toBeGreaterThan(originalLastSeq);
-      }
-
-      // Verify monotonicity across all events
-      for (let i = 1; i < events.length; i++) {
-        expect(events[i].seq).toBeGreaterThan(events[i - 1].seq);
-      }
+      expect(facts?.facts.provider).toBe('openai');
+      expect(facts?.facts.model).toBe('gpt-5');
 
       await okResult.recording.dispose();
     });
@@ -569,7 +517,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: new events aft
 });
 
 describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: returned recording has non-null file path and matching session ID', () => {
-  const { chatsDir, lockHandles } = useResumeFixture();
+  const { chatsDir, lockHandles, recordings } = useResumeFixture();
   describe('Recording append @requirement:REQ-RSM-006 @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
     /**
      * @plan PLAN-20260211-SESSIONRECORDING.P19
@@ -577,60 +525,22 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: returned recor
      */
     it('returned recording has non-null file path and matching session ID', async () => {
       const sessionId = 'recording-check-session';
-      await createTestSession(chatsDir(), {
+      await createJournalTestSession(chatsDir(), {
         sessionId,
         projectHash: PROJECT_HASH,
       });
 
-      const result = await resumeJsonlSession(
+      const result = await resumeSession(
         makeResumeRequest(chatsDir(), { continueRef: sessionId }),
       );
 
       const okResult = expectOk(result);
+      recordings.push(okResult.recording);
       lockHandles.push(okResult.lockHandle);
       expect(okResult.recording).toBeDefined();
       expect(okResult.recording.getFilePath()).not.toBeNull();
       expect(okResult.recording.getSessionId()).toBe(sessionId);
       expect(okResult.recording.isActive()).toBe(true);
-      await okResult.recording.dispose();
-    });
-  });
-});
-
-describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: passes through replay warnings for corrupt mid-file lines', () => {
-  const { chatsDir, lockHandles } = useResumeFixture();
-  describe('Warnings @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
-    /**
-     * Test 23: Resume returns replay warnings for corrupt mid-file lines
-     * GIVEN: Session file with a corrupt line in the middle
-     * WHEN: resumeSession completes
-     * THEN: result.warnings includes warning about the corrupt line
-     *
-     * @plan PLAN-20260211-SESSIONRECORDING.P19
-     * @requirement REQ-RSM-004
-     */
-    it('passes through replay warnings for corrupt mid-file lines', async () => {
-      // Create a valid session first
-      const { filePath } = await createTestSession(chatsDir(), {
-        projectHash: PROJECT_HASH,
-        contents: [makeContent('valid content')],
-      });
-
-      // Inject a corrupt line in the middle of the file
-      const fileContent = await fs.readFile(filePath, 'utf-8');
-      const lines = fileContent.trimEnd().split('\n');
-      // Insert corrupt line between session_start and content
-      const withCorruption =
-        [lines[0], '{this is not valid json}', ...lines.slice(1)].join('\n') +
-        '\n';
-      await fs.writeFile(filePath, withCorruption, 'utf-8');
-
-      const result = await resumeJsonlSession(makeResumeRequest(chatsDir()));
-
-      const okResult = expectOk(result);
-      lockHandles.push(okResult.lockHandle);
-      expect(okResult.warnings.length).toBeGreaterThan(0);
-      expect(okResult.warnings.some(isParseWarning)).toBe(true);
       await okResult.recording.dispose();
     });
   });

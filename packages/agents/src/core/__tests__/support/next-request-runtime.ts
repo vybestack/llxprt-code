@@ -1,23 +1,23 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { createAgent } from '../../../api/createAgent.js';
-import { AgentImpl } from '../../../api/agentImpl.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import { RecordingIntegration } from '@vybestack/llxprt-code-core/recording/RecordingIntegration.js';
 import {
   JournalResumeBoot,
   resumePointOf,
 } from '@vybestack/llxprt-code-core/recording/journalResume.js';
+import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type {
-  IContent,
   ContentBlock,
+  IContent,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { recordingFile, diskToolState } from './service-tool-recorders.js';
-import { callerRecording } from './next-request-recorders.js';
-import { requestFacts, toolGate } from './service-tool-runtime.js';
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { AgentImpl } from '../../../api/agentImpl.js';
+import { createAgent } from '../../../api/createAgent.js';
 import { recordCompletedToolHistory } from '../../agenticLoop/loopHelpers.js';
+import { callerRecording } from './next-request-recorders.js';
+import { diskToolState, recordingFile } from './service-tool-recorders.js';
+import { requestFacts, toolGate } from './service-tool-runtime.js';
 
 export type Variant =
   | 'directory'
@@ -66,7 +66,7 @@ async function fixtureAgent(
       .join('\n'),
   );
   process.env.LLXPRT_FAKE_RESPONSES = fixture;
-  process.env.LLXPRT_HISTORY_BACKEND = 'journal';
+
   const agent = await createAgent({
     provider: 'fake',
     model: 'fake-model',

@@ -25,21 +25,19 @@
  *   (Item 1).
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { pinHistoryBackend } from '../__tests__/support/backendEnv.js';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
-pinHistoryBackend('old');
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {
-  runSessionCleanup,
-  setScanToMutationHookForTest,
-  setRmdirFaultForTest,
-} from './sessionJanitor.js';
-import { resolveRetentionConfig } from './retentionPolicy.js';
 import { SessionRecordingService } from '../SessionRecordingService.js';
 import type { SessionRecordingServiceConfig } from '../types.js';
+import { resolveRetentionConfig } from './retentionPolicy.js';
+import {
+  runSessionCleanup,
+  setRmdirFaultForTest,
+  setScanToMutationHookForTest,
+} from './sessionJanitor.js';
 import { ARCHIVE_DIR_NAME } from './sessionScanner.js';
 
 const bunIt = it;

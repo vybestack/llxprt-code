@@ -1,20 +1,20 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { CompressionExecutionError } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { describe, expect, it } from 'bun:test';
 import { createRequire } from 'node:module';
-import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
-import { CompressionExecutionError } from '@vybestack/llxprt-code-core/core/compression/types.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { expectedRange } from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import { withCoreSuffixFixture } from '../../../../core/src/services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
+import { expectedRange } from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import { compressionValueDigest } from './compression-value-fixture.js';
-import {
-  highdensitySetup,
-  highdensityRow,
-} from './highdensity-disk-helpers.js';
 import {
   HighdensityFaultHistory,
   withFaultRollback,
 } from './highdensity-disk-fault-helpers.js';
+import {
+  highdensityRow,
+  highdensitySetup,
+} from './highdensity-disk-helpers.js';
 import { collectRows } from './truncation-stream-helpers.js';
 const { gcAndSweep }: { gcAndSweep: () => void } = createRequire(
   import.meta.url,
@@ -122,7 +122,6 @@ async function failedOrNoop(size: number): Promise<number> {
       created = new HighdensityFaultHistory(options);
       return created;
     },
-    'old',
   );
 }
 

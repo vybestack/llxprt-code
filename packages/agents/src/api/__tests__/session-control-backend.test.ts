@@ -1,21 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
+import { basename } from 'node:path';
 import { withRecordingLifetimeFixture } from './helpers/recording-owner-lifetime-fixture.js';
 import { recordedRows } from './support/recorded-rows.js';
-import { basename } from 'node:path';
 
-for (const backend of ['old', 'journal']) {
+for (const backend of ['journal']) {
   describe(`session control on ${backend}`, () => {
-    let previous: string | undefined;
-    beforeEach(() => {
-      previous = process.env.LLXPRT_HISTORY_BACKEND;
-      process.env.LLXPRT_HISTORY_BACKEND = backend;
-    });
-    afterEach(() => {
-      if (previous === undefined) delete process.env.LLXPRT_HISTORY_BACKEND;
-      else process.env.LLXPRT_HISTORY_BACKEND = previous;
-    });
-
     it('can record again after attachment succeeds but the subscription fails', async () => {
       await withRecordingLifetimeFixture(async ({ agent, config }) => {
         await agent.setHistory([

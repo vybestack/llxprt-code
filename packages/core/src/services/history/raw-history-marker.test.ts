@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { selectBackend } from './historyBackendSelect.js';
+
 import {
   suffixRow,
   withSuffixFixture,
@@ -18,18 +18,14 @@ for (const size of [512, 8192]) {
             step: 0,
             seq: size - 1,
           });
-          expect(counters.snapshot().rowsDecoded).toBe(
-            selectBackend() === 'journal' ? 1 : size,
-          );
+          expect(counters.snapshot().rowsDecoded).toBe(1);
           expect(ownership.snapshot().peakRows).toBe(1);
           expect(ownership.snapshot().liveRows).toBe(0);
         },
         0,
         (index) => ({
           ...suffixRow(index),
-          ...(selectBackend() === 'journal' && index === size - 1
-            ? { blocks: [] }
-            : {}),
+          ...(index === size - 1 ? { blocks: [] } : {}),
           metadata:
             index === size - 1
               ? undefined

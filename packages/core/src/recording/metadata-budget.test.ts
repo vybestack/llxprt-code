@@ -1,15 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { mkdtemp, rm, writeFile, stat } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { readFirstLineFromFile, SessionDiscovery } from './SessionDiscovery.js';
-import { scanResumeMetadata } from './resumeMetadata.js';
 import { scanSessionMetadata } from './boundedSessionScan.js';
 import { readMetadataJsonLines } from './metadataJsonLines.js';
-import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
-
-pinHistoryBackend('old');
+import { scanResumeMetadata } from './resumeMetadata.js';
 
 const header = {
   v: 1,

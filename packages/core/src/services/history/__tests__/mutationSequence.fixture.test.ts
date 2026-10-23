@@ -3,7 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { selectBackend } from '../historyBackendSelect.js';
+
 import {
   runMutationSequence,
   type MutationSequenceFixture,
@@ -42,9 +42,7 @@ function loadFixtures(): MutationSequenceFixture[] {
 }
 
 function expectedFor(fixture: MutationSequenceFixture): StepObservation[] {
-  const journalBackend = selectBackend() === 'journal';
-  if (journalBackend && fixture.corrected !== undefined)
-    return [...fixture.corrected];
+  if (fixture.corrected !== undefined) return [...fixture.corrected];
   return fixture.steps.map((entry) => entry.observed);
 }
 

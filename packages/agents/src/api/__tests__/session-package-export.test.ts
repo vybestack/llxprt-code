@@ -1,21 +1,21 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, it, expect } from 'bun:test';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import {
+  getProjectHash,
+  validateSessionMediaPackage,
+} from '@vybestack/llxprt-code-core';
 import { requireMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
+import { describe, expect, it } from 'bun:test';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import {
-  validateSessionMediaPackage,
-  getProjectHash,
-} from '@vybestack/llxprt-code-core';
 import { recordedRows } from './support/recorded-rows.js';
-import { withHistoryBackend } from './helpers/native-session-fixture.js';
+
 import { withRecordingLifetimeFixture } from './helpers/recording-owner-lifetime-fixture.js';
 
 for (const selected of ['old', 'journal'] as const) {
   describe(`public session package export on ${selected}`, () => {
     it('exports active resumed history and imports it without changing the source owner', async () =>
-      withHistoryBackend(selected, async () => {
+      (async () => {
         const destination = await mkdtemp(join(tmpdir(), 'session-export-'));
         try {
           await withRecordingLifetimeFixture(async ({ agent, config }) => {
@@ -91,6 +91,6 @@ for (const selected of ['old', 'journal'] as const) {
         } finally {
           await rm(destination, { recursive: true, force: true });
         }
-      }));
+      })());
   });
 }

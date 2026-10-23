@@ -1,4 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { withCoreSuffixFixture } from '@vybestack/llxprt-code-core/services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
+import { SemanticMediaPurgeStreamCoordinator } from '@vybestack/llxprt-code-core/services/history/semantic-purge-stream.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 import {
   afterAll,
   beforeAll,
@@ -7,27 +14,20 @@ import {
   it,
   setSystemTime,
 } from 'bun:test';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { withCoreSuffixFixture } from '@vybestack/llxprt-code-core/services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
-import { SemanticMediaPurgeStreamCoordinator } from '@vybestack/llxprt-code-core/services/history/semantic-purge-stream.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
-import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
-import { createCorpus, GoldenRecorder } from './support/wireBodyCorpus.js';
+import { closeInOrder } from './support/close-in-order.js';
 import {
-  WIRE_ROUTES,
   buildRouteCallOptions,
   installFakeTransport,
   recordOf,
   singleModelRequest,
+  WIRE_ROUTES,
   type CapturedWireRequest,
   type WireBodyRecord,
   type WireRoute,
 } from './support/wireBodyCapture.js';
-import type { HistoryCase } from './support/wireBodyHistories.js';
+import { createCorpus, GoldenRecorder } from './support/wireBodyCorpus.js';
 import { PINNED_CLOCK } from './support/wireBodyFixtures.js';
-import { closeInOrder } from './support/close-in-order.js';
+import type { HistoryCase } from './support/wireBodyHistories.js';
 
 const corpus = await createCorpus();
 const recorder = new GoldenRecorder(false);
@@ -106,7 +106,6 @@ async function captureJournal(
     (index) => structuredClone(input.rows[index]),
     undefined,
     guardedHistory,
-    'journal',
   );
 }
 

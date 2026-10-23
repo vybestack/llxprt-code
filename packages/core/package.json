@@ -302,10 +302,6 @@
       "bun": "./src/services/history/recorderBackend.ts",
       "import": "./dist/src/services/history/recorderBackend.js"
     },
-    "./services/history/historyBackendSelect.js": {
-      "bun": "./src/services/history/historyBackendSelect.ts",
-      "import": "./dist/src/services/history/historyBackendSelect.js"
-    },
     "./services/history/historyProviderPipeline.js": {
       "bun": "./src/services/history/historyProviderPipeline.ts",
       "import": "./dist/src/services/history/historyProviderPipeline.js"

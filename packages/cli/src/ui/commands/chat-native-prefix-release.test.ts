@@ -1,15 +1,14 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { clientMediaStore } from '@vybestack/llxprt-code-core';
 import { describe, expect, it, spyOn } from 'bun:test';
 import { readdir } from 'node:fs/promises';
-import { clientMediaStore } from '@vybestack/llxprt-code-core';
 import {
-  withCLI,
-  row,
   contents,
   persistedContents,
+  row,
   runCommand,
   useTempDir,
-  pinHistoryBackend,
+  withCLI,
 } from './native-prefix-test-helpers.js';
 
 async function reservationFiles(root: string): Promise<string[]> {
@@ -25,7 +24,6 @@ async function reservationFiles(root: string): Promise<string[]> {
 }
 
 describe('actual CLI prefix release failure drains every held media reference', () => {
-  pinHistoryBackend('journal');
   const directory = useTempDir('cli-prefix-release-');
   it('restores old media and releases later holds after an earlier release fails', async () => {
     await withCLI(

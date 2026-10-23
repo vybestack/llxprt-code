@@ -1,12 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { describe, expect, it, spyOn } from 'bun:test';
 import { stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { describe, expect, it, spyOn } from 'bun:test';
 import * as positionalFile from '../journal/positionalFile.js';
+import { discoveryDirectory } from './__tests__/support/native-discovery-fixture.js';
 import { JournalRecordingService } from './journalRecordingService.js';
 import { SessionDiscovery } from './SessionDiscovery.js';
-import { discoveryDirectory } from './__tests__/support/native-discovery-fixture.js';
-import { useBackendEnv } from './__tests__/support/backendEnv.js';
+
 import {
   PROJECT,
   chatsDirIn,
@@ -17,11 +17,8 @@ import {
 const METADATA_READ_BUDGET = 512 * 1024;
 
 describe('native discovery reads bounded metadata instead of history', () => {
-  const setBackend = useBackendEnv();
-
   for (const count of [40, 4000]) {
     it(`lists and counts ${count} rows with a multi-MiB body under the metadata byte budget`, async () => {
-      setBackend('journal');
       const directory = await discoveryDirectory(`bounded-${count}`);
       const chats = chatsDirIn(directory);
       const recorder = JournalRecordingService.create({

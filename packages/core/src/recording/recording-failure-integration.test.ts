@@ -1,16 +1,16 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { Storage } from '@vybestack/llxprt-code-settings';
 import { describe, expect, it } from 'bun:test';
-import { mkdtemp, mkdir, rm, writeFile, readFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Storage } from '@vybestack/llxprt-code-settings';
 import { HistoryService } from '../services/history/HistoryService.js';
 import { SessionPersistenceService } from '../storage/SessionPersistenceService.js';
-import { SessionRecordingService } from './SessionRecordingService.js';
 import { RecordingIntegration } from './RecordingIntegration.js';
+import { SessionRecordingService } from './SessionRecordingService.js';
 import {
-  RecordingFailureReport,
   RecordingFailureNotice,
+  RecordingFailureReport,
   RecordingFailureStorageError,
 } from './recording-failure-report.js';
 
@@ -48,7 +48,7 @@ async function withRecorder(
     ),
     failReportStorage ? reportDirectory : undefined,
   );
-  const history = new HistoryService({ backend: 'old' });
+  const history = new HistoryService({});
   await integration.subscribeToJournal(history);
   await history.addBatch([
     {

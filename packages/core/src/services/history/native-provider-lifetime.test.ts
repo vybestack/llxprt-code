@@ -1,13 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { RowOwnership } from '../../recording/rowOwnership.js';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import { exactTokenizer } from './chronology-rollback-test-helpers.js';
-import { RowOwnership } from '../../recording/rowOwnership.js';
 
 describe('native normalized request lifetime', () => {
   it('releases the canceled reader without invalidating another reader or pin', async () => {
-    const history = new HistoryService({ backend: 'journal' });
+    const history = new HistoryService({});
     history.setTokenizerFactory(exactTokenizer());
     const ownership = new RowOwnership();
     try {

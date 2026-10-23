@@ -1,17 +1,17 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it, spyOn } from 'bun:test';
-import { useNativePrefixBackend } from './helpers/native-prefix-backend.js';
-import type { Agent } from '../agent.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { JournalHistoryStore } from '@vybestack/llxprt-code-core/services/history/journalHistoryStore.js';
+import { describe, expect, it, spyOn } from 'bun:test';
+import { useTempDir } from '../../../../core/src/journal/__tests__/support/useTempDir.js';
+import { operationFileCreates } from '../../compression/__tests__/support/operation-file-creates.js';
+import { AgentClient } from '../../core/client.js';
+import type { Agent } from '../agent.js';
 import {
   buildAgent,
   drain,
   internalAgentClient,
 } from './helpers/agentHarness.js';
 import { collectAgentHistory } from './helpers/collect-agent-history.js';
-import { AgentClient } from '../../core/client.js';
-import { operationFileCreates } from '../../compression/__tests__/support/operation-file-creates.js';
-import { JournalHistoryStore } from '@vybestack/llxprt-code-core/services/history/journalHistoryStore.js';
 
 async function collectGarbage(): Promise<void> {
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -23,7 +23,6 @@ function live(rows: ReadonlyArray<WeakRef<IContent>>): number {
 function bounded(rows: ReadonlyArray<WeakRef<IContent>>): void {
   expect(live(rows)).toBeLessThanOrEqual(2);
 }
-import { useTempDir } from '../../../../core/src/journal/__tests__/support/useTempDir.js';
 
 function row(index: number): IContent {
   return {
@@ -55,7 +54,6 @@ async function blocks(agent: Agent): Promise<Array<IContent['blocks']>> {
 }
 
 describe('native session prefix publication lifecycle', () => {
-  useNativePrefixBackend();
   const directory = useTempDir('native-prefix-lifecycle-');
   it('denies creating APIs across roots for clear, restore and unchanged selections', async () => {
     await withSession(directory(), 65, async (agent) => {

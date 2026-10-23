@@ -1,11 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it, spyOn } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { JournalHistoryStore } from '@vybestack/llxprt-code-core/services/history/journalHistoryStore.js';
+import { describe, expect, it, spyOn } from 'bun:test';
 import { exactTokenizer } from '../../../core/src/services/history/chronology-rollback-test-helpers.js';
-import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
 import { operationFileCreates } from '../compression/__tests__/support/operation-file-creates.js';
+import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
 
 function row(index: number, text = `surviving value ${index}`): IContent {
   if (index === 1)
@@ -132,7 +132,7 @@ async function observePublication(
 describe('native semantic purge output lifetimes', () => {
   for (const size of [512, 8192]) {
     it(`releases actual output sink arguments at awaited backpressure over ${size} source rows`, async () => {
-      const history = new HistoryService({ backend: 'journal' });
+      const history = new HistoryService({});
       history.setTokenizerFactory(exactTokenizer());
       try {
         await seed(history, size);
@@ -143,7 +143,7 @@ describe('native semantic purge output lifetimes', () => {
     });
   }
   it('preserves every byte of a greater-than-nine-MiB surviving value', async () => {
-    const history = new HistoryService({ backend: 'journal' });
+    const history = new HistoryService({});
     history.setTokenizerFactory(exactTokenizer());
     const text = 'x'.repeat(9 * 1024 * 1024 + 17);
     try {

@@ -24,9 +24,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { pinHistoryBackend } from './__tests__/support/backendEnv.js';
 
-pinHistoryBackend('old');
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';

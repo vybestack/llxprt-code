@@ -1,15 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent } from '../../../services/history/IContent.js';
-import { selectBackend } from '../../../services/history/historyBackendSelect.js';
+
 import {
   buildContents,
-  createRecordedSession,
   PROJECT_HASH,
   type RecordedSession,
 } from './p05dTestKit.js';
 import { recordJournal } from './recordedJournals.js';
-
-type Env = Readonly<Record<string, string | undefined>>;
 
 /** When the journal fixture's rows were "written"; the JSONL fixture has no stamp. */
 export const JOURNAL_FIXTURE_RECORDED_AT = Date.parse('2026-09-20T10:00:00Z');
@@ -51,10 +48,7 @@ function stampedLikeHistory(contents: readonly IContent[]): IContent[] {
 export async function createResumableSession(
   chatsDir: string,
   spec: { rows?: number } = {},
-  env: Env = process.env,
 ): Promise<RecordedSession> {
-  if (selectBackend(env) === 'old')
-    return createRecordedSession(chatsDir, spec);
   const sessionId = crypto.randomUUID();
   const contents = stampedLikeHistory(buildContents(spec.rows ?? 2));
   const recorded = await recordJournal(chatsDir, sessionId, {

@@ -1,42 +1,27 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { spyOn } from 'bun:test';
-import * as writerOpen from '@vybestack/llxprt-code-core/journal/journalWriterOpen.js';
 import { openJournalReadOnly } from '@vybestack/llxprt-code-core/journal/journalReader.js';
+import * as writerOpen from '@vybestack/llxprt-code-core/journal/journalWriterOpen.js';
+import { readStoredRow } from '@vybestack/llxprt-code-core/journal/rowReads.js';
 import {
   iterateRowEntries,
   rowTreeRootOf,
 } from '@vybestack/llxprt-code-core/journal/rowTreeReader.js';
-import { readStoredRow } from '@vybestack/llxprt-code-core/journal/rowReads.js';
-import { decodeStoredRow } from '@vybestack/llxprt-code-core/services/history/journalRowCodec.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { HistoryBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
+import { decodeStoredRow } from '@vybestack/llxprt-code-core/services/history/journalRowCodec.js';
+import { spyOn } from 'bun:test';
 import { withRecordingLifetimeFixture } from './recording-owner-lifetime-fixture.js';
 
 export {
-  readJournalFileFacts,
   readJournalCheckpoints,
+  readJournalFileFacts,
 } from '@vybestack/llxprt-code-core/recording/journalSessionListing.js';
-
-export async function withHistoryBackend<T>(
-  backend: HistoryBackend,
-  run: () => Promise<T>,
-): Promise<T> {
-  const prior = process.env.LLXPRT_HISTORY_BACKEND;
-  process.env.LLXPRT_HISTORY_BACKEND = backend;
-  try {
-    return await run();
-  } finally {
-    if (prior === undefined) delete process.env.LLXPRT_HISTORY_BACKEND;
-    else process.env.LLXPRT_HISTORY_BACKEND = prior;
-  }
-}
 
 export const withOldRecordingFixture: typeof withRecordingLifetimeFixture = (
   ...args
-) => withHistoryBackend('old', () => withRecordingLifetimeFixture(...args));
+) => (() => withRecordingLifetimeFixture(...args))();
 export const withNativeRecordingFixture: typeof withRecordingLifetimeFixture = (
   ...args
-) => withHistoryBackend('journal', () => withRecordingLifetimeFixture(...args));
+) => (() => withRecordingLifetimeFixture(...args))();
 
 export async function nativeRows(path: string): Promise<IContent[]> {
   const reader = await openJournalReadOnly(path);

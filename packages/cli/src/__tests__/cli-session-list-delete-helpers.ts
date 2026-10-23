@@ -7,25 +7,23 @@
  * running the real CLI entry point and writing real session recordings.
  */
 
-import { spawn } from 'node:child_process';
-import { mkdir, utimes, writeFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
 import {
   createRecorderForTest,
   recordRowsForTest,
 } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
-import { selectBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
-import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+import { spawn } from 'node:child_process';
+import { utimes } from 'node:fs/promises';
+import { resolve } from 'node:path';
+
 import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
 import {
   encodeSessionFact,
   SESSION_KEYS,
 } from '@vybestack/llxprt-code-core/recording/sessionMetaKeys.js';
+import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
 
 export function corruptSessionReason(): string {
-  return selectBackend() === 'journal'
-    ? 'Session fact session:provider is not in the expected form'
-    : 'Invalid session_start: missing or malformed required fields';
+  return 'Session fact session:provider is not in the expected form';
 }
 
 const CLI_ENTRY = resolve(import.meta.dir, '..', '..', 'index.ts');
@@ -111,45 +109,22 @@ export async function writeCorruptSession(
   target: RecordingTarget,
   sessionId: string,
 ): Promise<string> {
-  if (selectBackend() === 'journal') {
-    const path = await writeHealthySession(
-      target,
-      sessionId,
-      '2026-10-08T21:18:08.000Z',
-    );
-    const session = await JournalSession.open(path);
-    try {
-      await session.store.commit([
-        {
-          kind: 'setState',
-          key: SESSION_KEYS.provider,
-          value: encodeSessionFact({ provider: 'anthropic', model: 42 }),
-        },
-      ]);
-    } finally {
-      await session.close();
-    }
-    return path;
-  }
-  await mkdir(target.chatsDir, { recursive: true });
-  const filePath = join(
-    target.chatsDir,
-    `session-2026-10-08T21-18-08-${sessionId.slice(0, 12)}.jsonl`,
+  const path = await writeHealthySession(
+    target,
+    sessionId,
+    '2026-10-08T21:18:08.000Z',
   );
-  const header = {
-    v: 1,
-    seq: 1,
-    ts: '2026-10-08T21:18:08.000Z',
-    type: 'session_start',
-    payload: {
-      sessionId,
-      projectHash: target.projectHash,
-      workspaceDirs: ['/x'],
-      provider: 'anthropic',
-      model: 42,
-      startTime: '2026-10-08T21:18:08.000Z',
-    },
-  };
-  await writeFile(filePath, `${JSON.stringify(header)}\n`, 'utf-8');
-  return filePath;
+  const session = await JournalSession.open(path);
+  try {
+    await session.store.commit([
+      {
+        kind: 'setState',
+        key: SESSION_KEYS.provider,
+        value: encodeSessionFact({ provider: 'anthropic', model: 42 }),
+      },
+    ]);
+  } finally {
+    await session.close();
+  }
+  return path;
 }

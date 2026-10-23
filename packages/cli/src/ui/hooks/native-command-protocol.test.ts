@@ -1,30 +1,30 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
-import { mkdtemp, readdir, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { createHash } from 'node:crypto';
 import { createAgent, type Agent } from '@vybestack/llxprt-code-agents';
 import {
   DebugLogger,
-  LocalMediaStore,
   getProjectHash,
+  LocalMediaStore,
   type MediaReferenceBlock,
 } from '@vybestack/llxprt-code-core';
-import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
 import {
   decodeSessionFact,
   SESSION_KEYS,
 } from '@vybestack/llxprt-code-core/recording/sessionMetaKeys.js';
+import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+import { describe, expect, it } from 'bun:test';
+import { createHash } from 'node:crypto';
+import { mkdtemp, readdir, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { chatOwnerCommand } from '../commands/chatOwnerCommand.js';
 import { continueCommand } from '../commands/continueCommand.js';
 import type { HistoryItemWithoutId, Message } from '../types.js';
-import type { SlashCommandProcessorActions } from './slashCommandProcessor.js';
 import {
   processSlashCommand,
   type SlashCommandHandlerDeps,
 } from './slashCommandHandlers.js';
+import type { SlashCommandProcessorActions } from './slashCommandProcessor.js';
 
 const actions: SlashCommandProcessorActions = {
   openAuthDialog: () => {},
@@ -111,7 +111,7 @@ describe('native CLI command protocol', () => {
         }) + '\n'
       ).repeat(3),
     );
-    process.env.LLXPRT_HISTORY_BACKEND = 'journal';
+
     process.env.LLXPRT_FAKE_RESPONSES = fixture;
     process.env.LLXPRT_LOG_HOME = join(root, 'logs');
     const agent = await createAgent({
@@ -306,11 +306,7 @@ describe('native CLI command protocol', () => {
       }
     } finally {
       await agent.dispose();
-      for (const key of [
-        'LLXPRT_HISTORY_BACKEND',
-        'LLXPRT_FAKE_RESPONSES',
-        'LLXPRT_LOG_HOME',
-      ]) {
+      for (const key of ['LLXPRT_FAKE_RESPONSES', 'LLXPRT_LOG_HOME']) {
         if (saved[key] === undefined) delete process.env[key];
         else process.env[key] = saved[key];
       }

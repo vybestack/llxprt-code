@@ -5,22 +5,20 @@
  */
 
 import {
+  SessionLockManager,
   SessionPersistenceService,
   createLockedSessionRecorder,
-  SessionLockManager,
-  scanResumeMetadata,
-  type SessionRecordingServiceConfig,
   type LocalMediaStore,
   type SessionPersistenceServiceOptions,
   type SessionRecordingPort,
+  type SessionRecordingServiceConfig,
 } from '@vybestack/llxprt-code-core';
-import { stat } from 'node:fs/promises';
 import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
-import { selectBackend } from '@vybestack/llxprt-code-core/services/history/historyBackendSelect.js';
-import {
-  isJsonlRecorder,
-  requireJsonlRecorder,
-} from '@vybestack/llxprt-code-core/services/history/recorderBackend.js';
+
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { isJsonlRecorder } from '@vybestack/llxprt-code-core/services/history/recorderBackend.js';
+import type { SemanticMediaPurgeFrontier } from '@vybestack/llxprt-code-core/services/history/semantic-media-purge.js';
+import type { SemanticPurgeRowSource } from '@vybestack/llxprt-code-core/services/history/semantic-purge-disk-rows.js';
 
 export function requireActiveRecording(
   recording: SessionRecordingPort | null,
@@ -73,9 +71,6 @@ export class AgentSessionPersistence {
     this.journals.clear();
   }
 }
-import type { SemanticPurgeRowSource } from '@vybestack/llxprt-code-core/services/history/semantic-purge-disk-rows.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { SemanticMediaPurgeFrontier } from '@vybestack/llxprt-code-core/services/history/semantic-media-purge.js';
 export async function persistSemanticMediaPurge(
   recording: SessionRecordingPort,
   candidate: SemanticPurgeRowSource,
@@ -111,7 +106,7 @@ export async function restartRecording(
   config: SessionRecordingServiceConfig,
   filePath: string | null,
 ): Promise<SessionRecordingPort> {
-  if (filePath !== null && selectBackend() === 'journal') {
+  if (filePath !== null) {
     const lock = await SessionLockManager.acquire(
       config.chatsDir,
       config.sessionId,
@@ -125,26 +120,5 @@ export async function restartRecording(
       throw error;
     }
   }
-  const recording = await createLockedSessionRecorder(config);
-  try {
-    if (filePath !== null) {
-      const { replay } = await scanResumeMetadata(
-        filePath,
-        config.projectHash,
-        (await stat(filePath)).size,
-      );
-      if (!replay.ok) throw new Error(replay.error);
-      if (replay.sequenceCorrupt)
-        throw new Error('Cannot restart recording: non-monotonic sequences');
-      requireJsonlRecorder(recording).initializeForResume(
-        filePath,
-        replay.lastSeq,
-        replay.metadata.title,
-      );
-    }
-    return recording;
-  } catch (error) {
-    await recording.dispose();
-    throw error;
-  }
+  return createLockedSessionRecorder(config);
 }

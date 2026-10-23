@@ -1,24 +1,24 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { vi } from 'bun:test';
 import type * as acp from '@agentclientprotocol/sdk';
-import { mkdir, mkdtemp, readdir, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { createHash } from 'node:crypto';
 import {
   Config,
   getProjectHash,
   SessionDiscovery,
 } from '@vybestack/llxprt-code-core';
 import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
-import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
 import { JournalHistoryStore } from '@vybestack/llxprt-code-core/services/history/journalHistoryStore.js';
+import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { ZedAgent } from '../../zedIntegration.js';
+import { vi } from 'bun:test';
+import { createHash } from 'node:crypto';
+import { mkdir, mkdtemp, readdir, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { unusedProfileApplication } from '../../test-profile-application.js';
-import { connectPeer } from './acp-readable-stream-test-helpers.js';
 import type { ChatSessionFileLister } from '../../zed-session-loader.js';
+import { ZedAgent } from '../../zedIntegration.js';
+import { connectPeer } from './acp-readable-stream-test-helpers.js';
 
 export async function nativeRows(
   path: string,
@@ -94,7 +94,7 @@ async function fixtureConfig(): Promise<{ root: string; config: Config }> {
       }),
     ).join('\n') + '\n',
   );
-  process.env.LLXPRT_HISTORY_BACKEND = 'journal';
+
   process.env.LLXPRT_FAKE_RESPONSES = fixture;
   process.env.LLXPRT_LOG_HOME = join(root, 'logs');
   const config = new Config({
@@ -199,11 +199,7 @@ export async function nativeAcpFixture(listFiles?: ChatSessionFileLister) {
         await peer.finish();
         manager.dispose();
         await config.dispose();
-        for (const key of [
-          'LLXPRT_HISTORY_BACKEND',
-          'LLXPRT_FAKE_RESPONSES',
-          'LLXPRT_LOG_HOME',
-        ]) {
+        for (const key of ['LLXPRT_FAKE_RESPONSES', 'LLXPRT_LOG_HOME']) {
           if (saved[key] === undefined) delete process.env[key];
           else process.env[key] = saved[key];
         }

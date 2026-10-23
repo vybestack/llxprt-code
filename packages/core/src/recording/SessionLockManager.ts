@@ -52,8 +52,8 @@
  */
 
 import * as path from 'node:path';
-import { selectBackend } from '../services/history/historyBackendSelect.js';
-import { sessionFileExtension } from './sessionFileExtension.js';
+
+import { SESSION_FILE_EXTENSION } from './sessionFileExtension.js';
 
 /** Maximum session-ID length (mirrors the safe grammar). */
 const SAFE_ID_MAX_LENGTH = 256;
@@ -164,7 +164,7 @@ export class SessionLockManager {
   static getLockPathFromFilePath(sessionFilePath: string): string {
     const dir = path.dirname(sessionFilePath);
     const basename = path.basename(sessionFilePath);
-    const extension = sessionFileExtension(selectBackend());
+    const extension = SESSION_FILE_EXTENSION;
     const match =
       basename.startsWith('session-') && basename.endsWith(extension)
         ? basename.slice('session-'.length, -extension.length)

@@ -1,21 +1,21 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach } from 'bun:test';
 import { join } from 'node:path';
-import { openJournalReadOnly } from '../../../journal/journalReader.js';
-import {
-  iterateRowEntries,
-  rowTreeRootOf,
-} from '../../../journal/rowTreeReader.js';
-import { readStoredRow } from '../../../journal/rowReads.js';
 import {
   testJournalSeams,
   type Failures,
   type TestJournalSeams,
 } from '../../../journal/__tests__/support/journalFixtures.js';
 import { useTempDir } from '../../../journal/__tests__/support/useTempDir.js';
+import { openJournalReadOnly } from '../../../journal/journalReader.js';
+import { readStoredRow } from '../../../journal/rowReads.js';
+import {
+  iterateRowEntries,
+  rowTreeRootOf,
+} from '../../../journal/rowTreeReader.js';
 import { HistoryService } from '../../../services/history/HistoryService.js';
-import { decodeStoredRow } from '../../../services/history/journalRowCodec.js';
 import type { IContent } from '../../../services/history/IContent.js';
+import { decodeStoredRow } from '../../../services/history/journalRowCodec.js';
 import { JournalRecordingService } from '../../journalRecordingService.js';
 import { RecordingIntegration } from '../../RecordingIntegration.js';
 
@@ -75,7 +75,7 @@ export function useNativeIntegration(): () => NativeIntegrationFixture {
       model: 'model-1',
       journal: { journal: seams.dependencies },
     });
-    const history = new HistoryService({ backend: 'journal' });
+    const history = new HistoryService({});
     const integration = new RecordingIntegration(recording);
     fixture = {
       history,

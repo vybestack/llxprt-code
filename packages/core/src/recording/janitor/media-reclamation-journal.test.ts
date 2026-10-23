@@ -1,19 +1,19 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { describe, expect, it } from 'bun:test';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import { gzipSync } from 'node:zlib';
-import { describe, expect, it } from 'bun:test';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
-import { HistoryService } from '../../services/history/HistoryService.js';
-import type { HistoryBackend } from '../../services/history/historyBackendSelect.js';
-import { HistoryMediaOwnership } from '../../storage/history-media-ownership.js';
-import { JournalSession } from '../../services/history/journalSession.js';
-import { openJournalReadOnly } from '../../journal/journalReader.js';
 import { JOURNAL_HEADER_BYTES } from '../../journal/fileHeader.js';
+import { openJournalReadOnly } from '../../journal/journalReader.js';
 import { RECORD_KIND } from '../../journal/recordKinds.js';
+import { HistoryService } from '../../services/history/HistoryService.js';
+import { JournalSession } from '../../services/history/journalSession.js';
+import { HistoryMediaOwnership } from '../../storage/history-media-ownership.js';
 import { LocalMediaStore } from '../../storage/local-media-store.js';
 import { SessionPersistenceService } from '../../storage/SessionPersistenceService.js';
-import { useBackendEnv } from '../__tests__/support/backendEnv.js';
+type HistoryBackend = 'old' | 'journal';
+
 import {
   recordJournal,
   userRow,
@@ -21,8 +21,8 @@ import {
 import { RecordingIntegration } from '../RecordingIntegration.js';
 import { createLockedSessionRecorder } from '../sessionRecorderFactory.js';
 import {
-  reclaimSessionMedia,
   projectRecordedContentIds,
+  reclaimSessionMedia,
 } from './mediaReclamation.js';
 import { resolveRetentionConfig } from './retentionPolicy.js';
 import { runSessionCleanup } from './sessionJanitor.js';
@@ -47,7 +47,7 @@ async function firstRowBody(filePath: string): Promise<number> {
 
 describe('validated journal media ownership without persisted snapshots', () => {
   const directory = useTempDir('media-reclamation-journal-');
-  const setBackend = useBackendEnv();
+
   const chatsDir = (): string => path.join(directory(), PROJECT, 'chats');
 
   async function media(): Promise<{
@@ -78,7 +78,6 @@ describe('validated journal media ownership without persisted snapshots', () => 
 
   for (const backend of BACKENDS) {
     it(`keeps turn media after owner shutdown and reclaims it only after session cleanup on ${backend}`, async () => {
-      setBackend(backend);
       const { store, reference, objectPath } = await media();
       const recording = await createLockedSessionRecorder({
         sessionId: 'media-turn',
@@ -280,7 +279,7 @@ describe('validated journal media ownership without persisted snapshots', () => 
             },
           ]);
         } finally {
-          snapshot.close();
+          await snapshot.close();
         }
         expect(session.store.published?.rows).toBe(1);
       } finally {

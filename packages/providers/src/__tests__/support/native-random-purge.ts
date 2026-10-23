@@ -1,13 +1,15 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { expect } from 'bun:test';
-import { createHash } from 'node:crypto';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
-import type { ProviderRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { withCoreSuffixFixture } from '@vybestack/llxprt-code-core/services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
 import { EagerSemanticPurgeOracle } from '@vybestack/llxprt-code-core/services/history/__tests__/support/semantic-purge-eager-test-helpers.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { ProviderRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { SemanticMediaPurgeStreamCoordinator } from '@vybestack/llxprt-code-core/services/history/semantic-purge-stream.js';
+import { expect } from 'bun:test';
+import { createHash } from 'node:crypto';
+import { captureRequestDump } from './chatSendCapture.js';
+import { closeInOrder } from './close-in-order.js';
 import {
   FROZEN_FORMATS,
   formatById,
@@ -16,16 +18,14 @@ import {
   type FrozenFormat,
   type FrozenSettings,
 } from './frozenWire/frozenCases.js';
+import { eagerProviderOracle } from './journal-provider-fixture.js';
 import {
   captureSeed,
   guardedSeedHistory,
   seedReceipt,
 } from './native-seed-cases.js';
 import { referenceSeedOutcome } from './native-seed-reference.js';
-import { eagerProviderOracle } from './journal-provider-fixture.js';
 import type { HistoryCase } from './wireBodyHistories.js';
-import { captureRequestDump } from './chatSendCapture.js';
-import { closeInOrder } from './close-in-order.js';
 
 type EagerTransaction = NonNullable<
   ReturnType<EagerSemanticPurgeOracle['begin']>
@@ -421,13 +421,11 @@ export async function checkRandomPurge(seed: number): Promise<void> {
         (index) => structuredClone(rows[index]),
         undefined,
         guardedSeedHistory,
-        'journal',
       );
     },
     0,
     (index) => structuredClone(rows[index]),
     undefined,
     undefined,
-    'old',
   );
 }

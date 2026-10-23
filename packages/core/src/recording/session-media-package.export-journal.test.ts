@@ -4,27 +4,25 @@ import * as files from 'node:fs/promises';
 import { mkdir, mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { JournalRecordingService } from './journalRecordingService.js';
 import { LocalMediaStore } from '../storage/local-media-store.js';
-import { useBackendEnv } from './__tests__/support/backendEnv.js';
-import { SESSION_KEYS, encodeSessionFact } from './sessionMetaKeys.js';
+import { JournalRecordingService } from './journalRecordingService.js';
+
 import {
-  readJournalFileFacts,
   readJournalCheckpoints,
+  readJournalFileFacts,
 } from './journalSessionListing.js';
-import { SessionLockManager } from './SessionLockManager.js';
+import { resumeSession } from './resumeSession.js';
 import {
   exportSessionMediaPackage,
   importSessionMediaPackage,
   validateSessionMediaPackage,
 } from './session-media-package.js';
-import { resumeSession } from './resumeSession.js';
+import { SessionLockManager } from './SessionLockManager.js';
+import { SESSION_KEYS, encodeSessionFact } from './sessionMetaKeys.js';
 
 describe('native recording export', () => {
-  const backend = useBackendEnv();
   let root = '';
   beforeEach(async () => {
-    backend('journal');
     root = await mkdtemp(join(tmpdir(), 'native-export-'));
   });
   afterEach(async () => {
@@ -153,7 +151,7 @@ describe('native recording export', () => {
         },
       ]);
     } finally {
-      read.close();
+      await read.close();
     }
     await f.session.append([
       { speaker: 'ai', blocks: [{ type: 'text', text: 'replacement' }] },

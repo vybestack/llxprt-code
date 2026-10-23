@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { HISTORY_BACKEND_ENV } from './historyBackendSelect.js';
+
 import { HistoryService } from './HistoryService.js';
 import { createUserMessage } from './IContent.js';
 
@@ -10,18 +10,14 @@ import { createUserMessage } from './IContent.js';
  * The journal store applies a clear one queue turn after the call returns;
  * the sync queued before the call must still be ignored.
  */
-describe.each(['old', 'journal'] as const)(
+describe.each(['journal'] as const)(
   'syncTotalTokens around clear() (%s store)',
-  (backend) => {
-    const saved = process.env[HISTORY_BACKEND_ENV];
+  () => {
     let history: HistoryService;
     beforeEach(() => {
-      process.env[HISTORY_BACKEND_ENV] = backend;
       history = new HistoryService();
     });
     afterEach(async () => {
-      if (saved === undefined) delete process.env[HISTORY_BACKEND_ENV];
-      else process.env[HISTORY_BACKEND_ENV] = saved;
       await history.dispose();
     });
 
