@@ -13,6 +13,7 @@ import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runt
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import { closeInOrder } from '../__tests__/support/close-in-order.js';
 import { rowsSelection } from '../__tests__/support/wireBodyCapture.js';
 import { activeWireBodySpoolCount } from '../utils/wire-body-spool.js';
 import { readSpooledChatBody } from './__tests__/support/prepareRequestBody.js';
@@ -89,14 +90,23 @@ describe('prepareRequest spools the chat body', () => {
     startingScratch = scratchNames();
   });
 
-  function releaseAndExpectNothingLeaked(): void {
-    for (const context of prepared.splice(0)) context.release();
+  function releasePrepared(): Promise<void> {
+    return closeInOrder(
+      undefined,
+      ...prepared.splice(0).map((context) => ({
+        close: () => context.release(),
+      })),
+    );
+  }
+
+  async function releaseAndExpectNothingLeaked(): Promise<void> {
+    await releasePrepared();
     expect(activeWireBodySpoolCount()).toBe(startingSpools);
     expect(scratchNames()).toStrictEqual(startingScratch);
   }
 
-  afterEach(() => {
-    for (const context of prepared.splice(0)) context.release();
+  afterEach(async () => {
+    await releasePrepared();
   });
 
   async function prepare(
@@ -138,7 +148,7 @@ describe('prepareRequest spools the chat body', () => {
     expect(sent.toString('utf8')).toBe(expected);
     expect(context.messageCount).toBe(messages.length);
     expect(context.spool.byteLength).toBeGreaterThan(0);
-    releaseAndExpectNothingLeaked();
+    await releaseAndExpectNothingLeaked();
   });
 
   it('keeps Kimi tool ids in a scratch index that lives until release', async () => {
@@ -156,7 +166,7 @@ describe('prepareRequest spools the chat body', () => {
       (message) => message.role === 'assistant',
     );
     expect(JSON.stringify(assistant)).toContain('functions.ls:0');
-    releaseAndExpectNothingLeaked();
+    await releaseAndExpectNothingLeaked();
   });
 
   it('rejects a messages override before writing anything', async () => {
@@ -208,7 +218,7 @@ describe('prepareRequest spools the chat body', () => {
     expect(
       plainScratch.some((name) => name.startsWith('openai-chat-prompt')),
     ).toBe(false);
-    releaseAndExpectNothingLeaked();
+    await releaseAndExpectNothingLeaked();
 
     for (const mode of ['on', 'error']) {
       const options = optionsFor(
@@ -228,7 +238,7 @@ describe('prepareRequest spools the chat body', () => {
       );
       expect(dumped).toStrictEqual(wire);
       expect(context.estimate).toBeUndefined();
-      releaseAndExpectNothingLeaked();
+      await releaseAndExpectNothingLeaked();
     }
   });
 
@@ -251,7 +261,7 @@ describe('prepareRequest spools the chat body', () => {
     }
     expect(total).toBeGreaterThan(4_800_000);
     expect(largest).toBeLessThanOrEqual(64 * 1024);
-    releaseAndExpectNothingLeaked();
+    await releaseAndExpectNothingLeaked();
   });
 
   it('removes the dump files with the request when a row fails mid-body', async () => {

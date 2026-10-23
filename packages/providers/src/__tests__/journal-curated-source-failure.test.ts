@@ -9,6 +9,7 @@ import {
   WIRE_ROUTES,
 } from './support/wireBodyCapture.js';
 import { localWireHashSink } from './support/local-wire-hash-sink.js';
+import { closeInOrder } from './support/close-in-order.js';
 
 async function drainFailure(source: AsyncIterable<unknown>): Promise<unknown> {
   try {
@@ -54,6 +55,7 @@ describe('committed curated producer faults at the actual provider caller', () =
           close: () => undefined,
         };
         const sink = await localWireHashSink(route);
+        let failure: { readonly error: unknown } | undefined;
         try {
           const options = buildHistoryCallOptions(
             sink.route,
@@ -76,9 +78,11 @@ describe('committed curated producer faults at the actual provider caller', () =
           expect(sink.entries()).toBe(0);
           expect(sink.requests).toHaveLength(0);
           expect((await snapshot.openReader().next()).done).toBe(false);
+        } catch (error) {
+          failure = { error };
+          throw error;
         } finally {
-          snapshot.close();
-          await sink.close();
+          await closeInOrder(failure, snapshot, sink);
         }
         expect(owners.snapshot().liveRows).toBe(0);
       });

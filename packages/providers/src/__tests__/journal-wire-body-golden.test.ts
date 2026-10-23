@@ -27,6 +27,7 @@ import {
 } from './support/wireBodyCapture.js';
 import type { HistoryCase } from './support/wireBodyHistories.js';
 import { PINNED_CLOCK } from './support/wireBodyFixtures.js';
+import { closeInOrder } from './support/close-in-order.js';
 
 const corpus = await createCorpus();
 const recorder = new GoldenRecorder(false);
@@ -91,10 +92,14 @@ async function captureJournal(
       const transaction = await coordinator.begin({ mode: 'remove' });
       if (transaction === undefined)
         throw new Error('Missing native purge transaction');
+      let failure: { readonly error: unknown } | undefined;
       try {
         return await captureRows(route, input, transaction.requestRows(true));
+      } catch (error) {
+        failure = { error };
+        throw error;
       } finally {
-        transaction.close();
+        await closeInOrder(failure, transaction);
       }
     },
     0,

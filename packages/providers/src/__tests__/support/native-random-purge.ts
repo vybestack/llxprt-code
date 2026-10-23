@@ -25,6 +25,7 @@ import { referenceSeedOutcome } from './native-seed-reference.js';
 import { eagerProviderOracle } from './journal-provider-fixture.js';
 import type { HistoryCase } from './wireBodyHistories.js';
 import { captureRequestDump } from './chatSendCapture.js';
+import { closeInOrder } from './close-in-order.js';
 
 type EagerTransaction = NonNullable<
   ReturnType<EagerSemanticPurgeOracle['begin']>
@@ -236,6 +237,7 @@ async function filterAndCheck(
   const final = await history.prepareCuratedForProviderSnapshot([], {
     ownership,
   });
+  let failure: { readonly error: unknown } | undefined;
   try {
     expect(
       await captureSeed(
@@ -256,8 +258,11 @@ async function filterAndCheck(
       filtered: arrayDigest(filtered),
       frontier: input.expected.nextFrontier,
     });
+  } catch (error) {
+    failure = { error };
+    throw error;
   } finally {
-    final.close();
+    await closeInOrder(failure, final);
   }
 }
 
@@ -269,6 +274,7 @@ async function checkChangedPurge(
   const after = await history.prepareCuratedForProviderSnapshot([], {
     ownership,
   });
+  let failure: { readonly error: unknown } | undefined;
   try {
     expect(
       await captureSeed(
@@ -281,8 +287,11 @@ async function checkChangedPurge(
     ).toStrictEqual(reference(input, input.expected.candidateHistory));
     await checkPurgeDump(input, after);
     await filterAndCheck(input, history, ownership, after);
+  } catch (error) {
+    failure = { error };
+    throw error;
   } finally {
-    after.close();
+    await closeInOrder(failure, after);
   }
 }
 
@@ -296,6 +305,7 @@ async function checkPinnedPurge(
     process.env.W23_NATIVE_SEED_TRAP === 'selected-snapshot'
       ? await history.prepareCuratedForProviderSnapshot([], { ownership })
       : pinned;
+  let failure: { readonly error: unknown } | undefined;
   try {
     expect(
       await captureSeed(
@@ -306,8 +316,11 @@ async function checkPinnedPurge(
         selected,
       ),
     ).toStrictEqual(reference(input, input.input.rows));
+  } catch (error) {
+    failure = { error };
+    throw error;
   } finally {
-    if (selected !== pinned) selected.close();
+    await closeInOrder(failure, selected === pinned ? undefined : selected);
   }
 }
 
@@ -339,6 +352,7 @@ async function checkNativePurge(
   const pinned = await history.prepareCuratedForProviderSnapshot([], {
     ownership,
   });
+  let failure: { readonly error: unknown } | undefined;
   try {
     expect(transaction.changedContentIndex).toBe(
       input.expected.changedContentIndex,
@@ -362,9 +376,11 @@ async function checkNativePurge(
     );
     await checkPinnedPurge(input, history, ownership, pinned);
     await checkChangedPurge(input, history, ownership);
+  } catch (error) {
+    failure = { error };
+    throw error;
   } finally {
-    pinned.close();
-    transaction.close();
+    await closeInOrder(failure, pinned, transaction);
     expect(() => pinned.openReader()).toThrow('closed');
     expect(ownership.snapshot().liveRows).toBe(0);
   }

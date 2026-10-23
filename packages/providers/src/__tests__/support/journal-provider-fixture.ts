@@ -7,6 +7,7 @@ import type { ProviderRequestSnapshot } from '@vybestack/llxprt-code-core/servic
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { HistoryCase } from './wireBodyHistories.js';
+import { closeInOrder } from './close-in-order.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { buildCuratedHistory } from '@vybestack/llxprt-code-core/services/history/historyCuration.js';
 import { buildProviderContent } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
@@ -67,6 +68,7 @@ export async function withJournalProviderSelection<T>(
               new DebugLogger('native-provider-normalized-fixture'),
               { ownership },
             );
+      let failure: { readonly error: unknown } | undefined;
       try {
         const result = await action(selection, history);
         if (selection.count > 0)
@@ -74,9 +76,11 @@ export async function withJournalProviderSelection<T>(
         expect(ownership.snapshot().liveRows).toBe(0);
         expect(counters.snapshot().peakDecodedRows).toBe(1);
         return result;
+      } catch (error) {
+        failure = { error };
+        throw error;
       } finally {
-        selection.close();
-        transaction?.close();
+        await closeInOrder(failure, selection, transaction);
         expect(() => selection.openReader()).toThrow('closed');
         expect(ownership.snapshot().liveRows).toBe(0);
       }

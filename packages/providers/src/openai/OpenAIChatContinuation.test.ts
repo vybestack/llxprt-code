@@ -121,7 +121,7 @@ async function continuationBytes(
   try {
     return readFileSync(body.spool.path);
   } finally {
-    body.release();
+    await body.release();
   }
 }
 

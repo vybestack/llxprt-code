@@ -13,6 +13,7 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
 import { OpenAIResponsesProvider } from '../openai-responses/OpenAIResponsesProvider.js';
+import { closeInOrder } from './support/close-in-order.js';
 
 function bodyRow(index: number, bytes: number): IContent {
   const text = {
@@ -191,6 +192,7 @@ describe('semantic purge exact provider BODY BYTES', () => {
             const transaction = await coordinator.begin({ mode: 'remove' });
             if (transaction === undefined)
               throw new Error('Missing purge transaction');
+            let failure: { readonly error: unknown } | undefined;
             try {
               const actual = await captureBody(
                 transaction.requestRows(explicit),
@@ -205,8 +207,11 @@ describe('semantic purge exact provider BODY BYTES', () => {
               expect(Buffer.from(actual).equals(Buffer.from(expected))).toBe(
                 true,
               );
+            } catch (error) {
+              failure = { error };
+              throw error;
             } finally {
-              transaction.close();
+              await closeInOrder(failure, transaction);
             }
           },
           2048,

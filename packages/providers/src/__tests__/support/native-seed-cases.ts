@@ -6,7 +6,11 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { withCoreSuffixFixture } from '@vybestack/llxprt-code-core/services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
 import { prepareProviderContentSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-curated-stream.js';
-import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import type {
+  ProviderRequestSelection,
+  ProviderRequestSnapshot,
+} from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import type { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { buildCuratedHistory } from '@vybestack/llxprt-code-core/services/history/historyCuration.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -26,6 +30,7 @@ import { normalizedRows } from './frozenWire/normalizedRows.js';
 import { recordBody, type CaseOutcome } from './frozenWire/frozenSend.js';
 import { eagerProviderOracle } from './journal-provider-fixture.js';
 import { referenceSeedOutcome } from './native-seed-reference.js';
+import { closeInOrder } from './close-in-order.js';
 import {
   buildRouteCallOptions,
   installFakeTransport,
@@ -209,6 +214,19 @@ function assertSameFrozenBoundary(
     ).toBeUndefined();
 }
 
+function prepareSeedProvider(
+  history: HistoryService,
+  input: HistoryCase,
+  ownership: RowOwnership,
+): Promise<ProviderRequestSnapshot> {
+  return prepareProviderContentSnapshot(
+    restoreRequestTags(history, input),
+    [],
+    new DebugLogger('seed-provider'),
+    { ownership },
+  );
+}
+
 export async function checkNativeSeed(
   format: FrozenFormat,
   seed: number,
@@ -231,13 +249,9 @@ export async function checkNativeSeed(
       );
       const provider =
         settings.form === 'normalized'
-          ? await prepareProviderContentSnapshot(
-              restoreRequestTags(history, input),
-              [],
-              new DebugLogger('seed-provider'),
-              { ownership },
-            )
+          ? await prepareSeedProvider(history, input, ownership)
           : undefined;
+      let failure: { readonly error: unknown } | undefined;
       try {
         const providerActual = await captureSeed(
           format,
@@ -273,9 +287,11 @@ export async function checkNativeSeed(
         assertSameFrozenBoundary(seed, expected, serviceActual, sameBoundary);
         expect(ownership.snapshot().liveRows).toBe(0);
         expect(counters.snapshot().peakDecodedRows).toBe(1);
+      } catch (error) {
+        failure = { error };
+        throw error;
       } finally {
-        provider?.close();
-        service.close();
+        await closeInOrder(failure, provider, service);
         expect(() => service.openReader()).toThrow('closed');
         expect(ownership.snapshot().liveRows).toBe(0);
       }

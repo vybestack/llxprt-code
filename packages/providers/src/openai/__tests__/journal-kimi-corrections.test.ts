@@ -124,7 +124,7 @@ async function conversionFacts(
       await snapshot.close();
     }
   } finally {
-    normalized.close();
+    await normalized.close();
   }
 }
 
