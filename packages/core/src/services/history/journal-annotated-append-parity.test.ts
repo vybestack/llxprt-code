@@ -5,7 +5,7 @@ import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
 import { MUTATION } from '../../journal/recordKinds.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { SessionRecordingPort } from '../../recording/recordingPort.js';
-import { replaySession } from '../../recording/ReplayEngine.js';
+import { SPAN_WINDOW_CAPACITY } from './historySpanWindow.js';
 import { createSessionRecorder } from '../../recording/sessionRecorderFactory.js';
 import { exactTokenizer } from './chronology-rollback-test-helpers.js';
 import { historyOriginId } from './historyOriginId.js';
@@ -14,7 +14,6 @@ import type { IContent } from './IContent.js';
 import { openOwnedJournal } from './journalOwnedFixture.js';
 import { decodeStoredRow } from './journalRowCodec.js';
 import { JournalSession } from './journalSession.js';
-type HistoryBackend = 'old' | 'journal';
 
 async function assertCopiedOwners(
   current: VersionSnapshot,
@@ -52,17 +51,9 @@ async function contents(history: HistoryService): Promise<IContent[]> {
   return rows;
 }
 
-async function durable(
-  recorder: SessionRecordingPort,
-  backend: HistoryBackend,
-): Promise<IContent[]> {
+async function durable(recorder: SessionRecordingPort): Promise<IContent[]> {
   const file = recorder.getFilePath();
   if (file === null) throw new Error('Missing annotated append recording');
-  if (backend === 'old') {
-    const replay = await replaySession(file, 'annotated-append');
-    if (!replay.ok) throw new Error(replay.error);
-    return replay.history;
-  }
   const journal = await JournalSession.open(file);
   try {
     const rows: IContent[] = [];
@@ -73,16 +64,12 @@ async function durable(
   }
 }
 
-async function capture(
-  root: string,
-  size: number,
-  backend: HistoryBackend,
-): Promise<unknown> {
+async function capture(root: string, size: number): Promise<unknown> {
   const history = new HistoryService({});
   history.setTokenizerFactory(exactTokenizer());
   const mirrors = [0, 1].map((index) =>
     createSessionRecorder({
-      sessionId: `${backend}-${size}-${index}`,
+      sessionId: `journal-${size}-${index}`,
       projectHash: 'annotated-append',
       chatsDir: root,
       workspaceDirs: [root],
@@ -94,13 +81,14 @@ async function capture(
     await history.detachedValues.append(
       Array.from({ length: size }, (_, index) => row(index)),
     );
-    for (const mirror of mirrors) await history.attachJournal(mirror, true);
+    for (const mirror of mirrors)
+      await history.attachJournal(mirror, true, undefined, {});
     await appendAnnotations(history, size);
     await history.waitForCommit();
     const rows = await contents(history);
     expect(rows.length).toBe(size * 2 + 1);
     for (const mirror of mirrors)
-      expect(await durable(mirror, backend)).toStrictEqual(rows);
+      expect(await durable(mirror)).toStrictEqual(rows);
     const state = {
       rows,
       tokens: history.getTotalTokens(),
@@ -111,7 +99,7 @@ async function capture(
     await history.waitForCommit();
     expect(await contents(history)).toStrictEqual([]);
     for (const mirror of mirrors)
-      expect(await durable(mirror, backend)).toStrictEqual([]);
+      expect(await durable(mirror)).toStrictEqual([]);
     return state;
   } finally {
     await history.dispose();
@@ -149,52 +137,53 @@ async function appendAnnotations(
   );
 }
 
-async function captureLive(size: number): Promise<unknown> {
-  const history = new HistoryService({});
-  history.setTokenizerFactory(exactTokenizer());
-  try {
-    await history.detachedValues.append(
-      Array.from({ length: size }, (_, index) => row(index)),
-    );
-    await appendAnnotations(history, size);
+function expectedState(size: number): unknown {
+  const originals = Array.from({ length: size }, (_, index) => row(index));
+  const replacements = Array.from({ length: size }, (_, index) => {
+    const ordinal = ((size - 1 - index) * 17) % size;
     return {
-      rows: await contents(history),
-      tokens: history.getTotalTokens(),
-      range: history.getContextRange(),
+      ...row(ordinal + size),
+      metadata: originals[ordinal].metadata,
     };
-  } finally {
-    await history.dispose();
-  }
+  });
+  const summary = {
+    ...row(size * 2),
+    metadata: {
+      ...row(size * 2).metadata,
+      isSummary: true,
+      chronologyReplaced: { fromSeq: 1, toSeq: 2, itemCount: 2 },
+    },
+  };
+  return {
+    rows: [...originals, ...replacements, summary],
+    tokens: size * 2 + 1,
+    offset: 0,
+    range: {
+      firstSeq: 0,
+      lastSeq: size * 8,
+      totalEntries: size * 2 + 1,
+      removedInterior: [
+        ...Array.from({ length: size }, (_, index) => ({
+          start: index * 4,
+          end: index * 4,
+          reason: 'density-removed',
+        })).slice(-SPAN_WINDOW_CAPACITY),
+        { start: 1, end: 2, reason: 'compressed' },
+      ].sort((left, right) => left.start - right.start),
+      approximate: false,
+    },
+  };
 }
 
 describe('annotated append independent values, tokens, mirrors and owners', () => {
   const directory = useTempDir('native-annotated-parity-');
 
   it.each([512, 8192])(
-    'matches the old backend at %i rows and clears both durable mirrors',
-    async (size) => {
-      const expected = await capture(directory(), size, 'old');
-      expect(await capture(directory(), size, 'journal')).toStrictEqual(
-        expected,
-      );
-    },
-    180_000,
-  );
-
-  it.each([512, 8192])(
-    'matches independent old live values, tokens and spans for %i annotated rows',
-    async (size) => {
-      expect(await captureLive(size)).toStrictEqual(await captureLive(size));
-    },
-    180_000,
-  );
-
-  it.each([512, 8192])(
     'preserves all %i annotated duplicate chronology rows in both native mirrors and clears them',
     async (size) => {
-      expect(await capture(directory(), size, 'journal')).toMatchObject({
-        rows: expect.arrayContaining([row(0)]),
-      });
+      expect(await capture(directory(), size)).toStrictEqual(
+        expectedState(size),
+      );
     },
     180_000,
   );
@@ -205,13 +194,21 @@ describe('annotated append independent values, tokens, mirrors and owners', () =
       const owners = ['a', 'b', undefined];
       const journal = await openOwnedJournal(
         join(directory(), 'owners.llxj'),
-        Array.from({ length: size + 2 }, (_, index) => ({
-          content: row(index),
-          origin: owners[index % owners.length],
-        })),
+        [],
       );
       const origin = {};
       try {
+        await journal.store.replaceFrom(
+          Array.from({ length: size + 2 }, (_, index) => row(index)),
+          size + 2,
+        );
+        journal.store.changeOwnersOf(
+          Array.from({ length: size + 2 }, (_, position) => ({
+            position,
+            origin: owners[position % owners.length],
+          })),
+        );
+        await journal.store.waitForDurable();
         await journal.store.publishDetached(
           {
             transform: async (source, sink) => {
