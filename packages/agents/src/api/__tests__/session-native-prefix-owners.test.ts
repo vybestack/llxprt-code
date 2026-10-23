@@ -2,7 +2,7 @@
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { historyOriginId } from '@vybestack/llxprt-code-core/services/history/historyOriginId.js';
 import { describe, expect, it } from 'bun:test';
-import { useTempDir } from '../../../../core/src/journal/__tests__/support/useTempDir.js';
+import { useTempDir } from './helpers/journal-fixture-support.js';
 import { operationFileCreates } from '../../compression/__tests__/support/operation-file-creates.js';
 import {
   buildAgent,

@@ -1,8 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { describe, expect, it } from 'bun:test';
-import { useTempDir } from '../../../../core/src/journal/__tests__/support/useTempDir.js';
-import { exactTokenizer } from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
+import {
+  useTempDir,
+  exactTokenizer,
+} from './helpers/journal-fixture-support.js';
 import { operationFileCreates } from '../../compression/__tests__/support/operation-file-creates.js';
 import {
   buildAgent,
