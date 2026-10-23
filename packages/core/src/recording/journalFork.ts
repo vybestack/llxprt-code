@@ -99,7 +99,7 @@ async function cloneIntoChild(
   request: JournalForkRequest,
   childPath: string,
   allocated: () => void,
-): Promise<void> {
+): Promise<SessionForkedPayload> {
   const { target } = request;
   const read = await source.openRead();
   try {
@@ -125,6 +125,12 @@ async function cloneIntoChild(
         hasher: sha256KeyHash,
       },
     );
+    return {
+      parentSessionId: target.source.sessionId,
+      parentSequence: descriptor.commitSeq,
+      checkpointId: target.checkpointId,
+      checkpointName: descriptor.name,
+    };
   } finally {
     await read.close();
   }
@@ -216,23 +222,17 @@ async function createChild(
   request: JournalForkRequest,
   metadata: SessionMetadata,
 ): Promise<JournalForkResult | JournalForkError> {
-  const { target, chatsDir } = request;
+  const { chatsDir } = request;
   const childPath = path.join(
     chatsDir,
     journalSessionFileName(metadata.sessionId),
   );
-  const fork: SessionForkedPayload = {
-    parentSessionId: target.source.sessionId,
-    parentSequence: target.sequence,
-    checkpointId: target.checkpointId,
-    checkpointName: target.checkpointName,
-  };
   let lock: LockHandle | undefined;
   let recording: JournalRecordingService | undefined;
   let created = false;
   try {
     lock = await SessionLockManager.acquire(chatsDir, metadata.sessionId);
-    await withSourceStore(request, (store) =>
+    const fork = await withSourceStore(request, (store) =>
       cloneIntoChild(store, request, childPath, () => {
         created = true;
       }),
