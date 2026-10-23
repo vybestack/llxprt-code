@@ -322,7 +322,20 @@ describe('workflow model cache behavior', () => {
 if [[ "$1" == pull ]]; then exit 0; fi
 exit 0`,
     );
-    writeExecutable(bin, 'curl', `printf '%s\\n' '{"version":"0.31.1"}'`);
+    // The start step backgrounds `ollama serve` and polls the version endpoint,
+    // so the fake endpoint answers only once the fake server has recorded its
+    // launch. Without that ordering the step can finish, and the test read the
+    // call log, before the background process has been scheduled.
+    writeExecutable(
+      bin,
+      'curl',
+      `for _ in {1..500}; do
+  if grep -qx serve "$RUNNER_TEMP/ollama-calls" 2>/dev/null; then break; fi
+  sleep 0.01
+done
+grep -qx serve "$RUNNER_TEMP/ollama-calls" || { echo 'fake ollama server never started' >&2; exit 1; }
+printf '%s\\n' '{"version":"0.31.1"}'`,
+    );
     writeExecutable(bin, 'jq', 'cat >/dev/null; exit 0');
     writeExecutable(bin, 'df', 'exit 0');
     const script = asString(step('Start local Gemma 4 E2B model').run);
