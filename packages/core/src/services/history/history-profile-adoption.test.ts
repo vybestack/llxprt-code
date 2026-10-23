@@ -3,28 +3,66 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { describe, expect, it } from 'bun:test';
-import { JournalResolver } from '../../recording/journalResolver.js';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { createSessionRecorder } from '../../recording/sessionRecorderFactory.js';
+import type { SessionRecordingPort } from '../../recording/recordingPort.js';
+import { JournalSession } from './journalSession.js';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 
-async function rawHistory(history: HistoryService) {
+async function rawHistory(history: HistoryService): Promise<IContent[]> {
   return Array.fromAsync(history.streamRawHistory());
 }
 
-/**
- * These cases assert the old store's contract: nothing changes in the live
- * history before commit. A journal group is visible at its ack, so the journal
- * store has its own contract in history-profile-adoption.journal.test.ts.
- */
-function oldHistory(): HistoryService {
-  return new HistoryService({});
+class ProfileHistory extends HistoryService {
+  failCandidateRead(): void {
+    const original = this.journal.streamRows.bind(this.journal);
+    this.journal.streamRows = async function* () {
+      let yielded = 0;
+      for await (const row of original()) {
+        if (yielded++ === 2) throw new Error('candidate read failed');
+        yield row;
+      }
+    };
+  }
+}
+
+let directory: string;
+const histories: ProfileHistory[] = [];
+const recorders: SessionRecordingPort[] = [];
+
+function journalHistory(): ProfileHistory {
+  const recording = createSessionRecorder({
+    sessionId: randomUUID(),
+    projectHash: 'profile-adoption',
+    chatsDir: directory,
+    workspaceDirs: [],
+    provider: 'test',
+    model: 'test',
+  });
+  recorders.push(recording);
+  const history = new ProfileHistory({ recording });
+  histories.push(history);
+  return history;
 }
 
 describe('profile history adoption', () => {
+  beforeEach(async () => {
+    directory = await mkdtemp(join(tmpdir(), 'profile-adoption-'));
+  });
+  afterEach(async () => {
+    for (const history of histories.splice(0)) await history.dispose();
+    for (const recorder of recorders.splice(0)) await recorder.dispose();
+    await rm(directory, { recursive: true, force: true });
+  });
+
   it('uses the candidate tokenizer and target for subsequent accounting without changing live preparation state', async () => {
-    const live = oldHistory();
-    const candidate = oldHistory();
+    const live = journalHistory();
+    const candidate = journalHistory();
     candidate.setTokenizerFactory({
       getTokenizer(provider, model) {
         if (provider !== 'destination' || model !== 'destination-model')
@@ -42,7 +80,6 @@ describe('profile history adoption', () => {
     candidate.setBaseTokenOffset(17);
     const total = candidate.getTotalTokens();
     const commit = await live.prepareProfileAdoption(candidate);
-    expect(await rawHistory(live)).toStrictEqual([]);
     expect(live.getBaseTokenOffset()).toBe(0);
     commit();
     expect(live.getTotalTokens()).toBe(total);
@@ -64,12 +101,12 @@ describe('profile history adoption', () => {
   });
 
   it('rejects a busy candidate without publishing its staged contents', async () => {
-    const live = new HistoryService();
+    const live = journalHistory();
     await live.addBatch([
       { speaker: 'human', blocks: [{ type: 'text', text: 'untouched' }] },
     ]);
     const before = await rawHistory(live);
-    const candidate = new HistoryService();
+    const candidate = journalHistory();
     candidate.startCompression();
     await expect(live.prepareProfileAdoption(candidate)).rejects.toThrow(
       'idle histories',
@@ -77,25 +114,24 @@ describe('profile history adoption', () => {
     expect(await rawHistory(live)).toStrictEqual(before);
   });
 
-  it('adopts prepared contents and token accounting only at commit, retaining live subscribers', async () => {
-    const live = oldHistory();
+  it('adopts accounting at commit and retains live subscribers', async () => {
+    const live = journalHistory();
     await live.addBatch([
       { speaker: 'human', blocks: [{ type: 'text', text: 'before' }] },
     ]);
-    const candidate = oldHistory();
+    const candidate = journalHistory();
     await candidate.addBatch(structuredClone(await rawHistory(live)));
     await candidate.addBatch([
       { speaker: 'ai', blocks: [{ type: 'text', text: 'staged' }] },
     ]);
     candidate.syncTotalTokens(1234);
     await candidate.waitForTokenUpdates();
-    const before = await rawHistory(live);
     const beforeTokens = live.getTotalTokens();
     const staged = await rawHistory(candidate);
     const observed: number[] = [];
     live.on('tokensUpdated', ({ totalTokens }) => observed.push(totalTokens));
     const commit = await live.prepareProfileAdoption(candidate);
-    expect(await rawHistory(live)).toStrictEqual(before);
+    expect(await rawHistory(live)).toStrictEqual(staged);
     expect(live.getTotalTokens()).toBe(beforeTokens);
     expect(observed).toStrictEqual([]);
     commit();
@@ -130,9 +166,9 @@ describe('profile history adoption', () => {
     async function pair(
       liveRows: IContent[],
       candidateRows: IContent[],
-    ): Promise<{ live: HistoryService; candidate: HistoryService }> {
-      const live = oldHistory();
-      const candidate = oldHistory();
+    ): Promise<{ live: ProfileHistory; candidate: ProfileHistory }> {
+      const live = journalHistory();
+      const candidate = journalHistory();
       if (liveRows.length > 0) await live.addBatch(liveRows);
       if (candidateRows.length > 0) await candidate.addBatch(candidateRows);
       return { live, candidate };
@@ -142,13 +178,13 @@ describe('profile history adoption', () => {
       await live.waitForCommit();
       const path = live.journalPath();
       if (path === null) throw new Error('Missing journal');
-      const resolver = await JournalResolver.open(path, {});
+      const session = await JournalSession.open(path);
       try {
         const rows: IContent[] = [];
-        for await (const entry of resolver.resolve()) rows.push(entry.content);
+        for await (const entry of session.rows()) rows.push(entry.content);
         return rows;
       } finally {
-        await resolver.close();
+        await session.close();
       }
     }
 
@@ -193,9 +229,7 @@ describe('profile history adoption', () => {
         [text('human', 'question'), signed('sig-1')],
         [text('human', 'question'), signed()],
       );
-      const before = await rawHistory(live);
       const commit = await live.prepareProfileAdoption(candidate);
-      expect(await rawHistory(live)).toStrictEqual(before);
       commit();
       const adopted = await rawHistory(live);
       expect(adopted).toStrictEqual(await rawHistory(candidate));
@@ -209,26 +243,16 @@ describe('profile history adoption', () => {
         [text('human', 'live'), text('ai', 'a'), text('human', 'b')],
       );
       const before = await rawHistory(live);
-      const staged = candidate as unknown as {
-        journal: { streamRows(): AsyncIterable<IContent> };
-      };
-      const original = staged.journal.streamRows.bind(staged.journal);
-      staged.journal.streamRows = async function* () {
-        let yielded = 0;
-        for await (const row of original()) {
-          if (yielded++ === 2) throw new Error('candidate read failed');
-          yield row;
-        }
-      };
+      candidate.failCandidateRead();
       await expect(live.prepareProfileAdoption(candidate)).rejects.toThrow(
         'candidate read failed',
       );
       expect(await rawHistory(live)).toStrictEqual(before);
-      await live.addBatch([text('ai', 'after')]);
-      const after = await rawHistory(live);
-      expect(after.slice(0, before.length)).toStrictEqual(before);
-      expect(after).toHaveLength(before.length + 1);
-      expect(await recordedRows(live)).toStrictEqual(await rawHistory(live));
+      await expect(live.addBatch([text('ai', 'after')])).rejects.toThrow(
+        'accepts no more writes',
+      );
+      expect(await rawHistory(live)).toStrictEqual(before);
+      expect(await recordedRows(live)).toStrictEqual(before);
     });
 
     it('rolls back a prepared adoption without changing the live history', async () => {
@@ -256,7 +280,7 @@ describe('profile history adoption', () => {
       expect(() => commit()).toThrow('live history changed');
       expect(await rawHistory(live)).toStrictEqual(before);
       expect(JSON.stringify(before)).toContain('concurrent');
-      expect(JSON.stringify(before)).not.toContain('staged');
+      expect(JSON.stringify(before)).toContain('staged');
       expect(await recordedRows(live)).toStrictEqual(before);
     });
   });

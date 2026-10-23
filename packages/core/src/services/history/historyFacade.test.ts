@@ -59,9 +59,9 @@ import * as path from 'node:path';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import type { ContextRange } from './historyEventTypes.js';
-import { SessionRecordingService } from '../../recording/SessionRecordingService.js';
-import { JournalResolver } from '../../recording/journalResolver.js';
-import type { ResolvedEntry } from '../../recording/journalResolver.js';
+import { createSessionRecorder } from '../../recording/sessionRecorderFactory.js';
+import type { SessionRecordingPort } from '../../recording/recordingPort.js';
+import { JournalSession } from './journalSession.js';
 import type { DensityResult } from '../../core/compression/types.js';
 
 const PROJECT_HASH = 'p05b3-facade-hash';
@@ -122,21 +122,21 @@ function project(contents: readonly IContent[]): ProjectedRow[] {
   }));
 }
 
-function projectFold(entries: readonly ResolvedEntry[]): ProjectedRow[] {
-  return project(entries.map((entry) => entry.content));
+async function foldJournal(filePath: string): Promise<IContent[]> {
+  const session = await JournalSession.open(filePath);
+  try {
+    const rows: IContent[] = [];
+    for await (const row of session.rows()) rows.push(row.content);
+    return rows;
+  } finally {
+    await session.close();
+  }
 }
 
-async function foldJournal(filePath: string): Promise<ResolvedEntry[]> {
-  const resolver = await JournalResolver.open(filePath);
-  try {
-    const entries: ResolvedEntry[] = [];
-    for await (const entry of resolver.resolve()) {
-      entries.push(entry);
-    }
-    return entries;
-  } finally {
-    await resolver.close();
-  }
+function journalPathOf(service: HistoryService): string {
+  const path = service.journalPath();
+  if (path === null) throw new Error('Missing journal');
+  return path;
 }
 
 let tempDir = '';
@@ -159,8 +159,8 @@ function useTempChatsDir(): {
   };
 }
 
-function makeRecorder(id: string): SessionRecordingService {
-  return new SessionRecordingService({
+function makeRecorder(id: string): SessionRecordingPort {
+  return createSessionRecorder({
     sessionId: `p05b3-facade-${id}`,
     projectHash: PROJECT_HASH,
     chatsDir: tempDir,
@@ -226,29 +226,23 @@ describe('HistoryService facade construction (P05b3)', () => {
     await attachment;
     await service.waitForCommit();
 
-    const rows = await foldJournal(service.journalPath() as string);
+    const rows = await foldJournal(journalPathOf(service));
     await collectRowsForAssertions(service.streamRawHistory(), (all) => {
-      expect(projectFold(rows)).toStrictEqual(project(all));
+      expect(project(rows)).toStrictEqual(project(all));
     });
   });
 
-  it('creates its own temp-file store when constructed bare (no array path)', async () => {
+  it('keeps bare history in an unlinked journal', async () => {
     const service = new HistoryService();
     service.add(textContent('human', 'first'));
     service.add(textContent('ai', 'second'));
     await service.waitForCommit();
 
-    const journalPath = service.journalPath();
-    expect(journalPath).not.toBeNull();
-    expect(journalPath?.startsWith(os.tmpdir())).toBe(true);
-
-    // The store is a real journal: the resolver fold of its file reproduces
-    // the live projection. There is no in-memory array backing these reads.
-    const rows = await foldJournal(journalPath as string);
-    await collectRowsForAssertions(service.streamRawHistory(), (all) => {
-      expect(projectFold(rows)).toStrictEqual(project(all));
+    expect(service.journalPath()).toBeNull();
+    await collectRowsForAssertions(service.streamRawHistory(), (rows) => {
+      expect(rows.map(textOf)).toStrictEqual(['first', 'second']);
     });
-    expect(rows).toHaveLength(2);
+    await service.dispose();
   });
 });
 
@@ -400,7 +394,14 @@ describe('HistoryService facade mutation durability (P05b3)', () => {
 
     // Rewind-style removal of the last row…
     const popped = await service.pop();
-    expect(textOf(popped as IContent)).toBe('');
+    expect(
+      textOf(
+        popped ??
+          (() => {
+            throw new Error('Missing popped row');
+          })(),
+      ),
+    ).toBe('');
 
     // …which leaves call-1 orphaned for the synthetic-insert path.
     await service.validateAndFix();
@@ -426,12 +427,10 @@ describe('HistoryService facade mutation durability (P05b3)', () => {
     // require. Asserting them pre-clear keeps the intent: the mutations are
     // in the journal, not just in memory.)
     await service.waitForCommit();
-    const preClear = await foldJournal(service.journalPath() as string);
-    expect(preClear.map((entry) => textOf(entry.content))).toContain(
-      'a1-compact',
-    );
+    const preClear = await foldJournal(journalPathOf(service));
+    expect(preClear.map((entry) => textOf(entry))).toContain('a1-compact');
     expect(
-      preClear.filter((entry) => entry.content.metadata?.synthetic === true),
+      preClear.filter((entry) => entry.metadata?.synthetic === true),
     ).toHaveLength(1);
 
     // Clear reaches the journal as a durable op, then the session continues.
@@ -442,9 +441,9 @@ describe('HistoryService facade mutation durability (P05b3)', () => {
 
     const journalPath = service.journalPath();
     expect(journalPath).not.toBeNull();
-    const rows = await foldJournal(journalPath as string);
+    const rows = await foldJournal(journalPathOf(service));
     await collectRowsForAssertions(service.streamRawHistory(), (all) => {
-      expect(projectFold(rows)).toStrictEqual(project(all));
+      expect(project(rows)).toStrictEqual(project(all));
     });
   }, 20000);
 
@@ -460,9 +459,9 @@ describe('HistoryService facade mutation durability (P05b3)', () => {
     await service.replaceAll([summary]);
     await service.waitForCommit();
 
-    const rows = await foldJournal(service.journalPath() as string);
+    const rows = await foldJournal(journalPathOf(service));
     await collectRowsForAssertions(service.streamRawHistory(), (all) => {
-      expect(projectFold(rows)).toStrictEqual(project(all));
+      expect(project(rows)).toStrictEqual(project(all));
       expect(project(all)).toStrictEqual([
         {
           speaker: 'ai',
@@ -492,6 +491,7 @@ describe('HistoryService facade context-range boundaries (P05b3)', () => {
       service.add(textContent('human', text));
     }
     await service.waitForTokenUpdates();
+    await service.waitForCommit();
     const range = service.getContextRange();
     expect(range.totalEntries).toBe(5);
     expect(range.firstSeq).toBe(await seqOfPositionFromEnd(service, 4));
@@ -512,6 +512,7 @@ describe('HistoryService facade context-range boundaries (P05b3)', () => {
 
     // P03 first-add fix: the empty→first transition emits exactly once,
     // naming the first entry's seq; follow-up single adds stay silent.
+    await service.waitForCommit();
     expect(events).toHaveLength(1);
     expect(events[0]?.firstSeq).toBe(await seqOfPositionFromEnd(service, 2));
     expect(events[0]?.lastSeq).toBe(await seqOfPositionFromEnd(service, 2));

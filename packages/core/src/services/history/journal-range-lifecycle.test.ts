@@ -1,6 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { open } from 'node:fs/promises';
+import { open, stat } from 'node:fs/promises';
+import {
+  ROW_READ_WINDOW_BYTES,
+  ROW_READ_WINDOW_COUNT,
+} from '../../journal/row-read-window.js';
 import { crc32 } from 'node:zlib';
 import { testJournalSeams } from '../../journal/__tests__/support/journalFixtures.js';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
@@ -91,7 +95,13 @@ describe('version 8 ROW range lifecycle', () => {
       },
     });
     try {
-      await session.append([CONTENT]);
+      await session.append([
+        {
+          ...CONTENT,
+          metadata: { model: 'x'.repeat(ROW_READ_WINDOW_BYTES) },
+        },
+      ]);
+      const durableEnd = (await stat(path)).size;
       const snapshot = await session.store.snapshot();
       try {
         const entry = await snapshot.entryAt(0);
@@ -104,13 +114,18 @@ describe('version 8 ROW range lifecycle', () => {
           ),
         ).toStrictEqual(CONTENT.blocks[1]);
         expect(reads).toStrictEqual([
-          { position: head.offset, length: 20 },
-          { position: head.offset + 20, length: head.headerLen },
+          { position: head.offset, length: ROW_READ_WINDOW_BYTES },
           {
             position: head.bodyOffset + header.blocks[1].offset,
-            length: header.blocks[1].length + 4,
+            length: Math.min(
+              ROW_READ_WINDOW_BYTES,
+              durableEnd - head.bodyOffset - header.blocks[1].offset,
+            ),
           },
         ]);
+        expect(
+          reads.reduce((total, read) => total + read.length, 0),
+        ).toBeLessThanOrEqual(ROW_READ_WINDOW_COUNT * ROW_READ_WINDOW_BYTES);
         expect(
           reads.some(
             (read) =>
