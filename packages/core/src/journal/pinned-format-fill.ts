@@ -12,10 +12,13 @@ import { JournalFormatError } from './errors.js';
 import type { VersionEdit } from './groupEdits.js';
 import { fillNativeFacts } from './nativeFactFill.js';
 
+type PinnedRequestRegistration = RowFormatRegistration | 'kimi';
+
 async function requestMappingEdits(
   snapshot: VersionSnapshot,
-  registration: RowFormatRegistration,
+  registration: PinnedRequestRegistration,
 ): Promise<VersionEdit[]> {
+  if (registration === 'kimi') return [{ kind: 'kimi' }];
   if (registration.nativeFacts !== undefined)
     return [{ kind: 'factIndex', registration: registration.nativeFacts }];
   const slot = registration.mistralSlot;
@@ -28,7 +31,7 @@ async function prepareMapping(
   ctx: BuildContext,
   plan: PlanContext,
   snapshot: VersionSnapshot,
-  registration: RowFormatRegistration,
+  registration: PinnedRequestRegistration,
   appender: RecordAppender,
 ): Promise<VersionSnapshot> {
   const edits = await requestMappingEdits(snapshot, registration);
@@ -48,7 +51,7 @@ async function prepareMapping(
     ctx,
     mapping.built,
     appender,
-    registration.nativeFacts,
+    registration === 'kimi' ? undefined : registration.nativeFacts,
     edits,
   );
   await appender.drain();
@@ -61,12 +64,12 @@ async function prepareMapping(
   );
 }
 
-export async function fillPinnedFormat(
+export async function fillPinnedRequest(
   writer: JournalGroupWriter,
   context: BuildContext,
   planning: PlanContext,
   snapshot: VersionSnapshot,
-  registration: RowFormatRegistration,
+  registration: PinnedRequestRegistration,
 ): Promise<VersionSnapshot> {
   snapshot.requireOpen();
   const release = snapshot.hold();
@@ -91,7 +94,10 @@ export async function fillPinnedFormat(
         ctx.access = ctx.readGroup(appender.nextOffset);
         await mapped.close();
       }
-      const edits = [{ kind: 'format' as const, registration }];
+      const edits: readonly VersionEdit[] =
+        registration === 'kimi'
+          ? [{ kind: 'append', rows: [] }]
+          : [{ kind: 'format', registration }];
       const prepared = await prepareBuild(
         ctx,
         { ...planning, published: ctx.published },
@@ -102,13 +108,10 @@ export async function fillPinnedFormat(
       );
       if (prepared.built === undefined)
         throw new JournalFormatError('Pinned format has no built version');
-      const filled = await fillRowFormats(
-        ctx,
-        prepared.built,
-        appender,
-        edits,
-        [],
-      );
+      const filled =
+        registration === 'kimi'
+          ? { built: prepared.built }
+          : await fillRowFormats(ctx, prepared.built, appender, edits, []);
       await appender.drain();
       measured = snapshotOf(
         ctx,
@@ -141,14 +144,14 @@ export async function fillPinnedFormat(
   }
 }
 
-export function pinnedFormatPreparation(host: {
+export function pinnedRequestPreparation(host: {
   enqueue<T>(run: () => Promise<T>): Promise<T>;
   writer(): JournalGroupWriter;
   context(): { build: BuildContext; plan: PlanContext };
   installed(): void;
 }): (
   snapshot: VersionSnapshot,
-  registration: RowFormatRegistration,
+  registration: PinnedRequestRegistration,
 ) => Promise<VersionSnapshot> {
   return (snapshot, registration) =>
     host.enqueue(async () => {
@@ -160,7 +163,7 @@ export function pinnedFormatPreparation(host: {
         throw new JournalFormatError(
           'Pinned format belongs to another journal',
         );
-      const measured = await fillPinnedFormat(
+      const measured = await fillPinnedRequest(
         writer,
         host.context().build,
         host.context().plan,

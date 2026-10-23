@@ -118,6 +118,10 @@ export class JournalHistoryStore
     current: () => this.session.store.published,
     commit: (edits) => this.commitStep(this.tentativeRows, edits),
     snapshot: () => this.session.store.snapshot(),
+    preparePinnedFormat: (snapshot, registration) =>
+      this.session.store.prepareSnapshotFormat(snapshot, registration),
+    preparePinnedKimi: (snapshot) =>
+      this.session.store.prepareSnapshotKimi(snapshot),
   });
 
   private tentativeRows = 0;

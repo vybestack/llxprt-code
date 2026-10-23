@@ -6,7 +6,7 @@ import {
   type ContextSpan,
   type ContextSpanPolicy,
 } from './contextSpanFacts.js';
-import { pinnedFormatPreparation } from './pinned-format-fill.js';
+import { pinnedRequestPreparation } from './pinned-format-fill.js';
 import {
   warmToolRanking,
   toolRankingPolicy,
@@ -519,12 +519,23 @@ export class JournalStore {
     installed: () => this.install(this.writer.published?.trailer),
   });
 
-  prepareSnapshotFormat = pinnedFormatPreparation({
+  private readonly preparePinnedRequest = pinnedRequestPreparation({
     enqueue: (run) => this.enqueueCommit(run),
     writer: () => this.writer,
     context: () => ({ build: this.buildContext(), plan: this.planContext() }),
     installed: () => this.install(this.writer.published?.trailer),
   });
+
+  prepareSnapshotFormat(
+    snapshot: VersionSnapshot,
+    registration: RegisteredRowFormat['registration'],
+  ): Promise<VersionSnapshot> {
+    return this.preparePinnedRequest(snapshot, registration);
+  }
+
+  prepareSnapshotKimi(snapshot: VersionSnapshot): Promise<VersionSnapshot> {
+    return this.preparePinnedRequest(snapshot, 'kimi');
+  }
 
   restorationOf(saved: VersionSnapshot): VersionEdit {
     return saved.restorationIn(this.writer.reader);

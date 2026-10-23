@@ -70,6 +70,8 @@ interface NativeRequestHost {
   current(): Version | undefined;
   commit(edits: () => Promise<VersionEdit[]>): Promise<unknown>;
   snapshot(): Promise<VersionSnapshot>;
+  readonly preparePinnedFormat: PrepareNativeRequestFormat;
+  readonly preparePinnedKimi: PrepareNativeRequestKimi;
 }
 
 function nativeRequestFormatPreparation(
@@ -77,10 +79,8 @@ function nativeRequestFormatPreparation(
 ): PrepareNativeRequestFormat {
   return (snapshot, registration) =>
     host.exclusive(async () => {
-      if (snapshot.version?.commitSeq !== host.current()?.commitSeq)
-        throw new Error(
-          'History changed before the native request format fill',
-        );
+      if (snapshot.version !== host.current())
+        return host.preparePinnedFormat(snapshot, registration);
       const nativeFacts = registration.nativeFacts;
       if (nativeFacts !== undefined)
         await host.commit(() =>
@@ -98,8 +98,8 @@ function nativeRequestKimiPreparation(
 ): PrepareNativeRequestKimi {
   return (snapshot) =>
     host.exclusive(async () => {
-      if (snapshot.version?.commitSeq !== host.current()?.commitSeq)
-        throw new Error('History changed before the native Kimi fact fill');
+      if (snapshot.version !== host.current())
+        return host.preparePinnedKimi(snapshot);
       await host.commit(() => Promise.resolve([{ kind: 'kimi' }]));
       return host.snapshot();
     });
