@@ -1019,7 +1019,7 @@ describe('sessionCleanupUtils @plan:PLAN-20260211-SESSIONRECORDING.P16', () => {
 
             expect(entries).toHaveLength(count);
             for (const entry of entries) {
-              expect(entry.fileName).toMatch(/^session-.*\.jsonl$/);
+              expect(entry.fileName).toMatch(/^session-.*\.llxj$/);
               expect(entry.filePath).toBe(
                 path.join(localChats, entry.fileName),
               );

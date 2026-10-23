@@ -757,7 +757,7 @@ describe('Item 4 — failure isolation and diagnostics', () => {
 
     // Archive exists — duplicate state preserved for next sweep reconciliation.
     const archives = await listArchives(chatsDir);
-    expect(archives.some((f) => f.endsWith('.jsonl.gz'))).toBe(true);
+    expect(archives.some((f) => f.endsWith('.llxj.gz'))).toBe(true);
 
     // The duplicate can be reconciled on the next sweep: clear the fault and
     // run again.

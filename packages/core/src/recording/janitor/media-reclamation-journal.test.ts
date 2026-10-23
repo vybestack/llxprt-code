@@ -12,7 +12,7 @@ import { JournalSession } from '../../services/history/journalSession.js';
 import { HistoryMediaOwnership } from '../../storage/history-media-ownership.js';
 import { LocalMediaStore } from '../../storage/local-media-store.js';
 import { SessionPersistenceService } from '../../storage/SessionPersistenceService.js';
-type HistoryBackend = 'old' | 'journal';
+type HistoryBackend = 'journal';
 
 import {
   recordJournal,
@@ -28,7 +28,7 @@ import { resolveRetentionConfig } from './retentionPolicy.js';
 import { runSessionCleanup } from './sessionJanitor.js';
 
 const PROJECT = 'a'.repeat(64);
-const BACKENDS: readonly HistoryBackend[] = ['old', 'journal'];
+const BACKENDS: readonly HistoryBackend[] = ['journal'];
 
 async function firstRowBody(filePath: string): Promise<number> {
   const reader = await openJournalReadOnly(filePath);
@@ -109,7 +109,7 @@ describe('validated journal media ownership without persisted snapshots', () => 
         const snapshots = (await fsp.readdir(chatsDir())).filter((name) =>
           name.endsWith('.json'),
         );
-        expect(snapshots.length).toBe(backend === 'journal' ? 0 : 1);
+        expect(snapshots.length).toBe(0);
       } finally {
         await integration.dispose();
         await history.dispose();
