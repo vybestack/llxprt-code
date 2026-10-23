@@ -4,7 +4,7 @@ import type { IdFactQueries } from './idFactQueries.js';
 import type { IdFactBatch } from './idFactBatch.js';
 import { ID_NS } from './idKeys.js';
 
-export const TOOL_RANKING_READY = 'history:tool-ranking:1';
+export const TOOL_RANKING_READY = 'history:tool-ranking:2';
 const utf8 = new TextEncoder();
 const namespace = ID_NS.nativeScalar;
 
@@ -48,33 +48,24 @@ export class ToolRankingTree {
     );
   }
 
-  private async part(id: number, part: number): Promise<DataView> {
-    const bytes = await this.facts.getEntry(
-      namespace,
-      this.key(['node', id, part]),
-    );
-    if (bytes?.length !== 16)
-      throw new JournalFormatError('Missing tool ranking node');
-    return view(bytes);
-  }
   async node(id: number): Promise<ToolRankNode> {
     if (id === 0) throw new RangeError('Empty tool ranking child');
-    const position = await this.part(id, 0);
-    const score = await this.part(id, 1);
-    const tree = await this.part(id, 2);
-    const total = await this.part(id, 3);
+    const bytes = await this.facts.getEntry(namespace, this.key(['node', id]));
+    if (bytes?.length !== 56)
+      throw new JournalFormatError('Missing tool ranking node');
+    const data = view(bytes);
     return {
       id,
-      label: position.getBigUint64(0, true),
-      ordinal: position.getUint32(8, true),
-      block: position.getUint32(12, true),
-      score: score.getFloat64(0, true),
-      saving: score.getFloat64(8, true),
-      left: tree.getUint32(0, true),
-      right: tree.getUint32(4, true),
-      height: tree.getUint32(8, true),
-      count: tree.getUint32(12, true),
-      total: total.getFloat64(0, true),
+      label: data.getBigUint64(0, true),
+      ordinal: data.getUint32(8, true),
+      block: data.getUint32(12, true),
+      score: data.getFloat64(16, true),
+      saving: data.getFloat64(24, true),
+      left: data.getUint32(32, true),
+      right: data.getUint32(36, true),
+      height: data.getUint32(40, true),
+      count: data.getUint32(44, true),
+      total: data.getFloat64(48, true),
     };
   }
   async header(): Promise<{
@@ -157,26 +148,19 @@ export class ToolRankingTreeWriter extends ToolRankingTree {
       total:
         Math.max(0, node.saving) + (left?.total ?? 0) + (right?.total ?? 0),
     };
-    const position = new Uint8Array(16);
-    const p = view(position);
-    p.setBigUint64(0, next.label, true);
-    p.setUint32(8, next.ordinal, true);
-    p.setUint32(12, next.block, true);
-    const scores = new Uint8Array(16);
-    view(scores).setFloat64(0, next.score, true);
-    view(scores).setFloat64(8, next.saving, true);
-    const tree = new Uint8Array(16);
-    [next.left, next.right, next.height, next.count].forEach((value, at) =>
-      view(tree).setUint32(at * 4, value, true),
-    );
-    const total = new Uint8Array(16);
-    view(total).setFloat64(0, next.total, true);
-    for (const [part, bytes] of [position, scores, tree, total].entries())
-      await this.batch.setEntry(
-        namespace,
-        this.key(['node', node.id, part]),
-        bytes,
-      );
+    const bytes = new Uint8Array(56);
+    const data = view(bytes);
+    data.setBigUint64(0, next.label, true);
+    data.setUint32(8, next.ordinal, true);
+    data.setUint32(12, next.block, true);
+    data.setFloat64(16, next.score, true);
+    data.setFloat64(24, next.saving, true);
+    data.setUint32(32, next.left, true);
+    data.setUint32(36, next.right, true);
+    data.setUint32(40, next.height, true);
+    data.setUint32(44, next.count, true);
+    data.setFloat64(48, next.total, true);
+    await this.batch.setEntry(namespace, this.key(['node', node.id]), bytes);
     return next;
   }
   private async rotateRight(node: ToolRankNode): Promise<ToolRankNode> {
