@@ -65,7 +65,7 @@ describe('native recording positional failure ownership', () => {
       expect(extraBytes).toBeGreaterThanOrEqual(0);
       expect(extraBytes > 0).toBe(mode !== 'zero');
       expect(await readdir(reports)).toStrictEqual([]);
-      await integration.dispose();
+      await expect(integration.dispose()).resolves.toBeUndefined();
       history.add(nativeText('after detach'));
       await history.waitForCommit();
       expect(history.getStatistics().totalMessages).toBe(3);
@@ -94,6 +94,8 @@ describe('native recording positional failure ownership', () => {
       expect(report.cause).toBe(cause);
       expect(generations).toStrictEqual([2]);
       expect(await readdir(reports)).toStrictEqual([]);
+      await expect(integration.dispose()).resolves.toBeUndefined();
+      await expect(recording.dispose()).resolves.toBeUndefined();
     });
   }
 

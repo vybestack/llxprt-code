@@ -22,6 +22,7 @@ export type JournalEvent =
       readonly type: 'write';
       readonly position: number;
       readonly length: number;
+      readonly kind?: number;
     }
   | { readonly type: 'flush'; readonly fd: number }
   | { readonly type: 'truncate'; readonly length: number }
@@ -35,6 +36,8 @@ export interface Failures {
   failTruncate?: boolean;
   /** Holds the write at this index until `release` is called. */
   gateWriteAt?: number;
+  gateTrailerAt?: number;
+  failTrailerAt?: number;
   /** Counts the positional reads that reach the file. */
   readCounter?: { reads: number };
   /** Holds every positional read until `promise` settles; `hits` counts the reads that arrived. */
@@ -64,9 +67,25 @@ function wrapHandle(
   gate: { promise: Promise<void> },
 ): JournalFileHandle {
   let writes = 0;
-  const admit = async (position: number, length: number): Promise<void> => {
+  let trailers = 0;
+  const admit = async (
+    position: number,
+    length: number,
+    kind?: number,
+  ): Promise<void> => {
     const index = writes++;
-    events.push({ type: 'write', position, length });
+    events.push({
+      type: 'write',
+      position,
+      length,
+      ...(kind === undefined ? {} : { kind }),
+    });
+    if (kind === RECORD_KIND.TRAILER) {
+      const trailer = trailers++;
+      if (failures.failTrailerAt === trailer)
+        throw new Error('injected write failure');
+      if (failures.gateTrailerAt === trailer) await gate.promise;
+    }
     if (failures.failWriteAt === index)
       throw new Error('injected write failure');
     if (failures.gateWriteAt === index) await gate.promise;
@@ -82,7 +101,7 @@ function wrapHandle(
       return real.read(buffer, offset, length, position);
     },
     write: async (buffer, offset, length, position) => {
-      await admit(position, length);
+      await admit(position, length, buffer[offset]);
       return real.write(buffer, offset, length, position);
     },
     writev: async (buffers, position) => {

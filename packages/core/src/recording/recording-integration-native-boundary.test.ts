@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { describe, expect, it } from 'bun:test';
+import { RECORD_KIND } from '../journal/recordKinds.js';
 import { TRAILER_RECORD_BYTES } from '../journal/trailerRecord.js';
 import { HistoryService } from '../services/history/HistoryService.js';
 import type { IContent } from '../services/history/IContent.js';
@@ -13,19 +14,23 @@ import { withResumed } from './__tests__/support/native-resume-fixture.js';
 import { JournalResumeBoot, resumePointOf } from './journalResume.js';
 import { readJournalFileFacts } from './journalSessionListing.js';
 
-function writeCount(fixture: NativeIntegrationFixture): number {
-  return fixture.seams.events.filter((event) => event.type === 'write').length;
+function trailerCount(fixture: NativeIntegrationFixture): number {
+  return fixture.seams.events.filter(
+    (event) => event.type === 'write' && event.kind === RECORD_KIND.TRAILER,
+  ).length;
 }
 
 async function waitForHeldWrite(
   fixture: NativeIntegrationFixture,
 ): Promise<void> {
-  const index = fixture.failures.gateWriteAt;
+  const index = fixture.failures.gateTrailerAt;
   if (index === undefined) throw new Error('Missing positional write gate');
-  while (writeCount(fixture) <= index)
+  while (trailerCount(fixture) <= index)
     await new Promise<void>((resolve) => setImmediate(resolve));
   expect(
-    fixture.seams.events.filter((event) => event.type === 'write')[index],
+    fixture.seams.events.filter(
+      (event) => event.type === 'write' && event.kind === RECORD_KIND.TRAILER,
+    )[index],
   ).toMatchObject({ length: TRAILER_RECORD_BYTES });
 }
 
@@ -115,8 +120,7 @@ describe('native compression and replacement recording boundaries', () => {
         await integration.subscribeToJournal(history);
         history.add(nativeText('baseline'));
         await integration.flushAtTurnBoundary();
-        failures.gateWriteAt =
-          writeCount(current) + (primary && operation === 'clear' ? 0 : 1);
+        failures.gateTrailerAt = trailerCount(current);
         let settled = false;
         const mutation = (
           operation === 'replace'
@@ -155,7 +159,7 @@ describe('native compression and replacement recording boundaries', () => {
     await integration.subscribeToJournal(history);
     history.add(nativeText('baseline'));
     await integration.flushAtTurnBoundary();
-    failures.gateWriteAt = writeCount(current) + 1;
+    failures.gateTrailerAt = trailerCount(current);
     const replacing = history.replaceAll([
       nativeText('replacement-1'),
       nativeText('replacement-2', 'ai'),
@@ -200,7 +204,7 @@ describe('native compression and replacement recording boundaries', () => {
       nativeText('second-user'),
       nativeText('second-ai', 'ai'),
     ]);
-    failures.gateWriteAt = writeCount(current) + 1;
+    failures.gateTrailerAt = trailerCount(current);
     history.add(nativeText('admitted-first'));
     let attached = false;
     const handover = integration.subscribeToJournal(replacement).then(() => {
@@ -282,9 +286,12 @@ describe('native compression and replacement recording boundaries', () => {
         failures.failFlushAt = seams.events.filter(
           (event) => event.type === 'flush',
         ).length;
+      else if (stage === 'trailer')
+        failures.failTrailerAt = trailerCount(current);
       else
-        failures.failWriteAt =
-          writeCount(current) + (stage === 'trailer' ? 1 : 0);
+        failures.failWriteAt = seams.events.filter(
+          (event) => event.type === 'write',
+        ).length;
       await expect(
         history.replaceAll([nativeText('rejected replacement')]),
       ).rejects.toThrow(

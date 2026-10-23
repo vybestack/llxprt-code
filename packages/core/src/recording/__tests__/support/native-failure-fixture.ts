@@ -123,8 +123,9 @@ export function useNativeFailureIntegration(): () => NativeFailureFixture {
       directory: directory(),
       reports,
     };
-    await integration.subscribeToJournal(history);
     history.add(nativeText('durable baseline'));
+    await history.waitForCommit();
+    await integration.subscribeToJournal(history);
     await integration.flushAtTurnBoundary();
   });
   afterEach(async () => {
