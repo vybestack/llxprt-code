@@ -1,5 +1,4 @@
-import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
-import { observeHistorySynchronouslyForTest as testHistory } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 /**
  * Test to reproduce duplicate tool call IDs during compression
  *
@@ -19,7 +18,7 @@ import { HistoryService } from '../services/history/HistoryService.js';
 import { encodeForProvider } from './__tests__/support/compression-wire-fixture.js';
 const histories: HistoryService[] = [];
 
-function createOldHistory(): HistoryService {
+function createHistory(): HistoryService {
   const history = new HistoryService({});
   histories.push(history);
   return history;
@@ -50,8 +49,8 @@ function collectToolCallId(
     ids.push(block.id);
   }
 }
-function legacyTest0() {
-  const historyService = createOldHistory();
+async function legacyTest0(): Promise<void> {
+  const historyService = createHistory();
   // Add initial conversation with a tool call
   historyService.add({
     speaker: 'human',
@@ -89,7 +88,9 @@ function legacyTest0() {
   });
   // Now simulate what happens during compression
   // Step 1: Get curated history as IContent
-  const curatedIContent = curatedHistoryForTest(historyService);
+  const curatedIContent = await Array.fromAsync(
+    historyService.getCuratedForProviderStream(),
+  );
   // Step 2: Encode to the provider wire Content[] format, mirroring what
   // the Gemini provider's outbound converter produces for request history.
   const curatedContent = encodeForProvider(curatedIContent);
@@ -105,7 +106,7 @@ function legacyTest0() {
   expect(historyToKeep[1].role).toBe('user'); // Tool response (user role in wire format)
   expect(historyToKeep[2].role).toBe('model'); // AI final response
   // Step 4: Create new history service (what startChat does)
-  const newHistoryService = createOldHistory();
+  const newHistoryService = createHistory();
   // Step 5: Add compressed summary
   newHistoryService.add({
     speaker: 'human',
@@ -122,7 +123,7 @@ function legacyTest0() {
     );
   }
   // Check that tool call IDs are not duplicated
-  const allHistory = testHistory(newHistoryService);
+  const allHistory = await collectRawHistory(newHistoryService);
   const toolCallIds: string[] = [];
   const toolResponseIds: string[] = [];
   for (const content of allHistory) {
@@ -145,7 +146,7 @@ function addHumanFixture(history: HistoryService, text: string): void {
   history.add({ speaker: 'human', blocks: [{ type: 'text', text }] });
 }
 async function legacyTest1() {
-  const historyService = createOldHistory();
+  const historyService = createHistory();
   // Add some history with tool calls
   addHumanFixture(historyService, 'Do something');
   const toolId1 = 'hist_tool_abc123';
@@ -172,7 +173,9 @@ async function legacyTest1() {
     ],
   });
   // Simulate first compression
-  let curated = curatedHistoryForTest(historyService);
+  let curated = await Array.fromAsync(
+    historyService.getCuratedForProviderStream(),
+  );
   let contents = encodeForProvider(curated);
   // Clear and rebuild
   await historyService.clear();
@@ -210,7 +213,7 @@ async function legacyTest1() {
     ],
   });
   // Simulate second compression
-  curated = curatedHistoryForTest(historyService);
+  curated = await Array.fromAsync(historyService.getCuratedForProviderStream());
   contents = encodeForProvider(curated);
   // Clear and rebuild again
   await historyService.clear();
@@ -221,7 +224,7 @@ async function legacyTest1() {
     historyService.add(ContentConverters.toIContent(c), 'model');
   }
   // Verify no duplicate IDs
-  const finalHistory = testHistory(historyService);
+  const finalHistory = await collectRawHistory(historyService);
   const allToolIds: string[] = [];
   for (const content of finalHistory) {
     for (const block of content.blocks) {
@@ -231,14 +234,14 @@ async function legacyTest1() {
   const uniqueIds = new Set(allToolIds);
   expect(allToolIds.length).toBe(uniqueIds.size);
 }
-describe('old synchronous compression tool identities', () => {
+describe('journal compression tool identities', () => {
   afterEach(async () => {
     for (const history of histories) await history.dispose();
     histories.length = 0;
   });
   describe('Compression and duplicate tool call IDs / should not create duplicate tool IDs when rebuilding history after compression', () => {
-    it('should not create duplicate tool IDs when rebuilding history after compression', () => {
-      expect(legacyTest0).not.toThrow();
+    it('should not create duplicate tool IDs when rebuilding history after compression', async () => {
+      await expect(legacyTest0()).resolves.toBeUndefined();
     });
   });
   describe('Compression and duplicate tool call IDs / should handle multiple compressions without duplicating IDs', () => {
