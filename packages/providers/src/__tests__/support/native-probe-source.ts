@@ -49,7 +49,7 @@ export async function prepareNativeProbeSources(
         await journalSendFixture(
           sourceRows({ directory, count: counts[size] }),
           [],
-          { directory: join(directory, 'journal'), oneRowAtATime: true },
+          { directory: join(directory, 'journal') },
         ),
       );
     }
