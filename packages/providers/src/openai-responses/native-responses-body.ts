@@ -33,11 +33,17 @@ import {
 } from './journal-responses-length.js';
 import { responsesRequestParts } from './responses-disk-body.js';
 import { responsesInputContext } from './responses-request-fields.js';
-import { jsonValueBytes } from '../utils/progressive-json-body.js';
+import { sanitizeDiagnosticData } from '../utils/mediaDiagnostics.js';
 import { resolveRowsMedia } from './responses-row-media.js';
 import { PROJECTION_REVISION } from '../runtime/promptEnvelopeProjections.js';
 import { NativeResponsesEstimateProjection } from './native-responses-estimate.js';
-import { sanitizeDiagnosticData } from '../utils/mediaDiagnostics.js';
+import {
+  NativeDumpBody,
+  nativeDumpLiteral,
+  nativeDumpValue,
+  type NativeDumpPiece,
+} from '../utils/native-dump-body.js';
+import type { StreamedDumpBody } from '../utils/dumpSDKContext.js';
 import type { DiskBodyMedia } from './responses-disk-body.js';
 import {
   statefulResponsesSummary,
@@ -89,6 +95,8 @@ export class NativeResponsesPrompt {
   readonly model: string;
   readonly estimate: NativeResponsesEstimateProjection;
   private closed = false;
+  private readonly capture: NativeDumpBody;
+  readonly dump: StreamedDumpBody;
 
   constructor(
     private readonly rows: ProviderRequestRows,
@@ -101,6 +109,11 @@ export class NativeResponsesPrompt {
   ) {
     this.model = shell.request.model;
     this.estimate = new NativeResponsesEstimateProjection(this);
+    this.capture = new NativeDumpBody(
+      () => this.bodyPieces(shell.request),
+      false,
+    );
+    this.dump = this.capture.dump;
   }
 
   toEstimatorProjection(): NativeResponsesEstimateProjection {
@@ -159,44 +172,69 @@ export class NativeResponsesPrompt {
     }
   }
 
-  async *inputBytes(media: DiskBodyMedia): AsyncGenerator<Uint8Array> {
+  private async *inputPieces(): AsyncGenerator<NativeDumpPiece> {
     if (this.selection.inputOverride !== undefined) {
-      const value = this.selection.inputOverride.value;
-      yield* jsonValueBytes(
-        media === 'dump' ? sanitizeDiagnosticData(value) : value,
-      );
+      yield* nativeDumpValue(this.selection.inputOverride.value);
       return;
     }
-    yield Buffer.from('[');
+    yield nativeDumpLiteral('[');
     let separator = '';
     for await (const item of this.items()) {
-      yield Buffer.from(separator);
-      yield* jsonValueBytes(
-        media === 'dump' ? sanitizeDiagnosticData(item) : item,
-      );
+      yield nativeDumpLiteral(separator);
+      yield* nativeDumpValue(item);
       separator = ',';
     }
-    yield Buffer.from(']');
+    yield nativeDumpLiteral(']');
+  }
+
+  private async *bodyPieces(
+    request: OpenAIResponsesRequest,
+    diagnosticRequest = request,
+  ): AsyncGenerator<NativeDumpPiece> {
+    this.requireOpen();
+    yield nativeDumpLiteral('{');
+    let wireComma = '';
+    let dumpComma = '';
+    for (const key of Object.keys(request)) {
+      this.requireOpen();
+      const value: unknown = Reflect.get(request, key);
+      if (value === undefined) continue;
+      const diagnostic: unknown = Reflect.get(diagnosticRequest, key);
+      const keep = diagnostic !== undefined;
+      yield nativeDumpLiteral(
+        `${wireComma}${JSON.stringify(key)}:`,
+        keep ? `${dumpComma}${JSON.stringify(key)}:` : '',
+      );
+      if (key === 'input') yield* this.inputPieces();
+      else
+        yield* nativeDumpValue(value, () =>
+          key === 'tools' ? sanitizeDiagnosticData(diagnostic) : diagnostic,
+        );
+      wireComma = ',';
+      if (keep) dumpComma = ',';
+    }
+    yield nativeDumpLiteral('}');
+  }
+
+  async *inputBytes(media: DiskBodyMedia): AsyncGenerator<Uint8Array> {
+    for await (const piece of this.inputPieces())
+      yield media === 'dump' ? piece.diagnostic() : piece.wire;
   }
 
   async *body(
     request: OpenAIResponsesRequest,
     media: DiskBodyMedia = 'wire',
   ): AsyncGenerator<Uint8Array> {
-    this.requireOpen();
-    for (const part of responsesRequestParts(
-      request,
-      this.options.invocation.signal,
-    )) {
-      if (part.kind === 'literal') yield part.bytes;
-      else if (part.key === 'input') yield* this.inputBytes(media);
-      else
-        yield* jsonValueBytes(
-          media === 'dump' && part.key === 'tools'
-            ? sanitizeDiagnosticData(part.value)
-            : part.value,
-        );
-    }
+    if (media === 'dump') {
+      for await (const piece of this.bodyPieces(request))
+        yield piece.diagnostic();
+    } else yield* this.capture.stream(() => this.bodyPieces(request));
+  }
+
+  async *frame(request: OpenAIResponsesRequest): AsyncGenerator<Uint8Array> {
+    yield* this.capture.stream(() =>
+      this.bodyPieces({ ...request, type: 'response.create' }, request),
+    );
   }
 
   envelope(): OpenAIResponsesRequest {
@@ -204,9 +242,12 @@ export class NativeResponsesPrompt {
     return this.shell.request;
   }
 
-  dispose(): Promise<void> {
-    this.closed = true;
-    return Promise.resolve();
+  async dispose(): Promise<void> {
+    try {
+      await this.capture.dispose();
+    } finally {
+      this.closed = true;
+    }
   }
 }
 

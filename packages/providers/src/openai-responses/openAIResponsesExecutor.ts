@@ -501,8 +501,7 @@ function responseBodyStreams(
     return {
       streamRequestBody: () => prompt.body(requestContext.request),
       streamRequestBodyLength: () => Promise.resolve(prompt.byteLength),
-      streamWebSocketFrame: () =>
-        prompt.body(createFrameRequest(requestContext.request)),
+      streamWebSocketFrame: () => prompt.frame(requestContext.request),
       streamDumpBody: () => prompt.body(requestContext.request, 'dump'),
     };
   const source = prompt.toEstimatorProjection();

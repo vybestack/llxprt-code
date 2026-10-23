@@ -156,6 +156,7 @@ async function assertArtifacts(
   expected: string | undefined,
   created: { files: string[]; directories: string[] },
   shouldDump: boolean,
+  artifacts: number,
 ): Promise<void> {
   expect(await requestDump(cache)).toBe(expected);
   if (shouldDump) {
@@ -164,8 +165,8 @@ async function assertArtifacts(
     expect(expected).not.toContain('AQI=');
     expect(expected).not.toContain('test-api-key');
     expect(expected).toContain('[REDACTED]');
-    expect(new Set(created.files).size).toBe(2);
-    expect(await readdir(join(cache, 'dumps'))).toHaveLength(2);
+    expect(new Set(created.files).size).toBe(artifacts);
+    expect(await readdir(join(cache, 'dumps'))).toHaveLength(artifacts);
     for (const file of created.files) {
       expect(file.startsWith(join(cache, 'dumps/'))).toBe(true);
       expect(file).toMatch(/-(request|response)\.json$/);
@@ -231,6 +232,9 @@ export async function nativeDumpBehavior(
   });
   const route = {
     ...found,
+    providerSettings: routeId.includes('responses')
+      ? { ...found.providerSettings, apiMode: 'responses' }
+      : found.providerSettings,
     baseURL: `http://127.0.0.1:${server.port}${routeId.startsWith('anthropic') ? '' : '/v1'}`,
   };
   const fixture = await journalSendFixture(rows, [], { directory: parent });
@@ -261,7 +265,16 @@ export async function nativeDumpBehavior(
     expect(bodies[2]).toBe(bodies[0]);
     expect(bodies[2]).toBe(bodies[1]);
     if (mode === 'on' || !fail) expect(measured.reads()).toBe(baselineReads);
-    await assertArtifacts(cache, expected, created, mode === 'on' || fail);
+    expect(bodies[2]).toContain(
+      routeId.includes('responses') ? '"input":' : '"messages":',
+    );
+    await assertArtifacts(
+      cache,
+      expected,
+      created,
+      mode === 'on' || fail,
+      routeId.includes('responses') && !fail ? 1 : 2,
+    );
   } finally {
     storage.mockRestore();
     await fixture.close();

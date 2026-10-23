@@ -43,7 +43,9 @@ const rows: readonly IContent[] = [
   },
 ];
 
-async function dump(selection: ProviderRequestSelection): Promise<Buffer> {
+async function prepare(
+  selection: ProviderRequestSelection,
+): ReturnType<typeof buildDiskTextResponsesContext> {
   const request = captureResponsesTestRequest(
     buildNormalizedOptions({
       contents: [],
@@ -62,7 +64,11 @@ async function dump(selection: ProviderRequestSelection): Promise<Buffer> {
     }),
     deps,
   );
-  const prepared = await buildDiskTextResponsesContext(request, deps);
+  return buildDiskTextResponsesContext(request, deps);
+}
+
+async function dump(selection: ProviderRequestSelection): Promise<Buffer> {
+  const prepared = await prepare(selection);
   const source = prepared.sourcePrompt;
   try {
     const chunks: Uint8Array[] = [];
@@ -97,6 +103,37 @@ describe('native Responses diagnostic projection', () => {
       expect(actual?.toString()).not.toContain('AQI=');
       expect(created).toStrictEqual({ files: [], directories: [] });
     } finally {
+      await fixture.close();
+    }
+  });
+});
+
+async function collect(bytes: AsyncIterable<Uint8Array>): Promise<Buffer> {
+  const chunks: Uint8Array[] = [];
+  for await (const chunk of bytes) chunks.push(chunk);
+  return Buffer.concat(chunks);
+}
+
+describe('native Responses frame diagnostics', () => {
+  it('preserves the native WebSocket frame bytes and leaves its extra type out of request dumps', async () => {
+    const fixture = await journalSendFixture(rows, [], {
+      directory: 'tmp/dump-native/fixtures',
+    });
+    const prepared = await prepare(fixture.selection);
+    try {
+      const source = prepared.sourcePrompt;
+      if (!(source instanceof NativeResponsesPrompt))
+        throw new Error('Expected native prompt');
+      const request = { ...prepared.request, type: 'caller-type' };
+      const expected = await collect(
+        source.body({ ...request, type: 'response.create' }),
+      );
+      expect(await collect(source.frame(request))).toStrictEqual(expected);
+      expect((await collect(source.dump.bytes())).toString()).not.toContain(
+        'response.create',
+      );
+    } finally {
+      await prepared.mediaRequest.release();
       await fixture.close();
     }
   });

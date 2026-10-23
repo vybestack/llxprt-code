@@ -17,10 +17,10 @@ import type { ResponsesRequest } from './responses-request.js';
 import {
   shouldDumpSDKContext,
   dumpSDKRequestContextBodyBytes,
+  dumpSDKRequestContext,
   type RequestDumpMetadata,
   bestEffortDump,
 } from '../utils/dumpSDKContext.js';
-import type { dumpSDKRequestContext } from '../utils/dumpSDKContext.js';
 import { buildHttpDumpMetadata } from './openAIResponsesHttpStream.js';
 import type { DumpMode } from '../utils/dumpContext.js';
 
@@ -141,18 +141,23 @@ function dumpRequest(
   signal: AbortSignal | undefined,
 ): ReturnType<typeof dumpSDKRequestContext> {
   const source = requestContext.sourcePrompt;
-  // Stream the sanitized disk body; the request object holds empty placeholders.
+  if (source instanceof NativeResponsesPrompt)
+    return dumpSDKRequestContext(
+      deps.providerName,
+      '/responses',
+      source.dump,
+      baseURL,
+      metadata,
+    );
   return dumpSDKRequestContextBodyBytes(
     deps.providerName,
     '/responses',
-    source instanceof NativeResponsesPrompt
-      ? source.body(requestContext.request, 'dump')
-      : diskResponsesBodyBytes(
-          requestContext.request,
-          source.toEstimatorProjection(),
-          signal,
-          'dump',
-        ),
+    diskResponsesBodyBytes(
+      requestContext.request,
+      source.toEstimatorProjection(),
+      signal,
+      'dump',
+    ),
     baseURL,
     metadata,
     signal,

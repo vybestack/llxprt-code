@@ -35,7 +35,10 @@ export function nativeDumpLiteral(
   };
 }
 
-export function* nativeDumpValue(value: unknown): Generator<NativeDumpPiece> {
+export function* nativeDumpValue(
+  value: unknown,
+  diagnostic: () => unknown = () => sanitizeDiagnosticData(value),
+): Generator<NativeDumpPiece> {
   const chunks = jsonValueChunks(value);
   if (chunks === undefined)
     throw new TypeError('Native dump value is not JSON');
@@ -44,10 +47,13 @@ export function* nativeDumpValue(value: unknown): Generator<NativeDumpPiece> {
     const emit = first;
     yield {
       wire,
-      diagnostic: () =>
-        emit
-          ? Buffer.from(JSON.stringify(sanitizeDiagnosticData(value)))
-          : new Uint8Array(0),
+      diagnostic: () => {
+        if (!emit) return new Uint8Array(0);
+        const value = diagnostic();
+        return value === undefined
+          ? new Uint8Array(0)
+          : Buffer.from(JSON.stringify(value));
+      },
     };
     first = false;
   }
@@ -106,17 +112,29 @@ export class NativeDumpBody {
 
   private async drain(iterator: AsyncIterator<NativeDumpPiece>): Promise<void> {
     if (this.writer === undefined) return;
-    for (;;) {
-      const next = await iterator.next();
-      if (next.done === true) break;
-      await this.append(next.value);
+    try {
+      for (;;) {
+        const next = await iterator.next();
+        if (next.done === true) break;
+        await this.append(next.value);
+      }
+      await this.finish();
+    } catch (error) {
+      await this.discard();
+      throw error;
     }
-    await this.finish();
   }
 
-  async *stream(): AsyncGenerator<Uint8Array> {
+  private async discard(): Promise<void> {
+    const writer = this.writer;
+    this.writer = undefined;
+    if (writer !== undefined)
+      await bestEffortDump('native-discard', 'native', () => writer.discard());
+  }
+
+  async *stream(pieces = this.pieces): AsyncGenerator<Uint8Array> {
     this.sent = true;
-    const iterator = this.pieces()[Symbol.asyncIterator]();
+    const iterator = pieces()[Symbol.asyncIterator]();
     try {
       for (;;) {
         const next = await iterator.next();
@@ -149,7 +167,11 @@ export class NativeDumpBody {
 
   async dispose(): Promise<void> {
     if (this.writer === undefined) return;
-    for await (const piece of this.pieces()) await this.append(piece);
-    await this.finish();
+    try {
+      for await (const piece of this.pieces()) await this.append(piece);
+      await this.finish();
+    } finally {
+      await this.discard();
+    }
   }
 }
