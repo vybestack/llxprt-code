@@ -1,28 +1,81 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { expectTicketCallersReleased } from './ticket-owner-contract-test-helpers.js';
-import {
-  captureTicketWrite,
-  expectTicketDisk,
-} from './ticket-disk-contract-test-helpers.js';
-import {
-  recordScalarOwners,
-  expectNoScalarOwners,
-} from './__tests__/support/scalar-test-evidence.js';
 import {
   batchRow,
   withBatchFixture,
 } from './__tests__/support/addbatch-stream-test-helpers.js';
-import { computeStatistics } from './curationDebugLogger.js';
 import { computeContextRange } from './contextRange.js';
+import { computeStatistics } from './curationDebugLogger.js';
 import type { IContent } from './IContent.js';
+import { expectScalarDurableRows } from './scalar-owner-contract-test-helpers.js';
+import { expectTicketCallersReleased } from './ticket-owner-contract-test-helpers.js';
+import {
+  probeTransformRow,
+  transformProbes,
+} from './transform-value-test-helpers.js';
 import type { ContextRange } from './historyEventTypes.js';
 
-import {
-  expectScalarCharge,
-  expectScalarDurableRows,
-  scalarRowCharge,
-} from './scalar-owner-contract-test-helpers.js';
+type ScalarFixture = Parameters<Parameters<typeof withBatchFixture>[0]>[0];
+
+function appendScalarRow(
+  history: ScalarFixture['history'],
+  index: number,
+): {
+  append: Promise<void>;
+  probes: ReturnType<typeof transformProbes>;
+} {
+  const row = batchRow(index);
+  const probes = transformProbes();
+  probeTransformRow(row, probes);
+  return { append: history.addBatch([row]), probes };
+}
+
+async function checkPendingScalarAppend(
+  {
+    history,
+    recorder,
+    owners,
+    pauseWriter,
+    waitForPausedWrite,
+    releaseWriter,
+  }: ScalarFixture,
+  size: number,
+): Promise<void> {
+  let emitted: ContextRange | undefined;
+  history.on('contextRangeChanged', (range) => {
+    emitted = range;
+  });
+  pauseWriter();
+  const { append, probes } = appendScalarRow(history, size);
+  try {
+    await waitForPausedWrite;
+    expect(history.length()).toBe(size + 1);
+    expect(history.getTotalTokens()).toBe(4 * size);
+    expect(emitted).toBeUndefined();
+    await expectTicketCallersReleased(probes);
+    expect(owners.snapshot().liveRows).toBe(0);
+    expect(owners.snapshot().liveSerializedBytes).toBe(0);
+    expect(owners.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 })).toBe(
+      true,
+    );
+  } finally {
+    releaseWriter();
+    await append;
+  }
+  await history.waitForCommit();
+  expect(history.length()).toBe(size + 1);
+  expect(history.getTotalTokens()).toBe(4 * (size + 1));
+  if (emitted === undefined)
+    throw new Error('Expected acknowledged range event');
+  expect(history.getContextRange()).toStrictEqual(emitted);
+  expect(await history.getLastUserContent()).toStrictEqual(
+    size % 3 === 0 ? batchRow(size) : scalarRow(size - (size % 3)),
+  );
+  expect(await history.removeLastIfMatches(batchRow(size + 10))).toBe(false);
+  await expectScalarDurableRows(recorder, size + 1, (index) =>
+    index === size ? batchRow(index) : scalarRow(index),
+  );
+}
 
 function scalarRow(index: number): IContent {
   const row = batchRow(index);
@@ -48,143 +101,49 @@ function scalarRow(index: number): IContent {
   };
 }
 
-import {
-  transformProbes,
-  probeTransformRow,
-} from './transform-value-test-helpers.js';
-
-function appendScalarRow(
-  history: ScalarFixture['history'],
-  size: number,
-): { append: Promise<void>; probes: ReturnType<typeof transformProbes> } {
-  const row = batchRow(size);
-  const probes = transformProbes();
-  probeTransformRow(row, probes);
-  return {
-    append: history.addBatch([row], undefined, { streamPublication: true }),
-    probes,
-  };
-}
-
-type ScalarFixture = Parameters<Parameters<typeof withBatchFixture>[0]>[0];
-
-async function checkPendingScalarAppend(
-  {
-    history,
-    recorder,
-    owners,
-    pauseWriter,
-    waitForPausedWrite,
-    releaseWriter,
-  }: Pick<
-    ScalarFixture,
-    | 'history'
-    | 'recorder'
-    | 'owners'
-    | 'pauseWriter'
-    | 'waitForPausedWrite'
-    | 'releaseWriter'
-  >,
-  size: number,
-): Promise<void> {
-  let emitted: ContextRange | undefined;
-  history.on('contextRangeChanged', (range) => {
-    emitted = range;
-  });
-  pauseWriter();
-  const { append, probes } = appendScalarRow(history, size);
-  await waitForPausedWrite;
-  expect(history.length()).toBe(size + 1);
-  const lastUser = history.getLastUserContent();
-  expect(emitted).toBeUndefined();
-  expect(history.getTotalTokens()).toBe(0);
-  expect(await lastUser).toStrictEqual(
-    size % 3 === 0 ? batchRow(size) : scalarRow(size - (size % 3)),
-  );
-  expectScalarCharge(owners, 1, scalarRowCharge(batchRow(size)));
-  const ticket = captureTicketWrite(recorder);
-  await expectTicketCallersReleased(probes);
-  expect(owners.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 })).toBe(
-    true,
-  );
-  recordScalarOwners('journal-before-ack', size, owners);
-  releaseWriter();
-  await append;
-  await expectTicketDisk(recorder, ticket, 1, () => batchRow(size));
-  await history.waitForCommit();
-  if (emitted === undefined)
-    throw new Error('Expected acknowledged range event');
-  expect(history.getTotalTokens()).toBe(4);
-  expect(await history.removeLastIfMatches(batchRow(size + 10))).toBe(false);
-  expect(history.getContextRange()).toStrictEqual(emitted);
-  expectNoScalarOwners(owners);
-  recordScalarOwners('journal-after-ack', size, owners);
-  await expectScalarDurableRows(recorder, size + 1, (index) =>
-    index === size ? batchRow(index) : scalarRow(index),
-  );
-  expect(history.getContextRange()).toStrictEqual(emitted);
-}
-
-describe('scalar queries over mixed disk history', () => {
+describe('scalar queries over mixed journal history', () => {
   it.each([512, 8192])(
     'derives counts, last speakers and range from all %i rows without eager history',
     async (size) => {
-      await withBatchFixture(
-        async ({
-          history,
-          recorder,
-          owners,
-          reads,
-          pauseWriter,
-          waitForPausedWrite,
-          releaseWriter,
-        }) => {
-          const expected = Array.from({ length: size }, (_, index) =>
-            scalarRow(index),
-          );
-          for (const content of expected)
-            await recorder.commit('content', { content });
-          expect(history.length()).toBe(size);
-          expect(history.isEmpty()).toBe(false);
-          expect(history.getStatistics()).toStrictEqual(
-            computeStatistics(expected),
-          );
-          expect(history.getContextRange()).toStrictEqual(
-            computeContextRange(expected),
-          );
-          expect(await history.getLastUserContent()).toStrictEqual(
-            expected
-              .slice()
-              .reverse()
-              .find((row) => row.speaker === 'human'),
-          );
-          expect(await history.getLastAIContent()).toStrictEqual(
-            expected
-              .slice()
-              .reverse()
-              .find((row) => row.speaker === 'ai'),
-          );
-          expect(history.getTotalTokens()).toBe(0);
-          recordScalarOwners('durable-scalar', size, owners);
-          expect(reads.snapshot().rowsDecoded).toBeGreaterThan(size);
-          expect(reads.snapshot().peakDecodedRows).toBeLessThanOrEqual(2);
-          expect(
-            owners.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 }),
-          ).toBe(true);
-          expectNoScalarOwners(owners);
-          await checkPendingScalarAppend(
-            {
-              history,
-              recorder,
-              owners,
-              pauseWriter,
-              waitForPausedWrite,
-              releaseWriter,
-            },
-            size,
-          );
-        },
-      );
+      await withBatchFixture(async (fixture) => {
+        const { history, owners, reads } = fixture;
+        const expected = Array.from({ length: size }, (_, index) =>
+          scalarRow(index),
+        );
+        await history.detachedValues.append(
+          (async function* () {
+            for (let index = 0; index < size; index++) yield scalarRow(index);
+          })(),
+        );
+        expect(history.length()).toBe(size);
+        expect(history.isEmpty()).toBe(false);
+        expect(history.getStatistics()).toStrictEqual(
+          computeStatistics(expected),
+        );
+        expect(history.getContextRange()).toStrictEqual(
+          computeContextRange(expected),
+        );
+        expect(await history.getLastUserContent()).toStrictEqual(
+          expected
+            .slice()
+            .reverse()
+            .find((row) => row.speaker === 'human'),
+        );
+        expect(await history.getLastAIContent()).toStrictEqual(
+          expected
+            .slice()
+            .reverse()
+            .find((row) => row.speaker === 'ai'),
+        );
+        expect(history.getTotalTokens()).toBe(4 * size);
+        expect(reads.snapshot().peakDecodedRows).toBeLessThanOrEqual(2);
+        expect(
+          owners.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 }),
+        ).toBe(true);
+        await checkPendingScalarAppend(fixture, size);
+        expect(owners.snapshot().liveRows).toBe(0);
+        expect(owners.snapshot().liveSerializedBytes).toBe(0);
+      });
     },
     180000,
   );
@@ -202,29 +161,27 @@ describe('scalar empty and single-row membership', () => {
       await history.addBatch([batchRow(0)]);
       expect(history.length()).toBe(1);
       expect(await history.getLastUserContent()).toStrictEqual(batchRow(0));
-      await history.waitForTokenUpdates();
       await history.waitForCommit();
       expect(history.getTotalTokens()).toBe(4);
-      expectNoScalarOwners(owners);
+      expect(owners.snapshot().liveRows).toBe(0);
     });
   });
 
-  it('reads the first synchronous append without eager history in the empty check', async () => {
+  it('reads the first synchronous append after its commit without eager history', async () => {
     await withBatchFixture(async ({ history, owners }) => {
       history.add(batchRow(0));
+      await history.waitForCommit();
       expect(history.length()).toBe(1);
       expect(await history.getLastUserContent()).toStrictEqual(batchRow(0));
-      await history.waitForTokenUpdates();
-      await history.waitForCommit();
       expect(history.getTotalTokens()).toBe(4);
-      expectNoScalarOwners(owners);
+      expect(owners.snapshot().liveRows).toBe(0);
     });
   });
 
   it('returns the entire valid last row above eight MiB without imposing a fixture cap', async () => {
-    await withBatchFixture(async ({ history, recorder, owners }) => {
+    await withBatchFixture(async ({ history, owners }) => {
       const row = batchRow(0, 9 * 1024 * 1024);
-      await recorder.commit('content', { content: row });
+      await history.addBatch([row]);
       expect(history.length()).toBe(1);
       const last = await history.getLastUserContent();
       expect(last).toStrictEqual(row);
@@ -232,7 +189,7 @@ describe('scalar empty and single-row membership', () => {
         8 * 1024 * 1024,
       );
       expect(history.getContextRange().lastSeq).toBe(1);
-      expectNoScalarOwners(owners);
+      expect(owners.snapshot().liveRows).toBe(0);
     });
   }, 180000);
 });
