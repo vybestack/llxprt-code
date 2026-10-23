@@ -67,6 +67,7 @@ export async function removeTailOnJournal(
     }
   } finally {
     await store.releaseCompensation(mark);
+    await store.settleFanout();
   }
 }
 
