@@ -4,12 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it } from 'bun:test';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import {
   durableRowsOf,
   expectedRange,
-  mediaParticipant,
+  journalMediaParticipant as mediaParticipant,
   rowsOf,
 } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-test-helpers.js';
 import {
@@ -20,26 +19,63 @@ import {
   withDetachedFixture,
   type DetachedFixture,
 } from '@vybestack/llxprt-code-core/services/history/detached-rollback-test-helpers.js';
-import * as turnHistory from './turnHistoryCommit.js';
-import { prepareAdmittedUserTurn } from './mediaAdmissionSeam.js';
+import { describe, expect, it } from 'bun:test';
 import { mediaRequestFixture } from './__tests__/support/turn-media-request-test-helpers.js';
+import { prepareAdmittedUserTurn } from './mediaAdmissionSeam.js';
+import * as turnHistory from './turnHistoryCommit.js';
+
+async function expectTurnRejection(
+  operation: Promise<void>,
+  failure: string,
+  writeFailure: Error,
+): Promise<void> {
+  if (failure === 'released-input')
+    await expect(operation).rejects.toThrow(
+      'Released user media admission cannot transfer to history',
+    );
+  else await expect(operation).rejects.toBe(writeFailure);
+}
+
+async function expectFollowingTurn(
+  history: HistoryService,
+  failure: string,
+): Promise<void> {
+  if (failure === 'released-input') {
+    history.add({
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'following' }],
+    });
+    await history.waitForTokenUpdates();
+    expect(
+      (await history.getLastUserContent())?.metadata?.chronology?.seq,
+    ).toBe(4);
+  } else {
+    await expect(
+      history.addBatch([
+        { speaker: 'human', blocks: [{ type: 'text', text: 'following' }] },
+      ]),
+    ).rejects.toThrow('journal writer failed earlier');
+  }
+}
 
 async function initializeBaseline(
-  {
-    history,
-    recorder,
-  }: Pick<DetachedFixture, 'history' | 'recorder' | 'releaseWriter'>,
+  fixture: DetachedFixture,
   pending: boolean,
 ): Promise<void> {
-  for (let index = 0; index < 3; index++) history.add(detachedRow(index));
-  await history.waitForTokenUpdates();
-  if (!pending) await recorder.flush();
+  const { history } = fixture;
+  await history.detachedValues.replace(detachedRows(pending ? 2 : 3));
   await history.registerMediaOwner(
     mediaParticipant(() => {
-      expect(recorder.getPendingRecordCount()).toBe(0);
+      expect(history.length()).toBeGreaterThanOrEqual(2);
       return { publish: () => {}, rollback: () => {} };
     }),
   );
+  if (pending) {
+    fixture.pauseWriter(3);
+    history.add(detachedRow(2));
+    await fixture.writerPaused;
+    expect(history.length()).toBe(3);
+  }
 }
 
 async function turnOptions(
@@ -96,108 +132,81 @@ describe('turn history commit surface', () => {
 for (const pending of [false, true]) {
   describe(`turn append with pending baseline ${pending}`, () => {
     it('appends a complete turn, preserves the prefix, and transfers admissions', async () => {
-      await withDetachedFixture(
-        async ({ history, recorder, releaseWriter, owners }) => {
-          await initializeBaseline(
-            { history, recorder, releaseWriter },
-            pending,
-          );
-          const options = await turnOptions(history);
-          const operation = turnHistory.commitTurnHistory(options);
-          expect(recorder.getPendingRecordCount() > 0).toBe(pending);
-          expect(history.getTotalTokens()).toBe(12);
-          releaseWriter();
-          await operation;
-          const rows = await rowsOf(history);
-          expect(rows.slice(0, 3)).toStrictEqual([
-            detachedRow(0),
-            detachedRow(1),
-            detachedRow(2),
-          ]);
-          expect(rows.slice(3).map((row) => row.blocks)).toStrictEqual([
-            [{ type: 'text', text: 'new question' }],
-            [{ type: 'text', text: 'new answer' }],
-          ]);
-          expect(
-            rows.slice(3).map((row) => row.metadata?.chronology?.seq),
-          ).toStrictEqual([4, 5]);
-          expect(rows[4].metadata?.model).toBe('commit-model');
-          expect(rows[4].metadata?.providerBaseURL).toBe(
-            'https://commit.example',
-          );
-          expect(options.preparedUserTurn.isTransferredToHistory()).toBe(true);
-          expect(options.eagerlyRecordedToolResponseCallIds.size).toBe(0);
-          releaseWriter();
-          await recorder.flush();
-          expect((await detachedDurableDigest(recorder)).count).toBe(5);
-          expect(
-            (await durableRowsOf(recorder)).slice(3).map((row) => row.blocks),
-          ).toStrictEqual([
-            [{ type: 'text', text: 'new question' }],
-            [{ type: 'text', text: 'new answer' }],
-          ]);
-          expect(history.getContextRange()).toStrictEqual(expectedRange(5));
-          expect(owners.snapshot().liveRows).toBe(0);
-        },
-        pending,
-      );
+      await withDetachedFixture(async (fixture) => {
+        const { history, recorder, releaseWriter, owners } = fixture;
+        await initializeBaseline(fixture, pending);
+        const options = await turnOptions(history);
+        const operation = turnHistory.commitTurnHistory(options);
+        expect(history.getTotalTokens()).toBe(12);
+        releaseWriter();
+        await operation;
+        const rows = await rowsOf(history);
+        expect(rows.slice(0, 3)).toStrictEqual([
+          detachedRow(0),
+          detachedRow(1),
+          detachedRow(2),
+        ]);
+        expect(rows.slice(3).map((row) => row.blocks)).toStrictEqual([
+          [{ type: 'text', text: 'new question' }],
+          [{ type: 'text', text: 'new answer' }],
+        ]);
+        expect(
+          rows.slice(3).map((row) => row.metadata?.chronology?.seq),
+        ).toStrictEqual([4, 5]);
+        expect(rows[4].metadata?.model).toBe('commit-model');
+        expect(rows[4].metadata?.providerBaseURL).toBe(
+          'https://commit.example',
+        );
+        expect(options.preparedUserTurn.isTransferredToHistory()).toBe(true);
+        expect(options.eagerlyRecordedToolResponseCallIds.size).toBe(0);
+        releaseWriter();
+        await recorder.flush();
+        expect((await detachedDurableDigest(recorder)).count).toBe(5);
+        expect(
+          (await durableRowsOf(recorder)).slice(3).map((row) => row.blocks),
+        ).toStrictEqual([
+          [{ type: 'text', text: 'new question' }],
+          [{ type: 'text', text: 'new answer' }],
+        ]);
+        expect(history.getContextRange()).toStrictEqual(expectedRange(5));
+        expect(owners.snapshot().liveRows).toBe(0);
+      });
     });
   });
 
-  for (const failure of [
-    'admission-zero',
-    'admission-prefix',
-    'released-input',
-  ]) {
+  for (const failure of ['records', 'trailer', 'released-input']) {
     describe(`turn ${failure} with pending baseline ${pending}`, () => {
       it('restores live and durable baseline', async () => {
-        await withDetachedFixture(
-          async ({ history, recorder, releaseWriter, owners }) => {
-            await initializeBaseline(
-              { history, recorder, releaseWriter },
-              pending,
-            );
-            const expected = await detachedDigest(detachedRows(3));
-            const options = await turnOptions(history);
-            if (failure === 'released-input') {
-              await options.preparedUserTurn.releaseIfUncommitted();
-            } else {
-              recorder.failAdmissionAfter(failure === 'admission-zero' ? 0 : 1);
-            }
-            const operation = turnHistory.commitTurnHistory(options);
-            expect(recorder.getPendingRecordCount() > 0).toBe(pending);
+        await withDetachedFixture(async (fixture) => {
+          const { history, recorder, releaseWriter, owners, io } = fixture;
+          await initializeBaseline(fixture, pending);
+          const expected = await detachedDigest(detachedRows(3));
+          const options = await turnOptions(history);
+          const writeFailure = new Error(`turn ${failure} failure`);
+          if (failure === 'released-input') {
+            await options.preparedUserTurn.releaseIfUncommitted();
+          } else if (failure === 'records' || failure === 'trailer') {
             releaseWriter();
-            await expect(operation).rejects.toThrow(
-              failure === 'released-input'
-                ? 'Released user media admission cannot transfer to history'
-                : recorder.failure.message,
-            );
-            expect(
-              await detachedDigest(history.streamRawHistory()),
-            ).toStrictEqual(expected);
-            expect(history.getTotalTokens()).toBe(12);
-            expect(history.getContextRange()).toStrictEqual(expectedRange(3));
-            expect(owners.snapshot().liveRows).toBe(0);
-            expect(options.preparedUserTurn.isTransferredToHistory()).toBe(
-              false,
-            );
-            expect(options.eagerlyRecordedToolResponseCallIds.size).toBe(0);
-            releaseWriter();
-            await recorder.flush();
-            expect(await detachedDurableDigest(recorder)).toStrictEqual(
-              expected,
-            );
-            history.add({
-              speaker: 'human',
-              blocks: [{ type: 'text', text: 'following' }],
-            });
-            await history.waitForTokenUpdates();
-            expect(
-              (await history.getLastUserContent())?.metadata?.chronology?.seq,
-            ).toBe(4);
-          },
-          pending,
-        );
+            await history.waitForCommit();
+            io.rejectNextWrite(writeFailure, failure);
+          }
+          const operation = turnHistory.commitTurnHistory(options);
+          releaseWriter();
+          await expectTurnRejection(operation, failure, writeFailure);
+          expect(
+            await detachedDigest(history.streamRawHistory()),
+          ).toStrictEqual(expected);
+          expect(history.getTotalTokens()).toBe(12);
+          expect(history.getContextRange()).toStrictEqual(expectedRange(3));
+          expect(owners.snapshot().liveRows).toBe(0);
+          expect(options.preparedUserTurn.isTransferredToHistory()).toBe(false);
+          expect(options.eagerlyRecordedToolResponseCallIds.size).toBe(0);
+          releaseWriter();
+          await history.waitForCommit();
+          await recorder.flush();
+          expect(await detachedDurableDigest(recorder)).toStrictEqual(expected);
+          await expectFollowingTurn(history, failure);
+        });
       });
     });
   }
