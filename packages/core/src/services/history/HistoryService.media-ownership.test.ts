@@ -114,6 +114,7 @@ class FailOnceReserveStore extends LocalMediaStore {
 
 describe('HistoryService local-media ownership lifecycle', () => {
   let directory = '';
+  const services: HistoryService[] = [];
 
   beforeEach(async () => {
     directory = await mkdtemp(
@@ -122,6 +123,7 @@ describe('HistoryService local-media ownership lifecycle', () => {
   });
 
   afterEach(async () => {
+    for (const service of services.splice(0)) await service.dispose();
     await rm(directory, { recursive: true, force: true });
   });
 
@@ -134,6 +136,7 @@ describe('HistoryService local-media ownership lifecycle', () => {
 
   async function serviceOf(store: LocalMediaStore): Promise<HistoryService> {
     const service = new HistoryService();
+    services.push(service);
     await service.registerMediaOwner(new HistoryMediaOwnership(store));
     return service;
   }
@@ -174,6 +177,7 @@ describe('HistoryService local-media ownership lifecycle', () => {
       source: 'user-input',
     };
     const service = new HistoryService();
+    services.push(service);
     service.addAll(initial);
     await service.registerMediaOwner(new HistoryMediaOwnership(store));
     store.failNextReserve();

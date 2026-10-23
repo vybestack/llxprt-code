@@ -1,4 +1,4 @@
-import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
+import { curatedHistoryAfterCommit } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 /// <reference lib="esnext.array" />
 /*
  * @license
@@ -6,7 +6,7 @@ import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/cu
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { afterEach, describe, it, expect, beforeEach } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import type { IContent, ToolCallBlock, ToolResponseBlock } from './IContent.js';
 let historyService: HistoryService;
@@ -25,6 +25,9 @@ function hasToolResponseFor(curated: IContent[], id: string): boolean {
 
 describe('Circular Reference Bug', () => {
   beforeEach(facadeCallback0);
+  afterEach(async () => {
+    await historyService.dispose();
+  });
 
   it(
     'should not create circular references when getCurated is called during tool execution',
@@ -58,7 +61,7 @@ function facadeCallback0(): void {
   historyService = new HistoryService();
 }
 
-function facadeCallback1(): void {
+async function facadeCallback1(): Promise<void> {
   // This simulates the actual flow where getCurated is called while a tool is executing
 
   // Step 1: Add user message
@@ -98,7 +101,7 @@ function facadeCallback1(): void {
 
   // Step 3: getCurated is called BEFORE tool response is added
   // This happens during tool execution flow
-  const curated1 = curatedHistoryForTest(historyService);
+  const curated1 = await curatedHistoryAfterCommit(historyService);
 
   // Should be able to stringify without circular reference
   expect(() => JSON.stringify(curated1)).not.toThrow();
@@ -117,20 +120,20 @@ function facadeCallback1(): void {
   });
 
   // Step 5: getCurated called again after tool response
-  const curated2 = curatedHistoryForTest(historyService);
+  const curated2 = await curatedHistoryAfterCommit(historyService);
 
   // Should still be serializable
   expect(() => JSON.stringify(curated2)).not.toThrow();
 }
 
-function facadeCallback2(): void {
+async function facadeCallback2(): Promise<void> {
   // Reproduce the exact sequence from the logs
 
   // Initial prompt
   const toolCall1 = addCircularPrompt();
 
   // getCurated called during tool execution (before response)
-  let curated = curatedHistoryForTest(historyService);
+  let curated = await curatedHistoryAfterCommit(historyService);
 
   // At this point we have an orphan tool call (no response yet)
   // The main concern is that the curated history is serializable
@@ -152,7 +155,7 @@ function facadeCallback2(): void {
   });
 
   // getCurated called again
-  curated = curatedHistoryForTest(historyService);
+  curated = await curatedHistoryAfterCommit(historyService);
   expect(() => JSON.stringify(curated)).not.toThrow();
 
   // This pattern repeats - let's do it multiple times like in the logs
@@ -180,7 +183,7 @@ function facadeCallback2(): void {
     });
 
     // getCurated before response (simulates tool execution)
-    const beforeResponse = curatedHistoryForTest(historyService);
+    const beforeResponse = await curatedHistoryAfterCommit(historyService);
     expect(() => JSON.stringify(beforeResponse)).not.toThrow();
 
     // Add tool response
@@ -197,12 +200,12 @@ function facadeCallback2(): void {
     });
 
     // getCurated after response
-    const afterResponse = curatedHistoryForTest(historyService);
+    const afterResponse = await curatedHistoryAfterCommit(historyService);
     expect(() => JSON.stringify(afterResponse)).not.toThrow();
   }
 }
 
-function facadeCallback3(): void {
+async function facadeCallback3(): Promise<void> {
   // This tests our fix - we check full history for responses, not just curated
 
   const toolCallId = historyService.generateHistoryId(
@@ -245,7 +248,7 @@ function facadeCallback3(): void {
     blocks: [], // Empty AI message (might be excluded from curated)
   });
 
-  const curated = curatedHistoryForTest(historyService);
+  const curated = await curatedHistoryAfterCommit(historyService);
 
   // Should NOT have synthetic response since real one exists
   expect(syntheticResponseCount(curated)).toBe(0);
@@ -294,7 +297,7 @@ async function facadeCallback4(): Promise<void> {
   });
 
   // getCurated does NOT add synthetic responses
-  const curated = curatedHistoryForTest(historyService);
+  const curated = await curatedHistoryAfterCommit(historyService);
 
   // getCurated should NOT have synthetic response
   expect(hasToolResponseFor(curated, toolCallId)).toBe(false);

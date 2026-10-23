@@ -16,7 +16,7 @@ import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core
  * limitations under the License.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { afterEach, describe, it, expect, beforeEach, vi } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import { createUserMessage as createUserMessageFromIContent } from './IContent.js';
@@ -27,6 +27,9 @@ let service: HistoryService;
 
 describe('HistoryService - Behavioral Tests', () => {
   beforeEach(facadeCallback0);
+  afterEach(async () => {
+    await service.dispose();
+  });
 
   describe('ID Normalization Architecture - NEW FAILING TESTS', () => {
     describe('HistoryService as ONLY ID generator', () => {

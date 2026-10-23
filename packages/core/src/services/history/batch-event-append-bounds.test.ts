@@ -2,11 +2,7 @@
 import { describe, expect, it } from 'bun:test';
 import { appendFileSync } from 'node:fs';
 import { withValueTransformFixture } from './transform-value-test-helpers.js';
-import {
-  batchText,
-  eventRows,
-  visitBatch,
-} from './batch-event-test-helpers.js';
+import { batchText, eventRows, readBatch } from './batch-event-test-helpers.js';
 
 describe('cold append suffix batch event ownership', () => {
   it.each([512, 8192])(
@@ -15,9 +11,10 @@ describe('cold append suffix batch event ownership', () => {
       await withValueTransformFixture(async ({ history, owners }) => {
         await history.detachedValues.append(eventRows(1));
         let count = 0;
+        let reading: Promise<void[]> | undefined;
         history.once('contentBatchAdded', (values) => {
           expect(values.length).toBe(size);
-          count = visitBatch(values, (row) => {
+          reading = readBatch(values, (row) => {
             expect(batchText(row)).toBe(`${count++}:` + 'x'.repeat(2048));
           });
         });
@@ -25,6 +22,7 @@ describe('cold append suffix batch event ownership', () => {
           streamPublication: true,
         });
         await history.waitForCommit();
+        await reading;
         const output = process.env.BATCH_EVENT_APPEND_OUTPUT;
         if (output !== undefined)
           appendFileSync(

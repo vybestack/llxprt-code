@@ -12,6 +12,7 @@ import { exactTokenizer } from './chronology-rollback-test-helpers.js';
 import {
   batchValues,
   eventRows,
+  readBatch,
   visitBatch,
 } from './batch-event-test-helpers.js';
 import { publishMutationTokens } from './historyBatchContracts.js';
@@ -36,15 +37,15 @@ describe('batch reader scope failures', () => {
   it('does not mistake a false listenerCount for absence of a real subscriber', async () => {
     const history = new FalseListenerHistory();
     history.setTokenizerFactory(exactTokenizer());
-    let count = 0;
+    let reading: Promise<undefined[]> | undefined;
     history.on('contentBatchAdded', (values) => {
-      count = visitBatch(values, () => undefined);
+      reading = readBatch(values, () => undefined);
     });
     try {
       await history.detachedValues.replace(eventRows(3), undefined, {
         publishBatch: true,
       });
-      expect(count).toBe(3);
+      expect(await reading).toHaveLength(3);
     } finally {
       await history.dispose();
     }
@@ -96,7 +97,7 @@ describe('batch reader misuse and legacy producer', () => {
       ).toThrow('synchronous');
     });
     try {
-      emitHistoryBatchValues(history, source);
+      await emitHistoryBatchValues(history, source);
       await Promise.resolve();
       expect(() => escaped?.next()).toThrow('closed');
     } finally {
@@ -126,7 +127,7 @@ describe('batch reader misuse and legacy producer', () => {
       order.push(`tokens:${event.addedTokens}`);
     });
     try {
-      publishMutationTokens(
+      await publishMutationTokens(
         history,
         {
           nextHistory: next,
