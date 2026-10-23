@@ -13,13 +13,32 @@ import { join } from 'node:path';
 import { LocalMediaStore } from './local-media-store.js';
 import { stageRecordedMedia } from './recorded-media-transfer.js';
 import { SessionMediaOwner } from './session-media-owner.js';
-import { SessionRecordingService } from '../recording/SessionRecordingService.js';
-import { replaySession } from '../recording/ReplayEngine.js';
+import { createSessionRecorder } from '../recording/sessionRecorderFactory.js';
+import { HistoryService } from '../services/history/HistoryService.js';
+import { JournalSession } from '../services/history/journalSession.js';
+import { hydrateRecordedMedia } from './recorded-media-transfer.js';
 import {
   exportSessionMediaPackage,
   importSessionMediaPackage,
 } from '../recording/session-media-package.js';
 import type { IContent } from '../services/history/IContent.js';
+
+async function replayRows(
+  path: string,
+  mediaStore: LocalMediaStore,
+): Promise<IContent[]> {
+  const session = await JournalSession.open(path);
+  try {
+    const history: IContent[] = [];
+    for await (const row of session.rows()) {
+      await hydrateRecordedMedia(mediaStore, [row.content]);
+      history.push(row.content);
+    }
+    return history;
+  } finally {
+    await session.close();
+  }
+}
 
 async function withOwners(
   scenario: (
@@ -50,7 +69,7 @@ async function record(
     semanticMetadata: {},
   });
   const content: IContent = { speaker: 'human', blocks: [reference] };
-  const recording = new SessionRecordingService({
+  const recording = createSessionRecorder({
     sessionId: 'durable-owner',
     projectHash: 'owner-project',
     chatsDir: join(directory, 'chats'),
@@ -59,8 +78,10 @@ async function record(
     model: 'test-model',
     mediaStore: owner.store,
   });
-  recording.recordContent(content);
-  await recording.flush();
+  const history = new HistoryService({ recording });
+  await history.addBatch([content]);
+  await history.waitForCommit();
+  await history.dispose();
   const path = recording.getFilePath();
   await recording.dispose();
   if (path === null) throw new Error('Missing recording');
@@ -112,14 +133,8 @@ describe('session media durable transfer', () => {
         1024 * 1024,
       );
       try {
-        const replay = await replaySession(
-          imported.recordingPath,
-          'owner-project',
-          { mediaStore: fresh.store },
-        );
-        expect(replay.ok).toBe(true);
-        if (!replay.ok) throw new Error(replay.error);
-        expect(replay.history[0].blocks[0]).toMatchObject({
+        const replay = await replayRows(imported.recordingPath, fresh.store);
+        expect(replay[0].blocks[0]).toMatchObject({
           encoding: 'reference',
           byteLength: 4,
         });
@@ -225,13 +240,8 @@ describe('import activation durability', () => {
         'owner-project',
         second.store,
         async (imported) => {
-          const replay = await replaySession(
-            imported.recordingPath,
-            'owner-project',
-            { mediaStore: second.store },
-          );
-          if (!replay.ok) throw new Error(replay.error);
-          const recording = new SessionRecordingService({
+          const replay = await replayRows(imported.recordingPath, second.store);
+          const recording = createSessionRecorder({
             sessionId: 'activation-journal',
             projectHash: 'owner-project',
             chatsDir: join(directory, 'second', 'chats'),
@@ -241,8 +251,10 @@ describe('import activation durability', () => {
             mediaStore: second.store,
           });
           try {
-            recording.recordContent(replay.history[0]);
-            await recording.flush();
+            const history = new HistoryService({ recording });
+            await history.addBatch([replay[0]]);
+            await history.waitForCommit();
+            await history.dispose();
             expect(await second.store.getStoredByteLength()).toBe(4);
           } finally {
             await recording.dispose();
