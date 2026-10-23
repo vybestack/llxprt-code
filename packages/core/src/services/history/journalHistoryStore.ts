@@ -649,20 +649,41 @@ export class JournalHistoryStore
 
   /** Settles the queue, then closes the journal. */
   dispose(): Promise<void> {
-    return (this.disposal ??= this.disposeInternal());
+    return (this.disposal ??= this.disposeInternal().catch((error: unknown) => {
+      this.disposal = Promise.resolve();
+      throw error;
+    }));
   }
 
   private async disposeInternal(): Promise<void> {
     this.disposed = true;
     await this.queue;
     await this.startup;
-    for (const dump of [...this.openDumps]) await dump.close();
-    await this.publication.close();
-    if (this.journal === undefined) return;
-    await this.checkpointLifetime.closePrimary(
-      this.journal,
-      this.adopted !== undefined,
-    );
+    const failures: unknown[] = [];
+    if (this.failure !== undefined) failures.push(this.failure.error);
+    for (const close of [
+      ...[...this.openDumps].map((dump) => () => dump.close()),
+      () => this.publication.close(),
+      async () => {
+        if (this.journal !== undefined)
+          await this.checkpointLifetime.closePrimary(
+            this.journal,
+            this.adopted !== undefined,
+          );
+      },
+    ]) {
+      try {
+        await close();
+      } catch (error) {
+        if (!failures.includes(error)) failures.push(error);
+      }
+    }
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1)
+      throw new AggregateError(
+        failures,
+        'Journal history store disposal failed',
+      );
   }
 
   /**
