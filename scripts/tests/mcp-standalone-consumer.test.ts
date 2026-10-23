@@ -58,6 +58,12 @@ const IMPORT_TIMEOUT_MS = 120_000;
 const TEST_TIMEOUT_MS = 420_000;
 
 const nodeRequire = createRequire(import.meta.url);
+const { npmInvocation } = nodeRequire('../lib/npm-command.cjs') as {
+  npmInvocation: (args: readonly string[]) => {
+    command: string;
+    args: string[];
+  };
+};
 
 interface TarCommandModule {
   spawnTarExtract: (
@@ -96,17 +102,13 @@ function createTemporaryDirectory(prefix: string): string {
  */
 function packAndExtractMcp(): string {
   const packDir = createTemporaryDirectory('llxprt-3305-pack-');
-  const npmBin = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-  const packResult = spawnSync(
-    npmBin,
-    ['pack', '--pack-destination', packDir],
-    {
-      cwd: mcpWorkspaceDir,
-      encoding: 'utf8',
-      timeout: PACK_TIMEOUT_MS,
-      maxBuffer: 64 * 1024 * 1024,
-    },
-  );
+  const npm = npmInvocation(['pack', '--pack-destination', packDir]);
+  const packResult = spawnSync(npm.command, npm.args, {
+    cwd: mcpWorkspaceDir,
+    encoding: 'utf8',
+    timeout: PACK_TIMEOUT_MS,
+    maxBuffer: 64 * 1024 * 1024,
+  });
   if (packResult.error !== undefined && packResult.error !== null) {
     throw new Error(`npm pack failed to spawn: ${packResult.error.message}`);
   }

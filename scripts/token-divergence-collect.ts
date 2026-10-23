@@ -455,7 +455,7 @@ const CHILD_TIMEOUT_MS = 120_000;
 const defaultRunner: ProcessRunner = {
   async run(args: string[], env: NodeJS.ProcessEnv): Promise<RunResult> {
     return new Promise((resolve, reject) => {
-      const child = spawn('bun', args, {
+      const child = spawn(process.execPath, args, {
         env,
         stdio: ['ignore', 'pipe', 'pipe'],
       });

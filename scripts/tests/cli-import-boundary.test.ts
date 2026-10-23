@@ -24,7 +24,7 @@ import { fileURLToPath } from 'node:url';
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(SCRIPT_DIR, '..', '..');
 const SCRIPT = join(REPO_ROOT, 'scripts', 'check-cli-import-boundary.ts');
-const RUNTIME = process.env.BUN_EXECUTABLE ?? 'bun';
+const RUNTIME = process.env.BUN_EXECUTABLE ?? process.execPath;
 
 /** @type {boolean | undefined} */
 let cachedBunAvailable: boolean | undefined;

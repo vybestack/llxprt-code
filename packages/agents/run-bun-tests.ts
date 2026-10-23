@@ -38,13 +38,8 @@ import {
   formatAgentsFailureReason,
 } from '../../scripts/lib/bun-test-retry.js';
 import { spawn } from 'node:child_process';
-import {
-  mkdtempSync,
-  readdirSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs';
+import { writeReportFile } from '../../scripts/lib/junit-report-writer.js';
+import { mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
@@ -464,7 +459,7 @@ async function main(): Promise<void> {
         (failed.length > 0 ? ` (${failed.length} failed)` : ''),
     );
 
-    writeFileSync(JUNIT_PATH, generateJUnit(results, reportPathFor));
+    writeReportFile(JUNIT_PATH, generateJUnit(results, reportPathFor));
     rmSync(reportDir, { recursive: true, force: true });
 
     exitCode = failed.length > 0 ? 1 : 0;

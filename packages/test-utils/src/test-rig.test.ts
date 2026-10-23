@@ -381,9 +381,11 @@ describe('TestRig setup and cleanup behavior', () => {
     await firstRun;
   });
 
-  // The run is recorded before the CLI is spawned. Emptying PATH makes the
-  // spawn fail with ENOENT straight away, so the recording is observable
-  // without a real provider call and without leaving a child process behind.
+  // The run is recorded before the CLI is spawned. Selecting the installed
+  // `llxprt` binary and emptying PATH makes the spawn fail with ENOENT
+  // straight away, so the recording is observable without a real provider call
+  // and without leaving a child process behind. (The source-entry command is
+  // the absolute Bun path, which an empty PATH does not hide.)
   it('records a real-provider run to the ledger when LLXPRT_E2E_MODEL_LEDGER is set', async () => {
     const root = createRoot();
     setEnv('LLXPRT_DEFAULT_PROVIDER', 'openai');
@@ -391,6 +393,7 @@ describe('TestRig setup and cleanup behavior', () => {
     setEnv('OPENAI_API_KEY', 'test-key');
     setEnv('OPENAI_BASE_URL', 'http://127.0.0.1:1');
     setEnv('LLXPRT_TEST_PROFILE', undefined);
+    setEnv('INTEGRATION_TEST_USE_INSTALLED_LLXPRT', 'true');
     setEnv('PATH', join(root, 'no-executables-here'));
 
     const ledgerPath = join(root, 'ledger.jsonl');

@@ -14,6 +14,7 @@ import {
   buildChildEnv,
   buildExtraArgs,
   getCommandAndArgs,
+  nativeBunCommand,
   getProfileName,
   toInlineProfileArg,
 } from './cli-args.js';
@@ -158,7 +159,7 @@ describe('cli-args helpers', () => {
     expect(
       getCommandAndArgs('/packages/cli/index.ts', ['--flag']),
     ).toStrictEqual({
-      command: 'bun',
+      command: nativeBunCommand(),
       initialArgs: ['/packages/cli/index.ts', '--flag'],
     });
   });
@@ -170,7 +171,7 @@ describe('cli-args helpers', () => {
     expect(
       getCommandAndArgs('/packages/cli/index.ts', ['--flag']),
     ).toStrictEqual({
-      command: 'bun',
+      command: nativeBunCommand(),
       initialArgs: ['/packages/cli/index.ts', '--flag'],
     });
   });

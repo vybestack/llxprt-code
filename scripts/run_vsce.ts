@@ -37,6 +37,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -47,6 +48,15 @@ import { fileURLToPath } from 'node:url';
  * scripts/tests/issue-2754-vsce-release-only.test.ts asserts the pin is exact.
  */
 export const VSCE_VERSION = '3.9.2';
+
+const { npmInvocation } = createRequire(import.meta.url)(
+  './lib/npm-command.cjs',
+) as {
+  npmInvocation: (args: readonly string[]) => {
+    command: string;
+    args: string[];
+  };
+};
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -76,20 +86,17 @@ export function ensureVsce(root: string = repoRoot): string {
   }
   const cacheDir = vsceCacheDir(root);
   mkdirSync(cacheDir, { recursive: true });
-  execFileSync(
-    'npm',
-    [
-      'install',
-      '--prefix',
-      cacheDir,
-      '--no-save',
-      '--no-audit',
-      '--no-fund',
-      '--ignore-scripts',
-      `@vscode/vsce@${VSCE_VERSION}`,
-    ],
-    { stdio: 'inherit' },
-  );
+  const npm = npmInvocation([
+    'install',
+    '--prefix',
+    cacheDir,
+    '--no-save',
+    '--no-audit',
+    '--no-fund',
+    '--ignore-scripts',
+    `@vscode/vsce@${VSCE_VERSION}`,
+  ]);
+  execFileSync(npm.command, npm.args, { stdio: 'inherit' });
   if (!existsSync(binary)) {
     throw new Error(
       `Installed @vscode/vsce@${VSCE_VERSION} but no executable at ${binary}.`,

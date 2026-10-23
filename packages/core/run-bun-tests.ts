@@ -36,7 +36,8 @@ import {
   JUNIT_SCAN_CHUNK_BYTES,
 } from '../../scripts/lib/bun-test-retry.js';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtempSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { writeReportFile } from '../../scripts/lib/junit-report-writer.js';
+import { mkdtempSync, readdirSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import {
@@ -460,7 +461,7 @@ async function main(): Promise<void> {
     );
 
     console.log(`Writing JUnit report to ${JUNIT_PATH}`);
-    writeFileSync(JUNIT_PATH, generateJUnit(results));
+    writeReportFile(JUNIT_PATH, generateJUnit(results));
 
     exitCode = failFast || failed.length > 0 ? 1 : 0;
   } catch (error) {

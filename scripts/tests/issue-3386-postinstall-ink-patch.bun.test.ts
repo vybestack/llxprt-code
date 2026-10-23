@@ -47,17 +47,13 @@ if (!isNpmInvocationModule(npmModule)) {
   throw new Error('npm-command.cjs does not export npmInvocation');
 }
 
-function resolveExecutable(name: 'bun' | 'node'): string {
-  const executable = Bun.which(name);
-  if (executable === null) {
-    throw new Error(`${name} executable is required for this test`);
-  }
-  return executable;
-}
+// The native Bun running this test. A bare `bun` resolves to the .bin/bun.cmd
+// shim on Windows, which Bun 1.4+ cannot spawn synchronously.
+const bunExecutable = process.execPath;
 
 function installers(): readonly Installer[] {
   const npm = npmModule.npmInvocation([]);
-  const bun = resolveExecutable('bun');
+  const bun = bunExecutable;
   return [
     {
       name: 'npm',
@@ -176,13 +172,11 @@ describe('issue #3386 real postinstall Ink patch application', () => {
         expect(install.error).toBeUndefined();
         expect(install.status).toBe(0);
 
-        const stock = run(
-          resolveExecutable('bun'),
-          ['check.mjs'],
-          packageRoot,
-          30_000,
-        );
-        expect(stock.status).toBe(42);
+        const stock = run(bunExecutable, ['check.mjs'], packageRoot, 30_000);
+        expect(
+          stock.status,
+          `${String(stock.error)} ${stock.stdout} ${stock.stderr}`,
+        ).toBe(42);
 
         const patch = run(
           installer.lifecycleCommand,
@@ -193,12 +187,7 @@ describe('issue #3386 real postinstall Ink patch application', () => {
         expect(patch.error).toBeUndefined();
         expect(patch.status).toBe(0);
 
-        const patched = run(
-          resolveExecutable('bun'),
-          ['check.mjs'],
-          packageRoot,
-          30_000,
-        );
+        const patched = run(bunExecutable, ['check.mjs'], packageRoot, 30_000);
         expect(patched.error).toBeUndefined();
         expect(patched.status).toBe(0);
       } finally {

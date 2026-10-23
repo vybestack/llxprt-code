@@ -34,13 +34,13 @@ import {
   failureExcerpt,
 } from '../../scripts/lib/bun-test-retry.js';
 import { spawn } from 'node:child_process';
+import { writeReportFile } from '../../scripts/lib/junit-report-writer.js';
 import {
   readdirSync,
   realpathSync,
   renameSync,
   rmSync,
   statSync,
-  writeFileSync,
 } from 'node:fs';
 import { isAbsolute, join, relative, win32 } from 'node:path';
 import {
@@ -434,7 +434,7 @@ export function writeJUnitReport(
   const ordered = [...results].sort((a, b) => a.file.localeCompare(b.file));
   const temporaryPath = `${reportPath}.${process.pid}.tmp`;
   try {
-    writeFileSync(temporaryPath, generateJUnit(ordered));
+    writeReportFile(temporaryPath, generateJUnit(ordered));
     renameSync(temporaryPath, reportPath);
   } catch (error) {
     rmSync(temporaryPath, { force: true });

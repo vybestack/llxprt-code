@@ -46,7 +46,7 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(SCRIPT_DIR, '..', '..');
 const SCRIPT = join(REPO_ROOT, 'scripts', 'check-no-new-js-files.ts');
 const ALLOWLIST_PATH = join(REPO_ROOT, 'scripts', 'no-new-js-allowlist.json');
-const RUNTIME = process.env.BUN_EXECUTABLE || 'bun';
+const RUNTIME = process.env.BUN_EXECUTABLE || process.execPath;
 
 // Path used by the temp-git-repo negative test; the expected guard message is
 // derived from it so the assertion stays in sync if the path changes.

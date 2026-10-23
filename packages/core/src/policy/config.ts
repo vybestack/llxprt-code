@@ -425,7 +425,14 @@ export async function persistPolicyToToml(
   const newContent = toml.stringify(existingData as toml.JsonMap);
 
   const tmpFile = `${policyFile}.tmp`;
-  await fs.writeFile(tmpFile, newContent, 'utf-8');
+  try {
+    await fs.writeFile(tmpFile, newContent, 'utf-8');
+  } catch (error) {
+    throw new Error(
+      `Failed to write policy file ${tmpFile}: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
+  }
   await fs.rename(tmpFile, policyFile);
 }
 

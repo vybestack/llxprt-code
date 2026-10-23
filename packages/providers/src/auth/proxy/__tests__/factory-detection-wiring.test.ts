@@ -26,6 +26,10 @@ const FACTORY_MODULE_PATH = fileURLToPath(
   new URL('../credential-store-factory.ts', import.meta.url),
 );
 const CHILD_RUNTIME = 'bun';
+// Direct (non-bash) spawns must use the native Bun executable: a bare `bun`
+// resolves to the .bin/bun.cmd shim on Windows, and Bun 1.4+ refuses to pass
+// cmd.exe special characters in arguments to .cmd files.
+const NATIVE_CHILD_RUNTIME = process.execPath;
 
 function runBashChild(bashScript: string): ReturnType<typeof spawnSync> {
   return spawnSync(
@@ -349,7 +353,7 @@ describe('Factory Detection Wiring (P33)', () => {
         'let threw = null; try { new HostCredentialOwner(process.env).authority.createTokenStore(); } catch (e) { threw = e.message; }',
         'process.stdout.write(JSON.stringify({ threw, markerGone: process.env.LLXPRT_CAPABILITY_FD === undefined }));',
       ].join('');
-      const result = spawnSync(CHILD_RUNTIME, ['-e', childScript], {
+      const result = spawnSync(NATIVE_CHILD_RUNTIME, ['-e', childScript], {
         encoding: 'utf8',
         env: {
           ...process.env,
