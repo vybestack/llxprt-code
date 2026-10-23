@@ -10,6 +10,7 @@ import { compareIdHashes, type IdEntry } from './idTrieNode.js';
 import { IdTrieReader } from './idTrieReader.js';
 import type { RecordAccess } from './recordAccess.js';
 import { RECORD_KIND } from './recordKinds.js';
+import type { ReadGroup } from './idFactBatch.js';
 
 /**
  * The meta map and the state map are the same persistent trie as the id trie
@@ -104,6 +105,10 @@ export class KeyedMapReader {
     return this.trie;
   }
 
+  withAccess(access: RecordAccess): KeyedMapReader {
+    return new KeyedMapReader(access, this.cache, this.kind, this.hasher);
+  }
+
   hashOf(key: string): Uint8Array {
     return this.hasher(MAP_NAMESPACE[this.kind], encodeKey(key));
   }
@@ -165,11 +170,24 @@ interface PendingValue {
  */
 export class KeyedMapBatch {
   private readonly pending = new Map<string, PendingValue>();
+  private pendingBytes = 0;
 
   constructor(
-    private readonly reader: KeyedMapReader,
-    private readonly root: number,
+    private reader: KeyedMapReader,
+    private root: number,
   ) {}
+
+  async spillWhenFull(
+    appender: RecordAppender,
+    read: ReadGroup,
+  ): Promise<void> {
+    if (this.pendingBytes <= 64 * 1024) return;
+    this.root = await this.commit(appender);
+    await appender.drain();
+    this.reader = this.reader.withAccess(read(appender.nextOffset));
+    this.pending.clear();
+    this.pendingBytes = 0;
+  }
 
   get size(): number {
     return this.pending.size;
@@ -179,11 +197,12 @@ export class KeyedMapBatch {
     assertValue(value);
     const keyBytes = encodeKey(key);
     const hash = this.reader.hashOf(key);
-    this.pending.set(Buffer.from(hash).toString('hex'), {
-      hash,
-      key: keyBytes,
-      value: value.slice(),
-    });
+    const id = Buffer.from(hash).toString('hex');
+    const previous = this.pending.get(id);
+    if (previous !== undefined)
+      this.pendingBytes -= previous.key.length + previous.value.length + 512;
+    this.pending.set(id, { hash, key: keyBytes, value: value.slice() });
+    this.pendingBytes += keyBytes.length + value.length + 512;
   }
 
   async get(key: string): Promise<Uint8Array | undefined> {

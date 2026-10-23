@@ -19,7 +19,7 @@ import {
 import { SeededRandom } from './__tests__/support/seededRandom.js';
 import { UnboundedIdNodeCache } from './__tests__/support/unboundedIdNodeCache.js';
 import { useTempDir } from './__tests__/support/useTempDir.js';
-import { createRecordAccess } from './recordAccess.js';
+import { createRecordAccess, groupReadAccess } from './recordAccess.js';
 import type { PositionalReader } from './positionalFile.js';
 import { createFileHandleReader } from './positionalFile.js';
 import * as fsp from 'node:fs/promises';
@@ -91,6 +91,51 @@ function countingReader(inner: PositionalReader) {
 
 describe('meta map and state map', () => {
   const directory = useTempDir('keyed-map-');
+
+  it('bounds pending metadata while preserving same-group reads through spills', async () => {
+    const file = path.join(directory(), 'spilled.llxj');
+    const writer = await createJournal(file, testJournalSeams().dependencies);
+    const read = groupReadAccess(file, writer, undefined);
+    try {
+      await writer.commitStreamedGroup(async (appender) => {
+        const batch = new KeyedMapBatch(
+          new KeyedMapReader(
+            undefined,
+            new BoundedIdNodeCache(),
+            'meta',
+            sha256KeyHash,
+          ),
+          0,
+        );
+        for (let index = 0; index < 256; index++) {
+          batch.set(`parent:${index}`, ENCODER.encode(`value:${index}`));
+          await batch.spillWhenFull(appender, read);
+          expect(batch.size).toBeLessThan(128);
+          expect(DECODER.decode(await batch.get('parent:0'))).toBe('value:0');
+        }
+        return trailerStateFor(1, { metaRoot: await batch.commit(appender) });
+      });
+    } finally {
+      await writer.close();
+    }
+    const opened = await openJournalReadOnly(file);
+    try {
+      const reader = new KeyedMapReader(
+        opened,
+        new BoundedIdNodeCache(),
+        'meta',
+        sha256KeyHash,
+      );
+      for (let index = 0; index < 256; index++)
+        expect(
+          DECODER.decode(
+            await reader.get(opened.trailer?.metaRoot ?? 0, `parent:${index}`),
+          ),
+        ).toBe(`value:${index}`);
+    } finally {
+      await opened.close();
+    }
+  });
 
   it('agree with a Map oracle over inserts and updates, then after a reopen', async () => {
     const file = path.join(directory(), 'maps.llxj');

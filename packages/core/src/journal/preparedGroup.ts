@@ -17,7 +17,8 @@ import type { NativeFactIndexRegistration } from './nativeFactIndex.js';
 import type { RowDraft } from './rowDraft.js';
 import type { RecordAccess } from './recordAccess.js';
 import type { MapKind } from './keyedMap.js';
-import type { Version } from './version.js';
+import { buildStreamedAppend } from './streamed-append-build.js';
+import type { AppendInput } from './streamed-append-pass.js';
 
 export interface PreparedGroup {
   readonly appender: RecordAppender;
@@ -90,25 +91,6 @@ function preparationWrites(appender: RecordAppender): {
   };
 }
 
-function appendedBase(prior: Version, built: BuiltGroup): Version {
-  const state = built.state;
-  return {
-    ...prior,
-    roots: {
-      rowRoot: state.rowRoot,
-      idRoot: state.idRoot,
-      metaRoot: state.metaRoot,
-      stateRoot: state.stateRoot,
-    },
-    rows: state.rootAggregate.rows,
-    aggregate: state.rootAggregate,
-    nextLabel: state.nextLabel,
-    firstLabel: state.firstLabel,
-    lastRowOffset: state.lastRowOffset,
-    lastOwner: state.lastOwner,
-  };
-}
-
 class PreparedBuilder {
   result: PreparedBuild;
   failure: { error: unknown } | undefined;
@@ -118,7 +100,6 @@ class PreparedBuilder {
     private readonly ctx: BuildContext,
     private readonly planning: PlanContext,
     edits: readonly VersionEdit[],
-    private readonly appender: RecordAppender,
     private readonly rowAppender: RecordAppender,
     private readonly register: RegisterFacts,
   ) {
@@ -169,8 +150,8 @@ class PreparedBuilder {
       { kind: 'append', rows: [] },
     ];
     await this.stream(
-      (async function* (): AsyncGenerator<VersionEdit> {
-        for await (const row of rows) yield { kind: 'append', rows: [row] };
+      (async function* (): AsyncGenerator<AppendInput> {
+        for await (const draft of rows) yield { draft };
       })(),
       actual,
       ownerEdits,
@@ -189,11 +170,12 @@ class PreparedBuilder {
       nextLabel,
     } satisfies VersionEdit;
     await this.stream(
-      (async function* (): AsyncGenerator<VersionEdit> {
-        for await (const row of rows) yield { ...edit, rows: [row] };
+      (async function* (): AsyncGenerator<AppendInput> {
+        for await (const foreign of rows) yield { foreign };
       })(),
       [edit],
       [],
+      nextLabel,
     );
     if (this.result.built === undefined) {
       this.started = false;
@@ -202,46 +184,28 @@ class PreparedBuilder {
   }
 
   private async stream(
-    edits: AsyncIterable<VersionEdit>,
+    inputs: AsyncIterable<AppendInput>,
     actual: readonly VersionEdit[],
     ownerEdits: readonly VersionEdit[],
+    nextLabel?: bigint,
   ): Promise<void> {
     this.start(actual);
-    let base = this.planning.published;
-    let spine: BuiltGroup['spine'];
-    let first = true;
     try {
       const facts = await this.register(actual);
-      for await (const edit of edits) {
-        await this.appender.drain();
-        const access = this.ctx.readGroup(this.appender.nextOffset);
-        const priorSpine = spine;
-        const turn = {
-          ...this.ctx,
-          access,
-          published: base,
-          spineFor:
-            priorSpine === undefined
-              ? this.ctx.spineFor
-              : async () => priorSpine,
-        };
-        const plan = await planGroup(
-          { ...this.planning, access, published: base },
-          [...(first ? ownerEdits : []), edit],
-        );
-        plan.parent = this.planning.published;
-        const built = await buildGroup(
-          turn,
-          plan,
-          mutationOf(actual),
-          this.rowAppender,
-        );
-        base = appendedBase(plan.base, built);
-        spine = built.spine;
-        plan.newRows = [];
+      const plan = await planGroup(this.planning, [
+        ...ownerEdits,
+        { kind: 'append', rows: [] },
+      ]);
+      const built = await buildStreamedAppend(
+        this.ctx,
+        plan,
+        mutationOf(actual),
+        this.rowAppender,
+        inputs,
+        nextLabel,
+      );
+      if (built !== undefined)
         this.result = { plan, built, edits: actual, facts };
-        first = false;
-      }
     } catch (error) {
       this.failure = { error };
       throw error;
@@ -321,7 +285,6 @@ export async function prepareBuild(
     ctx,
     planning,
     edits,
-    appender,
     rowAppender,
     register,
   );

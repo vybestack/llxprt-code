@@ -19,7 +19,7 @@ import type { RowEntry } from './rowEntry.js';
 import { repairResponsesPairChanges } from './responsesPairChanges.js';
 import { rowAlgebra } from './rowAlgebra.js';
 import { bulkBuildRowTree } from './rowTreeBuilder.js';
-import { editRowTree } from './rowTreeEdit.js';
+import { replaceRowEntriesStream } from './row-tree-stream-edit.js';
 import { iterateRowEntries, readRowTreeNode } from './rowTreeReader.js';
 import {
   captureRowFormat,
@@ -358,7 +358,7 @@ async function incrementalFill(
   built: BuiltGroup,
 ): Promise<BuiltGroup> {
   const { ctx, appender, slot, format } = fill;
-  let next =
+  const next =
     format.summaryKind === 'responses'
       ? await repairResponsesPairChanges(
           fill,
@@ -367,34 +367,34 @@ async function incrementalFill(
         )
       : built;
   const algebra = rowAlgebra(slotKindsOf(built.state.slots));
-  for await (const entry of missingEntries(
-    ctx,
-    appender,
-    next.state.rowRoot,
-    slot,
-    format,
-  )) {
-    const updated = await measureEntry(fill, entry);
-    await appender.drain();
-    const root = await editRowTree(
-      ctx.readGroup(appender.nextOffset),
+  async function* replacements(): AsyncGenerator<RowEntry> {
+    for await (const entry of missingEntries(
+      ctx,
       appender,
-      algebra,
-      { offset: next.state.rowRoot, rows: next.state.rootAggregate.rows },
-      { replace: [updated], insert: [] },
-    );
-    next = {
-      ...next,
-      spine: undefined,
-      state: {
-        ...next.state,
-        rowRoot: root.childOffset,
-        rootAggregate: root.aggregate,
-      },
-    };
-    await appender.drain();
+      next.state.rowRoot,
+      slot,
+      format,
+    ))
+      yield await measureEntry(fill, entry);
   }
-  return next;
+  await appender.drain();
+  const root = await replaceRowEntriesStream(
+    ctx.readGroup(appender.nextOffset),
+    appender,
+    algebra,
+    { offset: next.state.rowRoot, rows: next.state.rootAggregate.rows },
+    replacements(),
+  );
+  if (root === undefined) return next;
+  return {
+    ...next,
+    spine: undefined,
+    state: {
+      ...next.state,
+      rowRoot: root.childOffset,
+      rootAggregate: root.aggregate,
+    },
+  };
 }
 
 async function fillSlot(
