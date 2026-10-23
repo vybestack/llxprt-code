@@ -12,6 +12,7 @@ import {
   lstatSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   rmSync,
   symlinkSync,
@@ -274,6 +275,34 @@ export function parseHandleOwners(
   }));
 }
 
+export interface FixtureEntry {
+  readonly name: string;
+  readonly kind: 'directory' | 'file' | 'other';
+  readonly size: number;
+}
+
+const MAX_REPORTED_FIXTURE_ENTRIES = 32;
+
+/**
+ * Lists what a failed recursive removal left behind. `rm -r` deletes every
+ * entry it can before it fails, so the survivors are the locked objects; an
+ * empty list means only the fixture root itself is held. A directory's own
+ * lstat size is always 0 on NTFS and says nothing about emptiness.
+ */
+export function listFixtureEntries(fixture: string): FixtureEntry[] {
+  return readdirSync(fixture, { recursive: true })
+    .slice(0, MAX_REPORTED_FIXTURE_ENTRIES)
+    .map((name) => {
+      const stat = lstatSync(path.join(fixture, name), {
+        throwIfNoEntry: false,
+      });
+      let kind: FixtureEntry['kind'] = 'other';
+      if (stat?.isDirectory()) kind = 'directory';
+      else if (stat?.isFile()) kind = 'file';
+      return { name, kind, size: stat?.size ?? -1 };
+    });
+}
+
 export function throwShimCleanupError(
   error: unknown,
   fixture: string,
@@ -307,9 +336,9 @@ export function throwShimCleanupError(
     emit({
       directory: directory && {
         mode: directory.mode,
-        size: directory.size,
         modified: directory.mtimeMs,
       },
+      remainingEntries: listFixtureEntries(fixture),
     });
     const probe = (command: string, args: string[]): string => {
       const remaining = Math.floor(deadline - performance.now());

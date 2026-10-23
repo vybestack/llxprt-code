@@ -4,10 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it } from 'bun:test';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import * as path from 'node:path';
 import { tmpdir } from 'node:os';
 import {
+  listFixtureEntries,
   parseHandleOwners,
   throwShimCleanupError,
 } from './issue-2978-node-shim-helpers.ts';
@@ -54,4 +56,29 @@ describe('profile fixture cleanup diagnostics', () => {
       expect(caught).toBe(original);
     },
   );
+
+  describe('remaining fixture entries', () => {
+    let fixture: string;
+
+    afterEach(() => {
+      rmSync(fixture, { recursive: true, force: true });
+    });
+
+    it('names the survivors of a failed removal, so an empty root is distinguishable from a locked child', () => {
+      fixture = mkdtempSync(path.join(tmpdir(), 'llxprt-shim-profile-list-'));
+      expect(listFixtureEntries(fixture)).toEqual([]);
+
+      mkdirSync(path.join(fixture, 'bin'));
+      writeFileSync(path.join(fixture, 'bin', 'bun.exe'), 'abc');
+
+      expect(
+        listFixtureEntries(fixture).sort((a, b) =>
+          a.name.localeCompare(b.name),
+        ),
+      ).toEqual([
+        { name: 'bin', kind: 'directory', size: expect.any(Number) },
+        { name: path.join('bin', 'bun.exe'), kind: 'file', size: 3 },
+      ]);
+    });
+  });
 });
