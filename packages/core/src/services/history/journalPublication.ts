@@ -39,6 +39,7 @@ export class JournalCompensationMark implements HistoryCompensationMark {
   constructor(
     readonly store: JournalHistoryStore,
     readonly saved: Promise<VersionSnapshot>,
+    readonly mutation: HistoryMutationMark,
   ) {}
 }
 
@@ -56,7 +57,7 @@ export class JournalPublication {
     store: JournalHistoryStore,
     saved: Promise<VersionSnapshot>,
   ): JournalCompensationMark {
-    const mark = new JournalCompensationMark(store, saved);
+    const mark = new JournalCompensationMark(store, saved, this.mark(store));
     this.compensation.add(mark);
     return mark;
   }
@@ -72,9 +73,14 @@ export class JournalPublication {
   private depth = 0;
   /** Groups accepted so far, acked or not. */
   private admitted = 0;
+  private current = 0;
 
   accepted(): void {
-    this.admitted++;
+    this.current = ++this.admitted;
+  }
+
+  compensated(mark: JournalCompensationMark): void {
+    this.current = mark.mutation.lastSeq;
   }
 
   open(): HistoryPublicationScope {
@@ -91,11 +97,11 @@ export class JournalPublication {
 
   /** Names the position after the last group accepted; a later group makes the mark stale. */
   mark(binding: JournalHistoryStore): HistoryMutationMark {
-    return { binding, lastSeq: this.admitted };
+    return { binding, lastSeq: this.current };
   }
 
   isCurrent(binding: JournalHistoryStore, mark: HistoryMutationMark): boolean {
-    return mark.binding === binding && mark.lastSeq === this.admitted;
+    return mark.binding === binding && mark.lastSeq === this.current;
   }
 }
 

@@ -621,9 +621,10 @@ export class JournalHistoryStore
       this.session.store.published?.commitSeq === saved.version?.commitSeq;
     if (unchanged) {
       this.tentativeRows = saved.rows;
-      return;
+    } else {
+      await this.restoreTo(saved);
     }
-    await this.restoreTo(saved);
+    this.publication.compensated(mark);
   }
 
   /** Runs a detached task against the durable rows and publishes its result (design 4.5). */
