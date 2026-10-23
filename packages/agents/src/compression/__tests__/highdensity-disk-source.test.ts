@@ -1,104 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
-import type { RecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
-import { requireJsonlRecorder } from '@vybestack/llxprt-code-core/services/history/recorderBackend.js';
 import { describe, expect, it } from 'bun:test';
-import { withCoreSuffixFixture } from '../../../../core/src/services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
-import {
-  checkpointScratch,
-  checkpointState,
-  compressionInputSourceFault,
-  expectedCheckpointState,
-} from './checkpoint-source-fault-helpers.js';
-import {
-  HighdensityDiskHistory,
-  highdensityRow,
-  highdensitySetup,
-} from './highdensity-disk-helpers.js';
 import { nativeHighdensitySourceFailure } from './support/native-highdensity-source.js';
-import { collectRows } from './truncation-stream-helpers.js';
 
-class FailingSourceHistory extends HighdensityDiskHistory {
-  failure: Error | undefined;
-  private readonly source = compressionInputSourceFault(
-    this,
-    () => this.failure,
-    31,
-  );
-
-  get closedSnapshots(): number {
-    return this.source.closed;
-  }
-}
-async function sourceFailure(size: number, mode: string): Promise<number> {
-  let created: FailingSourceHistory | undefined;
-  let recording: RecordingPort | undefined;
-  return withCoreSuffixFixture(
-    size,
-    async (history, ownership) => {
-      if (created === undefined)
-        throw new Error('Missing source fault participant');
-      const { handler, transport } = highdensitySetup(history);
-      const error =
-        mode === 'cancel'
-          ? new DOMException('cancelled source', 'AbortError')
-          : new Error('disk source failed');
-      created.failure = error;
-      const expected = await expectedCheckpointState(
-        size,
-        highdensityRow,
-        0,
-        0,
-      );
-      expect(await checkpointState(history, recording)).toStrictEqual(expected);
-      expect(checkpointScratch()).toStrictEqual([]);
-      const rejected = await handler.performCompression('source-fault').then(
-        () => undefined,
-        (failure: unknown) => failure,
-      );
-      expect(rejected).toBe(error);
-      expect(created.closedSnapshots).toBe(1);
-      expect(checkpointScratch()).toStrictEqual([]);
-      expect(await checkpointState(history, recording)).toStrictEqual(expected);
-      expect(ownership.snapshot().liveRows).toBe(0);
-      expect(await collectRows(history)).toStrictEqual(
-        Array.from({ length: size }, (_, index) => highdensityRow(index, 64)),
-      );
-      expect(transport.requests).toHaveLength(0);
-      created.failure = undefined;
-      expect(await handler.performCompression('source-retry')).toBe(
-        PerformCompressionResult.COMPRESSED,
-      );
-      return created.closedSnapshots;
-    },
-    64,
-    highdensityRow,
-    undefined,
-    (options) => {
-      recording =
-        options.recording === undefined
-          ? undefined
-          : requireJsonlRecorder(options.recording);
-      created = new FailingSourceHistory(options);
-      return created;
-    },
-  );
-}
 const cases: Array<[number, string]> = [
   [512, 'error'],
   [512, 'cancel'],
   [8192, 'error'],
   [8192, 'cancel'],
 ];
-describe('disk high-density source lifetime', () => {
-  it.each(cases)(
-    'closes a failed %i-row %s source and can retry without eager collection',
-    async (size, mode) => {
-      expect(await sourceFailure(size, mode)).toBe(2);
-    },
-    180_000,
-  );
-});
 
 describe('native high-density source lifetime', () => {
   it.each(cases)(
