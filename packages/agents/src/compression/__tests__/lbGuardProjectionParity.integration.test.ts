@@ -379,14 +379,6 @@ async function facadeCallback1(): Promise<void> {
     contextLimit: GUARD_CASE_SESSION_LIMIT,
   });
 
-  await enforceProviderSourceForTest(
-    session.handler,
-    historyService,
-    [pending],
-    'prompt-3507-constant',
-    lb as unknown as RuntimeProvider,
-  );
-
   // Precondition: the envelope estimate (tools included) is over the LB
   // limit even though the reduction target below is reachable.
   const projection = await lb.projectPromptEnvelope({
@@ -398,11 +390,23 @@ async function facadeCallback1(): Promise<void> {
   expect(envelopeTokens).toBe(contentsOnlyTokens + toolTokens);
   expect(envelopeTokens).toBeGreaterThan(contextLimit);
 
-  const chunks = await consume(
-    lb.generateChatCompletion({
-      contents: toStream(contents),
-      tools: TOOLSET,
-    }),
+  let chunks: IContent[] = [];
+  await enforceProviderSourceForTest(
+    session.handler,
+    historyService,
+    [pending],
+    'prompt-3507-constant',
+    lb,
+    undefined,
+    true,
+    async () => {
+      chunks = await consume(
+        lb.generateChatCompletion({
+          contents: toStream(contents),
+          tools: TOOLSET,
+        }),
+      );
+    },
   );
 
   // The guard handed its real estimate and limit to the real callback.
@@ -452,26 +456,29 @@ async function facadeCallback2(): Promise<void> {
     contextLimit: GUARD_CASE_SESSION_LIMIT,
   });
 
+  let thrown: unknown = undefined;
+  const chunks: IContent[] = [];
   await enforceProviderSourceForTest(
     session.handler,
     historyService,
     [pending],
     'prompt-3507-growing-gap',
-    lb as unknown as RuntimeProvider,
+    lb,
+    undefined,
+    true,
+    async () => {
+      try {
+        for await (const chunk of lb.generateChatCompletion({
+          contents: toStream(contents),
+          tools: TOOLSET,
+        })) {
+          chunks.push(chunk);
+        }
+      } catch (error: unknown) {
+        thrown = error;
+      }
+    },
   );
-
-  let thrown: unknown = undefined;
-  const chunks: IContent[] = [];
-  try {
-    for await (const chunk of lb.generateChatCompletion({
-      contents: toStream(contents),
-      tools: TOOLSET,
-    })) {
-      chunks.push(chunk);
-    }
-  } catch (error: unknown) {
-    thrown = error;
-  }
 
   // The real callback ran and reduced history to satisfy its internal
   // target (guard facts consumed, history shrank)...
