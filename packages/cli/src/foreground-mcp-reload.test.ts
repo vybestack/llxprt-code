@@ -189,6 +189,15 @@ describe('foreground /mcp reload (issue #3937)', () => {
     await waitFor(() =>
       expect(toolNames(agent, 'beta')).toContain('mcp__beta__beta_tool'),
     );
+    const renamed = agent.tools.get('mcp__beta__beta_tool');
+    if (!renamed) throw new Error('Reloaded MCP tool is not registered');
+    const result = await renamed.buildAndExecute(
+      {},
+      new AbortController().signal,
+    );
+    expect(result.error).toBeUndefined();
+    expect(JSON.stringify(result.llmContent)).toContain('beta_tool');
+    expect(agent.tools.get('mcp__alpha__alpha_tool')).toBeUndefined();
     expect(toolNames(agent, 'alpha')).toStrictEqual([]);
     await waitFor(() => expect(isAlive(alphaPid)).toBe(false));
   });
