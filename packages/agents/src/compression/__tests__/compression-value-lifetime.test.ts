@@ -3,7 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import { createRequire } from 'node:module';
 import { setImmediate } from 'node:timers/promises';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { HistoryDumpSnapshot } from '@vybestack/llxprt-code-core/services/history/historyDumpSnapshot.js';
+import type { CompressionInputSnapshot } from '@vybestack/llxprt-code-core/services/history/compressionInput.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import { HistoryMediaOwnership } from '@vybestack/llxprt-code-core/storage/history-media-ownership.js';
@@ -25,17 +25,31 @@ const { gcAndSweep }: { gcAndSweep: () => void } = createRequire(
 class ObservedValueHistory extends ValueCompressionHistory {
   readonly sourceRows: Array<WeakRef<IContent>> = [];
   readonly submittedRows: Array<WeakRef<IContent>> = [];
-  override async openDumpSnapshot(): Promise<HistoryDumpSnapshot> {
-    const snapshot = await super.openDumpSnapshot();
+  override async openCompressionInput(): Promise<CompressionInputSnapshot> {
+    const input = await super.openCompressionInput();
     const weak = this.sourceRows;
+    const readRow = async (index: number): Promise<IContent> => {
+      const row = await input.rows.readRow(index);
+      weak.push(new WeakRef(row));
+      return row;
+    };
     return {
-      chronology: () => snapshot.chronology(),
-      close: () => snapshot.close(),
-      async *rows(): AsyncGenerator<IContent, void, unknown> {
-        for await (const row of snapshot.rows()) {
-          weak.push(new WeakRef(row));
-          yield row;
-        }
+      previous: input.previous,
+      close: () => input.close(),
+      rows: {
+        length: input.rows.length,
+        densityCalls: input.rows.densityCalls,
+        chronologySelection: input.rows.chronologySelection?.bind(input.rows),
+        sourceOrdinalAt: (index) => input.rows.sourceOrdinalAt(index),
+        readRow,
+        async *[Symbol.asyncIterator](): AsyncGenerator<
+          IContent,
+          void,
+          unknown
+        > {
+          for (let index = 0; index < input.rows.length; index++)
+            yield await readRow(index);
+        },
       },
     };
   }

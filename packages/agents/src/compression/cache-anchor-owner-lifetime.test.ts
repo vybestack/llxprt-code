@@ -15,10 +15,7 @@ import {
   detachedDurableDigest,
   type DetachedFixture,
 } from '../../../core/src/services/history/detached-rollback-test-helpers.js';
-import {
-  mediaParticipant,
-  rejectedValue,
-} from '../../../core/src/services/history/chronology-rollback-test-helpers.js';
+import { rejectedValue } from '../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import type { IContent } from '../../../core/src/services/history/IContent.js';
 
 const { gcAndSweep }: { gcAndSweep: () => void } = createRequire(
@@ -72,19 +69,19 @@ for (const size of [512, 8192]) {
         const release = gate();
         const failure = new Error('compression finalizer failed');
         let fail = true;
-        await history.registerMediaOwner(
-          mediaParticipant(() => ({
-            publish: (): void => {},
-            finalize: async (): Promise<void> => {
+        const transform = history.detachedValues.transform;
+        history.detachedValues.transform = (candidate, model, options) =>
+          transform(candidate, model, {
+            ...options,
+            afterPublication: async () => {
+              await options?.afterPublication?.();
               if (fail) {
                 ready.resolve();
                 await release.promise;
                 throw failure;
               }
             },
-            rollback: (): void => {},
-          })),
-        );
+          });
         const active = submitCandidate(fixture, size);
         await ready.promise;
         try {
