@@ -51,7 +51,7 @@ for (const size of [512, 8192]) {
             step: 0,
             runtime_id: 'raw-runtime',
           });
-          expect(counters.snapshot().rowsDecoded).toBe(size);
+          expect(counters.snapshot().rowsDecoded).toBe(1);
           expect(ownership.snapshot().peakRows).toBe(1);
           expect(ownership.snapshot().liveRows).toBe(0);
         });

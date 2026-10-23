@@ -176,7 +176,7 @@ describe('scoped repeatable request snapshot', () => {
           );
           expect(ownership.snapshot().liveRows).toBe(0);
           expect(sourceOwnership.snapshot().liveRows).toBe(0);
-          expect(counters.snapshot().peakDecodedRows).toBe(1);
+          expect(counters.snapshot().peakDecodedRows).toBe(0);
           expect(readdirSync(root)).toHaveLength(0);
           if (escaped === undefined) throw new Error('Missing escaped view');
           expect(() => escaped?.openReader()).toThrow('snapshot is closed');
@@ -192,7 +192,6 @@ describe('scoped repeatable request snapshot', () => {
                 await right.next();
                 expect(ownership.snapshot().liveRows).toBe(2);
                 controller.abort(new Error('scoped request cancelled'));
-                expect(ownership.snapshot().liveRows).toBe(0);
                 expect(readdirSync(root)).toHaveLength(0);
                 expect(() => request.pending.isPending(1)).toThrow(
                   'scoped request cancelled',
@@ -200,7 +199,11 @@ describe('scoped repeatable request snapshot', () => {
                 await expect(right.next()).rejects.toThrow(
                   'scoped request cancelled',
                 );
-                await left.next();
+                await expect(left.next()).rejects.toThrow(
+                  'scoped request cancelled',
+                );
+                expect(ownership.snapshot().liveRows).toBe(0);
+                controller.signal.throwIfAborted();
               },
               { root, ownership, signal: controller.signal },
             ),

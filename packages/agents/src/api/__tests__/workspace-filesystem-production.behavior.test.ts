@@ -159,8 +159,15 @@ describe('production filesystem roots', () => {
         FakeProvider.prototype,
         'generateChatCompletion',
       ).mockImplementation(async function* (this: FakeProvider, input) {
-        requests.push(JSON.stringify(input));
-        yield* generate.call(this, input);
+        if (!('contents' in input)) throw new Error('Expected chat options');
+        const contents = await Array.fromAsync(input.contents);
+        requests.push(
+          JSON.stringify({
+            contents,
+            systemInstruction: input.systemInstruction,
+          }),
+        );
+        yield* generate.call(this, { ...input, contents });
       });
       for await (const event of built.owner
         .getAgentClient()
