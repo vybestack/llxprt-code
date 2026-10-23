@@ -1,6 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import {
   withSuffixFixture,
@@ -14,16 +13,16 @@ import {
 class InterleavedHistory extends AttemptHistory {
   readonly timeline: string[] = [];
 
-  override async *getComprehensive(): AsyncGenerator<IContent, void, unknown> {
-    let appended = false;
-    for await (const row of super.getComprehensive()) {
-      if (!appended) {
-        this.timeline.push('append');
-        this.add(suffixRow(512));
-        appended = true;
-      }
-      yield row;
+  private appended = false;
+
+  override get compressionRowCount(): number | undefined {
+    const count = super.compressionRowCount;
+    if (!this.appended) {
+      this.timeline.push('append');
+      this.add(suffixRow(512));
+      this.appended = true;
     }
+    return count;
   }
 }
 

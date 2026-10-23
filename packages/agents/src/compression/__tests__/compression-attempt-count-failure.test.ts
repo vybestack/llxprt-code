@@ -1,6 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import {
   withSuffixFixture,
@@ -14,14 +13,12 @@ import {
 class FailedCountHistory extends AttemptHistory {
   private failed = false;
 
-  override async *getComprehensive(): AsyncGenerator<IContent, void, unknown> {
-    for await (const row of super.getComprehensive()) {
-      yield row;
-      if (!this.failed) {
-        this.failed = true;
-        throw new Error('Count source failed');
-      }
+  override get compressionRowCount(): number | undefined {
+    if (!this.failed) {
+      this.failed = true;
+      throw new Error('Count source failed');
     }
+    return super.compressionRowCount;
   }
 }
 

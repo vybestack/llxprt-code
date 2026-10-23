@@ -203,7 +203,7 @@ export function installEmptySummaryDiskFailure(provider: RuntimeProvider): {
   });
   const fallback = observeDiskFallback();
   const primary = vi
-    .spyOn(OneShotStrategy.prototype, 'compressDisk')
+    .spyOn(OneShotStrategy.prototype, 'prepareDisk')
     .mockImplementation(async (context) => {
       const { provider } = await context.resolveProvider(undefined);
       for await (const _row of provider.generateChatCompletion({
