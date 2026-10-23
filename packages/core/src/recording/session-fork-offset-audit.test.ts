@@ -14,15 +14,12 @@ import {
 } from '../journal/__tests__/support/mistralFixtures.js';
 import { OffsetAudit } from '../journal/__tests__/support/offsetAudit.js';
 import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
-import { readValueBody } from '../journal/mapEntries.js';
 import { OwnerDictionary } from '../journal/ownerDictionary.js';
 import { readVersionAt } from '../journal/trailerAccess.js';
 import type { IContent } from '../services/history/IContent.js';
-import { JournalHistoryStore } from '../services/history/journalHistoryStore.js';
 import { encodeContentRow } from '../services/history/journalRowCodec.js';
 import { JournalSession } from '../services/history/journalSession.js';
 import { JournalRecordingService } from './journalRecordingService.js';
-import { resumePointOf } from './journalResume.js';
 import { sessionFactEdit } from './sessionEdits.js';
 import { journalSessionFileName } from './sessionFileName.js';
 import { SESSION_KEYS } from './sessionMetaKeys.js';
@@ -59,32 +56,13 @@ function contentOf(row: MistralRow): IContent {
 }
 
 async function mappedId(session: JournalSession, id: string): Promise<string> {
-  const facts = await session.store.idFacts();
-  let ref: number;
+  const snapshot = await session.store.snapshot();
   try {
-    const fact = await facts.fact(id);
-    if (fact === undefined || fact.mappedRef === 0)
-      throw new Error(`Missing mapped fact ${id}`);
-    ref = fact.mappedRef;
+    const mapped = await snapshot.mistralMapping(id, MISTRAL_SLOT);
+    if (mapped === undefined) throw new Error(`Missing mapped fact ${id}`);
+    return mapped.id;
   } finally {
-    await facts.close();
-  }
-  const read = await session.store.openRead();
-  try {
-    const head = await read.access.readRecordHead(ref, 'VALUE');
-    expect(new TextDecoder().decode(head.kindHeader)).toBe(`mapped:${id}`);
-    const value: unknown = JSON.parse(
-      new TextDecoder().decode(await readValueBody(read.access, head)),
-    );
-    if (typeof value !== 'object' || value === null)
-      throw new Error('Invalid mapping');
-    const mapped = Object.entries(value).find(
-      ([slot]) => slot === String(MISTRAL_SLOT),
-    )?.[1];
-    if (typeof mapped !== 'string') throw new Error('Missing mapped slot');
-    return mapped;
-  } finally {
-    await read.close();
+    await snapshot.close();
   }
 }
 
@@ -151,6 +129,7 @@ describe('service checkpoint forks have no source-file offsets', () => {
       ),
     );
     const seeded = await JournalSession.open(sourcePath, journalSeams());
+    await seeded.store.commit([{ kind: 'mistral', slot: MISTRAL_SLOT }]);
     await seeded.store.commit([
       {
         kind: 'setState',
@@ -170,7 +149,6 @@ describe('service checkpoint forks have no source-file offsets', () => {
       }),
     ]);
     await seeded.close();
-    const history = proof.history();
     const recording = proof.keep(
       await JournalRecordingService.open(
         {
@@ -185,19 +163,25 @@ describe('service checkpoint forks have no source-file offsets', () => {
         sourcePath,
       ),
     );
-    await history.adoptResumeBoot(recording, await resumePointOf(recording));
     const session = await recording.session();
-    const store = history.detachedValues.host().journal;
-    if (!(store instanceof JournalHistoryStore))
-      throw new Error('Expected journal store');
-    store.changeOwnersOf([
-      { position: 0, origin: 'agent:beta' },
-      { position: 1, origin: 'subagent:gamma/7' },
-    ]);
-    await history.waitForCommit();
+    const owners = await OwnerDictionary.load(session.store);
+    for (const [position, origin] of [
+      'agent:beta',
+      'subagent:gamma/7',
+    ].entries()) {
+      const owner = owners.prepare(origin);
+      const entries = await Array.fromAsync(session.store.rows());
+      await session.store.commit([
+        ...owner.edits,
+        {
+          kind: 'owner',
+          changes: [{ label: entries[position].label, owner: owner.id }],
+        },
+      ]);
+      owners.confirm(owner);
+    }
     const checkpoint = await recording.createCheckpoint('retained');
-    history.add(userRow('saved shared row'));
-    await history.waitForCommit();
+    await session.append([userRow('saved shared row')]);
     const expected = await ownedRows(session);
     const expectedMeta = await mapContents(session.store, 'meta');
     const expectedState = await portableState(session);
@@ -205,8 +189,7 @@ describe('service checkpoint forks have no source-file offsets', () => {
       ...(await OwnerDictionary.load(session.store)).entries(),
     ];
     await recording.createCheckpoint('fork-point');
-    history.add(userRow('not in fork'));
-    await history.waitForCommit();
+    await session.append([userRow('not in fork')]);
     const first = await forkCheckpoint(chats, 'fork-point');
     proof.keep(first.recording);
     const retained = await session.store.checkpoint(checkpoint.checkpointId);
@@ -236,7 +219,6 @@ describe('service checkpoint forks have no source-file offsets', () => {
       first.recording.getFilePath(),
       second.recording.getFilePath(),
     ];
-    await history.dispose();
     await recording.dispose();
     await fs.unlink(sourcePath);
     for (const result of [first, second]) await result.recording.dispose();

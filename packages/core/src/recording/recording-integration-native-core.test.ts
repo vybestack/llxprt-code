@@ -101,6 +101,7 @@ describe('native recording integration core contracts', () => {
     await integration.flushAtTurnBoundary();
     await history.waitForCommit();
     expect(await texts()).toStrictEqual(['before-unsubscribe']);
+    expect(history.length()).toBe(2);
   });
 
   it('re-subscribes to the same history without duplicating later rows', async () => {

@@ -5,10 +5,8 @@ import * as path from 'node:path';
 import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
 import { JournalRecordingService } from './journalRecordingService.js';
 import { JournalResumeBoot } from './journalResume.js';
-import { ResumeCursorBoot } from './resumeCursorBoot.js';
 import { SessionDiscovery } from './SessionDiscovery.js';
 import { SessionLockManager } from './SessionLockManager.js';
-import { SessionRecordingService } from './SessionRecordingService.js';
 import { SessionTransitionService } from './SessionTransitionService.js';
 
 import type { IContent } from '../services/history/IContent.js';
@@ -34,7 +32,7 @@ async function lockIsFree(chats: string, sessionId: string): Promise<boolean> {
   return true;
 }
 
-describe('SessionTransitionService.forkFromCheckpoint dispatches by backend', () => {
+describe('SessionTransitionService.forkFromCheckpoint forks journal checkpoints', () => {
   const directory = useTempDir('transition-front-door-');
 
   async function journalTarget(chats: string): Promise<CheckpointTarget> {
@@ -114,61 +112,5 @@ describe('SessionTransitionService.forkFromCheckpoint dispatches by backend', ()
     expect(await fsp.readdir(chats)).toStrictEqual([
       path.basename(source.filePath),
     ]);
-  });
-
-  it('on the old backend returns the JSONL recorder and a cursor boot', async () => {
-    const chats = chatsDirIn(directory());
-    const parent = new SessionRecordingService({
-      sessionId: 'old-src',
-      projectHash: PROJECT,
-      chatsDir: chats,
-      workspaceDirs: ['/w'],
-      provider: 'anthropic',
-      model: 'm',
-    });
-    parent.recordContent(userRow('one'));
-    parent.recordContent(userRow('two'));
-    const checkpoint = await parent.createCheckpoint('cp');
-    parent.recordContent(userRow('three'));
-    await parent.flush();
-    await parent.dispose();
-    const filePath = parent.getFilePath();
-    if (filePath === null) throw new Error('no file');
-
-    const result = await new SessionTransitionService().forkFromCheckpoint(
-      {
-        kind: 'checkpoint',
-        source: {
-          sessionId: 'old-src',
-          filePath,
-          projectHash: PROJECT,
-          startTime: new Date().toISOString(),
-          lastModified: new Date(),
-          fileSize: 0,
-          provider: 'anthropic',
-          model: 'm',
-        },
-        checkpointId: checkpoint.checkpointId,
-        checkpointName: 'cp',
-        sequence: checkpoint.sequence,
-      },
-      chats,
-      PROJECT,
-      'openai',
-      'gpt-x',
-      ['/w'],
-    );
-
-    if (!result.ok) throw new Error(result.error);
-    try {
-      expect(result.recording).toBeInstanceOf(SessionRecordingService);
-      expect(result.boot).toBeInstanceOf(ResumeCursorBoot);
-      const rows = await Array.fromAsync(result.boot.streamRows());
-      expect(rows.map(textOf)).toStrictEqual(['one', 'two']);
-    } finally {
-      await result.boot.close();
-      await result.recording.dispose();
-      await result.lockHandle.release();
-    }
   });
 });

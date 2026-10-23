@@ -31,7 +31,7 @@ import * as path from 'node:path';
 import { HistoryService } from '../services/history/HistoryService.js';
 import type { IContent } from '../services/history/IContent.js';
 import { SessionLockManager } from './SessionLockManager.js';
-import { SessionRecordingService } from './SessionRecordingService.js';
+import { JournalRecordingService } from './journalRecordingService.js';
 
 const PROJECT_HASH = 'p05c-facade-hash';
 
@@ -45,8 +45,8 @@ async function makeChatsDir(): Promise<string> {
 async function startRecording(
   chatsDir: string,
   sessionId: string,
-): Promise<SessionRecordingService> {
-  const recording = await SessionRecordingService.createLocked({
+): Promise<JournalRecordingService> {
+  const recording = await JournalRecordingService.createLocked({
     sessionId,
     projectHash: PROJECT_HASH,
     chatsDir,
@@ -54,11 +54,6 @@ async function startRecording(
     provider: 'anthropic',
     model: 'claude-4',
   });
-  recording.recordContent({
-    speaker: 'human',
-    blocks: [{ type: 'text', text: 'seed' }],
-  });
-  await recording.flush();
   return recording;
 }
 
@@ -89,6 +84,7 @@ describe('P05c child facade is HistoryService over its own journal @plan:PLAN-20
     const chatsDir = await makeChatsDir();
     const recording = await startRecording(chatsDir, randomUUID());
     const history = new HistoryService({ recording });
+    history.add(textContent('seed'));
     history.add(textContent('durable child row'));
     await history.waitForCommit();
     expect(history.journalPath()).toBe(recording.getFilePath());
@@ -101,6 +97,7 @@ describe('P05c child facade is HistoryService over its own journal @plan:PLAN-20
     const chatsDir = await makeChatsDir();
     const childRecording = await startRecording(chatsDir, randomUUID());
     const history = new HistoryService();
+    history.add(textContent('seed'));
     history.add(textContent('pre-attach child row'));
     await history.waitForCommit();
 
@@ -150,6 +147,8 @@ async function verifyChildFacadeCase1(): Promise<void> {
     recording: parentRecording,
   });
   const childHistory = new HistoryService({ recording: childRecording });
+  parentHistory.add(textContent('seed'));
+  childHistory.add(textContent('seed'));
 
   parentHistory.add(textContent('parent task one'));
   childHistory.add(textContent('child task one'));

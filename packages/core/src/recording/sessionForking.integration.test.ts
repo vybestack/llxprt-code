@@ -23,35 +23,23 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { CheckpointService } from './CheckpointService.js';
-import { replaySession } from './ReplayEngine.js';
+import { JournalCheckpointService } from './journalCheckpointService.js';
+import { readJournalSnapshot } from './__tests__/support/journalSnapshot.js';
+import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 import { SessionLockManager } from './SessionLockManager.js';
-import { SessionRecordingService } from './SessionRecordingService.js';
+import { JournalRecordingService } from './journalRecordingService.js';
 import {
   SessionTransitionService,
   type ContinueTarget,
 } from './SessionTransitionService.js';
 
 import { type IContent } from '../services/history/IContent.js';
-import {
-  requireJsonlFork,
-  type JsonlFork,
-} from './__tests__/support/jsonlFork.js';
 import { type SessionRecordingServiceConfig } from './types.js';
-
-function requireReplaySuccess(
-  result: Awaited<ReturnType<typeof replaySession>>,
-): asserts result is Extract<
-  Awaited<ReturnType<typeof replaySession>>,
-  { ok: true }
-> {
-  if (!result.ok) throw new Error(`Expected replay success: ${result.error}`);
-}
 
 function requireForkSuccess(
   result: Awaited<ReturnType<SessionTransitionService['forkFromCheckpoint']>>,
-): asserts result is JsonlFork {
-  requireJsonlFork(result);
+): asserts result is Extract<typeof result, { ok: true }> {
+  if (!result.ok) throw new Error(result.error);
 }
 
 const PROJECT_HASH = 'fork-project-hash';
@@ -105,13 +93,15 @@ function tempDirHelper(): {
 const tmp = tempDirHelper();
 const chatsDir = (): string => path.join(tmp.getDir(), 'chats');
 
-function recordSiblingHistory(parent: SessionRecordingService): void {
-  parent.recordContent(makeContent('A', 'human'));
-  parent.recordContent(makeContent('B', 'ai'));
-  parent.recordContent(makeContent('C', 'human'));
+async function recordSiblingHistory(
+  parent: JournalRecordingService,
+): Promise<void> {
+  await recordRowsForTest(parent, [makeContent('A', 'human')]);
+  await recordRowsForTest(parent, [makeContent('B', 'ai')]);
+  await recordRowsForTest(parent, [makeContent('C', 'human')]);
 }
 async function finishSiblingParent(
-  parent: SessionRecordingService,
+  parent: JournalRecordingService,
 ): Promise<void> {
   await parent.flush();
   await parent.dispose();
@@ -122,13 +112,13 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: child initi
   afterEach(tmp.teardown);
   describe('A1: fork from checkpoint produces child with history up to checkpoint', () => {
     it('child initially replays A-C before F/G are added', async () => {
-      const parent = new SessionRecordingService(makeConfig(chatsDir()));
-      parent.recordContent(makeContent('A', 'human')); // seq 2
-      parent.recordContent(makeContent('B', 'ai')); // seq 3
-      parent.recordContent(makeContent('C', 'human')); // seq 4
+      const parent = JournalRecordingService.create(makeConfig(chatsDir()));
+      await recordRowsForTest(parent, [makeContent('A', 'human')]); // seq 2
+      await recordRowsForTest(parent, [makeContent('B', 'ai')]); // seq 3
+      await recordRowsForTest(parent, [makeContent('C', 'human')]); // seq 4
       const cp = await parent.createCheckpoint('atC'); // seq 5
-      parent.recordContent(makeContent('D', 'ai')); // seq 6
-      parent.recordContent(makeContent('E', 'human')); // seq 7
+      await recordRowsForTest(parent, [makeContent('D', 'ai')]); // seq 6
+      await recordRowsForTest(parent, [makeContent('E', 'human')]); // seq 7
       await parent.flush();
       await parent.dispose();
 
@@ -167,8 +157,10 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: child initi
 
         // Child recording is active and can append F/G
         try {
-          result.recording.recordContent(makeContent('F', 'ai'));
-          result.recording.recordContent(makeContent('G', 'human'));
+          await recordRowsForTest(result.recording, [makeContent('F', 'ai')]);
+          await recordRowsForTest(result.recording, [
+            makeContent('G', 'human'),
+          ]);
           await result.recording.flush();
           await result.recording.dispose();
         } finally {
@@ -176,11 +168,10 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: child initi
         }
 
         // Replay child from disk: should have A-C + F,G
-        const childReplay = await replaySession(
+        const childReplay = await readJournalSnapshot(
           result.recording.getFilePath()!,
           PROJECT_HASH,
         );
-        requireReplaySuccess(childReplay);
         {
           expect(childReplay.history).toHaveLength(5);
         }
@@ -194,8 +185,8 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: uses checkp
   afterEach(tmp.teardown);
   describe('A1: fork from checkpoint produces child with history up to checkpoint', () => {
     it('uses checkpoint metadata refreshed under the source lock for ancestry', async () => {
-      const parent = new SessionRecordingService(makeConfig(chatsDir()));
-      parent.recordContent(makeContent('A', 'human'));
+      const parent = JournalRecordingService.create(makeConfig(chatsDir()));
+      await recordRowsForTest(parent, [makeContent('A', 'human')]);
       const checkpoint = await parent.createCheckpoint('authoritative-name');
       await parent.dispose();
 
@@ -224,11 +215,10 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: uses checkp
       );
       requireForkSuccess(result);
       await result.recording.dispose();
-      const replay = await replaySession(
+      const replay = await readJournalSnapshot(
         result.recording.getFilePath()!,
         PROJECT_HASH,
       );
-      requireReplaySuccess(replay);
       expect(replay.ancestry).toMatchObject({
         checkpointName: 'authoritative-name',
         parentSequence: checkpoint.sequence,
@@ -243,13 +233,13 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: source repl
   afterEach(tmp.teardown);
   describe('A2: source and child remain independent', () => {
     it('source replay excludes child F/G; child replay excludes source D/E', async () => {
-      const parent = new SessionRecordingService(makeConfig(chatsDir()));
-      parent.recordContent(makeContent('A', 'human'));
-      parent.recordContent(makeContent('B', 'ai'));
-      parent.recordContent(makeContent('C', 'human'));
+      const parent = JournalRecordingService.create(makeConfig(chatsDir()));
+      await recordRowsForTest(parent, [makeContent('A', 'human')]);
+      await recordRowsForTest(parent, [makeContent('B', 'ai')]);
+      await recordRowsForTest(parent, [makeContent('C', 'human')]);
       const cp = await parent.createCheckpoint('atC');
-      parent.recordContent(makeContent('D', 'ai'));
-      parent.recordContent(makeContent('E', 'human'));
+      await recordRowsForTest(parent, [makeContent('D', 'ai')]);
+      await recordRowsForTest(parent, [makeContent('E', 'human')]);
       await parent.flush();
       await parent.dispose();
 
@@ -280,7 +270,7 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: source repl
       requireForkSuccess(result);
 
       try {
-        result.recording.recordContent(makeContent('F', 'ai'));
+        await recordRowsForTest(result.recording, [makeContent('F', 'ai')]);
         await result.recording.flush();
         await result.recording.dispose();
       } finally {
@@ -288,21 +278,19 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: source repl
       }
 
       // Source replay: A-E, no F
-      const sourceReplay = await replaySession(
+      const sourceReplay = await readJournalSnapshot(
         parent.getFilePath()!,
         PROJECT_HASH,
       );
-      requireReplaySuccess(sourceReplay);
       {
         expect(sourceReplay.history).toHaveLength(5); // A,B,C,D,E
       }
 
       // Child replay: A-C,F, no D,E
-      const childReplay = await replaySession(
+      const childReplay = await readJournalSnapshot(
         result.recording.getFilePath()!,
         PROJECT_HASH,
       );
-      requireReplaySuccess(childReplay);
       {
         expect(childReplay.history).toHaveLength(4); // A,B,C,F
       }
@@ -315,8 +303,8 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: two forks h
   afterEach(tmp.teardown);
   describe('A3: repeated checkpoint forks create siblings', () => {
     it('two forks have distinct IDs and identical initial state', async () => {
-      const parent = new SessionRecordingService(makeConfig(chatsDir()));
-      recordSiblingHistory(parent);
+      const parent = JournalRecordingService.create(makeConfig(chatsDir()));
+      await recordSiblingHistory(parent);
       const cp = await parent.createCheckpoint('atC');
       await finishSiblingParent(parent);
 
@@ -403,10 +391,10 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: child resum
   afterEach(tmp.teardown);
   describe('A4: children are self-contained', () => {
     it('child resumes after checkpoint deletion and parent deletion', async () => {
-      const parent = new SessionRecordingService(makeConfig(chatsDir()));
-      parent.recordContent(makeContent('A', 'human'));
-      parent.recordContent(makeContent('B', 'ai'));
-      parent.recordContent(makeContent('C', 'human'));
+      const parent = JournalRecordingService.create(makeConfig(chatsDir()));
+      await recordRowsForTest(parent, [makeContent('A', 'human')]);
+      await recordRowsForTest(parent, [makeContent('B', 'ai')]);
+      await recordRowsForTest(parent, [makeContent('C', 'human')]);
       const cp = await parent.createCheckpoint('atC');
       await parent.flush();
       await parent.dispose();
@@ -446,7 +434,7 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: child resum
       }
 
       // Delete checkpoint via CheckpointService on the parent (closed)
-      const cpService = new CheckpointService();
+      const cpService = new JournalCheckpointService();
       await cpService.deleteCheckpointClosed(
         parent.getFilePath()!,
         PROJECT_HASH,
@@ -459,8 +447,10 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: child resum
       await fs.unlink(parent.getFilePath()!);
 
       // Child still replays from its own file
-      const childReplay = await replaySession(childFilePath, PROJECT_HASH);
-      requireReplaySuccess(childReplay);
+      const childReplay = await readJournalSnapshot(
+        childFilePath,
+        PROJECT_HASH,
+      );
       {
         expect(childReplay.history).toHaveLength(3); // A,B,C
         expect(childReplay.metadata.sessionId).toBe(childSessionId);
@@ -474,17 +464,16 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: lists live 
   afterEach(tmp.teardown);
   describe('A5: source deletion blocker enumeration', () => {
     it('lists live checkpoint names as deletion blockers', async () => {
-      const parent = new SessionRecordingService(makeConfig(chatsDir()));
-      parent.recordContent(makeContent('A', 'human'));
-      parent.recordContent(makeContent('B', 'ai'));
+      const parent = JournalRecordingService.create(makeConfig(chatsDir()));
+      await recordRowsForTest(parent, [makeContent('A', 'human')]);
+      await recordRowsForTest(parent, [makeContent('B', 'ai')]);
       await parent.createCheckpoint('foo');
       await parent.flush();
       await parent.dispose();
 
-      const cpService = new CheckpointService();
+      const cpService = new JournalCheckpointService();
       const blockers = await cpService.getDeletionBlockers(
         parent.getFilePath()!,
-        PROJECT_HASH,
       );
       expect(blockers).toHaveLength(1);
       expect(blockers[0].name).toBe('foo');
@@ -497,13 +486,13 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: returns no 
   afterEach(tmp.teardown);
   describe('A5: source deletion blocker enumeration', () => {
     it('returns no blockers after checkpoint tombstones', async () => {
-      const parent = new SessionRecordingService(makeConfig(chatsDir()));
-      parent.recordContent(makeContent('A', 'human'));
+      const parent = JournalRecordingService.create(makeConfig(chatsDir()));
+      await recordRowsForTest(parent, [makeContent('A', 'human')]);
       const cp = await parent.createCheckpoint('foo');
       await parent.flush();
       await parent.dispose();
 
-      const cpService = new CheckpointService();
+      const cpService = new JournalCheckpointService();
       await cpService.deleteCheckpointClosed(
         parent.getFilePath()!,
         PROJECT_HASH,
@@ -514,7 +503,6 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: returns no 
 
       const blockers = await cpService.getDeletionBlockers(
         parent.getFilePath()!,
-        PROJECT_HASH,
       );
       expect(blockers).toHaveLength(0);
     });
@@ -526,8 +514,8 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: does not re
   afterEach(tmp.teardown);
   describe('source locking and failed-child cleanup', () => {
     it('does not read or fork a closed source while another owner holds its lock', async () => {
-      const parent = new SessionRecordingService(makeConfig(chatsDir()));
-      parent.recordContent(makeContent('A'));
+      const parent = JournalRecordingService.create(makeConfig(chatsDir()));
+      await recordRowsForTest(parent, [makeContent('A')]);
       const cp = await parent.createCheckpoint('locked-source');
       await parent.dispose();
       const sourceLock = await SessionLockManager.acquire(
@@ -573,9 +561,9 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: forked sess
   afterEach(tmp.teardown);
   describe('A11: forked sessions hold locks', () => {
     it('forked session rejects second lock acquisition', async () => {
-      const parent = new SessionRecordingService(makeConfig(chatsDir()));
-      parent.recordContent(makeContent('A', 'human'));
-      parent.recordContent(makeContent('B', 'ai'));
+      const parent = JournalRecordingService.create(makeConfig(chatsDir()));
+      await recordRowsForTest(parent, [makeContent('A', 'human')]);
+      await recordRowsForTest(parent, [makeContent('B', 'ai')]);
       const cp = await parent.createCheckpoint('atB');
       await parent.flush();
       await parent.dispose();
@@ -606,7 +594,7 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: forked sess
       );
       requireForkSuccess(fork);
 
-      const checkpointService = new CheckpointService();
+      const checkpointService = new JournalCheckpointService();
       await checkpointService.setSessionName(
         fork.recording,
         PROJECT_HASH,
@@ -637,14 +625,13 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: forked sess
         ),
       ).toBe(false);
 
-      const childReplay = await replaySession(
+      const childReplay = await readJournalSnapshot(
         fork.recording.getFilePath()!,
         PROJECT_HASH,
       );
-      requireReplaySuccess(childReplay);
       expect(childReplay.sessionName).toBe('forked-child');
       expect(
-        childReplay.checkpoints?.some(
+        childReplay.checkpoints.some(
           (checkpoint) => checkpoint.name === 'child-checkpoint',
         ),
       ).toBe(true);
@@ -657,13 +644,13 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: checkpoint 
   afterEach(tmp.teardown);
   describe('A9: checkpoint replay fidelity', () => {
     it('checkpoint after provider switch replays with correct provider', async () => {
-      const parent = new SessionRecordingService(
+      const parent = JournalRecordingService.create(
         makeConfig(chatsDir(), { provider: 'openai', model: 'gpt-4' }),
       );
-      parent.recordContent(makeContent('A', 'human'));
-      parent.recordContent(makeContent('B', 'ai'));
+      await recordRowsForTest(parent, [makeContent('A', 'human')]);
+      await recordRowsForTest(parent, [makeContent('B', 'ai')]);
       parent.recordProviderSwitch('anthropic', 'claude-4');
-      parent.recordContent(makeContent('C', 'human'));
+      await recordRowsForTest(parent, [makeContent('C', 'human')]);
       const cp = await parent.createCheckpoint('atC');
       await parent.flush();
       await parent.dispose();
@@ -700,11 +687,10 @@ describe('session forking and branching @plan:2026-07-28-issue-2625: checkpoint 
         provider: 'anthropic',
         model: 'claude-4',
       });
-      const replay = await replaySession(
+      const replay = await readJournalSnapshot(
         fork.recording.getFilePath()!,
         PROJECT_HASH,
       );
-      requireReplaySuccess(replay);
       expect(replay.metadata).toMatchObject({
         provider: 'anthropic',
         model: 'claude-4',

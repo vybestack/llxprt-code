@@ -23,22 +23,20 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import {
-  appendFile as fsAppendFile,
-  mkdtemp,
-  readFile,
-  readdir,
-  rm,
-} from 'node:fs/promises';
+import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 
-import { requireJsonlRecorder } from '../services/history/recorderBackend.js';
+import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
+import {
+  testJournalSeams,
+  type Failures,
+} from '../journal/__tests__/support/journalFixtures.js';
+import { readJournalSnapshot } from './__tests__/support/journalSnapshot.js';
 
 import { createChildSessionJournal } from './childJournal.js';
 import { SessionLockManager } from './SessionLockManager.js';
-import { SessionRecordingService } from './SessionRecordingService.js';
-import type { RecordingWriterIo } from './types.js';
+import { JournalRecordingService } from './journalRecordingService.js';
 
 const PROJECT_HASH = 'p05c-lifecycle-hash';
 
@@ -49,41 +47,9 @@ async function makeChatsDir(): Promise<string> {
   return path.join(fixtureDir, 'chats');
 }
 
-interface GatedWriterIo extends RecordingWriterIo {
-  failNow(): void;
-}
-
-/** Allows `allowed` appends through, then fails every later append. */
-function gatedWriterIo(allowed: number): GatedWriterIo {
-  let calls = 0;
-  return {
-    async appendFile(
-      filePath: string,
-      data: string,
-      encoding: 'utf8',
-    ): Promise<void> {
-      calls += 1;
-      if (calls > allowed) throw new Error('injected append failure');
-      await fsAppendFile(filePath, data, encoding);
-    },
-    failNow(): void {
-      calls = allowed;
-    },
-  };
-}
-
 function journalOptions(
   chatsDir: string,
-  io?: RecordingWriterIo,
-): {
-  parentSessionId: string;
-  projectHash: string;
-  chatsDir: string;
-  workspaceDirs: string[];
-  provider: string;
-  model: string;
-  io?: RecordingWriterIo;
-} {
+): Parameters<typeof createChildSessionJournal>[0] {
   return {
     parentSessionId: randomUUID(),
     projectHash: PROJECT_HASH,
@@ -91,7 +57,6 @@ function journalOptions(
     workspaceDirs: ['/w'],
     provider: 'anthropic',
     model: 'claude-4',
-    ...(io === undefined ? {} : { io }),
   };
 }
 
@@ -100,7 +65,7 @@ async function lockExists(chatsDir: string): Promise<boolean> {
   return entries.some((entry) => entry.endsWith('.lock'));
 }
 
-async function jsonlCount(chatsDir: string): Promise<number> {
+async function journalCount(chatsDir: string): Promise<number> {
   const entries = await readdir(chatsDir);
   return entries.filter((entry) => entry.startsWith('session-')).length;
 }
@@ -118,14 +83,17 @@ describe('P05c child journal creation and disposal @plan:PLAN-20260917-ISSUE854.
   it('materializes a locked child journal under its own file', async () => {
     const chatsDir = await makeChatsDir();
     const journal = await createChildSessionJournal(journalOptions(chatsDir));
-    requireJsonlRecorder(journal.recording).recordContent({
-      speaker: 'human',
-      blocks: [{ type: 'text', text: 'child work' }],
-    });
+    await recordRowsForTest(journal.recording, [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'child work' }],
+      },
+    ]);
     await journal.recording.flush();
     const filePath = journal.recording.getFilePath();
     expect(filePath).not.toBeNull();
-    expect(existsSync(filePath as string)).toBe(true);
+    if (filePath === null) throw new Error('Missing child file');
+    expect(existsSync(filePath)).toBe(true);
     expect(await SessionLockManager.isLocked(chatsDir, journal.sessionId)).toBe(
       true,
     );
@@ -138,7 +106,7 @@ describe('P05c child journal creation and disposal @plan:PLAN-20260917-ISSUE854.
     const sessionId = journal.sessionId;
     await journal.dispose();
     expect(await SessionLockManager.isLocked(chatsDir, sessionId)).toBe(false);
-    expect(await jsonlCount(chatsDir)).toBe(0);
+    expect(await journalCount(chatsDir)).toBe(0);
     expect(await lockExists(chatsDir)).toBe(false);
   });
 
@@ -155,35 +123,44 @@ describe('P05c child journal failure cleanup and isolation @plan:PLAN-20260917-I
 
   it('an init failure leaves no journal or lock behind', async () => {
     const chatsDir = await makeChatsDir();
-    const io = gatedWriterIo(0);
+    const seams = testJournalSeams({ failWriteAt: 0 });
     let error: unknown = null;
     try {
-      await createChildSessionJournal(journalOptions(chatsDir, io));
+      await createChildSessionJournal({
+        ...journalOptions(chatsDir),
+        journal: { journal: seams.dependencies },
+      });
     } catch (caught: unknown) {
       error = caught;
     }
     expect(error).toBeInstanceOf(Error);
-    expect(await jsonlCount(chatsDir)).toBe(0);
+    expect(await journalCount(chatsDir)).toBe(0);
     expect(await lockExists(chatsDir)).toBe(false);
   });
 
   it('a mid-life write failure still cleans up on dispose', async () => {
     const chatsDir = await makeChatsDir();
-    // Journal creation awaits durability of its start records, which take two
-    // appends, so both must pass for creation to succeed.
-    const io = gatedWriterIo(2);
-    const journal = await createChildSessionJournal(
-      journalOptions(chatsDir, io),
+    const failures: Failures = {};
+    const seams = testJournalSeams(failures);
+    const journal = await createChildSessionJournal({
+      ...journalOptions(chatsDir),
+      journal: { journal: seams.dependencies },
+    });
+    failures.failFlushAt = seams.events.filter(
+      (event) => event.type === 'flush',
+    ).length;
+    journal.recording.recordSessionMetadata('rejected');
+    await expect(journal.recording.flush()).rejects.toThrow(
+      'injected flush failure',
     );
-    io.failNow();
     await journal.dispose();
-    expect(await jsonlCount(chatsDir)).toBe(0);
+    expect(await journalCount(chatsDir)).toBe(0);
     expect(await lockExists(chatsDir)).toBe(false);
   });
 
   it('the parent journal stays one task group, isolated from children', async () => {
     const chatsDir = await makeChatsDir();
-    const parent = await SessionRecordingService.createLocked({
+    const parent = await JournalRecordingService.createLocked({
       sessionId: randomUUID(),
       projectHash: PROJECT_HASH,
       chatsDir,
@@ -191,21 +168,28 @@ describe('P05c child journal failure cleanup and isolation @plan:PLAN-20260917-I
       provider: 'anthropic',
       model: 'claude-4',
     });
-    parent.recordContent({
-      speaker: 'human',
-      blocks: [{ type: 'text', text: 'parent work' }],
-    });
+    await recordRowsForTest(parent, [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'parent work' }],
+      },
+    ]);
     await parent.flush();
     const journal = await createChildSessionJournal(journalOptions(chatsDir));
-    requireJsonlRecorder(journal.recording).recordContent({
-      speaker: 'human',
-      blocks: [{ type: 'text', text: 'child work' }],
-    });
+    await recordRowsForTest(journal.recording, [
+      {
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'child work' }],
+      },
+    ]);
     await journal.recording.flush();
     const parentPath = parent.getFilePath();
     expect(parentPath).not.toBeNull();
-    const raw = await readFile(parentPath as string, 'utf8');
-    expect(raw).not.toContain('child work');
+    if (parentPath === null) throw new Error('Missing parent file');
+    const saved = await readJournalSnapshot(parentPath, PROJECT_HASH);
+    expect(saved.history.map((row) => row.blocks)).toStrictEqual([
+      [{ type: 'text', text: 'parent work' }],
+    ]);
     expect(journal.recording.getFilePath()).not.toBe(parentPath);
     await journal.dispose();
     await parent.dispose();

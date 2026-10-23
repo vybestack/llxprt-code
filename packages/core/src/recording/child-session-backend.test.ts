@@ -13,7 +13,7 @@ import { createLockedSessionRecorder } from './sessionRecorderFactory.js';
 
 import { userRow } from './__tests__/support/recordedJournals.js';
 
-describe.each(['old', 'journal'] as const)('child history on %s', (backend) => {
+describe('child history on the journal backend', () => {
   const directory = useTempDir('child-backend-');
 
   function options(): Parameters<typeof createChildSessionJournal>[0] {
@@ -47,9 +47,7 @@ describe.each(['old', 'journal'] as const)('child history on %s', (backend) => {
       history.add(userRow('child work'));
       await history.waitForCommit();
       const childFile = child.recording.getFilePath();
-      expect(
-        childFile?.endsWith(backend === 'journal' ? '.llxj' : '.jsonl'),
-      ).toBe(true);
+      expect(childFile?.endsWith('.llxj')).toBe(true);
       expect(childFile).not.toBe(parentFile);
       await collectJournalRowsForAssertions(history, (rows) => {
         expect(rows.map((row) => row.blocks)).toStrictEqual([
