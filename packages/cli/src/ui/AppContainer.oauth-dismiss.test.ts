@@ -46,6 +46,10 @@ function deferred<T>(): {
   return { promise, resolve: resolveValue, reject: rejectValue };
 }
 
+const fixtureRoot = resolve(
+  import.meta.dir,
+  '../../../../tmp/issue3931-lazy-auth',
+);
 const directories: string[] = [];
 function harness(): {
   manager: OAuthManager;
@@ -57,12 +61,8 @@ function harness(): {
   ui: ReturnType<typeof renderWithProviders>;
   actions: string[];
 } {
-  const root = resolve(
-    import.meta.dir,
-    '../../../../../tmp/issue3931-lazy-auth',
-  );
-  mkdirSync(root, { recursive: true });
-  const lockDir = mkdtempSync(resolve(root, 'locks-'));
+  mkdirSync(fixtureRoot, { recursive: true });
+  const lockDir = mkdtempSync(resolve(fixtureRoot, 'locks-'));
   directories.push(lockDir);
   const values = new Map<string, string>();
   const saveStarted = deferred<void>();
@@ -227,6 +227,83 @@ describe('prompt-triggered lazy authentication dialog', () => {
     });
     for (const dir of directories.splice(0))
       rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('keeps fixture storage inside the assigned project root', () => {
+    expect(resolve(fixtureRoot, '../..')).toBe(
+      resolve(import.meta.dir, '../../../..'),
+    );
+  });
+
+  it('accepts a new attempt after manual failure without unmounting the host dialog', async () => {
+    const h = harness();
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response('Rejected', { status: 400 }),
+    );
+    const first = request();
+    const nextCallback = deferred<{ code: string; state: string }>();
+    let second: ReturnType<typeof request> | undefined;
+    try {
+      await h.ready;
+      await tick();
+      await act(async () => {
+        h.ui.stdin.write('\x1b[200~first-code\x1b[201~');
+      });
+      await waitFor(() => expect(h.ui.lastFrame()).toContain('first-code'));
+      await act(async () => {
+        h.ui.stdin.write('\r');
+      });
+      expect((await first).kind).toBe('failed');
+      await tick();
+      expect(h.ui.lastFrame()).toContain('authentication failed:');
+      const nextReady = deferred<void>();
+      vi.spyOn(callbackModule, 'startLocalOAuthCallback').mockResolvedValue({
+        redirectUri: 'http://localhost:8766/callback',
+        waitForCallback: () => nextCallback.promise,
+        async shutdown(): Promise<void> {
+          nextCallback.reject(new Error('Retry callback closed'));
+        },
+      });
+      vi.spyOn(browser, 'openBrowserSecurely').mockImplementation(async () => {
+        nextReady.resolve();
+      });
+      vi.spyOn(globalThis, 'fetch').mockImplementation(
+        async () =>
+          new Response(
+            JSON.stringify({ access_token: 'retry-token', expires_in: 3600 }),
+            { headers: { 'Content-Type': 'application/json' } },
+          ),
+      );
+      second = request();
+      await nextReady.promise;
+      await tick();
+      expect(h.ui.lastFrame()).not.toContain(
+        'Waiting for authentication to finish',
+      );
+      await act(async () => {
+        h.ui.stdin.write('\x1b[200~retry-code\x1b[201~');
+      });
+      await waitFor(() => expect(h.ui.lastFrame()).toContain('retry-code'));
+      await act(async () => {
+        h.ui.stdin.write('\r');
+      });
+      await h.saveStarted;
+      await tick();
+      expect(h.ui.lastFrame()).toContain(
+        'Waiting for authentication to finish',
+      );
+      h.save.resolve();
+      expect((await second).kind).toBe('succeeded');
+      await tick();
+      expect(h.ui.lastFrame()).toContain('Code dialog closed');
+      expect(await h.store.getToken('claudecode')).not.toBeNull();
+    } finally {
+      nextCallback.resolve({ code: 'cleanup-code', state: 'cleanup-state' });
+      h.save.resolve();
+      h.ui.unmount();
+      await first;
+      await second;
+    }
   });
 
   it('closes the actual host-challenge dialog only after callback credentials persist, without command completion', async () => {

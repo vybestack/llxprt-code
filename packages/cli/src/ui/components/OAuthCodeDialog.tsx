@@ -50,11 +50,13 @@ export const OAuthCodeDialog: React.FC<OAuthCodeDialogProps> = ({
   onSubmit,
 }) => {
   const [code, setCode] = useState('');
-  const [submitted, setSubmitted] = useState(false);
+  const [submittedAttemptId, setSubmittedAttemptId] = useState<string>();
 
   const attempt = useSyncExternalStore(oauthUIBridge.subscribeDialog, () =>
     oauthUIBridge.getDialog(),
   );
+  const attemptId = attempt?.provider === provider ? attempt.id : '';
+  const submitted = submittedAttemptId === attemptId;
   const error = attempt?.provider === provider ? attempt.error : undefined;
 
   /**
@@ -78,7 +80,7 @@ export const OAuthCodeDialog: React.FC<OAuthCodeDialogProps> = ({
       if (key.name === 'return') {
         if (code.trim()) {
           onSubmit(code.trim());
-          if (provider === 'claudecode') setSubmitted(true);
+          if (provider === 'claudecode') setSubmittedAttemptId(attemptId);
           else onClose();
         }
         return;
@@ -100,7 +102,6 @@ export const OAuthCodeDialog: React.FC<OAuthCodeDialogProps> = ({
           // Replace the entire code with the pasted content (don't append)
           setCode(cleanInput);
         }
-        return;
       }
 
       // Explicitly ignore ALL other input including:
@@ -109,7 +110,7 @@ export const OAuthCodeDialog: React.FC<OAuthCodeDialogProps> = ({
       // - Backspace (users must paste the entire correct code)
       // This prevents accidental control codes like I, IO, etc. from being added
     },
-    [attempt, code, onClose, onSubmit, provider, submitted],
+    [attempt, attemptId, code, onClose, onSubmit, provider, submitted],
   );
 
   useKeypress(handleInput, { isActive: true });

@@ -11,6 +11,7 @@ import { Text } from 'ink';
 import { Colors } from '../colors.js';
 import { act, useState } from 'react';
 import { OAuthCodeDialog } from './OAuthCodeDialog.js';
+import { oauthUIBridge } from '@vybestack/llxprt-code-auth';
 
 const PLACEHOLDER = '(paste only - typing disabled)';
 
@@ -24,8 +25,54 @@ const paste = (
 
 describe('OAuthCodeDialog', () => {
   afterEach(() => {
+    const attempt = oauthUIBridge.getDialog();
+    if (attempt) oauthUIBridge.dismissDialog(attempt.id);
+    oauthUIBridge.clearPending();
     vi.useRealTimers();
   });
+
+  it.each(['managed', 'legacy'])(
+    'blocks duplicate submissions while the same %s attempt is waiting',
+    async (mode) => {
+      if (mode === 'managed')
+        oauthUIBridge.beginDialog('duplicate', 'claudecode');
+      function Host(): React.JSX.Element {
+        const [codes, setCodes] = useState<string[]>([]);
+        return (
+          <>
+            <OAuthCodeDialog
+              provider="claudecode"
+              onClose={() => {}}
+              onSubmit={(code) => setCodes((old) => [...old, code])}
+            />
+            <Text color={Colors.Foreground}>Delivered: {codes.length}</Text>
+          </>
+        );
+      }
+      const ui = renderWithProviders(<Host />);
+      try {
+        await paste(ui.stdin, 'first-code');
+        await waitFor(() => expect(ui.lastFrame()).toContain('first-code'));
+        await act(async () => {
+          ui.stdin.write('\r');
+        });
+        await waitFor(() => expect(ui.lastFrame()).toContain('Delivered: 1'));
+        await paste(ui.stdin, 'duplicate-code');
+        await act(async () => {
+          ui.stdin.write('\r');
+        });
+        await waitFor(() => {
+          expect(ui.lastFrame()).toContain(
+            'Waiting for authentication to finish',
+          );
+          expect(ui.lastFrame()).toContain('Delivered: 1');
+          expect(ui.lastFrame()).not.toContain('duplicate-code');
+        });
+      } finally {
+        ui.unmount();
+      }
+    },
+  );
 
   it('ignores typed characters, keeping the paste-only placeholder and no code', async () => {
     const onClose = vi.fn();

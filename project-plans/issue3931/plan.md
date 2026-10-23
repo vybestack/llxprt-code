@@ -1,3 +1,29 @@
+## PR #3936 bounded CodeRabbit remediation, 2026-10-23
+
+Both inline findings were verified against the current source at `d9a339bf0`. Evidence for this pass is under `tmp/issue3931-pr-remediation/`. Earlier verification sections are historical.
+
+- **Fixture containment:** the CLI harness had five parent segments despite being one level shallower than the provider fixture. Its shared fixture root now uses four segments. The containment regression checks that root against the assigned project root before running the filesystem-backed cases. Unique `locks-*` children and per-test cleanup are preserved. No outside-worktree parent or unknown user artifact was inspected or deleted.
+- **Attempt-scoped input lock:** `OAuthCodeDialog` records the owning attempt ID when Claude Code submits and derives waiting/input locking from the current matching-provider attempt. A failed attempt followed by a new bridge attempt can accept pasted input without remounting. The empty-string legacy identity preserves single-submission waiting when no matching bridge ID exists; Gemini still closes immediately through its existing branch. Attempt ownership, detached participants and Escape view-dismissal semantics remain unchanged.
+- **RED:** `red-containment.log` records 0 pass / 1 fail with the worktree parent received instead of the assigned worktree. After fixing that fixture path, `red-retry.log` records 0 pass / 1 fail because the new attempt still displays `Waiting for authentication to finish`. Both fail for the intended defects. An initial input-escaping fixture syntax error was corrected before obtaining behavioral RED evidence.
+- **GREEN:** `green-host.log` records 13 pass / 0 fail, including failed-A to new-B through real manager/provider/store, bridge hooks and rendered dialog. B accepts its pasted code, waits for persistence, succeeds and closes. `green-component.log` records 12 pass / 0 fail, including managed and missing-ID duplicate-submission controls. `controls-before.log` confirms those 12 compatibility cases also passed before the submission-state change.
+- **Bounded refactor:** targeted lint initially reported 81 executable lines against the existing 80-line component limit. Removing the redundant final paste-branch return preserves behavior and passes `lint-targeted-final.log`.
+- **Review scope:** the bot's summary-only 80% docstring advisory does not justify a blanket rewrite under this project's conciseness and comment rules. No extra inline action or independent review round was started. Foreground retains commits, pushes, thread replies/resolution, PR-body ownership and CI watching.
+
+| Final check | Exit | Evidence and result |
+| --- | ---: | --- |
+| Focused pinned Bun 1.3.14 suites | 0 each | **290 pass, 0 fail, 32 independent processes**, including four added cases; `focused.log`, `focused.status.tsv`, `focused-totals.json` |
+| `npm run test`, bounded to 300 seconds | 124 | Reached core; full suite remains unverified. `full-test.log` and `full-test-diagnostics.log` retain two real-home sentinel-removal diagnostics attributed best-effort to `src/services/shellJobLogStore.test.ts`. No failing assertion was observed before timeout. |
+| `npm run lint` | 0 | All **18 canonical scopes** completed; `lint.log` |
+| `npm run typecheck` | 0 | Complete root command, including workspace/test, scripts and evals checks; `typecheck.log` |
+| `npm run format` | 0 | `format.log`; final documentation update followed by `format-final.log` |
+| `npm run build` | 0 | `build.log`; started after typecheck completed, with no overlapping build writers; `pipeline.log` |
+| `bun scripts/start.ts --profile-load opus "write me a haiku and nothing else"` | 0 | `smoke.log`: `[opus:claude-opus-5-5]` returned a haiku. This exercises an authenticated request, without testing fresh interactive browser login. |
+| Test-audit scanner and supplied-main comparison | 0 | `audit.log`, `audit-comparison.json`; **zero new MOCK_MIRROR, ALWAYS_TRUE, SELF_CONFIRMING or NO_ASSERT findings**. Two non-prohibited `DUP_ASSERT` diagnostics cover repeated observations across lifecycle boundaries: the existing callback/persistence test and the new before/after duplicate-submission control. |
+| Targeted ESLint, max warnings 0 | 0 | `lint-targeted-final.log`; initial size-limit failure retained separately |
+| `git diff HEAD --check` | 0 | `diff-check.log` |
+
+The full-suite timeout and its sentinel diagnostics remain the verification limitation. Previously unavailable OCR remains historical; no additional review was attempted. `process-cleanup.log` records zero remaining positively owned full-test processes; all other remediation-owned jobs completed, and synthetic fixture `locks-*` children are absent. No outside-worktree user artifact was removed. Exactly three source/test files plus this plan changed. No commit, push, PR/body edit, thread mutation or merge was performed; foreground owns those steps. No `.llxprt`, profile, configuration or credential content was inspected or edited by the remediation. The full runner's sentinel diagnostics are retained explicitly above.
+
 ## Current pre-PR snapshot, 2026-10-23
 
 User interactive retesting works. The full required pre-checkin cycle was refreshed against the existing issue3931 changes. Evidence is under `tmp/issue3931-pr-preflight/`; earlier sections remain historical.
