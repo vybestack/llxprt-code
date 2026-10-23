@@ -2,7 +2,9 @@
 import { mkdir, rename, rm, readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { vi } from 'bun:test';
-import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
+import { JournalStore } from '@vybestack/llxprt-code-core/journal/journalStore.js';
+import type { VersionEdit } from '@vybestack/llxprt-code-core/journal/groupEdits.js';
+import type { RowDraft } from '@vybestack/llxprt-code-core/journal/rowDraft.js';
 import type { GitService } from '@vybestack/llxprt-code-core';
 import { withCleanupHistory } from '../../../utils/__tests__/support/cleanup-history-test-helpers.js';
 import { createToolCheckpoint } from './checkpointPersistence.js';
@@ -128,31 +130,77 @@ export async function saveCheckpoint(
   );
 }
 
-export function failDurableWrite(): void {
-  // Durable acknowledgement is awaited by sequence, so remember the sequence
-  // of the enqueued candidate row and refuse only that row's commit ack.
-  const enqueue = SessionRecordingService.prototype.enqueue;
-  const waitForSequence =
-    SessionRecordingService.prototype.waitForCommitSequence;
-  let candidateSeq: number | null = null;
-  vi.spyOn(SessionRecordingService.prototype, 'enqueue').mockImplementation(
-    function (this: SessionRecordingService, ...args) {
-      const line = enqueue.call(this, ...args);
-      if (
-        line !== null &&
-        candidateSeq === null &&
-        JSON.stringify(args[1]).includes('checkpoint-candidate')
-      )
-        candidateSeq = line.seq;
-      return line;
+export function gateJournalRowCommit(
+  text: string,
+  acknowledge: () => Promise<void>,
+  beforeCommit = false,
+): void {
+  const commit = JournalStore.prototype.commitDetailed;
+  let selected = false;
+  vi.spyOn(JournalStore.prototype, 'commitDetailed').mockImplementation(
+    async function (this: JournalStore, edits) {
+      const observedRow = { candidate: false };
+      function inspect(row: RowDraft): void {
+        if (
+          !selected &&
+          row.blocks.some((block) =>
+            new TextDecoder().decode(block.bytes).includes(text),
+          )
+        ) {
+          selected = true;
+          observedRow.candidate = true;
+        }
+      }
+      async function* observe(
+        rows: Iterable<RowDraft> | AsyncIterable<RowDraft>,
+      ): AsyncGenerator<RowDraft> {
+        for await (const row of rows) {
+          inspect(row);
+          if (observedRow.candidate && beforeCommit) await acknowledge();
+          yield row;
+        }
+      }
+      function instrument(edits: readonly VersionEdit[]): VersionEdit[] {
+        return edits.map((edit) => {
+          if (edit.kind === 'append') {
+            for (const row of edit.rows) inspect(row);
+          }
+          if (edit.kind === 'replace')
+            return { ...edit, rows: observe(edit.rows) };
+          if (edit.kind === 'prepared')
+            return {
+              ...edit,
+              prepare: (group) =>
+                edit.prepare({
+                  ...group,
+                  append: (rows, ownerEdits) =>
+                    group.append(observe(rows), ownerEdits),
+                  build: async (actual) => {
+                    const observed = instrument(actual);
+                    if (observedRow.candidate && beforeCommit)
+                      await acknowledge();
+                    await group.build(observed);
+                  },
+                }),
+            };
+          return edit;
+        });
+      }
+      const observed = instrument(edits);
+      if (observedRow.candidate && beforeCommit) await acknowledge();
+      const result = await commit.call(this, observed);
+      if (observedRow.candidate && !beforeCommit) await acknowledge();
+      return result;
     },
   );
-  vi.spyOn(
-    SessionRecordingService.prototype,
-    'waitForCommitSequence',
-  ).mockImplementation(async function (this: SessionRecordingService, seq) {
-    if (candidateSeq !== null && seq === candidateSeq)
+}
+
+export function failDurableWrite(): void {
+  gateJournalRowCommit(
+    'checkpoint-candidate',
+    async () => {
       throw new Error('checkpoint durable write failure');
-    return waitForSequence.call(this, seq);
-  });
+    },
+    true,
+  );
 }

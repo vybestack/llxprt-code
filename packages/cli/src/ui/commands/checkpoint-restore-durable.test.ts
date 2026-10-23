@@ -2,7 +2,6 @@
 import { describe, expect, it, vi } from 'bun:test';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
 import {
   accountingFactory,
   deferred,
@@ -11,6 +10,7 @@ import {
   withCheckpoint,
   checkpointUiHistory,
   checkpointTool,
+  gateJournalRowCommit,
 } from '../hooks/agentStream/checkpoint-disk-test-helpers.js';
 import { restoreCommand } from './restoreCommand.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
@@ -19,33 +19,9 @@ function gateDurableWrite(
   gate: ReturnType<typeof deferred>,
   entered: ReturnType<typeof deferred>,
 ): void {
-  // Durable acknowledgement is awaited by sequence; remember the sequence of
-  // the enqueued checkpoint row and pause only that row's acknowledgement.
-  const enqueue = SessionRecordingService.prototype.enqueue;
-  const waitForSequence =
-    SessionRecordingService.prototype.waitForCommitSequence;
-  let rowSeq: number | null = null;
-  vi.spyOn(SessionRecordingService.prototype, 'enqueue').mockImplementation(
-    function (this: SessionRecordingService, ...args) {
-      const line = enqueue.call(this, ...args);
-      if (
-        line !== null &&
-        rowSeq === null &&
-        JSON.stringify(args[1]).includes('acknowledged checkpoint row')
-      )
-        rowSeq = line.seq;
-      return line;
-    },
-  );
-  vi.spyOn(
-    SessionRecordingService.prototype,
-    'waitForCommitSequence',
-  ).mockImplementation(async function (this: SessionRecordingService, seq) {
-    if (rowSeq !== null && seq === rowSeq) {
-      entered.resolve();
-      await gate.promise;
-    }
-    return waitForSequence.call(this, seq);
+  gateJournalRowCommit('acknowledged checkpoint row', async () => {
+    entered.resolve();
+    await gate.promise;
   });
 }
 
