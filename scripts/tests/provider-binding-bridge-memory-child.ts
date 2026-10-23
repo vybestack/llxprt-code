@@ -2,7 +2,9 @@
 import { gcAndSweep, heapSize } from 'bun:jsc';
 import { readFileSync } from 'node:fs';
 import { setImmediate } from 'node:timers/promises';
-import { withDetachedFixture } from '../../packages/core/src/services/history/detached-rollback-test-helpers.js';
+import { HistoryService } from '../../packages/core/src/services/history/HistoryService.js';
+import { JournalHistoryStore } from '../../packages/core/src/services/history/journalHistoryStore.js';
+import { RowOwnership } from '../../packages/core/src/recording/rowOwnership.js';
 import {
   bindingBridgeRows,
   bindingContentId,
@@ -10,10 +12,35 @@ import {
 } from '../../packages/core/src/services/history/provider-binding-bridge-test-helpers.js';
 import { createHistoryProviderFileBindingStore } from '../../packages/core/src/services/history/provider-file-binding.js';
 import {
-  mediaParticipant,
+  exactTokenizer,
+  journalMediaParticipant,
   rejectedValue,
 } from '../../packages/core/src/services/history/chronology-rollback-test-helpers.js';
 import type { IContent } from '../../packages/core/src/services/history/IContent.js';
+
+async function withBindingHistory(
+  size: number,
+  action: (fixture: {
+    history: HistoryService;
+    owners: RowOwnership;
+  }) => Promise<void>,
+): Promise<void> {
+  const owners = new RowOwnership();
+  const history = new HistoryService({ mutationOwnership: owners });
+  history.setTokenizerFactory(exactTokenizer());
+  try {
+    await history.waitForCommit();
+    const journal = history.detachedValues.host().journal;
+    if (!(journal instanceof JournalHistoryStore))
+      throw new Error('Binding memory fixture requires a journal store');
+    await journal.replaceFrom(bindingBridgeRows(size), size);
+    await history.recalculateTotalTokens();
+    await history.waitForCommit();
+    await action({ history, owners });
+  } finally {
+    await history.dispose();
+  }
+}
 
 async function settled(): Promise<{ heap: number; external: number }> {
   await setImmediate();
@@ -23,10 +50,7 @@ async function settled(): Promise<{ heap: number; external: number }> {
   return { heap: heapSize(), external: process.memoryUsage().external };
 }
 async function probe(size: number, trap: boolean): Promise<void> {
-  await withDetachedFixture(async ({ history, recorder, owners }) => {
-    for await (const row of bindingBridgeRows(size))
-      await recorder.commit('content', { content: row });
-    await history.recalculateTotalTokens();
+  await withBindingHistory(size, async ({ history, owners }) => {
     const before = await settled();
     const retained: IContent[] = [];
     let reached = (): void => {};
@@ -38,13 +62,19 @@ async function probe(size: number, trap: boolean): Promise<void> {
       release = resolve;
     });
     const failure = new Error('binding suspended finalization');
+    const previous = trap ? await history.openDumpSnapshot() : undefined;
     await history.registerMediaOwner(
-      mediaParticipant(({ previous }) => {
-        if (trap)
-          for (const row of previous) {
-            retained.push(row);
-            owners.retain(row);
+      journalMediaParticipant(async () => {
+        if (previous !== undefined) {
+          try {
+            for await (const row of previous.rows()) {
+              retained.push(row);
+              owners.retain(row);
+            }
+          } finally {
+            await previous.close();
           }
+        }
         return {
           publish: () => undefined,
           finalize: async (): Promise<void> => {
@@ -104,9 +134,7 @@ if (Bun.version !== pin)
 const size = Number(process.argv[2]);
 if (!Number.isSafeInteger(size) || size < 1)
   throw new Error('Expected positive row count');
-await withDetachedFixture(async ({ history, recorder }) => {
-  for await (const row of bindingBridgeRows(32))
-    await recorder.commit('content', { content: row });
+await withBindingHistory(32, async ({ history }) => {
   await createHistoryProviderFileBindingStore(history).bind(
     bindingContentId,
     bindingFile,
