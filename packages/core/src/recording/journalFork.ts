@@ -287,17 +287,30 @@ export async function forkJournalFromCheckpoint(
       error: `Source session is in use: ${failureDetail(error)}`,
     };
   }
+  const child = await createChild(request, {
+    sessionId: crypto.randomUUID(),
+    projectHash: request.projectHash,
+    provider: request.currentProvider,
+    model: request.currentModel,
+    workspaceDirs: request.workspaceDirs,
+    startTime: new Date().toISOString(),
+    kind: 'main',
+  });
   try {
-    return await createChild(request, {
-      sessionId: crypto.randomUUID(),
-      projectHash: request.projectHash,
-      provider: request.currentProvider,
-      model: request.currentModel,
-      workspaceDirs: request.workspaceDirs,
-      startTime: new Date().toISOString(),
-      kind: 'main',
-    });
-  } finally {
     await sourceLock?.release();
+  } catch (error) {
+    if (!child.ok) {
+      return {
+        ok: false,
+        error: `${child.error}; Failed to release source session: ${failureDetail(error)}`,
+      };
+    }
+    const childPath = child.recording.getFilePath();
+    return failedChild(error, [
+      () => child.recording.dispose(),
+      () =>
+        childPath === null ? undefined : fs.rm(childPath, { force: true }),
+    ]);
   }
+  return child;
 }
