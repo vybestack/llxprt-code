@@ -29,6 +29,7 @@ import type {
   UnreadableRecording,
 } from './types.js';
 import type { IContent } from '../services/history/IContent.js';
+import type { JournalReadCounters } from './journalCounters.js';
 
 export interface JournalResumeRequest {
   continueRef: string;
@@ -63,6 +64,7 @@ export class JournalResumeBoot implements ResumePoint {
   constructor(
     private readonly recording: JournalRecordingService,
     point: ResumePoint,
+    private readonly counters?: JournalReadCounters,
   ) {
     this.commitSeq = point.commitSeq;
     this.rows = point.rows;
@@ -73,8 +75,15 @@ export class JournalResumeBoot implements ResumePoint {
   async *streamRows(): AsyncGenerator<IContent> {
     const session = await this.recording.session();
     for await (const row of resumedRows(session, this)) {
-      await this.recording.hydrateMedia(row.content);
-      yield row.content;
+      this.counters?.rowDecoded();
+      this.counters?.ownership?.retain(row.content);
+      try {
+        await this.recording.hydrateMedia(row.content);
+        yield row.content;
+      } finally {
+        this.counters?.ownership?.release(row.content);
+        this.counters?.rowReleased();
+      }
     }
   }
 

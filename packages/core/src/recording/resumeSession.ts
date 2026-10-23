@@ -273,7 +273,11 @@ export async function resumeSession(
   if (!result.ok) return result;
   return {
     ok: true,
-    boot: new JournalResumeBoot(result.recording, result.resumePoint),
+    boot: new JournalResumeBoot(
+      result.recording,
+      result.resumePoint,
+      request.counters,
+    ),
     metadata: result.metadata,
     recording: result.recording,
     lockHandle: result.lockHandle,

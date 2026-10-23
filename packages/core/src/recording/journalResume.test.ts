@@ -7,6 +7,9 @@ import { testJournalSeams } from '../journal/__tests__/support/journalFixtures.j
 import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
 import type { IContent } from '../services/history/IContent.js';
 import { CONTINUE_LATEST } from './continueLatest.js';
+import { resumeSession } from './resumeSession.js';
+import { createRowCounters } from './journalCounters.js';
+import { RowOwnership } from './rowOwnership.js';
 import {
   resumeJournalSession,
   resumedRows,
@@ -78,6 +81,54 @@ describe('resuming a session on the journal', () => {
     }
     return texts;
   }
+
+  it('charges a suspended resume row and releases it on return, throw and exhaustion', async () => {
+    await recordJournal(chatsDirIn(directory()), 'counted', {
+      rows: [userRow('one'), userRow('two')],
+    });
+    const ownership = new RowOwnership();
+    const counters = createRowCounters();
+    const result = await resumeSession({
+      ...request('counted'),
+      counters: { ...counters.counters, ownership },
+    });
+    if (!result.ok) throw new Error(result.error);
+    const returned = result.boot.streamRows()[Symbol.asyncIterator]();
+    const failed = result.boot.streamRows()[Symbol.asyncIterator]();
+    try {
+      expect((await returned.next()).done).toBe(false);
+      expect(ownership.snapshot().liveRows).toBe(1);
+      await returned.return?.();
+      expect(ownership.snapshot().liveRows).toBe(0);
+      expect((await failed.next()).done).toBe(false);
+      expect(ownership.snapshot().liveRows).toBe(1);
+      const failure = new Error('resume consumer failed');
+      if (failed.throw === undefined) throw new Error('Missing throw');
+      await expect(failed.throw(failure)).rejects.toBe(failure);
+      expect(ownership.snapshot().liveRows).toBe(0);
+      const texts: string[] = [];
+      for await (const row of result.boot.streamRows()) {
+        expect(ownership.snapshot().liveRows).toBe(1);
+        const block = row.blocks[0];
+        if (block.type !== 'text') throw new Error('Missing text');
+        texts.push(block.text);
+      }
+      expect(texts).toStrictEqual(['one', 'two']);
+      expect(ownership.snapshot()).toMatchObject({
+        liveRows: 0,
+        peakRows: 1,
+        acquisitions: 4,
+      });
+      expect(counters.snapshot()).toMatchObject({
+        rowsDecoded: 4,
+        peakDecodedRows: 1,
+      });
+    } finally {
+      await returned.return?.();
+      await failed.return?.();
+      await result.recording.dispose();
+    }
+  });
 
   it('resumes the newest session with its facts and its rows, holding the session lock', async () => {
     const chats = chatsDirIn(directory());
