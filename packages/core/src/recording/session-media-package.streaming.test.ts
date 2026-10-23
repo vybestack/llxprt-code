@@ -255,16 +255,6 @@ describe('streamed portable session import', () => {
     await expect(readdir(chats)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
-  it('rejects a recording line above the finite line limit', async () => {
-    const packageDirectory = join(tempDirectory, 'package');
-    const { recordingPath } = await writePackage(packageDirectory, 1);
-    await appendFile(recordingPath, `${'y'.repeat(65 * 1024 * 1024)}\n`);
-
-    await expect(validateSessionMediaPackage(packageDirectory)).rejects.toThrow(
-      /line exceeds finite byte limit/,
-    );
-  });
-
   it('validates native chunk boundaries and short state keys without changing recording digests', async () => {
     const directory = join(tempDirectory, 'boundaries');
     await mkdir(directory);

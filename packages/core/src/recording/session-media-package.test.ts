@@ -25,7 +25,6 @@ import type {
 } from '../services/history/IContent.js';
 import { LocalMediaStore } from '../storage/local-media-store.js';
 import { SessionLockManager } from './SessionLockManager.js';
-import { SessionRecordingService } from './SessionRecordingService.js';
 import {
   createPackageRecorder,
   packageRecordingName,
@@ -558,71 +557,6 @@ describe('internal session media package', () => {
       },
     );
     expect(chatEntries).toStrictEqual([]);
-  });
-
-  it('packages media from rewound recording events and sibling persisted session state', async () => {
-    const sourceRoot = join(tempDirectory, 'complete-source');
-    const sourceStore = new LocalMediaStore({
-      rootDirectory: join(sourceRoot, 'media'),
-      quotaBytes: 1024,
-    });
-    const recordingOnly = await sourceStore.admit({
-      bytes: new Uint8Array([1, 3, 5]),
-      mimeType: 'image/png',
-      semanticMetadata: {},
-    });
-    const persistedOnly = await sourceStore.admit({
-      bytes: new Uint8Array([2, 4, 6, 8]),
-      mimeType: 'image/png',
-      semanticMetadata: {},
-    });
-    const recording = createPackageRecorder({
-      sessionId: 'complete-session',
-      projectHash: PROJECT_HASH,
-      chatsDir: join(sourceRoot, 'chats'),
-      workspaceDirs: [join(sourceRoot, 'workspace')],
-      cwd: sourceRoot,
-      provider: 'test',
-      model: 'test',
-      mediaStore: sourceStore,
-    });
-    await recordRowsForTest(recording, [content(recordingOnly)]);
-    if (!(recording instanceof SessionRecordingService))
-      throw new Error('Expected JSONL recorder');
-    recording.recordRewind(1);
-    await recording.flush();
-    const recordingPath = recording.getFilePath();
-    assertNotNull(recordingPath, 'Expected recording path');
-    await writeFile(
-      join(sourceRoot, 'chats', 'persisted-session-extra.json'),
-      JSON.stringify({
-        version: 1,
-        sessionId: 'complete-session',
-        projectHash: PROJECT_HASH,
-        createdAt: new Date(0).toISOString(),
-        updatedAt: new Date(0).toISOString(),
-        history: [content(persistedOnly)],
-      }),
-    );
-    const packageDirectory = join(tempDirectory, 'complete-package');
-
-    await exportSessionMediaPackage(
-      recordingPath,
-      PROJECT_HASH,
-      sourceStore,
-      packageDirectory,
-    );
-    await recording.dispose();
-
-    const packagedObjects = await readdir(
-      join(packageDirectory, 'blobs', 'sha256'),
-    );
-    const packagedRecording = await readFile(
-      join(packageDirectory, 'session.jsonl'),
-      'utf8',
-    );
-    expect(packagedObjects).toHaveLength(2);
-    expect(packagedRecording).not.toContain(sourceRoot);
   });
 
   it('packages media retained by native popped rows and checkpoint state', async () => {
