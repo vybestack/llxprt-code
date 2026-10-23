@@ -59,11 +59,12 @@ export async function replaceNormalizedRow(
       ) === 0;
   }
   if (unchanged) return;
-  const original = await writer.freeze();
+  const shift = positions.length - removed;
+  const original =
+    shift !== 0 && end <= count ? await writer.freeze() : undefined;
   for (const [index, at] of positions.entries())
     await writer.position(first + index, at);
-  const shift = positions.length - removed;
-  if (shift !== 0) {
+  if (original !== undefined) {
     for (let ordinal = end; ordinal <= count; ordinal++) {
       await writer.position(ordinal + shift, await read(original, ordinal));
     }
