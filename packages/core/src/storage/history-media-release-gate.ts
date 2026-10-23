@@ -61,6 +61,8 @@ export class HistoryMediaReleaseGate {
   private head = 0;
   private tail = 0;
   private busy = false;
+  private observedOldest: number | undefined;
+  private drainRequested = false;
   private serial: Promise<void> = Promise.resolve();
 
   constructor(
@@ -76,7 +78,12 @@ export class HistoryMediaReleaseGate {
       throw new Error('Invalid deferred history media queue bounds');
     this.journal.mediaPins.bind(
       () => {
-        if (this.busy || this.head === this.tail) return undefined;
+        if (this.head === this.tail) return undefined;
+        if (this.busy) {
+          if (this.journal.mediaPins.oldestVersion !== this.observedOldest)
+            this.drainRequested = true;
+          return undefined;
+        }
         return this.run(() => this.drain());
       },
       () => this.busy || this.head !== this.tail,
@@ -112,8 +119,14 @@ export class HistoryMediaReleaseGate {
   private run(work: () => Promise<void>): Promise<void> {
     const turn = this.serial.then(async () => {
       this.busy = true;
+      this.observedOldest = this.journal.mediaPins.oldestVersion;
       try {
         await work();
+        while (this.drainRequested) {
+          this.drainRequested = false;
+          this.observedOldest = this.journal.mediaPins.oldestVersion;
+          await this.drain();
+        }
       } finally {
         this.busy = false;
       }

@@ -20,6 +20,71 @@ import { RequestMediaResolver } from './request-media-resolver.js';
 
 const directory = tempDirectory('native-media-gate-');
 
+describe('media release while the gate is draining', () => {
+  it('finishes a release when the last old pin closes during the busy drain', async () => {
+    const session = await JournalSession.create(
+      join(directory(), 'busy-release.llxj'),
+    );
+    const media = new LocalMediaStore({
+      rootDirectory: join(directory(), 'busy-media'),
+      quotaBytes: 1024,
+    });
+    const reference = await media.admit({
+      bytes: new Uint8Array([7, 3, 9]),
+      mimeType: 'image/png',
+      semanticMetadata: {},
+    });
+    await media.reserve(reference, historyOwnerIdFor(reference.contentId));
+    const gate = new HistoryMediaReleaseGate(session.store, media, () => false);
+    await gate.open();
+    const pins = session.store.mediaPins;
+    const release = pins.retain(0);
+    const boundary = Object.getOwnPropertyDescriptor(
+      JournalMediaPins.prototype,
+      'oldestVersion',
+    );
+    if (boundary?.get === undefined) throw new Error('Missing pin boundary');
+    const oldest = boundary.get.bind(pins);
+    const retirement = { closed: false, closing: Promise.resolve() };
+    let armed = false;
+    const read = session.store.getState.bind(session.store);
+    await gate.release(reference.contentId);
+    const reading = spyOn(session.store, 'getState').mockImplementation(
+      async (key) => {
+        const value = await read(key);
+        armed = true;
+        return value;
+      },
+    );
+    try {
+      Object.defineProperty(pins, 'oldestVersion', {
+        configurable: true,
+        get() {
+          const version: number | undefined = oldest();
+          if (armed && !retirement.closed) {
+            retirement.closed = true;
+            retirement.closing = Promise.resolve(
+              pins.afterReaderRelease(release),
+            );
+          }
+          return version;
+        },
+      });
+      await gate.settle();
+      await retirement.closing;
+      expect(retirement.closed).toBe(true);
+      expect(await gate.pendingCount()).toBe(0);
+      expect(await media.hasReservations(reference.contentId)).toBe(false);
+    } finally {
+      reading.mockRestore();
+      Reflect.deleteProperty(pins, 'oldestVersion');
+      if (!retirement.closed) await pins.afterReaderRelease(release);
+      await session.close();
+      await media.close();
+    }
+  });
+});
+
 describe('version-pinned history media ownership', () => {
   it('drains releases after reader failure and preserves a single failure identity', async () => {
     const pins = new JournalMediaPins();
