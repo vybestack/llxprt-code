@@ -28,7 +28,6 @@ import { buildHandlerHarness } from './support/handler-harness.js';
 import { computeMarginAdjustedLimit } from '../contextLimitPolicy.js';
 import { buildRuntimeContext } from '../../core/__tests__/chatSession-density-helpers.js';
 import type { CompressionCallback } from '@vybestack/llxprt-code-providers';
-import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 
 const MODEL = 'test-model';
 const HISTORY_MESSAGES = 14;
@@ -135,9 +134,10 @@ interface GuardedHarness {
  * compression callback attached) and returns the captured callback, the way a
  * load-balancer guard would later invoke it.
  */
-async function buildGuardedHarness(options: {
-  compression: 'noop' | 'underdeliver';
-}): Promise<GuardedHarness> {
+async function buildGuardedHarness(
+  options: { compression: 'noop' | 'underdeliver' },
+  consume: (harness: GuardedHarness) => Promise<void>,
+): Promise<void> {
   const historyService = new HistoryService();
   const runtimeContext = buildRuntimeContext(historyService, {
     contextLimit: SESSION_CONTEXT_LIMIT,
@@ -181,86 +181,103 @@ async function buildGuardedHarness(options: {
     historyService,
     [pending],
     'prompt-3499',
-    provider as unknown as IProvider,
+    provider,
+    undefined,
+    true,
+    async () =>
+      consume({
+        historyService,
+        callback: expectCapturedCallback(capturedCallback),
+        initialEstimate,
+      }),
   );
-
-  return {
-    historyService,
-    callback: expectCapturedCallback(capturedCallback),
-    initialEstimate,
-  };
 }
 
 describe('CompressionHandler compression-callback escalation (issue #3499)', () => {
   it('T2: escalates past an under-delivering compression round and truncates history to the guard target', async () => {
-    const { historyService, callback, initialEstimate } =
-      await buildGuardedHarness({ compression: 'underdeliver' });
-    const guard = guardOverBy(initialEstimate, 900);
+    await buildGuardedHarness(
+      { compression: 'underdeliver' },
+      async ({ historyService, callback, initialEstimate }) => {
+        const guard = guardOverBy(initialEstimate, 900);
 
-    const result = await readSelection(await callback(guard));
+        const result = await readSelection(await callback(guard));
 
-    const finalEstimate = await historyService.estimateTokensForContents(
-      result,
-      MODEL,
+        const finalEstimate = await historyService.estimateTokensForContents(
+          result,
+          MODEL,
+        );
+        expect(finalEstimate).toBeLessThanOrEqual(effectiveLimitFor(guard));
+        // Compression shed only entry 00; truncation had to remove more than
+        // that for the payload to fit the guard target, while entry 03 onward
+        // survives and the pending request is preserved.
+        expect(resultText(result)).not.toContain('entry 00');
+        expect(resultText(result)).not.toContain('entry 01');
+        expect(resultText(result)).toContain('entry 03');
+        expect(resultText(result)).toContain('pending-marker');
+      },
     );
-    expect(finalEstimate).toBeLessThanOrEqual(effectiveLimitFor(guard));
-    // Compression shed only entry 00; truncation had to remove more than
-    // that for the payload to fit the guard target, while entry 03 onward
-    // survives and the pending request is preserved.
-    expect(resultText(result)).not.toContain('entry 00');
-    expect(resultText(result)).not.toContain('entry 01');
-    expect(resultText(result)).toContain('entry 03');
-    expect(resultText(result)).toContain('pending-marker');
   });
 
   it('T3: returns fitting contents instead of throwing when compression is a structural no-op', async () => {
-    const { historyService, callback, initialEstimate } =
-      await buildGuardedHarness({ compression: 'noop' });
-    const guard = guardOverBy(initialEstimate, 900);
-    const historyTokensBefore = historyService.getTotalTokens();
+    await buildGuardedHarness(
+      { compression: 'noop' },
+      async ({ historyService, callback, initialEstimate }) => {
+        const guard = guardOverBy(initialEstimate, 900);
+        const historyTokensBefore = historyService.getTotalTokens();
 
-    const result = await readSelection(await callback(guard));
+        const result = await readSelection(await callback(guard));
 
-    const finalEstimate = await historyService.estimateTokensForContents(
-      result,
-      MODEL,
+        const finalEstimate = await historyService.estimateTokensForContents(
+          result,
+          MODEL,
+        );
+        expect(finalEstimate).toBeLessThanOrEqual(effectiveLimitFor(guard));
+        expect(historyService.getTotalTokens()).toBeLessThan(
+          historyTokensBefore,
+        );
+      },
     );
-    expect(finalEstimate).toBeLessThanOrEqual(effectiveLimitFor(guard));
-    expect(historyService.getTotalTokens()).toBeLessThan(historyTokensBefore);
   });
 
   it('T3: throws the structured overflow error when even truncation cannot fit the guard limit', async () => {
-    const { callback, initialEstimate } = await buildGuardedHarness({
-      compression: 'noop',
-    });
-    const guard: GuardInfo = {
-      estimatedTokens: initialEstimate + GUARD_OVERHEAD,
-      contextLimit: 40,
-    };
+    await buildGuardedHarness(
+      { compression: 'noop' },
+      async ({ callback, initialEstimate }) => {
+        const guard: GuardInfo = {
+          estimatedTokens: initialEstimate + GUARD_OVERHEAD,
+          contextLimit: 40,
+        };
 
-    await expect(callback(guard)).rejects.toThrow(
-      /Request still exceeds the safety-adjusted context limit/,
+        await expect(callback(guard)).rejects.toThrow(
+          /Request still exceeds the safety-adjusted context limit/,
+        );
+      },
     );
   });
 
   it('T4: targets contextLimit minus overhead for a small deficit instead of over-cutting', async () => {
-    const { historyService, callback, initialEstimate } =
-      await buildGuardedHarness({ compression: 'noop' });
-    const guard = guardOverBy(initialEstimate, 800);
-    const historyTokensBefore = historyService.getTotalTokens();
+    await buildGuardedHarness(
+      { compression: 'noop' },
+      async ({ historyService, callback, initialEstimate }) => {
+        const guard = guardOverBy(initialEstimate, 800);
+        const historyTokensBefore = historyService.getTotalTokens();
 
-    const result = await readSelection(await callback(guard));
+        const result = await readSelection(await callback(guard));
 
-    const finalEstimate = await historyService.estimateTokensForContents(
-      result,
-      MODEL,
+        const finalEstimate = await historyService.estimateTokensForContents(
+          result,
+          MODEL,
+        );
+        expect(finalEstimate).toBeLessThanOrEqual(effectiveLimitFor(guard));
+        // A deficit-exact target removes roughly the deficit; a default
+        // completion-budget ceiling (~limit/2) would land far below this floor.
+        expect(finalEstimate).toBeGreaterThan(effectiveLimitFor(guard) - 800);
+        expect(finalEstimate).toBeGreaterThan(guard.contextLimit / 2);
+        expect(historyService.getTotalTokens()).toBeLessThan(
+          historyTokensBefore,
+        );
+      },
     );
-    expect(finalEstimate).toBeLessThanOrEqual(effectiveLimitFor(guard));
-    // A deficit-exact target removes roughly the deficit; a default
-    // completion-budget ceiling (~limit/2) would land far below this floor.
-    expect(finalEstimate).toBeGreaterThan(effectiveLimitFor(guard) - 800);
-    expect(finalEstimate).toBeGreaterThan(guard.contextLimit / 2);
-    expect(historyService.getTotalTokens()).toBeLessThan(historyTokensBefore);
   });
 
   it('T4: converges against the handler own limits when no guard info is supplied', async () => {
