@@ -8,8 +8,11 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { OutputLimitConfig } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { HistoryDumpSource } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { AnthropicConversationConversionOptions as AnthropicMessageConversionOptions } from '../anthropic/AnthropicMessageNormalizer.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { callerOwnedAnthropicDump } from '../anthropic/caller-owned-anthropic-dump.js';
+import { nativeRawAnthropicDump } from '../anthropic/native-raw-anthropic-dump.js';
 import { nativeChatDump } from '../openai/native-chat-dump.js';
-import { buildAnthropicDumpStream } from '../anthropic/anthropicDumpStream.js';
+import { inMemoryRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { ReasoningMessageOptions } from '../openai/OpenAIRequestBuilder.js';
 
 /** Reasoning options for a `/dump` conversion under the given policy. */
@@ -80,38 +83,51 @@ export function withModel(
 
 export function buildProviderDumpBodyStream(params: {
   providerName: string;
-  history: HistoryDumpSource;
+  history: HistoryDumpSource | IContent[];
   policy?: Readonly<Record<string, unknown>>;
   config?: OutputLimitConfig;
   model?: string;
   baseURL?: string;
 }): Record<string, unknown> {
   const family = dumpProviderFamily(params.providerName);
+  const history = params.history;
+  const source: HistoryDumpSource = Array.isArray(history)
+    ? {
+        callerOwnedRows: {
+          ...inMemoryRequestSelection(history),
+          callerOwned: true,
+        },
+        async *rows() {
+          yield* history;
+        },
+      }
+    : history;
   if (family === 'openai') {
     return withModel(
       {
-        messages: nativeChatDump(params.history, params.policy, params.config),
+        messages: nativeChatDump(source, params.policy, params.config),
       },
       params.model,
     );
   }
   if (family === 'anthropic') {
+    const options = anthropicDumpOptions(
+      params.policy,
+      params.config,
+      params.model,
+      params.baseURL,
+    );
     return withModel(
       {
-        messages: buildAnthropicDumpStream(
-          params.history,
-          anthropicDumpOptions(
-            params.policy,
-            params.config,
-            params.model,
-            params.baseURL,
-          ),
-        ),
+        messages:
+          source.callerOwnedRows === undefined
+            ? nativeRawAnthropicDump(source, options)
+            : callerOwnedAnthropicDump(source.callerOwnedRows, options),
       },
       params.model,
     );
   }
   // Callers that need a real Gemini body must ask the runtime provider (see
   // the CLI dumpcontext command).
-  return { history: params.history.rows() };
+  return { history: source.rows() };
 }

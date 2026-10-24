@@ -16,6 +16,7 @@ import {
   type AnthropicMessage,
 } from './AnthropicMessageNormalizer.js';
 import type { AnthropicMessageConversionOptions } from './AnthropicMessageConversionOptions.js';
+import { rawChainResults } from './raw-anthropic-chain-results.js';
 import { unprefixAnthropicToolName } from './schemaConverter.js';
 
 export interface RepairMessage {
@@ -57,7 +58,11 @@ export type AnthropicRepairRows = Pick<
   IndexedJournalRequestSnapshot,
   'count' | 'normalizedCount' | 'normalizedPosition'
 > &
-  Pick<ProviderRequestRows, 'readAt'>;
+  Pick<ProviderRequestRows, 'readAt'> & {
+    rawChainAt?(
+      at: number,
+    ): Promise<{ readonly start: number; readonly end: number } | undefined>;
+  };
 
 export class AnthropicRepairSource<
   Query extends AnthropicRepairRows = IndexedJournalRequestSnapshot,
@@ -174,13 +179,26 @@ export class AnthropicRepairSource<
             slot: end > at ? 'chain' : 'content',
             role: unit.speaker === 'ai' ? 'assistant' : 'user',
           };
-          yield message;
+          yield* this.withRawResults(message);
           at = end;
         }
       }
     }
     if (pending >= 0)
       yield { start: pending, end: pendingEnd, slot: 'results', role: 'user' };
+  }
+  private async *withRawResults(
+    message: RepairMessage,
+  ): AsyncGenerator<RepairMessage> {
+    if (this.query.rawChainAt !== undefined && message.slot === 'chain') {
+      for (let at = message.start; at <= message.end; at++) {
+        if ((await this.describe(at))?.results === true) {
+          yield { ...message, slot: 'results', role: 'user' };
+          break;
+        }
+      }
+    }
+    yield message;
   }
   private chainParts(
     row: IContent,
@@ -215,6 +233,11 @@ export class AnthropicRepairSource<
     const row = await this.row(at);
     if (row === undefined) return undefined;
     const results = row.blocks.some((block) => block.type === 'tool_response');
+    if (!this.normalized && message.slot === 'results' && results) {
+      const chain = await this.query.rawChainAt?.(at);
+      if (chain !== undefined)
+        return rawChainResults(this.query, row, chain, this.options);
+    }
     const converted = convertContentToMessages(
       [row],
       new Set(redact ? [0] : []),

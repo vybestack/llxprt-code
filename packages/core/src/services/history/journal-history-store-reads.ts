@@ -175,6 +175,11 @@ export abstract class JournalHistoryStoreReads {
       this.resumeBoundary,
       this.options.counters,
       () => this.openDumps.delete(dump),
+      (snapshot, registration) =>
+        this.requireOpen().session.store.prepareSnapshotFacts(
+          snapshot,
+          registration,
+        ),
     );
     this.openDumps.add(dump);
     return dump;

@@ -98,48 +98,195 @@ async function stringify(value: unknown): Promise<string> {
   return result;
 }
 
+const chainRows: IContent[] = [
+  ...rows.slice(0, 3),
+  { speaker: 'human', blocks: [{ type: 'text', text: 'gap' }] },
+  {
+    speaker: 'ai',
+    blocks: [
+      {
+        type: 'thinking',
+        thought: 'signed',
+        sourceField: 'thinking',
+        signature: 'sig',
+      },
+    ],
+  },
+  {
+    speaker: 'ai',
+    metadata: { cacheAnchor: true },
+    blocks: [{ type: 'text', text: '  reply 雪' }, ...rows[3].blocks],
+  },
+  {
+    speaker: 'ai',
+    blocks: [
+      { type: 'code', code: 'next()', language: 'ts' },
+      ...rows[4].blocks,
+    ],
+  },
+];
+async function journalDump(
+  providerName: string,
+  strip: string,
+  contents: IContent[],
+): Promise<{
+  readonly actual: string;
+  readonly expected: string;
+  readonly creates: Awaited<ReturnType<typeof operationFileCreates>>;
+}> {
+  const history = new HistoryService();
+  try {
+    history.addAll(structuredClone(contents));
+    await history.waitForCommit();
+    const snapshot = await history.openDumpSnapshot();
+    try {
+      const policy = {
+        'reasoning.includeInContext': true,
+        'reasoning.stripFromContext': strip,
+      };
+      const expected = JSON.stringify(
+        buildProviderDumpBody({
+          providerName,
+          model: 'test-model',
+          history: contents,
+          policy,
+        }),
+        null,
+        2,
+      );
+      let actual = '';
+      const creates = await operationFileCreates(async () => {
+        actual = await stringify(
+          buildProviderDumpBodyStream({
+            providerName,
+            model: 'test-model',
+            history: snapshot,
+            policy,
+          }),
+        );
+      }, true);
+      return { actual, expected, creates };
+    } finally {
+      await snapshot.close();
+    }
+  } finally {
+    await history.dispose();
+  }
+}
+
 describe('native generic raw dump', () => {
-  for (const strip of ['none', 'all', 'allButLast']) {
-    it(`openai keeps ${strip} reasoning, raw media and tool bytes without scratch`, async () => {
-      const history = new HistoryService();
+  it('serializes an empty journal without scratch', async () => {
+    const result = await journalDump('anthropic', 'none', []);
+    expect(result.creates).toStrictEqual({ files: [], directories: [] });
+    expect(result.actual).toBe(result.expected);
+  });
+  it('refuses a raw source without an indexed or caller-owned capability before consuming it', async () => {
+    const creates = await operationFileCreates(async () => {
+      await expect(
+        stringify(
+          buildProviderDumpBodyStream({
+            providerName: 'anthropic',
+            history: {
+              async *rows() {
+                yield await Promise.reject<IContent>(
+                  new Error('Unindexed source consumed'),
+                );
+              },
+            },
+          }),
+        ),
+      ).rejects.toThrow(
+        'Anthropic dump requires caller-owned rows or a pinned raw journal source',
+      );
+    }, true);
+    expect(creates).toStrictEqual({ files: [], directories: [] });
+  });
+  it('reopens the same raw journal pin after later history publication without changing tool occurrences', async () => {
+    const history = new HistoryService();
+    try {
+      history.addAll(structuredClone(chainRows));
+      const snapshot = await history.openDumpSnapshot();
       try {
-        history.addAll(structuredClone(rows));
-        await history.waitForCommit();
-        const snapshot = await history.openDumpSnapshot();
-        try {
-          const policy = {
-            'reasoning.includeInContext': true,
-            'reasoning.stripFromContext': strip,
-          };
-          const expected = JSON.stringify(
-            buildProviderDumpBody({
-              providerName: 'openai',
-              model: 'test-model',
-              history: rows,
-              policy,
-            }),
-            null,
-            2,
+        const params = {
+          providerName: 'anthropic',
+          model: 'test-model',
+          history: snapshot,
+          policy: { 'reasoning.includeInContext': true },
+        };
+        const expected = JSON.stringify(
+          buildProviderDumpBody({ ...params, history: chainRows }),
+          null,
+          2,
+        );
+        const creates = await operationFileCreates(async () => {
+          expect(await stringify(buildProviderDumpBodyStream(params))).toBe(
+            expected,
           );
-          let actual = '';
-          const creates = await operationFileCreates(async () => {
-            actual = await stringify(
-              buildProviderDumpBodyStream({
-                providerName: 'openai',
-                model: 'test-model',
-                history: snapshot,
-                policy,
-              }),
-            );
-          }, true);
-          expect(creates).toStrictEqual({ files: [], directories: [] });
-          expect(actual).toBe(expected);
-        } finally {
-          await snapshot.close();
-        }
+          expect(await stringify(buildProviderDumpBodyStream(params))).toBe(
+            expected,
+          );
+        }, true);
+        expect(creates).toStrictEqual({ files: [], directories: [] });
+        history.add({
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'later' }],
+        });
+        await history.waitForCommit();
+        const after = await operationFileCreates(async () => {
+          expect(await stringify(buildProviderDumpBodyStream(params))).toBe(
+            expected,
+          );
+        }, true);
+        expect(after).toStrictEqual({ files: [], directories: [] });
       } finally {
-        await history.dispose();
+        await snapshot.close();
       }
+    } finally {
+      await history.dispose();
+    }
+  });
+  for (const strip of ['none', 'all', 'allButLast']) {
+    it(`anthropic caller arrays preserve ${strip} raw bytes without scratch`, async () => {
+      const policy = {
+        'reasoning.includeInContext': true,
+        'reasoning.stripFromContext': strip,
+      };
+      const history: IContent[] = structuredClone(rows);
+      const expected = JSON.stringify(
+        buildProviderDumpBody({
+          providerName: 'anthropic',
+          model: 'test-model',
+          history,
+          policy,
+        }),
+        null,
+        2,
+      );
+      let actual = '';
+      const creates = await operationFileCreates(async () => {
+        actual = await stringify(
+          buildProviderDumpBodyStream({
+            providerName: 'anthropic',
+            model: 'test-model',
+            history,
+            policy,
+          }),
+        );
+      }, true);
+      expect(creates).toStrictEqual({ files: [], directories: [] });
+      expect(actual).toBe(expected);
     });
+    it(`anthropic journal chains preserve ${strip} signed reasoning, media and anchors without scratch`, async () => {
+      const result = await journalDump('anthropic', strip, chainRows);
+      expect(result.creates).toStrictEqual({ files: [], directories: [] });
+      expect(result.actual).toBe(result.expected);
+    });
+    for (const providerName of ['openai', 'anthropic']) {
+      it(`${providerName} keeps ${strip} reasoning, raw media and tool bytes without scratch`, async () => {
+        const result = await journalDump(providerName, strip, rows);
+        expect(result.creates).toStrictEqual({ files: [], directories: [] });
+        expect(result.actual).toBe(result.expected);
+      });
+    }
   }
 });

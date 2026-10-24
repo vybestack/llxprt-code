@@ -554,6 +554,15 @@ export class JournalStore {
     return this.preparePinnedRequest(snapshot, 'kimi');
   }
 
+  prepareSnapshotFacts(
+    snapshot: VersionSnapshot,
+    nativeFacts: NonNullable<
+      RegisteredRowFormat['registration']['nativeFacts']
+    >,
+  ): Promise<VersionSnapshot> {
+    return this.preparePinnedRequest(snapshot, { nativeFacts });
+  }
+
   restorationOf(saved: VersionSnapshot): VersionEdit {
     return saved.restorationIn(this.writer.reader);
   }

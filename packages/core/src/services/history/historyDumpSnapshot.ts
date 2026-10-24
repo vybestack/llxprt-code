@@ -1,5 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { JournalReadCounters } from '../../recording/journalCounters.js';
+import type { NativeFactIndexRegistration } from '../../journal/nativeFactIndex.js';
+import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
+import type { ProviderRequestRows } from './provider-request-snapshot.js';
 import type { PendingFoldSnapshot } from '../../recording/pendingFoldSnapshot.js';
 import type { IContent } from './IContent.js';
 import type {
@@ -10,7 +13,12 @@ import type { ChronologyTraceEntry } from './historyChronology.js';
 import { captureHistoryDumpValues } from './dumpSnapshotValues.js';
 
 export interface HistoryDumpSource {
+  readonly callerOwnedRows?: ProviderRequestRows;
   rows(): AsyncIterable<IContent>;
+  withRawFacts?<T>(
+    registration: NativeFactIndexRegistration,
+    consume: (snapshot: VersionSnapshot) => Promise<T>,
+  ): Promise<T>;
   rawChatFacts?(): Promise<{
     readonly lastThinking: number;
     readonly hasCalls: boolean;

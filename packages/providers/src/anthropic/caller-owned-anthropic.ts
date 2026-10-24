@@ -49,6 +49,12 @@ class CallerOwnedAnthropicIndex implements AnthropicRequestRepairIndex {
         await this.decide(message, next, call.id);
     }
   }
+  async rawChainAt(at: number): Promise<RepairMessage | undefined> {
+    return this.entries.find(
+      (message) =>
+        message.slot === 'chain' && message.start <= at && at <= message.end,
+    );
+  }
   async *messages(from: number): AsyncGenerator<RepairMessage> {
     for (const message of this.entries) if (message.end >= from) yield message;
   }
@@ -146,10 +152,15 @@ export async function callerOwnedAnthropicEngine(
   rows: ProviderRequestRows,
   settings: RowFormatSettings,
   policy: RepairPolicy,
+  rawDump = false,
 ): Promise<AnthropicStreamRepair<AnthropicRepairRows>> {
-  const query = Object.assign(await CallerOwnedToolQuery.create(rows), {
-    readAt: rows.readAt,
-  });
+  const query: AnthropicRepairRows = Object.assign(
+    await CallerOwnedToolQuery.create(rows),
+    {
+      readAt: rows.readAt,
+      ...(rawDump ? { rawChainAt: (at: number) => index.rawChainAt(at) } : {}),
+    },
+  );
   const source = new AnthropicRepairSource(
     query,
     settings,

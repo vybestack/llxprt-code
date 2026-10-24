@@ -18,6 +18,7 @@ import type {
 } from './compressionChronology.js';
 import { journalCompressionSpan } from './journalCompressionSpan.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
+import type { NativeFactIndexRegistration } from '../../journal/nativeFactIndex.js';
 import type { IContent, MediaReferenceBlock } from './IContent.js';
 import {
   buildChronologyTrace,
@@ -75,7 +76,27 @@ export class JournalDumpSnapshot implements HistoryDumpSnapshot {
     private readonly resumeBoundary?: bigint,
     private readonly counters?: JournalReadCounters,
     private readonly onClose: () => void = () => {},
+    private readonly prepareFacts?: (
+      snapshot: VersionSnapshot,
+      registration: NativeFactIndexRegistration,
+    ) => Promise<VersionSnapshot>,
   ) {}
+
+  withRawFacts<T>(
+    registration: NativeFactIndexRegistration,
+    consume: (snapshot: VersionSnapshot) => Promise<T>,
+  ): Promise<T> {
+    return this.readers.read(async () => {
+      if (this.prepareFacts === undefined)
+        throw new Error('Dump snapshot has no native fact preparation owner');
+      const filled = await this.prepareFacts(this.snapshot, registration);
+      try {
+        return await consume(filled);
+      } finally {
+        await filled.close();
+      }
+    });
+  }
 
   get length(): number {
     this.readers.requireOpen();

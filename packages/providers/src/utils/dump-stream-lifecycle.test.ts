@@ -5,6 +5,8 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { HistoryDumpSource } from '@vybestack/llxprt-code-core/services/history/historyDumpSnapshot.js';
+import { inMemoryRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { DumpScratch } from './dumpScratch.js';
 import { AnthropicDumpTable } from '../anthropic/anthropicDumpTable.js';
 import { buildProviderDumpBodyStream } from './providerRequestConversion.js';
@@ -78,7 +80,7 @@ describe('provider iterator cleanup', () => {
       const watch = scratchWatch();
       let closed = false;
       let passes = 0;
-      async function* rows(): AsyncIterable<IContent> {
+      async function* rows(): AsyncGenerator<IContent> {
         passes++;
         try {
           yield { speaker: 'human', blocks: [{ type: 'text', text: 'first' }] };
@@ -91,11 +93,25 @@ describe('provider iterator cleanup', () => {
       try {
         await expect(
           exhaust(
-            buildProviderDumpBodyStream({ providerName, history: { rows } }),
+            buildProviderDumpBodyStream({
+              providerName,
+              history: {
+                rows,
+                callerOwnedRows: {
+                  callerOwned: true,
+                  count: 1,
+                  openReader: rows,
+                  readAt: () => ({
+                    speaker: 'human',
+                    blocks: [{ type: 'text', text: 'first' }],
+                  }),
+                },
+              },
+            }),
           ),
         ).rejects.toThrow('read failure');
         expect(closed).toBe(true);
-        expect(watch.directories.length === 0).toBe(providerName === 'openai');
+        expect(watch.directories).toStrictEqual([]);
         expect(watch.directories.filter(fs.existsSync)).toStrictEqual([]);
       } finally {
         watch.restore();
@@ -108,7 +124,7 @@ describe('provider nested iterator cleanup', () => {
     it(`${providerName} removes conversion scratch when nested output is abandoned`, async () => {
       const watch = scratchWatch();
       let closed = false;
-      async function* rows(): AsyncIterable<IContent> {
+      async function* rows(): AsyncGenerator<IContent> {
         try {
           yield { speaker: 'human', blocks: [{ type: 'text', text: 'first' }] };
           yield {
@@ -137,14 +153,25 @@ describe('provider nested iterator cleanup', () => {
           closed = true;
         }
       }
+      const contents: IContent[] = [];
+      for await (const row of rows()) contents.push(row);
+      closed = false;
+      const history: HistoryDumpSource = {
+        rows,
+        callerOwnedRows: {
+          ...inMemoryRequestSelection(contents),
+          callerOwned: true,
+          openReader: rows,
+        },
+      };
       const iterator = streamPrettyJson(
-        buildProviderDumpBodyStream({ providerName, history: { rows } }),
+        buildProviderDumpBodyStream({ providerName, history }),
       )[Symbol.asyncIterator]();
       try {
         await advanceToMedia(iterator);
         await iterator.return(undefined);
         expect(closed).toBe(true);
-        expect(watch.directories.length === 0).toBe(providerName === 'openai');
+        expect(watch.directories).toStrictEqual([]);
         expect(watch.directories.filter(fs.existsSync)).toStrictEqual([]);
       } finally {
         await iterator.return(undefined);
@@ -161,7 +188,7 @@ describe('stream dump writer cleanup', () => {
     spyOn(Storage, 'getGlobalCacheDir').mockReturnValue(root);
     const controller = new AbortController();
     let closed = false;
-    async function* rows(): AsyncIterable<IContent> {
+    async function* rows(): AsyncGenerator<IContent> {
       try {
         yield {
           speaker: 'human',

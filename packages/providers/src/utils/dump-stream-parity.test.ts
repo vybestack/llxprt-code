@@ -1,6 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { inMemoryRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import type { HistoryDumpSource } from '@vybestack/llxprt-code-core/services/history/historyDumpSnapshot.js';
 import { buildProviderDumpBodyStream } from './providerRequestConversion.js';
 import { buildProviderDumpBody } from './__tests__/support/arrayDumpBody.js';
 import { streamPrettyJson } from './streamPrettyJson.js';
@@ -94,7 +96,11 @@ async function streamBytes(
   providerName: string,
   policy: string,
 ): Promise<string> {
-  const source = {
+  const source: HistoryDumpSource = {
+    callerOwnedRows: {
+      ...inMemoryRequestSelection(history),
+      callerOwned: true,
+    },
     async *rows(): AsyncIterable<IContent> {
       yield* structuredClone(history);
     },

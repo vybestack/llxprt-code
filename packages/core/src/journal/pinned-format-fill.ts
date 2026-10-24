@@ -12,7 +12,10 @@ import { JournalFormatError } from './errors.js';
 import type { VersionEdit } from './groupEdits.js';
 import { fillNativeFacts } from './nativeFactFill.js';
 
-type PinnedRequestRegistration = RowFormatRegistration | 'kimi';
+type PinnedRequestRegistration =
+  | RowFormatRegistration
+  | Pick<RowFormatRegistration, 'nativeFacts'>
+  | 'kimi';
 
 async function requestMappingEdits(
   snapshot: VersionSnapshot,
@@ -21,7 +24,8 @@ async function requestMappingEdits(
   if (registration === 'kimi') return [{ kind: 'kimi' }];
   if (registration.nativeFacts !== undefined)
     return [{ kind: 'factIndex', registration: registration.nativeFacts }];
-  const slot = registration.mistralSlot;
+  const slot =
+    'settings' in registration ? registration.mistralSlot : undefined;
   if (slot === undefined || (await snapshot.hasMistralSlot(slot))) return [];
   return [{ kind: 'mistral', slot }];
 }
@@ -95,9 +99,9 @@ export async function fillPinnedRequest(
         await mapped.close();
       }
       const edits: readonly VersionEdit[] =
-        registration === 'kimi'
-          ? [{ kind: 'append', rows: [] }]
-          : [{ kind: 'format', registration }];
+        registration !== 'kimi' && 'settings' in registration
+          ? [{ kind: 'format', registration }]
+          : [{ kind: 'append', rows: [] }];
       const prepared = await prepareBuild(
         ctx,
         { ...planning, published: ctx.published },
@@ -109,9 +113,9 @@ export async function fillPinnedRequest(
       if (prepared.built === undefined)
         throw new JournalFormatError('Pinned format has no built version');
       const filled =
-        registration === 'kimi'
-          ? { built: prepared.built }
-          : await fillRowFormats(ctx, prepared.built, appender, edits, []);
+        registration !== 'kimi' && 'settings' in registration
+          ? await fillRowFormats(ctx, prepared.built, appender, edits, [])
+          : { built: prepared.built };
       await appender.drain();
       measured = snapshotOf(
         ctx,
