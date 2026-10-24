@@ -188,6 +188,7 @@ export class IdFactBatch {
       this.workingReader,
       this.workingRoot,
       this.sortedUpdates(),
+      this.readback,
     );
     // The nodes just appended are read by the next lookup and the next merge.
     await appender.drain();

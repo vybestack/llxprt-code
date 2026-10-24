@@ -2,6 +2,7 @@
 import { JournalFormatError } from './errors.js';
 import type { RecordAppender } from './groupAppender.js';
 import type { IdTrieReader } from './idTrieReader.js';
+import type { IdNodeCache } from './idTrieCache.js';
 import {
   ID_TRIE_FANOUT,
   ID_TRIE_LEAF_CAPACITY,
@@ -10,6 +11,7 @@ import {
   encodeIdTrieNode,
   nibbleAt,
   type IdEntry,
+  type IdTrieNode,
   type InternalIdNode,
 } from './idTrieNode.js';
 import { bytesEqual } from './bytes.js';
@@ -146,6 +148,22 @@ class UnionSource implements SortedSource {
 interface MergeContext {
   readonly appender: RecordAppender;
   readonly reader: IdTrieReader | undefined;
+  readonly written: IdNodeCache | undefined;
+}
+
+async function appendNode(
+  context: MergeContext,
+  node: IdTrieNode,
+  depth: number,
+): Promise<number> {
+  const record = encodeIdTrieNode(node);
+  const offset = await context.appender.append(record);
+  context.written?.put(
+    offset,
+    record.kindHeader,
+    depth < 3 && node.kind === 'internal',
+  );
+  return offset;
 }
 
 interface ExistingLeaf {
@@ -189,9 +207,7 @@ async function buildNode(
     if (existing !== undefined && sameFacts(taken, existing.entries)) {
       return existing.offset;
     }
-    return context.appender.append(
-      encodeIdTrieNode({ kind: 'leaf', entries: taken }),
-    );
+    return appendNode(context, { kind: 'leaf', entries: taken }, depth);
   }
   if (depth >= ID_TRIE_MAX_DEPTH) {
     throw new JournalFormatError(
@@ -214,9 +230,7 @@ async function buildInternal(
     children.push(await buildNode(context, depth + 1, below, undefined));
     bitmap |= 1 << nibble;
   }
-  return context.appender.append(
-    encodeIdTrieNode({ kind: 'internal', bitmap, children }),
-  );
+  return appendNode(context, { kind: 'internal', bitmap, children }, depth);
 }
 
 /** Merges the updates into the subtree at `offset`, rewriting only the nodes on changed paths. */
@@ -274,9 +288,7 @@ async function mergeInternal(
     }
   }
   if (!changed) return offset;
-  return context.appender.append(
-    encodeIdTrieNode({ kind: 'internal', bitmap, children }),
-  );
+  return appendNode(context, { kind: 'internal', bitmap, children }, depth);
 }
 
 function isEntryArray(
@@ -324,7 +336,7 @@ async function mergeArrayNode(
     node?.kind === 'leaf' ? unionEntries(node.entries, updates) : updates;
   if (node?.kind !== 'internal' && entries.length <= ID_TRIE_LEAF_CAPACITY) {
     if (node !== undefined && sameFacts(entries, node.entries)) return offset;
-    return context.appender.append(encodeIdTrieNode({ kind: 'leaf', entries }));
+    return appendNode(context, { kind: 'leaf', entries }, depth);
   }
   if (depth >= ID_TRIE_MAX_DEPTH)
     throw new JournalFormatError(
@@ -367,9 +379,7 @@ async function mergeArrayChildren(
     changed = changed || next !== previous;
   }
   if (node?.kind === 'internal' && !changed) return offset;
-  return context.appender.append(
-    encodeIdTrieNode({ kind: 'internal', bitmap, children }),
-  );
+  return appendNode(context, { kind: 'internal', bitmap, children }, depth);
 }
 
 /**
@@ -388,8 +398,9 @@ export async function mergeIdTrie(
   reader: IdTrieReader | undefined,
   root: number,
   updates: Iterable<IdEntry> | AsyncIterable<IdEntry>,
+  written?: IdNodeCache,
 ): Promise<number> {
-  const context: MergeContext = { appender, reader };
+  const context: MergeContext = { appender, reader, written };
   if (isEntryArray(updates)) {
     for (let index = 1; index < updates.length; index++)
       if (compareIdHashes(updates[index - 1].hash, updates[index].hash) >= 0)
