@@ -1,5 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createHash } from 'node:crypto';
+import {
+  CallerRequestLineage,
+  type CallerLineageState,
+} from './caller-request-lineage.js';
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
@@ -28,6 +32,8 @@ export interface RequestShapeInput {
   readonly countTokens: TokenCountFn;
   readonly lastSendSequence: bigint;
   readonly previousFingerprint?: string;
+  readonly callerOwned?: boolean;
+  readonly previousCallerLineage?: CallerLineageState;
 }
 
 export interface ToolCallAttribution {
@@ -70,17 +76,23 @@ class RequestShapeAccumulator {
   sequence = 0n;
   private readonly fingerprint = createHash('sha256');
   private readonly toolsJson: string;
+  readonly callerLineage: CallerRequestLineage | undefined;
 
   constructor(
     private readonly input: Omit<RequestShapeInput, 'requestContents'>,
     private readonly toolCallNames: ToolCallNames,
   ) {
+    this.callerLineage =
+      input.callerOwned === true
+        ? new CallerRequestLineage(input.previousCallerLineage)
+        : undefined;
     this.toolsJson = stableStringify(input.tools);
     this.fingerprint.update(`I:${input.instructionsText ?? ''}`);
     this.fingerprint.update(`\u0000T:${this.toolsJson}`);
   }
 
   add(content: IContent, sequence: bigint): void {
+    this.callerLineage?.observe(content);
     const measurement = measureRequestRow(content, this.input.countTokens);
     let part: FingerprintContribution | null = null;
     if (this.fingerprintBudget > 0) {
@@ -140,6 +152,10 @@ class RequestShapeAccumulator {
   }
 
   finish(): RequestShapeResult {
+    if (this.callerLineage?.continuesPrevious() === false) {
+      this.newToolResultTokens += this.carriedToolResultTokens;
+      this.carriedToolResultTokens = 0;
+    }
     const prefixFingerprint = this.fingerprint
       .digest('hex')
       .slice(0, FINGERPRINT_HEX_LENGTH);
@@ -169,6 +185,13 @@ class RequestShapeAccumulator {
 export function computeRequestShape(
   input: RequestShapeInput,
 ): RequestShapeResult {
+  return arrayShape(input).shape;
+}
+
+function arrayShape(input: RequestShapeInput): {
+  readonly shape: RequestShapeResult;
+  readonly callerLineage: CallerLineageState | undefined;
+} {
   const accumulator = new RequestShapeAccumulator(
     input,
     fullRequestToolCallNames(input.requestContents),
@@ -176,7 +199,10 @@ export function computeRequestShape(
   input.requestContents.forEach((content, index) =>
     accumulator.add(content, BigInt(index + 1)),
   );
-  return accumulator.finish();
+  return {
+    shape: accumulator.finish(),
+    callerLineage: accumulator.callerLineage?.finish(),
+  };
 }
 
 export interface SourceRequestShapeInput
@@ -185,9 +211,11 @@ export interface SourceRequestShapeInput
   readonly signal?: AbortSignal;
 }
 
-async function sourceShape(
-  input: SourceRequestShapeInput,
-): Promise<{ readonly shape: RequestShapeResult; readonly sequence: bigint }> {
+async function sourceShape(input: SourceRequestShapeInput): Promise<{
+  readonly shape: RequestShapeResult;
+  readonly sequence: bigint;
+  readonly callerLineage: CallerLineageState | undefined;
+}> {
   const accumulator = new RequestShapeAccumulator(
     input,
     new BoundedToolCallNames(2000),
@@ -214,7 +242,11 @@ async function sourceShape(
   input.signal?.throwIfAborted();
   const shape = accumulator.finish();
   input.signal?.throwIfAborted();
-  return { shape, sequence: accumulator.sequence };
+  return {
+    shape,
+    sequence: accumulator.sequence,
+    callerLineage: accumulator.callerLineage?.finish(),
+  };
 }
 
 export async function computeSourceRequestShape(
@@ -235,6 +267,7 @@ type SourceShapeOptions = Omit<
 export class RequestShapeTracker {
   private lastSequence = 0n;
   private lastFp: string | undefined;
+  private lastCallerLineage: CallerLineageState | undefined;
 
   snapshot(): {
     readonly sequence: bigint;
@@ -244,14 +277,17 @@ export class RequestShapeTracker {
   }
 
   recordRequestShape(input: ShapeOptions): RequestShapeResult {
-    const shape = computeRequestShape({
+    const result = arrayShape({
       ...input,
       lastSendSequence: this.lastSequence,
       previousFingerprint: this.lastFp,
+      callerOwned: true,
+      previousCallerLineage: this.lastCallerLineage,
     });
     this.lastSequence = BigInt(input.requestContents.length);
-    this.lastFp = shape.prefixFingerprint;
-    return shape;
+    this.lastFp = result.shape.prefixFingerprint;
+    this.lastCallerLineage = result.callerLineage;
+    return result.shape;
   }
 
   async recordSourceRequestShape(
@@ -261,10 +297,16 @@ export class RequestShapeTracker {
       ...input,
       lastSendSequence: this.lastSequence,
       previousFingerprint: this.lastFp,
+      callerOwned: input.requestRows.callerOwned === true,
+      previousCallerLineage: this.lastCallerLineage,
     });
-    if (result.sequence > this.lastSequence)
+    if (
+      input.requestRows.callerOwned === true ||
+      result.sequence > this.lastSequence
+    )
       this.lastSequence = result.sequence;
     this.lastFp = result.shape.prefixFingerprint;
+    this.lastCallerLineage = result.callerLineage;
     return result.shape;
   }
 }
