@@ -175,11 +175,32 @@ async function adoptRuntimeMedia(
 export async function loadAgentRuntime(
   options: AgentRuntimeLoaderOptions,
 ): Promise<AgentRuntimeLoaderResult> {
-  const { profile, mediaStore, overrides = {}, signal } = options;
+  const { overrides = {}, signal } = options;
   throwIfAborted(signal);
 
   const history = overrides.historyService ?? new HistoryService();
+  try {
+    return await assembleAgentRuntime(options, history);
+  } catch (error) {
+    if (overrides.historyService === undefined) {
+      try {
+        await history.dispose();
+      } catch (cleanupError) {
+        throw new AggregateError(
+          [error, cleanupError],
+          'Runtime loading and history disposal failed',
+        );
+      }
+    }
+    throw error;
+  }
+}
 
+async function assembleAgentRuntime(
+  options: AgentRuntimeLoaderOptions,
+  history: HistoryService,
+): Promise<AgentRuntimeLoaderResult> {
+  const { profile, mediaStore, overrides = {} } = options;
   const providerAdapter: AgentRuntimeProviderAdapter =
     overrides.providerAdapter ??
     createProviderAdapterFromManager(profile.providerManager);
