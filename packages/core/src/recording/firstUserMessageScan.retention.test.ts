@@ -5,21 +5,36 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { settledHeap } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import { MIB } from '../journal/__tests__/support/streamedBody.js';
-import { scanFirstUserMessage } from './firstUserMessageScan.js';
+import { SessionDiscovery } from './SessionDiscovery.js';
+import { JournalRecordingService } from './journalRecordingService.js';
+import { HistoryService } from '../services/history/HistoryService.js';
 
 const TITLE_LENGTH = 120;
 const RETAINED_BOUND = 4 * MIB;
 
-function contentLine(text: string): string {
-  return JSON.stringify({
-    v: 1,
-    seq: 2,
-    ts: '2026-01-01T00:00:00.000Z',
-    type: 'content',
-    payload: {
-      content: { speaker: 'human', blocks: [{ type: 'text', text }] },
-    },
+async function recordLargeMessage(dir: string): Promise<string> {
+  const recording = JournalRecordingService.create({
+    sessionId: 'large-first-message',
+    projectHash: 'retention',
+    chatsDir: dir,
+    workspaceDirs: [],
+    provider: 'test',
+    model: 'test',
   });
+  const history = new HistoryService({ recording });
+  try {
+    await history.addBatch([
+      { speaker: 'human', blocks: [{ type: 'text', text: bigText(12 * MIB) }] },
+    ]);
+    await history.waitForCommit();
+    await recording.flush();
+    const filePath = recording.getFilePath();
+    if (filePath === null) throw new Error('Missing fixture journal');
+    return filePath;
+  } finally {
+    await history.dispose();
+    await recording.dispose();
+  }
 }
 
 /** Distinct pieces, so the text is a real allocation. */
@@ -48,12 +63,14 @@ describe('first user message title scan retention', () => {
   });
 
   it('keeps none of the first message alive through the title it returns', async () => {
-    const filePath = path.join(dir, 'big-first-message.jsonl');
-    await fs.writeFile(filePath, contentLine(bigText(12 * MIB)) + '\n');
+    const filePath = await recordLargeMessage(dir);
     expect((await fs.stat(filePath)).size).toBeGreaterThan(12 * MIB);
 
     const baseline = await settledHeap();
-    const title = await scanFirstUserMessage(filePath, TITLE_LENGTH);
+    const title = await SessionDiscovery.readFirstUserMessage(
+      filePath,
+      TITLE_LENGTH,
+    );
     const afterScan = await settledHeap();
 
     expect(title).toHaveLength(TITLE_LENGTH);

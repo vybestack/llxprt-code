@@ -59,6 +59,9 @@ describe('session discovery on the journal backend', () => {
     await recorder.flush();
     const file = recorder.getFilePath();
     if (file === null) throw new Error('The recorder wrote no file');
+    await store.dispose();
+    await recorder.dispose();
+    await primary.close();
     return file;
   }
 

@@ -25,7 +25,6 @@
  */
 
 import { readBoundedFirstLine } from './boundedHeaderReader.js';
-import { type FirstUserMessageScanOptions } from './firstUserMessageScan.js';
 import type { JournalReadCounters } from './journalCounters.js';
 import { MetadataJsonProjection } from './metadataJsonProjection.js';
 import {
@@ -450,7 +449,6 @@ export class SessionDiscovery {
   static async readFirstUserMessage(
     filePath: string,
     maxLength: number = SESSION_TITLE_MAX_LENGTH,
-    _options: FirstUserMessageScanOptions = {},
   ): Promise<string | null> {
     const found = await readJournalFileFacts(filePath).catch(() => undefined);
     return found?.preview?.slice(0, maxLength) ?? null;
