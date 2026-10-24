@@ -17,6 +17,10 @@ import type { IModel } from './IModel.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { createProviderWithRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 const asContent = (text: string): IContent => ({
   speaker: 'human',
@@ -110,6 +114,7 @@ describe('generateChatCompletion contract', () => {
       contents: [asContent('options-call')],
       invocation: captureProviderInvocation(
         {
+          fetch: requestFetch,
           runtimeId: 'options-test',
           globalSettings: customSettings.getAllGlobalSettings(),
           providerSettings: customSettings.getProviderSettings('contract'),

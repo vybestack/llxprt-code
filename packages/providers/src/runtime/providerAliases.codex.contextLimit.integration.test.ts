@@ -35,7 +35,12 @@ import { setActiveModel } from '../../../agents/src/api/providerMutations.js';
 import { assembleModelSelection } from '../../../agents/src/api/model-selection.js';
 
 import { switchActiveProvider } from '../../../agents/src/api/provider-switch/provider-switch.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
 const RUNTIME_ID = 'issue3576-codex-context-limit';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 describe('Codex effective context limit runtime integration', () => {
   const credentials = useOwnedCredentials();
   const retiring: Array<() => void | Promise<void>> = [];
@@ -192,6 +197,8 @@ describe('Codex effective context limit runtime integration', () => {
           providerName,
           parameters,
           signal,
+          undefined,
+          requestFetch,
         ),
       provider,
       telemetry: {

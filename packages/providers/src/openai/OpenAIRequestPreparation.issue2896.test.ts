@@ -20,6 +20,10 @@ import { REASONING_WIRE_KEYS } from './openaiReasoningDialect.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn().mockResolvedValue('test system prompt'),
@@ -41,6 +45,7 @@ function createMockOptions(
   } = {},
 ): NormalizedGenerateChatOptions {
   const invocation = createRuntimeInvocationContext({
+    fetch: requestFetch,
     runtimeId: 'test-request',
     providerName: 'openai',
     ephemeralsSnapshot: {

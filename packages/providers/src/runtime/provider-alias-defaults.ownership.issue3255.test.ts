@@ -17,6 +17,10 @@ import {
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { prepareRequest } from '../openai/OpenAIRequestPreparation.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 const realProviderAliasesModule = {
   ...(await import('../composition/providerAliases.js')),
@@ -474,6 +478,7 @@ describe('alias reasoning maps propagate to request preparation (issue #3255)', 
     // ephemerals through separateSettings, so the alias value must survive
     // the full runtime hand-off to reach request preparation.
     const invocation = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: createProviderRuntimeContext({
         runtimeId: 'alias-request-test',
       }).runtimeId,

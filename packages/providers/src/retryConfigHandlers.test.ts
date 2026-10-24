@@ -16,6 +16,10 @@ import { OpenAIProvider } from './openai/OpenAIProvider.js';
 import { RetryOrchestrator } from './RetryOrchestrator.js';
 import type { GenerateChatOptions } from './IProvider.js';
 import type { OnAuthErrorHandler } from '@vybestack/llxprt-code-core/config/configTypes.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = (input, init) =>
+  globalThis.fetch(input, init);
 
 async function consume(
   provider: RetryOrchestrator,
@@ -110,6 +114,7 @@ describe('owner-selected retry authentication over HTTP', () => {
       ],
       invocation: captureProviderInvocation(
         {
+          fetch: requestFetch,
           runtimeId: 'same-label',
           globalSettings: settings.getAllGlobalSettings(),
           providerSettings: settings.getProviderSettings('openai'),

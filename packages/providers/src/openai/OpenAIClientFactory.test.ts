@@ -32,6 +32,10 @@ import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { GenerateChatOptions } from '../IProvider.js';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 class ClientScopeProvider extends OpenAIProvider {
   admitForClientScope(
@@ -139,6 +143,7 @@ describe('OpenAIClientFactory', () => {
     it('returns undefined for empty params', () => {
       const options = {
         invocation: createRuntimeInvocationContext({
+          fetch: requestFetch,
           runtimeId: 'params',
           providerName: 'openai',
           ephemeralsSnapshot: {},
@@ -152,6 +157,7 @@ describe('OpenAIClientFactory', () => {
     it('translates maxOutputTokens to max_tokens', () => {
       const options = {
         invocation: createRuntimeInvocationContext({
+          fetch: requestFetch,
           runtimeId: 'params',
           providerName: 'openai',
           ephemeralsSnapshot: { maxOutputTokens: 2000 },
@@ -166,6 +172,7 @@ describe('OpenAIClientFactory', () => {
     it('does not override existing max_tokens', () => {
       const options = {
         invocation: createRuntimeInvocationContext({
+          fetch: requestFetch,
           runtimeId: 'params',
           providerName: 'openai',
           ephemeralsSnapshot: {
@@ -183,6 +190,7 @@ describe('OpenAIClientFactory', () => {
     it('includes model params from invocation', () => {
       const options = {
         invocation: createRuntimeInvocationContext({
+          fetch: requestFetch,
           runtimeId: 'params',
           providerName: 'openai',
           ephemeralsSnapshot: { openai: { temperature: 0.7, top_p: 0.9 } },
@@ -198,6 +206,7 @@ describe('OpenAIClientFactory', () => {
     it('ignores invalid maxOutputTokens values', () => {
       const options = {
         invocation: createRuntimeInvocationContext({
+          fetch: requestFetch,
           runtimeId: 'params',
           providerName: 'openai',
           ephemeralsSnapshot: { maxOutputTokens: -1 },
@@ -220,6 +229,7 @@ describe('OpenAIClientFactory', () => {
         contents: [],
         metadata: { runtimeId: 'conflicting-owner' },
         invocation: createRuntimeInvocationContext({
+          fetch: requestFetch,
           runtimeId: 'runtime-123',
           providerName: 'openai',
           ephemeralsSnapshot: {},
@@ -240,6 +250,7 @@ describe('OpenAIClientFactory', () => {
       const options = await admit({
         contents: [],
         invocation: createRuntimeInvocationContext({
+          fetch: requestFetch,
           runtimeId: 'call-test',
           providerName: 'openai',
           ephemeralsSnapshot: { 'call-id': 'call-789' },
