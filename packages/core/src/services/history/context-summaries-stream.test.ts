@@ -70,7 +70,6 @@ function recorder(root: string): SessionRecordingPort {
     workspaceDirs: [root],
     provider: 'test',
     model: 'test',
-    maxQueueBytes: Infinity,
   });
 }
 

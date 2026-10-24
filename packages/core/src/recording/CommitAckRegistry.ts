@@ -26,7 +26,7 @@
  * and provides the drain-completion gate that holds backpressure waiters in
  * `commit`.
  *
- * Extracted from SessionRecordingService for file size
+ * Extracted from the JSONL writer for file size
  * (PLAN-20260917-ISSUE854.P05b2); behaviour is unchanged.
  */
 

@@ -29,9 +29,7 @@ import type {
 } from './types.js';
 
 /**
- * What a session recorder is, apart from how it writes: lifecycle, identity,
- * the session lock, header facts and checkpoints. Both recorders provide it
- * (the JSONL `SessionRecordingService` and the journal recorder).
+ * Session recorder lifecycle, identity, the session lock, facts and checkpoints.
  */
 export interface SessionRecordingPort {
   // Lifecycle, identity and the session lock.
@@ -68,7 +66,7 @@ export interface SessionRecordingPort {
  * The surface of the JSONL recorder that the history store and its callers
  * use: the session surface plus the old record layout (envelope lines, seq
  * watermarks, mutation records). History-side modules depend on this port
- * rather than on the concrete `SessionRecordingService`. The journal recorder
+ * rather than on the concrete writer. The journal recorder
  * has no such layout; its rows are written by the history store, and the
  * members below leave with the JSONL recorder (#854 phase 4, S15).
  */

@@ -175,7 +175,7 @@ export const productionPolicy: AuditPolicy = {
     'core/src/runtime/contracts/RuntimeTokenizerFactory.ts':
       'RuntimeTokenizerFactory',
     'core/src/config/subagentManager.ts': 'SubagentManager',
-    'core/src/recording/SessionRecordingService.ts': 'SessionRecordingService',
+    'core/src/recording/journalRecordingService.ts': 'JournalRecordingService',
     'core/src/services/asyncTaskManager.ts': 'AsyncTaskManager',
     'core/src/services/shellJobManager.ts': 'ShellJobManager',
     'core/src/services/asyncTaskReminderService.ts': 'AsyncTaskReminderService',

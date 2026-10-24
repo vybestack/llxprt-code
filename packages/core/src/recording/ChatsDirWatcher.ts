@@ -21,9 +21,6 @@
  * removal is diagnosable with an exact timestamp, and diagnoses which
  * directory level is missing when a journal append fails with ENOENT
  * (PLAN-20260211-SESSIONRECORDING.P05).
- *
- * Extracted from SessionRecordingService for file size
- * (PLAN-20260917-ISSUE854.P05b2); behaviour is unchanged.
  */
 
 import { existsSync, watch, watchFile, unwatchFile, type Stats } from 'node:fs';

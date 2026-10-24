@@ -50,7 +50,6 @@ export async function startNewSessionTransition(
         provider: deps.getProvider(),
         model: deps.getModel(),
         mediaStore: deps.mediaStore,
-        maxQueueBytes: deps.readRecordingQueueLimit(),
       });
       integration = new RecordingIntegration(recording);
       const history = candidate.client.getHistoryService();

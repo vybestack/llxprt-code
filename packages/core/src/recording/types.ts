@@ -351,8 +351,7 @@ export interface SessionInfo {
 // ---------------------------------------------------------------------------
 
 /**
- * Ack returned by {@link SessionRecordingService.commit} and
- * {@link SessionRecordingService.waitForCommit} once a record's bytes are
+ * Ack returned by the JSONL recording port once a record's bytes are
  * durably appended to the session JSONL file.
  *
  * @plan PLAN-20260917-ISSUE854.P05b2
@@ -407,7 +406,7 @@ export interface RecordingWriterObservation {
 // ---------------------------------------------------------------------------
 
 /**
- * Configuration for creating a new SessionRecordingService.
+ * Shared session identity and retired JSONL writer configuration.
  */
 export interface SessionRecordingServiceConfig {
   sessionId: string;

@@ -237,8 +237,8 @@ export function isEnoent(error: unknown): boolean {
 
 /**
  * Pure matcher: returns the first entry naming a recorded session file for
- * `sessionId`, or null when none match. SessionRecordingService.materialize
- * names files using the selected backend's extension, so a matching file
+ * `sessionId`, or null when none match. The journal recorder
+ * names files using the native extension, so a matching file
  * starts with `session-` and ends with the truncated id and that extension. Exported
  * so the loadSession re-attach probe (zed-session-loader.ts) decides "does an
  * on-disk recording exist for this id?" against the EXACT same naming rule the

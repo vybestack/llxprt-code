@@ -91,8 +91,8 @@ async function listSessionFileNames(
  * Re-attach decision probe (#1604): true when a recorded session file for
  * `sessionId` already exists on disk under the ZedAgent config's chats dir.
  *
- * A freshly created but UNPROMPTED session has no recording — SessionRecordingService
- * only materializes the JSONL file on the FIRST content event — so this returns
+ * A freshly created but unprompted session has no recording. The journal recorder
+ * materializes the file when first needed, so this returns
  * false for it, signalling loadSession to RE-ATTACH the live in-memory session
  * (replaying its in-memory history) instead of destroying it and failing a disk
  * resume that would find no file. Once the session has been prompted (a file

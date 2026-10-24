@@ -14,11 +14,10 @@
  *
  * - Checkpoints are append-only recording metadata. Forks are prepared by the
  *   canonical transition service before the active recording is replaced.
- * - Recording is backed by SessionRecordingService; setRecording(true) starts a
- *   service and seeds it with the current history so a file is materialized,
+ * - Recording uses the journal recorder factory; setRecording(true) starts a
+ *   recorder and seeds it with the current history so a file is materialized,
  *   then subscribes a RecordingIntegration to the client's HistoryService so
- *   EVERY subsequent turn's content is appended to the JSONL file (continuous
- *   recording, not a one-shot snapshot). setRecording(false) disposes the
+ *   subsequent turns are appended to the journal. setRecording(false) disposes the
  *   integration + service.
  * - resume is backed by resumeSession (CONTINUE_LATEST for 'latest'); a success
  *   feeds the reconstructed IContent history through the client restore path,
@@ -697,8 +696,8 @@ export class SessionControl implements AgentSessionControl {
 
   /**
    * Enables or disables session recording. Enabling starts a fresh
-   * SessionRecordingService for this session and seeds it with the current
-   * history so the JSONL file is materialized (and getRecording().path is
+   * journal recorder for this session and seeds it with the current
+   * history so the native file is materialized (and getRecording().path is
    * defined). Disabling flushes + disposes the live service and clears it.
    * @plan:PLAN-20260617-COREAPI.P20
    * @requirement:REQ-010
