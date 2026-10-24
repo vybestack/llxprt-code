@@ -9,7 +9,7 @@ import {
   type DetachedFixture,
 } from '../../../core/src/services/history/detached-rollback-test-helpers.js';
 import {
-  mediaParticipant,
+  journalMediaParticipant as mediaParticipant,
   rejectedValue,
 } from '../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import {
@@ -17,6 +17,7 @@ import {
   type RowOwnershipStats,
 } from '../../../core/src/recording/rowOwnership.js';
 import type { IContent } from '../../../core/src/services/history/IContent.js';
+import { seedClientArrayHistory } from './__tests__/support/client-array-test-helpers.js';
 import {
   boundedOwners,
   conversationFor,
@@ -29,9 +30,7 @@ async function seedPending(
   fixture: DetachedFixture,
   size: number,
 ): Promise<void> {
-  for (let index = 0; index < size; index++)
-    fixture.history.add(detachedRow(index));
-  await fixture.history.waitForTokenUpdates();
+  await seedClientArrayHistory(fixture, size);
   fixture.history.setCacheAnchorSeq(1);
 }
 async function pendingCheckpoint(
