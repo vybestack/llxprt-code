@@ -26,6 +26,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import {
   MediaAdmissionService,
+  historyOwnerIdFor,
   type MediaAdmissionContext,
 } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
 import type { IProvider } from '@vybestack/llxprt-code-providers/IProvider.js';
@@ -86,8 +87,19 @@ class SpyAdmission extends MediaAdmissionService {
   }
 }
 
+class AdmissionMediaStore extends LocalMediaStore {
+  failHistoryRelease = false;
+
+  override async release(contentId: string, ownerId: string): Promise<void> {
+    if (this.failHistoryRelease && ownerId === historyOwnerIdFor(contentId))
+      throw new Error('durable history release failed');
+    await super.release(contentId, ownerId);
+  }
+}
+
+let sessions: ChatSession[] = [];
 let directory = '';
-let store: LocalMediaStore;
+let store: AdmissionMediaStore;
 let admission: SpyAdmission;
 
 async function createSession(): Promise<ChatSession> {
@@ -100,7 +112,7 @@ async function createSession(): Promise<ChatSession> {
     },
   };
   const setup = createChatSessionRuntime({ provider });
-  store = new LocalMediaStore({
+  store = new AdmissionMediaStore({
     rootDirectory: join(directory, 'media'),
     quotaBytes: 1024 * 1024,
   });
@@ -139,7 +151,7 @@ async function createSession(): Promise<ChatSession> {
     mediaAdmission: admission,
   });
   await registerRuntimeMediaOwner(runtime);
-  return new ChatSession(
+  const chat = new ChatSession(
     runtime,
     {
       generateContent: vi.fn(),
@@ -150,6 +162,8 @@ async function createSession(): Promise<ChatSession> {
     {},
     [],
   );
+  sessions.push(chat);
+  return chat;
 }
 
 async function referencedIds(chat: ChatSession): Promise<string[]> {
@@ -191,7 +205,16 @@ describe('ChatSession.setHistory disk-backed media ownership', () => {
     directory = await mkdtemp(join(tmpdir(), 'llxprt-session-admission-'));
   });
   afterEach(async () => {
-    await rm(directory, { recursive: true, force: true });
+    admission.failRelease = false;
+    store.failHistoryRelease = false;
+    try {
+      for (const chat of sessions) {
+        await chat.getHistoryService().dispose();
+      }
+    } finally {
+      sessions = [];
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   it('keeps media usable after replacement settles and retains no admitted transcript rows', async () => {
@@ -220,7 +243,8 @@ describe('ChatSession.setHistory disk-backed media ownership', () => {
     await chat.setHistory([imageRow(BLUE_PNG)]);
     const [newId] = await referencedIds(chat);
     expect(newId).not.toBe(oldId);
-    expect(admission.released).toStrictEqual([oldId]);
+    expect(admission.released).toStrictEqual([oldId, newId]);
+    expect(await store.hasReservations(oldId)).toBe(false);
     expect(await store.hasReservations(newId)).toBe(true);
   });
 
@@ -244,6 +268,7 @@ describe('ChatSession.setHistory disk-backed media ownership', () => {
     const chat = await createSession();
     await chat.setHistory([imageRow(RED_PNG)]);
     const [priorId] = await referencedIds(chat);
+    admission.released.length = 0;
     admission.failAdmitAtCall = admission.admitCalls + 2;
     await expect(
       chat.setHistory([imageRow(BLUE_PNG), imageRow(BLUE_PNG)]),
@@ -262,6 +287,9 @@ describe('ChatSession.setHistory disk-backed media ownership', () => {
       'Replaced chat history media cleanup was incomplete',
     );
     expect(await referencedIds(chat)).toHaveLength(1);
+    admission.failRelease = false;
+    await chat.clearHistory();
+    await chat.getHistoryService().waitForCommit();
   });
 
   it('clear releases media ownership and a second clear has nothing left to release', async () => {
@@ -277,10 +305,11 @@ describe('ChatSession.setHistory disk-backed media ownership', () => {
   it('surfaces a failed release during clear', async () => {
     const chat = await createSession();
     await chat.setHistory([imageRow(RED_PNG)]);
-    admission.failRelease = true;
-    await expect(chat.clearHistory()).rejects.toThrow(
-      'Chat history media cleanup was incomplete',
-    );
+    store.failHistoryRelease = true;
+    await chat.clearHistory();
+    await expect(
+      chat.getHistoryService().waitForOwnershipSettlement(),
+    ).rejects.toThrow('durable history release failed');
   });
 });
 
