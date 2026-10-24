@@ -15,9 +15,15 @@ const packageRequire = createRequire(
 );
 const { Agent, ProxyAgent }: typeof Undici = packageRequire('./');
 
+export interface NetworkFetchOptions {
+  /** Deadline for response headers on this request, replacing the dispatcher default. */
+  readonly headersTimeoutMs?: number;
+}
+
 export type NetworkFetch = (
   input: RequestInfo | URL,
   init?: RequestInit,
+  options?: NetworkFetchOptions,
 ) => Promise<Response>;
 
 const PRIVATE_IP_RANGES = [
@@ -106,7 +112,7 @@ export class OwnedFetch {
     this.dispatcher = proxy === undefined ? new Agent() : new ProxyAgent(proxy);
   }
 
-  readonly fetch: NetworkFetch = async (input, init) => {
+  readonly fetch: NetworkFetch = async (input, init, options) => {
     if (this.closing !== undefined || this.cancellation.signal.aborted)
       throw new Error('Root fetch is closed');
     const request = new Request(input, init);
@@ -115,6 +121,7 @@ export class OwnedFetch {
       request,
       AbortSignal.any([request.signal, this.cancellation.signal]),
       captureReplayableBody(init?.body),
+      options?.headersTimeoutMs,
     );
   };
 

@@ -19,10 +19,14 @@ export function dispatchOwnedFetch(
   request: Request,
   signal: AbortSignal,
   replayableBody: string | Uint8Array | undefined,
+  headersTimeoutMs: number | undefined,
 ): Promise<Response> {
-  return new OwnedFetchRequest(request, signal, replayableBody).dispatch(
-    dispatcher,
-  );
+  return new OwnedFetchRequest(
+    request,
+    signal,
+    replayableBody,
+    headersTimeoutMs,
+  ).dispatch(dispatcher);
 }
 
 class OwnedFetchRequest implements Dispatcher.DispatchHandler {
@@ -60,6 +64,7 @@ class OwnedFetchRequest implements Dispatcher.DispatchHandler {
     private readonly request: Request,
     private readonly signal: AbortSignal,
     private readonly replayableBody: string | Uint8Array | undefined,
+    private readonly headersTimeoutMs: number | undefined,
   ) {
     this.responseUrl = request.url;
   }
@@ -90,6 +95,7 @@ class OwnedFetchRequest implements Dispatcher.DispatchHandler {
           path: `${url.pathname}${url.search}`,
           method: this.request.method,
           headers: Object.fromEntries(this.request.headers),
+          headersTimeout: this.headersTimeoutMs,
           body:
             this.replayableBody ??
             (this.request.body === null

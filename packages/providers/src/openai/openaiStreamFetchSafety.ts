@@ -6,10 +6,10 @@
 
 /** Avoid runtime-native stream iteration in the OpenAI SDK's SSE reader. */
 export function createReaderBasedStreamFetch(
-  innerFetch?: typeof fetch,
+  innerFetch: typeof fetch,
 ): typeof fetch {
   return async (input, init) => {
-    const response = await (innerFetch ?? globalThis.fetch)(input, init);
+    const response = await innerFetch(input, init);
     return response.ok &&
       response.body &&
       Boolean(Reflect.get(response.body, Symbol.asyncIterator))

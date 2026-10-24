@@ -28,7 +28,7 @@ export interface ResponsesRequest {
   };
   readonly invocation: {
     readonly runtimeId: string;
-    readonly fetch?: (
+    readonly fetch: (
       input: RequestInfo | URL,
       init?: RequestInit,
     ) => Promise<Response>;

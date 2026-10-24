@@ -26,19 +26,10 @@ import OpenAI from 'openai';
 import * as http from 'http';
 import * as https from 'https';
 import * as net from 'net';
-import { createRequire } from 'node:module';
-import { Readable } from 'node:stream';
-import type * as Undici from 'undici';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { OPENAI_TRANSPORT_SELECTOR_KEYS } from './openaiModelPolicy.js';
 import { createReaderBasedStreamFetch } from './openaiStreamFetchSafety.js';
-
-// Bun's 'undici' shim does not apply dispatcher headersTimeout; load the
-// installed package's public entry instead of the shim.
-const undiciRequire = createRequire(
-  createRequire(import.meta.url).resolve('undici/package.json'),
-);
-const { request: undiciRequest } = undiciRequire('./') as typeof Undici;
 
 /**
  * Create HTTP/HTTPS agents with socket configuration for local AI servers
@@ -177,53 +168,12 @@ export function resolveRuntimeKey(
 
 function fetchWithHeadersTimeout(
   headersTimeoutMs: number,
-  requestFetch?: typeof fetch,
+  requestFetch: NetworkFetch,
 ): typeof fetch {
   if (!Number.isSafeInteger(headersTimeoutMs) || headersTimeoutMs <= 0) {
     throw new Error('openai-headers-timeout-ms must be a positive integer');
   }
-  if (requestFetch !== undefined)
-    return fetchUntilHeaders(requestFetch, headersTimeoutMs);
-  return async (input, init) => {
-    if (input instanceof Request) {
-      throw new Error('Scoped OpenAI transport requires a URL');
-    }
-    const body = init?.body;
-    if (
-      body !== undefined &&
-      body !== null &&
-      typeof body !== 'string' &&
-      !(body instanceof ReadableStream)
-    ) {
-      throw new Error('Scoped OpenAI transport requires a JSON body');
-    }
-    const result = await undiciRequest(String(input), {
-      method: init?.method ?? 'GET',
-      headers: Object.fromEntries(new Headers(init?.headers)),
-      body:
-        body instanceof ReadableStream
-          ? Readable.fromWeb(
-              body as unknown as Parameters<typeof Readable.fromWeb>[0],
-            )
-          : body,
-      signal: init?.signal ?? undefined,
-      headersTimeout: headersTimeoutMs,
-    });
-    const headers = new Headers();
-    for (const [key, value] of Object.entries(result.headers)) {
-      if (Array.isArray(value)) {
-        for (const item of value) headers.append(key, item);
-      } else if (value !== undefined) {
-        headers.append(key, String(value));
-      }
-    }
-    return new Response(
-      result.statusCode === 204
-        ? null
-        : (Readable.toWeb(result.body) as ReadableStream<Uint8Array>),
-      { status: result.statusCode, headers },
-    );
-  };
+  return (input, init) => requestFetch(input, init, { headersTimeoutMs });
 }
 
 /**
@@ -233,20 +183,20 @@ function fetchWithHeadersTimeout(
  */
 export function instantiateClient(
   authToken: string,
-  baseURL?: string,
-  agents?: { httpAgent: http.Agent; httpsAgent: https.Agent },
-  headers?: Record<string, string>,
-  transport?: {
+  baseURL: string | undefined,
+  agents: { httpAgent: http.Agent; httpsAgent: https.Agent } | undefined,
+  headers: Record<string, string> | undefined,
+  transport: {
     headersTimeoutMs?: number;
     requestTimeoutMs?: number;
-    fetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+    fetch: NetworkFetch;
   },
 ): OpenAI {
   const clientOptions: Record<string, unknown> = {
     apiKey: authToken || '',
     maxRetries: 0,
   };
-  if (transport?.requestTimeoutMs !== undefined) {
+  if (transport.requestTimeoutMs !== undefined) {
     if (
       !Number.isSafeInteger(transport.requestTimeoutMs) ||
       transport.requestTimeoutMs <= 0
@@ -257,8 +207,8 @@ export function instantiateClient(
   }
 
   const scopedFetch =
-    transport?.headersTimeoutMs === undefined
-      ? transport?.fetch
+    transport.headersTimeoutMs === undefined
+      ? transport.fetch
       : fetchWithHeadersTimeout(transport.headersTimeoutMs, transport.fetch);
   clientOptions.fetch = createReaderBasedStreamFetch(scopedFetch);
 
@@ -319,29 +269,4 @@ export function mergeInvocationHeaders(
           : {}),
       }
     : undefined;
-}
-
-function fetchUntilHeaders(
-  requestFetch: typeof fetch,
-  timeoutMs: number,
-): typeof fetch {
-  return async (input, init) => {
-    const controller = new AbortController();
-    const timeout = setTimeout(
-      () => controller.abort(new Error('Headers timeout')),
-      timeoutMs,
-    );
-    const inheritedSignal = input instanceof Request ? input.signal : undefined;
-    const requestSignal =
-      init?.signal === undefined ? inheritedSignal : init.signal;
-    const signal =
-      requestSignal === undefined || requestSignal === null
-        ? controller.signal
-        : AbortSignal.any([requestSignal, controller.signal]);
-    try {
-      return await requestFetch(input, { ...init, signal });
-    } finally {
-      clearTimeout(timeout);
-    }
-  };
 }

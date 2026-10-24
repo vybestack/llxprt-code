@@ -19,7 +19,10 @@ import { OpenAIProvider } from '../openai/OpenAIProvider.js';
 import type { GenerateChatOptions } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
-import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+import {
+  OwnedFetch,
+  type NetworkFetch,
+} from '@vybestack/llxprt-code-core/utils/fetch.js';
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -44,8 +47,15 @@ class KeyOwnedOpenAIProvider extends OpenAIProvider {
     yield* super.generateChatCompletionWithOptions(options);
   }
 
-  constructor(settings: SettingsService, storage: IProviderKeyStorage) {
+  protected override readonly requestFetch: NetworkFetch;
+
+  constructor(
+    settings: SettingsService,
+    storage: IProviderKeyStorage,
+    requestFetch: NetworkFetch,
+  ) {
     super(undefined);
+    this.requestFetch = requestFetch;
     this.setRuntimeSettingsService(settings);
     this.authResolver = new AuthPrecedenceResolver(
       { providerId: 'openai', envKeyNames: [], supportsOAuth: false },
@@ -69,7 +79,14 @@ async function drain(
 
 describe('public invocation ownership', () => {
   const servers: Server[] = [];
+  const owners: OwnedFetch[] = [];
+  function ownedFetch(): NetworkFetch {
+    const owner = new OwnedFetch();
+    owners.push(owner);
+    return owner.fetch;
+  }
   afterEach(async () => {
+    await Promise.all(owners.splice(0).map((owner) => owner.dispose()));
     await Promise.all(
       servers.splice(0).map(
         (server) =>
@@ -167,7 +184,11 @@ describe('public invocation ownership', () => {
       listKeys: async () => ['owned-key'],
       hasKey: async () => true,
     };
-    const provider = new KeyOwnedOpenAIProvider(settings, storage);
+    const provider = new KeyOwnedOpenAIProvider(
+      settings,
+      storage,
+      ownedFetch(),
+    );
     const requestFieldNames: string[][] = [];
     provider.onAdmitted = (options) => {
       requestFieldNames.push(Object.keys(options));
@@ -228,10 +249,12 @@ describe('public invocation ownership', () => {
     const leftProvider = new KeyOwnedOpenAIProvider(
       leftSettings,
       storageFor(leftGate, 'left-secret'),
+      ownedFetch(),
     );
     const rightProvider = new KeyOwnedOpenAIProvider(
       rightSettings,
       storageFor(rightGate, 'right-secret'),
+      ownedFetch(),
     );
     const leftPending = drain(leftProvider, optionsFor(leftSettings));
     const rightPending = drain(rightProvider, optionsFor(rightSettings));
@@ -299,15 +322,19 @@ describe('public invocation ownership', () => {
     const resume = gate();
     let authorized = true;
     const settings = settingsFor('https://revoked.invalid/v1');
-    const provider = new KeyOwnedOpenAIProvider(settings, {
-      getKey: async () => {
-        entered.open();
-        await resume.promise;
-        return authorized ? 'permitted' : null;
+    const provider = new KeyOwnedOpenAIProvider(
+      settings,
+      {
+        getKey: async () => {
+          entered.open();
+          await resume.promise;
+          return authorized ? 'permitted' : null;
+        },
+        listKeys: async () => ['owned-key'],
+        hasKey: async () => authorized,
       },
-      listKeys: async () => ['owned-key'],
-      hasKey: async () => authorized,
-    });
+      requestFetch,
+    );
     const pending = drain(provider, optionsFor(settings));
     await entered.promise;
     authorized = false;

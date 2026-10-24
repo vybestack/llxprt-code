@@ -341,6 +341,7 @@ describe('session executable tool ownership', () => {
       config,
       () => settingsOwner.readRegistryPolicy([]),
       () => settingsOwner.readToolExecutionPolicy(),
+      () => Promise.reject(new Error('this scenario makes no requests')),
     );
     const policy = mcpRuntime.policyOwner.session;
     const approval = createMcpApprovalPolicy(

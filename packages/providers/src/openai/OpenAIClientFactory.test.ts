@@ -18,9 +18,6 @@ import { describe, it, expect } from 'bun:test';
 import { createServer } from 'node:http';
 import * as http from 'http';
 import * as https from 'https';
-import { createRequire } from 'node:module';
-import type * as Undici from 'undici';
-import type { Agent as UndiciAgent } from 'undici';
 import {
   createHttpAgents,
   extractModelParamsFromOptions,
@@ -32,7 +29,10 @@ import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { GenerateChatOptions } from '../IProvider.js';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+import {
+  OwnedFetch,
+  type NetworkFetch,
+} from '@vybestack/llxprt-code-core/utils/fetch.js';
 
 const requestFetch: NetworkFetch = () =>
   Promise.reject(new Error('This test must not make network requests'));
@@ -44,11 +44,6 @@ class ClientScopeProvider extends OpenAIProvider {
     return this.normalizeOptionsForProjection(options);
   }
 }
-
-const undiciRequire = createRequire(
-  createRequire(import.meta.url).resolve('undici/package.json'),
-);
-const { Agent, fetch: undiciFetch } = undiciRequire('./') as typeof Undici;
 
 function getCustomInvocationHeaders(
   key: string,
@@ -277,7 +272,13 @@ describe('OpenAIClientFactory', () => {
 
   describe('instantiateClient', () => {
     it('installs a callable stream-safe fetch in the SDK options', () => {
-      const client = instantiateClient('test-token');
+      const client = instantiateClient(
+        'test-token',
+        undefined,
+        undefined,
+        undefined,
+        { fetch: requestFetch },
+      );
       const options: unknown = Reflect.get(client, '_options');
       if (
         typeof options !== 'object' ||
@@ -290,7 +291,13 @@ describe('OpenAIClientFactory', () => {
     });
 
     it('creates client with authToken as apiKey', () => {
-      const client = instantiateClient('test-token-123');
+      const client = instantiateClient(
+        'test-token-123',
+        undefined,
+        undefined,
+        undefined,
+        { fetch: requestFetch },
+      );
       expect(client).toBeDefined();
       expect(client.apiKey).toBe('test-token-123');
     });
@@ -299,13 +306,22 @@ describe('OpenAIClientFactory', () => {
       const client = instantiateClient(
         'test-token',
         'https://custom.api.com/v1',
+        undefined,
+        undefined,
+        { fetch: requestFetch },
       );
       expect(client).toBeDefined();
       expect(client.baseURL).toBe('https://custom.api.com/v1');
     });
 
     it('sets maxRetries to 0', () => {
-      const client = instantiateClient('test-token');
+      const client = instantiateClient(
+        'test-token',
+        undefined,
+        undefined,
+        undefined,
+        { fetch: requestFetch },
+      );
       expect(client).toBeDefined();
       expect(client.maxRetries).toBe(0);
     });
@@ -317,6 +333,7 @@ describe('OpenAIClientFactory', () => {
         undefined,
         undefined,
         headers,
+        { fetch: requestFetch },
       );
       const opts = (client as unknown as Record<string, unknown>)
         ._options as Record<string, unknown>;
@@ -330,7 +347,13 @@ describe('OpenAIClientFactory', () => {
       const savedBaseURL = process.env.OPENAI_BASE_URL;
       delete process.env.OPENAI_BASE_URL;
       try {
-        const client = instantiateClient('test-token');
+        const client = instantiateClient(
+          'test-token',
+          undefined,
+          undefined,
+          undefined,
+          { fetch: requestFetch },
+        );
         expect(client).toBeDefined();
         expect(client.baseURL).toBe('https://api.openai.com/v1');
       } finally {
@@ -341,10 +364,13 @@ describe('OpenAIClientFactory', () => {
     it('passes HTTP agents through to client options', () => {
       const httpAgent = new http.Agent();
       const httpsAgent = new https.Agent();
-      const client = instantiateClient('test-token', undefined, {
-        httpAgent,
-        httpsAgent,
-      });
+      const client = instantiateClient(
+        'test-token',
+        undefined,
+        { httpAgent, httpsAgent },
+        undefined,
+        { fetch: requestFetch },
+      );
       const opts = (client as unknown as Record<string, unknown>)
         ._options as Record<string, unknown>;
       expect(opts).toBeDefined();
@@ -353,7 +379,13 @@ describe('OpenAIClientFactory', () => {
     });
 
     it('omits defaultHeaders when no headers provided', () => {
-      const client = instantiateClient('test-token');
+      const client = instantiateClient(
+        'test-token',
+        undefined,
+        undefined,
+        undefined,
+        { fetch: requestFetch },
+      );
       const opts = (client as unknown as Record<string, unknown>)
         ._options as Record<string, unknown>;
       expect(opts).toBeDefined();
@@ -369,15 +401,13 @@ describe('OpenAIClientFactory', () => {
           );
         }, 1_500);
       });
-      const defaultDispatcher = new Agent({ headersTimeout: 100 });
-      const testFetch: typeof fetch = async (input, init) => {
-        const requestInit = init as RequestInit & { dispatcher?: UndiciAgent };
-        const response = await undiciFetch(String(input), {
-          ...requestInit,
-          dispatcher: requestInit.dispatcher ?? defaultDispatcher,
-        } as Parameters<typeof undiciFetch>[1]);
-        return response as unknown as Response;
-      };
+      const owner = new OwnedFetch();
+      const ordinaryHeadersTimeoutMs = 100;
+      const testFetch: NetworkFetch = (input, init, options) =>
+        owner.fetch(input, init, {
+          headersTimeoutMs:
+            options?.headersTimeoutMs ?? ordinaryHeadersTimeoutMs,
+        });
       await new Promise<void>((resolve) => {
         server.listen(0, '127.0.0.1', resolve);
       });
@@ -415,7 +445,7 @@ describe('OpenAIClientFactory', () => {
           baseURL,
           undefined,
           undefined,
-          { headersTimeoutMs: 100 },
+          { fetch: testFetch, headersTimeoutMs: 100 },
         );
         await expect(consume(shortPilot)).rejects.toThrow('Request timed out.');
 
@@ -424,13 +454,13 @@ describe('OpenAIClientFactory', () => {
           baseURL,
           undefined,
           undefined,
-          { headersTimeoutMs: 4_000 },
+          { fetch: testFetch, headersTimeoutMs: 4_000 },
         );
         expect(await consume(pilot)).toStrictEqual(['ready']);
       } finally {
         server.closeAllConnections();
         server.close();
-        await defaultDispatcher.close();
+        await owner.dispose();
       }
     });
   });

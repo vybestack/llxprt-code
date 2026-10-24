@@ -14,6 +14,7 @@ import { RequestMediaResolver } from '@vybestack/llxprt-code-core/storage/reques
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import type { IProvider, GenerateChatOptions } from '../IProvider.js';
 import { OpenAIProvider } from '../openai/OpenAIProvider.js';
 import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
@@ -38,7 +39,10 @@ describe('provider request ownership', () => {
     );
   });
 
-  async function fixture(provider: IProvider): Promise<{
+  async function fixture(
+    provider: IProvider,
+    requestFetch?: NetworkFetch,
+  ): Promise<{
     options: ReturnType<typeof createProviderCallOptions>;
     provider: IProvider;
     entered: ReturnType<typeof gate>;
@@ -85,7 +89,11 @@ describe('provider request ownership', () => {
       !(provider instanceof OpenAIResponsesProvider)
     )
       throw new Error('Expected concrete provider owner');
-    provider.setRuntimeSettingsService(settings);
+    const owned =
+      requestFetch === undefined
+        ? provider
+        : provider.bindOwnerAuthentication(settings, () => requestFetch);
+    owned.setRuntimeSettingsService(settings);
     const options = createProviderCallOptions({
       providerName: provider.name,
       settings,
@@ -129,7 +137,7 @@ describe('provider request ownership', () => {
       settings,
       resolver,
       provider: bindProviderMedia(
-        provider,
+        owned,
         {
           resolve: async (input) => {
             entered.open();
@@ -219,7 +227,10 @@ describe('provider request ownership', () => {
 
       it('honors replacement policy on a later request rather than ignoring policy changes', async () => {
         let transported = '';
-        global.fetch = async (_input, init): Promise<Response> => {
+        const transportFetch: NetworkFetch = async (
+          _input,
+          init,
+        ): Promise<Response> => {
           transported = await new Response(init?.body).text();
           return new Response(
             'data: {"type":"response.completed","response":{"id":"done","status":"completed"}}\n\ndata: [DONE]\n\n',
@@ -227,7 +238,7 @@ describe('provider request ownership', () => {
           );
         };
         let provider = create();
-        const fixtureOwner = await fixture(provider);
+        const fixtureOwner = await fixture(provider, transportFetch);
         const { options, resume, settings } = fixtureOwner;
         provider = fixtureOwner.provider;
         mutateOwner(settings, provider.name);

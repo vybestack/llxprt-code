@@ -271,4 +271,18 @@ describe('owned fetch HTTP semantics', () => {
     expect(await (await owner.fetch(url)).text()).toBe('not reached');
     expect(requests).toBe(1);
   });
+
+  it('applies a per-request headers deadline on the same owner, shorter or longer than the dispatcher default', async () => {
+    const url = await endpoint((_request, response) => {
+      setTimeout(() => response.end('delayed'), 1_500);
+    });
+    const owner = acquire();
+    await expect(
+      owner.fetch(url, undefined, { headersTimeoutMs: 100 }),
+    ).rejects.toMatchObject({ code: 'UND_ERR_HEADERS_TIMEOUT' });
+    const response = await owner.fetch(url, undefined, {
+      headersTimeoutMs: 4_000,
+    });
+    expect(await response.text()).toBe('delayed');
+  });
 });

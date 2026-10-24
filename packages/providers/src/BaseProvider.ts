@@ -97,6 +97,10 @@ export interface NormalizedGenerateChatOptions extends GenerateChatOptions {
     streaming?: boolean;
   };
 }
+// Left undefined, the OpenAI, Anthropic and Google SDKs would substitute the
+// global fetch, so an unbound provider gets a transport that refuses instead.
+const unboundProviderFetch: NetworkFetch = () =>
+  Promise.reject(new Error('Provider request requires the owner transport'));
 
 /**
  * Abstract base provider class that implements authentication precedence logic
@@ -151,11 +155,11 @@ export abstract class BaseProvider implements IProvider {
       () => this.authResolver,
     );
   }
-  protected readonly requestFetch: NetworkFetch = globalThis.fetch;
+  protected readonly requestFetch: NetworkFetch = unboundProviderFetch;
 
   bindOwnerAuthentication(
     settings: SettingsService,
-    readFetch?: () => NetworkFetch,
+    readFetch: () => NetworkFetch,
     providerKeyStorage?: IProviderKeyStorage,
   ): this {
     const resolver =
@@ -173,8 +177,7 @@ export abstract class BaseProvider implements IProvider {
       get(target, property, receiver): unknown {
         if (property === 'owner') return owner;
         if (property === 'authResolver') return resolver;
-        if (property === 'requestFetch' && readFetch !== undefined)
-          return readFetch();
+        if (property === 'requestFetch') return readFetch();
         if (property === 'requestAuthentication') return readAuthentication;
         return Reflect.get(target, property, receiver);
       },

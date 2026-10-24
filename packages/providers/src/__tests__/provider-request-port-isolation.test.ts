@@ -69,7 +69,7 @@ describe('call-bound provider ports', () => {
     settings.setProviderSetting('openai', 'model', 'gpt-4o');
     settings.setProviderSetting('openai', 'base-url', baseURL);
     const provider = bindProviderMedia(
-      shared.bindOwnerAuthentication(settings),
+      shared.bindOwnerAuthentication(settings, () => requestFetch),
       resolver,
       1024,
     );

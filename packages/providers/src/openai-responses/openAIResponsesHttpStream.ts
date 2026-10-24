@@ -325,7 +325,7 @@ async function fetchResponse(
   requestFetch: (
     input: RequestInfo | URL,
     init?: RequestInit,
-  ) => Promise<Response> = globalThis.fetch,
+  ) => Promise<Response>,
 ): Promise<Response> {
   const requestBody = params.body.createStreamHandle();
   const requestInit: RequestInit & { duplex: 'half' } = {

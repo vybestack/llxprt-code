@@ -143,7 +143,7 @@ export class SessionToolCatalogOwner {
     private readonly requestFetch: (
       input: RequestInfo | URL,
       init?: RequestInit,
-    ) => Promise<Response> = globalThis.fetch,
+    ) => Promise<Response>,
   ) {}
 
   private shellExecution: IShellToolHost['executeShellCommand'] | undefined;

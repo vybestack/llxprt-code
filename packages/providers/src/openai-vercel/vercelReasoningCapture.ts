@@ -194,7 +194,7 @@ export function createReasoningCaptureFetch(
   requestFetch: (
     input: RequestInfo | URL,
     init?: RequestInit,
-  ) => Promise<Response> = globalThis.fetch,
+  ) => Promise<Response>,
 ): typeof fetch {
   return async (input: RequestInfo | URL, init?: RequestInit) => {
     const response = await requestFetch(input, init);
