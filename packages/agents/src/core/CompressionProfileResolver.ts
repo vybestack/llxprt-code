@@ -65,10 +65,7 @@ export interface CompressionProfileResolverContext {
  * compressed session's own invocations carry.
  */
 function readRootFetch(ctx: CompressionProfileResolverContext): NetworkFetch {
-  const { fetch } = ctx.prepareProviderInvocation(ctx.runtimeState.provider);
-  if (fetch === undefined)
-    throw new Error('Provider request requires the owner transport');
-  return fetch;
+  return ctx.prepareProviderInvocation(ctx.runtimeState.provider).fetch;
 }
 
 // ---------------------------------------------------------------------------

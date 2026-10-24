@@ -63,7 +63,7 @@ class HeldRequestProvider extends OpenAIProvider {
     ...args: Parameters<OpenAIProvider['bindOwnerAuthentication']>
   ): this {
     const [, readFetch] = args;
-    if (readFetch !== undefined && !this.started) {
+    if (!this.started) {
       this.started = true;
       this.onRegistered(readFetch());
     }

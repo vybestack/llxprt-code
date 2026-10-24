@@ -77,7 +77,6 @@ describe('admitted request transport normalization', () => {
       expect(normalized.invocation.signal).toBe(signal.signal);
       expect(normalized.resolved.model).toBe('admitted-model');
       const request = normalized.invocation.fetch;
-      if (request === undefined) throw new Error('Admitted fetch was lost');
       expect(await (await request(baseURL)).text()).toBe('actual owner route');
       owner.closeAdmissionAndAbort();
       await expect(request(baseURL)).rejects.toThrow('Root fetch is closed');

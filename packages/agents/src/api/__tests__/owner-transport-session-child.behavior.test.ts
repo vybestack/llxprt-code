@@ -55,10 +55,7 @@ class KeepingFetchProvider extends OpenAIProvider {
   protected override async *generateChatCompletionWithOptions(
     options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
-    const sessionFetch = options.invocation.fetch;
-    if (sessionFetch === undefined)
-      throw new Error('Session request carried no fetch');
-    this.keep(sessionFetch);
+    this.keep(options.invocation.fetch);
     yield { speaker: 'ai', blocks: [{ type: 'text', text: 'kept' }] };
   }
 }
