@@ -92,6 +92,24 @@ const LIBC_BY_PLATFORM: Readonly<Partial<Record<NodeJS.Platform, string>>> = {
   linux: 'libc.so.6',
 };
 
+interface BunFcntlLibrary {
+  readonly symbols: { readonly fcntl: Fcntl };
+}
+
+interface BunFcntlFfi {
+  dlopen(
+    path: string,
+    symbols: {
+      readonly fcntl: {
+        readonly args: readonly ['i32', 'i32', 'i32'];
+        readonly returns: 'i32';
+      };
+    },
+  ): BunFcntlLibrary;
+}
+
+const BUN_FFI_MODULE = 'bun:ffi';
+
 /** The real libc `fcntl` through `bun:ffi`. Only meaningful under Bun on a POSIX host. */
 export async function loadBunFcntl(
   platform: NodeJS.Platform = process.platform,
@@ -100,7 +118,7 @@ export async function loadBunFcntl(
   if (library === undefined) {
     throw new JournalFlushError(`No libc is known for platform ${platform}`);
   }
-  const ffi = await import('bun:ffi');
+  const ffi: BunFcntlFfi = await import(BUN_FFI_MODULE);
   const { symbols } = ffi.dlopen(library, {
     fcntl: { args: ['i32', 'i32', 'i32'], returns: 'i32' },
   });
