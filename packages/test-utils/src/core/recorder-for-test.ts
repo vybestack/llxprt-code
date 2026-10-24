@@ -2,7 +2,6 @@
 import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
 import type { SessionRecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
 import { createSessionRecorder } from '@vybestack/llxprt-code-core/recording/sessionRecorderFactory.js';
-import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
 import type { SessionRecordingServiceConfig } from '@vybestack/llxprt-code-core/recording/types.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
@@ -39,10 +38,6 @@ export async function recordRowsForTest(
 ): Promise<void> {
   if (recorder instanceof JournalRecordingService) {
     await (await recorder.session()).append(rows);
-    return;
-  }
-  if (recorder instanceof SessionRecordingService) {
-    for (const row of rows) recorder.recordContent(row);
     return;
   }
   throw new Error('recordRowsForTest needs a recorder from the factory');

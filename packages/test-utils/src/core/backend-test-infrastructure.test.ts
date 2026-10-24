@@ -1,7 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { CONTINUE_LATEST, resumeSession } from '@vybestack/llxprt-code-core';
 import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
-import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { describe, expect, it } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -27,11 +26,7 @@ describe('test infrastructure on both history backends', () => {
         const chatsDir = mkdtempSync(join(tmpdir(), 'recorder-for-test-'));
         const recorder = createRecorderForTest({ chatsDir });
         try {
-          expect(recorder).toBeInstanceOf(
-            backend === 'journal'
-              ? JournalRecordingService
-              : SessionRecordingService,
-          );
+          expect(recorder).toBeInstanceOf(JournalRecordingService);
           expect(recorder.getSessionId()).toBe('test-session');
           expect(recorder.getProjectHash()).toBe('test-project');
           expect(recorder.getChatsDir()).toBe(chatsDir);

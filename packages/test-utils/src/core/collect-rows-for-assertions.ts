@@ -1,6 +1,4 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { JournalResolver } from '@vybestack/llxprt-code-core/recording/journalResolver.js';
-import { isJournalFileName } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
 import { openJournalReadOnly } from '@vybestack/llxprt-code-core/journal/journalReader.js';
 import { readStoredRow } from '@vybestack/llxprt-code-core/journal/rowReads.js';
 import {
@@ -40,8 +38,7 @@ interface CommittedHistory {
 
 /**
  * The rows the recorder's file holds once everything is durable, read apart
- * from the history service: the old backend's JSONL file through the resolver,
- * the journal backend's file through the journal store. A journal history with
+ * from the history service through the journal reader. A journal history with
  * no recorder keeps its rows in an unlinked file that has no path, so the
  * service's own committed rows are the only way to read them.
  */
@@ -54,16 +51,7 @@ async function* journalRowsForAssertions(
     yield* history.streamRawHistory();
     return;
   }
-  if (isJournalFileName(path)) {
-    yield* journalFileRows(path);
-    return;
-  }
-  const resolver = await JournalResolver.open(path);
-  try {
-    for await (const entry of resolver.resolve()) yield entry.content;
-  } finally {
-    await resolver.close();
-  }
+  yield* journalFileRows(path);
 }
 
 export function collectJournalRowsForAssertions(
