@@ -14,7 +14,8 @@ import {
   TOOL_RANKING_READY,
 } from './tool-ranking-tree.js';
 import { JournalInputError } from './errors.js';
-import { ROW_FLAG, ROW_BLOCK_TYPE } from './rowRecord.js';
+import { ROW_FLAG, ROW_BLOCK_TYPE, ROW_SPEAKER } from './rowRecord.js';
+import { decodeStoredRow } from '../services/history/journalRowCodec.js';
 
 export interface ToolRankingOverlay {
   readonly measure: (rows: number) => AsyncIterable<{
@@ -137,7 +138,12 @@ async function fillRows(
   for await (const entry of snapshot.entries(old.rows)) {
     if (entry.responseBlocks > 0)
       state = await fillRow(tree, snapshot, policy, entry, ordinal, state);
-    if ((entry.flags & ROW_FLAG.responseParent) !== 0)
+    if (
+      entry.speaker === ROW_SPEAKER.ai &&
+      ((entry.flags & ROW_FLAG.responseParent) !== 0 ||
+        decodeStoredRow(await snapshot.readMetadata(entry)).metadata
+          ?.responsesStored === true)
+    )
       state = { ...state, lastParent: ordinal };
     ordinal++;
   }
