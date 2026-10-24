@@ -4,14 +4,14 @@ import { gcAndSweep } from 'bun:jsc';
 import { suffixRow, withSuffixFixture } from './history-suffix-test-helpers.js';
 import { collectRawHistory } from './collect-raw-history.js';
 import { collectRowsForAssertions } from './collect-rows-for-assertions.js';
-import { observeHistorySynchronouslyForTest } from './synchronous-history-test-observation.js';
 
 describe('durable relocated helper values', () => {
   it('keeps independent decoded rows after clearing and releasing the producer', async () => {
     let retained: Awaited<ReturnType<typeof collectRawHistory>> = [];
     await withSuffixFixture(512, async (history, ownership) => {
       retained = await collectRawHistory(history);
-      const observed = observeHistorySynchronouslyForTest(history);
+      await history.waitForCommit();
+      const observed = await collectRawHistory(history);
       expect(observed).toStrictEqual(retained);
       expect(observed[0]).not.toBe(retained[0]);
       await history.clear();

@@ -28,7 +28,7 @@ import { referenceSeedOutcome } from './native-seed-reference.js';
 import type { HistoryCase } from './wireBodyHistories.js';
 
 type EagerTransaction = NonNullable<
-  ReturnType<EagerSemanticPurgeOracle['begin']>
+  Awaited<ReturnType<EagerSemanticPurgeOracle['begin']>>
 >;
 interface PurgeCase {
   seed: number;
@@ -406,7 +406,7 @@ export async function checkRandomPurge(seed: number): Promise<void> {
         enabled: true,
         explicitCacheWriteRequired: false,
       });
-      const expected = oracle.begin(purgeOptions(seed));
+      const expected = await oracle.begin(purgeOptions(seed));
       if (expected === undefined)
         throw new Error(`No eager purge candidate seed ${seed}`);
       await withCoreSuffixFixture(

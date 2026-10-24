@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { observeHistorySynchronouslyForTest } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
+import { materializeHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 import { DensityDiskHistory } from '../../packages/agents/src/compression/__tests__/density-disk-helpers.js';
 import { HighdensityPreparationHistory } from '../../packages/agents/src/compression/__tests__/highdensity-disk-helpers.js';
 import { BatchStreamHistory } from '../../packages/core/src/services/history/__tests__/support/addbatch-stream-test-helpers.js';
@@ -8,66 +8,66 @@ import { MergeRowHistory } from '../../packages/core/src/services/history/__test
 import { DiagnosticsCursorHistory } from '../../packages/core/src/services/history/__tests__/support/provider-diagnostics-test-helpers.js';
 
 describe('journal materialization guard', () => {
-  it('DensityDiskHistory rejects journal eager materialization', () => {
+  it('DensityDiskHistory rejects journal eager materialization', async () => {
     const history = new DensityDiskHistory();
     try {
-      expect(() => observeHistorySynchronouslyForTest(history)).toThrow(
+      await expect(materializeHistoryForTest(history)).rejects.toThrow(
         'density materialization forbidden',
       );
     } finally {
-      history.dispose();
+      await history.dispose();
     }
   });
 });
 
 describe('journal materialization guard', () => {
-  it('HighdensityPreparationHistory rejects journal eager materialization', () => {
+  it('HighdensityPreparationHistory rejects journal eager materialization', async () => {
     const history = new HighdensityPreparationHistory();
     try {
-      expect(() => observeHistorySynchronouslyForTest(history)).toThrow(
+      await expect(materializeHistoryForTest(history)).rejects.toThrow(
         'eager high-density preparation materialization forbidden',
       );
     } finally {
-      history.dispose();
+      await history.dispose();
     }
   });
 });
 
 describe('journal materialization guard', () => {
-  it('BatchStreamHistory rejects journal eager materialization', () => {
+  it('BatchStreamHistory rejects journal eager materialization', async () => {
     const history = new BatchStreamHistory();
     try {
-      expect(() => observeHistorySynchronouslyForTest(history)).toThrow(
+      await expect(materializeHistoryForTest(history)).rejects.toThrow(
         'addBatch eager materialization reached',
       );
     } finally {
-      history.dispose();
+      await history.dispose();
     }
   });
 });
 
 describe('journal materialization guard', () => {
-  it('MergeRowHistory rejects journal eager materialization', () => {
+  it('MergeRowHistory rejects journal eager materialization', async () => {
     const history = new MergeRowHistory();
     try {
-      expect(() => observeHistorySynchronouslyForTest(history)).toThrow(
+      await expect(materializeHistoryForTest(history)).rejects.toThrow(
         'merge materialization forbidden',
       );
     } finally {
-      history.dispose();
+      await history.dispose();
     }
   });
 });
 
 describe('journal materialization guard', () => {
-  it('DiagnosticsCursorHistory rejects journal eager materialization', () => {
+  it('DiagnosticsCursorHistory rejects journal eager materialization', async () => {
     const history = new DiagnosticsCursorHistory();
     try {
-      expect(() => observeHistorySynchronouslyForTest(history)).toThrow(
+      await expect(materializeHistoryForTest(history)).rejects.toThrow(
         'eager diagnostics preparation',
       );
     } finally {
-      history.dispose();
+      await history.dispose();
     }
   });
 });

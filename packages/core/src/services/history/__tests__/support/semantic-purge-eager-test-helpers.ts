@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { observeHistorySynchronouslyForTest as testHistory } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
+import { rawHistoryAfterCommit } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import type { HistoryService } from '../../HistoryService.js';
 import type { ContentBlock, IContent } from '../../IContent.js';
 import { sanitizeProviderHistoryForSerialization } from '../../historyCloneUtils.js';
@@ -432,26 +432,28 @@ export class EagerSemanticPurgeOracle {
   constructor(
     private readonly history: HistoryService,
     private readonly configuration: EagerPurgeOracleConfiguration,
-  ) {
-    this.currentFrontier = restoredFrontier(testHistory(history));
-  }
+  ) {}
 
   get frontier(): SemanticMediaPurgeFrontier {
     return this.currentFrontier;
   }
 
-  refresh(): void {
-    this.currentFrontier = restoredFrontier(testHistory(this.history));
+  async refresh(): Promise<void> {
+    this.currentFrontier = restoredFrontier(
+      await rawHistoryAfterCommit(this.history),
+    );
   }
 
-  begin(
+  async begin(
     options: SemanticMediaPurgeOptions,
-  ): EagerPurgeOracleTransaction | undefined {
+  ): Promise<EagerPurgeOracleTransaction | undefined> {
     if (this.configuration.enabled !== true) {
       return undefined;
     }
-    this.refresh();
-    const baseHistory = Object.freeze(testHistory(this.history));
+    await this.refresh();
+    const baseHistory = Object.freeze(
+      await rawHistoryAfterCommit(this.history),
+    );
     const location = findCandidate(
       baseHistory,
       rebasedFrontier(baseHistory, this.currentFrontier),

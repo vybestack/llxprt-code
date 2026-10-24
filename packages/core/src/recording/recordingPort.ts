@@ -14,19 +14,8 @@
  * limitations under the License.
  */
 
-import type { IContent } from '../services/history/IContent.js';
 import type { LockHandle } from './SessionLockManager.js';
-import type { PurgeRecordingOptions } from './semanticPurgeRecordingRows.js';
-import type {
-  CommitWatermark,
-  CompressionDetailPayload,
-  DensityMutationPayload,
-  RecordingCheckpointInfo,
-  SessionEventType,
-  SessionForkedPayload,
-  SessionRecordLine,
-  SyntheticInsertPayload,
-} from './types.js';
+import type { RecordingCheckpointInfo, SessionForkedPayload } from './types.js';
 
 /**
  * Session recorder lifecycle, identity, the session lock, facts and checkpoints.
@@ -60,55 +49,4 @@ export interface SessionRecordingPort {
   createCheckpoint(name: string): Promise<RecordingCheckpointInfo>;
   deleteCheckpoint(checkpointId: string): Promise<void>;
   renameCheckpoint(checkpointId: string, name: string): Promise<void>;
-}
-
-/**
- * The surface of the JSONL recorder that the history store and its callers
- * use: the session surface plus the old record layout (envelope lines, seq
- * watermarks, mutation records). History-side modules depend on this port
- * rather than on the concrete writer. The journal recorder
- * has no such layout; its rows are written by the history store, and the
- * members below leave with the JSONL recorder (#854 phase 4, S15).
- */
-export interface RecordingPort extends SessionRecordingPort {
-  // Acks and the commit protocol.
-  onCommitWatermark(listener: (watermark: CommitWatermark) => void): () => void;
-  enqueue(type: SessionEventType, payload: unknown): SessionRecordLine | null;
-  commit(type: SessionEventType, payload: unknown): Promise<CommitWatermark>;
-  waitForCommit(line: SessionRecordLine): Promise<CommitWatermark>;
-  waitForCommitSequence(seq: number): Promise<CommitWatermark>;
-  requireCommittable(): void;
-  retireIdleTicketStorage(): void;
-  getPendingRecordCount(): number;
-  getPendingByteCount(): number;
-  getLastEnqueuedSequence(): number;
-  initializeForResume(
-    filePath: string,
-    lastSeq: number,
-    title?: string | null,
-    unfinishedReplaceTxId?: string,
-  ): void;
-
-  // History mutations.
-  recordContent(content: IContent): void;
-  recordSemanticMediaPurge(
-    history: readonly IContent[],
-    frontier: { readonly contentIndex: number; readonly blockIndex: number },
-  ): void;
-  recordSemanticMediaPurgeRows(
-    history: AsyncIterable<IContent>,
-    frontier: { readonly contentIndex: number; readonly blockIndex: number },
-    options?: PurgeRecordingOptions,
-  ): Promise<void>;
-  recordCompressed(summary: IContent, itemsCompressed: number): void;
-  recordRewind(itemsRemoved: number, cutSeq?: number): void;
-  recordDensityChange(
-    payload: DensityMutationPayload,
-  ): SessionRecordLine | null;
-  recordSyntheticInsert(
-    payload: SyntheticInsertPayload,
-  ): SessionRecordLine | null;
-  recordCompressionDetail(
-    payload: CompressionDetailPayload,
-  ): SessionRecordLine | null;
 }

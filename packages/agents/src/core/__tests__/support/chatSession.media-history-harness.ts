@@ -32,7 +32,8 @@ import type {
   IProvider,
 } from '@vybestack/llxprt-code-providers/IProvider.js';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
+import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
+import { encodeContentRow } from '@vybestack/llxprt-code-core/services/history/journalRowCodec.js';
 import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { collectHistoryFixture } from './collect-history-test-fixture.js';
 
@@ -143,13 +144,13 @@ function createPurgeProvider(
 
 export async function createPurgeChat(options: PurgeChatOptions): Promise<{
   readonly chat: ChatSession;
-  readonly recording: SessionRecordingService;
+  readonly recording: JournalRecordingService;
   readonly execution: AgentChatRecordingExecution;
   readonly requests: readonly IContent[][];
 }> {
   const requests: IContent[][] = [];
   const provider = createPurgeProvider(options, requests);
-  const recording = new SessionRecordingService({
+  const recording = JournalRecordingService.create({
     sessionId: `purge-${options.providerName}`,
     projectHash: 'purge-project',
     chatsDir: join(directory, `chats-${options.providerName}`),
@@ -214,21 +215,26 @@ export async function createPurgeChat(options: PurgeChatOptions): Promise<{
 }
 
 function createPurgeExecution(
-  recording: SessionRecordingService,
+  recording: JournalRecordingService,
 ): AgentChatRecordingExecution {
   return {
     transcriptPath: () => recording.getFilePath() ?? undefined,
-    persistSemanticMediaPurge: async (candidate, frontier) => {
+    persistSemanticMediaPurge: async (candidate) => {
       if (!recording.isActive()) {
         throw new Error(
           'Semantic media purge requires an active session recording',
         );
       }
-      await recording.recordSemanticMediaPurgeRows(
-        candidate.streamRows(),
-        frontier,
-        { requireLiveFold: true },
-      );
+      const session = await recording.session();
+      await session.store.commit([
+        {
+          kind: 'replace',
+          rows: (async function* () {
+            for await (const row of candidate.streamRows())
+              yield encodeContentRow(row, { owner: 0 });
+          })(),
+        },
+      ]);
       await recording.flush();
       if (!recording.isActive()) {
         throw new Error('Semantic media purge recording did not remain active');

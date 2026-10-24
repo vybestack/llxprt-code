@@ -13,6 +13,7 @@ import {
   expect,
   it,
   vi,
+  spyOn,
 } from 'bun:test';
 import { join } from 'node:path';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -496,13 +497,15 @@ async function testMediaHistory15(): Promise<void> {
     providerName: 'purge-persistence-failure',
   });
   await fixture.chat.setHistory(mediaHistory());
-  fixture.recording.recordSemanticMediaPurgeRows = async () => {
-    throw new Error('purge persistence failed');
-  };
+  const persist = spyOn(
+    fixture.execution,
+    'persistSemanticMediaPurge',
+  ).mockRejectedValue(new Error('purge persistence failed'));
 
   await expect(
     sendOwned(fixture, 'next', 'purge-commit-failure'),
   ).rejects.toThrow('purge persistence failed');
+  persist.mockRestore();
 
   expect(
     mediaHistoryShape(await collectHistoryFixture(fixture.chat.getHistory())),

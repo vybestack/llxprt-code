@@ -2,15 +2,18 @@
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { suffixRow, withSuffixFixture } from './history-suffix-test-helpers.js';
-import { observeHistorySynchronouslyForTest } from './synchronous-history-test-observation.js';
-import { forbidHistoryMaterializationForTest } from './history-materialization-test-guard.js';
+import { rawHistoryAfterCommit } from './collect-raw-history.js';
+import {
+  forbidHistoryMaterializationForTest,
+  materializeHistoryForTest,
+} from './history-materialization-test-guard.js';
 
 describe('test-only history materialization guard', () => {
   it('rejects an eager read of committed history while leaving the public stream usable', async () => {
     await withSuffixFixture(512, async (history) => {
-      expect(observeHistorySynchronouslyForTest(history)).toHaveLength(512);
+      expect(await rawHistoryAfterCommit(history)).toHaveLength(512);
       forbidHistoryMaterializationForTest(history);
-      expect(() => observeHistorySynchronouslyForTest(history)).toThrow(
+      await expect(materializeHistoryForTest(history)).rejects.toThrow(
         'eager history materialization forbidden',
       );
       let count = 0;
@@ -21,7 +24,7 @@ describe('test-only history materialization guard', () => {
     });
   });
 
-  it('keeps same-turn detached values when a conditional guard permits reads and restores after rejection', async () => {
+  it('keeps committed detached values when a conditional guard permits reads and restores after rejection', async () => {
     const history = new HistoryService();
     const row = suffixRow(0);
     let forbidden = false;
@@ -32,15 +35,16 @@ describe('test-only history materialization guard', () => {
         'conditional journal trap',
         () => forbidden,
       );
-      const permitted = observeHistorySynchronouslyForTest(history);
+      await history.waitForCommit();
+      const permitted = await materializeHistoryForTest(history);
       expect(permitted[0]).toStrictEqual(row);
       expect(permitted[0]).not.toBe(row);
       forbidden = true;
-      expect(() => observeHistorySynchronouslyForTest(history)).toThrow(
+      await expect(materializeHistoryForTest(history)).rejects.toThrow(
         'conditional journal trap',
       );
       restore();
-      expect(observeHistorySynchronouslyForTest(history)[0]).toStrictEqual(row);
+      expect((await materializeHistoryForTest(history))[0]).toStrictEqual(row);
     } finally {
       await history.dispose();
     }

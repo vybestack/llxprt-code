@@ -273,10 +273,6 @@
       "bun": "./src/recording/journalRecordingService.ts",
       "import": "./dist/src/recording/journalRecordingService.js"
     },
-    "./recording/SessionRecordingService.js": {
-      "bun": "./src/recording/SessionRecordingService.ts",
-      "import": "./dist/src/recording/SessionRecordingService.js"
-    },
     "./recording/recordingPort.js": {
       "bun": "./src/recording/recordingPort.ts",
       "import": "./dist/src/recording/recordingPort.js"
@@ -756,11 +752,6 @@
       "types": "./dist/src/recording/rowOwnership.d.ts",
       "bun": "./src/recording/rowOwnership.ts",
       "import": "./dist/src/recording/rowOwnership.js"
-    },
-    "./recording/journalResolver.js": {
-      "types": "./dist/src/recording/journalResolver.d.ts",
-      "bun": "./src/recording/journalResolver.ts",
-      "import": "./dist/src/recording/journalResolver.js"
     },
     "./services/history/historyCuration.js": {
       "types": "./dist/src/services/history/historyCuration.d.ts",

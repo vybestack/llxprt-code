@@ -1,32 +1,26 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
-type Materializer = () => unknown;
-type EagerReader = 'materializeSynchronously' | 'materialize';
+interface MaterializingJournal {
+  materialize(): Promise<IContent[]>;
+  streamRows(): AsyncIterable<IContent>;
+}
 
-function journalOf(history: object): object {
+function isMaterializingJournal(value: unknown): value is MaterializingJournal {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof Reflect.get(value, 'materialize') === 'function' &&
+    typeof Reflect.get(value, 'streamRows') === 'function'
+  );
+}
+
+function journalOf(history: object): MaterializingJournal {
   const journal: unknown = Reflect.get(history, 'journal');
-  if (typeof journal !== 'object' || journal === null) {
+  if (!isMaterializingJournal(journal)) {
     throw new Error('Materialization guard requires the service journal');
   }
   return journal;
-}
-
-/**
- * The method that reads every row into memory at once: the old store's
- * same-turn sampler (which its `materialize()` calls), or the `materialize()`
- * of a store that reads rows from a file (it has `streamRows`; a stand-in with
- * only `materialize` is not a service journal).
- */
-function eagerReader(journal: object): EagerReader {
-  if (typeof Reflect.get(journal, 'materializeSynchronously') === 'function')
-    return 'materializeSynchronously';
-  if (
-    typeof Reflect.get(journal, 'streamRows') === 'function' &&
-    typeof Reflect.get(journal, 'materialize') === 'function'
-  )
-    return 'materialize';
-  throw new Error('Materialization guard requires the service journal');
 }
 
 export function forbidHistoryMaterializationForTest(
@@ -35,15 +29,16 @@ export function forbidHistoryMaterializationForTest(
   forbidden: () => boolean = () => true,
 ): () => void {
   const journal = journalOf(history);
-  const name = eagerReader(journal);
-  const original: Materializer = Reflect.get(journal, name);
-  Reflect.set(journal, name, (): unknown => {
-    if (!forbidden()) return original.call(journal);
-    // The journal's `materialize()` is asynchronous, so its refusal is a rejection.
-    if (name === 'materialize') return Promise.reject(new Error(message));
-    throw new Error(message);
-  });
+  const original = journal.materialize;
+  journal.materialize = (): Promise<IContent[]> =>
+    forbidden() ? Promise.reject(new Error(message)) : original.call(journal);
   return () => {
-    Reflect.set(journal, name, original);
+    journal.materialize = original;
   };
+}
+
+export function materializeHistoryForTest(
+  history: object,
+): Promise<IContent[]> {
+  return journalOf(history).materialize();
 }

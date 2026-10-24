@@ -1,4 +1,4 @@
-import { observeHistorySynchronouslyForTest } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
+import { materializeHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { writeBodyFile } from '../../packages/test-utils/src/body-evidence-writer.js';
@@ -27,15 +27,15 @@ class CursorOnlyHistory extends HistoryService {
 }
 
 describe('journal materialization guard', () => {
-  it('CursorOnlyHistory rejects journal eager materialization', () => {
+  it('CursorOnlyHistory rejects journal eager materialization', async () => {
     const history = new CursorOnlyHistory();
 
     try {
-      expect(() => observeHistorySynchronouslyForTest(history)).toThrow(
+      await expect(materializeHistoryForTest(history)).rejects.toThrow(
         'eager provider send preparation',
       );
     } finally {
-      history.dispose();
+      await history.dispose();
     }
   });
 });

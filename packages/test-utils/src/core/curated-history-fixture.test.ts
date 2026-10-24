@@ -4,43 +4,15 @@ import { HistoryService } from '@vybestack/llxprt-code-core/services/history/His
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { withSuffixFixture, suffixRow } from './history-suffix-test-helpers.js';
 import {
-  curatedHistoryForTest,
+  curatedHistoryAfterCommit,
   withCuratedHistoryForTest,
 } from './curated-history-fixture.js';
-import { forbidHistoryMaterializationForTest } from './history-materialization-test-guard.js';
+import {
+  forbidHistoryMaterializationForTest,
+  materializeHistoryForTest,
+} from './history-materialization-test-guard.js';
 
 describe('independent curated test observations', () => {
-  it('samples detached pending values without yielding or moving the compression event point', async () => {
-    const history = new HistoryService();
-    const original = suffixRow(0);
-    let yielded = false;
-    queueMicrotask(() => {
-      yielded = true;
-    });
-    try {
-      history.add(original);
-      history.add({ speaker: 'ai', blocks: [] });
-      const observed = curatedHistoryForTest(history);
-      expect(observed).toStrictEqual([original]);
-      expect(observed[0]).not.toBe(original);
-      expect(observed[0].blocks).not.toBe(original.blocks);
-      const samples: IContent[][] = [];
-      history.on('compressionLockReleased', () => {
-        samples.push(curatedHistoryForTest(history));
-      });
-      history.startCompression();
-      history.add(suffixRow(1));
-      history.endCompression();
-      expect(samples).toStrictEqual([[original]]);
-      expect(samples[0][0]).not.toBe(original);
-      expect(samples[0][0]).toStrictEqual(observed[0]);
-      expect(curatedHistoryForTest(history)).toHaveLength(2);
-      expect(yielded).toBe(false);
-    } finally {
-      await history.dispose();
-    }
-  });
-
   for (const size of [512, 8192]) {
     it(`curates ${size} committed rows through raw streaming with a rejecting eager guard`, async () => {
       await withSuffixFixture(size, async (history) => {
@@ -81,17 +53,17 @@ describe('independent curated test observations', () => {
 describe('public curated observation boundary', () => {
   it('curates and restores an eager guard through the raw-history contract', async () => {
     const service = new HistoryService();
-    const history: { streamRawHistory(): AsyncIterable<IContent> } = service;
+    const history = service;
     const original = suffixRow(2, 32);
     try {
       service.add(original);
       service.add({ speaker: 'ai', blocks: [] });
-      const observed = curatedHistoryForTest(history);
+      const observed = await curatedHistoryAfterCommit(history);
       expect(observed).toStrictEqual([original]);
       expect(observed[0]).not.toBe(original);
       const restore = forbidHistoryMaterializationForTest(history);
       try {
-        expect(() => curatedHistoryForTest(history)).toThrow(
+        await expect(materializeHistoryForTest(history)).rejects.toThrow(
           'eager history materialization forbidden',
         );
         let retained: readonly IContent[] | undefined;
@@ -103,7 +75,9 @@ describe('public curated observation boundary', () => {
       } finally {
         restore();
       }
-      expect(curatedHistoryForTest(history)).toStrictEqual([original]);
+      expect(await curatedHistoryAfterCommit(history)).toStrictEqual([
+        original,
+      ]);
     } finally {
       await service.dispose();
     }

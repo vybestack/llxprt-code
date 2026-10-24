@@ -15,7 +15,6 @@ const names = [
   'history-materialization-test-guard',
   'providerCallOptions',
   'retained-growth',
-  'synchronous-history-test-observation',
 ];
 
 describe('relocated helper package ownership and discovery', () => {
@@ -42,6 +41,17 @@ describe('relocated helper package ownership and discovery', () => {
       Object.keys(core.exports).some((key) => key.startsWith('./test-utils/')),
     ).toBe(false);
     expect(Object.keys(agents.exports)).not.toContain('./internals.js');
+    expect(Object.keys(testUtils.exports)).not.toContain(
+      './core/synchronous-history-test-observation.js',
+    );
+    expect(
+      existsSync(
+        join(
+          root,
+          'packages/test-utils/src/core/synchronous-history-test-observation.ts',
+        ),
+      ),
+    ).toBe(false);
   });
 
   it('discovers relocated helper tests as real suites, not empty helper files', () => {

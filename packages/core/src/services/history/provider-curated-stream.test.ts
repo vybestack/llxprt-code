@@ -1,5 +1,5 @@
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
-import { observeHistorySynchronouslyForTest } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
+import { materializeHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
@@ -24,10 +24,10 @@ class CursorOnlyProviderHistory extends HistoryService {
 }
 
 describe('journal materialization guard', () => {
-  it('preserves the synchronous old materialization trap', async () => {
+  it('preserves the native materialization trap', async () => {
     const history = new CursorOnlyProviderHistory({});
     try {
-      expect(() => observeHistorySynchronouslyForTest(history)).toThrow(
+      await expect(materializeHistoryForTest(history)).rejects.toThrow(
         'eager provider preparation',
       );
     } finally {
@@ -183,7 +183,9 @@ describe('committed provider curation rules R1 through R8', () => {
               await digest(expected),
             );
             for (let index = 0; index < snapshot.count; index++) {
-              expect(snapshot.readAt(index)).toStrictEqual(expected[index]);
+              expect(await snapshot.readAt(index)).toStrictEqual(
+                expected[index],
+              );
               expect(snapshot.isPending(index)).toBe(false);
             }
             expect(snapshot.pending).toStrictEqual({

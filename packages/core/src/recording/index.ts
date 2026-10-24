@@ -55,7 +55,6 @@ export {
   enterHistoryRecord,
   type ReplaceRowStore,
 } from './replaceTransaction.js';
-export { SessionRecordingService } from './SessionRecordingService.js';
 export { SESSION_FILE_ID_PREFIX_LENGTH } from './sessionFileName.js';
 export type { SessionRecordingPort } from './recordingPort.js';
 export {
@@ -68,11 +67,6 @@ export {
   type ChildSessionJournal,
   type ChildSessionJournalOptions,
 } from './childJournal.js';
-export {
-  replaySession,
-  replaySessionThroughSequence,
-  foldCheckpointMetadata,
-} from './ReplayEngine.js';
 export {
   SessionLockManager,
   SessionLockedError,

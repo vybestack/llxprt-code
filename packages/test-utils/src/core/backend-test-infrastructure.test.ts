@@ -14,7 +14,6 @@ import {
   createRecorderForTest,
   recordRowsForTest,
 } from './recorder-for-test.js';
-import { observeHistorySynchronouslyForTest } from './synchronous-history-test-observation.js';
 type HistoryBackend = 'old' | 'journal';
 
 const BACKENDS: readonly HistoryBackend[] = ['journal'];
@@ -118,9 +117,7 @@ describe('test infrastructure on both history backends', () => {
         await withSuffixFixture(2, async (history) => {
           const journal: object = Object(Reflect.get(history, 'journal'));
           const eagerRead = (): unknown =>
-            backend === 'journal'
-              ? Reflect.get(journal, 'materialize').call(journal)
-              : observeHistorySynchronouslyForTest(history);
+            Reflect.get(journal, 'materialize').call(journal);
           const restore = forbidHistoryMaterializationForTest(
             history,
             'eager read forbidden',
@@ -140,20 +137,6 @@ describe('test infrastructure on both history backends', () => {
     const service = new HistoryService();
     try {
       service.add(suffixRow(0));
-      await service.waitForCommit();
-      expect(await collectRawHistory(service)).toHaveLength(1);
-    } finally {
-      await service.dispose();
-    }
-  });
-
-  it('refuses a same-turn sample of the journal backend and names the replacement', async () => {
-    const service = new HistoryService();
-    try {
-      service.add(suffixRow(0));
-      expect(() => observeHistorySynchronouslyForTest(service)).toThrow(
-        'Await waitForCommit() and read collectRawHistory() instead',
-      );
       await service.waitForCommit();
       expect(await collectRawHistory(service)).toHaveLength(1);
     } finally {

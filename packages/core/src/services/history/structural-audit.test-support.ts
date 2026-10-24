@@ -188,7 +188,7 @@ function isEmptyArray(initializer: ts.Expression | undefined): boolean {
 
 function resumeWarningsBound(helperText: string): boolean {
   const source = ts.createSourceFile(
-    'historyResumeAdoption.ts',
+    '../../recording/journalResumeAdoption.ts',
     helperText,
     ts.ScriptTarget.ESNext,
     true,
@@ -196,7 +196,7 @@ function resumeWarningsBound(helperText: string): boolean {
   const fn = source.statements.find(
     (statement): statement is ts.FunctionDeclaration =>
       ts.isFunctionDeclaration(statement) &&
-      statement.name?.text === 'adoptResumeJournal',
+      statement.name?.text === 'adoptResumedJournal',
   );
   if (fn?.body === undefined) return false;
   const declarations = statementsOf(fn.body, ts.isVariableDeclaration).filter(
@@ -214,7 +214,7 @@ function resumeWarningsBound(helperText: string): boolean {
   if (
     cleanupLoop === undefined ||
     !ts.isArrayLiteralExpression(cleanupLoop.expression) ||
-    cleanupLoop.expression.elements.length !== 3 ||
+    cleanupLoop.expression.elements.length !== 2 ||
     !cleanupLoop.expression.elements.every((element) =>
       ts.isArrowFunction(element),
     )
@@ -465,7 +465,7 @@ function resumeFacadeBound(
     readFileSync(
       source.fileName.replace(
         /HistoryService\.ts$/,
-        'historyResumeAdoption.ts',
+        '../../recording/journalResumeAdoption.ts',
       ),
       'utf8',
     );

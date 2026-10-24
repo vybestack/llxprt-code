@@ -76,8 +76,6 @@ const WHITELIST_BOUNDS: Readonly<Record<string, string>> = {
     'generation-keyed transient map; every entry is deleted when its save settles; bound = concurrent in-flight persistence saves',
   'RecordingIntegration.persistenceFailures':
     'generation-keyed transient map; every entry is deleted when reported; bound = concurrent in-flight persistence saves',
-  'JournalResolver.units':
-    'survivor interval list (§5c interval-list fold): one unit per journal record that survives the fold, and records are appended only by mutations; rewind/compressed/purge ops destroy units, density compacts them, and the context-floor trim drops resolved units, so the list is bounded by O(mutation events) (rewinds + compressions + purges), not by context length',
 };
 
 const WHITELIST: ReadonlySet<string> = new Set(Object.keys(WHITELIST_BOUNDS));
@@ -305,17 +303,14 @@ describe('no context-retaining collections in the facade surface (P05b3): produc
     expect(flagged.map(describeFlag)).toStrictEqual([]);
   });
 
-  it('journalResolver.ts retains nothing unwhitelisted', async () => {
-    const flagged = await auditRepoFile(
-      path.join('..', '..', 'recording', 'journalResolver.ts'),
-      WHITELIST,
-    );
+  it('journalSession.ts retains nothing unwhitelisted', async () => {
+    const flagged = await auditRepoFile('./journalSession.ts', WHITELIST);
     expect(flagged.map(describeFlag)).toStrictEqual([]);
   });
 
-  it('journalCursor.ts retains nothing unwhitelisted', async () => {
+  it('journalReader.ts retains nothing unwhitelisted', async () => {
     const flagged = await auditRepoFile(
-      path.join('..', '..', 'recording', 'journalCursor.ts'),
+      path.join('..', '..', 'journal', 'journalReader.ts'),
       WHITELIST,
     );
     expect(flagged.map(describeFlag)).toStrictEqual([]);
@@ -416,16 +411,16 @@ async function verifyRollbackHelperControls(
 }
 
 describe('no context-retaining collections in the facade surface (P05b3): mutation controls', () => {
-  it('keeps the resolver file read return scalar and rejects a returned buffer', async () => {
+  it('keeps the native file read return scalar and rejects a returned buffer', async () => {
     const file = path.join(
       import.meta.dir,
       '..',
       '..',
-      'recording',
-      'journalResolver.ts',
+      'journal',
+      'positionalFile.ts',
     );
     const source = await fs.readFile(file, 'utf8');
-    const scalar = '): Promise<number>;';
+    const scalar = '): Promise<{ bytesRead: number }>;';
     const returnedBuffer =
       '): Promise<{ readonly bytesRead: number; readonly buffer: Buffer }>;';
     expect(source).toContain(scalar);
@@ -435,7 +430,8 @@ describe('no context-retaining collections in the facade surface (P05b3): mutati
       auditSourceText(text, WHITELIST, file)
         .filter(
           (flag) =>
-            flag.className === 'ResolverFileHandle' && flag.property === 'read',
+            flag.className === 'PositionalReadTarget' &&
+            flag.property === 'read',
         )
         .map(describeFlag);
     expect(readFlags(source)).toStrictEqual([]);
@@ -465,7 +461,13 @@ describe('no context-retaining collections in the facade surface (P05b3): mutati
 
   it('rejects resume warnings if cleanup count tracks history or facade returns it', async () => {
     const file = path.join(import.meta.dir, 'HistoryService.ts');
-    const helperFile = path.join(import.meta.dir, 'historyResumeAdoption.ts');
+    const helperFile = path.join(
+      import.meta.dir,
+      '..',
+      '..',
+      'recording',
+      'journalResumeAdoption.ts',
+    );
     const source = await fs.readFile(file, 'utf8');
     const helper = await fs.readFile(helperFile, 'utf8');
     const mutatedHelper = helper.replace(
@@ -491,30 +493,30 @@ describe('no context-retaining collections in the facade surface (P05b3): mutati
   });
 });
 
-describe('cursor scalar read mutation control', () => {
-  it('keeps cursor chunk reads scalar and detects a Buffer-returning mutation', async () => {
-    const file = path.join(
-      import.meta.dir,
-      '..',
-      '..',
-      'recording',
-      'journalCursor.ts',
-    );
+describe('native journal retention mutation controls', () => {
+  it('detects a planted retaining field and whole-history return in the session source', async () => {
+    const file = path.join(import.meta.dir, 'journalSession.ts');
     const source = await fs.readFile(file, 'utf8');
-    const scalar =
-      'private async readChunk(\n    buffer: Buffer,\n    start: number,\n    length: number,\n  ): Promise<number>';
-    const returnedBuffer = scalar.replace('Promise<number>', 'Promise<Buffer>');
-    expect(source).toContain(scalar);
-    const mutated = source.replace(scalar, returnedBuffer);
+    const insertion = 'export class JournalSession {';
+    expect(source).toContain(insertion);
+    const mutated = source.replace(
+      insertion,
+      insertion +
+        '\n  private retainedRows: IContent[] = [];\n  allRows(): IContent[] { return this.retainedRows; }',
+    );
     expect(mutated).not.toBe(source);
-    const readFlags = (text: string): string[] =>
+    const retentionFlags = (text: string): string[] =>
       auditSourceText(text, WHITELIST, file)
-        .filter(
-          (flag) =>
-            flag.className === 'JournalCursor' && flag.property === 'readChunk',
-        )
-        .map(describeFlag);
-    expect(readFlags(source)).toStrictEqual([]);
-    expect(readFlags(mutated)).toHaveLength(1);
+        .filter((flag) => flag.className === 'JournalSession')
+        .map((flag) => flag.property);
+    expect(retentionFlags(source)).toStrictEqual([]);
+    expect(retentionFlags(mutated)).toStrictEqual([
+      'retainedRows',
+      'allRows',
+      'create',
+      'open',
+      'createUnlinked',
+      'cloneUnlinked',
+    ]);
   });
 });

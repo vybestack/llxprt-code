@@ -1,4 +1,4 @@
-import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
+import { curatedHistoryAfterCommit } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 /// <reference lib="esnext.array" />
 /**
  * @license
@@ -115,7 +115,7 @@ function expectCapturedCallback(
 async function shedOldestMessage(
   historyService: HistoryService,
 ): Promise<void> {
-  const original = [...curatedHistoryForTest(historyService)];
+  const original = [...(await curatedHistoryAfterCommit(historyService))];
   await historyService.clear();
   for (const entry of original.slice(1)) {
     historyService.add(entry);

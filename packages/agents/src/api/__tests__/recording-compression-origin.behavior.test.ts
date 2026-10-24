@@ -6,12 +6,10 @@
 
 import { describe, expect, it, spyOn } from 'bun:test';
 import { readFile } from 'node:fs/promises';
-import { isJournalFileName } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
-import { JournalResolver } from '@vybestack/llxprt-code-core/recording/journalResolver.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { collectJournalFileRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
-import { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
+import { summaryOutput } from '../../compression/summaryOutput.js';
 import { EmptySummaryError } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import { OneShotStrategy } from '../../compression/OneShotStrategy.js';
 import { TopDownTruncationStrategy } from '../../compression/TopDownTruncationStrategy.js';
@@ -19,30 +17,11 @@ import { withRecordingLifetimeFixture } from './helpers/recording-owner-lifetime
 import { drain } from './helpers/agentHarness.js';
 
 async function recordingRows(path: string): Promise<IContent[]> {
-  if (isJournalFileName(path)) {
-    let result: IContent[] = [];
-    await collectJournalFileRowsForAssertions(path, (rows) => {
-      result = [...rows];
-    });
-    return result;
-  }
-  const resolver = await JournalResolver.open(path);
-  try {
-    const rows: IContent[] = [];
-    for await (const entry of resolver.resolve()) rows.push(entry.content);
-    return rows;
-  } finally {
-    await resolver.close();
-  }
-}
-
-async function replacementRecordingText(
-  path: string,
-  rows: readonly IContent[],
-): Promise<string> {
-  return isJournalFileName(path)
-    ? JSON.stringify(rows)
-    : readFile(path, 'utf8');
+  let result: IContent[] = [];
+  await collectJournalFileRowsForAssertions(path, (rows) => {
+    result = [...rows];
+  });
+  return result;
 }
 
 function recordingPath(state: { readonly path?: string }): string {
@@ -58,15 +37,16 @@ function useSummaryStrategy(fails = false): () => void {
   let index = 0;
   const spy = spyOn(
     OneShotStrategy.prototype,
-    'compressDisk',
-  ).mockImplementation(async (_context, candidate) => {
+    'prepareDisk',
+  ).mockImplementation(async (context) => {
     if (fails) throw new Error('compression rejected');
-    candidate.append({
-      speaker: 'ai',
-      blocks: [{ type: 'text', text: `owned-summary-${++index}` }],
-      metadata: { reason: 'compression-state-snapshot' },
-    });
-    return { kind: 'applied', top: 0 };
+    return summaryOutput(context.history, 0, context.history.length, [
+      {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: `owned-summary-${++index}` }],
+        metadata: { reason: 'compression-state-snapshot' },
+      },
+    ]);
   });
   return () => spy.mockRestore();
 }
@@ -214,27 +194,27 @@ describe('shared history compression recording origin', () => {
   it('keeps a fallback summary with its originating facade after a primary error', async () => {
     const primary = spyOn(
       OneShotStrategy.prototype,
-      'compressDisk',
-    ).mockRejectedValue(new EmptySummaryError('one-shot'));
+      'prepareDisk',
+    ).mockImplementation(async (context) =>
+      summaryOutput(context.history, 0, context.history.length, [
+        {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'A-fallback-summary' }],
+          metadata: { reason: 'compression-state-snapshot' },
+        },
+      ]),
+    );
     const fallback = spyOn(
       TopDownTruncationStrategy.prototype,
       'compressDisk',
     ).mockImplementation(async (context) => {
-      const rows = context.history;
-      if (!(rows instanceof HistoryDensityRows))
-        throw new Error('Expected disk compression rows');
-      const start = rows.length;
-      rows.append({
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'A-fallback-summary' }],
-        metadata: { reason: 'compression-state-snapshot' },
-      });
+      const start = 0;
       return {
         kind: 'applied',
         start,
         metadata: {
-          originalMessageCount: start,
-          compressedMessageCount: 1,
+          originalMessageCount: context.history.length,
+          compressedMessageCount: context.history.length,
           strategyUsed: 'top-down-truncation',
           llmCallMade: false,
         },
@@ -249,6 +229,8 @@ describe('shared history compression recording origin', () => {
         await sibling.session.setRecording({ enabled: true });
         const aPath = recordingPath(agent.session.getRecording());
         const bPath = recordingPath(sibling.session.getRecording());
+        expect((await agent.compress()).status).toBe('compressed');
+        primary.mockRejectedValue(new EmptySummaryError('one-shot'));
         expect((await agent.compress()).status).toBe('compressed');
         await agent.session.setRecording({ enabled: false });
         await sibling.session.setRecording({ enabled: false });
@@ -303,8 +285,8 @@ describe('shared history compression recording origin', () => {
         const bRows = await recordingRows(bPath);
         expect(aRows).toContainEqual(summary);
         expect(bRows).not.toContainEqual(summary);
-        const a = await replacementRecordingText(aPath, aRows);
-        const b = await replacementRecordingText(bPath, bRows);
+        const a = JSON.stringify(aRows);
+        const b = JSON.stringify(bRows);
         expect(a).toContain('owned-summary-1');
         expect(b).not.toContain('owned-summary-1');
         expect(a).not.toContain('rejected-summary');

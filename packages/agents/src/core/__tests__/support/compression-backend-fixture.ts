@@ -1,14 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import {
-  curatedHistoryAfterCommit,
-  curatedHistoryForTest,
-} from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
+import { curatedHistoryAfterCommit } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 import { afterEach } from 'bun:test';
 type HistoryBackend = 'old' | 'journal';
 
-export function compressionBackendFixture(backend: HistoryBackend): {
+export function compressionBackendFixture(_backend: HistoryBackend): {
   createHistory(): HistoryService;
   sampleCurated(history: HistoryService): IContent[] | Promise<IContent[]>;
   assertCurated(
@@ -28,12 +25,8 @@ export function compressionBackendFixture(backend: HistoryBackend): {
       return history;
     },
     sampleCurated: (history): IContent[] | Promise<IContent[]> =>
-      backend === 'old'
-        ? curatedHistoryForTest(history)
-        : curatedHistoryAfterCommit(history),
-    assertCurated: (history, assertRows): void | Promise<void> => {
-      if (backend === 'old') return assertRows(curatedHistoryForTest(history));
-      return curatedHistoryAfterCommit(history).then(assertRows);
-    },
+      curatedHistoryAfterCommit(history),
+    assertCurated: (history, assertRows): void | Promise<void> =>
+      curatedHistoryAfterCommit(history).then(assertRows),
   };
 }

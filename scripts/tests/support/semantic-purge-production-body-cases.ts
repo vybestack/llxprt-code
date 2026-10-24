@@ -94,7 +94,7 @@ async function expectedBody(
   const eager = new HistoryService();
   try {
     for (let index = 0; index < size; index++) eager.add(row(index, 2048));
-    const transaction = new EagerSemanticPurgeOracle(eager, {
+    const transaction = await new EagerSemanticPurgeOracle(eager, {
       enabled: true,
       explicitCacheWriteRequired: false,
     }).begin({ mode: 'remove' });

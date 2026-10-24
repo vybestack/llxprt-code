@@ -1,6 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { MutableRowDirectory } from './mutableRowDirectory.js';
-import type { ResolverDiskIndex } from './resolverDiskIndex.js';
 
 /**
  * Replace transactions make a streamed history replacement atomic inside the
@@ -203,20 +202,6 @@ export function directoryRowStore(
     truncate: (length) => directory.truncate(length),
     dropPrefix: (count) => {
       directory.compact((_row, index) => index >= count);
-    },
-  };
-}
-
-export function diskIndexRowStore(index: ResolverDiskIndex): ReplaceRowStore {
-  return {
-    get length() {
-      return index.length;
-    },
-    truncate: (length) => index.truncate(length),
-    dropPrefix: (count) => {
-      for (let read = count; read < index.length; read += 1)
-        index.set(read - count, index.get(read));
-      index.truncate(index.length - count);
     },
   };
 }
