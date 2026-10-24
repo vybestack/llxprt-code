@@ -33,7 +33,11 @@ export async function fillMistralFormat(
   if ((mask & (1 << slot)) !== 0) return built;
   const facts = await startFacts(
     ctx.readGroup(appender.nextOffset),
-    { idRoot: built.state.idRoot, metaRoot: built.state.metaRoot },
+    {
+      rowRoot: built.state.rowRoot,
+      idRoot: built.state.idRoot,
+      metaRoot: built.state.metaRoot,
+    },
     ctx,
     reader,
     { appender, readGroup: ctx.readGroup },

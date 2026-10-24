@@ -106,11 +106,12 @@ export function existingEntries(
 
 /** The roots a fact collection starts from: those of the version the group builds on, or zero for a rebuild. */
 export interface FactRoots {
+  readonly rowRoot: number;
   readonly idRoot: number;
   readonly metaRoot: number;
 }
 
-export const NO_FACT_ROOTS: FactRoots = { idRoot: 0, metaRoot: 0 };
+export const NO_FACT_ROOTS: FactRoots = { rowRoot: 0, idRoot: 0, metaRoot: 0 };
 
 async function applyRow(
   facts: GroupFacts,
@@ -171,7 +172,7 @@ export async function startFacts(
       'Kimi emitted facts need normalized row contributions',
     );
   const meta = new KeyedMapBatch(metaReader, metaRoot);
-  if (idRoot === 0 && metaRoot === 0) {
+  if (roots.rowRoot === 0) {
     meta.set(CHRONOLOGY_INDEX_READY, Uint8Array.of(1));
     meta.set(DENSITY_CALL_INDEX_READY, Uint8Array.of(1));
     if (deps.recencyFactPolicy !== undefined)
