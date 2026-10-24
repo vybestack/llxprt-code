@@ -39,6 +39,8 @@ import {
   useResumeFixture,
 } from './resumeSession.test.helpers.js';
 
+const propertyJournal = { journal: { flush: (): void => undefined } };
+
 describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: preserves any IContent through write-resume cycle @requirement:REQ-RSM-004', () => {
   useResumeFixture();
   describe('Property-Based Tests @plan:PLAN-20260211-SESSIONRECORDING.P19', () => {
@@ -73,12 +75,13 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: preserves any 
               }));
 
               await createJournalTestSession(localChatsDir, {
+                journal: propertyJournal,
                 projectHash: PROJECT_HASH,
                 contents,
               });
 
               const result = await resumeSession(
-                makeResumeRequest(localChatsDir),
+                makeResumeRequest(localChatsDir, { journal: propertyJournal }),
               );
 
               const okResult = expectOk(result);
@@ -132,6 +135,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: detects provid
 
             try {
               await createJournalTestSession(localChatsDir, {
+                journal: propertyJournal,
                 projectHash: PROJECT_HASH,
                 provider: sessionProvider,
                 model: 'model-a',
@@ -139,6 +143,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: detects provid
 
               const result = await resumeSession(
                 makeResumeRequest(localChatsDir, {
+                  journal: propertyJournal,
                   currentProvider,
                   currentModel: 'model-b',
                 }),
@@ -194,12 +199,13 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: sequence is mo
               }
 
               await createJournalTestSession(localChatsDir, {
+                journal: propertyJournal,
                 projectHash: PROJECT_HASH,
                 contents: originalContents,
               });
 
               const result = await resumeSession(
-                makeResumeRequest(localChatsDir),
+                makeResumeRequest(localChatsDir, { journal: propertyJournal }),
               );
 
               const okResult = expectOk(result);
@@ -268,12 +274,13 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: resume always 
               }
 
               await createJournalTestSession(localChatsDir, {
+                journal: propertyJournal,
                 projectHash: PROJECT_HASH,
                 contents,
               });
 
               const result = await resumeSession(
-                makeResumeRequest(localChatsDir),
+                makeResumeRequest(localChatsDir, { journal: propertyJournal }),
               );
 
               const okResult = expectOk(result);
@@ -320,7 +327,10 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: compression + 
                 sessionId,
                 projectHash: PROJECT_HASH,
               });
-              const svc = JournalRecordingService.create(config);
+              const svc = JournalRecordingService.create({
+                ...config,
+                journal: propertyJournal,
+              });
 
               const session = await svc.session();
 
@@ -356,7 +366,7 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: compression + 
               await svc.dispose();
 
               const result = await resumeSession(
-                makeResumeRequest(localChatsDir),
+                makeResumeRequest(localChatsDir, { journal: propertyJournal }),
               );
 
               const okResult = expectOk(result);
@@ -402,12 +412,13 @@ describe('resumeSession @plan:PLAN-20260211-SESSIONRECORDING.P19: resume succeed
               }
 
               await createJournalTestSession(localChatsDir, {
+                journal: propertyJournal,
                 projectHash: PROJECT_HASH,
                 contents,
               });
 
               const result = await resumeSession(
-                makeResumeRequest(localChatsDir),
+                makeResumeRequest(localChatsDir, { journal: propertyJournal }),
               );
 
               const okResult = expectOk(result);

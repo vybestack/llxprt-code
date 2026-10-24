@@ -10,6 +10,7 @@ import * as path from 'node:path';
 import { type IContent } from '../services/history/IContent.js';
 import { type LockHandle } from './SessionLockManager.js';
 import { JournalRecordingService } from './journalRecordingService.js';
+import type { JournalSessionOptions } from '../services/history/journalSession.js';
 import type { SessionRecordingPort } from './recordingPort.js';
 import { CONTINUE_LATEST, type ResumeRequest } from './resumeSession.js';
 import type { SessionRecordingServiceConfig } from './types.js';
@@ -63,6 +64,7 @@ export async function createJournalTestSession(
     provider?: string;
     model?: string;
     contents?: IContent[];
+    journal?: JournalSessionOptions;
   } = {},
 ): Promise<{
   filePath: string;
@@ -76,7 +78,10 @@ export async function createJournalTestSession(
     provider: opts.provider,
     model: opts.model,
   });
-  const svc = JournalRecordingService.create(config);
+  const svc = JournalRecordingService.create({
+    ...config,
+    ...(opts.journal === undefined ? {} : { journal: opts.journal }),
+  });
 
   const contents = opts.contents ?? [makeContent('hello')];
   await (await svc.session()).append(contents);
@@ -101,6 +106,7 @@ export function makeResumeRequest(
     currentProvider: overrides.currentProvider ?? 'anthropic',
     currentModel: overrides.currentModel ?? 'claude-4',
     workspaceDirs: overrides.workspaceDirs ?? ['/test/workspace'],
+    ...(overrides.journal === undefined ? {} : { journal: overrides.journal }),
   };
 }
 
