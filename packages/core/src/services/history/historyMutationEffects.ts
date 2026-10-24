@@ -17,7 +17,7 @@ import type {
   HistoryMediaOwner,
   HistoryOwnedMediaReservation,
 } from './historyBatchContracts.js';
-import type { HistoryMutationSnapshot } from './historyMutationSnapshot.js';
+import type { HistoryMutationSnapshot } from './historyIndexedRows.js';
 import type { HistoryRowSource } from './historyIndexedRows.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 

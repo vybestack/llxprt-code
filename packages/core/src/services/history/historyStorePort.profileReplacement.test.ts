@@ -1,4 +1,3 @@
-import { HistoryJournalStore } from './historyJournalStore.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, describe, expect, it } from 'bun:test';
 import * as path from 'node:path';
@@ -37,113 +36,101 @@ async function textsOf(store: ReplacementStore): Promise<string[]> {
   return texts;
 }
 
-describe.each(['old', 'journal'] as const)(
-  'HistoryStorePort.stageProfileReplacement (%s store)',
-  (backend) => {
-    const directory = useTempDir('history-port-profile-');
-    const open: ReplacementStore[] = [];
-    let counter = 0;
+describe('HistoryStorePort.stageProfileReplacement (journal store)', () => {
+  const directory = useTempDir('history-port-profile-');
+  const open: ReplacementStore[] = [];
+  let counter = 0;
 
-    afterEach(async () => {
-      for (const store of open.splice(0)) await store.dispose();
-    });
+  afterEach(async () => {
+    for (const store of open.splice(0)) await store.dispose();
+  });
 
-    async function opened(
-      rows: readonly IContent[],
-    ): Promise<ReplacementStore> {
-      const store: ReplacementStore =
-        backend === 'old'
-          ? new HistoryJournalStore()
-          : new JournalHistoryStore(
-              await JournalSession.create(
-                path.join(directory(), `profile-${counter++}.llxj`),
-                { journal: testJournalSeams({}).dependencies },
-              ),
-            );
-      open.push(store);
-      for (const content of rows) store.apply({ kind: 'content', content });
-      await store.waitForDurable();
-      return store;
-    }
+  async function opened(rows: readonly IContent[]): Promise<ReplacementStore> {
+    const store: ReplacementStore = new JournalHistoryStore(
+      await JournalSession.create(
+        path.join(directory(), `profile-${counter++}.llxj`),
+        { journal: testJournalSeams({}).dependencies },
+      ),
+    );
+    open.push(store);
+    for (const content of rows) store.apply({ kind: 'content', content });
+    await store.waitForDurable();
+    return store;
+  }
 
-    it('makes the live rows the candidate rows at commit', async () => {
-      const live = await opened([row('human', 'one', 1), row('ai', 'two', 2)]);
-      const candidate = await opened([
-        row('human', 'other', 1),
-        row('ai', 'answer', 2),
-        row('human', 'more', 3),
-      ]);
-      const staged = await live.stageProfileReplacement(candidate, {});
-      staged.commit();
-      await live.waitForDurable();
-      expect(await textsOf(live)).toStrictEqual(['other', 'answer', 'more']);
-      expect(live.getLength()).toBe(3);
-      expect(await textsOf(candidate)).toStrictEqual([
-        'other',
-        'answer',
-        'more',
-      ]);
-    });
+  it('makes the live rows the candidate rows at commit', async () => {
+    const live = await opened([row('human', 'one', 1), row('ai', 'two', 2)]);
+    const candidate = await opened([
+      row('human', 'other', 1),
+      row('ai', 'answer', 2),
+      row('human', 'more', 3),
+    ]);
+    const staged = await live.stageProfileReplacement(candidate, {});
+    staged.commit();
+    await live.waitForDurable();
+    expect(await textsOf(live)).toStrictEqual(['other', 'answer', 'more']);
+    expect(live.getLength()).toBe(3);
+    expect(await textsOf(candidate)).toStrictEqual(['other', 'answer', 'more']);
+  });
 
-    it('takes a candidate that only drops the tail', async () => {
-      const rows = [row('human', 'one', 1), row('ai', 'two', 2)];
-      const live = await opened(rows);
-      const candidate = await opened([rows[0]]);
-      const staged = await live.stageProfileReplacement(candidate, {});
-      staged.commit();
-      await live.waitForDurable();
-      expect(await textsOf(live)).toStrictEqual(['one']);
-      expect(live.getLength()).toBe(1);
-    });
+  it('takes a candidate that only drops the tail', async () => {
+    const rows = [row('human', 'one', 1), row('ai', 'two', 2)];
+    const live = await opened(rows);
+    const candidate = await opened([rows[0]]);
+    const staged = await live.stageProfileReplacement(candidate, {});
+    staged.commit();
+    await live.waitForDurable();
+    expect(await textsOf(live)).toStrictEqual(['one']);
+    expect(live.getLength()).toBe(1);
+  });
 
-    it('takes an empty candidate', async () => {
-      const live = await opened([row('human', 'one', 1)]);
-      const candidate = await opened([]);
-      const staged = await live.stageProfileReplacement(candidate, {});
-      staged.commit();
-      await live.waitForDurable();
-      expect(await textsOf(live)).toStrictEqual([]);
-      expect(live.getLength()).toBe(0);
-    });
+  it('takes an empty candidate', async () => {
+    const live = await opened([row('human', 'one', 1)]);
+    const candidate = await opened([]);
+    const staged = await live.stageProfileReplacement(candidate, {});
+    staged.commit();
+    await live.waitForDurable();
+    expect(await textsOf(live)).toStrictEqual([]);
+    expect(live.getLength()).toBe(0);
+  });
 
-    it('commits an identical candidate and keeps the rows', async () => {
-      const rows = [row('human', 'one', 1), row('ai', 'two', 2)];
-      const live = await opened(rows);
-      const candidate = await opened(rows);
-      const staged = await live.stageProfileReplacement(candidate, {});
-      staged.commit();
-      await live.waitForDurable();
-      expect(await textsOf(live)).toStrictEqual(['one', 'two']);
-    });
+  it('commits an identical candidate and keeps the rows', async () => {
+    const rows = [row('human', 'one', 1), row('ai', 'two', 2)];
+    const live = await opened(rows);
+    const candidate = await opened(rows);
+    const staged = await live.stageProfileReplacement(candidate, {});
+    staged.commit();
+    await live.waitForDurable();
+    expect(await textsOf(live)).toStrictEqual(['one', 'two']);
+  });
 
-    it('leaves the previous rows after a rollback', async () => {
-      const live = await opened([row('human', 'one', 1), row('ai', 'two', 2)]);
-      const candidate = await opened([row('human', 'other', 1)]);
-      const staged = await live.stageProfileReplacement(candidate, {});
-      await staged.rollback();
-      await live.waitForDurable();
-      expect(await textsOf(live)).toStrictEqual(['one', 'two']);
-      expect(live.getLength()).toBe(2);
-    });
+  it('leaves the previous rows after a rollback', async () => {
+    const live = await opened([row('human', 'one', 1), row('ai', 'two', 2)]);
+    const candidate = await opened([row('human', 'other', 1)]);
+    const staged = await live.stageProfileReplacement(candidate, {});
+    await staged.rollback();
+    await live.waitForDurable();
+    expect(await textsOf(live)).toStrictEqual(['one', 'two']);
+    expect(live.getLength()).toBe(2);
+  });
 
-    it('refuses to commit when the live history was written after staging', async () => {
-      const live = await opened([row('human', 'one', 1)]);
-      const candidate = await opened([row('human', 'other', 1)]);
-      const staged = await live.stageProfileReplacement(candidate, {});
-      live.apply({ kind: 'content', content: row('ai', 'late', 2) });
-      await live.waitForDurable();
-      expect(() => staged.commit()).toThrow(/changed after it was prepared/);
-    });
+  it('refuses to commit when the live history was written after staging', async () => {
+    const live = await opened([row('human', 'one', 1)]);
+    const candidate = await opened([row('human', 'other', 1)]);
+    const staged = await live.stageProfileReplacement(candidate, {});
+    live.apply({ kind: 'content', content: row('ai', 'late', 2) });
+    await live.waitForDurable();
+    expect(() => staged.commit()).toThrow(/changed after it was prepared/);
+  });
 
-    it('cannot commit twice', async () => {
-      const live = await opened([row('human', 'one', 1)]);
-      const candidate = await opened([row('human', 'other', 1)]);
-      const staged = await live.stageProfileReplacement(candidate, {});
-      staged.commit();
-      expect(() => staged.commit()).toThrow(/already settled/);
-    });
-  },
-);
+  it('cannot commit twice', async () => {
+    const live = await opened([row('human', 'one', 1)]);
+    const candidate = await opened([row('human', 'other', 1)]);
+    const staged = await live.stageProfileReplacement(candidate, {});
+    staged.commit();
+    expect(() => staged.commit()).toThrow(/already settled/);
+  });
+});
 
 describe('journal profile replacement failure', () => {
   const directory = useTempDir('history-port-profile-fail-');

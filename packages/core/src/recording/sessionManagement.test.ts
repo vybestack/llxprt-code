@@ -33,6 +33,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { type IContent } from '../services/history/IContent.js';
 import { JournalRecordingService } from './journalRecordingService.js';
+import { journalSeams } from './__tests__/support/recordedJournals.js';
 import { SessionLockManager } from './SessionLockManager.js';
 import {
   deleteSession,
@@ -91,7 +92,10 @@ async function createTestSession(
     provider: opts.provider,
     model: opts.model,
   });
-  const svc = JournalRecordingService.create(config);
+  const svc = JournalRecordingService.create({
+    ...config,
+    journal: journalSeams(),
+  });
   await (await svc.session()).append([makeContent('hello')]);
   await svc.flush();
   const filePath = svc.getFilePath()!;

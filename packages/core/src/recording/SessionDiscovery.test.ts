@@ -35,6 +35,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { type IContent } from '../services/history/IContent.js';
 import { JournalRecordingService } from './journalRecordingService.js';
+import { journalSeams } from './__tests__/support/recordedJournals.js';
 import { SessionDiscovery } from './SessionDiscovery.js';
 import { type SessionRecordingServiceConfig } from './types.js';
 
@@ -87,7 +88,10 @@ async function createTestSession(
     provider: opts.provider,
     model: opts.model,
   });
-  const svc = JournalRecordingService.create(config);
+  const svc = JournalRecordingService.create({
+    ...config,
+    journal: journalSeams(),
+  });
 
   const contents = opts.contents ?? [makeContent('hello')];
   await (await svc.session()).append(contents);

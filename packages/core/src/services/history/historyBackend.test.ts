@@ -11,7 +11,6 @@ import { JournalRecordingService } from '../../recording/journalRecordingService
 import type { RecordingPort } from '../../recording/recordingPort.js';
 import { SessionRecordingService } from '../../recording/SessionRecordingService.js';
 import { createHistoryStore } from './historyBackend.js';
-import { HistoryJournalStore } from './historyJournalStore.js';
 import type { HistoryStorePort } from './historyStorePort.js';
 import { JournalHistoryStore } from './journalHistoryStore.js';
 
@@ -72,14 +71,6 @@ const everyPortMethodListed: Exclude<
   ? true
   : false = true;
 
-// Fails to compile when either store stops satisfying the port.
-const bothStoresArePorts: [HistoryJournalStore, JournalHistoryStore] extends [
-  HistoryStorePort,
-  HistoryStorePort,
-]
-  ? true
-  : false = true;
-
 // Fails to compile when the recorder class stops providing the recording port.
 const recorderIsARecordingPort: SessionRecordingService extends RecordingPort
   ? true
@@ -97,22 +88,7 @@ describe('createHistoryStore', () => {
         },
       });
       await store.waitForCommit();
-      expect(store.compressionRowCount?.()).toBe(1);
-    } finally {
-      await store.dispose();
-    }
-  });
-
-  it('builds the old store, which provides every port method', async () => {
-    expect(everyPortMethodListed).toBe(true);
-    expect(recorderIsARecordingPort).toBe(true);
-    expect(bothStoresArePorts).toBe(true);
-    const store: HistoryStorePort = new HistoryJournalStore();
-    try {
-      expect(store).toBeInstanceOf(HistoryJournalStore);
-      expect(store.compressionRowCount).toBeUndefined();
-      for (const method of PORT_METHODS)
-        expect(typeof store[method]).toBe('function');
+      expect(store.compressionRowCount()).toBe(1);
     } finally {
       await store.dispose();
     }
@@ -151,6 +127,8 @@ describe('createHistoryStore', () => {
     }
 
     it('builds the journal store, which provides every port method and opens itself', async () => {
+      expect(everyPortMethodListed).toBe(true);
+      expect(recorderIsARecordingPort).toBe(true);
       const store = journalStore({});
       expect(store).toBeInstanceOf(JournalHistoryStore);
       for (const method of PORT_METHODS)

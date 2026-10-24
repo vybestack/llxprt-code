@@ -10,7 +10,6 @@ import type {
   DensityRowDecision,
   DiskDensityOptimizer,
 } from './historyDiskDensity.js';
-import { HistoryJournalStore } from './historyJournalStore.js';
 import { HistoryService } from './HistoryService.js';
 import type { HistoryDensityRequest } from './historyStorePort.js';
 import type { IContent } from './IContent.js';
@@ -79,7 +78,7 @@ function textsOf(rows: readonly IContent[]): unknown[] {
 }
 
 describe('HistoryStorePort.optimizeDensity', () => {
-  it('old store: removes and replaces the rows the optimizer decided on, keeping the markers', async () => {
+  it('removes and replaces the rows the optimizer decided on, keeping the markers', async () => {
     const history = new HistoryService();
     history.setTokenizerFactory(exactTokenizer());
     try {
@@ -120,10 +119,13 @@ describe('HistoryStorePort.optimizeDensity', () => {
       return store;
     }
 
-    function hostFor(batches: HistoryBatchRowSource[]): DetachedHistoryHost {
+    function hostFor(
+      store: JournalHistoryStore,
+      batches: HistoryBatchRowSource[],
+    ): DetachedHistoryHost {
       return {
         // The journal path never reads it.
-        journal: new HistoryJournalStore(),
+        journal: store,
         chronology: new ChronologyStamper(() => 0),
         snapshot: () => ({
           tokens: 0,
@@ -147,20 +149,23 @@ describe('HistoryStorePort.optimizeDensity', () => {
     }
 
     function requestOf(
+      store: JournalHistoryStore,
       optimize: DiskDensityOptimizer,
       batches: HistoryBatchRowSource[],
     ): HistoryDensityRequest {
       return {
         optimize,
-        host: hostFor(batches),
+        host: hostFor(store, batches),
         mutate: () => Promise.reject(new Error('the old store arm')),
       };
     }
 
-    it('removes and replaces the rows the optimizer decided on, keeping the markers, as the old store does', async () => {
+    it('removes and replaces the rows the optimizer decided on, keeping the markers', async () => {
       const store = await openStore();
 
-      await store.optimizeDensity(requestOf(optimizer(decisionsOf()), []));
+      await store.optimizeDensity(
+        requestOf(store, optimizer(decisionsOf()), []),
+      );
 
       expect(textsOf(await store.materialize())).toStrictEqual(EXPECTED);
     });
@@ -174,7 +179,7 @@ describe('HistoryStorePort.optimizeDensity', () => {
         return optimizer(decisionsOf())(source);
       };
 
-      await store.optimizeDensity(requestOf(observing, []));
+      await store.optimizeDensity(requestOf(store, observing, []));
 
       expect(textsOf(seen)).toStrictEqual(textsOf(SEED));
     });
@@ -183,7 +188,9 @@ describe('HistoryStorePort.optimizeDensity', () => {
       const store = await openStore();
       const batches: HistoryBatchRowSource[] = [];
 
-      await store.optimizeDensity(requestOf(optimizer(new Map()), batches));
+      await store.optimizeDensity(
+        requestOf(store, optimizer(new Map()), batches),
+      );
 
       expect(textsOf(await store.materialize())).toStrictEqual(textsOf(SEED));
       expect(batches).toHaveLength(0);
@@ -202,7 +209,7 @@ describe('HistoryStorePort.optimizeDensity', () => {
       });
 
       await expect(
-        store.optimizeDensity(requestOf(failing, [])),
+        store.optimizeDensity(requestOf(store, failing, [])),
       ).rejects.toThrow('decision failed');
 
       expect(closed).toBe(1);

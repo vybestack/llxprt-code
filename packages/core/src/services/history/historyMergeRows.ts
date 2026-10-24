@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 import { HistoryDensityRows } from './historyDensityRows.js';
-import type { HistoryMutationSnapshot } from './historyMutationSnapshot.js';
+import type { HistoryMutationSnapshot } from './historyIndexedRows.js';
 import type { IContent } from './IContent.js';
 import { isAcceptedHistoryValue } from './historyValueEntries.js';
 

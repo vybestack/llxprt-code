@@ -34,16 +34,17 @@ import type {
 } from '../../journal/tool-ranking-fill.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import type { IContent } from './IContent.js';
-import type { CurrentTurnMarker } from './historyChronology.js';
+import type {
+  CurrentTurnMarker,
+  ChronologyStamper,
+} from './historyChronology.js';
 import type { HistoryDumpSnapshot } from './historyDumpSnapshot.js';
 import type { CompressionInputSnapshot } from './compressionInput.js';
-import type { HistoryMutationSnapshot } from './historyMutationSnapshot.js';
+import type { HistoryMutationSnapshot } from './historyIndexedRows.js';
 import type { HistorySuffixQuery } from './historyJournalRows.js';
 import type { HistoryRowView } from './historyRowView.js';
 import type { ConversationStatistics } from './curationDebugLogger.js';
 import type { ContextRange } from './historyEventTypes.js';
-import type { ResumeDerivedState } from './historyResumeAdoption.js';
-import type { ResumeCursorBoot } from '../../recording/resumeCursorBoot.js';
 import type { ResumePoint } from '../../recording/journalResume.js';
 import type { HistoryCheckpoint } from './historyCheckpointRows.js';
 import type { HistoryDensityRows } from './historyDensityRows.js';
@@ -114,8 +115,14 @@ type HistoryJournalOpBody =
     }
   | { readonly kind: 'density'; readonly payload: DensityMutationPayload };
 
-/** What a resume boots from: the replayed cursor of the JSONL stack, or the version a journal was opened at. */
-export type ResumeBoot = ResumeCursorBoot | ResumePoint;
+/** The published version a journal was opened at. */
+export type ResumeBoot = ResumePoint;
+
+export interface ResumeDerivedState {
+  readonly chronology: ChronologyStamper;
+  readonly tokens: number;
+  readonly range: ContextRange;
+}
 
 /**
  * One resume adoption (decision G5): the policy of HistoryService rides in the

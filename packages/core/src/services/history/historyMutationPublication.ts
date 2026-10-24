@@ -5,7 +5,7 @@ import type {
   HistoryStorePort,
 } from './historyStorePort.js';
 import type { HistoryMutationInput } from './historyBatchContracts.js';
-import type { HistoryMutationSnapshot } from './historyMutationSnapshot.js';
+import type { HistoryMutationSnapshot } from './historyIndexedRows.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 import { planMutation } from './planHistoryMutation.js';
 import { OpenReplaceTracker } from './historyReplaceOps.js';

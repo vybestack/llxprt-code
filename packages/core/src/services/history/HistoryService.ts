@@ -28,9 +28,9 @@ import { isCuratedContent } from './historyCuration.js';
 import type { HistoryDensityRows } from './historyDensityRows.js';
 import type { HistoryDumpSnapshot } from './historyDumpSnapshot.js';
 import { estimateMergedAppendTokens } from './historyMergeRows.js';
-import type { HistoryMutationSnapshot } from './historyMutationSnapshot.js';
+import type { HistoryMutationSnapshot } from './historyIndexedRows.js';
 import { RemovalObserverFailure } from './historyRemovalObserverFailure.js';
-import { publishResumeRestoration } from './historyResumeProjection.js';
+import { publishResumeRestoration } from './historyResumeNotifications.js';
 import type {
   HistoryRepair,
   ResumeBoot,

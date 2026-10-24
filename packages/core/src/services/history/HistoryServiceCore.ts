@@ -77,7 +77,7 @@ import {
 } from './historyMutationEffects.js';
 import { HistoryMutationFifo } from './historyMutationFifo.js';
 import { HistoryMutationPublication } from './historyMutationPublication.js';
-import type { HistoryMutationSnapshot } from './historyMutationSnapshot.js';
+import type { HistoryMutationSnapshot } from './historyIndexedRows.js';
 import { SpanWindow } from './historySpanWindow.js';
 import {
   estimateContentTokens as estimateContentTokensImpl,

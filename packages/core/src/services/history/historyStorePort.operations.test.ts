@@ -1,4 +1,4 @@
-import { HistoryJournalStore } from './historyJournalStore.js';
+import { createHistoryStore } from './historyBackend.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import type { RemovedInteriorSpan } from './historyEventTypes.js';
@@ -12,9 +12,9 @@ function row(speaker: 'human' | 'ai', text: string, seq: number): IContent {
   };
 }
 
-describe('HistoryStorePort whole operations on the old store', () => {
+describe('HistoryStorePort whole operations on the journal store', () => {
   it('clear empties the store and publishes the cleared span', async () => {
-    const store = new HistoryJournalStore();
+    const store = createHistoryStore({});
     try {
       store.apply({ kind: 'content', content: row('human', 'one', 3) });
       store.apply({ kind: 'content', content: row('ai', 'two', 4) });
@@ -39,7 +39,7 @@ describe('HistoryStorePort whole operations on the old store', () => {
   });
 
   it('validateAndFix inserts the missing tool response and rollback removes it', async () => {
-    const store = new HistoryJournalStore();
+    const store = createHistoryStore({});
     try {
       store.apply({
         kind: 'content',

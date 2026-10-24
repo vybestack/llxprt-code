@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { createRecorderForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
+import { JournalRecordingService } from '../../../../recording/journalRecordingService.js';
+import { journalSeams } from '../../../../recording/__tests__/support/recordedJournals.js';
 import { expect } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -62,10 +63,14 @@ export async function withNativeBorrowedFixture(
   ) => Promise<void>,
 ): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), 'native-borrowed-'));
-  const recording = createRecorderForTest({
+  const recording = JournalRecordingService.create({
     sessionId: 'borrowed',
     projectHash: 'borrowed',
     chatsDir: root,
+    workspaceDirs: [root],
+    provider: 'test',
+    model: 'test',
+    journal: journalSeams(),
   });
   const owners = new BorrowedCensus();
   const counters = createRowCounters();

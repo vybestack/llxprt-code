@@ -615,7 +615,11 @@ async function resumeOwnerRecording(
     return null;
   }
   // The restored prefix is streamed to the UI; it is never collected here.
-  return { streamRows: () => resumed };
+  return {
+    async *streamRows() {
+      yield* resumed;
+    },
+  };
 }
 
 export async function setupOwnerSessionRecording(

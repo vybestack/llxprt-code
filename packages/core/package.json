@@ -772,11 +772,6 @@
       "bun": "./src/services/history/historyCuration.ts",
       "import": "./dist/src/services/history/historyCuration.js"
     },
-    "./services/history/historyJournalStore.js": {
-      "types": "./dist/src/services/history/historyJournalStore.d.ts",
-      "bun": "./src/services/history/historyJournalStore.ts",
-      "import": "./dist/src/services/history/historyJournalStore.js"
-    },
     "./storage/history-media-ownership.js": {
       "types": "./dist/src/storage/history-media-ownership.d.ts",
       "bun": "./src/storage/history-media-ownership.ts",
@@ -861,11 +856,6 @@
       "types": "./dist/src/services/history/historyIndexedRows.d.ts",
       "bun": "./src/services/history/historyIndexedRows.ts",
       "import": "./dist/src/services/history/historyIndexedRows.js"
-    },
-    "./services/history/historyMutationSnapshot.js": {
-      "types": "./dist/src/services/history/historyMutationSnapshot.d.ts",
-      "bun": "./src/services/history/historyMutationSnapshot.ts",
-      "import": "./dist/src/services/history/historyMutationSnapshot.js"
     },
     "./services/history/provider-request-options.js": {
       "types": "./dist/src/services/history/provider-request-options.d.ts",

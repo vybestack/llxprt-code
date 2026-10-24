@@ -3,12 +3,14 @@ import { closeSync, openSync, rmSync, writeSync, readSync } from 'node:fs';
 import { join } from 'node:path';
 import type { IContent } from './IContent.js';
 import type { OwnedRow } from './historyReplaceOps.js';
-import type { HistoryReadCursor } from '../../recording/synchronousHistoryCursor.js';
 import { RowOriginDictionary } from '../../recording/rowOriginDictionary.js';
 import { createScratchDirSync } from '../../storage/scratch-root.js';
 
 /** The part of a read cursor that names row origins. */
-export type RowOriginSource = Pick<HistoryReadCursor, 'length' | 'originAt'>;
+export interface RowOriginSource {
+  readonly length: number;
+  originAt(index: number): string | undefined;
+}
 
 const ENTRY_BYTES = 4;
 const CHUNK_ENTRIES = 4096;

@@ -1,4 +1,3 @@
-import { HistoryJournalStore } from './historyJournalStore.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -77,156 +76,149 @@ function failingOwner(
   };
 }
 
-describe.each(['old', 'journal'] as const)(
-  'HistoryStorePort.removeTail (%s store)',
-  (backend) => {
-    const directory = useTempDir('history-port-remove-tail-');
-    const open: RemovalStore[] = [];
-    let mediaRoot: string;
-    let media: LocalMediaStore;
-    let owner: HistoryMediaOwnership;
-    let ownership: RowOwnership;
-    let shared: MediaReferenceBlock;
-    let removed: MediaReferenceBlock;
+describe('HistoryStorePort.removeTail (journal store)', () => {
+  const directory = useTempDir('history-port-remove-tail-');
+  const open: RemovalStore[] = [];
+  let mediaRoot: string;
+  let media: LocalMediaStore;
+  let owner: HistoryMediaOwnership;
+  let ownership: RowOwnership;
+  let shared: MediaReferenceBlock;
+  let removed: MediaReferenceBlock;
 
-    const admit = (byte: number): Promise<MediaReferenceBlock> =>
-      media.admit({
-        bytes: new Uint8Array([byte]),
-        mimeType: 'application/octet-stream',
-        semanticMetadata: {},
-      });
-
-    const held = (...refs: MediaReferenceBlock[]): Promise<boolean[]> =>
-      Promise.all(refs.map((ref) => media.hasReservations(ref.contentId)));
-
-    beforeEach(async () => {
-      mediaRoot = await mkdtemp(path.join(tmpdir(), 'history-port-media-'));
-      media = new LocalMediaStore({
-        rootDirectory: mediaRoot,
-        quotaBytes: 4096,
-      });
-      owner = new HistoryMediaOwnership(media);
-      ownership = new RowOwnership();
-      shared = await admit(1);
-      removed = await admit(2);
+  const admit = (byte: number): Promise<MediaReferenceBlock> =>
+    media.admit({
+      bytes: new Uint8Array([byte]),
+      mimeType: 'application/octet-stream',
+      semanticMetadata: {},
     });
 
-    afterEach(async () => {
-      for (const store of open.splice(0)) await store.dispose();
-      await owner.releaseAll();
-      await media.close();
-      await rm(mediaRoot, { recursive: true, force: true });
-    });
+  const held = (...refs: MediaReferenceBlock[]): Promise<boolean[]> =>
+    Promise.all(refs.map((ref) => media.hasReservations(ref.contentId)));
 
-    /** A store holding `rows`, the media owner holding what they reference. */
-    async function opened(rows: readonly IContent[]): Promise<RemovalStore> {
-      const store: RemovalStore =
-        backend === 'old'
-          ? new HistoryJournalStore()
-          : new JournalHistoryStore(
-              await JournalSession.create(
-                path.join(directory(), 'remove-tail.llxj'),
-                { journal: testJournalSeams({}).dependencies },
-              ),
-            );
-      open.push(store);
-      for (const content of rows) store.apply({ kind: 'content', content });
-      await store.waitForDurable();
-      await owner.reconcile([], () => rows);
-      return store;
-    }
-
-    it('removes and returns the last row', async () => {
-      const store = await opened([row('human', 'one', 1), row('ai', 'two', 2)]);
-      const tail = await store.removeTail({});
-      expect(textsOf([tail!])).toStrictEqual(['two']);
-      expect(store.getLength()).toBe(1);
-      expect(textsOf(await rowsOf(store))).toStrictEqual(['one']);
+  beforeEach(async () => {
+    mediaRoot = await mkdtemp(path.join(tmpdir(), 'history-port-media-'));
+    media = new LocalMediaStore({
+      rootDirectory: mediaRoot,
+      quotaBytes: 4096,
     });
+    owner = new HistoryMediaOwnership(media);
+    ownership = new RowOwnership();
+    shared = await admit(1);
+    removed = await admit(2);
+  });
 
-    it('returns undefined for an empty history', async () => {
-      const store = await opened([]);
-      expect(await store.removeTail({})).toBeUndefined();
-      expect(store.getLength()).toBe(0);
-    });
+  afterEach(async () => {
+    for (const store of open.splice(0)) await store.dispose();
+    await owner.releaseAll();
+    await media.close();
+    await rm(mediaRoot, { recursive: true, force: true });
+  });
 
-    it('removes nothing when the match differs and removes the row when it is equal', async () => {
-      const rows = [row('human', 'one', 1), row('ai', 'two', 2)];
-      const store = await opened(rows);
-      expect(
-        await store.removeTail({ match: row('ai', 'other', 2) }),
-      ).toBeUndefined();
-      expect(store.getLength()).toBe(2);
-      expect((await store.removeTail({ match: rows[1] }))?.speaker).toBe('ai');
-      expect(store.getLength()).toBe(1);
-    });
+  /** A store holding `rows`, the media owner holding what they reference. */
+  async function opened(rows: readonly IContent[]): Promise<RemovalStore> {
+    const store: RemovalStore = new JournalHistoryStore(
+      await JournalSession.create(path.join(directory(), 'remove-tail.llxj'), {
+        journal: testJournalSeams({}).dependencies,
+      }),
+    );
+    open.push(store);
+    for (const content of rows) store.apply({ kind: 'content', content });
+    await store.waitForDurable();
+    await owner.reconcile([], () => rows);
+    return store;
+  }
 
-    it('keeps media that an earlier row still references and releases media only the removed row held', async () => {
-      const store = await opened([
-        row('human', 'one', 1, shared),
-        row('ai', 'two', 2, shared, removed),
-      ]);
-      expect(await held(shared, removed)).toStrictEqual([true, true]);
-      await store.removeTail({ owner, ownership });
-      expect(await held(shared, removed)).toStrictEqual([true, false]);
-      expect(textsOf(await rowsOf(store))).toStrictEqual(['one']);
-    });
+  it('removes and returns the last row', async () => {
+    const store = await opened([row('human', 'one', 1), row('ai', 'two', 2)]);
+    const tail = await store.removeTail({});
+    expect(textsOf([tail!])).toStrictEqual(['two']);
+    expect(store.getLength()).toBe(1);
+    expect(textsOf(await rowsOf(store))).toStrictEqual(['one']);
+  });
 
-    it('takes the removal back when the observer fails, restoring rows and media', async () => {
-      const store = await opened([
-        row('human', 'one', 1, shared),
-        row('ai', 'two', 2, removed),
-      ]);
-      const boom = new Error('observer failed');
-      await expect(
-        store.removeTail({
-          owner,
-          ownership,
-          recalculate: () => Promise.reject(new RemovalObserverFailure(boom)),
-        }),
-      ).rejects.toBe(boom);
-      expect(store.getLength()).toBe(2);
-      expect(textsOf(await rowsOf(store))).toStrictEqual(['one', 'two']);
-      expect(await held(shared, removed)).toStrictEqual([true, true]);
-    });
+  it('returns undefined for an empty history', async () => {
+    const store = await opened([]);
+    expect(await store.removeTail({})).toBeUndefined();
+    expect(store.getLength()).toBe(0);
+  });
 
-    it('keeps the removal when the recalculation fails for another reason', async () => {
-      const store = await opened([
-        row('human', 'one', 1),
-        row('ai', 'two', 2, removed),
-      ]);
-      const boom = new Error('recalculation failed');
-      await expect(
-        store.removeTail({
-          owner,
-          recalculate: () => Promise.reject(boom),
-        }),
-      ).rejects.toBe(boom);
-      expect(textsOf(await rowsOf(store))).toStrictEqual(['one']);
-      expect(await held(removed)).toStrictEqual([false]);
-    });
+  it('removes nothing when the match differs and removes the row when it is equal', async () => {
+    const rows = [row('human', 'one', 1), row('ai', 'two', 2)];
+    const store = await opened(rows);
+    expect(
+      await store.removeTail({ match: row('ai', 'other', 2) }),
+    ).toBeUndefined();
+    expect(store.getLength()).toBe(2);
+    expect((await store.removeTail({ match: rows[1] }))?.speaker).toBe('ai');
+    expect(store.getLength()).toBe(1);
+  });
 
-    it('puts the row back when the media publication fails', async () => {
-      const store = await opened([
-        row('human', 'one', 1, shared),
-        row('ai', 'two', 2, removed),
-      ]);
-      const boom = new Error('media publication failed');
-      await expect(
-        store.removeTail({ owner: failingOwner(owner, boom), ownership }),
-      ).rejects.toBe(boom);
-      expect(store.getLength()).toBe(2);
-      expect(textsOf(await rowsOf(store))).toStrictEqual(['one', 'two']);
-      expect(await held(shared, removed)).toStrictEqual([true, true]);
-      // The owner is settled again: a later removal succeeds.
-      await store.removeTail({ owner, ownership });
-      expect(await held(shared, removed)).toStrictEqual([true, false]);
-    });
+  it('keeps media that an earlier row still references and releases media only the removed row held', async () => {
+    const store = await opened([
+      row('human', 'one', 1, shared),
+      row('ai', 'two', 2, shared, removed),
+    ]);
+    expect(await held(shared, removed)).toStrictEqual([true, true]);
+    await store.removeTail({ owner, ownership });
+    expect(await held(shared, removed)).toStrictEqual([true, false]);
+    expect(textsOf(await rowsOf(store))).toStrictEqual(['one']);
+  });
 
-    it('releases the row from ownership accounting when it is done', async () => {
-      const store = await opened([row('human', 'one', 1)]);
-      await store.removeTail({ owner, ownership });
-      expect(ownership.snapshot().liveRows).toBe(0);
-    });
-  },
-);
+  it('takes the removal back when the observer fails, restoring rows and media', async () => {
+    const store = await opened([
+      row('human', 'one', 1, shared),
+      row('ai', 'two', 2, removed),
+    ]);
+    const boom = new Error('observer failed');
+    await expect(
+      store.removeTail({
+        owner,
+        ownership,
+        recalculate: () => Promise.reject(new RemovalObserverFailure(boom)),
+      }),
+    ).rejects.toBe(boom);
+    expect(store.getLength()).toBe(2);
+    expect(textsOf(await rowsOf(store))).toStrictEqual(['one', 'two']);
+    expect(await held(shared, removed)).toStrictEqual([true, true]);
+  });
+
+  it('keeps the removal when the recalculation fails for another reason', async () => {
+    const store = await opened([
+      row('human', 'one', 1),
+      row('ai', 'two', 2, removed),
+    ]);
+    const boom = new Error('recalculation failed');
+    await expect(
+      store.removeTail({
+        owner,
+        recalculate: () => Promise.reject(boom),
+      }),
+    ).rejects.toBe(boom);
+    expect(textsOf(await rowsOf(store))).toStrictEqual(['one']);
+    expect(await held(removed)).toStrictEqual([false]);
+  });
+
+  it('puts the row back when the media publication fails', async () => {
+    const store = await opened([
+      row('human', 'one', 1, shared),
+      row('ai', 'two', 2, removed),
+    ]);
+    const boom = new Error('media publication failed');
+    await expect(
+      store.removeTail({ owner: failingOwner(owner, boom), ownership }),
+    ).rejects.toBe(boom);
+    expect(store.getLength()).toBe(2);
+    expect(textsOf(await rowsOf(store))).toStrictEqual(['one', 'two']);
+    expect(await held(shared, removed)).toStrictEqual([true, true]);
+    // The owner is settled again: a later removal succeeds.
+    await store.removeTail({ owner, ownership });
+    expect(await held(shared, removed)).toStrictEqual([true, false]);
+  });
+
+  it('releases the row from ownership accounting when it is done', async () => {
+    const store = await opened([row('human', 'one', 1)]);
+    await store.removeTail({ owner, ownership });
+    expect(ownership.snapshot().liveRows).toBe(0);
+  });
+});

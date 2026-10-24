@@ -7,7 +7,7 @@ import { getScratchRoot } from '../../storage/scratch-root.js';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
-import { HistoryJournalStore } from './historyJournalStore.js';
+import { JournalHistoryStore } from './journalHistoryStore.js';
 
 type Query = 'recent' | 'tokens';
 type Exit = 'return' | 'break' | 'throw' | 'abort';
@@ -165,8 +165,8 @@ async function verifyBoundedTraversal(size: number): Promise<number> {
     size,
     async (service, ownership, counters) => {
       const eager = spyOn(
-        HistoryJournalStore.prototype,
-        'materializeSynchronously',
+        JournalHistoryStore.prototype,
+        'materialize',
       ).mockImplementation(() => {
         throw new Error('eager history trap');
       });
