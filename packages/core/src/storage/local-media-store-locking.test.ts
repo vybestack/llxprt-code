@@ -446,45 +446,50 @@ describe('local-media-store-locking', () => {
         ).toBe(false);
       });
 
-      it('refuses to release a lock whose inode has an active takeover claim', async () => {
-        const payload = bytes(1, 2, 3);
-        const contentId = `sha256:${createHash('sha256').update(payload).digest('hex')}`;
-        const lockPath = join(tempDirectory(), 'locks', 'store.lock');
-        const claimPath = join(
-          tempDirectory(),
-          'locks',
-          'store.lock.test.takeover',
-        );
-        const store = new LocalMediaStore({
-          rootDirectory: tempDirectory(),
-          quotaBytes: 3,
-        });
+      it.each(['operation', 'store'] satisfies Array<'operation' | 'store'>)(
+        'refuses to finish %s-locked work whose inode has an active takeover claim',
+        async (lockLifetime) => {
+          const payload = bytes(1, 2, 3);
+          const contentId = `sha256:${createHash('sha256').update(payload).digest('hex')}`;
+          const lockPath = join(tempDirectory(), 'locks', 'store.lock');
+          const claimPath = join(
+            tempDirectory(),
+            'locks',
+            'store.lock.test.takeover',
+          );
+          const store = new LocalMediaStore({
+            rootDirectory: tempDirectory(),
+            quotaBytes: 3,
+            lockLifetime,
+          });
 
-        try {
-          await expect(
-            store.admitObjectsTransaction(
-              [
-                {
-                  object: {
-                    contentId,
-                    mimeType: 'image/png',
-                    byteLength: payload.byteLength,
-                    normalizedBase64Length: 4,
+          try {
+            await expect(
+              store.admitObjectsTransaction(
+                [
+                  {
+                    object: {
+                      contentId,
+                      mimeType: 'image/png',
+                      byteLength: payload.byteLength,
+                      normalizedBase64Length: 4,
+                    },
+                    bytes: payload,
                   },
-                  bytes: payload,
+                ],
+                async () => {
+                  await publishLink(lockPath, claimPath);
                 },
-              ],
-              async () => {
-                await publishLink(lockPath, claimPath);
-              },
-            ),
-          ).rejects.toThrow(/ownership changed/i);
-          expect(await Bun.file(lockPath).exists()).toBe(true);
-        } finally {
-          await rm(claimPath, { force: true });
-          await rm(lockPath, { force: true });
-        }
-      });
+              ),
+            ).rejects.toThrow(/ownership changed/i);
+            expect(await Bun.file(lockPath).exists()).toBe(true);
+          } finally {
+            await rm(claimPath, { force: true });
+            await store.close();
+            await rm(lockPath, { force: true });
+          }
+        },
+      );
 
       it('recovers a store lock abandoned by a crashed child process', async () => {
         const crashed = await runChild(

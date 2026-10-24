@@ -181,7 +181,9 @@ export class LocalMediaStorePersistence extends LocalMediaStoreReservations {
         };
       }
       await this.refreshStoreLock(this.heldLock.owner, operation, contentId);
-      return work();
+      const result = await work();
+      await this.refreshStoreLock(this.heldLock.owner, operation, contentId);
+      return result;
     }
     const owner = await this.acquireStoreLock(operation, contentId);
     const heartbeat = this.startStoreLockHeartbeat(owner, operation, contentId);
