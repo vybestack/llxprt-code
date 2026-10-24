@@ -1,12 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
-  assertRowIndex,
   isProviderRequestSource,
   type ProviderRequestSelection,
   type ProviderRequestRows,
 } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
-import { ProviderNormalizationDisk } from '@vybestack/llxprt-code-core/services/history/provider-normalization-disk.js';
 import type { GenerateChatOptions, ProviderToolset } from '../IProvider.js';
 import {
   getRequestSignal,
@@ -51,12 +49,6 @@ export function acquireRequestRows(
   };
 }
 
-/**
- * The row selection behind a leased request stream. Journal producers open
- * their indexed selection directly; unindexed one-shot streams still stage
- * on the lease's scratch disk. The lease owns either selection until close.
- * Throws when `contents` was not handed out by {@link acquireRequestRows}.
- */
 export function stagedRequestRows(
   contents: AsyncIterable<IContent>,
 ): Promise<ProviderRequestRows> {
@@ -72,20 +64,11 @@ export function stagedRequestRows(
 }
 
 class RequestRowsLease {
-  private disk: ProviderNormalizationDisk | undefined;
   private admission: Promise<ProviderRequestSelection> | undefined;
-  private source: AsyncIterator<IContent> | undefined;
-  private length = 0;
-  private exhausted = false;
   private closed = false;
-  private advancing: Promise<void> | undefined;
-  private failure: unknown;
   private readonly readers = new Set<AsyncGenerator<IContent, void, unknown>>();
   readonly contents: AsyncIterable<IContent>;
-  private readonly onAbort = (): void => {
-    this.failure = this.signal?.reason;
-    this.disposeDisk();
-  };
+  private readonly onAbort = (): void => this.dispose();
 
   constructor(
     private input: AsyncIterable<IContent> | undefined,
@@ -104,143 +87,79 @@ class RequestRowsLease {
 
   private assertOpen(): void {
     this.signal?.throwIfAborted();
-    if (this.failure !== undefined) throw this.failure;
     if (this.closed) throw new Error('Provider request rows are closed');
   }
 
-  private openReader(): AsyncGenerator<IContent, void, unknown> {
-    const reader = this.trackReader(() => reader);
+  private openReader(
+    rows?: ProviderRequestRows,
+    signal?: AbortSignal,
+  ): AsyncGenerator<IContent, void, unknown> {
+    const reader = this.trackReader(() => reader, rows, signal);
     this.readers.add(reader);
     return reader;
   }
 
   private async *trackReader(
     reader: () => AsyncGenerator<IContent, void, unknown>,
+    rows?: ProviderRequestRows,
+    signal?: AbortSignal,
   ): AsyncGenerator<IContent, void, unknown> {
     try {
-      yield* this.readRows();
+      this.assertOpen();
+      const selected = rows ?? (await this.staged());
+      for await (const row of selected.openReader(signal ?? this.signal)) {
+        this.assertOpen();
+        yield row;
+      }
     } finally {
       this.readers.delete(reader());
     }
   }
 
-  private async stageNext(): Promise<void> {
-    this.advancing ??= this.advance().finally(() => {
-      this.advancing = undefined;
-    });
-    if (this.signal === undefined) await this.advancing;
-    else await raceWithAbort(this.advancing, this.signal);
-  }
-
   async staged(): Promise<ProviderRequestRows> {
     this.assertOpen();
-    if (this.rows !== undefined) return this.rows;
-    if (this.input !== undefined && isProviderRequestSource(this.input)) {
-      this.admission ??= this.input.openProviderRequest(this.signal);
-      const rows = await this.admission;
-      this.assertOpen();
-      return rows;
-    }
-    while (!this.exhausted) {
-      this.assertOpen();
-      await this.stageNext();
-    }
+    if (this.rows !== undefined) return this.scopedRows(this.rows);
+    if (this.input === undefined || !isProviderRequestSource(this.input))
+      throw new Error(
+        'Provider contents require requestRows or an openProviderRequest source',
+      );
+    this.admission ??= this.input.openProviderRequest(this.signal);
+    const rows = await (this.signal === undefined
+      ? this.admission
+      : raceWithAbort(this.admission, this.signal));
     this.assertOpen();
-    return Object.freeze({
-      count: this.length,
-      openReader: () => this.openReader(),
-      readAt: (index: number, signal?: AbortSignal) =>
-        this.readAt(index, signal),
-    });
+    return this.scopedRows(rows);
   }
 
-  private readAt(index: number, signal?: AbortSignal): IContent {
-    signal?.throwIfAborted();
-    this.assertOpen();
-    assertRowIndex(index, this.length);
-    if (this.disk === undefined)
-      throw new Error('Missing request staging disk');
-    return this.disk.row('ordered', index);
+  private scopedRows(rows: ProviderRequestRows): ProviderRequestRows {
+    return {
+      ...(rows.native === undefined ? {} : { native: rows.native }),
+      ...(rows.callerOwned === true ? { callerOwned: true } : {}),
+      count: rows.count,
+      openReader: (signal) => this.openReader(rows, signal),
+      readAt: (index, signal) => {
+        this.assertOpen();
+        return rows.readAt(index, signal);
+      },
+    };
   }
 
-  private async *readRows(): AsyncGenerator<IContent, void, unknown> {
-    this.assertOpen();
-    if (this.rows !== undefined) {
-      yield* this.rows.openReader(this.signal);
-      return;
-    }
-    if (this.input !== undefined && isProviderRequestSource(this.input)) {
-      yield* (await this.staged()).openReader(this.signal);
-      return;
-    }
-    for (let index = 0; ; index++) {
-      this.assertOpen();
-      if (index === this.length && !this.exhausted) await this.stageNext();
-      this.assertOpen();
-      if (index === this.length) return;
-      if (this.disk === undefined)
-        throw new Error('Missing request staging disk');
-      yield this.disk.row('ordered', index);
-    }
-  }
-
-  private async *readInput(
-    input: AsyncIterable<IContent>,
-  ): AsyncGenerator<IContent> {
-    yield* input;
-  }
-
-  private async advance(): Promise<void> {
-    try {
-      this.assertOpen();
-      if (this.input !== undefined) {
-        this.source = this.readInput(this.input);
-        this.input = undefined;
-        this.disk = new ProviderNormalizationDisk();
-      }
-      if (this.source === undefined)
-        throw new Error('Missing request staging source');
-      const next = await this.source.next();
-      this.assertOpen();
-      if (next.done === true) {
-        this.exhausted = true;
-        this.source = undefined;
-        return;
-      }
-      if (this.disk === undefined)
-        throw new Error('Missing request staging disk');
-      this.disk.append('ordered', next.value);
-      this.length++;
-    } catch (error) {
-      this.failure = error;
-      throw error;
-    }
-  }
-
-  private disposeDisk(): void {
+  private dispose(): void {
     this.closed = true;
     this.input = undefined;
     this.signal?.removeEventListener('abort', this.onAbort);
-    this.disk?.close();
-    this.disk = undefined;
   }
 
   async close(): Promise<void> {
-    this.disposeDisk();
+    this.dispose();
     try {
       for (const reader of this.readers) await reader.return();
     } finally {
       this.readers.clear();
-      const source = this.source;
-      this.source = undefined;
-      try {
-        await source?.return?.();
-      } finally {
-        await this.admission?.then(
-          (rows) => rows.close(),
-          () => undefined,
-        );
-      }
+      await this.admission?.then(
+        (rows) => rows.close(),
+        () => undefined,
+      );
     }
   }
 }

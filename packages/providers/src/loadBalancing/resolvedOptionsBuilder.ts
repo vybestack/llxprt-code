@@ -22,15 +22,15 @@ import type {
 } from '../LoadBalancingProvider.js';
 import { isResolvedSubProfile } from '../LoadBalancingProvider.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
-import { replayableContents } from '../utils/collectContents.js';
+import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 
 export function normalizeLoadBalancerOptions(
-  options: GenerateChatOptions,
+  options: Partial<GenerateChatOptions>,
 ): GenerateChatOptions {
-  const runtimeOptions: Partial<GenerateChatOptions> = options;
-  return runtimeOptions.contents === undefined
-    ? { ...options, contents: replayableContents([]) }
-    : options;
+  return {
+    ...options,
+    contents: options.contents ?? callerOwnedRawProviderSource([]),
+  };
 }
 
 export interface OptionsBuildContext {

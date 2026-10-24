@@ -10,20 +10,15 @@ export type ProviderRowsOptions = Pick<
   GenerateChatOptions,
   'requestRows' | 'invocation' | 'metadata'
 > & {
-  /**
-   * A one-shot stream handed out by `acquireRequestRows`, or the collected
-   * array of an already normalized call, which has no rows to offer unless it
-   * carries `requestRows`.
-   */
+  /** A leased source, or a normalized call carrying an explicit selection. */
   readonly contents: AsyncIterable<IContent> | readonly IContent[];
 };
 
 /**
  * The call's rows as a repeatable, countable selection with random access, so
  * a transport never needs a history array. A call with `requestRows` uses that
- * selection. Any other call uses the disk copy that `acquireRequestRows` staged
- * for its one-shot `contents`; that copy is completed here, one row in memory
- * at a time. A stream that did not come from `acquireRequestRows` is an error.
+ * selection. Otherwise `acquireRequestRows` opens the producer's repeatable
+ * source. Bare unindexed streams are rejected without staging them.
  *
  * Every reader checks the rows it yields against `count` and fails with
  * "Provider request rows count changed" when a pass sees more or fewer.

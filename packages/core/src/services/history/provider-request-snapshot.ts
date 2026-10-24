@@ -59,6 +59,19 @@ export function isProviderRequestSource(
 export function inMemoryRequestSelection(
   rows: readonly IContent[],
 ): ProviderRequestSelection {
+  let boundaryIdentity: object | undefined;
+  for (const row of rows) {
+    const boundary = row.metadata?.semanticMediaPurgeBoundary;
+    if (boundary === undefined) continue;
+    if (
+      boundaryIdentity !== undefined &&
+      boundaryIdentity !== boundary.boundaryId
+    )
+      throw new Error(
+        'Provider request has conflicting semantic purge boundaries',
+      );
+    boundaryIdentity = boundary.boundaryId;
+  }
   return {
     count: rows.length,
     async *openReader(signal) {

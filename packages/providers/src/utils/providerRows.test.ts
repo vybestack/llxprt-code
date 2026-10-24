@@ -9,6 +9,7 @@ import {
 import { textRow } from '../__tests__/requestRowsTestSupport.js';
 import { providerRowsOf } from './providerRows.js';
 import { acquireRequestRows } from './requestRowsLease.js';
+import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 
 function rowsOf(size: number): IContent[] {
   return Array.from({ length: size }, (_, i) => textRow(`row ${i}`));
@@ -112,35 +113,34 @@ describe('providerRowsOf with a request selection', () => {
   });
 });
 
-describe('providerRowsOf with the staged disk reader', () => {
-  it('stages a one-shot stream once and serves repeatable passes and random access', async () => {
-    const pulled = { count: 0 };
+describe('providerRowsOf with an admitted caller-owned source', () => {
+  it('serves repeatable passes and random access without copying caller rows', async () => {
+    const input = rowsOf(40);
     const scope = acquireRequestRows({
-      contents: oneShot(rowsOf(40), pulled),
+      contents: callerOwnedRawProviderSource(input),
     });
     try {
       const rows = await providerRowsOf(scope.options);
       expect(rows.count).toBe(40);
-      expect(pulled.count).toBe(40);
-      const expected = rowsOf(40).map((_, i) => `row ${i}`);
+      expect(rows.callerOwned).toBe(true);
+      const expected = input.map((_, i) => `row ${i}`);
       expect(await read(rows)).toStrictEqual(expected);
       expect(await read(rows)).toStrictEqual(expected);
       expect(rows.readAt(37)).toStrictEqual(textRow('row 37'));
       expect(rows.readAt(0)).toStrictEqual(textRow('row 0'));
-      expect(pulled.count).toBe(40);
+      expect(rows.readAt(37)).toBe(input[37]);
       expect(() => rows.readAt(40)).toThrow(RangeError);
       const again = await providerRowsOf(scope.options);
       expect(again.count).toBe(40);
-      expect(pulled.count).toBe(40);
+      expect(again.readAt(0)).toBe(input[0]);
     } finally {
       await scope.close();
     }
   });
 
-  it('completes the staging when some rows were already read by another reader', async () => {
-    const pulled = { count: 0 };
+  it('serves the full source when some rows were already read by another reader', async () => {
     const scope = acquireRequestRows({
-      contents: oneShot(rowsOf(6), pulled),
+      contents: callerOwnedRawProviderSource(rowsOf(6)),
     });
     try {
       const early = scope.options.contents[Symbol.asyncIterator]();
@@ -155,8 +155,10 @@ describe('providerRowsOf with the staged disk reader', () => {
     }
   });
 
-  it('stages an empty stream as zero rows', async () => {
-    const scope = acquireRequestRows({ contents: oneShot([], { count: 0 }) });
+  it('admits an empty caller source as zero rows', async () => {
+    const scope = acquireRequestRows({
+      contents: callerOwnedRawProviderSource([]),
+    });
     try {
       const rows = await providerRowsOf(scope.options);
       expect(rows.count).toBe(0);
@@ -183,7 +185,7 @@ describe('providerRowsOf with the staged disk reader', () => {
 
   it('refuses rows after the lease is closed', async () => {
     const scope = acquireRequestRows({
-      contents: oneShot(rowsOf(3), { count: 0 }),
+      contents: callerOwnedRawProviderSource(rowsOf(3)),
     });
     const rows = await providerRowsOf(scope.options);
     await scope.close();
@@ -234,28 +236,34 @@ describe('providerRowsOf cancellation', () => {
     expect(() => rows.readAt(0)).toThrow('request cancelled');
   });
 
-  it('aborts staging of a one-shot stream mid-drain', async () => {
+  it('aborts reading of an admitted source mid-drain', async () => {
     const controller = new AbortController();
     const pulled = { count: 0 };
+    const selection = inMemoryRequestSelection(rowsOf(1000));
     const scope = acquireRequestRows(
       {
-        contents: (async function* () {
-          for (const row of rowsOf(1000)) {
-            pulled.count++;
-            if (pulled.count === 5)
-              controller.abort(new Error('drain cancelled'));
-            yield row;
-          }
-        })(),
+        contents: callerOwnedRawProviderSource([]),
+        requestRows: {
+          ...selection,
+          async *openReader() {
+            for await (const row of selection.openReader()) {
+              pulled.count++;
+              if (pulled.count === 5)
+                controller.abort(new Error('drain cancelled'));
+              yield row;
+            }
+          },
+        },
       },
       undefined,
       controller.signal,
     );
     try {
-      await expect(providerRowsOf(scope.options)).rejects.toThrow(
+      await expect(read(await providerRowsOf(scope.options))).rejects.toThrow(
         /Aborted|drain cancelled/,
       );
       expect(pulled.count).toBeLessThan(1000);
+      expect(pulled.count).toBe(5);
     } finally {
       await scope.close();
     }

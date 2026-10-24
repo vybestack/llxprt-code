@@ -1,4 +1,5 @@
 import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
+import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 const fixtureOwners = installRuntimeTestOwners();
 /**
  * @license
@@ -314,7 +315,7 @@ describe('load-balancer peek keeps the delegate source alive (issue #854)', () =
 
     const chunks: IContent[] = [];
     for await (const chunk of lb.generateChatCompletion({
-      contents: replayableContents(rows),
+      contents: callerOwnedRawProviderSource(rows),
       promptEnvelopeTransportToken: peeked.transportToken,
     })) {
       chunks.push(chunk);

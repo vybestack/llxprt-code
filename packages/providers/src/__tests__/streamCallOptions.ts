@@ -20,7 +20,7 @@ import {
   createProviderCallOptions,
   type ProviderCallOptionsInit,
 } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
-import { replayableContents } from '../utils/collectContents.js';
+import { inMemoryRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 
 export function streamCallOptions(init: ProviderCallOptionsInit): Omit<
   ReturnType<typeof createProviderCallOptions>,
@@ -29,11 +29,11 @@ export function streamCallOptions(init: ProviderCallOptionsInit): Omit<
   contents: AsyncIterable<IContent>;
 } {
   const options = createProviderCallOptions(init);
-  return {
-    ...options,
-    contents:
-      Symbol.asyncIterator in options.contents
-        ? options.contents
-        : replayableContents(options.contents),
+  const contents = init.contents ?? [];
+  if (Symbol.asyncIterator in contents) return { ...options, contents };
+  const source = {
+    openProviderRequest: async () => inMemoryRequestSelection(contents),
+    [Symbol.asyncIterator]: () => options.contents[Symbol.asyncIterator](),
   };
+  return { ...options, contents: source };
 }
