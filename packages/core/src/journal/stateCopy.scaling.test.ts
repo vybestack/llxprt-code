@@ -12,7 +12,9 @@ import {
 } from './__tests__/support/copyFixtures.js';
 import { useTempDir } from './__tests__/support/useTempDir.js';
 import { compactionCopy } from './versionCopy.js';
-import { accessOf } from './__tests__/support/pinnedAccess.js';
+import { trackPinnedAccess } from './__tests__/support/pinnedAccess.js';
+
+const accessOf = trackPinnedAccess();
 
 const FEW = 100;
 const MANY = 400;

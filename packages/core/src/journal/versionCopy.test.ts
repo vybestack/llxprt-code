@@ -23,7 +23,9 @@ import {
 } from './__tests__/support/storeFixtures.js';
 import { snapshotStore } from './__tests__/support/storeSnapshot.js';
 import { useTempDir } from './__tests__/support/useTempDir.js';
-import { accessOf } from './__tests__/support/pinnedAccess.js';
+import { trackPinnedAccess } from './__tests__/support/pinnedAccess.js';
+
+const accessOf = trackPinnedAccess();
 
 const IDS = ['a', 'b', 'c', 'd', 'e', 'c1-0', 'c1-1', 'c1-2', 'c1-3'];
 

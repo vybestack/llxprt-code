@@ -19,7 +19,9 @@ import { pair, realMapping } from './__tests__/support/mistralFixtures.js';
 import { OffsetAudit } from './__tests__/support/offsetAudit.js';
 import { snapshotStore } from './__tests__/support/storeSnapshot.js';
 import { useTempDir } from './__tests__/support/useTempDir.js';
-import { accessOf } from './__tests__/support/pinnedAccess.js';
+import { trackPinnedAccess } from './__tests__/support/pinnedAccess.js';
+
+const accessOf = trackPinnedAccess();
 
 const SOURCE_ID = 'toolu_alpha-1';
 const UTF8 = new TextEncoder();

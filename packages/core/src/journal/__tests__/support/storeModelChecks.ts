@@ -148,7 +148,7 @@ async function expectListMatches(
       ).toStrictEqual(position);
     }
   } finally {
-    queries.close();
+    await queries.close();
   }
 }
 
@@ -162,7 +162,7 @@ async function expectFactsMatch(
   try {
     for (const rawId of ids) await expectIdMatches(queries, naive, rawId);
   } finally {
-    queries.close();
+    await queries.close();
   }
   for (const rawId of ids) {
     for (const family of FAMILIES) {
@@ -216,7 +216,7 @@ async function expectExceptionsMatch(
     }
     expect(await queries.exceptionHash(exceptions.length)).toBeUndefined();
   } finally {
-    queries.close();
+    await queries.close();
   }
 }
 

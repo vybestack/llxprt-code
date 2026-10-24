@@ -167,7 +167,7 @@ export async function factSnapshot(
     }
     return out;
   } finally {
-    queries.close();
+    await queries.close();
   }
 }
 

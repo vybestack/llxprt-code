@@ -21,7 +21,7 @@ import {
   mapContentsAt,
   populatedSource,
 } from './copyFixtures.js';
-import { accessOf } from './pinnedAccess.js';
+import { withPinnedAccess } from './pinnedAccess.js';
 
 const MIB = 1024 * 1024;
 
@@ -231,7 +231,7 @@ export class PerVersionBuilders {
         owners,
       });
     } finally {
-      read.close();
+      await read.close();
     }
   }
 }
@@ -243,11 +243,13 @@ export async function warmCompaction(
 ): Promise<CopyResult> {
   const current = source.published;
   if (current === undefined) throw new Error('nothing is published');
-  return compactionCopy(
-    await accessOf(source),
-    current,
-    target,
-    copyDepsWithoutEventLog(),
+  return withPinnedAccess(async (accessOf) =>
+    compactionCopy(
+      await accessOf(source),
+      current,
+      target,
+      copyDepsWithoutEventLog(),
+    ),
   );
 }
 
@@ -302,12 +304,14 @@ export async function measureCompaction(
       samples += 1;
     }
   };
-  const result = await compactionCopy(
-    await accessOf(source),
-    current,
-    target,
-    copyDepsWithoutEventLog(),
-    observer,
+  const result = await withPinnedAccess(async (accessOf) =>
+    compactionCopy(
+      await accessOf(source),
+      current,
+      target,
+      copyDepsWithoutEventLog(),
+      observer,
+    ),
   );
   const finalGrowth = (await medianSettledHeap('after the copy')) - before;
   const readings = [...series, finalGrowth];

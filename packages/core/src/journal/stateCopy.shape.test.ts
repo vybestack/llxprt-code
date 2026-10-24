@@ -16,7 +16,9 @@ import { IdTrieReader } from './idTrieReader.js';
 import type { JournalStore } from './journalStore.js';
 import type { RecordAccess } from './recordAccess.js';
 import { cloneVersion, compactionCopy } from './versionCopy.js';
-import { accessOf } from './__tests__/support/pinnedAccess.js';
+import { trackPinnedAccess } from './__tests__/support/pinnedAccess.js';
+
+const accessOf = trackPinnedAccess();
 
 const CHECKPOINTS = 60;
 const DROPPED_PREFIXES = ['ckpt:', 'mirror:', 'rel:'];

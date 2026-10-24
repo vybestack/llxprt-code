@@ -30,7 +30,9 @@ import {
 } from './__tests__/support/storeFixtures.js';
 import { snapshotStore } from './__tests__/support/storeSnapshot.js';
 import { useTempDir } from './__tests__/support/useTempDir.js';
-import { accessOf } from './__tests__/support/pinnedAccess.js';
+import { trackPinnedAccess } from './__tests__/support/pinnedAccess.js';
+
+const accessOf = trackPinnedAccess();
 
 const MIB = 1024 * 1024;
 const IDS = ['a', 'b', 'c', 'd', 'e', 'c1-0', 'c2-0'];

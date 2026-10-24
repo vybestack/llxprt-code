@@ -12,7 +12,9 @@ import {
 } from './__tests__/support/storeFixtures.js';
 import { OffsetAudit } from './__tests__/support/offsetAudit.js';
 import { useTempDir } from './__tests__/support/useTempDir.js';
-import { accessOf } from './__tests__/support/pinnedAccess.js';
+import { trackPinnedAccess } from './__tests__/support/pinnedAccess.js';
+
+const accessOf = trackPinnedAccess();
 
 function published(store: JournalStore) {
   const version = store.published;

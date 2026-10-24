@@ -6,7 +6,7 @@ import { resyncEdits } from '../../mirrorApply.js';
 import type { RowDraft } from '../../rowDraft.js';
 import { draftRow, storeDeps } from './storeFixtures.js';
 import { settledHeap } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
-import { accessOf } from './pinnedAccess.js';
+import { withPinnedAccess } from './pinnedAccess.js';
 
 export const SEED_ROWS = 100_000;
 /** Rows are owned by 0 to 4 in turn; the mirror of owner 2 takes the rows of 2 and of 0. */
@@ -78,42 +78,44 @@ export async function seedWithProbe(
   mirrorFile: string,
   observe: SeedObserver,
 ): Promise<SeedRun> {
-  const version = primary.published;
-  if (version === undefined) throw new Error('nothing is published');
-  const mirror = await JournalStore.create(mirrorFile, storeDeps());
-  // One unwatched copy first, so the caches and compiled code of the copy are
-  // warm and the baseline is not taken before they fill.
-  const warm = await JournalStore.create(`${mirrorFile}.warm`, storeDeps());
-  await warm.commit(
-    resyncEdits(
-      { store: warm, owner: MIRROR_OWNER },
+  return withPinnedAccess(async (accessOf) => {
+    const version = primary.published;
+    if (version === undefined) throw new Error('nothing is published');
+    const mirror = await JournalStore.create(mirrorFile, storeDeps());
+    // One unwatched copy first, so the caches and compiled code of the copy are
+    // warm and the baseline is not taken before they fill.
+    const warm = await JournalStore.create(`${mirrorFile}.warm`, storeDeps());
+    await warm.commit(
+      resyncEdits(
+        { store: warm, owner: MIRROR_OWNER },
+        { version, access: await accessOf(primary) },
+      ),
+    );
+    await warm.close();
+    const baseline = await settledHeap();
+    const series: number[] = [];
+    const sample = async (): Promise<void> => {
+      series.push((await settledHeap()) - baseline);
+    };
+    const every = Math.floor(acceptedCount() / SAMPLES);
+    let seen = 0;
+    const [edit] = resyncEdits(
+      { store: mirror, owner: MIRROR_OWNER },
       { version, access: await accessOf(primary) },
-    ),
-  );
-  await warm.close();
-  const baseline = await settledHeap();
-  const series: number[] = [];
-  const sample = async (): Promise<void> => {
-    series.push((await settledHeap()) - baseline);
-  };
-  const every = Math.floor(acceptedCount() / SAMPLES);
-  let seen = 0;
-  const [edit] = resyncEdits(
-    { store: mirror, owner: MIRROR_OWNER },
-    { version, access: await accessOf(primary) },
-  );
-  if (edit.kind !== 'adoptAll') throw new Error('a seed adopts all rows');
-  const source = edit.rows;
-  async function* watched(): AsyncGenerator<SourceRow> {
-    for await (const row of source) {
-      seen += 1;
-      observe(row, seen);
-      if (seen % every === 0) await sample();
-      yield row;
+    );
+    if (edit.kind !== 'adoptAll') throw new Error('a seed adopts all rows');
+    const source = edit.rows;
+    async function* watched(): AsyncGenerator<SourceRow> {
+      for await (const row of source) {
+        seen += 1;
+        observe(row, seen);
+        if (seen % every === 0) await sample();
+        yield row;
+      }
     }
-  }
-  const watchedEdit: VersionEdit = { ...edit, rows: watched() };
-  await mirror.commit([watchedEdit]);
-  await sample();
-  return { mirror, growth: Math.max(...series), series, accepted: seen };
+    const watchedEdit: VersionEdit = { ...edit, rows: watched() };
+    await mirror.commit([watchedEdit]);
+    await sample();
+    return { mirror, growth: Math.max(...series), series, accepted: seen };
+  });
 }
