@@ -65,7 +65,7 @@ async function observeFailure(
         result = await rejectedValue(prepared.execute().then(() => {}));
       } finally {
         restore();
-        prepared.close();
+        await prepared.close();
       }
       expect(result).toBe(failure);
       expect(await detachedDigest(history.streamRawHistory())).toStrictEqual(

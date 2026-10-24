@@ -108,7 +108,7 @@ export async function prepareValueRoute(
 ): Promise<{
   execute(): Promise<unknown>;
   rollback(): Promise<void>;
-  close(): void;
+  close(): void | Promise<void>;
 }> {
   if (route === 'purge') {
     const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {
