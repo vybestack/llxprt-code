@@ -5,6 +5,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { historyOriginId } from '@vybestack/llxprt-code-core/services/history/historyOriginId.js';
+import { JournalHistoryStore } from '@vybestack/llxprt-code-core/services/history/journalHistoryStore.js';
 import { describe, expect, it } from 'bun:test';
 import {
   blocks,
@@ -112,8 +113,20 @@ describe('actual native CLI prefix original owners and owner-filtered mirrors', 
         },
         [],
         async (history) => {
-          for (let index = 0; index < size; index++)
-            history.add(row(index), undefined, index % 2 === 0 ? a : b);
+          // Seed one batch so setup does not leave thousands of obsolete versions
+          // whose automatic compaction would run during the measured commands.
+          await history.addBatch(
+            Array.from({ length: size }, (_, index) => row(index)),
+          );
+          const store = history.detachedValues.host().journal;
+          if (!(store instanceof JournalHistoryStore))
+            throw new Error('Expected a native journal history store');
+          store.changeOwnersOf(
+            Array.from({ length: size }, (_, position) => ({
+              position,
+              origin: historyOriginId(position % 2 === 0 ? a : b),
+            })),
+          );
           await history.waitForCommit();
         },
       );
