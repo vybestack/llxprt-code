@@ -9,10 +9,10 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRecorderForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ProviderCuratedStreamOptions } from '@vybestack/llxprt-code-core/services/history/provider-curated-stream.js';
+import type { ProviderCuratedStreamOptions } from '@vybestack/llxprt-code-core/services/history/provider-request-options.js';
 import type { ProviderRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
-import type { HistoryStorePort } from '@vybestack/llxprt-code-core/services/history/historyStorePort.js';
+import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 import {
   HookEventName,
   HookType,
@@ -65,33 +65,23 @@ class ObservedDiskHistory extends HistoryService {
   closedReaders = 0;
   abortDuringRead: AbortController | undefined;
 
-  private preparing = false;
-
-  constructor(options: ConstructorParameters<typeof HistoryService>[0]) {
-    super(options);
-    const stream = this.journal.streamRows.bind(this.journal);
-    this.journal.streamRows = (...args) => this.observedRows(stream, args);
-  }
-
   private async *observedRows(
-    stream: HistoryStorePort['streamRows'],
-    args: Parameters<HistoryStorePort['streamRows']>,
+    snapshot: ProviderRequestSnapshot,
+    signal?: AbortSignal,
   ): AsyncGenerator<IContent, void, unknown> {
-    const observed = this.preparing;
-    if (observed) this.activeReaders += 1;
+    this.activeReaders += 1;
+    let index = 0;
     try {
-      for await (const row of stream(...args)) {
-        if (observed) {
+      for await (const row of snapshot.openReader(signal)) {
+        if (!snapshot.isPending(index++)) {
           this.pulled += 1;
           this.abortDuringRead?.abort(new Error('disk request aborted'));
         }
         yield row;
       }
     } finally {
-      if (observed) {
-        this.activeReaders -= 1;
-        this.closedReaders += 1;
-      }
+      this.activeReaders -= 1;
+      this.closedReaders += 1;
     }
   }
 
@@ -100,16 +90,21 @@ class ObservedDiskHistory extends HistoryService {
     options: ProviderCuratedStreamOptions = {},
     historyOverride?: Iterable<IContent> | AsyncIterable<IContent>,
   ): Promise<ProviderRequestSnapshot> {
-    this.preparing = true;
-    try {
-      return await super.prepareCuratedForProviderSnapshot(
-        tailContents,
-        options,
-        historyOverride,
-      );
-    } finally {
-      this.preparing = false;
-    }
+    const snapshot = await super.prepareCuratedForProviderSnapshot(
+      tailContents,
+      options,
+      historyOverride,
+    );
+    return {
+      native: snapshot.native,
+      callerOwned: snapshot.callerOwned,
+      count: snapshot.count,
+      pending: snapshot.pending,
+      isPending: (index) => snapshot.isPending(index),
+      readAt: (index, signal) => snapshot.readAt(index, signal),
+      openReader: (signal) => this.observedRows(snapshot, signal),
+      close: () => snapshot.close(),
+    };
   }
 }
 
@@ -355,11 +350,7 @@ async function independentEstimate(fixture: Fixture): Promise<number> {
     historyRow(index),
   );
   rows.push({ speaker: 'human', blocks: [{ type: 'text', text: 'pending' }] });
-  const contents: AsyncIterable<IContent> = {
-    async *[Symbol.asyncIterator](): AsyncGenerator<IContent> {
-      yield* rows;
-    },
-  };
+  const contents = callerOwnedRawProviderSource(rows);
   const projection = await fixture.provider.projectPromptEnvelope({
     contents,
     invocation: captureProviderInvocation(
@@ -438,7 +429,7 @@ describe('issue854 real StreamProcessor Responses BODY demand', () => {
       );
       try {
         expect(snapshot.count).toBe(rowCount);
-        expect(fixture.history.pulled).toBe(rowCount);
+        expect(fixture.history.pulled).toBe(0);
         expect(ownership.snapshot().acquisitions).toBe(0);
         const reader = snapshot.openReader();
         expect(ownership.snapshot().acquisitions).toBe(0);
@@ -449,7 +440,7 @@ describe('issue854 real StreamProcessor Responses BODY demand', () => {
         expect(ownership.snapshot().acquisitions).toBe(1);
         await reader.return();
         expect(ownership.snapshot().liveRows).toBe(0);
-        expect(fixture.history.pulled).toBe(rowCount);
+        expect(fixture.history.pulled).toBe(1);
         const replay = snapshot.openReader();
         const next = await replay.next();
         if (next.done === true) throw new Error('Missing replay row');
@@ -457,8 +448,9 @@ describe('issue854 real StreamProcessor Responses BODY demand', () => {
         expect(next.value).not.toBe(first.value);
         await replay.return();
         expect(ownership.snapshot().liveRows).toBe(0);
+        expect(fixture.history.pulled).toBe(2);
       } finally {
-        snapshot.close();
+        await snapshot.close();
       }
     } finally {
       await fixture.dispose();
@@ -483,9 +475,6 @@ describe('issue854 real StreamProcessor Responses BODY demand', () => {
       expect(
         fixture.processor.getPromptEnvelopeEstimate()?.estimatedPromptTokens,
       ).toBe(await independentEstimate(fixture));
-      // Curation reads the journal once, before the provider call, into the
-      // request snapshot. BODY streaming then reads that snapshot, so the
-      // journal reader is closed and never touched again.
       expect(observation.beforeBody).toBe(rowCount);
       expect(observation.afterFirstPull).toBe(rowCount);
       expect(fixture.history.pulled).toBe(rowCount);
