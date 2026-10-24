@@ -8,7 +8,7 @@ import {
   createCorpus,
   type Corpus,
 } from '../__tests__/support/wireBodyCorpus.js';
-import { activeWireBodySpoolCount } from '../utils/wire-body-spool.js';
+import { observeNativeBodies } from '../__tests__/support/native-body-lifecycle.js';
 import type { ChatBodyOptions } from './OpenAIChatBodyBuilder.js';
 import { prepareNativePlainRequest } from './native-chat-body.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
@@ -33,6 +33,8 @@ interface Settings {
   readonly strip: StripPolicy;
   readonly include: boolean;
 }
+
+const liveBodies = observeNativeBodies();
 
 const FORMATS: ReadonlyArray<ToolFormat | undefined> = [
   undefined,
@@ -181,7 +183,7 @@ function scratchNames(): Set<string> {
   return new Set(readdirSync(getScratchRoot()));
 }
 
-describe('chat continuation request as a second spool', () => {
+describe('native chat continuation request', () => {
   it('equals the array continuation for every setting over seeded histories', async () => {
     const differences: string[] = [];
     for (let seed = 1; seed <= 12; seed++) {
@@ -286,16 +288,16 @@ describe('chat continuation request as a second spool', () => {
     expect(body['stream']).toBe(true);
   });
 
-  it('removes its spool and tool id index on release, and when the rows fail', async () => {
+  it('releases its native body and mapping when the rows fail', async () => {
     const before = scratchNames();
-    const spools = activeWireBodySpoolCount();
+    const spools = liveBodies();
     await continuationBytes(seededHistory(3), {
       toolFormat: 'kimi',
       strip: 'none',
       include: true,
     });
     expect(scratchNames()).toStrictEqual(before);
-    expect(activeWireBodySpoolCount()).toBe(spools);
+    expect(liveBodies()).toBe(spools);
 
     let fail = false;
     const source = rowsSelection(
@@ -344,7 +346,11 @@ describe('chat continuation request as a second spool', () => {
       await request.release();
     }
     expect(scratchNames()).toStrictEqual(before);
-    expect(activeWireBodySpoolCount()).toBe(spools);
+    expect(liveBodies()).toBe(spools);
+    expect(() => request.spool.openStream()).toThrow('disposed');
+    await expect(request.continuation.build(TOOL_CALLS)).rejects.toThrow(
+      'released',
+    );
   });
 
   describe('golden corpus histories', () => {
@@ -356,7 +362,7 @@ describe('chat continuation request as a second spool', () => {
       await corpus.dispose();
     });
 
-    it('is sent through the provider and every spool is gone afterwards', async () => {
+    it('is sent through the provider and every native body is released afterwards', async () => {
       const history = corpus.histories.find(
         (candidate) => candidate.id === 'tool-calls-with-results',
       );
@@ -364,7 +370,7 @@ describe('chat continuation request as a second spool', () => {
       for (const route of CHAT_ROUTES) {
         for (const source of ['stream', 'rows'] as const) {
           const before = scratchNames();
-          const spools = activeWireBodySpoolCount();
+          const spools = liveBodies();
           const sent = await captureContinuation(
             route,
             history!,
@@ -374,7 +380,7 @@ describe('chat continuation request as a second spool', () => {
           expect(sent.continuation.contentLength).toBe('present');
           expect(sent.continuation.length).toBeGreaterThan(sent.first.length);
           expect(scratchNames()).toStrictEqual(before);
-          expect(activeWireBodySpoolCount()).toBe(spools);
+          expect(liveBodies()).toBe(spools);
         }
       }
     });

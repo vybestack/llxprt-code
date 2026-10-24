@@ -10,7 +10,9 @@ import {
   executeApiRequest,
   type ApiExecutionOptions,
 } from './OpenAIApiExecution.js';
-import { WireBodySpool } from '../utils/wire-body-spool.js';
+import { NativeChatBody } from './native-chat-body.js';
+import { nativeDumpValue } from '../utils/native-dump-body.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { StreamedDumpBody } from '../utils/dumpSDKContext.js';
 import {
   createOpenAIRawPostTestAdapter,
@@ -46,14 +48,17 @@ const requestBody = {
   messages: [{ role: 'user', content: 'Hello' }],
 };
 
-const spools: WireBodySpool[] = [];
+const bodies: NativeChatBody[] = [];
 
-function spoolOf(body: unknown): WireBodySpool {
-  const spool = WireBodySpool.create('openai-chat-test');
-  spools.push(spool);
-  spool.append(JSON.stringify(body));
-  spool.seal();
-  return spool;
+function bodyOf(body: unknown): NativeChatBody {
+  const prepared = new NativeChatBody(
+    async function* () {
+      yield* nativeDumpValue(body);
+    },
+    Buffer.byteLength(JSON.stringify(body)),
+  );
+  bodies.push(prepared);
+  return prepared;
 }
 
 const dumpBody = new StreamedDumpBody(async function* () {
@@ -65,7 +70,7 @@ function createBaseOptions(
 ): ApiExecutionOptions {
   return {
     client: createMockClient({ id: 'chatcmpl-test', choices: [] }),
-    spool: spoolOf(requestBody),
+    spool: bodyOf(requestBody),
     dumpBody,
     abortSignal: undefined,
     mergedHeaders: undefined,
@@ -74,9 +79,7 @@ function createBaseOptions(
     model: 'gpt-4o',
     formattedTools: undefined,
     streamingEnabled: false,
-    logger: { error: vi.fn(), debug: vi.fn() } as unknown as Parameters<
-      typeof executeApiRequest
-    >[0]['logger'],
+    logger: new DebugLogger('llxprt:separate-dump-test'),
     getBaseURL: () => 'https://api.openai.com/v1',
     ...overrides,
   };
@@ -110,9 +113,9 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
     dumpSDKContextSpy.mockResolvedValue('legacy-dump.json');
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.restoreAllMocks();
-    for (const spool of spools.splice(0)) spool.dispose();
+    for (const body of bodies.splice(0)) await body.dispose();
   });
 
   it('should dump request before API call and response after in on mode (non-streaming)', async () => {
@@ -544,7 +547,7 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
 
     expect(create).toHaveBeenCalledOnce();
     expect(dumpSDKResponseContextSpy).not.toHaveBeenCalled();
-    expect(opts.logger.debug).toHaveBeenCalled();
+    expect(dumpSDKRequestContextSpy).toHaveBeenCalledOnce();
   });
 
   it('should dump streaming iteration errors in error mode after passing through chunks', async () => {

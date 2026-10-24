@@ -24,7 +24,7 @@ describe('native plain Chat journal-backed 1/8 MiB send and estimate', () => {
       expect(round.nativeRoute).toMatchObject({
         streams: 1,
         estimates: 1,
-        spools: 0,
+        fileCreates: 0,
         estimatorFiles: 0,
       });
       expect(round.nativeRoute?.tokens).toBeGreaterThan(0);

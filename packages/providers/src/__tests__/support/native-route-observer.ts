@@ -2,12 +2,12 @@
 import { NativeChatBody } from '../../openai/native-chat-body.js';
 import { NativeChatEstimateProjection } from '../../openai/native-chat-estimate.js';
 import { PromptEstimatorFiles } from '../../runtime/prompt-estimator-files.js';
-import { WireBodySpool } from '../../utils/wire-body-spool.js';
+import { observeNativeFileCreates } from './native-file-observer.js';
 
 export interface NativeRouteCounts {
   readonly streams: number;
   readonly estimates: number;
-  readonly spools: number;
+  readonly fileCreates: number;
   readonly estimatorFiles: number;
   readonly tokens: number;
 }
@@ -19,12 +19,11 @@ export function observeNativeRoute(): {
 } {
   let streams = 0;
   let estimates = 0;
-  let spools = 0;
+  const files = observeNativeFileCreates();
   let estimatorFiles = 0;
   let tokens = 0;
   const open = NativeChatBody.prototype.openStream;
   const count = NativeChatEstimateProjection.prototype.estimate;
-  const create = WireBodySpool.create;
   const write = PromptEstimatorFiles.prototype.writeMessages;
   NativeChatBody.prototype.openStream = function () {
     streams++;
@@ -37,33 +36,35 @@ export function observeNativeRoute(): {
       return result;
     });
   };
-  WireBodySpool.create = function (...args) {
-    spools++;
-    return create.call(this, ...args);
-  };
   PromptEstimatorFiles.prototype.writeMessages = function (...args) {
     estimatorFiles++;
     return write.call(this, ...args);
   };
   return {
-    counts: () => ({ streams, estimates, spools, estimatorFiles, tokens }),
+    counts: () => ({
+      streams,
+      estimates,
+      fileCreates: files.count(),
+      estimatorFiles,
+      tokens,
+    }),
     requireSend(estimate): void {
       const invalid = [
         streams !== 1,
         estimates !== Number(estimate),
-        spools !== 0,
+        files.count() !== 0,
         estimatorFiles !== 0,
         estimate && tokens <= 0,
       ].some((failed) => failed);
       if (invalid)
         throw new Error(
-          `Native route assertion failed: ${JSON.stringify({ streams, estimates, spools, estimatorFiles, tokens })}`,
+          `Native route assertion failed: ${JSON.stringify({ streams, estimates, fileCreates: files.count(), estimatorFiles, tokens })}`,
         );
     },
     restore(): void {
       NativeChatBody.prototype.openStream = open;
       NativeChatEstimateProjection.prototype.estimate = count;
-      WireBodySpool.create = create;
+      files.restore();
       PromptEstimatorFiles.prototype.writeMessages = write;
     },
   };

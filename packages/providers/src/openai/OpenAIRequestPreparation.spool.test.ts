@@ -1,9 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 
 /**
- * Issue #854 D3a: the chat request is prepared into a sealed spool, the
- * messages are never held as an array, and everything the preparation opens is
- * released with the request.
+ * Issue #854: native preparation streams the chat body without scratch files
+ * and releases its row readers and body handles with the request.
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
@@ -15,13 +14,15 @@ import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { closeInOrder } from '../__tests__/support/close-in-order.js';
 import { rowsSelection } from '../__tests__/support/wireBodyCapture.js';
-import { activeWireBodySpoolCount } from '../utils/wire-body-spool.js';
-import { readSpooledChatBody } from './__tests__/support/prepareRequestBody.js';
+import { observeNativeBodies } from '../__tests__/support/native-body-lifecycle.js';
+import { readPreparedChatBody } from './__tests__/support/prepareRequestBody.js';
 import { buildMessagesWithReasoning } from './OpenAIRequestBuilder.js';
 import {
   prepareRequest,
   type RequestContext,
 } from './OpenAIRequestPreparation.js';
+
+const liveBodies = observeNativeBodies();
 
 const logger = new DebugLogger('llxprt:provider:openai:spool-test');
 
@@ -73,20 +74,20 @@ function optionsFor(
     }),
     systemInstruction: 'be brief',
     resolved: { model, authToken: 'test-token' },
-  } as unknown as NormalizedGenerateChatOptions;
+  };
 }
 
 function scratchNames(): Set<string> {
   return new Set(readdirSync(getScratchRoot()));
 }
 
-describe('prepareRequest spools the chat body', () => {
+describe('prepareRequest streams the native chat body', () => {
   let startingSpools: number;
   let startingScratch: Set<string>;
   const prepared: RequestContext[] = [];
 
   beforeEach(() => {
-    startingSpools = activeWireBodySpoolCount();
+    startingSpools = liveBodies();
     startingScratch = scratchNames();
   });
 
@@ -101,7 +102,7 @@ describe('prepareRequest spools the chat body', () => {
 
   async function releaseAndExpectNothingLeaked(): Promise<void> {
     await releasePrepared();
-    expect(activeWireBodySpoolCount()).toBe(startingSpools);
+    expect(liveBodies()).toBe(startingSpools);
     expect(scratchNames()).toStrictEqual(startingScratch);
   }
 
@@ -143,7 +144,7 @@ describe('prepareRequest spools the chat body', () => {
       stream_options: { include_usage: true },
     });
     const sent = Buffer.from(
-      JSON.stringify(readSpooledChatBody(context.spool)),
+      JSON.stringify(await readPreparedChatBody(context.spool)),
     );
     expect(sent.toString('utf8')).toBe(expected);
     expect(context.messageCount).toBe(messages.length);
@@ -151,17 +152,14 @@ describe('prepareRequest spools the chat body', () => {
     await releaseAndExpectNothingLeaked();
   });
 
-  it('keeps Kimi tool ids in a scratch index that lives until release', async () => {
+  it('keeps Kimi tool ids stable without scratch files', async () => {
     const options = optionsFor(HISTORY, 'kimi-k2');
     const context = await prepare(options);
 
-    const withIndex = scratchNames();
-    const added = [...withIndex].filter((name) => !startingScratch.has(name));
-    expect(added.some((name) => name.startsWith('tool-ids-'))).toBe(true);
-    expect(added.some((name) => name.startsWith('openai-chat-'))).toBe(true);
+    expect(scratchNames()).toStrictEqual(startingScratch);
     expect(context.detectedFormat).toBe('kimi');
 
-    const body = readSpooledChatBody(context.spool);
+    const body = await readPreparedChatBody(context.spool);
     const assistant = body.messages.find(
       (message) => message.role === 'assistant',
     );
@@ -177,39 +175,39 @@ describe('prepareRequest spools the chat body', () => {
     await expect(
       prepareRequest(options, 'gpt-4o', undefined, logger, 'openai'),
     ).rejects.toThrow('cannot replace "messages"');
-    expect(activeWireBodySpoolCount()).toBe(startingSpools);
+    expect(liveBodies()).toBe(startingSpools);
   });
 
-  it('disposes the spool and the tool id index when a row fails mid-body', async () => {
-    let readers = 0;
+  it('closes the native reader, body and request when a row fails mid-body', async () => {
+    let fail = false;
+    let returned = 0;
     const failing = {
       ...rowsSelection(HISTORY),
-      openReader(signal?: AbortSignal) {
-        const inner = rowsSelection(HISTORY).openReader(signal);
-        const pass = ++readers;
-        let seen = 0;
-        return (async function* () {
-          for await (const row of inner) {
-            seen++;
-            // Pass 1 completes; the conversion pass dies after two rows.
-            if (pass === 2 && seen === 3) {
-              throw new Error('row source failed');
-            }
+      async *openReader(signal?: AbortSignal) {
+        try {
+          let seen = 0;
+          for await (const row of rowsSelection(HISTORY).openReader(signal)) {
+            if (fail && ++seen === 3) throw new Error('row source failed');
             yield row;
           }
-        })();
+        } finally {
+          returned++;
+        }
       },
     };
-    const options = optionsFor(HISTORY, 'kimi-k2', {}, failing);
-
-    await expect(
-      prepareRequest(options, 'gpt-4o', undefined, logger, 'openai'),
-    ).rejects.toThrow('row source failed');
-    expect(activeWireBodySpoolCount()).toBe(startingSpools);
-    expect(scratchNames()).toStrictEqual(startingScratch);
+    const context = await prepare(optionsFor(HISTORY, 'kimi-k2', {}, failing));
+    const before = returned;
+    fail = true;
+    await expect(readPreparedChatBody(context.spool)).rejects.toThrow(
+      'row source failed',
+    );
+    expect(returned).toBe(before + 1);
+    await releaseAndExpectNothingLeaked();
+    expect(() => context.spool.openStream()).toThrow('disposed');
+    await expect(context.continuation.build([])).rejects.toThrow('released');
   });
 
-  it('writes the dump form beside the body only when dumpcontext asks for it', async () => {
+  it('provides a file-free dump form only when dumpcontext asks for it', async () => {
     const withoutDump = await prepare(optionsFor(HISTORY, 'gpt-4o'));
     expect(withoutDump.dump).toBeUndefined();
     const plainScratch = [...scratchNames()].filter(
@@ -234,7 +232,7 @@ describe('prepareRequest spools the chat body', () => {
       for await (const part of context.dump?.bytes() ?? []) parts.push(part);
       const dumped: unknown = JSON.parse(Buffer.concat(parts).toString('utf8'));
       const wire: unknown = JSON.parse(
-        JSON.stringify(readSpooledChatBody(context.spool)),
+        JSON.stringify(await readPreparedChatBody(context.spool)),
       );
       expect(dumped).toStrictEqual(wire);
       expect(context.estimate).toBeUndefined();
@@ -264,40 +262,47 @@ describe('prepareRequest spools the chat body', () => {
     await releaseAndExpectNothingLeaked();
   });
 
-  it('removes the dump files with the request when a row fails mid-body', async () => {
+  it('closes the dump reader and request when a lazy row read fails', async () => {
+    let fail = false;
+    let returned = 0;
     const failing = {
       ...rowsSelection(HISTORY),
-      openReader(signal?: AbortSignal) {
-        const inner = rowsSelection(HISTORY).openReader(signal);
-        return (async function* () {
+      async *openReader(signal?: AbortSignal) {
+        try {
           let seen = 0;
-          for await (const row of inner) {
-            if (++seen === 3) throw new Error('row source failed');
+          for await (const row of rowsSelection(HISTORY).openReader(signal)) {
+            if (fail && ++seen === 3) throw new Error('row source failed');
             yield row;
           }
-        })();
+        } finally {
+          returned++;
+        }
       },
     };
-    const options = optionsFor(HISTORY, 'gpt-4o', {}, failing, {
-      dumpcontext: 'on',
-    });
-
-    await expect(
-      prepareRequest(options, 'gpt-4o', undefined, logger, 'openai'),
-    ).rejects.toThrow('row source failed');
-    expect(activeWireBodySpoolCount()).toBe(startingSpools);
-    expect(scratchNames()).toStrictEqual(startingScratch);
+    const context = await prepare(
+      optionsFor(HISTORY, 'gpt-4o', {}, failing, { dumpcontext: 'on' }),
+    );
+    const before = returned;
+    fail = true;
+    const consume = async (): Promise<void> => {
+      if (context.dump === undefined) throw new Error('Missing dump');
+      for await (const part of context.dump.bytes()) void part;
+    };
+    await expect(consume()).rejects.toThrow('row source failed');
+    expect(returned).toBe(before + 1);
+    await releaseAndExpectNothingLeaked();
+    expect(() => context.spool.openStream()).toThrow('disposed');
   });
 
   it('fails without rows instead of sending an empty history', async () => {
     const options = {
       ...optionsFor(HISTORY, 'gpt-4o'),
       requestRows: undefined,
-    } as NormalizedGenerateChatOptions;
+    };
 
     await expect(
       prepareRequest(options, 'gpt-4o', undefined, logger, 'openai'),
-    ).rejects.toThrow('require a requestRows selection');
-    expect(activeWireBodySpoolCount()).toBe(startingSpools);
+    ).rejects.toThrow('requires a native or caller-owned request selection');
+    expect(liveBodies()).toBe(startingSpools);
   });
 });

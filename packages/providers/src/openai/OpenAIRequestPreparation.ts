@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { providerRowsOf } from '../utils/providerRows.js';
 import type OpenAI from 'openai';
 import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
 import { type NormalizedGenerateChatOptions } from '../BaseProvider.js';
@@ -359,7 +360,7 @@ export async function prepareRequest(
     estimate: withEstimate,
     dump: wantsRequestDump(ephemeralSettings['dumpcontext']),
   };
-  const nativeRows = options.requestRows;
+  const nativeRows = await providerRowsOf(options);
   const body = await prepareNativePlainRequest(
     envelope,
     nativeRows,

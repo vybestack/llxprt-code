@@ -1,4 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
@@ -32,6 +35,22 @@ function plainRoute(): (typeof WIRE_ROUTES)[number] {
 }
 
 describe('native send probe capability forwarding', () => {
+  it('rejects filesystem creation at the native route assertion', () => {
+    const observed = observeNativeRoute();
+    let root: string | undefined;
+    try {
+      root = mkdtempSync(join(tmpdir(), 'native-route-control-'));
+      writeFileSync(join(root, 'control'), 'created');
+      expect(observed.counts().fileCreates).toBeGreaterThan(0);
+      expect(() => observed.requireSend(false)).toThrow(
+        'Native route assertion failed',
+      );
+    } finally {
+      observed.restore();
+      if (root !== undefined) rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('reports incremental socket chunks without changing the independent converter body', async () => {
     const shape: HistoryCase = {
       ...history,
@@ -99,17 +118,22 @@ describe('native send probe capability forwarding', () => {
         new SettingsService(),
         handle.selection,
       );
-      for await (const chunk of sink.route
-        .createProvider()
-        .generateChatCompletion(options))
-        void chunk;
+      const send = async (): Promise<void> => {
+        for await (const chunk of sink.route
+          .createProvider()
+          .generateChatCompletion(options))
+          void chunk;
+      };
+      await expect(send()).rejects.toThrow(
+        'requires a native or caller-owned request selection',
+      );
       expect(() => observed.requireSend(false)).toThrow(
         'Native route assertion failed',
       );
       expect(observed.counts()).toMatchObject({
         streams: 0,
         estimates: 0,
-        spools: 1,
+        fileCreates: 0,
       });
     } finally {
       if (prior === undefined)
@@ -196,7 +220,7 @@ describe('native send probe capability forwarding', () => {
         expect(observed.counts()).toStrictEqual({
           streams: 1,
           estimates: 1,
-          spools: 0,
+          fileCreates: 0,
           estimatorFiles: 0,
           tokens: count,
         });

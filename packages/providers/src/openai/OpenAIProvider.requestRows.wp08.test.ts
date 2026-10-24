@@ -5,18 +5,15 @@
  */
 
 /**
- * Issue #854 WP08: the OpenAI chat transport reads `requestRows` itself and
- * writes the chat `messages` body once, row by row, into a request-scoped
- * spool. The body must be byte-identical to the independent array route; the
- * spool serves the send and the estimator files written with it serve
- * estimation; both are released on every outcome. Only the SDK transport is
- * faked.
+ * Issue #854 WP08: native chat bodies preserve the caller-owned array route's
+ * bytes, estimate without prompt files, and release readers and bodies on
+ * every outcome. Only the SDK transport is faked.
  */
 
+import { projectOpenAIChatPromptEnvelope } from '../runtime/promptEnvelopeProjections.js';
 import { readAtOf } from '../__tests__/requestRowsTestSupport.js';
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { readdirSync } from 'node:fs';
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
@@ -27,9 +24,11 @@ import { streamCallOptions } from '../__tests__/streamCallOptions.js';
 import { createOpenAIRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
 import { createRuntimeTokenizerFactory } from '../composition/runtimeTokenizerFactory.js';
-import { Gpt56SourceProjection } from '../tokenizers/gpt56-source-projection.js';
-import { activeWireBodySpoolCount } from '../utils/wire-body-spool.js';
+import { NativeChatEstimateProjection } from './native-chat-estimate.js';
+import { observeNativeBodies } from '../__tests__/support/native-body-lifecycle.js';
 import { OpenAIProvider } from './OpenAIProvider.js';
+
+const liveBodies = observeNativeBodies();
 
 const mockChatCreate = vi.fn();
 
@@ -56,6 +55,7 @@ function probeRows(rows: IContent[], onPull?: () => void): RowProbe {
   let pulled = 0;
   let returned = 0;
   const selection: ProviderRequestSelection = Object.freeze({
+    callerOwned: true,
     count: rows.length,
     readAt: readAtOf(rows),
     openReader: (signal?: AbortSignal) => {
@@ -176,9 +176,8 @@ async function sendRows(scenario: Scenario): Promise<string[]> {
   const provider = new OpenAIProvider('test-key');
   const probe = probeRows(scenario.rows);
   await drain(provider.generateChatCompletion(rowsOptions(scenario, probe)));
-  // Pass 1 indexes the rows, pass 2 converts them; each reader is returned.
-  expect(probe.opened()).toBe(2);
-  expect(probe.returned()).toBe(2);
+  expect(probe.opened()).toBe(3);
+  expect(probe.returned()).toBe(3);
   return sentBodies();
 }
 
@@ -340,28 +339,20 @@ describe('OpenAI chat transport-owned request rows body (WP08)', () => {
       'Provider request rows count changed',
     );
     expect(mockChatCreate).not.toHaveBeenCalled();
-    expect(activeWireBodySpoolCount()).toBe(0);
+    expect(liveBodies()).toBe(0);
   });
 });
 
 const tokenizerFactory = createRuntimeTokenizerFactory();
 
-function sourceOf(projection: PromptEnvelopeProjection): Gpt56SourceProjection {
+function sourceOf(
+  projection: PromptEnvelopeProjection,
+): NativeChatEstimateProjection {
   const finalized = projection.finalizedProjection;
-  if (!(finalized instanceof Gpt56SourceProjection)) {
-    throw new Error('Expected a segment-file projection');
+  if (!(finalized instanceof NativeChatEstimateProjection)) {
+    throw new Error('Expected a native estimate projection');
   }
   return finalized;
-}
-
-function directoryOf(source: Gpt56SourceProjection): string {
-  return dirname(source.promptSegments[0].source.path);
-}
-
-function segmentBytes(source: Gpt56SourceProjection): Buffer[] {
-  return source.promptSegments.map((segment) =>
-    readFileSync(segment.source.path),
-  );
 }
 
 async function tokensOf(
@@ -383,36 +374,30 @@ describe('OpenAI chat request rows preparation lifecycle (WP08)', () => {
     mockChatCreate.mockReset();
   });
 
-  it('writes the body spool and the estimator files at projection, serves send and estimate from them, and releases both after the call', async () => {
+  it('prepares, estimates and sends without creating scratch files and closes its projection', async () => {
     const provider = new OpenAIProvider('test-key');
     const probe = probeRows(scenario.rows);
     const options = rowsOptions(scenario, probe);
-    const before = activeWireBodySpoolCount();
+    const startingScratch = new Set(readdirSync(getScratchRoot()));
+    const before = liveBodies();
     const projection = await provider.projectPromptEnvelope(options);
-    expect(activeWireBodySpoolCount()).toBe(before + 1);
-    expect(probe.opened()).toBe(2);
-    // The estimate reads sealed estimator-form files, the same ones on every
-    // access; the files are not copies of the wire or dump forms.
+    expect(liveBodies()).toBe(before);
     const source = sourceOf(projection);
     expect(projection.finalizedProjection).toBe(source);
-    expect(
-      source.promptSegments.map((segment) => segment.promptKey),
-    ).toStrictEqual(['messages', 'tools']);
-    for (const segment of source.promptSegments) {
-      expect(segment.wireSource).toBeUndefined();
-      expect(segment.dumpSource).toBeUndefined();
-      expect(existsSync(segment.source.path)).toBe(true);
-    }
+    expect(new Set(readdirSync(getScratchRoot()))).toStrictEqual(
+      startingScratch,
+    );
     expect(await tokensOf(provider, projection)).toBeGreaterThan(0);
     expect(await tokensOf(provider, projection)).toBe(
       await tokensOf(provider, projection),
     );
-
+    const readsBeforeSend = probe.opened();
     let during = -1;
-    let filesDuring = false;
-    mockChatCreate.mockImplementation(() => {
-      during = activeWireBodySpoolCount();
-      filesDuring = existsSync(directoryOf(source));
+    mockChatCreate.mockImplementation(async () => {
+      during = liveBodies();
+      expect(new Set(readdirSync(getScratchRoot()))).toStrictEqual(
+        startingScratch,
+      );
       return okResponse(false);
     });
     await drain(
@@ -422,15 +407,16 @@ describe('OpenAI chat request rows preparation lifecycle (WP08)', () => {
       }),
     );
     expect(during).toBe(before + 1);
-    expect(filesDuring).toBe(true);
-    expect(activeWireBodySpoolCount()).toBe(before);
-    expect(existsSync(directoryOf(source))).toBe(false);
-    // Send reused the prepared body: the rows were read at projection only.
-    expect(probe.opened()).toBe(2);
+    expect(liveBodies()).toBe(before);
+    expect(new Set(readdirSync(getScratchRoot()))).toStrictEqual(
+      startingScratch,
+    );
+    expect(probe.opened()).toBe(readsBeforeSend + 1);
+    await expect(tokensOf(provider, projection)).rejects.toThrow('closed');
     expect(sentBodies()).toStrictEqual(await sendArray(scenario));
   });
 
-  it('estimates from the same prompt files as the array route', async () => {
+  it('estimates the same native prompt as the array route', async () => {
     const rowProvider = new OpenAIProvider('test-key');
     const rowProjection = await rowProvider.projectPromptEnvelope(
       rowsOptions(scenario, probeRows(scenario.rows)),
@@ -439,14 +425,41 @@ describe('OpenAI chat request rows preparation lifecycle (WP08)', () => {
     const arrayProjection = await arrayProvider.projectPromptEnvelope(
       arrayOptions(scenario),
     );
-    expect(segmentBytes(sourceOf(rowProjection))).toStrictEqual(
-      segmentBytes(sourceOf(arrayProjection)),
+    expect(sourceOf(rowProjection)).toBeInstanceOf(
+      NativeChatEstimateProjection,
+    );
+    expect(sourceOf(arrayProjection)).toBeInstanceOf(
+      NativeChatEstimateProjection,
     );
     expect(await tokensOf(rowProvider, rowProjection)).toBe(
       await tokensOf(arrayProvider, arrayProjection),
     );
     expect(rowProjection.unsupportedMedia).toStrictEqual(
       arrayProjection.unsupportedMedia,
+    );
+    mockChatCreate.mockResolvedValue(okResponse(false));
+    await drain(
+      rowProvider.generateChatCompletion({
+        ...rowsOptions(scenario, probeRows(scenario.rows)),
+        promptEnvelopeTransportToken: rowProjection.transportToken,
+      }),
+    );
+    const rowBody: unknown = JSON.parse(
+      sentBodies()[sentBodies().length - 1] ?? 'null',
+    );
+    await drain(
+      arrayProvider.generateChatCompletion({
+        ...arrayOptions(scenario),
+        promptEnvelopeTransportToken: arrayProjection.transportToken,
+      }),
+    );
+    const arrayBody: unknown = JSON.parse(
+      sentBodies()[sentBodies().length - 1] ?? 'null',
+    );
+    expect(
+      projectOpenAIChatPromptEnvelope(rowBody).finalizedProjection,
+    ).toStrictEqual(
+      projectOpenAIChatPromptEnvelope(arrayBody).finalizedProjection,
     );
     await rowProjection.releaseIfUnsent?.();
     await arrayProjection.releaseIfUnsent?.();
@@ -484,42 +497,40 @@ describe('OpenAI chat request rows preparation lifecycle (WP08)', () => {
   it('releases an unsent preparation and refuses later estimation', async () => {
     const provider = new OpenAIProvider('test-key');
     const options = rowsOptions(scenario, probeRows(scenario.rows));
-    const before = activeWireBodySpoolCount();
+    const before = liveBodies();
     const projection = await provider.projectPromptEnvelope(options);
-    expect(activeWireBodySpoolCount()).toBe(before + 1);
+    expect(liveBodies()).toBe(before);
     const source = sourceOf(projection);
     await projection.releaseIfUnsent?.();
-    expect(activeWireBodySpoolCount()).toBe(before);
-    expect(existsSync(directoryOf(source))).toBe(false);
-    await expect(tokensOf(provider, projection)).rejects.toThrow(
-      'Source projection is disposed',
-    );
+    expect(liveBodies()).toBe(before);
+    expect<unknown>(source).toBe(projection.finalizedProjection);
+    await expect(tokensOf(provider, projection)).rejects.toThrow('closed');
     expect(mockChatCreate).not.toHaveBeenCalled();
   });
 
   it('releases the body when the send fails', async () => {
     const provider = new OpenAIProvider('test-key');
     const options = rowsOptions(scenario, probeRows(scenario.rows));
-    const before = activeWireBodySpoolCount();
+    const before = liveBodies();
     mockChatCreate.mockRejectedValue(new Error('transport exploded'));
     await expect(
       drain(provider.generateChatCompletion(options)),
     ).rejects.toThrow('transport exploded');
-    expect(activeWireBodySpoolCount()).toBe(before);
+    expect(liveBodies()).toBe(before);
   });
 
   it('releases the body when the consumer returns mid-stream', async () => {
     const streaming: Scenario = { rows: toolTurns, streaming: true };
     const provider = new OpenAIProvider('test-key');
     const options = rowsOptions(streaming, probeRows(streaming.rows));
-    const before = activeWireBodySpoolCount();
+    const before = liveBodies();
     mockChatCreate.mockResolvedValue(okResponse(true));
     const iterator = provider.generateChatCompletion(options);
     const first = await iterator.next();
     expect(first.done).toBe(false);
-    expect(activeWireBodySpoolCount()).toBe(before + 1);
+    expect(liveBodies()).toBe(before + 1);
     await iterator.return?.();
-    expect(activeWireBodySpoolCount()).toBe(before);
+    expect(liveBodies()).toBe(before);
   });
 
   it('releases the body when the request is aborted during the call', async () => {
@@ -530,7 +541,7 @@ describe('OpenAI chat request rows preparation lifecycle (WP08)', () => {
       probeRows(scenario.rows),
       controller.signal,
     );
-    const before = activeWireBodySpoolCount();
+    const before = liveBodies();
     mockChatCreate.mockImplementation(() => {
       controller.abort(new Error('aborted mid call'));
       throw controller.signal.reason;
@@ -538,7 +549,7 @@ describe('OpenAI chat request rows preparation lifecycle (WP08)', () => {
     await expect(
       drain(provider.generateChatCompletion(options)),
     ).rejects.toThrow('aborted mid call');
-    expect(activeWireBodySpoolCount()).toBe(before);
+    expect(liveBodies()).toBe(before);
   });
 
   it('never opens the rows when cancelled before the first pull', async () => {
@@ -547,13 +558,13 @@ describe('OpenAI chat request rows preparation lifecycle (WP08)', () => {
     controller.abort(new Error('cancelled early'));
     const probe = probeRows(scenario.rows);
     const options = rowsOptions(scenario, probe, controller.signal);
-    const before = activeWireBodySpoolCount();
+    const before = liveBodies();
     await expect(
       drain(provider.generateChatCompletion(options)),
     ).rejects.toThrow('cancelled early');
     expect(probe.pulled()).toBe(0);
     expect(mockChatCreate).not.toHaveBeenCalled();
-    expect(activeWireBodySpoolCount()).toBe(before);
+    expect(liveBodies()).toBe(before);
   });
 
   it('closes the reader and sends nothing when cancelled after the first chunk', async () => {
@@ -563,7 +574,7 @@ describe('OpenAI chat request rows preparation lifecycle (WP08)', () => {
       controller.abort(new Error('cancelled after first chunk'));
     });
     const options = rowsOptions(scenario, probe, controller.signal);
-    const before = activeWireBodySpoolCount();
+    const before = liveBodies();
     const scratchBefore = readdirSync(getScratchRoot());
     await expect(provider.projectPromptEnvelope(options)).rejects.toThrow(
       'cancelled after first chunk',
@@ -571,7 +582,7 @@ describe('OpenAI chat request rows preparation lifecycle (WP08)', () => {
     expect(probe.pulled()).toBe(1);
     expect(probe.returned()).toBe(1);
     expect(mockChatCreate).not.toHaveBeenCalled();
-    expect(activeWireBodySpoolCount()).toBe(before);
+    expect(liveBodies()).toBe(before);
     expect(readdirSync(getScratchRoot())).toStrictEqual(scratchBefore);
   });
 });
@@ -600,7 +611,7 @@ describe('OpenAI chat request rows retry bytes (WP08)', () => {
       route === 'array'
         ? arrayOptions(scenario)
         : rowsOptions(scenario, probeRows(scenario.rows));
-    const before = activeWireBodySpoolCount();
+    const before = liveBodies();
     const projection = await provider.projectPromptEnvelope(options);
     const orchestrator = new RetryOrchestrator(provider, {
       maxAttempts: 2,
@@ -612,7 +623,7 @@ describe('OpenAI chat request rows retry bytes (WP08)', () => {
         promptEnvelopeTransportToken: projection.transportToken,
       }),
     );
-    expect(activeWireBodySpoolCount()).toBe(before);
+    expect(liveBodies()).toBe(before);
     return sentBodies();
   }
 

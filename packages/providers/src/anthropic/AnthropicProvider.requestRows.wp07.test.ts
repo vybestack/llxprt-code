@@ -5,13 +5,12 @@
  */
 
 /**
- * Issue #854 WP07: the Anthropic transport reads `requestRows` itself and
- * builds the Messages-SDK body once. The body must be byte-identical to the
- * independent array route, live in exactly one request-scoped lease that
- * serves estimation, send and image-recovery retry, and be released on every
- * outcome. Only the SDK transport is faked.
+ * Issue #854 WP07: native Anthropic bodies preserve the caller-owned array
+ * route's bytes across estimation, send and image-recovery retry, and release
+ * readers and bodies on every outcome. Only the SDK transport is faked.
  */
 
+import { projectAnthropicPromptEnvelope } from '../runtime/promptEnvelopeProjections.js';
 import { readAtOf } from '../__tests__/requestRowsTestSupport.js';
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { APIError } from '@anthropic-ai/sdk';
@@ -28,28 +27,20 @@ import type { GenerateChatOptions } from '../IProvider.js';
 import { TEST_PROVIDER_CONFIG } from '../__tests__/providerTestConfig.js';
 import { streamCallOptions } from '../__tests__/streamCallOptions.js';
 import { createAnthropicRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
-import { activeRequestBodyCount } from '../utils/requestScopedBody.js';
-import { activeWireBodySpoolCount } from '../utils/wire-body-spool.js';
+import { observeNativeBodies } from '../__tests__/support/native-body-lifecycle.js';
 import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { readdirSync } from 'node:fs';
 import {
   estimatePromptEnvelope,
   type PromptEnvelopeProjection,
 } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { createRuntimeTokenizerFactory } from '../composition/runtimeTokenizerFactory.js';
-import { Gpt56SourceProjection } from '../tokenizers/gpt56-source-projection.js';
+import { NativeAnthropicEstimateProjection } from './native-anthropic-estimate.js';
 import { AnthropicProvider } from './AnthropicProvider.js';
 
-const mockMessagesCreate = vi.fn();
+const liveBodies = observeNativeBodies();
 
-/**
- * Request bodies alive: leases over built bodies (projected sends) plus spools
- * (every other send).
- */
-function liveBodies(): number {
-  return activeRequestBodyCount() + activeWireBodySpoolCount();
-}
+const mockMessagesCreate = vi.fn();
 
 void vi.mock('@anthropic-ai/sdk', () => ({
   default: vi.fn().mockImplementation(() => ({
@@ -111,6 +102,7 @@ function probeRows(rows: IContent[], onPull?: () => void): RowProbe {
   let pulled = 0;
   let returned = 0;
   const selection: ProviderRequestSelection = Object.freeze({
+    callerOwned: true,
     count: rows.length,
     readAt: readAtOf(rows),
     openReader: (signal?: AbortSignal) => {
@@ -420,22 +412,14 @@ describe('Anthropic transport-owned request rows body (WP07)', () => {
 
 const tokenizerFactory = createRuntimeTokenizerFactory();
 
-function sourceOf(projection: PromptEnvelopeProjection): Gpt56SourceProjection {
+function sourceOf(
+  projection: PromptEnvelopeProjection,
+): NativeAnthropicEstimateProjection {
   const finalized = projection.finalizedProjection;
-  if (!(finalized instanceof Gpt56SourceProjection)) {
-    throw new Error('Expected a segment-file projection');
+  if (!(finalized instanceof NativeAnthropicEstimateProjection)) {
+    throw new Error('Expected a native estimate projection');
   }
   return finalized;
-}
-
-function directoryOf(source: Gpt56SourceProjection): string {
-  return dirname(source.promptSegments[0].source.path);
-}
-
-function segmentBytes(source: Gpt56SourceProjection): Buffer[] {
-  return source.promptSegments.map((segment) =>
-    readFileSync(segment.source.path),
-  );
 }
 
 async function tokensOf(
@@ -457,54 +441,50 @@ describe('Anthropic request rows preparation lifecycle (WP07)', () => {
     mockMessagesCreate.mockReset();
   });
 
-  it('writes the body spool and the estimator files at projection, serves send and estimate from them, and releases both after the call', async () => {
+  it('prepares, estimates and sends without creating scratch files and closes its projection', async () => {
     const harness = makeHarness(scenario);
+    const provider = harness.provider;
     const probe = probeRows(scenario.rows);
     const options = rowsOptions(harness, scenario, probe);
+    const startingScratch = new Set(readdirSync(getScratchRoot()));
     const before = liveBodies();
-    const projection = await harness.provider.projectPromptEnvelope(options);
-    expect(liveBodies()).toBe(before + 1);
-    expect(probe.opened()).toBe(1);
-    // The estimate reads sealed estimator-form files, the same ones on every
-    // access; the files are not copies of the wire or dump forms.
+    const projection = await provider.projectPromptEnvelope(options);
+    expect(liveBodies()).toBe(before);
     const source = sourceOf(projection);
     expect(projection.finalizedProjection).toBe(source);
-    expect(
-      source.promptSegments.map((segment) => segment.promptKey),
-    ).toStrictEqual(['system', 'messages', 'tools']);
-    for (const segment of source.promptSegments) {
-      expect(segment.wireSource).toBeUndefined();
-      expect(segment.dumpSource).toBeUndefined();
-      expect(existsSync(segment.source.path)).toBe(true);
-    }
-    expect(await tokensOf(harness.provider, projection)).toBeGreaterThan(0);
-    expect(await tokensOf(harness.provider, projection)).toBe(
-      await tokensOf(harness.provider, projection),
+    expect(new Set(readdirSync(getScratchRoot()))).toStrictEqual(
+      startingScratch,
     );
-
+    expect(await tokensOf(provider, projection)).toBeGreaterThan(0);
+    expect(await tokensOf(provider, projection)).toBe(
+      await tokensOf(provider, projection),
+    );
+    const readsBeforeSend = probe.opened();
     let during = -1;
-    let filesDuring = false;
     mockMessagesCreate.mockImplementation(async () => {
       during = liveBodies();
-      filesDuring = existsSync(directoryOf(source));
+      expect(new Set(readdirSync(getScratchRoot()))).toStrictEqual(
+        startingScratch,
+      );
       return okResponse(false);
     });
     await drain(
-      harness.provider.generateChatCompletion({
+      provider.generateChatCompletion({
         ...options,
         promptEnvelopeTransportToken: projection.transportToken,
       }),
     );
     expect(during).toBe(before + 1);
-    expect(filesDuring).toBe(true);
     expect(liveBodies()).toBe(before);
-    expect(existsSync(directoryOf(source))).toBe(false);
-    // Send reused the prepared body: the rows were read once, at projection.
-    expect(probe.opened()).toBe(1);
+    expect(new Set(readdirSync(getScratchRoot()))).toStrictEqual(
+      startingScratch,
+    );
+    expect(probe.opened()).toBe(readsBeforeSend + 0);
+    await expect(tokensOf(provider, projection)).rejects.toThrow('closed');
     expect(sentBodies()).toStrictEqual(await sendArray(scenario));
   });
 
-  it('estimates from the same prompt files as the array route', async () => {
+  it('estimates the same native prompt as the array route', async () => {
     const harness = makeHarness(scenario);
     const rowProjection = await harness.provider.projectPromptEnvelope(
       rowsOptions(harness, scenario, probeRows(scenario.rows)),
@@ -513,14 +493,41 @@ describe('Anthropic request rows preparation lifecycle (WP07)', () => {
     const arrayProjection = await arrayHarness.provider.projectPromptEnvelope(
       arrayOptions(arrayHarness, scenario),
     );
-    expect(segmentBytes(sourceOf(rowProjection))).toStrictEqual(
-      segmentBytes(sourceOf(arrayProjection)),
+    expect(sourceOf(rowProjection)).toBeInstanceOf(
+      NativeAnthropicEstimateProjection,
+    );
+    expect(sourceOf(arrayProjection)).toBeInstanceOf(
+      NativeAnthropicEstimateProjection,
     );
     expect(await tokensOf(harness.provider, rowProjection)).toBe(
       await tokensOf(arrayHarness.provider, arrayProjection),
     );
     expect(rowProjection.unsupportedMedia).toStrictEqual(
       arrayProjection.unsupportedMedia,
+    );
+    mockMessagesCreate.mockResolvedValue(okResponse(false));
+    await drain(
+      harness.provider.generateChatCompletion({
+        ...rowsOptions(harness, scenario, probeRows(scenario.rows)),
+        promptEnvelopeTransportToken: rowProjection.transportToken,
+      }),
+    );
+    const rowBody: unknown = JSON.parse(
+      sentBodies()[sentBodies().length - 1] ?? 'null',
+    );
+    await drain(
+      arrayHarness.provider.generateChatCompletion({
+        ...arrayOptions(arrayHarness, scenario),
+        promptEnvelopeTransportToken: arrayProjection.transportToken,
+      }),
+    );
+    const arrayBody: unknown = JSON.parse(
+      sentBodies()[sentBodies().length - 1] ?? 'null',
+    );
+    expect(
+      projectAnthropicPromptEnvelope(rowBody).finalizedProjection,
+    ).toStrictEqual(
+      projectAnthropicPromptEnvelope(arrayBody).finalizedProjection,
     );
     await rowProjection.releaseIfUnsent?.();
     await arrayProjection.releaseIfUnsent?.();
@@ -531,13 +538,13 @@ describe('Anthropic request rows preparation lifecycle (WP07)', () => {
     const options = rowsOptions(harness, scenario, probeRows(scenario.rows));
     const before = liveBodies();
     const projection = await harness.provider.projectPromptEnvelope(options);
-    expect(liveBodies()).toBe(before + 1);
+    expect(liveBodies()).toBe(before);
     const source = sourceOf(projection);
     await projection.releaseIfUnsent?.();
     expect(liveBodies()).toBe(before);
-    expect(existsSync(directoryOf(source))).toBe(false);
+    expect<unknown>(source).toBe(projection.finalizedProjection);
     await expect(tokensOf(harness.provider, projection)).rejects.toThrow(
-      'Source projection is disposed',
+      'closed',
     );
     expect(mockMessagesCreate).not.toHaveBeenCalled();
   });
@@ -626,14 +633,14 @@ function scratchNames(): Set<string> {
   return new Set(readdirSync(getScratchRoot()));
 }
 
-describe('Anthropic spooled send (issue #854 E4)', () => {
+describe('Anthropic native send (issue #854 E4)', () => {
   const scenario: Scenario = { rows: toolTurns, tools: WEATHER_TOOL };
 
   beforeEach(() => {
     mockMessagesCreate.mockReset();
   });
 
-  it('posts the sealed spool size as the content-length of the bytes it streams', async () => {
+  it('posts the measured size as the content-length of the bytes it streams', async () => {
     mockMessagesCreate.mockResolvedValue(okResponse(false));
     const harness = makeHarness(scenario);
     await drain(
@@ -650,7 +657,7 @@ describe('Anthropic spooled send (issue #854 E4)', () => {
     );
   });
 
-  it('keeps the body on scratch disk while the request is in flight and removes it afterwards', async () => {
+  it('keeps scratch disk unchanged while the request is in flight and afterwards', async () => {
     const harness = makeHarness(scenario);
     const startingScratch = scratchNames();
     let scratchDuringSend = startingScratch;
@@ -663,11 +670,11 @@ describe('Anthropic spooled send (issue #854 E4)', () => {
         rowsOptions(harness, scenario, probeRows(scenario.rows)),
       ),
     );
-    expect(scratchDuringSend.size).toBeGreaterThan(startingScratch.size);
+    expect(scratchDuringSend).toStrictEqual(startingScratch);
     expect(scratchNames()).toStrictEqual(startingScratch);
   });
 
-  it('removes the spool and the message table when the rows fail while the body is written', async () => {
+  it('closes native body preparation when the rows fail', async () => {
     const harness = makeHarness(scenario);
     const startingScratch = scratchNames();
     const before = liveBodies();
@@ -686,7 +693,7 @@ describe('Anthropic spooled send (issue #854 E4)', () => {
     expect(scratchNames()).toStrictEqual(startingScratch);
   });
 
-  it('removes the spool and the message table when the consumer returns mid-stream', async () => {
+  it('releases the native body when the consumer returns mid-stream', async () => {
     const streaming: Scenario = { rows: toolTurns, streaming: true };
     const harness = makeHarness(streaming);
     const startingScratch = scratchNames();
@@ -695,7 +702,7 @@ describe('Anthropic spooled send (issue #854 E4)', () => {
       rowsOptions(harness, streaming, probeRows(streaming.rows)),
     );
     await iterator.next();
-    expect(scratchNames().size).toBeGreaterThan(startingScratch.size);
+    expect(scratchNames()).toStrictEqual(startingScratch);
     await iterator.return?.();
     expect(scratchNames()).toStrictEqual(startingScratch);
   });

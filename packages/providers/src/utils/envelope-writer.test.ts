@@ -5,7 +5,7 @@ import {
   writeEnvelope,
   type EnvelopeSink,
 } from './envelope-writer.js';
-import { WireBodySpool } from './wire-body-spool.js';
+import { ProgressiveJsonBody } from './progressive-json-body.js';
 
 class CollectingSink implements EnvelopeSink {
   private readonly parts: Buffer[] = [];
@@ -147,36 +147,37 @@ describe('writeEnvelope', () => {
     );
   });
 
-  it('writes into a spool whose stream carries exactly the sealed bytes', async () => {
-    const spool = WireBodySpool.create('envelope-writer-test');
+  it('streams exactly the envelope bytes through a progressive body', async () => {
+    const messages = Array.from({ length: 2000 }, (_, index) => ({
+      role: 'user',
+      content: `message ${index} 😀`,
+    }));
+    const sink = new CollectingSink();
+    await writeEnvelope(sink, {
+      model: 'm',
+      messages: arraySegment(messages),
+      stream: true,
+    });
+    const expected = Buffer.from(
+      JSON.stringify({ model: 'm', messages, stream: true }),
+    );
+    const bytes = Buffer.from(sink.text());
+    const body = new ProgressiveJsonBody(async function* () {
+      yield bytes;
+    }, bytes.byteLength);
     try {
-      const messages = Array.from({ length: 2000 }, (_, index) => ({
-        role: 'user',
-        content: `message ${index} 😀`,
-      }));
-      await writeEnvelope(spool, {
-        model: 'm',
-        messages: arraySegment(messages),
-        stream: true,
-      });
-      const length = spool.seal();
-      const expected = Buffer.from(
-        JSON.stringify({ model: 'm', messages, stream: true }),
-      );
-
-      const handle = spool.openStream();
-      const chunks: Uint8Array[] = [];
-      const reader = handle.stream.getReader();
-      for (let next = await reader.read(); !next.done; ) {
-        chunks.push(next.value);
-        next = await reader.read();
+      const handle = body.createStreamHandle();
+      try {
+        const received = Buffer.from(
+          await new Response(handle.stream).arrayBuffer(),
+        );
+        expect(body.byteLength).toBe(expected.byteLength);
+        expect(received.equals(expected)).toBe(true);
+      } finally {
+        await handle.dispose();
       }
-      handle.dispose();
-
-      expect(length).toBe(expected.byteLength);
-      expect(Buffer.concat(chunks).equals(expected)).toBe(true);
     } finally {
-      spool.dispose();
+      await body.dispose();
     }
   });
 });
