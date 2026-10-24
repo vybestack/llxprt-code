@@ -5,7 +5,8 @@
  */
 import { act } from 'react';
 import { describe, expect, it, vi } from 'bun:test';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 await import('ink-testing-library');
@@ -47,26 +48,18 @@ const { createScrollbackPagerStore } = await import(
 );
 
 async function writeJournal(filePath: string): Promise<void> {
-  await writeFile(
-    filePath,
-    Array.from({ length: 32 }, (_, i) =>
-      JSON.stringify({
-        v: 1,
-        seq: i,
-        ts: '2026-10-05T00:00:00.000Z',
-        type: 'content',
-        payload: {
-          content: {
-            speaker: 'human',
-            blocks: [{ type: 'text', text: `disk-page-${i}` }],
-            metadata: {
-              chronology: { seq: i, userTurn: 1, step: 1, recordedAt: 0 },
-            },
-          },
-        },
-      }),
-    ).join('\n') + '\n',
-  );
+  const session = await JournalSession.create(filePath);
+  try {
+    await session.append(
+      Array.from({ length: 32 }, (_, seq) => ({
+        speaker: 'human',
+        blocks: [{ type: 'text', text: `disk-page-${seq}` }],
+        metadata: { chronology: { seq, userTurn: 1, step: 1, recordedAt: 0 } },
+      })),
+    );
+  } finally {
+    await session.close();
+  }
 }
 
 function makeUiRuntime(dir: string) {
@@ -103,7 +96,7 @@ function makeUiRuntime(dir: string) {
 describe('layout disk-pager integration', () => {
   it('renders the bounded disk window instead of resident transcript arrays and updates its geometry', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'critical-layout-pager-'));
-    const filePath = join(dir, 'session.jsonl');
+    const filePath = join(dir, 'session.llxj');
     await writeJournal(filePath);
     const viewport = {
       visibleKeys: [],

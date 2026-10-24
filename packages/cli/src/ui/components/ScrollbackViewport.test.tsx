@@ -42,6 +42,7 @@ await import('ink-testing-library');
 const ink = await import('../../../test-utils/real-ink.js');
 void vi.mock('ink', () => ink);
 import type { IContent } from '@vybestack/llxprt-code-core';
+import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
 import type { HistoryItem } from '../types.js';
 import type {
   ScrollbackPagerState,
@@ -72,7 +73,6 @@ const END_KEY = '\u001B[F';
 /** Separator rendered above pending live-tail slots (addendum gap 6). */
 const PENDING_SEPARATOR = '··· pending ···';
 
-const TS = '2026-01-01T00:00:00.000Z';
 const ROW_PAD = 'x'.repeat(60);
 
 function rowLabel(seq: number): string {
@@ -94,30 +94,22 @@ function userContent(text: string, seq: number): IContent {
   };
 }
 
-function envelope(seq: number, type: string, payload: unknown): string {
-  return JSON.stringify({ v: 1, seq, ts: TS, type, payload });
-}
-
 interface Fixture {
   filePath: string;
-  addUser(seq: number): Promise<number>;
+  addUser(seq: number): Promise<void>;
+  close(): Promise<void>;
 }
 
 async function useJournalFixture(): Promise<Fixture> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'scrollback-viewport-'));
-  const filePath = path.join(dir, 'session-under-test.jsonl');
-  let offset = 0;
+  const filePath = path.join(dir, 'session-under-test.llxj');
+  const session = await JournalSession.create(filePath);
   return {
     filePath,
-    async addUser(seq: number): Promise<number> {
-      const at = offset;
-      const line = envelope(seq, 'content', {
-        content: userContent(`${rowLabel(seq)}${ROW_PAD}`, seq),
-      });
-      await fs.appendFile(filePath, `${line}\n`, 'utf8');
-      offset += Buffer.byteLength(line, 'utf8') + 1;
-      return at;
+    async addUser(seq: number): Promise<void> {
+      await session.append([userContent(`${rowLabel(seq)}${ROW_PAD}`, seq)]);
     },
+    close: () => session.close(),
   };
 }
 
@@ -204,6 +196,7 @@ describe('ScrollbackViewport @plan:PLAN-20260917-ISSUE854.P02d @requirement:G1,G
     for (const store of stores.splice(0)) {
       await store.close().catch(() => undefined);
     }
+    await fixture.close();
     await fs.rm(path.dirname(fixture.filePath), {
       recursive: true,
       force: true,
