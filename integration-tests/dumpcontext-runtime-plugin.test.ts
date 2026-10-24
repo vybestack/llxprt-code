@@ -28,13 +28,12 @@ class WatchedHistory extends HistoryService {
   override async openDumpSnapshot(): Promise<HistoryDumpSnapshot> {
     this.opened++;
     const snapshot = await super.openDumpSnapshot();
-    return {
-      ...snapshot,
-      close: async (): Promise<void> => {
-        await snapshot.close();
-        this.closed++;
-      },
+    const close = snapshot.close.bind(snapshot);
+    snapshot.close = async (): Promise<void> => {
+      await close();
+      this.closed++;
     };
+    return snapshot;
   }
 }
 /**
@@ -128,11 +127,15 @@ async function run(
     runtime.providerManager.registerProvider(provider);
     await runtime.providerManager.setActiveProvider(PLUGIN_NAME);
     await activateIsolatedRuntimeContext(runtime);
-    for (let index = 0; index < count; index++)
-      history.add({
-        speaker: 'human',
-        blocks: [{ type: 'text', text: `message-${index}` }],
-      });
+    await history.addBatch(
+      Array.from(
+        { length: count },
+        (_, index): IContent => ({
+          speaker: 'human',
+          blocks: [{ type: 'text', text: `message-${index}` }],
+        }),
+      ),
+    );
     await history.waitForCommit();
     const controller = new AbortController();
     if (cancel) controller.abort(new Error('dump cancelled'));
