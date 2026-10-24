@@ -115,12 +115,15 @@ export class NativeJournalCursor {
       throw error;
     }
   }
-  private async read(entry: RowEntry): Promise<IContent> {
+  private async read(entry: RowEntry, callStart?: number): Promise<IContent> {
     this.options.signal?.throwIfAborted();
     this.options.counters?.recordDecoded();
     this.options.counters?.rowDecoded();
     try {
-      const content = await this.reader.readContent(entry);
+      const content =
+        callStart === undefined
+          ? await this.reader.readContent(entry)
+          : await this.reader.readToolPage(entry, callStart, 16);
       this.options.signal?.throwIfAborted();
       return content;
     } finally {
@@ -272,6 +275,16 @@ export class NativeJournalCursor {
       };
     });
   }
+  private async readToolCalls(
+    first: RowEntry,
+    opener: IContent,
+    start: number,
+  ): Promise<
+    Array<Extract<IContent['blocks'][number], { type: 'tool_call' }>>
+  > {
+    const page = start === 0 ? opener : await this.read(first, start);
+    return page.blocks.filter((block) => block.type === 'tool_call');
+  }
   private async *projectGroup(
     from: number,
     minimumItem = 0,
@@ -280,12 +293,14 @@ export class NativeJournalCursor {
   ): AsyncGenerator<LocatedEntry> {
     const first = await this.reader.entryAt(from);
     const end = await this.groupEnd(from);
-    const opener = await this.read(first);
+    const opener = await this.read(first, 0);
     this.options.counters?.ownership?.retain(opener);
     let itemIndex = 0;
     try {
-      const calls = opener.blocks.filter((block) => block.type === 'tool_call');
-      const callIds = new Set(calls.map((call) => call.id));
+      const callCount = first.toolCallBlocks;
+      const callIds = new Set(
+        end === from + 1 ? [] : await this.reader.callIds(first),
+      );
       const responseEntries = await this.responseEntries(
         callIds,
         from + 1,
@@ -294,10 +309,10 @@ export class NativeJournalCursor {
       const spanEnd = this.responseSpan(responseEntries);
       for (
         let callStart = 0;
-        callStart === 0 || callStart < calls.length;
+        callStart === 0 || callStart < callCount;
         callStart += 16
       ) {
-        const selected = calls.slice(callStart, callStart + 16);
+        const selected = await this.readToolCalls(first, opener, callStart);
         const responses = await this.responsesFor(
           new Set(selected.map((call) => call.id)),
           responseEntries,
@@ -314,7 +329,7 @@ export class NativeJournalCursor {
         const items = iContentToHistoryItems([page, ...responses.values()]);
         if (callStart === 0) {
           const total =
-            items.length + Math.max(0, Math.ceil(calls.length / 16) - 1);
+            items.length + Math.max(0, Math.ceil(callCount / 16) - 1);
           minimumItem = Math.max(
             minimumItem,
             Math.min(maximumItem, total) - tailCount,
@@ -326,7 +341,7 @@ export class NativeJournalCursor {
             opener,
             from,
             rows: end - from,
-            calls: calls.length,
+            calls: callCount,
             spanEnd,
           },
           items,
@@ -338,7 +353,7 @@ export class NativeJournalCursor {
             before.item >= minimumItem && before.item < maximumItem,
         );
         itemIndex += items.length;
-        if (calls.length === 0 || itemIndex >= maximumItem) break;
+        if (callCount === 0 || itemIndex >= maximumItem) break;
         if (itemIndex < minimumItem) {
           callStart += (minimumItem - itemIndex) * 16;
           itemIndex = minimumItem;
@@ -411,7 +426,7 @@ export class NativeJournalCursor {
     count: number,
   ): Promise<{ entries: DisplayJournalEntry[] }> {
     this.releasePage();
-    await this.refreshReader();
+    if (this.end.row >= this.rows) await this.refreshReader();
     const selected: LocatedEntry[] = [];
     let position = this.end;
     while (selected.length < count && position.row < this.rows) {

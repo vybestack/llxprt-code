@@ -9,6 +9,34 @@ import { storedTokenUsageFacts } from './token-usage-facts.js';
 describe('request-scoped token usage preparation', () => {
   const directory = useTempDir('deferred-token-facts-');
 
+  it('reopens deferred history without a write or token measurement', async () => {
+    const path = directory() + '/deferred-open.llxj';
+    let calls = 0;
+    const options = {
+      tokenUsageCountTokens: (text: string): number => {
+        calls++;
+        return text.length;
+      },
+    };
+    const original = await JournalSession.create(path, options);
+    let sequence: number | undefined;
+    try {
+      await original.append([
+        { speaker: 'human', blocks: [{ type: 'text', text: 'shell only' }] },
+      ]);
+      sequence = original.store.published?.commitSeq;
+    } finally {
+      await original.close();
+    }
+    const resumed = await JournalSession.open(path, options);
+    try {
+      expect(resumed.store.published?.commitSeq).toBe(sequence);
+      expect(calls).toBe(0);
+    } finally {
+      await resumed.close();
+    }
+  });
+
   it('does not measure shell-only history before a provider request needs usage', async () => {
     let calls = 0;
     const session = await JournalSession.createUnlinked({

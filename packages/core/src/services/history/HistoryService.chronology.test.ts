@@ -27,18 +27,6 @@ import type {
 import type { DensityResult } from '../../core/compression/types.js';
 
 // ---------------------------------------------------------------------------
-const services: HistoryService[] = [];
-
-function createHistoryService(): HistoryService {
-  const service = new HistoryService();
-  services.push(service);
-  return service;
-}
-
-afterEach(async () => {
-  for (const service of services.splice(0)) await service.dispose();
-});
-
 // Test helpers (data builders — NOT mocks)
 // ---------------------------------------------------------------------------
 
@@ -103,10 +91,10 @@ function captureSynchronousMarker(content: IContent): ChronologyMarker {
 
 describe('HistoryService chronology - AC1: seq starts at 1 and increments', () => {
   let service: HistoryService;
-
   beforeEach(() => {
-    service = createHistoryService();
+    service = new HistoryService();
   });
+  afterEach(() => service.dispose());
 
   it('stamps the first added item with seq 1', async () => {
     const synchronousInput0 = makeHumanContent('hello');
@@ -180,10 +168,10 @@ describe('HistoryService chronology - AC1: seq starts at 1 and increments', () =
 
 describe('HistoryService chronology - AC2: seq never reused after clear()', () => {
   let service: HistoryService;
-
   beforeEach(() => {
-    service = createHistoryService();
+    service = new HistoryService();
   });
+  afterEach(() => service.dispose());
 
   it('continues seq from the previous maximum after clear()', async () => {
     const synchronousInput0 = makeHumanContent('a');
@@ -229,10 +217,10 @@ describe('HistoryService chronology - AC2: seq never reused after clear()', () =
 
 describe('HistoryService chronology - AC3: userTurn increments on human only', () => {
   let service: HistoryService;
-
   beforeEach(() => {
-    service = createHistoryService();
+    service = new HistoryService();
   });
+  afterEach(() => service.dispose());
 
   it('increments userTurn on human and shares it with ai/tool of the same turn', async () => {
     const synchronousInput0 = makeHumanContent('q1');
@@ -284,10 +272,10 @@ describe('HistoryService chronology - AC3: userTurn increments on human only', (
 
 describe('HistoryService chronology - AC4: step increments within turn, resets on human', () => {
   let service: HistoryService;
-
   beforeEach(() => {
-    service = createHistoryService();
+    service = new HistoryService();
   });
+  afterEach(() => service.dispose());
 
   it('assigns step 1 to the human, increments across the turn, resets on next human', async () => {
     const synchronousInput0 = makeHumanContent('q1');
@@ -339,10 +327,10 @@ describe('HistoryService chronology - AC4: step increments within turn, resets o
 
 describe('HistoryService chronology - AC5: recordedAt populated', () => {
   let service: HistoryService;
-
   beforeEach(() => {
-    service = createHistoryService();
+    service = new HistoryService();
   });
+  afterEach(() => service.dispose());
 
   it('populates recordedAt with a finite number within the insertion time bracket', async () => {
     const before = Date.now();
@@ -425,10 +413,10 @@ describe('HistoryService chronology - AC5: recordedAt populated', () => {
 
 describe('HistoryService chronology - AC8: validateAndFix preserves INV-1', () => {
   let service: HistoryService;
-
   beforeEach(() => {
-    service = createHistoryService();
+    service = new HistoryService();
   });
+  afterEach(() => service.dispose());
 
   it('stamps every synthetic tool message inserted by validateAndFix', async () => {
     const synchronousInput0 = makeAIWithToolCall('hist_tool_orphan1');
@@ -478,10 +466,10 @@ describe('HistoryService chronology - AC8: validateAndFix preserves INV-1', () =
 
 describe('HistoryService chronology - AC9: applyDensityResult inherits marker', () => {
   let service: HistoryService;
-
   beforeEach(() => {
-    service = createHistoryService();
+    service = new HistoryService();
   });
+  afterEach(() => service.dispose());
 
   it('inherits the replaced item marker on density replacement and keeps INV-1', async () => {
     const synchronousInput0 = makeHumanContent('h1');
@@ -559,10 +547,10 @@ describe('HistoryService chronology - AC9: applyDensityResult inherits marker', 
 
 describe('HistoryService chronology - AC11: a replaced row preserves its marker', () => {
   let service: HistoryService;
-
   beforeEach(() => {
-    service = createHistoryService();
+    service = new HistoryService();
   });
+  afterEach(() => service.dispose());
 
   it('stamps every entry installed through replaceAll', async () => {
     service.add(makeHumanContent('h1'));
@@ -689,10 +677,10 @@ async function assertToolResponseChronology(
 
 describe('HistoryService chronology - AC25: getChronologyTrace', () => {
   let service: HistoryService;
-
   beforeEach(() => {
-    service = createHistoryService();
+    service = new HistoryService();
   });
+  afterEach(() => service.dispose());
 
   it('returns one ordered entry per history item with marker fields', async () => {
     service.add(makeHumanContent('q1'));
