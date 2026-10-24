@@ -15,6 +15,10 @@ import {
   createFakeProvider,
   generateHistory,
 } from './__tests__/MiddleOutStrategy-test-helpers.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 describe('One-shot finish diagnostics', () => {
   it('retains the normalized and native reasons when thinking exhausts the output budget', async () => {
@@ -38,6 +42,7 @@ describe('One-shot finish diagnostics', () => {
       resolveProvider: () => ({
         invocation: captureProviderInvocation(
           {
+            fetch: requestFetch,
             runtimeId: createProviderRuntimeContext({}).runtimeId,
             metadata: createProviderRuntimeContext({}).metadata,
             globalSettings: settingsService.getAllGlobalSettings(),

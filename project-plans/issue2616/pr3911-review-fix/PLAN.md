@@ -1068,7 +1068,7 @@ Coders tick their own line in the commit that completes the task. Inventory task
   - [x] T2.5e A3 test-built invocations pass fetch: packages/providers, 15 files (file list in inventory-phase2.md)
   - [x] T2.5f A3 test-built invocations pass fetch: packages/providers, 14 files (file list in inventory-phase2.md)
   - [x] T2.5g A3 test-built invocations pass fetch: packages/agents, 15 files (file list in inventory-phase2.md)
-  - [ ] T2.5h A3 test-built invocations pass fetch: packages/agents, 15 files (file list in inventory-phase2.md)
+  - [x] T2.5h A3 test-built invocations pass fetch: packages/agents, 15 files (file list in inventory-phase2.md)
   - [ ] T2.5i A3 test-built invocations pass fetch: packages/agents, 15 files (file list in inventory-phase2.md)
   - [ ] T2.5j A3 test-built invocations pass fetch: packages/agents, 14 files (file list in inventory-phase2.md)
   - [ ] T2.5k A3 test-built invocations pass fetch: plugins/google-gemini, 5 files (file list in inventory-phase2.md)

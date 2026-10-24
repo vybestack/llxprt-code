@@ -36,6 +36,10 @@ import {
   EmptySummaryError,
   isTransientCompressionError,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 // ---------------------------------------------------------------------------
 // Helpers — build realistic IContent messages
@@ -232,6 +236,7 @@ function buildContext(
         ...resolved,
         invocation: captureProviderInvocation(
           {
+            fetch: requestFetch,
             runtimeId: resolved.runtime.runtimeId,
             metadata: resolved.runtime.metadata,
             globalSettings: invocationSettings.getAllGlobalSettings(),

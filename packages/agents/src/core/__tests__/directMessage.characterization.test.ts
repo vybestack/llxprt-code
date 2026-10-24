@@ -59,6 +59,10 @@ import {
   usageCounts,
   visibleText,
 } from './helpers/directMessageObservers.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 // retry must be a no-op so the real DMP runs the provider call exactly once
 void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
@@ -182,6 +186,7 @@ function createDirectHarness(
     prepareProviderInvocation: (name, parameters, signal) =>
       captureProviderInvocation(
         {
+          fetch: requestFetch,
           runtimeId: requestRuntime.runtimeId,
           metadata: requestRuntime.metadata,
           globalSettings: settingsService.getAllGlobalSettings(),

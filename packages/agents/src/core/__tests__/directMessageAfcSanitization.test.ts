@@ -53,6 +53,10 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { TestRuntimeProviderManager } from '../../test-utils/runtimeProviderManager.js';
 import { createConfigParams } from '../chatSession-runtime-helpers.js';
 import { ChatSession } from '../chatSession.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   retryWithBackoff: vi.fn((fn: () => unknown) => fn()),
@@ -135,6 +139,7 @@ function createDirectHarness(
     prepareProviderInvocation: (name, parameters, signal) =>
       captureProviderInvocation(
         {
+          fetch: requestFetch,
           runtimeId: requestRuntime.runtimeId,
           metadata: requestRuntime.metadata,
           globalSettings: settingsService.getAllGlobalSettings(),

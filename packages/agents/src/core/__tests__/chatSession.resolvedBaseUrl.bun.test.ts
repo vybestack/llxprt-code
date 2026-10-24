@@ -18,6 +18,10 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { TestRuntimeProviderManager } from '../../test-utils/runtimeProviderManager.js';
 import { ChatSession } from '../chatSession.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 const settingsOwners: SessionSettingsOwner[] = [];
 
@@ -81,6 +85,8 @@ function createChatSession(options: {
         name,
         parameters,
         signal,
+        undefined,
+        requestFetch,
       ),
   });
 

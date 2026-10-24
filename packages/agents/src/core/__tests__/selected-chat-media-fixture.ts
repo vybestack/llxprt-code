@@ -30,6 +30,10 @@ import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core
 import { vi } from 'bun:test';
 import { join } from 'node:path';
 import { ChatSession } from '../chatSession.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 type MediaHistoryRequest = (
   request: GenerateChatOptions,
@@ -112,6 +116,8 @@ export function createMediaHistoryChat(
         name,
         parameters,
         signal,
+        undefined,
+        requestFetch,
       ),
     state,
     history,

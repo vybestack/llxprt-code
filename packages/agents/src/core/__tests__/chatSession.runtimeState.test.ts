@@ -39,6 +39,10 @@ import type { HistoryService } from '@vybestack/llxprt-code-core/services/histor
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { ChatSession } from '../chatSession.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 /**
  * Test helper: Create minimal Config for testing
@@ -114,6 +118,8 @@ function createTestRuntimeContext(
         name,
         parameters,
         signal,
+        undefined,
+        requestFetch,
       ),
   });
 }

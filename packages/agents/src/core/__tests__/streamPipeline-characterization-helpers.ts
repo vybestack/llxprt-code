@@ -54,6 +54,26 @@ import { createConfigParams } from '../chatSession-runtime-helpers.js';
 import { ChatSession } from '../chatSession.js';
 import type { ServerAgentStreamEvent, ServerFinishedEvent } from '../turn.js';
 import { AgentEventType, DEFAULT_AGENT_ID, Turn } from '../turn.js';
+import type { PrepareProviderInvocation } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
+
+function invocationReaderFor(
+  owner: SessionSettingsOwner,
+  runtimeId: string,
+): PrepareProviderInvocation {
+  return (name, parameters, signal) =>
+    owner.prepareProviderInvocation(
+      runtimeId,
+      name,
+      parameters,
+      signal,
+      undefined,
+      requestFetch,
+    );
+}
 
 // ---------------------------------------------------------------------------
 // IContent chunk factories — the ONLY mock boundary
@@ -185,13 +205,10 @@ export function createFullLoopHarness(
   const invocationOwner = createSessionSettingsFixture(config).settingsOwner;
   retainedInvocationOwners.push(invocationOwner);
   const view = createAgentRuntimeContext({
-    prepareProviderInvocation: (name, parameters, signal) =>
-      invocationOwner.prepareProviderInvocation(
-        runtimeState.runtimeId,
-        name,
-        parameters,
-        signal,
-      ),
+    prepareProviderInvocation: invocationReaderFor(
+      invocationOwner,
+      runtimeState.runtimeId,
+    ),
     state: runtimeState,
     history: historyService,
     settings: {

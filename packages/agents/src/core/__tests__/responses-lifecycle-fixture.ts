@@ -5,7 +5,10 @@
  */
 
 import { afterEach } from 'bun:test';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type {
+  AgentRuntimeContext,
+  PrepareProviderInvocation,
+} from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 
 import { createRuntimeTokenizerFactory } from '../../../../providers/src/composition/runtimeTokenizerFactory.js';
@@ -34,6 +37,30 @@ import { createSessionSettingsFixture } from '../../api/__tests__/helpers/sessio
 import { createConfigParams } from '../chatSession-runtime-helpers.js';
 import { ChatSession } from '../chatSession.js';
 import { installModelToolFixture } from './model-tool-fixture.js';
+import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = (input, init) =>
+  globalThis.fetch(input, init);
+
+function lifecycleInvocationReader(
+  providerRuntime: ProviderRuntimeContext,
+  settingsService: SettingsService,
+): PrepareProviderInvocation {
+  return (name, parameters, signal) =>
+    captureProviderInvocation(
+      {
+        fetch: requestFetch,
+        runtimeId: providerRuntime.runtimeId,
+        metadata: providerRuntime.metadata,
+        globalSettings: settingsService.getAllGlobalSettings(),
+        providerSettings: settingsService.getProviderSettings(name),
+      },
+      name,
+      parameters,
+      signal,
+    );
+}
 
 const unusedContentGenerator: ContentGenerator = {
   async generateContent() {
@@ -184,18 +211,10 @@ export function installResponsesLifecycleFixture(): (
     const history = new HistoryService();
     const toolRegistry = modelTools();
     const runtime = createAgentRuntimeContext({
-      prepareProviderInvocation: (name, parameters, signal) =>
-        captureProviderInvocation(
-          {
-            runtimeId: providerRuntime.runtimeId,
-            metadata: providerRuntime.metadata,
-            globalSettings: settingsService.getAllGlobalSettings(),
-            providerSettings: settingsService.getProviderSettings(name),
-          },
-          name,
-          parameters,
-          signal,
-        ),
+      prepareProviderInvocation: lifecycleInvocationReader(
+        providerRuntime,
+        settingsService,
+      ),
       state: createAgentRuntimeState({
         runtimeId: 'responses-lifecycle',
         provider: provider.name,
