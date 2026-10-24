@@ -1,15 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 
-import type { CheckpointService } from './CheckpointService.js';
 import { JournalCheckpointService } from './journalCheckpointService.js';
 
 /**
- * The operations both checkpoint services offer. The journal service takes no
- * `projectHash` for its listings (its file knows the project) and no media
- * store (a listing reads no media), so it satisfies the narrower shape.
+ * The checkpoint operations provided by the journal service.
  */
 export type CheckpointServicePort = Pick<
-  CheckpointService,
+  JournalCheckpointService,
   | 'listCheckpoints'
   | 'getDeletionBlockers'
   | 'createCheckpoint'

@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'bun:test';
 import type { HistoryService } from '../services/history/HistoryService.js';
 import type { ResumeBoot } from '../services/history/historyStorePort.js';
-import type { CheckpointService } from './CheckpointService.js';
+import type { CheckpointServicePort } from './checkpointServiceFactory.js';
 import { JournalRecordingService } from './journalRecordingService.js';
 import { RecordingIntegration } from './RecordingIntegration.js';
 import type { SessionRecordingPort } from './recordingPort.js';
@@ -17,7 +17,7 @@ import type { SessionTransitionService } from './SessionTransitionService.js';
 export function consumersAcceptTheJournalRecorder(
   journal: JournalRecordingService,
   history: HistoryService,
-  checkpoints: CheckpointService,
+  checkpoints: CheckpointServicePort,
   transitions: SessionTransitionService,
   boot: ResumeBoot,
   target: Parameters<SessionTransitionService['forkFromCheckpoint']>[0],

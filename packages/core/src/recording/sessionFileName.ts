@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { SESSION_FILE_ID_PREFIX_LENGTH } from './SessionRecordingService.js';
 import { SESSION_FILE_EXTENSION } from './sessionFileExtension.js';
+
+export const SESSION_FILE_ID_PREFIX_LENGTH = 12;
 
 /** `session-<timestamp>-<instance>-<id prefix>.llxj`, unique per recorder instance. */
 export function journalSessionFileName(

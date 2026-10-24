@@ -1,6 +1,14 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent } from '../../../services/history/IContent.js';
-import { JournalSession } from '../../../services/history/journalSession.js';
+import { openJournalReadOnly } from '../../../journal/journalReader.js';
+import { stateReaderOf } from '../../../journal/journalReaderState.js';
+import { sha256KeyHash } from '../../../journal/idKeys.js';
+import {
+  iterateRowEntries,
+  rowTreeRootOf,
+} from '../../../journal/rowTreeReader.js';
+import { readStoredRow } from '../../../journal/rowReads.js';
+import { decodeStoredRow } from '../../../services/history/journalRowCodec.js';
 import { JournalCheckpointService } from '../../journalCheckpointService.js';
 import {
   SESSION_KEYS,
@@ -22,14 +30,18 @@ export async function readJournalSnapshot(
   filePath: string,
   projectHash: string,
 ): Promise<JournalSnapshot> {
-  const session = await JournalSession.open(filePath);
+  const reader = await openJournalReadOnly(filePath);
+  const readState = stateReaderOf(reader, sha256KeyHash);
   try {
-    const facts = await readSessionFacts((key) => session.store.getState(key));
+    const facts = await readSessionFacts(readState);
     if (facts === undefined || facts.start.projectHash !== projectHash)
       throw new Error('Missing fixture session or mismatched project');
     const history: IContent[] = [];
-    for await (const row of session.rows()) history.push(row.content);
-    const fork = await session.store.getState(SESSION_KEYS.fork);
+    const root = rowTreeRootOf(reader.trailer);
+    if (root !== undefined)
+      for await (const entry of iterateRowEntries(reader, root))
+        history.push(decodeStoredRow(await readStoredRow(reader, entry)));
+    const fork = await readState(SESSION_KEYS.fork);
     return {
       history,
       metadata: {
@@ -47,9 +59,9 @@ export async function readJournalSnapshot(
       ),
       ancestry: fork === undefined ? undefined : decodeSessionFact(fork),
       ...(facts.name === undefined ? {} : { sessionName: facts.name }),
-      commitSeq: session.store.published?.commitSeq ?? 0,
+      commitSeq: reader.trailer?.commitSeq ?? 0,
     };
   } finally {
-    await session.close();
+    await reader.close();
   }
 }

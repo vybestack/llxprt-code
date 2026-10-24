@@ -87,7 +87,7 @@ import {
 
 export type { SessionRecordingServiceConfig };
 
-export const SESSION_FILE_ID_PREFIX_LENGTH = 12;
+import { SESSION_FILE_ID_PREFIX_LENGTH } from './sessionFileName.js';
 
 /**
  * Default hard bound for serialized records waiting for durable write

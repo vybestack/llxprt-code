@@ -108,11 +108,7 @@ export async function deleteSessionWithDiagnostics(
   }
 
   return {
-    result: await deleteResolvedSession(
-      resolved.session,
-      chatsDir,
-      projectHash,
-    ),
+    result: await deleteResolvedSession(resolved.session, chatsDir),
     unreadableRecordings,
   };
 }
@@ -149,13 +145,12 @@ export async function deleteSessionById(
     };
   }
 
-  return deleteResolvedSession(target, chatsDir, projectHash);
+  return deleteResolvedSession(target, chatsDir);
 }
 
 async function deleteResolvedSession(
   target: SessionSummary,
   chatsDir: string,
-  projectHash: string,
 ): Promise<DeleteSessionResult | DeleteSessionError> {
   let lock: LockHandle;
   try {
@@ -179,7 +174,6 @@ async function deleteResolvedSession(
   try {
     const blockers = await createCheckpointService().getDeletionBlockers(
       target.filePath,
-      projectHash,
     );
     if (blockers.length > 0) {
       const details = blockers

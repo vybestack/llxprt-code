@@ -85,22 +85,18 @@ describe('checkpoint service factory', () => {
         );
         await recorder.flush();
         const filePath = fileOf(recorder);
-        const listed = await service.listCheckpoints(filePath, PROJECT);
+        const listed = await service.listCheckpoints(filePath);
         expect(listed.map((view) => view.name)).toStrictEqual(['renamed']);
         expect(listed[0].checkpointId).toBe(created.checkpointId);
         expect(listed[0].sequence).toBe(created.sequence);
-        expect(
-          await service.getDeletionBlockers(filePath, PROJECT),
-        ).toStrictEqual(listed);
+        expect(await service.getDeletionBlockers(filePath)).toStrictEqual(
+          listed,
+        );
 
         await service.deleteCheckpoint(recorder, PROJECT, created.checkpointId);
         await recorder.flush();
-        expect(await service.listCheckpoints(filePath, PROJECT)).toStrictEqual(
-          [],
-        );
-        expect(
-          await service.getDeletionBlockers(filePath, PROJECT),
-        ).toStrictEqual([]);
+        expect(await service.listCheckpoints(filePath)).toStrictEqual([]);
+        expect(await service.getDeletionBlockers(filePath)).toStrictEqual([]);
         await expect(
           service.renameCheckpoint(
             recorder,
@@ -127,7 +123,7 @@ describe('checkpoint service factory', () => {
           service.createCheckpoint(recorder, PROJECT, 'shared'),
         ).rejects.toThrow(/already exists/);
         expect(
-          (await service.listCheckpoints(fileOf(recorder), PROJECT)).map(
+          (await service.listCheckpoints(fileOf(recorder))).map(
             (view) => view.checkpointId,
           ),
         ).toStrictEqual([first.checkpointId]);
@@ -139,7 +135,7 @@ describe('checkpoint service factory', () => {
         );
         await recorder.flush();
         expect(
-          (await service.listCheckpoints(fileOf(recorder), PROJECT)).map(
+          (await service.listCheckpoints(fileOf(recorder))).map(
             (view) => view.checkpointId,
           ),
         ).toStrictEqual([replacement.checkpointId]);
@@ -158,9 +154,9 @@ describe('checkpoint service factory', () => {
         ).rejects.toThrow(/already exists/);
         await service.setSessionName(recorder, PROJECT, 'taken', true);
         await recorder.flush();
-        expect(
-          await service.getDeletionBlockers(fileOf(other), PROJECT),
-        ).toStrictEqual([]);
+        expect(await service.getDeletionBlockers(fileOf(other))).toStrictEqual(
+          [],
+        );
         await expect(
           service.createCheckpoint(recorder, PROJECT, 'taken'),
         ).rejects.toThrow(/already exists/);
@@ -190,7 +186,7 @@ describe('checkpoint service factory', () => {
           ).rejects.toThrow(/already exists/);
         }
         expect(
-          (await service.listCheckpoints(fileOf(recorder), PROJECT)).map(
+          (await service.listCheckpoints(fileOf(recorder))).map(
             (view) => view.name,
           ),
         ).toStrictEqual(['new']);
@@ -217,7 +213,7 @@ describe('checkpoint service factory', () => {
           `live checkpoints block deletion: blocker (${checkpoint.checkpointId})`,
         );
         expect(
-          (await service.listCheckpoints(file, PROJECT)).map(
+          (await service.listCheckpoints(file)).map(
             (view) => view.checkpointId,
           ),
         ).toStrictEqual([checkpoint.checkpointId]);
@@ -265,7 +261,7 @@ describe('checkpoint service factory', () => {
           created.checkpointId,
           'renamed',
         );
-        const listed = await service.listCheckpoints(file, PROJECT);
+        const listed = await service.listCheckpoints(file);
         expect(
           listed.map((view) => ({
             name: view.name,
@@ -279,9 +275,7 @@ describe('checkpoint service factory', () => {
             sequence: created.sequence,
           },
         ]);
-        expect(await service.getDeletionBlockers(file, PROJECT)).toStrictEqual(
-          listed,
-        );
+        expect(await service.getDeletionBlockers(file)).toStrictEqual(listed);
         await service.deleteCheckpointClosed(
           file,
           PROJECT,
@@ -289,10 +283,8 @@ describe('checkpoint service factory', () => {
           'live',
           created.checkpointId,
         );
-        expect(await service.listCheckpoints(file, PROJECT)).toStrictEqual([]);
-        expect(await service.getDeletionBlockers(file, PROJECT)).toStrictEqual(
-          [],
-        );
+        expect(await service.listCheckpoints(file)).toStrictEqual([]);
+        expect(await service.getDeletionBlockers(file)).toStrictEqual([]);
       });
     });
   }

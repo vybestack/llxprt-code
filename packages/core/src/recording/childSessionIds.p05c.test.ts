@@ -25,7 +25,7 @@
 import { describe, expect, it } from 'bun:test';
 import { allocateChildSessionId } from './childSessionIds.js';
 import { isValidSafeSessionId } from './janitor/sessionSafety.js';
-import { SESSION_FILE_ID_PREFIX_LENGTH } from './SessionRecordingService.js';
+import { SESSION_FILE_ID_PREFIX_LENGTH } from './sessionFileName.js';
 
 const PARALLEL_LAUNCHES = 64;
 

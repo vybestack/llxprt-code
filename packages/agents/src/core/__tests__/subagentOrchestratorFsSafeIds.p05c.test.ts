@@ -27,7 +27,7 @@ import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagen
 import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { isValidSafeSessionId } from '@vybestack/llxprt-code-core/recording/janitor/sessionSafety.js';
-import { SESSION_FILE_ID_PREFIX_LENGTH } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
+import { SESSION_FILE_ID_PREFIX_LENGTH } from '@vybestack/llxprt-code-core/recording/sessionFileName.js';
 import type { AgentRuntimeLoaderOptions } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';

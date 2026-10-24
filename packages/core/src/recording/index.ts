@@ -55,10 +55,8 @@ export {
   enterHistoryRecord,
   type ReplaceRowStore,
 } from './replaceTransaction.js';
-export {
-  SessionRecordingService,
-  SESSION_FILE_ID_PREFIX_LENGTH,
-} from './SessionRecordingService.js';
+export { SessionRecordingService } from './SessionRecordingService.js';
+export { SESSION_FILE_ID_PREFIX_LENGTH } from './sessionFileName.js';
 export type { SessionRecordingPort } from './recordingPort.js';
 export {
   createLockedSessionRecorder,
@@ -132,7 +130,7 @@ export {
   type DeleteSessionError,
   type DeleteSessionOutcome,
 } from './sessionManagement.js';
-export { CheckpointService, CheckpointLockError } from './CheckpointService.js';
+export { CheckpointLockError } from './checkpointNaming.js';
 export {
   createCheckpointService,
   type CheckpointServicePort,
