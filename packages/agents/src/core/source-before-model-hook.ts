@@ -59,7 +59,7 @@ export async function sourceBeforeModelHook(
       },
       model: input.model,
       tools: input.tools ?? [],
-      root: getScratchRoot(),
+      root: getScratchRoot,
       signal: input.signal,
       log: input.log,
     });
@@ -67,12 +67,26 @@ export async function sourceBeforeModelHook(
       snapshotKept = true;
       return unmodified();
     }
+    const borrowedSnapshot = boundary.contents === input.snapshot;
+    snapshotKept = borrowedSnapshot;
     return pendingAwareRequestSelection(
       {
+        ...(boundary.contents.native === undefined
+          ? {}
+          : { native: boundary.contents.native }),
+        ...(boundary.contents.callerOwned === true
+          ? { callerOwned: true }
+          : {}),
         count: boundary.contents.count,
         openReader: (signal) => boundary.contents.openReader(signal),
         readAt: (index, signal) => boundary.contents.readAt(index, signal),
-        close: () => boundary.close(),
+        async close() {
+          try {
+            boundary.close();
+          } finally {
+            if (borrowedSnapshot) await input.snapshot.close();
+          }
+        },
       },
       boundary.pendingSelection === undefined
         ? undefined

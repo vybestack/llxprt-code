@@ -31,7 +31,7 @@ export interface BeforeModelSnapshotHookOptions {
   readonly log: (message: string) => void;
   readonly requestContents: ProviderRequestRows;
   readonly rawPending: ProviderRequestRows;
-  readonly root: string;
+  readonly root: string | (() => string);
   readonly signal?: AbortSignal;
 }
 
@@ -75,6 +75,7 @@ export async function fireBeforeModelSnapshotHook(
   if (hook === undefined) return undefined;
   let resolved: BoundarySnapshotResult | undefined;
   try {
+    options.signal?.throwIfAborted();
     enforceSnapshotDecision(hook.finalOutput);
     // Execution failures are non-blocking, as on the eager route and for
     // AfterModel. The stop/block decision above still applies; otherwise the
@@ -99,6 +100,17 @@ export async function fireBeforeModelSnapshotHook(
       request === undefined || request.contents.count === 0
         ? options.requestContents
         : request.contents;
+    if (replaced === options.requestContents) {
+      options.log(
+        '[BeforeModelSnapshot] Pending boundary classification=unchanged recovered=true',
+      );
+      return {
+        classification: 'unchanged',
+        contents: options.requestContents,
+        pendingSelection: options.rawPending,
+        close: () => undefined,
+      };
+    }
     resolved = await resolvePendingBoundarySnapshot({
       before: options.requestContents,
       after: replaced,
@@ -107,7 +119,7 @@ export async function fireBeforeModelSnapshotHook(
         'hookSpecificOutput',
         'llm_request_boundary',
       ]),
-      root: options.root,
+      root: typeof options.root === 'function' ? options.root() : options.root,
       signal: options.signal,
     });
     options.log(
