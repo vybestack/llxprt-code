@@ -105,7 +105,7 @@ export async function observeWholeProductIo(): Promise<{
   const create = JournalSession.create;
   const open = JournalSession.open;
   const bare = JournalSession.createUnlinked;
-  const commit = JournalGroupWriter.prototype.commitStreamedGroup;
+  const commit = JournalGroupWriter.prototype.prepareGroup;
   const options = (
     input: JournalSessionOptions = {},
   ): JournalSessionOptions => ({
@@ -126,7 +126,7 @@ export async function observeWholeProductIo(): Promise<{
     open.call(JournalSession, path, options(input));
   JournalSession.createUnlinked = (input) =>
     bare.call(JournalSession, options(input));
-  JournalGroupWriter.prototype.commitStreamedGroup = function (build) {
+  JournalGroupWriter.prototype.prepareGroup = function (build) {
     const handle = this.currentFile().handle;
     handles.watch(handle, 'primary');
     const count = handles.count(handle.fd);
@@ -140,7 +140,7 @@ export async function observeWholeProductIo(): Promise<{
         return offset;
       };
       const state = await build(appender);
-      count.groups++;
+      if (state !== undefined) count.groups++;
       return state;
     });
   };
@@ -153,7 +153,7 @@ export async function observeWholeProductIo(): Promise<{
       JournalSession.create = create;
       JournalSession.open = open;
       JournalSession.createUnlinked = bare;
-      JournalGroupWriter.prototype.commitStreamedGroup = commit;
+      JournalGroupWriter.prototype.prepareGroup = commit;
     },
   };
 }
