@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { recordedMessages as emittedCandidate } from './message-table/__tests__/support/recorded-wire-oracle.js';
 import { describe, expect, it } from 'bun:test';
 import { anthropicRepairFactIndex } from './anthropic-repair-fact-writer.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -9,7 +10,6 @@ import { IndexedJournalRequestSnapshot } from '@vybestack/llxprt-code-core/servi
 import { testJournalSeams } from '@vybestack/llxprt-code-core/journal/__tests__/support/journalFixtures.js';
 import { useTempDir } from '@vybestack/llxprt-code-core/journal/__tests__/support/useTempDir.js';
 import { withAnthropicStreamRepair } from './anthropic-stream-repair.js';
-import { emittedCandidate } from './message-table/__tests__/support/wireBuilderHarness.js';
 
 export const repairSettings: RowFormatSettings = {
   formatId: 'anthropic',

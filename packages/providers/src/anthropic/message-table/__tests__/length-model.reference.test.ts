@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { recordedCachedMessages as cachedCandidate } from './support/recorded-wire-oracle.js';
 
 /**
  * Issue #854 phase 0: the reference machine (the plain-array port of the
@@ -13,10 +14,7 @@ import {
   formatById,
   caseOf,
 } from '../../../__tests__/support/frozenWire/frozenCases.js';
-import {
-  cachedCandidate,
-  type WireSettings,
-} from './support/wireBuilderHarness.js';
+import { type WireSettings } from './support/wireBuilderHarness.js';
 import { frozenSettingsInputs } from './support/lengthModel/frozenInputs.js';
 import { policyOf } from './support/lengthModel/lengthChecks.js';
 import {

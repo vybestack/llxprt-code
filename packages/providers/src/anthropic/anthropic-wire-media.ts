@@ -9,7 +9,7 @@ import {
   mediaBlockToAnthropicDocument,
 } from './AnthropicHumanMessageConverter.js';
 import { anthropicWireMedia } from './anthropic-measured-media.js';
-import type { MediaStage } from './message-table/wire-builder.js';
+import type { MediaStage } from './native-anthropic-media-stage.js';
 import type { ImageDimensionBudget } from '@vybestack/llxprt-code-tools/utils/imageDimensionBudget.js';
 import { sanitizeWireBlockImages } from './AnthropicImageSanitizer.js';
 

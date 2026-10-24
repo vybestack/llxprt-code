@@ -29,7 +29,6 @@ import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { uploadKimiRowMedia } from '../kimi/kimiMediaProcessing.js';
 import { declaredMediaTransportCapabilities } from '../providerMediaTransportCapabilities.js';
 import { ProviderFileLifecycle } from '../providerFilePolicy.js';
-import { KeyedRowIndex } from '../utils/keyed-row-index.js';
 import { collectContents } from '../utils/collectContents.js';
 import { providerRowsOf } from '../utils/providerRows.js';
 import { resolveRequestMedia } from '../utils/request-media-resolution.js';
@@ -209,7 +208,7 @@ async function collectingPrepass(
 ): Promise<IContent[]> {
   const rows = await providerRowsOf(options);
   const held = await collectContents(rows.openReader());
-  const uploads = KeyedRowIndex.create('kimi-prepass-trap');
+  const uploads = new Map<string, unknown>();
   try {
     for (const [ordinal, row] of held.entries()) {
       await uploadKimiRowMedia(client, row, ordinal, uploads, undefined, {
@@ -217,7 +216,7 @@ async function collectingPrepass(
       });
     }
   } finally {
-    uploads.close();
+    uploads.clear();
   }
   return held;
 }
@@ -284,20 +283,36 @@ describe('Kimi file pre-pass residency', () => {
 });
 
 describe('Kimi file pre-pass request scope', () => {
-  it('removes its upload index when the media request ends', async () => {
+  it('releases its upload records without creating scratch files', async () => {
     const before = kimiScratchDirectories();
     const census: Census = { refs: [] };
     const client = watchingClient(census, { value: 0 });
     const mediaRequest = await resolveRequestMedia(MEDIA_INPUT, [], undefined);
 
-    await realPrepass(
-      prepassOptions(watchedSelection(3, census)),
+    const selection = watchedSelection(3, census);
+    const prepared = await realPrepass(
+      prepassOptions(selection),
       client,
       mediaRequest,
     );
-    expect(kimiScratchDirectories()).toHaveLength(before.length + 1);
+    if (prepared?.mediaStage === undefined)
+      throw new Error('Missing media stage');
+    const uploaded = await collectContents(
+      prepared.mediaStage(selection.openReader()),
+    );
+    expect(uploaded).toHaveLength(3);
+    for (const [at, row] of uploaded.entries()) {
+      expect(row.blocks[1]).toStrictEqual({
+        type: 'text',
+        text: `[Uploaded PDF: doc-${at}.pdf (file id: file-${at + 1})]`,
+      });
+    }
+    expect(kimiScratchDirectories()).toStrictEqual(before);
 
     await mediaRequest.release();
+    expect(
+      await collectContents(prepared.mediaStage(selection.openReader())),
+    ).toStrictEqual(await collectContents(selection.openReader()));
     expect(kimiScratchDirectories()).toStrictEqual(before);
   });
 

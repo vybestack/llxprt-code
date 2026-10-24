@@ -53,7 +53,7 @@ import {
   AnthropicRepairIndex,
   anthropicRepairScope,
 } from './anthropic-repair-index.js';
-import type { MediaStage } from './message-table/wire-builder.js';
+import type { MediaStage } from './native-anthropic-media-stage.js';
 import { NativeAnthropicEstimateProjection } from './native-anthropic-estimate.js';
 
 import { AnthropicRepairSource } from './anthropic-repair-source.js';

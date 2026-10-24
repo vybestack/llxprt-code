@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { recordedMessages as emittedCandidate } from './message-table/__tests__/support/recorded-wire-oracle.js';
 import { describe, expect, it } from 'bun:test';
 import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
 import { encodeContentRow } from '@vybestack/llxprt-code-core/services/history/journalRowCodec.js';
@@ -19,7 +20,6 @@ import {
   planStoredAnthropicRequest,
 } from './journal-anthropic-length.js';
 import { normalizedRows } from '../__tests__/support/frozenWire/normalizedRows.js';
-import { emittedCandidate } from './message-table/__tests__/support/wireBuilderHarness.js';
 
 const settings: RowFormatSettings = {
   formatId: 'anthropic',

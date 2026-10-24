@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { recordedMessages as candidateJson } from './message-table/__tests__/support/recorded-wire-oracle.js';
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RowFormatSettings } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
@@ -20,7 +21,6 @@ import {
   analyze,
   lcg,
 } from './message-table/__tests__/support/lengthModel/lengthChecks.js';
-import { candidateJson } from './message-table/__tests__/support/wireBuilderHarness.js';
 
 const SETTINGS: RowFormatSettings = {
   formatId: 'anthropic',

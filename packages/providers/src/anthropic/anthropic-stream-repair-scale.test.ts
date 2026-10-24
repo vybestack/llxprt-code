@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { recordedMessages as emittedCandidate } from './message-table/__tests__/support/recorded-wire-oracle.js';
 import { describe, expect, it } from 'bun:test';
 import { anthropicRepairFactIndex } from './anthropic-repair-fact-writer.js';
 import { createHash } from 'node:crypto';
@@ -8,7 +9,7 @@ import { testJournalSeams } from '@vybestack/llxprt-code-core/journal/__tests__/
 import { useTempDir } from '@vybestack/llxprt-code-core/journal/__tests__/support/useTempDir.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RowFormatSettings } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
-import { emittedCandidate } from './message-table/__tests__/support/wireBuilderHarness.js';
+
 import {
   withAnthropicStreamRepair,
   type AnthropicStreamRepair,

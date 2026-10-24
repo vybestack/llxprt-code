@@ -22,7 +22,6 @@ import {
   createBoundedCache,
   type KimiUploadOptions,
 } from './kimiFileUpload.js';
-import { KeyedRowIndex } from '../utils/keyed-row-index.js';
 import type {
   IContent,
   MediaBlock,
@@ -99,7 +98,7 @@ async function processKimiMedia(
   cache?: ReturnType<typeof createBoundedCache<string>>,
   options: KimiUploadOptions = {},
 ): Promise<ProcessedRows> {
-  const uploads = KeyedRowIndex.create('kimi-media-test');
+  const uploads = new Map<string, unknown>();
   try {
     let uploaded = 0;
     for (const [ordinal, row] of contents.entries()) {
@@ -119,7 +118,7 @@ async function processKimiMedia(
       uploaded,
     };
   } finally {
-    uploads.close();
+    uploads.clear();
   }
 }
 
@@ -519,14 +518,14 @@ describe('Kimi row media', () => {
     });
 
     it('fails when a recorded upload has an unexpected shape', () => {
-      const uploads = KeyedRowIndex.create('kimi-media-test');
+      const uploads = new Map<string, unknown>();
       try {
         uploads.set('kimi-media:0:0', { kind: 'unknown' });
         expect(() => applyKimiRowMedia(pdfRow('x.pdf'), 0, uploads)).toThrow(
           'Kimi upload record holds an unexpected value',
         );
       } finally {
-        uploads.close();
+        uploads.clear();
       }
     });
   });
