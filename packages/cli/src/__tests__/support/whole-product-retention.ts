@@ -27,29 +27,50 @@ export function observeWholeProductRetention(
     const measured = measuring;
     if (measured) prepared++;
     let released = false;
+    const rows = snapshot.native?.indexed;
+    const open = snapshot.openReader.bind(snapshot);
+    const observe = (row: IContent, first: boolean): void => {
+      if (measuring) {
+        if (trap) retained.push(row);
+        if (allRows || first) weak.push(new WeakRef(row));
+      } else if (first) {
+        warm.push(new WeakRef(row));
+      }
+    };
+    const observedReader = async function* (
+      source: AsyncGenerator<IContent>,
+    ): AsyncGenerator<IContent> {
+      let first = true;
+      for await (const row of source) {
+        observe(row, first);
+        first = false;
+        yield row;
+      }
+    };
+    if (rows !== undefined) {
+      const indexedOpen = rows.openReader.bind(rows);
+      const read = rows.readAt.bind(rows);
+      rows.openReader = (signal) => observedReader(indexedOpen(signal));
+      rows.readAt = async (index, signal): Promise<IContent> => {
+        const row = await read(index, signal);
+        observe(row, true);
+        return row;
+      };
+    }
     return {
+      ...(snapshot.native === undefined ? {} : { native: snapshot.native }),
+      ...(snapshot.callerOwned === true ? { callerOwned: true } : {}),
       count: snapshot.count,
       pending: snapshot.pending,
       isPending: (index) => snapshot.isPending(index),
       readAt: (index, signal) => snapshot.readAt(index, signal),
-      close: (): void => {
-        snapshot.close();
+      close: async (): Promise<void> => {
+        await snapshot.close();
         if (measured && !released) closed++;
         released = true;
       },
-      async *openReader(signal): AsyncGenerator<IContent> {
-        let observed = false;
-        for await (const row of snapshot.openReader(signal)) {
-          if (measuring) {
-            if (trap) retained.push(row);
-            if (allRows || !observed) weak.push(new WeakRef(row));
-          } else if (!observed) {
-            warm.push(new WeakRef(row));
-          }
-          observed = true;
-          yield row;
-        }
-      },
+      openReader: (signal) =>
+        rows === undefined ? observedReader(open(signal)) : open(signal),
     };
   };
   return {
