@@ -18,7 +18,10 @@ import { LoggingProviderWrapper } from '../LoggingProviderWrapper.js';
 import { ConfigBasedRedactor } from '../logging/ConfigBasedRedactor.js';
 import type { IProvider, GenerateChatOptions } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { isAsyncIterableContents } from '../utils/collectContents.js';
+import {
+  isAsyncIterableContents,
+  replayableContents,
+} from '../utils/collectContents.js';
 
 class RecoveryConfig extends Config {
   readonly settings = new SettingsService();
@@ -114,9 +117,9 @@ async function invoke(
   redactor = new ConfigBasedRedactor(redaction),
   signal?: AbortSignal,
 ): Promise<IContent[]> {
-  const contents = (async function* (): AsyncGenerator<IContent> {
-    for (let index = 0; index < 24; index++) yield row(index);
-  })();
+  const contents = replayableContents(
+    Array.from({ length: 24 }, (_, index) => row(index)),
+  );
   const wrapper = new LoggingProviderWrapper(
     provider(),
     redactor,
