@@ -22,6 +22,7 @@ import {
 } from '@vybestack/llxprt-code-providers/composition.js';
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { Storage } from '@vybestack/llxprt-code-storage';
 import { fileURLToPath } from 'node:url';
 import type { TestChildLaunchOptions } from '../../core/__tests__/child-launch-fixture.js';
 import { createTestChildOrchestrator } from '../../core/__tests__/child-launch-fixture.js';
@@ -381,6 +382,47 @@ describe('Isolated child session client ownership', () => {
         await continuing.dispose();
       }
     }, credentials().authority);
+  }, 30000);
+  it('roots the child media store in the parent workspace project directory', async () => {
+    let childRuntime: AgentRuntimeLoaderResult | undefined;
+    await withChildOwner(
+      async (orchestrator, _settings, _owner, parentMcp) => {
+        const [parentDirectory] = parentMcp.workspacePaths.directories();
+        const parentProjectDirectory = join(
+          Storage.getGlobalLogDir(),
+          'tmp',
+          Storage.getProjectHistoryKey(parentDirectory),
+        );
+        const launchDirectoryProjectDirectory = join(
+          Storage.getGlobalLogDir(),
+          'tmp',
+          Storage.getProjectHistoryKey(process.cwd()),
+        );
+        expect(parentProjectDirectory).not.toBe(
+          launchDirectoryProjectDirectory,
+        );
+        const child = await orchestrator.launch({ name: 'child' });
+        try {
+          const mediaRoot =
+            childRuntime?.runtimeContext.mediaStore?.rootDirectory;
+          if (mediaRoot === undefined)
+            throw new Error('Child runtime has no media store');
+          expect(
+            mediaRoot.startsWith(join(parentProjectDirectory, 'media-live')),
+          ).toBe(true);
+          expect(mediaRoot.startsWith(launchDirectoryProjectDirectory)).toBe(
+            false,
+          );
+        } finally {
+          await child.dispose();
+        }
+      },
+      credentials().authority,
+      async (options) => {
+        childRuntime = await loadAgentRuntime(options);
+        return childRuntime;
+      },
+    );
   }, 30000);
   it('closes the child client after success without closing its parent', async () => {
     await withChildOwner(

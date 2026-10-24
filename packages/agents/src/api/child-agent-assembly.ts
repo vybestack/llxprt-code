@@ -193,9 +193,9 @@ export class ChildAgentAssembly {
     }
     this.config = new Config({
       sessionId: this.data.runtimeId,
-      targetDir: process.cwd(),
+      targetDir: this.foregroundConfig.getTargetDir(),
       debugMode: false,
-      cwd: process.cwd(),
+      cwd: this.foregroundConfig.getWorkingDir(),
       model: this.data.activationProfile.model,
       initialSettings: this.settings.getAllGlobalSettings(),
     });
