@@ -4,25 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { openJournalReadOnly } from '@vybestack/llxprt-code-core/journal/journalReader.js';
-import {
-  iterateRowEntries,
-  rowTreeRootOf,
-} from '@vybestack/llxprt-code-core/journal/rowTreeReader.js';
-import { readStoredRow } from '@vybestack/llxprt-code-core/journal/rowReads.js';
-import { decodeStoredRow } from '@vybestack/llxprt-code-core/services/history/journalRowCodec.js';
+import { NativeJournalPageReader } from '@vybestack/llxprt-code-core';
 
 export async function readToolResultBody(
   filePath: string,
   callId: string,
 ): Promise<string | undefined> {
-  const reader = await openJournalReadOnly(filePath);
+  const reader = await NativeJournalPageReader.open(filePath);
   try {
-    const root = rowTreeRootOf(reader.trailer);
-    if (root === undefined) return undefined;
     let lastMatch: string | undefined;
-    for await (const entry of iterateRowEntries(reader, root)) {
-      const content = decodeStoredRow(await readStoredRow(reader, entry));
+    for await (const entry of reader.entries()) {
+      const content = await reader.readContent(entry);
       if (content.speaker !== 'tool') continue;
       const response = content.blocks.find(
         (block) => block.type === 'tool_response' && block.callId === callId,

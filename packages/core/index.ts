@@ -49,3 +49,10 @@ export {
 export { WorkspaceToolCatalogOwner } from './src/services/workspace-tool-catalog-owner.js';
 export { ToolDispatchAdmission } from './src/services/tool-dispatch-admission.js';
 export { SessionSettingsOwner } from './src/session/session-settings-owner.js';
+
+export {
+  NativeJournalPageReader,
+  type NativeJournalEntry,
+  type NativeJournalReadDependencies,
+} from './src/journal/native-journal-page-reader.js';
+export { JournalSession } from './src/services/history/journalSession.js';

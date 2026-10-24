@@ -1,13 +1,15 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { JournalReadCounters } from '@vybestack/llxprt-code-core';
-import type { JournalReaderDependencies } from '@vybestack/llxprt-code-core/journal/journalReader.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type {
+  JournalReadCounters,
+  NativeJournalReadDependencies,
+  IContent,
+} from '@vybestack/llxprt-code-core';
 import type { HistoryItem } from '../../types.js';
 
 export interface NativeJournalOptions {
   readonly counters?: JournalReadCounters;
   readonly signal?: AbortSignal;
-  readonly journal?: JournalReaderDependencies;
+  readonly journal?: NativeJournalReadDependencies;
 }
 
 export type NativeDisplayEntry =

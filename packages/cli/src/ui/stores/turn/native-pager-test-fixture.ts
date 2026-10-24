@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+import { JournalSession } from '@vybestack/llxprt-code-core';
 import type { IContent } from '@vybestack/llxprt-code-core';
 
 export type NativePagerEdit =
