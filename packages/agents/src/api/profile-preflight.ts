@@ -48,6 +48,7 @@ import {
   createPreflightOAuthProfileReads,
 } from '@vybestack/llxprt-code-providers/composition.js';
 import { releaseAdoptedFileScope } from './adoption-release.js';
+import { acquireRootNetwork } from './root-network.js';
 import { applyCliArgumentOverrides } from './settingsResolver.js';
 import type { ProviderSwitcher } from '@vybestack/llxprt-code-core';
 import {
@@ -177,6 +178,7 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
     oauthSettings: IOAuthSettingsProvider | undefined,
     fakeResponses: string | undefined,
   ): void {
+    const network = acquireRootNetwork(this.#release, this.#host.proxy);
     this.#manager = new ProviderManager(
       undefined,
       undefined,
@@ -187,6 +189,7 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
       this.#runtimeContext('pre-config'),
     );
     const manager = this.#manager;
+    manager.bindNetworkFetch(network.fetch);
     this.#release.acquire('manager', () => manager.dispose());
     const keys = authority.createProviderKeyStorage();
     this.#release.acquire('manager', () => keys.close());

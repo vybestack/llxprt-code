@@ -13,7 +13,10 @@ import { OpenAIProvider } from '@vybestack/llxprt-code-providers';
 import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { bindProviderAliasIdentity } from '@vybestack/llxprt-code-providers/composition/aliasProviderFactory.js';
 import { buildProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition/runtimePlugins/index.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
+import {
+  ProfileManager,
+  SettingsService,
+} from '@vybestack/llxprt-code-settings';
 import {
   startLocalForwardProxy,
   type ForwardProxyRequest,
@@ -23,6 +26,10 @@ import type { Agent } from '../agent.js';
 import { toConfigParameters } from '../agentConfig.adapter.js';
 import { createAgent } from '../createAgent.js';
 import { fromConfig } from '../fromConfig.js';
+import {
+  AgentProfilePreflight,
+  prepareAgentPreflight,
+} from '../profile-preflight.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 
 const HOST_A = 'model-a.invalid';
@@ -369,4 +376,215 @@ describe('owner transport per root', () => {
       'the held socket closes',
     );
   }, 30_000);
+
+  describe('profile preflight root', () => {
+    const HOST_P = 'model-p.invalid';
+    const CANNED_P = 'model-p-canned';
+    const ALIAS = 'proxied-local';
+    const DEFAULT_MODEL = 'proxied-default';
+
+    interface PreflightRoot {
+      readonly proxy: LocalForwardProxy;
+      readonly preflight: AgentProfilePreflight;
+      readonly config: Config;
+    }
+
+    function contribution(): ReturnType<
+      typeof buildProviderContributionRegistry
+    > {
+      return buildProviderContributionRegistry([
+        {
+          specifier: 'memory:preflight-root-network',
+          manifest: {
+            apiVersion: 1,
+            id: 'preflight-root-network',
+            providers: [
+              {
+                providerId: 'proxied-openai',
+                createProvider: (entry) => {
+                  const provider = new OpenAIProvider(
+                    'test-key',
+                    `http://${HOST_P}/v1`,
+                  );
+                  bindProviderAliasIdentity(provider, entry.alias);
+                  return provider;
+                },
+                builtinAliases: [
+                  {
+                    alias: ALIAS,
+                    config: {
+                      baseProvider: 'proxied-openai',
+                      'base-url': `http://${HOST_P}/v1`,
+                      'requires-auth': false,
+                      defaultModel: DEFAULT_MODEL,
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      ]);
+    }
+
+    async function createPreflightRoot(): Promise<PreflightRoot> {
+      const proxy = await startProxy(HOST_P, CANNED_P);
+      const preflight = await prepareAgentPreflight(
+        { runtimeId: 'preflight-root', proxy: proxy.url },
+        credentials().authority,
+        new SettingsService(),
+        undefined,
+        contribution(),
+      );
+      cleanups.push(() => preflight.dispose());
+      const profileDirectory = join(directory, 'profiles');
+      const config = new Config({
+        sessionId: 'preflight-root',
+        cwd: directory,
+        targetDir: directory,
+        debugMode: false,
+        model: DEFAULT_MODEL,
+        provider: ALIAS,
+        profileDirectory,
+        proxy: proxy.url,
+        mcpEnabled: false,
+        skillsSupport: false,
+        telemetry: { enabled: false },
+      });
+      cleanups.push(() => config.dispose());
+      await new ProfileManager(profileDirectory).saveProfile('sub-p', {
+        version: 1,
+        provider: ALIAS,
+        model: DEFAULT_MODEL,
+        modelParams: {},
+        ephemeralSettings: {},
+      });
+      await preflight.prepareConfiguredWorkspace(config, () => undefined);
+      return { proxy, preflight, config };
+    }
+
+    const intent = {
+      provider: ALIAS,
+      model: DEFAULT_MODEL,
+      authMode: 'none',
+    } as const;
+
+    async function foreground(
+      root: PreflightRoot,
+      host: Parameters<typeof AgentProfilePreflight.createForegroundAgent>[3],
+    ): Promise<Agent> {
+      const receipt = await root.preflight.preflight(intent);
+      if (receipt.token === undefined) throw new Error('Activation failed');
+      return AgentProfilePreflight.createForegroundAgent(
+        root.preflight,
+        receipt.token,
+        intent,
+        host,
+      );
+    }
+
+    function holdSubProfileListing(root: PreflightRoot): Promise<unknown> {
+      root.proxy.hold(HOST_P);
+      return root.preflight
+        .applySnapshot(
+          {
+            version: 1,
+            type: 'loadbalancer',
+            policy: 'failover',
+            profiles: ['sub-p'],
+            provider: 'load-balancer',
+            model: 'lb',
+            modelParams: {},
+            ephemeralSettings: {},
+          },
+          { profileName: 'lb-p' },
+        )
+        .then(
+          () => 'applied',
+          (error: unknown) => error,
+        );
+    }
+
+    it('lists models through the preflight proxy from the foreground agent', async () => {
+      const root = await createPreflightRoot();
+      const agent = await foreground(root, {});
+      cleanups.push(() => agent.dispose());
+
+      expect(await modelIds(agent)).toContain(CANNED_P);
+      expect(root.proxy.requestsTo(HOST_P).map(({ path }) => path)).toContain(
+        '/v1/models',
+      );
+    }, 30_000);
+
+    it('lets a request in flight at transfer finish on the preflight network until the foreground disposes', async () => {
+      const root = await createPreflightRoot();
+      const applying = holdSubProfileListing(root);
+      await eventually(
+        () => root.proxy.requestsTo(HOST_P).length === 1,
+        'the held sub-profile listing reaches the proxy',
+      );
+      await applying;
+      const agent = await foreground(root, {});
+      cleanups.push(() => agent.dispose());
+
+      expect(root.proxy.requestsTo(HOST_P)[0].closed).toBe(false);
+      root.proxy.release(HOST_P);
+      expect(await modelIds(agent)).toContain(CANNED_P);
+      expect(root.proxy.requestsTo(HOST_P)[0].closed).toBe(false);
+
+      await agent.dispose();
+      const recorded = root.proxy.requestsTo(HOST_P).length;
+      await eventually(
+        () => root.proxy.requestsTo(HOST_P).every(({ closed }) => closed),
+        'every socket closes after the foreground disposes',
+      );
+      expect(root.proxy.requestsTo(HOST_P)).toHaveLength(recorded);
+    }, 30_000);
+
+    it('ends a held request when the preflight is disposed without transfer', async () => {
+      const root = await createPreflightRoot();
+      const applying = holdSubProfileListing(root);
+      await eventually(
+        () => root.proxy.requestsTo(HOST_P).length === 1,
+        'the held sub-profile listing reaches the proxy',
+      );
+      await applying;
+
+      expect(await settlesWithin(root.preflight.dispose())).toBe(true);
+      await eventually(
+        () => root.proxy.requestsTo(HOST_P)[0].closed,
+        'the held socket closes',
+      );
+      expect(root.proxy.requestsTo(HOST_P)).toHaveLength(1);
+    }, 30_000);
+
+    it('ends a held request once when foreground construction fails after transfer', async () => {
+      const root = await createPreflightRoot();
+      const applying = holdSubProfileListing(root);
+      await eventually(
+        () => root.proxy.requestsTo(HOST_P).length === 1,
+        'the held sub-profile listing reaches the proxy',
+      );
+      await applying;
+
+      const outcome: unknown = await foreground(root, {
+        onSkills: () => {
+          throw new Error('host skills publication failed');
+        },
+      }).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+
+      expect(outcome).toMatchObject({
+        message: expect.stringContaining('host skills publication failed'),
+      });
+      await eventually(
+        () => root.proxy.requestsTo(HOST_P)[0].closed,
+        'the held socket closes',
+      );
+      expect(await settlesWithin(root.preflight.dispose())).toBe(true);
+      expect(root.proxy.requestsTo(HOST_P)).toHaveLength(1);
+    }, 30_000);
+  });
 });
