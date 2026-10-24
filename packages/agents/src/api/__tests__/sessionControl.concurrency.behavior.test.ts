@@ -36,6 +36,7 @@ import {
 } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 import { assertNotNull, errorMessage } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, spyOn } from 'bun:test';
+import { trackTestHistories } from './support/test-histories.js';
 import {
   mkdirSync,
   mkdtempSync,
@@ -140,8 +141,10 @@ interface FakeClient {
   replacementCount: () => number;
 }
 
+const createTestHistory = trackTestHistories();
+
 function buildFakeClient(seed: readonly IContent[] = []): FakeClient {
-  let historyService: HistoryService | null = new HistoryService();
+  let historyService: HistoryService | null = createTestHistory();
   historyService.addAll(seed);
   let history = [...seed];
   let replacementCalls = 0;
@@ -687,7 +690,7 @@ describe('SessionControl atomic resume', () => {
       // A HistoryService whose 'on' throws so the post-restore integration
       // subscribe fails DURING resume (after the resumed recording + lock were
       // acquired). This models a real subscribe failure, not a mocked outcome.
-      const throwingHistory = new HistoryService();
+      const throwingHistory = createTestHistory();
       throwingHistory.addAll(liveHistory);
       await throwingHistory.waitForTokenUpdates();
       throwingHistory.on('tokensUpdated', () => {
@@ -921,7 +924,7 @@ describe('SessionControl recording reattachment', () => {
       // Now a HistoryService becomes available (as it would once the client's
       // chat materializes). No listener is attached yet (enable could not
       // subscribe), so the bounded-re-attach must wire it on the NEXT operation.
-      const liveHistory = new HistoryService();
+      const liveHistory = createTestHistory();
       expect(liveHistory.listenerCount('contentAdded')).toBe(0);
       client.setHistoryService(liveHistory);
 
