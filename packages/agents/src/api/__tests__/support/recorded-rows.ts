@@ -3,24 +3,17 @@ import { expect } from 'bun:test';
 import { basename } from 'node:path';
 import type { SessionControl } from '../../control/sessionControl.js';
 
-import {
-  replaySession,
-  type LocalMediaStore,
-} from '@vybestack/llxprt-code-core';
-import { isJournalFileName } from '@vybestack/llxprt-code-core/recording/sessionFileExtension.js';
+import { readJournalFileFacts } from '@vybestack/llxprt-code-core/recording/journalSessionListing.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { collectJournalFileRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 
 export async function recordedRows(
   path: string,
   projectHash: string,
-  mediaStore?: LocalMediaStore,
 ): Promise<readonly IContent[]> {
-  if (!isJournalFileName(path)) {
-    const replay = await replaySession(path, projectHash, { mediaStore });
-    if (!replay.ok) throw new Error(replay.error);
-    return replay.history;
-  }
+  const found = await readJournalFileFacts(path);
+  if (found === undefined || found.facts.start.projectHash !== projectHash)
+    throw new Error('Missing fixture session or mismatched project');
   let observed: readonly IContent[] = [];
   await collectJournalFileRowsForAssertions(path, (rows) => {
     observed = [...rows];

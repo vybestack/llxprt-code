@@ -62,7 +62,6 @@ for (const selected of ['journal']) {
                 await recordedRows(
                   importedPath,
                   getProjectHash(config.getProjectRoot()),
-                  media,
                 )
               ).map((row) => row.blocks),
             ).toStrictEqual(expected.map((row) => row.blocks));

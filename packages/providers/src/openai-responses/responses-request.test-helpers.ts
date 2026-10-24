@@ -52,6 +52,7 @@ export function captureResponsesTestRequest(
 
 function copiedRows(rows: readonly IContent[]) {
   return Object.freeze({
+    callerOwned: true,
     count: rows.length,
     readAt: (index: number, signal?: AbortSignal) => {
       signal?.throwIfAborted();
