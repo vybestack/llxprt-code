@@ -119,6 +119,8 @@ async function incrementalFacts(
   { facts: GroupFacts | undefined; affected: ReadonlySet<bigint> } | undefined
 > {
   const affected = new Set<bigint>();
+  if (adds.length === 0 && !rewritesRows && plan.mistralScope === undefined)
+    return { facts: undefined, affected };
   if (
     plan.base.rows > 0 &&
     ctx.recencyFactPolicy !== undefined &&
@@ -142,8 +144,6 @@ async function incrementalFacts(
       )) === undefined)
   )
     return undefined;
-  if (adds.length === 0 && !rewritesRows && plan.mistralScope === undefined)
-    return { facts: undefined, affected };
   const facts = await startFacts(
     ctx.access,
     plan.base.roots,
