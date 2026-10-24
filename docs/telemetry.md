@@ -170,8 +170,10 @@ event and metric names use the `llxprt_code.*` prefix (the service name is
 - `llxprt_code.api_request`: provider API request. Includes `request_chars`
   (the size of the request, see below). The body itself is omitted by default;
   it is included only when `telemetry.logApiBodies` is enabled (and
-  `telemetry.logPrompts` is `true`), exported as `llxprt_code.api_request_chunk`
-  records and a closing `llxprt_code.api_request_complete` record.
+  `telemetry.logPrompts` is `true`). Artifact export derives record names
+  from this base event: chunk records append `_chunk`, and the closing record
+  appends `_complete`. Each chunk carries base64 bytes and a byte offset; the
+  closing record carries the chunk count and confirms the SHA-256 digest.
 - `llxprt_code.api_error`: provider API error, recorded when a request that
   was handed to the provider fails. A request stopped before that point (a
   BeforeModel hook block, an abort, a compression failure or a context

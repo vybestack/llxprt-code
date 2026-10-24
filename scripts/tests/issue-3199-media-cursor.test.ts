@@ -58,7 +58,10 @@ describe('issue 3199 admitted-row cursor resolution', () => {
               data: encoded,
             },
           ],
-          metadata: { turnId: 'probe-turn' },
+          metadata: {
+            turnId: 'probe-turn',
+            chronology: { seq: 1, userTurn: 1, step: 1, recordedAt: 0 },
+          },
         },
         { turnId: 'probe-turn', source: 'media-memory-probe' },
       );

@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { captureBodyAttempt } from '../../packages/test-utils/src/body-evidence-writer.js';
+import { bodyRequestRows } from './support/body-request-rows.js';
 import { randomUUID } from 'node:crypto';
 import { withFetchPreconnect } from '../../packages/test-utils/src/fetch-test-helpers.js';
 import type { IContent } from '../../packages/core/src/services/history/IContent.js';
@@ -98,7 +99,8 @@ export async function captureWithAdapter(
       retrywait: 1,
     },
   });
-  const rows = bodyRows(contents);
+  const selection = await bodyRequestRows(contents);
+  const rows = bodyRows(selection.openReader());
   const options = createProviderCallOptions({
     providerName: name,
     settings,
@@ -136,6 +138,8 @@ export async function captureWithAdapter(
     for await (const chunk of provider.generateChatCompletion({
       ...options,
       contents: rows,
+      requestRows: selection,
+      contentCount: selection.count,
     })) {
       responseContents?.push(chunk);
     }

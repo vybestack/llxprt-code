@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { captureBodyAttempt } from '../../../packages/test-utils/src/body-evidence-writer.js';
+import { bodyRequestRows } from './body-request-rows.js';
 import { randomUUID } from 'node:crypto';
 import { withFetchPreconnect } from '../../../packages/test-utils/src/fetch-test-helpers.js';
 import type { IContent } from '../../../packages/core/src/services/history/IContent.js';
@@ -81,10 +82,9 @@ export async function captureCompressionBody(
       retrywait: 1,
     },
   });
+  const selection = await bodyRequestRows(contents);
   const rows = {
-    async *[Symbol.asyncIterator](): AsyncGenerator<IContent, void, unknown> {
-      yield* contents;
-    },
+    [Symbol.asyncIterator]: () => selection.openReader(),
   };
   const options = createProviderCallOptions({
     providerName: 'openai',
@@ -109,6 +109,8 @@ export async function captureCompressionBody(
     for await (const _chunk of selected.generateChatCompletion({
       ...options,
       contents: rows,
+      requestRows: selection,
+      contentCount: selection.count,
     })) {
       void _chunk;
     }

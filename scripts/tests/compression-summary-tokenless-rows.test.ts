@@ -21,6 +21,7 @@ import { ProviderManager } from '../../packages/providers/src/ProviderManager.js
 import { LoadBalancingProvider } from '../../packages/providers/src/LoadBalancingProvider.js';
 import type { IProvider } from '../../packages/providers/src/IProvider.js';
 import type { IContent } from '../../packages/core/src/services/history/IContent.js';
+import { bodyRequestRows } from './support/body-request-rows.js';
 import { RowOwnership } from '../../packages/core/src/recording/rowOwnership.js';
 import type { HistoryIndexedRows } from '../../packages/core/src/services/history/historyIndexedRows.js';
 import { diskSummaryRequestSelection } from '../../packages/agents/src/compression/middleOutDiskPlan.js';
@@ -333,6 +334,7 @@ async function summaryCall(family: Family, wrap: Wrap) {
         yield* rowsAsArray;
       },
     },
+    requestRows: await bodyRequestRows(rowsAsArray),
     contentCount: rowsAsArray.length,
   };
   return { provider, options, reference, concrete };
