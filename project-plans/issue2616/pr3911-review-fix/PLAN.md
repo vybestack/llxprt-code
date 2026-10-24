@@ -971,8 +971,8 @@ Write against the actual final head SHA (`git rev-parse HEAD` after the last pus
 
 Coders tick their own line in the commit that completes the task. Inventory tasks add the ids of the batches they generate under their own line. T10.1-T10.3 are the exception: T10.0 marks them `[~]` and they are never ticked in the tree (phase 10, tracked-tree rule).
 
-- [ ] T0.1 commit plan, baseline
-- [ ] T1.1 D1 remove bun.sh download from install
+- [x] T0.1 commit plan, baseline
+- [x] T1.1 D1 remove bun.sh download from install
 - [ ] T1.2 C4 stale CLI boundary subpaths
 - [ ] T1.3 A1 extension selection and disabled list
 - [ ] T1.4 A2 skills list without preflight
