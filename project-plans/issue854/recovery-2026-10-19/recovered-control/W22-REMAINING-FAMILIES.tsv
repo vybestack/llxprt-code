@@ -1,2 +1,0 @@
-family	state	path	pid	source_sha256	batch	pass	fail	skip
-native-counterpart-mapping	mapping-open-tests-green	packages/agents/src/core/client-array-route.test.ts	34350	e9a475826f5748b6c7ecc0ecc7dae848850830bcf035d0695c54ebc712420554	package-resume-g-0350	5	0	0
