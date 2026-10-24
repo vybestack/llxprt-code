@@ -293,7 +293,7 @@ export class AnthropicRepairSource<
     const group = await this.query.rawResultsAt(at);
     if (
       group !== undefined &&
-      at === group.end &&
+      at === (await this.lastResultAt(group.start, group.end)) &&
       (await this.resultsAnchored(group.start, group.end))
     )
       tagAnchorMessage({ role: 'user', content: blocks });
@@ -327,6 +327,19 @@ export class AnthropicRepairSource<
   ): AsyncGenerator<{ readonly id: string; readonly unit: number }> {
     for (let at = message.start; at <= message.end; at++)
       yield* this.callsAt(at);
+  }
+  private async lastResultAt(
+    from: number,
+    to: number,
+  ): Promise<number | undefined> {
+    for (let at = to; at >= from; at--)
+      if (
+        (await this.row(at))?.blocks.some(
+          (block) => block.type === 'tool_response',
+        ) === true
+      )
+        return at;
+    return undefined;
   }
   async resultsAnchored(from: number, to: number): Promise<boolean> {
     for (let at = from; at <= to; at++) {

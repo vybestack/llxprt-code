@@ -9,6 +9,7 @@ import type { AnthropicStreamRepair } from './anthropic-stream-repair.js';
 import type { AnthropicSpanPlan } from './anthropic-span-plan.js';
 import {
   firstAnthropicCacheAnchor,
+  finishAnthropicPurgeState,
   type AnthropicCacheState,
 } from './anthropic-cache-facts.js';
 
@@ -64,7 +65,24 @@ export function composeAnthropicSpanCache(
   const anchor =
     firstAnthropicCacheAnchor(previous) ??
     (local === undefined ? undefined : { ...local, run: local.run + offset });
-  return { anchor, run: { ...next.run, ordinal: next.run.ordinal + offset } };
+  const before = finishAnthropicPurgeState(previous);
+  const current = next.purge ?? { count: 0, image: false };
+  const shift = (value: typeof before.tagged): typeof before.tagged =>
+    value === undefined ? undefined : { ...value, run: value.run + offset };
+  let expected = before.expected;
+  if (!before.image && current.image)
+    expected = shift(current.expected) ?? before.last;
+  return {
+    anchor,
+    purge: {
+      count: before.count + current.count,
+      tagged: before.tagged ?? shift(current.tagged),
+      image: before.image || current.image,
+      expected,
+      last: shift(current.last) ?? before.last,
+    },
+    run: { ...next.run, ordinal: next.run.ordinal + offset },
+  };
 }
 export function anthropicSummaryRole(
   summary: SlotSummary,

@@ -58,6 +58,7 @@ import { NativeAnthropicEstimateProjection } from './native-anthropic-estimate.j
 
 import { AnthropicRepairSource } from './anthropic-repair-source.js';
 import { AnthropicSpanPlan } from './anthropic-span-plan.js';
+import { applyAnthropicPurgeCache } from './anthropic-cache-facts.js';
 import { AnthropicDecisionOverlay } from './anthropic-decision-overlay.js';
 import { measureAnthropicSpans } from './anthropic-span-measure.js';
 
@@ -321,6 +322,17 @@ async function requestFromStored(
 ): Promise<NativeAnthropicRequest> {
   const query = engine.source.query;
   const settings = measured.settings;
+  const cache =
+    measured.cache !== undefined && plan.wantMediaPurgeCacheAnchor
+      ? applyAnthropicPurgeCache(
+          measured.cache,
+          Number(
+            params.placement === 'context-prefix' &&
+              (params.options.systemInstruction ?? '') !== '',
+          ),
+        )
+      : measured.cache;
+  const purgeBytes = (cache?.bytes ?? 0) - (measured.cache?.bytes ?? 0);
   const recovery = await planAnthropicImageRecovery(
     snapshot,
     engine,
@@ -344,8 +356,9 @@ async function requestFromStored(
     engine,
     {
       ...measured,
-      contentLength: measured.contentLength + recovery.bytes,
-      messagesBytes: measured.messagesBytes + recovery.bytes,
+      cache,
+      contentLength: measured.contentLength + recovery.bytes + purgeBytes,
+      messagesBytes: measured.messagesBytes + recovery.bytes + purgeBytes,
     },
     options.estimate === true,
     mediaStage,
@@ -392,7 +405,7 @@ async function prepareNativeAnthropicRequest(
           settings,
           policy,
           base,
-          changed,
+          changed || plan.wantMediaPurgeCacheAnchor,
         );
         try {
           const request = await requestFromStored(

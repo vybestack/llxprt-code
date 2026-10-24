@@ -64,10 +64,22 @@ const runSchema = z.object({
   otherAnchor: spotSchema.optional(),
   leadingTail: spotSchema.optional(),
   otherTail: spotSchema.optional(),
+  purge: spotSchema.optional(),
+  purgeCount: z.number().optional(),
+  image: z.boolean().optional(),
+  imagePrevious: spotSchema.optional(),
+});
+const purgeSchema = z.object({
+  count: z.number(),
+  tagged: targetSchema.optional(),
+  image: z.boolean(),
+  expected: targetSchema.optional(),
+  last: targetSchema.optional(),
 });
 const stateSchema = z.object({
   anchor: targetSchema.optional(),
   run: runSchema.optional(),
+  purge: purgeSchema.optional(),
 });
 export const anthropicCacheFactsSchema = z.object({
   kept: stateSchema,
@@ -97,6 +109,61 @@ export interface AnthropicCachePlan {
   readonly targets: readonly Target[];
   readonly ttl: '5m' | '1h';
   readonly bytes: number;
+  readonly purge?: z.infer<typeof purgeSchema>;
+}
+
+export function finishAnthropicPurgeState(
+  state: AnthropicCacheState,
+): z.infer<typeof purgeSchema> {
+  const previous = state.purge ?? { count: 0, image: false };
+  const run = state.run;
+  if (run === undefined) return previous;
+  const beforeImage = run.imagePrevious ?? run.leadingTail;
+  const tail = tailTarget(run);
+  let expected = previous.expected;
+  if (!previous.image && run.image === true)
+    expected =
+      beforeImage === undefined ? previous.last : target(run, beforeImage);
+  return {
+    count: previous.count + (run.purgeCount ?? 0),
+    tagged:
+      previous.tagged ??
+      (run.purge === undefined ? undefined : target(run, run.purge)),
+    image: previous.image || run.image === true,
+    expected,
+    last: tail ?? previous.last,
+  };
+}
+
+export function applyAnthropicPurgeCache(
+  cache: AnthropicCachePlan,
+  prefixBreakpoints: number,
+): AnthropicCachePlan {
+  const purge = cache.purge;
+  const tagged = purge?.tagged;
+  const expected = purge?.expected;
+  if (purge?.count !== 1 || tagged === undefined || expected === undefined)
+    return cache;
+  if (tagged.run !== expected.run || tagged.block !== expected.block)
+    return cache;
+  if (
+    prefixBreakpoints + cache.targets.length >= 3 ||
+    cache.targets.some(
+      (item) => item.run === tagged.run && item.block === tagged.block,
+    )
+  )
+    return cache;
+  const markerBytes =
+    Buffer.byteLength(
+      JSON.stringify({ cache_control: { type: 'ephemeral', ttl: cache.ttl } }),
+    ) - 1;
+  const blockify =
+    Buffer.byteLength(JSON.stringify([{ type: 'text', text: '' }])) - 2;
+  return {
+    ...cache,
+    targets: [...cache.targets, tagged],
+    bytes: cache.bytes + markerBytes + (tagged.string ? blockify : 0),
+  };
 }
 
 function target(run: CacheRun, spot: Spot): Target {
@@ -151,6 +218,7 @@ export function beginAnthropicCacheAtom(
     anchor:
       state.anchor ??
       (previous === undefined ? undefined : firstAnchor(previous)),
+    purge: finishAnthropicPurgeState(state),
     run: {
       role,
       ordinal: previous === undefined ? 0 : previous.ordinal + 1,
@@ -170,6 +238,7 @@ function addBlock(
     blank: boolean;
     anchored: boolean;
     cacheable?: boolean;
+    purge?: boolean;
   },
 ): CacheRun {
   if (block.blank) return run;
@@ -185,6 +254,7 @@ function addBlock(
   const cacheable =
     block.cacheable ??
     (block.kind !== 'thinking' && block.kind !== 'redacted_thinking');
+  const imagePrevious = block.kind === 'image' ? run.otherTail : undefined;
   return {
     ...run,
     blocks: run.blocks + 1,
@@ -196,6 +266,10 @@ function addBlock(
       run.otherAnchor ?? (!leading && block.anchored ? spot : undefined),
     leadingTail: leading && cacheable ? spot : run.leadingTail,
     otherTail: !leading && cacheable ? spot : run.otherTail,
+    purge: run.purge ?? (block.purge === true ? spot : undefined),
+    purgeCount: (run.purgeCount ?? 0) + Number(block.purge === true),
+    image: run.image === true || block.kind === 'image',
+    imagePrevious: run.image === true ? run.imagePrevious : imagePrevious,
   };
 }
 export function addAnthropicCachePiece(
@@ -209,6 +283,7 @@ export function addAnthropicCachePiece(
       kind: 'text',
       blank: atom.blank,
       anchored: atom.anchored,
+      purge: atom.purge,
     });
     if (!atom.blank) run = { ...run, string: true };
   } else for (const block of atom.blocks) run = addBlock(run, block);
@@ -252,6 +327,7 @@ export function anthropicCachePlan(
   return {
     targets,
     ttl,
+    purge: finishAnthropicPurgeState(state),
     bytes: targets.reduce(
       (total, item) => total + markerBytes + (item.string ? blockify : 0),
       0,

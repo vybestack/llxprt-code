@@ -18,6 +18,10 @@ import {
 import { unprefixAnthropicToolName } from './schemaConverter.js';
 import { selectLastCacheableBlockIndex } from './AnthropicRequestBuilder.js';
 import {
+  readPurgeBlockTag,
+  readPurgeStringTag,
+} from './AnthropicMediaPurgeCache.js';
+import {
   readAnchorBlockTag,
   readAnchorStringTag,
 } from './AnthropicAnchorCache.js';
@@ -29,6 +33,7 @@ export interface AnthropicBlockLength {
   readonly id?: string;
   readonly anchored: boolean;
   readonly cacheable?: boolean;
+  readonly purge?: boolean;
 }
 
 export type AnthropicAtom =
@@ -38,6 +43,7 @@ export type AnthropicAtom =
       readonly bytes: number;
       readonly blank: boolean;
       readonly anchored: boolean;
+      readonly purge?: boolean;
     }
   | {
       readonly role: AnthropicMessage['role'];
@@ -67,6 +73,7 @@ function blockLength(block: AnthropicMessageBlock): AnthropicBlockLength {
     blank: block.type === 'text' && block.text.trim() === '',
     id: blockId(block),
     anchored: readAnchorBlockTag(block),
+    purge: readPurgeBlockTag(block) !== undefined,
     cacheable: selectLastCacheableBlockIndex([block]) === 0,
   };
 }
@@ -79,6 +86,7 @@ function atomLength(message: AnthropicMessage): AnthropicAtom {
         bytes: Buffer.byteLength(JSON.stringify(message.content)),
         blank: message.content.trim() === '',
         anchored: readAnchorStringTag(message),
+        purge: readPurgeStringTag(message) !== undefined,
       }
     : {
         role: message.role,

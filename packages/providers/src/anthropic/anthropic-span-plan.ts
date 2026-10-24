@@ -88,6 +88,18 @@ export class AnthropicSpanPlan {
       const right = await this.bounds(Math.min(this.query.count - 1, end - 1));
       this.windows.push({ start: left.start, end: right.end });
     };
+    const purgeWindows = await facts.get(['cache-purge-windows']);
+    if (purgeWindows === undefined)
+      throw new Error('Missing Anthropic purge cache windows');
+    for (let ordinal = 0; ordinal < purgeWindows[0]; ordinal++) {
+      const window = await facts.get(['cache-purge-window', ordinal]);
+      if (window === undefined)
+        throw new Error('Missing Anthropic purge cache window');
+      await add(
+        this.coordinates.forward(window[0]),
+        this.coordinates.forward(window[1] - 1) + 1,
+      );
+    }
     const firstAnchor = await this.firstCacheAnchor(anchors[0]);
     if (firstAnchor !== undefined) {
       const window = await this.cacheRun(firstAnchor, runs[0]);

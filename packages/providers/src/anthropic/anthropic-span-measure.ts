@@ -51,11 +51,15 @@ async function measureSpan(
       !atom.repair &&
       (await plan.query.planAt(atom.end ?? Math.floor(atom.key / 4))).header
         .metadata?.cacheAnchor === true;
+    const purge =
+      !atom.repair &&
+      (await plan.query.planAt(atom.end ?? Math.floor(atom.key / 4))).header
+        .metadata?.semanticMediaPurgeBoundary !== undefined;
     const before = cache.run?.role === atom.role ? cache.run.blocks : 0;
-    cache = beginAnthropicCacheAtom(cache, atom.role);
+    cache = beginAnthropicCacheAtom(cache, atom.role, atom.chain);
     let emitted = false;
     const add = (piece: Parameters<typeof numericRepairPiece>[0]): void => {
-      const fact = numericRepairPiece(piece, atom.role, anchored);
+      const fact = numericRepairPiece(piece, atom.role, anchored, purge);
       cache = addAnthropicCachePiece(cache, fact);
       summary = composeSlotSummaries(
         summary,

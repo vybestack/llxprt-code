@@ -82,6 +82,7 @@ export function numericRepairPiece(
   piece: RepairPiece,
   role: Run['role'],
   anchoredString = false,
+  purgeString = false,
 ): AnthropicAtom {
   return typeof piece === 'string'
     ? {
@@ -90,6 +91,7 @@ export function numericRepairPiece(
         bytes: jsonBytes(piece),
         blank: piece.trim() === '',
         anchored: anchoredString,
+        purge: purgeString,
       }
     : {
         role,
@@ -99,6 +101,7 @@ export function numericRepairPiece(
           bytes: anthropicBlockByteLength(block),
           blank: block.type === 'text' && block.text.trim() === '',
           anchored: readAnchorBlockTag(block),
+          purge: readPurgeBlockTag(block) !== undefined,
           cacheable: selectLastCacheableBlockIndex([block]) === 0,
         })),
       };

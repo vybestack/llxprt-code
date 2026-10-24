@@ -49,12 +49,13 @@ async function atomSummary(
   atom: LazyRepairAtom,
   redact: boolean,
   anchored: boolean,
+  purge: boolean,
   observe: (fact: ReturnType<typeof numericRepairPiece>) => void,
 ): Promise<AnthropicSummary> {
   let summary = identity();
   let emitted = false;
   const add = (piece: Parameters<typeof numericRepairPiece>[0]): void => {
-    const fact = numericRepairPiece(piece, atom.role, anchored);
+    const fact = numericRepairPiece(piece, atom.role, anchored, purge);
     observe(fact);
     summary = compose(
       summary,
@@ -106,6 +107,10 @@ async function summaries(
     !atom.repair &&
     (await state.query.planAt(atom.end ?? Math.floor(atom.key / 4))).header
       .metadata?.cacheAnchor === true;
+  const purge =
+    !atom.repair &&
+    (await state.query.planAt(atom.end ?? Math.floor(atom.key / 4))).header
+      .metadata?.semanticMediaPurgeBoundary !== undefined;
   const chain =
     atom.chain === true ||
     (atom.role === 'assistant' &&
@@ -117,7 +122,7 @@ async function summaries(
     stripped: beginAnthropicCacheAtom(state.cache.stripped, atom.role, chain),
     corrected: beginAnthropicCacheAtom(state.cache.corrected, atom.role, chain),
   };
-  const kept = await atomSummary(atom, false, anchored, (fact) => {
+  const kept = await atomSummary(atom, false, anchored, purge, (fact) => {
     state.cache = {
       ...state.cache,
       kept: addAnthropicCachePiece(state.cache.kept, fact),
@@ -126,7 +131,7 @@ async function summaries(
         : state.cache.corrected,
     };
   });
-  const stripped = await atomSummary(atom, true, anchored, (fact) => {
+  const stripped = await atomSummary(atom, true, anchored, purge, (fact) => {
     state.cache = {
       ...state.cache,
       stripped: addAnthropicCachePiece(state.cache.stripped, fact),
