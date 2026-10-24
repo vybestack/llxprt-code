@@ -71,6 +71,14 @@ describe('public native journal page reader', () => {
         const page = await reader.readToolPage(entry, 16, 16);
         expect(stats.reads).toBeLessThanOrEqual(6);
         expect(stats.bytes).toBeLessThan(entry.recordLength / 2);
+        const firstPageBytes = stats.bytes;
+        stats.reads = 0;
+        stats.bytes = 0;
+        expect((await reader.readToolPage(entry, 32, 16)).blocks).toHaveLength(
+          16,
+        );
+        expect(stats.reads).toBeLessThanOrEqual(2);
+        expect(stats.bytes).toBeLessThan(firstPageBytes / 4);
         expect(page.blocks).toHaveLength(16);
         expect(page.blocks[0]).toMatchObject({
           type: 'tool_call',

@@ -8,7 +8,7 @@ import {
 } from './journalReader.js';
 import { entryAt, iterateRowEntries, rowTreeRootOf } from './rowTreeReader.js';
 import { entryByLabel } from './rowTreeQueries.js';
-import { readRowIds, readStoredRow } from './rowReads.js';
+import { readRowIds, readStoredRow, type RowIds } from './rowReads.js';
 import {
   decodeRowHeader,
   validateRowAgainstBody,
@@ -24,12 +24,18 @@ import { readVersionAt } from './trailerAccess.js';
 import { versionOf } from './version.js';
 import { MUTATION, RECORD_KIND } from './recordKinds.js';
 import { NativeResponseIndex } from './native-response-index.js';
+import type { FrameHead } from './frame.js';
+
+type ToolPageHeader = RowIds & { readonly head: FrameHead };
 
 export type NativeJournalEntry = RowEntry;
 export type NativeJournalReadDependencies = JournalReaderDependencies;
 
 export class NativeJournalPageReader {
   private readonly responses: NativeResponseIndex;
+  private pageHeader:
+    | { readonly offset: number; readonly ids: ToolPageHeader }
+    | undefined;
 
   private constructor(private readonly reader: JournalReader) {
     this.responses = new NativeResponseIndex(reader);
@@ -83,11 +89,14 @@ export class NativeJournalPageReader {
     return decodeStoredRow(await readStoredRow(this.reader, entry));
   }
 
-  async readToolPage(
+  private async toolPageHeader(
     entry: NativeJournalEntry,
-    start: number,
-    count: number,
-  ): Promise<IContent> {
+  ): Promise<ToolPageHeader> {
+    if (
+      this.pageHeader?.offset === entry.recordOffset &&
+      this.pageHeader.ids.header.label === entry.label
+    )
+      return this.pageHeader.ids;
     const head = await this.reader.readRecordHead(entry.recordOffset, 'ROW');
     if (head.kind !== RECORD_KIND.ROW)
       throw new JournalFormatError('Tool page source is not a row');
@@ -96,6 +105,17 @@ export class NativeJournalPageReader {
       throw new JournalFormatError('Tool page source has the wrong label');
     validateRowAgainstBody(header, head.bodyLen);
     const ids = { head, header, rawIds: [] };
+    this.pageHeader = { offset: entry.recordOffset, ids };
+    return ids;
+  }
+
+  async readToolPage(
+    entry: NativeJournalEntry,
+    start: number,
+    count: number,
+  ): Promise<IContent> {
+    const ids = await this.toolPageHeader(entry);
+    const head = ids.head;
     const metadata = await readStoredMetadata(this.reader, entry, ids);
     let call = 0;
     const selected = ids.header.blocks.flatMap((block, index) => {
@@ -186,6 +206,7 @@ export class NativeJournalPageReader {
   }
 
   close(): Promise<void> {
+    this.pageHeader = undefined;
     return this.reader.close();
   }
 }
