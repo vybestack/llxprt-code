@@ -34,7 +34,16 @@
 
 import { spawn, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { closeSync, existsSync, readFileSync, statSync } from 'node:fs';
+import {
+  accessSync,
+  constants,
+  closeSync,
+  existsSync,
+  openSync,
+  readFileSync,
+  readSync,
+  statSync,
+} from 'node:fs';
 import { dirname, join, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -96,11 +105,50 @@ function isFile(thePath) {
   }
 }
 
+function isNativeBun(thePath) {
+  let descriptor;
+  try {
+    if (!statSync(thePath).isFile()) {
+      return false;
+    }
+    if (!isWin) {
+      accessSync(thePath, constants.X_OK);
+    }
+    descriptor = openSync(thePath, 'r');
+    const header = Buffer.alloc(4);
+    if (readSync(descriptor, header, 0, header.length, 0) !== header.length) {
+      return false;
+    }
+    if (process.platform === 'win32') {
+      return header[0] === 0x4d && header[1] === 0x5a;
+    }
+    if (process.platform === 'darwin') {
+      return (
+        header.toString('hex') === 'feedface' ||
+        header.toString('hex') === 'cefaedfe' ||
+        header.toString('hex') === 'feedfacf' ||
+        header.toString('hex') === 'cffaedfe' ||
+        header.toString('hex') === 'cafebabe' ||
+        header.toString('hex') === 'bebafeca' ||
+        header.toString('hex') === 'cafebabf' ||
+        header.toString('hex') === 'bfbafeca'
+      );
+    }
+    return header[0] === 0x7f && header.toString('ascii', 1, 4) === 'ELF';
+  } catch {
+    return false;
+  } finally {
+    if (descriptor !== undefined) {
+      closeSync(descriptor);
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Host detection + @oven/bun-<variant> selection.
 //
 // The platform table is transcribed verbatim from node_modules/bun/install.js
-// (bun@1.3.14) and mirrors packages/cli/src/launcher/oven-bun-variants.ts and
+// (bun@1.4.4) and mirrors packages/cli/src/launcher/oven-bun-variants.ts and
 // packages/cli/scripts/install-native-launchers.cjs. One deliberate deviation
 // from upstream: on a musl host, musl variants are ordered FIRST with glibc as
 // a last resort (upstream's postinstall already picked a binary, so its filter
@@ -316,7 +364,7 @@ function resolveOvenViaResolution() {
     if (pkgDir !== null) {
       for (const exe of exeNames) {
         const candidate = join(pkgDir, exe);
-        if (isFile(candidate)) {
+        if (isNativeBun(candidate)) {
           return candidate;
         }
       }
@@ -341,7 +389,7 @@ function resolveOvenViaNodeModulesWalk() {
     for (const variant of variants) {
       for (const exe of exeNames) {
         const candidate = join(nodeModules, variant, exe);
-        if (isFile(candidate)) {
+        if (isNativeBun(candidate)) {
           return candidate;
         }
       }
@@ -359,14 +407,14 @@ function resolveOvenViaNodeModulesWalk() {
 function resolveBun() {
   for (const name of BUN_BIN_CANDIDATES) {
     const candidate = join(pkgRoot, 'node_modules', 'bun', 'bin', name);
-    if (isFile(candidate)) {
+    if (isNativeBun(candidate)) {
       return candidate;
     }
   }
   for (const nodeModules of ancestorNodeModulesDirs(shimDir)) {
     for (const name of BUN_BIN_CANDIDATES) {
       const candidate = join(nodeModules, 'bun', 'bin', name);
-      if (isFile(candidate)) {
+      if (isNativeBun(candidate)) {
         return candidate;
       }
     }

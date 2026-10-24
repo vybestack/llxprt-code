@@ -5,8 +5,19 @@
  */
 
 import { describe, expect, it, vi } from 'bun:test';
+import {
+  chmodSync,
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
 import { join, resolve, win32 } from 'node:path';
 import { resolveBunPath, defaultPathCommand } from './bun-path-resolver.js';
+import { detectHostPlatform, selectOvenVariants } from './oven-bun-variants.js';
 
 // These paths are virtual inputs for injected filesystem capabilities; no
 // on-disk fixture is required.
@@ -34,6 +45,103 @@ function windowsWhereCommand(): string {
 }
 
 describe('resolveBunPath', () => {
+  it.skipIf(process.platform === 'win32')(
+    'accepts an executable POSIX PATH wrapper while rejecting unusable PATH entries',
+    async () => {
+      const root = mkdtempSync(join(tmpdir(), 'llxprt-bun-path-wrapper-'));
+      try {
+        const wrapper = join(root, 'bun');
+        const nonExecutable = join(root, 'non-executable');
+        const directory = join(root, 'directory');
+        writeFileSync(
+          wrapper,
+          `#!/bin/sh\nexec '${process.execPath.replaceAll("'", "'\\''")}' "$@"\n`,
+        );
+        chmodSync(wrapper, 0o755);
+        copyFileSync(wrapper, nonExecutable);
+        chmodSync(nonExecutable, 0o644);
+        mkdirSync(directory);
+
+        const result = await resolveBunPath({
+          moduleDir: root,
+          pathCommand: async () =>
+            [join(root, 'missing'), nonExecutable, directory, wrapper].join(
+              '\n',
+            ),
+        });
+
+        expect(result).toBe(wrapper);
+        if (result === null) throw new Error('Expected the PATH wrapper');
+        const execution = spawnSync(result, ['--version'], {
+          encoding: 'utf8',
+        });
+        expect(execution.status).toBe(0);
+        const bunVersion = process.versions.bun;
+        if (bunVersion === undefined)
+          throw new Error('Run this test under Bun');
+        expect(execution.stdout.trim()).toBe(bunVersion);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
+
+  const fallbacks: ReadonlyArray<'materialized' | 'oven' | 'none'> = [
+    'materialized',
+    'oven',
+    'none',
+  ];
+  for (const fallback of fallbacks) {
+    it(`rejects executable text placeholders with ${fallback} runtime fallback`, async () => {
+      const root = mkdtempSync(join(tmpdir(), 'llxprt-bun-resolver-'));
+      try {
+        const host = detectHostPlatform();
+        if (host === null) throw new Error('Unsupported test host');
+        const variant = selectOvenVariants(host)[0];
+        for (const placeholder of [
+          join(
+            root,
+            'node_modules',
+            '.bin',
+            process.platform === 'win32' ? 'bun.exe' : 'bun',
+          ),
+          join(root, 'node_modules', 'bun', 'bin', 'bun.exe'),
+          join(root, 'node_modules', variant.packageName, variant.exeNames[0]),
+        ]) {
+          mkdirSync(join(placeholder, '..'), { recursive: true });
+          writeFileSync(
+            placeholder,
+            'echo "Bun postinstall script was not run"\nexit 1\n',
+          );
+          chmodSync(placeholder, 0o755);
+        }
+        let native: string | null = null;
+        if (fallback === 'materialized')
+          native = join(root, 'node_modules', 'bun', 'bin', 'bun.exe');
+        if (fallback === 'oven')
+          native = join(
+            root,
+            'node_modules',
+            variant.packageName,
+            variant.exeNames[0],
+          );
+        if (native !== null) {
+          mkdirSync(join(native, '..'), { recursive: true });
+          copyFileSync(process.execPath, native);
+          chmodSync(native, 0o755);
+        }
+
+        const result = await resolveBunPath({
+          moduleDir: root,
+          pathCommand: async () => null,
+        });
+
+        expect(result).toBe(native);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+  }
   it('prefers a direct native Bun executable over a local bun.cmd wrapper on Windows', async () => {
     const wrapper = join(virtualRoot, 'node_modules', '.bin', 'bun.cmd');
     const native = join(virtualRoot, 'node_modules', 'bun', 'bin', 'bun.exe');

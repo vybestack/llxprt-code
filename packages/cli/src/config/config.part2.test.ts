@@ -257,7 +257,7 @@ describe('loadCliConfig chatCompression', () => {
 
   beforeEach(() => {
     resetRuntimeSettingsState();
-    vi.resetAllMocks();
+    vi.clearAllMocks();
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue('/mock/home/user');
     setEnv('GEMINI_API_KEY', 'test-api-key');
   });
@@ -314,7 +314,7 @@ describe('loadCliConfig useRipgrep', () => {
 
   beforeEach(() => {
     resetRuntimeSettingsState();
-    vi.resetAllMocks();
+    vi.clearAllMocks();
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue('/mock/home/user');
     setEnv('GEMINI_API_KEY', 'test-api-key');
     // Default: ripgrep is available
@@ -415,7 +415,7 @@ describe('screenReader configuration', () => {
 
   beforeEach(() => {
     resetRuntimeSettingsState();
-    vi.resetAllMocks();
+    vi.clearAllMocks();
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue('/mock/home/user');
     setEnv('GEMINI_API_KEY', 'test-api-key');
   });
@@ -507,7 +507,7 @@ describe('loadCliConfig tool exclusions', () => {
 
   beforeEach(() => {
     resetRuntimeSettingsState();
-    vi.resetAllMocks();
+    vi.clearAllMocks();
     (os.homedir as Mock<typeof os.homedir>).mockReturnValue('/mock/home/user');
     setEnv('GEMINI_API_KEY', 'test-api-key');
     process.stdin.isTTY = true;

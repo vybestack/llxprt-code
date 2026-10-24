@@ -344,6 +344,13 @@ describe('CLI --profile-load Integration Tests', () => {
           'https://cli-base-url.example.com',
           '--set',
           'context-limit=200000',
+          // The unresolvable host fails with ENOTFOUND, which the provider
+          // retry policy treats as transient (Bun 1.4 reports it as Node does;
+          // Bun 1.3 reported a non-retried connect error). One attempt keeps the
+          // run well inside the spawned-CLI guard without changing what is
+          // asserted.
+          '--set',
+          'retries=1',
           '--prompt',
           'test',
           '--debug',

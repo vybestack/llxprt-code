@@ -1,3 +1,5 @@
+import { withFetchPreconnect } from '../../../../test-utils/src/fetch-test-helpers.js';
+import { inMemoryRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -42,7 +44,7 @@
  */
 
 import { createMockRuntimeApi } from '../components/__tests__/StatsDisplay.testHelpers.js';
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { mkdtempSync, rmSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -57,6 +59,11 @@ import { AnthropicProvider } from '@vybestack/llxprt-code-providers';
 import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import { registerStandardOAuthProviders } from '@vybestack/llxprt-code-providers/composition/oauth-provider-registration.js';
 
+import * as browserLauncher from '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js';
+import * as callbackModule from '@vybestack/llxprt-code-providers/auth/local-oauth-callback.js';
+import { ClipboardService } from '@vybestack/llxprt-code-providers/auth/ClipboardService.js';
+
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { AuthCommandExecutor } from './authCommand.js';
 import type { CommandContext } from './types.js';
 
@@ -216,6 +223,7 @@ describe('Issue #2891 (b) (characterization) — /auth claudecode login makes th
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     // Guard against `beforeEach` having thrown before `tempDir` was assigned;
     // an unguarded rmSync would raise a TypeError that masks the real failure.
     if (tempDir === undefined) {
@@ -281,4 +289,105 @@ describe('Issue #2891 (b) (characterization) — /auth claudecode login makes th
     const tokenAfterLogin = await anthropicProvider.testGetAuthTokenForPrompt();
     expect(tokenAfterLogin).toBe(validToken.access_token);
   });
+
+  it.each([undefined, 'named'])(
+    'selects the persisted login bucket %s for the next real HTTP request over a previous override',
+    async (bucket) => {
+      const { oauthManager, anthropicProvider, tokenStore } = buildObjectGraph(
+        requireTempDir(tempDir),
+      );
+      const executor = new AuthCommandExecutor(oauthManager, () => {});
+      await tokenStore.saveToken(
+        'claudecode',
+        { ...makeValidToken(), access_token: 'sk-ant-oat-old-session' },
+        'old',
+      );
+      oauthManager.setSessionBucket('claudecode', 'old');
+      await oauthManager.toggleOAuthEnabled('claudecode');
+      vi.spyOn(ClipboardService, 'copyToClipboard').mockResolvedValue();
+      vi.spyOn(browserLauncher, 'shouldLaunchBrowser').mockReturnValue(true);
+      vi.spyOn(browserLauncher, 'openBrowserSecurely').mockResolvedValue();
+      vi.spyOn(callbackModule, 'startLocalOAuthCallback').mockResolvedValue({
+        redirectUri: 'http://localhost:8766/callback',
+        async waitForCallback() {
+          return { code: 'new-session-code', state: 'state' };
+        },
+        async shutdown(): Promise<void> {},
+      });
+      const authorizations: Array<string | null> = [];
+      vi.spyOn(globalThis, 'fetch').mockImplementation(
+        withFetchPreconnect(async (input, init) => {
+          const url = input instanceof Request ? input.url : String(input);
+          if (url.includes('/oauth/token')) {
+            return new Response(
+              JSON.stringify({
+                access_token: 'sk-ant-oat-new-session',
+                expires_in: 3600,
+              }),
+              {
+                headers: { 'Content-Type': 'application/json' },
+              },
+            );
+          }
+          const headers = new Headers(
+            input instanceof Request ? input.headers : init?.headers,
+          );
+          authorizations.push(headers.get('authorization'));
+          return new Response(
+            JSON.stringify({
+              id: 'synthetic-message',
+              type: 'message',
+              role: 'assistant',
+              model: 'claude-sonnet-4-5',
+              content: [{ type: 'text', text: 'Synthetic response' }],
+              stop_reason: 'end_turn',
+              usage: { input_tokens: 1, output_tokens: 1 },
+            }),
+            {
+              headers: { 'Content-Type': 'application/json' },
+            },
+          );
+        }),
+      );
+      const request = async (): Promise<string[]> => {
+        const output: string[] = [];
+        for await (const chunk of anthropicProvider.generateChatCompletion({
+          ...createProviderCallOptions({
+            providerName: 'anthropic',
+            contents: [
+              { speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] },
+            ],
+            systemInstruction:
+              "You are Claude Code, Anthropic's official CLI for Claude.",
+            settingsOverrides: { global: { streaming: 'disabled' } },
+          }),
+          contentCount: 1,
+          requestRows: {
+            ...inMemoryRequestSelection([
+              { speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] },
+            ]),
+            callerOwned: true,
+          },
+        })) {
+          for (const block of chunk.blocks) {
+            if (block.type === 'text') output.push(block.text);
+          }
+        }
+        return output;
+      };
+      await request();
+      const result = await executor.execute(
+        makeCommandContext(),
+        `claudecode login${bucket ? ` ${bucket}` : ''}`,
+      );
+      const output = await request();
+      expect(result).toMatchObject({ type: 'message', messageType: 'info' });
+      expect(await tokenStore.getToken('claudecode', bucket)).not.toBeNull();
+      expect(output.join('')).toContain('Synthetic response');
+      expect(authorizations).toStrictEqual([
+        'Bearer sk-ant-oat-old-session',
+        'Bearer sk-ant-oat-new-session',
+      ]);
+    },
+  );
 });

@@ -589,9 +589,9 @@ describe('base + a malformed plugin install', () => {
    * (so real discovery finds it) but exports an incompatible manifest
    * (apiVersion 2). Everything else about the package is a real install.
    */
-  function withIncompatibleManifestFixture<T>(
-    run: (root: string, pluginName: string) => T,
-  ): T {
+  async function withIncompatibleManifestFixture<T>(
+    run: (root: string, pluginName: string) => Promise<T>,
+  ): Promise<T> {
     const root = buildInstalledFixture([]);
     try {
       const pluginName = '@vybestack/llxprt-plugin-google-gemini';
@@ -619,7 +619,8 @@ describe('base + a malformed plugin install', () => {
           '',
         ].join('\n'),
       );
-      return run(root, pluginName);
+      // Await the body so the fixture outlives the module import it performs.
+      return await run(root, pluginName);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

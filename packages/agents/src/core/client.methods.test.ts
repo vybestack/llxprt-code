@@ -186,8 +186,9 @@ void vi.mock('@vybestack/llxprt-code-core/telemetry/index.js', () => ({
   logApiResponse: vi.fn(),
   logApiError: vi.fn(),
 }));
+const retryMock = vi.fn<typeof retryWithBackoff>((apiCall) => apiCall());
 void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
-  retryWithBackoff: vi.fn((apiCall) => apiCall()),
+  retryWithBackoff: retryMock,
 }));
 const actual3 = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
 void vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
@@ -801,6 +802,8 @@ describe('AgentClient (client.ts)', () => {
     );
     instructionData = ctx.instructionData;
     instructionReads = ctx.instructionReads;
+
+    retryMock.mockImplementation((apiCall) => apiCall());
 
     mockTodoStoreConstructor.mockImplementation(() => ({
       readTodos: todoStoreReadMock,

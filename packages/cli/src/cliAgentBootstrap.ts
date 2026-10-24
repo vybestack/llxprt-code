@@ -107,9 +107,7 @@ export async function createForegroundAgent({
 }: ForegroundAgentOptions): Promise<Agent> {
   const activation = foregroundActivationIntent(config, settingsOwner);
 
-  const feedback = (
-    ...args: Parameters<typeof coreEvents.emitFeedback>
-  ): void => coreEvents.emitFeedback(...args);
+  const feedback = emitForegroundFeedback;
   const mcpRuntime = await McpRuntimeOwner.create(
     {
       getAuthProviderFactory: getMcpAuthProviderFactory,
@@ -141,6 +139,9 @@ export async function createForegroundAgent({
     undefined,
     activationPreflight?.operation.trustCleanup,
     cliSkillOperations(config),
+    // The session MCP settings binding lets /mcp reload re-read persisted
+    // settings; without it the runtime rejects reload (issue #3937).
+    settingsOwner.readMcpSettingsBinding(),
   );
   const agent = await fromConfig({
     githubBrokerClient: githubBrokerClient ?? createGitHubBrokerClient(),
@@ -177,6 +178,12 @@ export async function createForegroundAgent({
   registerCleanup(() => agent.dispose());
 
   return agent;
+}
+
+function emitForegroundFeedback(
+  ...args: Parameters<typeof coreEvents.emitFeedback>
+): void {
+  coreEvents.emitFeedback(...args);
 }
 
 function foregroundActivationIntent(

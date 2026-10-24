@@ -38,9 +38,9 @@
     "dist"
   ],
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.25.2",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "@vybestack/llxprt-code-telemetry": "file:../telemetry",
-    "undici": "^7.29.0",
+    "undici": "^7.30.1",
     "vscode-jsonrpc": "^8.2.1",
     "zod": "^3.25.76"
   },
@@ -49,6 +49,6 @@
     "typescript": "^5.3.3"
   },
   "engines": {
-    "node": ">=24"
+    "node": ">=24.22.1"
   }
 }

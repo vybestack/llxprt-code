@@ -241,7 +241,14 @@ export function proxyRequest(
   }: ProxyRequestOptions,
 ): Promise<ProxyResponse> {
   const url = new URL(proxyUrl);
-  url.pathname += pathSuffix;
+  if (pathSuffix !== '') {
+    // Bun >= 1.4 sends the path literally, so joining onto a bare origin
+    // ('/' + '/open') would request '//open' instead of '/open'.
+    const basePath = url.pathname.endsWith('/')
+      ? url.pathname.slice(0, -1)
+      : url.pathname;
+    url.pathname = basePath + pathSuffix;
+  }
   const retryHeaders =
     retryCount === null ? {} : { 'x-stainless-retry-count': retryCount };
   return new Promise<ProxyResponse>((resolve, reject) => {

@@ -155,8 +155,10 @@ describe('activation media owner lifetime', () => {
     const refreshing = memory.operations.refresh();
     await entered.promise;
     const closing = operation.dispose();
+    const settled = Promise.allSettled([refreshing, closing]);
     release.release();
     try {
+      await settled;
       await expect(refreshing).rejects.toThrow(
         'Memory publication and rollback failed',
       );

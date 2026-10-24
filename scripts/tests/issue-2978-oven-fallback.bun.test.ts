@@ -226,8 +226,14 @@ interface UpstreamPlatformRow {
 /**
  * Parses the platform table out of `node_modules/bun/install.js` at test time.
  * The table is an array literal assigned to `platforms = [ ... ]` immediately
- * before `supportedPlatforms = platforms.filter`. We extract it with a
- * tolerant line-based parser rather than eval'ing upstream code.
+ * before `function getSupportedPlatforms`. We extract it with a tolerant
+ * line-based parser rather than eval'ing upstream code.
+ *
+ * Since bun 1.4.4 upstream no longer tags the AVX2 variant (`avx2: !0`). It
+ * tags the baseline variant instead (`alias: !0`) and its own postinstall only
+ * ever selects the non-alias row. The rows are still the same set, so the
+ * parser maps the new shape back onto this suite's model: a non-alias row that
+ * has an alias sibling for the same (os, arch, abi) is the AVX2 variant.
  */
 function parseUpstreamTable(): readonly UpstreamPlatformRow[] {
   const installJsPath = join(repoRoot, 'node_modules', 'bun', 'install.js');
@@ -236,13 +242,13 @@ function parseUpstreamTable(): readonly UpstreamPlatformRow[] {
   const start = source.indexOf(startMarker);
   expect(start).toBeGreaterThan(-1);
   const openBracket = source.indexOf('[', start);
-  // The table ends at the `]` immediately preceding `supportedPlatforms`.
-  const endMarker = '], supportedPlatforms = platforms.filter';
+  // The table ends at the `]` immediately preceding `getSupportedPlatforms`.
+  const endMarker = '];\nfunction getSupportedPlatforms';
   const end = source.indexOf(endMarker, openBracket);
   expect(end).toBeGreaterThan(-1);
   const tableSource = source.slice(openBracket, end + 1);
 
-  const rows: UpstreamPlatformRow[] = [];
+  const parsed: Array<UpstreamPlatformRow & { readonly alias: boolean }> = [];
   let i = 0;
   const text = tableSource;
   while (i < text.length) {
@@ -259,19 +265,22 @@ function parseUpstreamTable(): readonly UpstreamPlatformRow[] {
     const abi = objText.match(/abi:\s*"([^"]+)"/)?.[1];
     // String.match() returns null (not undefined) on no match, so check
     // against null here.
-    const avx2Token = objText.match(/avx2:\s*!0/);
+    const aliasToken = objText.match(/alias:\s*!0/);
     if (os && arch && bin && exe) {
-      rows.push({
-        os,
-        arch,
-        bin,
-        exe,
-        abi,
-        avx2: avx2Token !== null ? true : undefined,
-      });
+      parsed.push({ os, arch, bin, exe, abi, alias: aliasToken !== null });
     }
     i = objEnd + 1;
   }
+  const rows: UpstreamPlatformRow[] = parsed.map(({ alias, ...row }) => {
+    const hasBaselineSibling = parsed.some(
+      (other) =>
+        other.alias &&
+        other.os === row.os &&
+        other.arch === row.arch &&
+        other.abi === row.abi,
+    );
+    return { ...row, avx2: !alias && hasBaselineSibling ? true : undefined };
+  });
   if (rows.length !== 16) {
     throw new Error(
       `parseUpstreamTable extracted ${rows.length} rows, expected 16. ` +

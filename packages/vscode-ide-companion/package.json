@@ -147,7 +147,7 @@
   },
   "dependencies": {
     "@dqbd/tiktoken": "1.0.22",
-    "@modelcontextprotocol/sdk": "^1.25.2",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "@vybestack/llxprt-code-ide-integration": "file:../ide-integration",
     "cors": "^2.8.5",
     "express": "^5.2.0",
@@ -155,12 +155,12 @@
     "zod": "^3.25.76"
   },
   "overrides": {
-    "js-yaml": "^4.3.1",
+    "js-yaml": "^4.3.2",
     "@textlint/linter-formatter": {
-      "js-yaml": "npm:js-yaml@4.3.1"
+      "js-yaml": "npm:js-yaml@4.3.2"
     },
     "rc-config-loader": {
-      "js-yaml": "npm:js-yaml@4.3.1"
+      "js-yaml": "npm:js-yaml@4.3.2"
     }
   }
 }

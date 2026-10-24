@@ -593,18 +593,19 @@ export class AuthCommandExecutor {
       await this.oauthManager.authenticate(provider, bucket, {
         signalAuthCompletion: true,
       });
-      if (bucket) {
-        try {
-          await this.oauthManager.activateNamedLoginBucket(provider, bucket);
-        } catch (error) {
-          const errorMessage =
-            error instanceof Error ? error.message : String(error);
-          return {
-            type: 'message',
-            messageType: 'error',
-            content: `Authenticated ${provider}, but failed to activate bucket ${bucket}: ${errorMessage}. Run /auth ${provider} switch ${bucket}.`,
-          };
-        }
+      try {
+        await this.oauthManager.activateNamedLoginBucket(
+          provider,
+          bucket ?? 'default',
+        );
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `Authenticated ${provider}, but failed to activate bucket ${bucket ?? 'default'}: ${errorMessage}. Run /auth ${provider} switch ${bucket ?? 'default'}.`,
+        };
       }
 
       // Drop any cached provider client so the next request uses the new credential.

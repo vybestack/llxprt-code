@@ -48,7 +48,7 @@ function createBodyDelegatingWrapper(
   let bodySource = initialBodySource;
   let currentBody = initialBody;
   let wrappedBody = createReaderIteratedBody(currentBody);
-  return {
+  const wrapper = {
     get status() {
       return metadataSource.status;
     },
@@ -107,12 +107,15 @@ function createBodyDelegatingWrapper(
       );
     },
     text: () => bodySource.text(),
+    textStream: (): ReadableStream<string> =>
+      currentBody.pipeThrough(new TextDecoderStream()),
     json: () => bodySource.json(),
     arrayBuffer: () => bodySource.arrayBuffer(),
     bytes: () => bodySource.bytes(),
     blob: () => bodySource.blob(),
     formData: () => bodySource.formData(),
   };
+  return wrapper;
 }
 
 type ReaderIteratedBody<T extends Uint8Array> = ReadableStream<T> & {

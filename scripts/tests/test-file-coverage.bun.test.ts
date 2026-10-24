@@ -17,6 +17,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import { discoverTestFiles as discoverAgentsTestFiles } from '../../packages/agents/run-bun-tests.js';
 import {
   BunTestRootStatError,
   type BunTestRootDependencies,
@@ -88,6 +89,23 @@ function scanningExecutor(name: string, scanRelative: string): TestExecutor {
 // ---------------------------------------------------------------------------
 
 describe('test-file coverage guard (real repository)', () => {
+  it('discovers high-density compression behavior without scheduling its helper as an empty suite', () => {
+    const compressionTests = join(
+      repoRoot,
+      'packages/agents/src/compression/__tests__',
+    );
+    const discovered = discoverAgentsTestFiles(
+      join(repoRoot, 'packages/agents'),
+    );
+
+    expect(discovered).toContain(
+      join(compressionTests, 'high-density-compress.test.ts'),
+    );
+    expect(discovered).not.toContain(
+      join(compressionTests, 'high-density-compress-helpers.test.ts'),
+    );
+  });
+
   it('reports zero uncovered test files (AC8)', () => {
     const uncovered = findUncoveredTestFiles(repoRoot);
     expect(

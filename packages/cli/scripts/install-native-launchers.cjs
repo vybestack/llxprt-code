@@ -407,7 +407,7 @@ function writeOwnedLauncher(
  * `@oven/bun-<platform>` optional dependency into `bun/bin/bun.exe` — never
  * runs. The `@oven` tarballs contain only `bin/bun[.exe]` and NO scripts, so
  * they materialize under default-deny. The table below is transcribed from
- * `node_modules/bun/install.js` (bun@1.3.14).
+ * `node_modules/bun/install.js` (bun@1.4.4).
  *
  * DELIBERATE DEVIATION from upstream: on a musl host, musl variants are
  * ordered FIRST (abiSortKey 0) with glibc as a last resort (abiSortKey 1).

@@ -54,6 +54,26 @@ async function readBodyBytes(response: Response): Promise<readonly number[]> {
 }
 
 describe('reader-based OpenAI fetch / clone bytes and iterator ownership', () => {
+  it('decodes the current response body through textStream after cloning', async () => {
+    const wrapped = wrapResponseWithReaderIteratedBody(
+      new Response(byteStream()),
+    );
+    const clone = wrapped.clone();
+    const reader = wrapped.textStream().getReader();
+    const decoded: string[] = [];
+    try {
+      for (;;) {
+        const result = await reader.read();
+        if (result.done) break;
+        decoded.push(result.value);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+    expect(decoded.join('')).toBe('\u0000�ø\n');
+    expect(await readBodyBytes(clone)).toStrictEqual([0, 255, 195, 184, 10]);
+  });
+
   it('serves full payload bytes from both original and clone bodies when string-backed', async () => {
     const wrapped = wrapResponseWithReaderIteratedBody(new Response('abc'));
     const clone = wrapped.clone();

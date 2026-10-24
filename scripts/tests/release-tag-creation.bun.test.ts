@@ -31,7 +31,7 @@ const ROOT = resolve(import.meta.dirname, '../..');
 const RELEASE_TAG = 'v1.2.3';
 const RELEASE_VERSION = '1.2.3';
 const RELEASE_BRANCH = `release/${RELEASE_TAG}`;
-const CLI_TARBALL = 'packages/cli/dist/vybestack-llxprt-code-1.2.3.tgz';
+const CLI_TARBALL = './release-proof/vybestack-llxprt-code-1.2.3.tgz';
 const VSIX_PATH = 'packages/vscode/llxprt-code.vsix';
 const REPOSITORY = 'vybestack/llxprt-code';
 
@@ -252,6 +252,7 @@ function runWorkflow(
         FAIL_API_LOOKUP: options.failLookup === true ? 'true' : 'false',
         RELEASE_TAG,
         RELEASE_VERSION,
+        RUNNER_TEMP: '.',
         RELEASE_BRANCH: options.targetMode === 'branch' ? RELEASE_BRANCH : '',
         SHOULD_CREATE_BRANCH:
           options.targetMode === 'branch' ? 'true' : 'false',
@@ -280,7 +281,12 @@ function runScenario(options: ScenarioOptions): ScenarioResult {
     const headSha = createCommit(repository, 'nightly\n', 'nightly');
     const targetSha = options.targetMode === 'branch' ? releaseSha : headSha;
 
+    mkdirSync(join(repository, 'release-proof'), { recursive: true });
     mkdirSync(join(repository, 'packages/cli/dist'), { recursive: true });
+    writeFileSync(
+      join(repository, 'packages/cli/dist/vybestack-llxprt-code-1.2.3.tgz'),
+      'unproven repack',
+    );
     if (options.includeCliTarball !== false) {
       writeFileSync(join(repository, CLI_TARBALL), 'cli tarball');
     }
@@ -492,7 +498,7 @@ describe('Create GitHub Release and Tag workflow step', () => {
     expect(releaseInvocations(result)).toHaveLength(0);
   });
 
-  it('fails on a missing CLI tarball before any GitHub API call', () => {
+  it('rejects an unproven workspace repack when the proven CLI tarball is missing', () => {
     const result = runScenario({
       targetMode: 'head',
       includeCliTarball: false,
