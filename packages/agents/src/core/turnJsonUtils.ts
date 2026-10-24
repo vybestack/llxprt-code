@@ -4,32 +4,39 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { getErrorMessage } from '@vybestack/llxprt-code-core/utils/errors.js';
-import type {
-  StructuredError,
-  StructuredErrorCategory,
-  StructuredErrorReason,
+import {
+  getErrorMessage,
+  LocalTokenizationError,
+} from '@vybestack/llxprt-code-core/utils/errors.js';
+import {
+  STRUCTURED_ERROR_CATEGORIES,
+  type StructuredError,
+  type StructuredErrorCategory,
+  type StructuredErrorReason,
 } from '@vybestack/llxprt-code-core/core/turn.js';
-
-const STRUCTURED_ERROR_CATEGORIES: ReadonlySet<string> = new Set([
-  'rate_limit',
-  'quota',
-  'authentication',
-  'server_error',
-  'network',
-  'client_error',
-]);
 
 function isStructuredErrorCategory(
   value: unknown,
 ): value is StructuredErrorCategory {
-  return typeof value === 'string' && STRUCTURED_ERROR_CATEGORIES.has(value);
+  return (
+    typeof value === 'string' &&
+    STRUCTURED_ERROR_CATEGORIES.some((category) => category === value)
+  );
 }
 
 function isStructuredErrorReason(
   value: unknown,
 ): value is StructuredErrorReason {
   return value === 'retries_exhausted' || value === 'all_buckets_exhausted';
+}
+
+function readStructuredErrorCategory(
+  error: object,
+): StructuredErrorCategory | undefined {
+  if (error instanceof LocalTokenizationError) return 'local_tokenization';
+  return 'category' in error && isStructuredErrorCategory(error.category)
+    ? error.category
+    : undefined;
 }
 
 export function buildStructuredError(error: unknown): StructuredError {
@@ -41,10 +48,7 @@ export function buildStructuredError(error: unknown): StructuredError {
     'status' in error && typeof error.status === 'number'
       ? error.status
       : undefined;
-  const category =
-    'category' in error && isStructuredErrorCategory(error.category)
-      ? error.category
-      : undefined;
+  const category = readStructuredErrorCategory(error);
   const reason =
     'reason' in error && isStructuredErrorReason(error.reason)
       ? error.reason

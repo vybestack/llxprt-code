@@ -28,7 +28,8 @@ type SyncCleanupFn = () => void;
 interface CleanupState {
   readonly asyncFns: readonly CleanupFn[];
   readonly syncFns: readonly SyncCleanupFn[];
-  readonly inProgress: boolean;
+  /** Completion of the one cleanup run, shared by every caller. */
+  readonly completion: Promise<void> | undefined;
 }
 
 const EMPTY_ASYNC_FNS: readonly CleanupFn[] = [];
@@ -37,7 +38,7 @@ const EMPTY_SYNC_FNS: readonly SyncCleanupFn[] = [];
 const EMPTY_STATE: CleanupState = {
   asyncFns: EMPTY_ASYNC_FNS,
   syncFns: EMPTY_SYNC_FNS,
-  inProgress: false,
+  completion: undefined,
 };
 
 let state: CleanupState = EMPTY_STATE;
@@ -50,13 +51,17 @@ export function registerSyncCleanupFn(fn: SyncCleanupFn): void {
   state = { ...state, syncFns: [...state.syncFns, fn] };
 }
 
-export function isCleanupInProgress(): boolean {
-  return state.inProgress;
+/**
+ * The completion promise of the cleanup run that has started, if any. A
+ * second caller must wait on it rather than assume cleanup is finished.
+ */
+export function getCleanupCompletion(): Promise<void> | undefined {
+  return state.completion;
 }
 
-/** Mark cleanup as started, preventing reentrant/concurrent runs. */
-export function beginCleanup(): void {
-  state = { ...state, inProgress: true };
+/** Record the single cleanup run, preventing reentrant/concurrent runs. */
+export function beginCleanup(completion: Promise<void>): void {
+  state = { ...state, completion };
 }
 
 /**
@@ -105,7 +110,7 @@ export async function drainAsyncCleanups(
 
 /**
  * Reset cleanup state for testing purposes only.
- * Clears pending sync/async callbacks and returns the in-progress guard
+ * Clears pending sync/async callbacks and returns the cleanup run guard
  * to idle.
  * DO NOT use this in production code.
  * @internal

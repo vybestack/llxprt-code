@@ -70,6 +70,18 @@ export class FatalCancellationError extends FatalError {
   }
 }
 
+/**
+ * A failure of LLxprt Code's own local token counting, as opposed to a
+ * response from a provider API. Display layers use it to avoid presenting
+ * these failures as provider "API Error"s.
+ */
+export class LocalTokenizationError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'LocalTokenizationError';
+  }
+}
+
 export class ForbiddenError extends Error {}
 export class UnauthorizedError extends Error {}
 export class BadRequestError extends Error {}

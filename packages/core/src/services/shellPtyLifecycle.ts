@@ -158,6 +158,27 @@ export function createPtyResultPromise(
 }
 
 /**
+ * Whether `process.kill(-pid)` targets only the group this PTY spawned.
+ *
+ * node-pty spawns through forkpty, which always makes the child a group
+ * leader. `Bun.spawn` with an inline terminal does the same, but inside Bun,
+ * so the group is confirmed with the kernel instead of assumed: a live group
+ * whose id equals the freshly spawned child's pid can only have been created
+ * by that child, and the kernel does not reuse a pid while a group still
+ * carries it. If the child has already gone and left no group behind, there
+ * is nothing to signal and the direct-kill path applies.
+ */
+function ptyLeadsProcessGroup(
+  ptyInfo: NonNullable<PtyImplementation>,
+  pid: number,
+): boolean {
+  if (ptyInfo.name !== 'bun-pty') {
+    return true;
+  }
+  return isProcessGroupAlive(pid);
+}
+
+/**
  * @plan PLAN-20260825-SHELLMEM.P01
  * @requirement REQ-3329-02
  * @requirement REQ-3329-03
@@ -183,10 +204,14 @@ function initializePtyExecState(execution: {
     controller: inactivityAbortController,
   } = makeInactivityTimer(inactivityTimeoutMs, exitedGuard);
 
+  const supportsProcessGroupKill = ptyLeadsProcessGroup(
+    execution.ptyInfo,
+    execution.ptyProcess.pid,
+  );
   const activePtyEntry: ActivePty = {
     ptyProcess: execution.ptyProcess,
     headlessTerminal: execution.headlessTerminal,
-    supportsProcessGroupKill: execution.ptyInfo.name !== 'bun-pty',
+    supportsProcessGroupKill,
   };
 
   return {
@@ -198,7 +223,7 @@ function initializePtyExecState(execution: {
     onOutputEvent: execution.onOutputEvent,
     shellExecutionConfig: execution.shellExecutionConfig,
     ptyInfo: execution.ptyInfo,
-    supportsProcessGroupKill: execution.ptyInfo.name !== 'bun-pty',
+    supportsProcessGroupKill,
     inactivityAbortController,
     resetInactivityTimer,
     cancelInactivityTimer,
@@ -649,9 +674,9 @@ export async function ptyAbortAction(
     return;
   }
 
-  // bun-pty (no process group): direct-kill only, unchanged. No group reap
-  // is possible here — waiting would stall every abort without being able to
-  // kill anything (Issue #3517 documents, not changes, this limitation).
+  // No confirmed PTY-owned group (a bun-pty child that left no group behind):
+  // direct-kill only. There is nothing to reap, so waiting would only stall
+  // the abort.
   try {
     state.ptyProcess.kill('SIGTERM');
   } catch {
