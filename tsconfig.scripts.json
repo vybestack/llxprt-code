@@ -366,6 +366,7 @@
     "scripts/tests/workflow-quota-selection.test.ts",
     "scripts/tests/workspace-source-helpers.test.ts",
     "scripts/tests/workspace-source-helpers.ts",
+    "scripts/tests/workspace-test-utils-resolution.test.ts",
     "integration-tests/run_shell_command.multibyte.test.ts",
     "integration-tests/run_shell_command.qwen-script-call.test.ts",
     "integration-tests/run_shell_command.windows.test.ts",
