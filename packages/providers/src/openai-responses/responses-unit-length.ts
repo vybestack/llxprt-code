@@ -45,7 +45,7 @@ export async function responsesUnitPairs(
   };
 }
 
-function emittedPdfBytes(item: ResponsesInputItem): number {
+export function emittedPdfBytes(item: ResponsesInputItem): number {
   if (!('role' in item) || item.role !== 'user' || !Array.isArray(item.content))
     return 0;
   let bytes = 0;

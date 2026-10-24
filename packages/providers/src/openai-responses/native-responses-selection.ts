@@ -27,12 +27,14 @@ export async function statefulUnsupportedMedia(
   pdfEnabled: boolean,
 ): Promise<readonly UnsupportedMediaEntry[]> {
   const indexed = rows.native?.indexed;
-  if (indexed === undefined)
-    throw new Error('Native Responses requires journal rows');
   const unsupported: UnsupportedMediaEntry[] = [];
   for (let index = skipRows; index < rows.count; index++) {
-    const { entry } = await indexed.unitEntryAt(index);
+    const entry =
+      indexed === undefined
+        ? undefined
+        : (await indexed.unitEntryAt(index)).entry;
     if (
+      entry !== undefined &&
       (entry.flags & ROW_FLAG.hasMedia) === 0 &&
       entry.toolCallBlocks === 0 &&
       entry.responseBlocks === 0

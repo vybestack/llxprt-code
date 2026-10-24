@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import { PDF_AGGREGATE_MAX_BYTES } from '../utils/mediaUtils.js';
 import { CallerOwnedToolQuery } from '../utils/caller-owned-tool-query.js';
 import { requestFormatSlot } from '@vybestack/llxprt-code-core/services/history/native-provider-format.js';
 import type { RowFormatSettings } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
@@ -24,6 +25,7 @@ import type {
   ResponsesInputItem,
 } from './OpenAIResponsesTypes.js';
 import {
+  emittedPdfBytes,
   responsesUnitPairs,
   responsesUnitLength,
   responsesUnitSummary,
@@ -354,6 +356,7 @@ async function callerOwnedByteLength(
     serverSideParentActive: selection.stateful.parentId !== undefined,
   };
   let bytes = 2;
+  let pdfBytes = 0;
   let items = 0;
   let counter = 0;
   for (let at = selection.skipRows; at < rows.count; at++) {
@@ -364,9 +367,15 @@ async function callerOwnedByteLength(
       context,
       pairs,
       () => `rs_${reasoningIdTime}_${counter++}`,
-    ))
+    )) {
       bytes += jsonValueByteLength(item) + Number(items++ > 0);
+      pdfBytes += emittedPdfBytes(item);
+    }
   }
+  if (pdfBytes > PDF_AGGREGATE_MAX_BYTES)
+    throw new Error(
+      `Native PDF input payload (${pdfBytes} bytes) exceeds the allowed ${PDF_AGGREGATE_MAX_BYTES} bytes (50 MB). Reduce the number or size of PDF files.`,
+    );
   return overrideByteLength(shell.request, []) - 2 + bytes;
 }
 
