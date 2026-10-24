@@ -354,12 +354,15 @@ function emitFinalResult(
  * AgentEventType.Error throw path. The optional HTTP status is preserved as a
  * property without a type assertion.
  */
-function reconstructError(structured: StructuredError): Error {
+function reconstructError(structured: StructuredError, cause?: unknown): Error {
   const err: Error & {
     status?: number;
     category?: StructuredError['category'];
     reason?: StructuredError['reason'];
-  } = new Error(structured.message);
+  } = new Error(
+    structured.message,
+    cause === undefined ? undefined : { cause },
+  );
   if (structured.status !== undefined) {
     err.status = structured.status;
   }
@@ -376,9 +379,10 @@ function throwStructuredStreamError(
   structured: StructuredError,
   formatter: StreamJsonFormatter | null,
   message = structured.message,
+  cause?: unknown,
 ): never {
   emitStreamError(formatter, 'error', message, structured);
-  const error = reconstructError(structured);
+  const error = reconstructError(structured, cause);
   if (formatter !== null) {
     markMachineErrorReported(error);
   }
@@ -636,7 +640,12 @@ function dispatchAgentEvent(
         'Stream idle timeout: no response received within the allowed time.',
       );
     case 'error':
-      return throwStructuredStreamError(event.error, context.streamFormatter);
+      return throwStructuredStreamError(
+        event.error,
+        context.streamFormatter,
+        event.error.message,
+        event.cause,
+      );
     case 'done':
       state.pendingDone = event;
       return;

@@ -63,8 +63,11 @@ import {
 } from './session-client-cleanup.js';
 import { SessionConversationBinding } from './session-conversation-binding.js';
 import {
+  EXECUTION_NOT_INITIALIZED,
   SessionExecutionOwner,
   type SessionExecution,
+  type SessionLoopResolution,
+  toLoopResolution,
 } from './session-execution-owner.js';
 import { SessionInstructionBinding } from './session-instruction-binding.js';
 import {
@@ -217,14 +220,10 @@ export abstract class SessionClientAcquisitionOwner extends SessionConversationB
     this.requireExecution().rebuild(this.getAgentClient());
   }
 
-  resolveExecution():
-    | { loop: SessionExecution; error?: undefined }
-    | { loop?: undefined; error: { message: string } } {
+  resolveExecution(): SessionLoopResolution {
     const execution = this.execution;
-    if (execution === undefined)
-      return { error: { message: 'Agent loop is not initialized' } };
-    const result = execution.resolve(this.getAgentClient());
-    return result.error !== undefined ? result : { loop: result.execution };
+    if (execution === undefined) return { error: EXECUTION_NOT_INITIALIZED };
+    return toLoopResolution(execution.resolve(this.getAgentClient()));
   }
 
   isCurrentExecution(execution: SessionExecution | undefined): boolean {

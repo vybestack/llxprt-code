@@ -37,6 +37,31 @@ export interface SessionExecution {
   injectSteer(text: string): void;
 }
 
+export type SessionExecutionUnavailable =
+  | { kind: 'initialization-failed'; message: string; cause: unknown }
+  | { kind: 'not-initialized'; message: 'Agent loop is not initialized' };
+
+export type SessionExecutionResolution =
+  | { execution: SessionExecution; error?: undefined }
+  | { execution?: undefined; error: SessionExecutionUnavailable };
+
+export type SessionLoopResolution =
+  | { loop: SessionExecution; error?: undefined }
+  | { loop?: undefined; error: SessionExecutionUnavailable };
+
+export function toLoopResolution(
+  resolution: SessionExecutionResolution,
+): SessionLoopResolution {
+  return resolution.error !== undefined
+    ? resolution
+    : { loop: resolution.execution };
+}
+
+export const EXECUTION_NOT_INITIALIZED: SessionExecutionUnavailable = {
+  kind: 'not-initialized',
+  message: 'Agent loop is not initialized',
+};
+
 export class SessionExecutionOwner {
   private currentClient: AgentClientContract | undefined;
   private currentLoop: AgenticLoop | undefined;
@@ -207,11 +232,7 @@ export class SessionExecutionOwner {
     }
   }
 
-  resolve(
-    client: AgentClientContract,
-  ):
-    | { execution: SessionExecution; error?: undefined }
-    | { execution?: undefined; error: { message: string } } {
+  resolve(client: AgentClientContract): SessionExecutionResolution {
     try {
       this.assertOpen();
       if (this.currentExecution !== undefined && this.currentClient !== client)
@@ -219,12 +240,14 @@ export class SessionExecutionOwner {
     } catch (error) {
       return {
         error: {
+          kind: 'initialization-failed',
           message: `Agent loop initialization failed: ${error instanceof Error ? error.message : String(error)}`,
+          cause: error,
         },
       };
     }
     return this.currentExecution === undefined
-      ? { error: { message: 'Agent loop is not initialized' } }
+      ? { error: EXECUTION_NOT_INITIALIZED }
       : { execution: this.currentExecution };
   }
 

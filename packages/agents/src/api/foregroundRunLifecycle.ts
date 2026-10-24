@@ -7,6 +7,7 @@
 import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import type { ActiveRun } from './directProviderAdmission.js';
+import type { SessionLoopResolution } from '../session/session-execution-owner.js';
 import type { AgentInput, TurnOptions } from './agent.js';
 import type { AgentEvent } from './event-types.js';
 import type { ToolControl } from './control/toolControl.js';
@@ -42,9 +43,7 @@ export class ForegroundRunLifecycle {
     private readonly isReady: () => boolean,
     private readonly admitRun: (run: ActiveRun) => void,
     private readonly releaseRun: (run: ActiveRun) => void,
-    private readonly resolveLoop: () =>
-      | { loop: NonNullable<ActiveRun['loop']>; error?: undefined }
-      | { loop?: undefined; error: { message: string } },
+    private readonly resolveLoop: () => SessionLoopResolution,
     private readonly admitParameters: () => AdmittedModelParameters | undefined,
     private readonly awaitDiscovery: () => Promise<ReadonlyMap<string, string>>,
     private readonly notifyConfirmation: ToolControl['notifyConfirmation'],
@@ -103,7 +102,13 @@ export class ForegroundRunLifecycle {
     }
     const init = this.resolveLoop();
     if (init.error !== undefined) {
-      yield { type: 'error', error: init.error };
+      yield init.error.kind === 'initialization-failed'
+        ? {
+            type: 'error',
+            error: { message: init.error.message },
+            cause: init.error.cause,
+          }
+        : { type: 'error', error: { message: init.error.message } };
       yield { type: 'done', reason: 'error' };
       return;
     }
