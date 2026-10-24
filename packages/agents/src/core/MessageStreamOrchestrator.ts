@@ -910,7 +910,7 @@ export class MessageStreamOrchestrator {
     const identity = route
       ? { providerName: route.provider.name, model: route.model }
       : this.deps.getEffectiveModelIdentity();
-    return buildModelInfo(this.deps.config, identity, route?.profileName);
+    return buildModelInfo(identity, route?.profileName ?? null);
   }
 
   private *_modelInfoEvents(

@@ -3,9 +3,6 @@
  * to keep it within the max-lines lint limit.
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { AgentEventType } from '@vybestack/llxprt-code-core/core/turn.js';
-import type { ServerAgentStreamEvent } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { ModelInfo } from './turn.js';
 
 export interface EffectiveModelIdentity {
@@ -56,37 +53,10 @@ export function buildEffectiveModelIdentity(
   };
 }
 
-/** Resolves the current profile name from the config's settings service. */
-export function resolveProfileName(config: Config): string | null {
-  try {
-    const svc = (
-      config as unknown as {
-        getSettingsService?: () => {
-          getCurrentProfileName?: () => string | null;
-          get?: (key: string) => unknown;
-        };
-      }
-    ).getSettingsService?.();
-    if (svc?.getCurrentProfileName) return svc.getCurrentProfileName();
-    if (svc?.get) {
-      const p = svc.get('currentProfile');
-      return typeof p === 'string' ? p : null;
-    }
-  } catch {
-    /* Settings service unavailable */
-  }
-  return null;
-}
-
 export function buildModelInfo(
-  config: Config,
   identity: EffectiveModelIdentity,
-  admittedProfileName?: string | null,
+  profileName: string | null,
 ): ModelInfo {
-  const profileName =
-    admittedProfileName === undefined
-      ? resolveProfileName(config)
-      : admittedProfileName;
   return {
     model: identity.model,
     providerName: identity.providerName,
@@ -105,17 +75,6 @@ export function modelIdentityKey(info: ModelInfo): string {
     info.profileName ?? '',
     info.model,
   ]);
-}
-
-/** Emits a ModelInfo event for a new sequence (always emitted). */
-export async function* emitModelInfoForNewSequence(
-  config: Config,
-  identity: EffectiveModelIdentity,
-): AsyncGenerator<ServerAgentStreamEvent, void> {
-  yield {
-    type: AgentEventType.ModelInfo,
-    value: buildModelInfo(config, identity),
-  };
 }
 
 export function resolveClientModelIdentity(
