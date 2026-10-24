@@ -986,8 +986,8 @@ Coders tick their own line in the commit that completes the task. Inventory task
 - [x] T1.9d-inv E6 fake-seam suppression inventory
   - [x] T1.9d-B1 E6 fake-seam test batch 1 (agents, 4 files)
   - [x] T1.9d-B2 E6 fake-seam test batch 2 (cli, 2 files)
-- [ ] T1.9d-Bk E6 fake-seam test batches (ids added by T1.9d-inv, may be none)
-- [ ] T1.9d E6 delete fake-seam suppression
+- [x] T1.9d-Bk E6 fake-seam test batches (ids added by T1.9d-inv, may be none)
+- [x] T1.9d E6 delete fake-seam suppression
 - [ ] T1.10 E8 no-op disposal flags
 - [ ] T1.11 E9b move providers specs to agents
 - [ ] T1.12 E9c real capability delivery per platform

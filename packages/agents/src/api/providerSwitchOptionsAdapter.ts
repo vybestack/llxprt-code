@@ -91,33 +91,15 @@ export async function applyFacadeProviderSwitch(
   rebuild: () => void,
 ): Promise<AgentProviderSwitchResult> {
   const previousProvider = state.provider;
-  // switchActiveProvider rebuilds the content generator internally; under the
-  // fake seam the named provider is not registered and this throws (no-op).
-  let providerChanged = false;
-  let infoMessages: readonly string[] = [];
-  let defaultModel: string | undefined;
-  try {
-    const switchResult = await switchProvider(
-      provider,
-      toRuntimeSwitchOptions(options),
-    );
-    providerChanged = switchResult.changed;
-    infoMessages = switchResult.infoMessages;
-    defaultModel = switchResult.defaultModel;
-  } catch (error) {
-    // Only the EXPECTED fake-seam case is suppressed: the fake seam sets
-    // LLXPRT_FAKE_RESPONSES to a fixture-file path (never the string '1'), so
-    // the seam predicate is simply "the env var is set at all". A REAL
-    // provider-switch failure (env var not set) must propagate so a genuine
-    // failure is never reported as success — facade state below is then left
-    // untouched.
-    const isFakeSeam = process.env.LLXPRT_FAKE_RESPONSES !== undefined;
-    if (!isFakeSeam) {
-      throw error;
-    }
-    // Provider not registered (fake seam) — the active provider handles all
-    // requests. Per-agent state still reflects the switch (getProvider etc.).
-  }
+  // switchActiveProvider rebuilds the content generator internally. A failure
+  // propagates and leaves the facade state below untouched.
+  const switchResult = await switchProvider(
+    provider,
+    toRuntimeSwitchOptions(options),
+  );
+  const providerChanged = switchResult.changed;
+  const infoMessages = switchResult.infoMessages;
+  const defaultModel = switchResult.defaultModel;
   if (providerChanged) {
     // Real provider switch succeeded; apply the requested model (if any) via
     // setActiveModel + the explicit model-only rebuild.
@@ -134,8 +116,8 @@ export async function applyFacadeProviderSwitch(
     // rebuild() below propagates it to the loop (#2374 deepthinker finding).
     await selectModel(model);
   }
-  // Under the fake seam (providerChanged === false), the client is unchanged;
-  // history/HistoryService identity is trivially preserved (same client).
+  // When providerChanged is false the client is unchanged, so its
+  // history/HistoryService identity is trivially preserved.
   state.provider = provider;
   if (model !== undefined) {
     state.model = model;
