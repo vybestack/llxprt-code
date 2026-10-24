@@ -5,25 +5,19 @@
  */
 
 import { createHash } from 'node:crypto';
-import { mkdir, readdir, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import type {
   IContent,
   MediaReferenceBlock,
 } from '../services/history/IContent.js';
-import type { MediaAdmissionService } from '../storage/media-admission-service.js';
-import type { LocalMediaStore } from '../storage/local-media-store.js';
-import { hydrateRecordedMedia } from '../storage/recorded-media-transfer.js';
 import { collectMediaReferences } from '../storage/media-reference-lifecycle.js';
-import type { ReservationLedger } from './session-media-package-ledger.js';
 import {
   MAX_HISTORY_CONTENTS,
-  MAX_PERSISTED_STATES,
   MAX_REFERENCES,
   MAX_PERSISTED_STATE_AGGREGATE_BYTES,
   MAX_PERSISTED_STATE_BYTES,
   PERSISTED_SESSION_PREFIX,
-  SUPPORTED_PERSISTED_SESSION_VERSION,
   boundedAggregate,
   boundedFileSize,
   hasSameObjectMetadata,
@@ -184,122 +178,6 @@ export function importedStateFileName(
   index: number,
 ): string {
   return `${PERSISTED_SESSION_PREFIX}imported-${sessionId}-${index}.json`;
-}
-
-export interface ExportStateContext {
-  readonly recordingPath: string;
-  readonly stateDirectory: string;
-  readonly sessionId: string;
-  readonly projectHash: string;
-  readonly mediaStore: LocalMediaStore;
-  readonly admission: MediaAdmissionService;
-  readonly ledger: ReservationLedger;
-  readonly onContents: (contents: readonly IContent[]) => void;
-}
-
-async function exportPersistedStateEntries(
-  recordingPath: string,
-): Promise<readonly string[]> {
-  const entries = (await readdir(dirname(recordingPath)))
-    .filter(
-      (entry) =>
-        entry.startsWith(PERSISTED_SESSION_PREFIX) && entry.endsWith('.json'),
-    )
-    .sort();
-  if (entries.length > MAX_PERSISTED_STATES) {
-    throw new Error('Export persisted state count exceeds limit');
-  }
-  const sizes: number[] = [];
-  for (const entry of entries) {
-    sizes.push(
-      await boundedFileSize(
-        join(dirname(recordingPath), entry),
-        MAX_PERSISTED_STATE_BYTES,
-        'Persisted session state',
-      ),
-    );
-  }
-  boundedAggregate(
-    sizes,
-    MAX_PERSISTED_STATE_AGGREGATE_BYTES,
-    'Persisted session states',
-  );
-  return entries;
-}
-
-async function exportPersistedState(
-  context: ExportStateContext,
-  entry: string,
-  stateIndex: number,
-): Promise<string | undefined> {
-  const parsed: unknown = JSON.parse(
-    (
-      await readBoundedFile(
-        join(dirname(context.recordingPath), entry),
-        MAX_PERSISTED_STATE_BYTES,
-        'Persisted session state',
-      )
-    ).toString('utf8'),
-  );
-  if (!isRecord(parsed)) throw new Error(`Invalid persisted session ${entry}`);
-  if (
-    parsed['sessionId'] !== context.sessionId ||
-    parsed['projectHash'] !== context.projectHash
-  ) {
-    return undefined;
-  }
-  if (parsed['version'] !== SUPPORTED_PERSISTED_SESSION_VERSION) {
-    throw new Error(
-      `Unsupported persisted session version ${String(parsed['version'])}`,
-    );
-  }
-  const history = parsed['history'];
-  if (
-    !Array.isArray(history) ||
-    !history.every(isContent) ||
-    history.length > MAX_HISTORY_CONTENTS
-  ) {
-    throw new Error(`Invalid persisted session history ${entry}`);
-  }
-  const admissionContext = {
-    turnId: `session-package-persisted-${stateIndex}`,
-    source: 'session-package-export',
-  };
-  await hydrateRecordedMedia(context.mediaStore, history);
-  const admitted = await context.admission.admitContents(
-    history,
-    admissionContext,
-  );
-  await context.ledger.record({
-    contents: admitted,
-    context: admissionContext,
-    mode: 'contents',
-  });
-  context.onContents(admitted);
-  const file = `persisted-${stateIndex}.json`;
-  await mkdir(context.stateDirectory, { recursive: true, mode: 0o700 });
-  await writeFile(
-    join(context.stateDirectory, file),
-    JSON.stringify({ ...parsed, history: admitted }),
-    { mode: 0o600, flag: 'wx' },
-  );
-  return `state/${file}`;
-}
-
-/**
- * Exports the persisted states belonging to the session one at a time,
- * writing each straight to the staged package. Returns the packaged files.
- */
-export async function exportPersistedStates(
-  context: ExportStateContext,
-): Promise<readonly string[]> {
-  const entries = await exportPersistedStateEntries(context.recordingPath);
-  const files: string[] = [];
-  for (const entry of entries) {
-    const file = await exportPersistedState(context, entry, files.length);
-    if (file !== undefined) files.push(file);
-  }
-  return files;
 }
 
 /** Unique media references seen while exporting, bounded by the package limit. */

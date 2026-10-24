@@ -152,7 +152,7 @@ export class MemoryCommand {
     await this.pager.resumeFromJournal();
     verifyWindow(
       this.pager.getState().rows.map((row) => row.item),
-      MEMORY_PAGE,
+      workload === 'compressed' ? 1 : MEMORY_PAGE,
       count,
       workload === 'compressed' ? '[compressed] ' : '',
     );

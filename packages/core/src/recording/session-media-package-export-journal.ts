@@ -14,12 +14,7 @@ import {
   JOURNAL_RECORDING_FILE,
   requiredObjects,
 } from './session-media-package-validation.js';
-import {
-  exportPersistedStates,
-  MediaReferenceIndex,
-} from './session-media-package-state.js';
-import { ReservationLedger } from './session-media-package-ledger.js';
-import { MediaAdmissionService } from '../storage/media-admission-service.js';
+import { MediaReferenceIndex } from './session-media-package-state.js';
 import { hydrateRecordedMedia } from '../storage/recorded-media-transfer.js';
 import {
   prepareSessionMediaPackageStaging,
@@ -147,11 +142,6 @@ async function writeNativePackage(
 ): Promise<void> {
   options.signal?.throwIfAborted();
   const source = await exportSource(path, options);
-  const admission = new MediaAdmissionService(mediaStore);
-  const ledger = new ReservationLedger(
-    join(directory, 'reservations.jsonl'),
-    admission,
-  );
   let failure: unknown;
   try {
     await prepareSessionMediaPackageStaging(directory);
@@ -168,16 +158,6 @@ async function writeNativePackage(
       facts.facts.sessionId !== source.sessionId
     )
       throw new Error('Export source session/project does not match');
-    const persistedStateFiles = await exportPersistedStates({
-      recordingPath: path,
-      stateDirectory: join(directory, 'state'),
-      sessionId: source.sessionId,
-      projectHash,
-      mediaStore,
-      admission,
-      ledger,
-      onContents: (contents) => index.add(contents),
-    });
     const references = index.references();
     await hydrateRecordedMedia(mediaStore, references);
     const objects = requiredObjects(references);
@@ -186,23 +166,12 @@ async function writeNativePackage(
     await writeSessionMediaPackageManifest({
       temporaryDirectory: directory,
       recordingFile: JOURNAL_RECORDING_FILE,
-      persistedStateFiles,
+      persistedStateFiles: [],
       references,
       objects,
     });
   } catch (error) {
     failure = error;
-  }
-  try {
-    await ledger.releaseAll();
-  } catch (cleanup) {
-    failure =
-      failure === undefined
-        ? cleanup
-        : new AggregateError(
-            [failure, cleanup],
-            'Export and reservation release failed',
-          );
   }
   try {
     await source.close();

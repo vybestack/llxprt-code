@@ -469,7 +469,6 @@ describe('continue package perform_resume integration', () => {
       const persisted = await recordedRows(
         path,
         getProjectHash(config.getProjectRoot()),
-        requireMediaStore(built.sessionClient.getAgentClient()),
       );
       expect(historyText(persisted)).toContain(
         'history restored through perform_resume',

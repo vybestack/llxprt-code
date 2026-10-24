@@ -4,45 +4,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * P05c target contract: the `session_start` payload is extended with
- * `kind: 'main' | 'subagent'` plus an optional `parentSessionId` (present
- * only on child journals); replay normalizes legacy absence to `main`; and
- * the existing lock/filename machinery holds for fs-safe child ids while
- * rejecting today's `::`/`#` orchestrator ids.
- *
- * RED on assertion: every import below exists at HEAD; the `kind` and
- * `parentSessionId` fields do not, so the first three tests fail until the
- * green session extends the payload and the replay metadata view. The lock
- * grammar tests pin behavior that already works (signal, expected green).
- *
- * @plan:PLAN-20260917-ISSUE854.P05c
- * @requirement:G7
- */
-
 import { randomUUID } from 'node:crypto';
-import { appendFile, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'bun:test';
 import {
-  SessionRecordingService,
-  type SessionRecordingServiceConfig,
-} from './SessionRecordingService.js';
+  JournalRecordingService,
+  type JournalRecordingConfig,
+} from './journalRecordingService.js';
+import { readJournalFileFacts } from './journalSessionListing.js';
+import { JournalSession } from '../services/history/journalSession.js';
+import { retiredJournalMessage } from '../journal/journalRefusal.js';
 import { SessionLockManager } from './SessionLockManager.js';
-import { replaySession } from './ReplayEngine.js';
-import { sessionStartLine } from './__tests__/replay-test-helpers.js';
-
-/**
- * Proposed P05c extension of the recording config (tmp/verify854/p05c/api_sketch.md).
- * At HEAD these fields are ignored by the constructor — asserting on them is
- * the red.
- */
-type SubagentRecordingConfig = SessionRecordingServiceConfig & {
-  kind?: 'main' | 'subagent';
-  parentSessionId?: string;
-};
 
 const PROJECT_HASH = 'p05c-start-hash';
 
@@ -56,7 +31,7 @@ async function makeChatsDir(): Promise<string> {
 function baseConfig(
   chatsDir: string,
   sessionId: string,
-): SubagentRecordingConfig {
+): JournalRecordingConfig {
   return {
     sessionId,
     projectHash: PROJECT_HASH,
@@ -67,33 +42,27 @@ function baseConfig(
   };
 }
 
-function observedStartPayload(raw: string): Record<string, unknown> {
-  const firstLine = raw.split('\n')[0] ?? '';
-  const parsed: unknown = JSON.parse(firstLine);
-  expect(typeof parsed).toBe('object');
-  const envelope = parsed as { payload?: Record<string, unknown> };
-  const payload = envelope.payload;
-  expect(typeof payload).toBe('object');
-  return payload as Record<string, unknown>;
-}
-
-async function readStartPayload(
-  recording: SessionRecordingService,
-): Promise<Record<string, unknown>> {
+async function readStartPayload(recording: JournalRecordingService) {
   const filePath = recording.getFilePath();
   expect(filePath).not.toBeNull();
-  const raw = await readFile(filePath as string, 'utf8');
-  return observedStartPayload(raw);
+  if (filePath === null) throw new Error('Missing child journal');
+  const facts = await readJournalFileFacts(filePath);
+  if (facts === undefined) throw new Error('Missing child session facts');
+  return facts.facts.start;
 }
 
 async function materializedRecording(
-  config: SubagentRecordingConfig,
-): Promise<SessionRecordingService> {
-  const recording = await SessionRecordingService.createLocked(config);
-  recording.recordContent({
-    speaker: 'human',
-    blocks: [{ type: 'text', text: 'seed' }],
-  });
+  config: JournalRecordingConfig,
+): Promise<JournalRecordingService> {
+  const recording = await JournalRecordingService.createLocked(config);
+  await (
+    await recording.session()
+  ).append([
+    {
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'seed' }],
+    },
+  ]);
   await recording.flush();
   return recording;
 }
@@ -134,50 +103,40 @@ describe('P05c session_start payload extension @plan:PLAN-20260917-ISSUE854.P05c
     expect('parentSessionId' in payload).toBe(false);
   });
 
-  it('replay exposes kind and parentSessionId from a child journal', async () => {
+  it('reads kind and parentSessionId from a child journal', async () => {
     const chatsDir = await makeChatsDir();
     const parentId = randomUUID();
     const childId = randomUUID();
-    const childStart = JSON.stringify({
-      v: 1,
-      seq: 1,
-      ts: '2026-02-11T16:00:00.000Z',
-      type: 'session_start',
-      payload: {
-        sessionId: childId,
-        projectHash: PROJECT_HASH,
-        workspaceDirs: ['/w'],
-        provider: 'anthropic',
-        model: 'claude-4',
-        startTime: '2026-02-11T16:00:00.000Z',
-        kind: 'subagent',
-        parentSessionId: parentId,
-      },
+    const recording = await materializedRecording({
+      ...baseConfig(chatsDir, childId),
+      kind: 'subagent',
+      parentSessionId: parentId,
     });
-    const filePath = path.join(chatsDir, `session-${childId}.jsonl`);
-    await mkdir(chatsDir, { recursive: true });
-    await appendFile(filePath, `${childStart}\n`, 'utf8');
-    const replay = await replaySession(filePath, PROJECT_HASH, {});
-    expect(replay.ok).toBe(true);
-    if (!replay.ok) return;
-    expect(replay.metadata.kind).toBe('subagent');
-    expect(replay.metadata.parentSessionId).toBe(parentId);
+    try {
+      const metadata = await readStartPayload(recording);
+      expect(metadata.kind).toBe('subagent');
+      expect(metadata.parentSessionId).toBe(parentId);
+    } finally {
+      await recording.dispose();
+    }
   });
 
-  it('replay reads legacy journals without kind as main', async () => {
+  it('refuses retired journals without kind rather than normalizing them as main', async () => {
     const chatsDir = await makeChatsDir();
     await mkdir(chatsDir, { recursive: true });
-    const legacyId = randomUUID();
-    const filePath = path.join(chatsDir, `session-${legacyId}.jsonl`);
-    await appendFile(
+    const filePath = path.join(chatsDir, 'session-retired.jsonl');
+    await writeFile(
       filePath,
-      `${sessionStartLine(1, { sessionId: legacyId, projectHash: PROJECT_HASH })}\n`,
-      'utf8',
+      JSON.stringify({
+        v: 1,
+        seq: 1,
+        type: 'session_start',
+        payload: { sessionId: randomUUID(), projectHash: PROJECT_HASH },
+      }),
     );
-    const replay = await replaySession(filePath, PROJECT_HASH, {});
-    expect(replay.ok).toBe(true);
-    if (!replay.ok) return;
-    expect(replay.metadata.kind).toBe('main');
+    await expect(JournalSession.open(filePath)).rejects.toThrow(
+      retiredJournalMessage(filePath),
+    );
   });
 });
 
@@ -206,8 +165,10 @@ describe('P05c lock grammar and filename bucketing @plan:PLAN-20260917-ISSUE854.
     expect(firstPath).not.toBeNull();
     expect(secondPath).not.toBeNull();
     expect(firstPath).not.toBe(secondPath);
-    expect(existsSync(firstPath as string)).toBe(true);
-    expect(existsSync(secondPath as string)).toBe(true);
+    if (firstPath === null || secondPath === null)
+      throw new Error('Missing child recording');
+    expect(existsSync(firstPath)).toBe(true);
+    expect(existsSync(secondPath)).toBe(true);
     await first.dispose();
     await second.dispose();
   });
@@ -215,19 +176,20 @@ describe('P05c lock grammar and filename bucketing @plan:PLAN-20260917-ISSUE854.
   it('refuses a second recording over an id that is still locked', async () => {
     const chatsDir = await makeChatsDir();
     const sessionId = randomUUID();
-    const first = await SessionRecordingService.createLocked(
+    const first = await JournalRecordingService.createLocked(
       baseConfig(chatsDir, sessionId),
     );
     let secondError: unknown = null;
     try {
-      await SessionRecordingService.createLocked(
+      await JournalRecordingService.createLocked(
         baseConfig(chatsDir, sessionId),
       );
     } catch (error: unknown) {
       secondError = error;
     }
     expect(secondError).toBeInstanceOf(Error);
-    expect((secondError as Error).name).toBe('SessionLockedError');
+    if (!(secondError instanceof Error)) throw new Error('Missing lock error');
+    expect(secondError.name).toBe('SessionLockedError');
     await first.dispose();
   });
 

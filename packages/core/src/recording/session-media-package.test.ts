@@ -127,11 +127,7 @@ describe('internal session media package', () => {
       PROJECT_HASH,
       destinationStore,
     );
-    const rows = await readPackageRows(
-      imported.recordingPath,
-      PROJECT_HASH,
-      destinationStore,
-    );
+    const rows = await readPackageRows(imported.recordingPath, PROJECT_HASH);
     expect(rows.map((row) => row.blocks)).toStrictEqual([[reference]]);
     expect(await destinationStore.readVerified(reference)).toStrictEqual(
       new Uint8Array([11, 22, 33, 44]),
@@ -726,9 +722,10 @@ describe('internal session media package', () => {
       packageRecordingName(),
     );
 
-    const bytes = await readFile(packagedRecordingPath);
-    bytes.writeUInt32LE(999, 8);
-    await writeFile(packagedRecordingPath, bytes);
+    await writeFile(
+      packagedRecordingPath,
+      JSON.stringify({ v: 1, seq: 1, type: 'session_start', payload: {} }),
+    );
 
     const destinationStore = new LocalMediaStore({
       rootDirectory: join(tempDirectory, 'rollback-destination-media'),

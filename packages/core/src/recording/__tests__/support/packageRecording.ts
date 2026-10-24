@@ -5,9 +5,8 @@ import { rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { IContent } from '../../../services/history/IContent.js';
 import { JournalSession } from '../../../services/history/journalSession.js';
-import type { LocalMediaStore } from '../../../storage/local-media-store.js';
 import type { SessionRecordingPort } from '../../recordingPort.js';
-import { replaySession } from '../../ReplayEngine.js';
+import { readJournalFileFacts } from '../../journalSessionListing.js';
 import { createSessionRecorder } from '../../sessionRecorderFactory.js';
 import type { SessionRecordingServiceConfig } from '../../types.js';
 
@@ -25,7 +24,7 @@ export function createPackageRecorder(
   });
 }
 
-export function packageRecordingName(): 'session.jsonl' | 'session.llxj' {
+export function packageRecordingName(): 'session.llxj' {
   return 'session.llxj';
 }
 
@@ -61,13 +60,10 @@ export async function writePackageRecording(
 export async function readPackageRows(
   path: string,
   projectHash: string,
-  mediaStore?: LocalMediaStore,
 ): Promise<readonly IContent[]> {
-  if (path.endsWith('.jsonl')) {
-    const result = await replaySession(path, projectHash, { mediaStore });
-    if (!result.ok) throw new Error(result.error);
-    return result.history;
-  }
+  const found = await readJournalFileFacts(path);
+  if (found === undefined || found.facts.start.projectHash !== projectHash)
+    throw new Error('Missing package recording or mismatched project');
   const session = await JournalSession.open(path);
   try {
     const rows: IContent[] = [];

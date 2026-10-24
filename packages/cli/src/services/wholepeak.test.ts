@@ -1,18 +1,49 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'bun:test';
-import { mkdtemp, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { RowOwnership } from '../../../core/src/recording/rowOwnership.js';
-import { JournalResolver } from '../../../core/src/recording/journalResolver.js';
+import { JournalRecordingService } from '../../../core/src/recording/journalRecordingService.js';
+import {
+  JournalResumeBoot,
+  resumePointOf,
+} from '../../../core/src/recording/journalResume.js';
+import type { JournalReadCounters } from '../../../core/src/recording/journalCounters.js';
 import { createRowCounters } from '../../../core/src/recording/journalCounters.js';
 import { streamHistoryItems } from '../ui/utils/streamHistoryItems.js';
 import {
+  MEMORY_PROJECT,
   writeMemoryFixture,
   type MemoryWorkload,
 } from './__tests__/support/wholememory-fixture.js';
 import type { IContent } from '../../../core/src/services/history/IContent.js';
 import { MemoryCommand } from './__tests__/support/wholememory-command.js';
+
+async function observedReader(
+  path: string,
+  counters: JournalReadCounters,
+): Promise<{ recording: JournalRecordingService; boot: JournalResumeBoot }> {
+  const recording = await JournalRecordingService.open(
+    {
+      sessionId: 'wholememory',
+      projectHash: MEMORY_PROJECT,
+      chatsDir: dirname(path),
+      workspaceDirs: [],
+      provider: 'test',
+      model: 'test',
+    },
+    path,
+  );
+  return {
+    recording,
+    boot: new JournalResumeBoot(
+      recording,
+      await resumePointOf(recording),
+      counters,
+    ),
+  };
+}
 
 describe('overlapping readers', () => {
   it('separates overlapping resolvers and releases cancelled consumers', async () => {
@@ -20,25 +51,35 @@ describe('overlapping readers', () => {
     await writeMemoryFixture(directory, 32, 'plain');
     const ownership = new RowOwnership();
     const counters = { ...createRowCounters().counters, ownership };
-    const path = join(directory, 'session-wholememory.jsonl');
-    const first = await JournalResolver.open(path, { counters });
-    const second = await JournalResolver.open(path, { counters });
-    const left = first.resolve()[Symbol.asyncIterator]();
-    const right = second.resolve()[Symbol.asyncIterator]();
+    const filename = (await readdir(directory)).find((name) =>
+      name.endsWith('.llxj'),
+    );
+    if (filename === undefined)
+      throw new Error('Missing native memory fixture');
+    const path = join(directory, filename);
+    const first = await observedReader(path, counters);
+    const second = new JournalResumeBoot(
+      first.recording,
+      await resumePointOf(first.recording),
+      counters,
+    );
+    const left = first.boot.streamRows()[Symbol.asyncIterator]();
+    const right = second.streamRows()[Symbol.asyncIterator]();
     try {
       await left.next();
       expect(ownership.snapshot().liveRows).toBe(1);
       await right.next();
       expect(ownership.snapshot().liveRows).toBe(2);
-      await left.return?.();
+      await left.return(undefined);
       expect(ownership.snapshot().liveRows).toBe(1);
-      await right.return?.();
+      await right.return(undefined);
       expect(ownership.snapshot().liveRows).toBe(0);
     } finally {
-      await left.return?.();
-      await right.return?.();
-      await first.close();
+      await left.return(undefined);
+      await right.return(undefined);
+      await first.recording.dispose();
       await second.close();
+      await rm(directory, { recursive: true, force: true });
     }
   });
 });
@@ -46,43 +87,48 @@ describe('overlapping readers', () => {
 describe('consumer retention control', () => {
   it('observes consumer retention after real resolver exhaustion and detects the peak', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'peak-consumer-'));
-    const path = join(directory, 'rows.jsonl');
-    const records = Array.from({ length: 512 }, (_, index) =>
-      JSON.stringify({
-        v: 2,
-        seq: index + 1,
-        type: 'content',
-        payload: {
-          content: {
-            speaker: 'human',
-            blocks: [{ type: 'text', text: String(index) }],
-          },
-        },
-      }),
+    const recording = JournalRecordingService.create({
+      sessionId: 'wholememory',
+      projectHash: MEMORY_PROJECT,
+      chatsDir: directory,
+      workspaceDirs: [],
+      provider: 'test',
+      model: 'test',
+    });
+    await (
+      await recording.session()
+    ).append(
+      Array.from(
+        { length: 512 },
+        (_, index): IContent => ({
+          speaker: 'human',
+          blocks: [{ type: 'text', text: String(index) }],
+        }),
+      ),
     );
-    await writeFile(path, records.join('\n') + '\n');
+    await recording.dispose();
+    const path = recording.getFilePath();
+    if (path === null) throw new Error('Missing native retention fixture');
     const ownership = new RowOwnership();
     const kit = createRowCounters();
     let producerLive = 0;
-    const resolver = await JournalResolver.open(path, {
-      counters: {
-        ...kit.counters,
-        ownership,
-        rowDecoded: () => {
-          producerLive += 1;
-          kit.counters.rowDecoded();
-        },
-        rowReleased: () => {
-          producerLive -= 1;
-          kit.counters.rowReleased();
-        },
+    const reader = await observedReader(path, {
+      ...kit.counters,
+      ownership,
+      rowDecoded: () => {
+        producerLive += 1;
+        kit.counters.rowDecoded();
+      },
+      rowReleased: () => {
+        producerLive -= 1;
+        kit.counters.rowReleased();
       },
     });
-    const retained = [];
+    const retained: IContent[] = [];
     try {
-      for await (const entry of resolver.resolve()) {
-        ownership.retain(entry.content);
-        retained.push(entry.content);
+      for await (const row of reader.boot.streamRows()) {
+        ownership.retain(row);
+        retained.push(row);
       }
       expect(kit.snapshot().peakDecodedRows).toBe(1);
       expect(producerLive).toBe(0);
@@ -92,7 +138,8 @@ describe('consumer retention control', () => {
       ).toBe(false);
     } finally {
       for (const row of retained) ownership.release(row);
-      await resolver.close();
+      await reader.recording.dispose();
+      await rm(directory, { recursive: true, force: true });
     }
     expect(ownership.snapshot().acquisitions).toBeGreaterThan(512);
     expect(ownership.snapshot().liveRows).toBe(0);

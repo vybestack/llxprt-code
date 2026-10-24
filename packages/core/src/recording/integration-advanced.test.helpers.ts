@@ -13,18 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { it, expect, beforeEach, afterEach } from 'bun:test';
+import { it, beforeEach, afterEach } from 'bun:test';
 import * as fc from 'fast-check';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { SessionRecordingService } from './SessionRecordingService.js';
 import { CONTINUE_LATEST, type ResumeRequest } from './resumeSession.js';
-import type {
-  ReplayResult,
-  SessionRecordingServiceConfig,
-  SessionRecordLine,
-} from './types.js';
+import type { SessionRecordingServiceConfig } from './types.js';
 import type { IContent } from '../services/history/IContent.js';
 
 // Polyfill it.prop for Bun compatibility
@@ -78,19 +73,6 @@ export const itProp: ItPropOverload =
 
 export const PROJECT_HASH = 'integration-test-project';
 
-type ReplayOkResult = Extract<ReplayResult, { ok: true }>;
-export function assertReplayOk(
-  result: ReplayResult,
-): asserts result is ReplayOkResult {
-  expect(result.ok).toBe(true);
-}
-
-export function assertReplayError<T extends { ok: boolean }>(
-  result: T,
-): asserts result is Extract<T, { ok: false }> {
-  expect(result.ok).toBe(false);
-}
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -121,51 +103,6 @@ export function makeConfig(
  */
 export function alternatingSpeaker(i: number): 'human' | 'ai' {
   return i % 2 === 0 ? 'human' : 'ai';
-}
-
-/**
- * Create a real session file, flush, dispose, and return file path + session ID.
- */
-export async function createAndRecordSession(
-  chatsDir: string,
-  opts: {
-    sessionId?: string;
-    projectHash?: string;
-    provider?: string;
-    model?: string;
-    contents: IContent[];
-  },
-): Promise<{ filePath: string; sessionId: string }> {
-  const sid = opts.sessionId ?? crypto.randomUUID();
-  const svc = new SessionRecordingService(
-    makeConfig(chatsDir, {
-      sessionId: sid,
-      projectHash: opts.projectHash,
-      provider: opts.provider,
-      model: opts.model,
-    }),
-  );
-  for (const c of opts.contents) {
-    svc.recordContent(c);
-  }
-  await svc.flush();
-  const fp = svc.getFilePath()!;
-  await svc.dispose();
-  return { filePath: fp, sessionId: sid };
-}
-
-/**
- * Read a JSONL file and parse all lines.
- */
-export async function readJsonlLines(
-  filePath: string,
-): Promise<SessionRecordLine[]> {
-  const raw = await fs.readFile(filePath, 'utf-8');
-  return raw
-    .trim()
-    .split('\n')
-    .filter((l) => l.trim() !== '')
-    .map((line) => JSON.parse(line) as SessionRecordLine);
 }
 
 export function makeResumeRequest(

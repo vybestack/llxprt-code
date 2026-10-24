@@ -3,11 +3,6 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import * as path from 'node:path';
 import { testJournalSeams } from '../../journal/__tests__/support/journalFixtures.js';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
-import {
-  chatsDirIn,
-  PROJECT,
-} from '../../recording/__tests__/support/recordedJournals.js';
-import { SessionRecordingService } from '../../recording/SessionRecordingService.js';
 import type { HistoryStorePort } from './historyStorePort.js';
 import type { IContent } from './IContent.js';
 import { JournalHistoryStore } from './journalHistoryStore.js';
@@ -38,11 +33,8 @@ type Store = Pick<
 describe('HistoryStorePort scalars and recorder binding (journal store)', () => {
   const directory = useTempDir('history-port-recorders-');
   const open: Store[] = [];
-  const recorders: Array<{ dispose(): Promise<void> }> = [];
   afterEach(async () => {
     for (const store of open.splice(0)) await store.dispose();
-    for (const recorder of recorders.splice(0))
-      await recorder.dispose().catch(() => undefined);
   });
 
   async function opened(): Promise<Store> {
@@ -53,19 +45,6 @@ describe('HistoryStorePort scalars and recorder binding (journal store)', () => 
     );
     open.push(store);
     return store;
-  }
-
-  function jsonlRecorder(): SessionRecordingService {
-    const created = new SessionRecordingService({
-      sessionId: 'port-jsonl-recorder',
-      projectHash: PROJECT,
-      chatsDir: chatsDirIn(directory()),
-      workspaceDirs: [],
-      provider: 'test',
-      model: 'test',
-    });
-    recorders.push(created);
-    return created;
   }
 
   it('serves the statistics of the rows once they are committed', async () => {
@@ -101,22 +80,5 @@ describe('HistoryStorePort scalars and recorder binding (journal store)', () => 
         { start: 6, end: 7, reason: 'density-removed' },
       ],
     });
-  });
-
-  it('refuses a recorder of the other backend at every binding member', async () => {
-    const store = await opened();
-    const foreign = jsonlRecorder();
-    expect(() => store.isRecorder(foreign)).toThrow(
-      /Recorder\/backend mismatch/,
-    );
-    expect(() => store.isAdoptingRecorder(foreign)).toThrow(
-      /Recorder\/backend mismatch/,
-    );
-    await expect(
-      Promise.resolve().then(() => store.attachJournal(foreign)),
-    ).rejects.toThrow(/Recorder\/backend mismatch/);
-    await expect(
-      Promise.resolve().then(() => store.detachJournal(foreign)),
-    ).rejects.toThrow(/Recorder\/backend mismatch/);
   });
 });

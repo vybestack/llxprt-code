@@ -8,8 +8,7 @@ import {
 } from '../../recording/__tests__/support/recordedJournals.js';
 import { createRowCounters } from '../../recording/journalCounters.js';
 import { JournalRecordingService } from '../../recording/journalRecordingService.js';
-import type { RecordingPort } from '../../recording/recordingPort.js';
-import { SessionRecordingService } from '../../recording/SessionRecordingService.js';
+import type { SessionRecordingPort } from '../../recording/recordingPort.js';
 import { createHistoryStore } from './historyBackend.js';
 import type { HistoryStorePort } from './historyStorePort.js';
 import { JournalHistoryStore } from './journalHistoryStore.js';
@@ -72,7 +71,7 @@ const everyPortMethodListed: Exclude<
   : false = true;
 
 // Fails to compile when the recorder class stops providing the recording port.
-const recorderIsARecordingPort: SessionRecordingService extends RecordingPort
+const recorderIsARecordingPort: JournalRecordingService extends SessionRecordingPort
   ? true
   : false = true;
 
@@ -150,21 +149,6 @@ describe('createHistoryStore', () => {
       const store = journalStore({ recording: recorder });
       await store.waitForDurable();
       expect(store.isRecorder(recorder)).toBe(true);
-    });
-
-    it('refuses a recorder of the old backend at construction', () => {
-      const jsonl = new SessionRecordingService({
-        sessionId: 'backend-jsonl-recorder',
-        projectHash: PROJECT,
-        chatsDir: chatsDirIn(directory()),
-        workspaceDirs: [],
-        provider: 'test',
-        model: 'test',
-      });
-      recorders.push(jsonl);
-      expect(() => createHistoryStore({ recording: jsonl })).toThrow(
-        /Recorder\/backend mismatch/,
-      );
     });
 
     it('reports the rows its readers decode to the counters of the options', async () => {

@@ -31,12 +31,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { SessionDiscovery } from '../../SessionDiscovery.js';
-import { SessionRecordingService } from '../../SessionRecordingService.js';
-import {
-  type ContinueTarget,
-  type SessionRecordingServiceConfig,
-  type SessionSummary,
-} from '../../types.js';
+import { type ContinueTarget, type SessionSummary } from '../../types.js';
 import type { ResumeRequest } from '../../resumeSession.js';
 import { type SessionTransitionServiceOptions } from '../../SessionTransitionService.js';
 import type { IContent } from '../../../services/history/IContent.js';
@@ -135,59 +130,6 @@ export function buildContents(count: number, prefix = ''): IContent[] {
   }));
 }
 
-export interface RecordedSessionSpec {
-  rows?: number;
-  name?: string;
-  /** Checkpoint name; created after `checkpointAfter` rows (default: all). */
-  checkpoint?: string;
-  checkpointAfter?: number;
-  provider?: string;
-  model?: string;
-  sessionId?: string;
-  projectHash?: string;
-}
-
-/** Record a real session journal, optionally named, optionally checkpointed. */
-export async function createRecordedSession(
-  chatsDir: string,
-  spec: RecordedSessionSpec = {},
-): Promise<RecordedSession> {
-  const sessionId = spec.sessionId ?? crypto.randomUUID();
-  const config: SessionRecordingServiceConfig = {
-    sessionId,
-    projectHash: spec.projectHash ?? PROJECT_HASH,
-    chatsDir,
-    workspaceDirs: ['/test/workspace'],
-    provider: spec.provider ?? 'anthropic',
-    model: spec.model ?? 'claude-4',
-  };
-  const service = new SessionRecordingService(config);
-  const total = spec.rows ?? 2;
-  const checkpointAfter = spec.checkpointAfter ?? total;
-  const checkpoints: RecordedSession['checkpoints'] = [];
-  const contents = buildContents(total);
-  const recordSlice = (from: number, to: number): void => {
-    for (let index = from; index < to; index += 1) {
-      service.recordContent(contents[index]);
-    }
-  };
-  recordSlice(0, checkpointAfter);
-  if (spec.checkpoint !== undefined) {
-    checkpoints.push(await service.createCheckpoint(spec.checkpoint));
-  }
-  recordSlice(checkpointAfter, total);
-  if (spec.name !== undefined) {
-    await service.setSessionName(spec.name);
-  }
-  await service.flush();
-  const filePath = service.getFilePath();
-  if (filePath === null) {
-    throw new Error('session file was not materialized');
-  }
-  await service.dispose();
-  return { sessionId, filePath, contents, checkpoints };
-}
-
 export interface RawJournalSpec {
   sessionId?: string;
   rows?: number;
@@ -237,30 +179,6 @@ export async function writeRawJournal(
   });
   await fs.writeFile(filePath, `${lines.join('\n')}\n`, 'utf-8');
   return { sessionId, filePath, contents, checkpoints: [] };
-}
-
-/**
- * Corrupt a journal in place: splice one unparseable line after the header
- * and strip the final newline so the tail is a crash-torn partial record.
- * Replay stays ok with warnings; discovery still lists the session.
- */
-export async function corruptMidFile(filePath: string): Promise<void> {
-  const raw = await fs.readFile(filePath, 'utf-8');
-  const trimmed = raw.endsWith('\n') ? raw.slice(0, -1) : raw;
-  const lines = trimmed.split('\n');
-  lines.splice(1, 0, '{"v":1,"seq":999,"ts":"garbage","type":"content"');
-  await fs.writeFile(filePath, lines.join('\n'), 'utf-8');
-}
-
-/** Duplicate one content line's seq so replay reports sequenceCorrupt. */
-export async function duplicateSeqLine(filePath: string): Promise<void> {
-  const raw = await fs.readFile(filePath, 'utf-8');
-  const lines = raw.trimEnd().split('\n');
-  const victim = JSON.parse(lines[2]) as { seq: number };
-  const source = JSON.parse(lines[1]) as { seq: number };
-  victim.seq = source.seq;
-  lines[2] = JSON.stringify(victim);
-  await fs.writeFile(filePath, `${lines.join('\n')}\n`, 'utf-8');
 }
 
 /** Pin a file's mtime so newest-first ordering is deterministic. */

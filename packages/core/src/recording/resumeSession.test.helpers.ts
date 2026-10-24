@@ -9,14 +9,10 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { type IContent } from '../services/history/IContent.js';
 import { type LockHandle } from './SessionLockManager.js';
-import { SessionRecordingService } from './SessionRecordingService.js';
 import { JournalRecordingService } from './journalRecordingService.js';
 import type { SessionRecordingPort } from './recordingPort.js';
 import { CONTINUE_LATEST, type ResumeRequest } from './resumeSession.js';
-import {
-  type SessionRecordingServiceConfig,
-  type SessionRecordLine,
-} from './types.js';
+import type { SessionRecordingServiceConfig } from './types.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -57,44 +53,6 @@ export function alternatingSpeaker(i: number): 'human' | 'ai' {
  */
 export function isParseWarning(w: string): boolean {
   return w.includes('parse') || w.includes('JSON');
-}
-
-/**
- * Create a real session file using SessionRecordingService, flush it,
- * and return its file path and sessionId.
- */
-export async function createTestSession(
-  chatsDir: string,
-  opts: {
-    sessionId?: string;
-    projectHash?: string;
-    provider?: string;
-    model?: string;
-    contents?: IContent[];
-  } = {},
-): Promise<{
-  filePath: string;
-  sessionId: string;
-  service: SessionRecordingService;
-}> {
-  const sessionId = opts.sessionId ?? crypto.randomUUID();
-  const config = makeConfig(chatsDir, {
-    sessionId,
-    projectHash: opts.projectHash,
-    provider: opts.provider,
-    model: opts.model,
-  });
-  const svc = new SessionRecordingService(config);
-
-  const contents = opts.contents ?? [makeContent('hello')];
-  for (const content of contents) {
-    svc.recordContent(content);
-  }
-  await svc.flush();
-
-  const filePath = svc.getFilePath()!;
-  await svc.dispose();
-  return { filePath, sessionId, service: svc };
 }
 
 export async function createJournalTestSession(
@@ -144,17 +102,6 @@ export function makeResumeRequest(
     currentModel: overrides.currentModel ?? 'claude-4',
     workspaceDirs: overrides.workspaceDirs ?? ['/test/workspace'],
   };
-}
-
-/**
- * Read a JSONL file and parse each line into a SessionRecordLine.
- */
-export async function readJsonlFile(
-  filePath: string,
-): Promise<SessionRecordLine[]> {
-  const raw = await fs.readFile(filePath, 'utf-8');
-  const lines = raw.trim().split('\n');
-  return lines.map((line) => JSON.parse(line) as SessionRecordLine);
 }
 
 export function delay(ms: number): Promise<void> {
