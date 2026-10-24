@@ -1,13 +1,17 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
-import { readFileSync, readdirSync } from 'node:fs';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { readdirSync } from 'node:fs';
 import { projectOpenAIResponsesPromptEnvelope } from './promptEnvelopeProjections.js';
-import { serializeResponsesPromptEnvelope } from './responses-source-serializer.js';
+import {
+  nativePrompt,
+  nativeRows,
+  nativePromptKeys,
+  nativeImages,
+} from './__tests__/native-responses-fixture.js';
+import { estimateImageTokens } from '@vybestack/llxprt-code-tools/utils/imageTokenEstimation.js';
 import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
-async function* empty(): AsyncIterable<IContent> {}
 const context = {
   includeReasoningInContext: false,
   mediaPdfEnabled: true,
@@ -29,17 +33,14 @@ async function parity(tools: unknown): Promise<string[]> {
     !Array.isArray(old.promptSegments)
   )
     throw new Error('Invalid old oracle');
-  const prompt = await serializeResponsesPromptEnvelope({
+  const prompt = await nativePrompt(nativeRows([]), {
     model: 'gpt-5.6',
     context,
     instructions: '',
     tools,
-    contents: empty(),
   });
   try {
-    const actual = prompt.projection.promptSegments.map((segment) =>
-      readFileSync(segment.source.path, segment.source.encoding ?? 'utf8'),
-    );
+    const actual = await nativePromptKeys(prompt);
     expect(actual).toStrictEqual(old.promptSegments);
     return actual;
   } finally {
@@ -89,10 +90,9 @@ describe('Responses source recursive canonicalization', () => {
   it('rejects unsupported bigint JSON without leaving an owner or partial segment', async () => {
     const before = new Set(readdirSync(getScratchRoot()));
     await expect(
-      serializeResponsesPromptEnvelope({
+      nativePrompt(nativeRows([]), {
         model: 'gpt-5.6',
         context,
-        contents: empty(),
         tools: [{ size: BigInt(1) }],
       }),
     ).rejects.toThrow('BigInt');
@@ -101,25 +101,26 @@ describe('Responses source recursive canonicalization', () => {
     );
     expect(leaked).toStrictEqual([]);
   });
-  it('transfers disk image costs without rebuilding an image list', async () => {
-    const prompt = await serializeResponsesPromptEnvelope({
+  it('counts tool image costs through native input conversion', async () => {
+    const prompt = await nativePrompt(nativeRows([]), {
       model: 'gpt-5.6',
       context,
-      contents: empty(),
       tools: [{ image: 'data:image/png;base64,YQ==' }],
     });
     try {
-      const lease = prompt.toEstimatorProjection().acquire();
-      try {
-        expect(
-          await lease.countImageTokens({
-            provider: 'openai-responses',
-            model: 'gpt-5.6',
-          }),
-        ).toBe(1844);
-      } finally {
-        await lease();
-      }
+      const images = await nativeImages(prompt);
+      expect(
+        images.reduce(
+          (sum, entry) =>
+            sum +
+            estimateImageTokens({
+              provider: 'openai-responses',
+              model: 'gpt-5.6',
+              dimensions: entry.dimensions,
+            }),
+          0,
+        ),
+      ).toBe(1844);
     } finally {
       await prompt.dispose();
     }

@@ -1,9 +1,14 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
-import { readdirSync, readFileSync } from 'node:fs';
+import { readdirSync } from 'node:fs';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { serializeResponsesPromptEnvelope } from './responses-source-serializer.js';
+import { readOwnedSource } from './__tests__/owned-source-read.js';
+import {
+  nativePrompt,
+  nativeRows,
+  nativePromptKeys,
+} from './__tests__/native-responses-fixture.js';
 import { requestScopedContents } from '../utils/requestScopedBody.js';
 import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
@@ -41,14 +46,9 @@ describe('Responses source deterministic lifecycle', () => {
         closed = true;
       }
     }
-    await expect(
-      serializeResponsesPromptEnvelope({
-        model: 'gpt-5.6',
-        contents: contents(),
-        context,
-        signal: controller.signal,
-      }),
-    ).rejects.toBe(reason);
+    await expect(readOwnedSource(contents(), controller.signal)).rejects.toBe(
+      reason,
+    );
     expect(closed).toBe(true);
     const leaked = readdirSync(getScratchRoot()).filter(
       (name) => !before.has(name),
@@ -74,24 +74,25 @@ describe('Responses source deterministic lifecycle', () => {
       await owner.dispose();
     }
   });
-  it('provides a sealed text-only adapter projection without reopening history', async () => {
+  it('provides a native text-only estimator without a captured prompt string', async () => {
     let pulls = 0;
-    async function* contents(): AsyncIterable<IContent> {
-      pulls++;
-      yield row;
-    }
-    const prompt = await serializeResponsesPromptEnvelope({
-      model: 'gpt-5.6',
-      contents: contents(),
-      context,
-    });
+    const rows = {
+      ...nativeRows([row]),
+      readAt: () => {
+        pulls++;
+        return row;
+      },
+    };
+    const prompt = await nativePrompt(rows, { model: 'gpt-5.6', context });
     try {
       const estimator = prompt.toEstimatorProjection();
+      expect((await nativePromptKeys(prompt))[0]).toBe(
+        '[{"role":"user","content":"first"}]',
+      );
       expect(
-        readFileSync(estimator.promptSegments[0].source.path, 'utf8'),
-      ).toBe('[{"role":"user","content":"first"}]');
-      expect(Object.isFrozen(estimator.promptSegments[0].source)).toBe(true);
-      expect(pulls).toBe(1);
+        Object.getOwnPropertyDescriptor(estimator, 'promptSegments'),
+      ).toBeUndefined();
+      expect(pulls).toBe(2);
     } finally {
       await prompt.dispose();
     }
@@ -109,12 +110,7 @@ describe('Responses source pending-next cancellation demand', () => {
       await blocked.wait;
       yield row;
     }
-    const pending = serializeResponsesPromptEnvelope({
-      model: 'gpt-5.6',
-      contents: contents(),
-      context,
-      signal: controller.signal,
-    });
+    const pending = readOwnedSource(contents(), controller.signal);
     await started.wait;
     controller.abort(reason);
     const result = await Promise.race([

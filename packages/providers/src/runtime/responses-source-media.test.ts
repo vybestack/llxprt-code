@@ -1,12 +1,17 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
-import { closeSync, openSync, readSync, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { buildOpenAIResponsesInput } from '../openai-responses/OpenAIResponsesInputBuilder.js';
 import { projectOpenAIResponsesPromptEnvelope } from './promptEnvelopeProjections.js';
-import { serializeResponsesPromptEnvelope } from './responses-source-serializer.js';
+import {
+  nativePrompt,
+  nativeRows,
+  nativePromptKeys,
+  nativeImages,
+} from './__tests__/native-responses-fixture.js';
+import { estimateImageTokens } from '@vybestack/llxprt-code-tools/utils/imageTokenEstimation.js';
 
 const context = {
   includeReasoningInContext: false,
@@ -45,58 +50,38 @@ function oracle(count: number): string {
   if (typeof segment !== 'string') throw new Error('Invalid oracle segment');
   return createHash('sha256').update(segment).digest('hex');
 }
-function hash(path: string): string {
-  const fd = openSync(path, 'r');
-  const bytes = Buffer.alloc(65536);
-  const sha = createHash('sha256');
-  try {
-    for (;;) {
-      const count = readSync(fd, bytes, 0, bytes.length, null);
-      if (count === 0) break;
-      sha.update(bytes.subarray(0, count));
-    }
-    return sha.digest('hex');
-  } finally {
-    closeSync(fd);
-  }
-}
-
 describe('Responses disk media accounting', () => {
-  it('writes thousands of image costs on disk without a request-wide image list', async () => {
+  it('preserves thousands of native image costs without retaining an image list on the estimator', async () => {
     const count = 4096;
     const expected = oracle(count);
-    async function* contents(): AsyncIterable<IContent> {
-      for (let index = 0; index < count; index++) yield row(index);
-    }
-    const prompt = await serializeResponsesPromptEnvelope({
-      model: 'gpt-5.6',
-      context,
-      contents: contents(),
-    });
+    const prompt = await nativePrompt(
+      nativeRows(Array.from({ length: count }, (_, index) => row(index))),
+      { model: 'gpt-5.6', context },
+    );
     try {
-      expect(hash(prompt.projection.promptSegments[0].source.path)).toBe(
-        expected,
-      );
-      expect(prompt.imageCount).toBe(count);
-      const lines = readFileSync(prompt.imageCostsSource.path, 'utf8')
-        .trim()
-        .split('\n');
-      expect(lines).toHaveLength(count);
-      expect(new Set(lines).size).toBe(1);
       expect(
-        Object.getOwnPropertyDescriptor(prompt.projection, 'imageEntries'),
+        createHash('sha256')
+          .update((await nativePromptKeys(prompt))[0])
+          .digest('hex'),
+      ).toBe(expected);
+      const images = await nativeImages(prompt);
+      expect(images.length).toBe(count);
+      const costs = images.map((entry) =>
+        estimateImageTokens({
+          provider: 'openai-responses',
+          model: 'gpt-5.6',
+          dimensions: entry.dimensions,
+        }),
+      );
+      expect(costs).toHaveLength(count);
+      expect(new Set(costs).size).toBe(1);
+      expect(
+        Object.getOwnPropertyDescriptor(
+          prompt.toEstimatorProjection(),
+          'imageEntries',
+        ),
       ).toBeUndefined();
-      const lease = prompt.toEstimatorProjection().acquire();
-      try {
-        expect(
-          await lease.countImageTokens({
-            provider: 'openai-responses',
-            model: 'gpt-5.6',
-          }),
-        ).toBe(count * 1844);
-      } finally {
-        await lease();
-      }
+      expect(costs.reduce((sum, value) => sum + value, 0)).toBe(count * 1844);
     } finally {
       await prompt.dispose();
     }

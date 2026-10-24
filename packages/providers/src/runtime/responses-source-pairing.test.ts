@@ -4,8 +4,10 @@ import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputL
 import * as fs from 'node:fs';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
-import type { RequestScopedContents } from '../utils/requestScopedBody.js';
-import { ResponsesSourceInput } from './responses-source-input.js';
+import {
+  nativePrompt,
+  nativeRows,
+} from './__tests__/native-responses-fixture.js';
 
 const context = {
   includeReasoningInContext: false,
@@ -13,19 +15,6 @@ const context = {
   outputLimits: parseOutputLimits({}),
   debug: (): void => {},
 };
-
-/** Counts every pass over the stored request rows. */
-class CountingContents implements RequestScopedContents {
-  passes = 0;
-  constructor(private readonly rows: readonly IContent[]) {}
-  async *stream(): AsyncIterableIterator<IContent> {
-    this.passes += 1;
-    for (const row of this.rows) yield row;
-  }
-  dispose(): Promise<void> {
-    return Promise.resolve();
-  }
-}
 
 function exchange(index: number, answered: boolean): IContent[] {
   const rows: IContent[] = [
@@ -59,24 +48,22 @@ function exchange(index: number, answered: boolean): IContent[] {
 async function write(
   rows: readonly IContent[],
 ): Promise<{ passes: number; items: unknown[] }> {
-  const contents = new CountingContents(rows);
-  let text = '';
-  await new ResponsesSourceInput(
-    {
-      append: (value) => {
-        text += value;
-      },
-      value: (value) => {
-        text += JSON.stringify(value);
-      },
+  let passes = 0;
+  const contents = {
+    ...nativeRows(rows),
+    async *openReader() {
+      passes++;
+      yield* rows;
     },
-    context,
-    '/dev/null',
-  ).write(contents);
-  return {
-    passes: contents.passes,
-    items: JSON.parse(text.replaceAll('}{', '},{')) as unknown[],
   };
+  const prompt = await nativePrompt(contents, { model: 'gpt-5.6', context });
+  try {
+    const items: unknown[] = [];
+    for await (const item of prompt.items()) items.push(item);
+    return { passes, items };
+  } finally {
+    await prompt.dispose();
+  }
 }
 
 describe('Responses source tool-pair membership', () => {
@@ -110,11 +97,25 @@ describe('Responses source tool-pair membership', () => {
       ...exchange(1, true),
     ]);
     const callIds = items.flatMap((item) => {
-      const entry = item as { type?: string; call_id?: string };
+      if (
+        typeof item !== 'object' ||
+        item === null ||
+        !('type' in item) ||
+        !('call_id' in item)
+      )
+        return [];
+      const entry = item;
       return entry.type === 'function_call' ? [entry.call_id] : [];
     });
     const outputIds = items.flatMap((item) => {
-      const entry = item as { type?: string; call_id?: string };
+      if (
+        typeof item !== 'object' ||
+        item === null ||
+        !('type' in item) ||
+        !('call_id' in item)
+      )
+        return [];
+      const entry = item;
       return entry.type === 'function_call_output' ? [entry.call_id] : [];
     });
     expect(callIds).toHaveLength(2);

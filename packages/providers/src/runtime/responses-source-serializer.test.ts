@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { readFileSync, existsSync, readdirSync } from 'node:fs';
+import { readdirSync } from 'node:fs';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { projectOpenAIResponsesPromptEnvelope } from './promptEnvelopeProjections.js';
 import {
@@ -8,9 +8,15 @@ import {
   type ResponsesInputBuildContext,
 } from '../openai-responses/OpenAIResponsesInputBuilder.js';
 import {
-  serializeResponsesPromptEnvelope,
-  type ResponsesSourcePrompt,
-} from './responses-source-serializer.js';
+  nativePrompt,
+  nativeRows,
+  nativePromptKeys,
+  nativeImages,
+} from './__tests__/native-responses-fixture.js';
+import type { NativeResponsesPrompt } from '../openai-responses/native-responses-body.js';
+import { nativeResponsesAccounting } from '../openai-responses/native-responses-estimate.js';
+import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import { createRuntimeTokenizerFactory } from '../composition/runtimeTokenizerFactory.js';
 import { estimateImageTokens } from '@vybestack/llxprt-code-tools/utils/imageTokenEstimation.js';
 import { requestScopedContents } from '../utils/requestScopedBody.js';
 import { collectUnsupportedMedia } from '../utils/mediaUtils.js';
@@ -72,12 +78,6 @@ function isFinalizedOracle(value: unknown): value is FinalizedOracle {
   );
 }
 
-function texts(prompt: ResponsesSourcePrompt): string[] {
-  return prompt.projection.promptSegments.map((segment) =>
-    readFileSync(segment.source.path, segment.source.encoding ?? 'utf8'),
-  );
-}
-
 async function compare(
   rows: IContent[],
   buildContext = context,
@@ -101,20 +101,31 @@ async function compare(
     { unsupportedMedia },
   );
   const old = finalized(oracle.finalizedProjection);
-  const prompt = await serializeResponsesPromptEnvelope({
-    model,
-    instructions,
-    tools,
-    contents: source(rows),
-    context: buildContext,
-  });
+  const prompt = await nativePrompt(
+    nativeRows(SyntheticToolResponseHandler.patchMessageHistory(rows)),
+    {
+      model,
+      instructions,
+      tools,
+      context: buildContext,
+    },
+  );
   try {
-    expect<readonly string[] | undefined>(texts(prompt)).toStrictEqual(
-      old.promptSegments,
-    );
+    expect<readonly string[] | undefined>(
+      await nativePromptKeys(prompt),
+    ).toStrictEqual(old.promptSegments);
     expect(prompt.model).toBe(oracle.model);
     expect(prompt.projectionRevision).toBe(oracle.projectionRevision);
-    const costs = readFileSync(prompt.imageCostsSource.path, 'utf8').trim();
+    const costs = (await nativeImages(prompt)).map((entry) => ({
+      cost: estimateImageTokens({
+        provider: 'openai-responses',
+        model,
+        dimensions: entry.dimensions,
+      }),
+      ...(entry.dimensions === undefined
+        ? {}
+        : { dimensions: entry.dimensions }),
+    }));
     const expected = (old.imageEntries ?? []).map((entry) => ({
       cost: estimateImageTokens({
         provider: 'openai-responses',
@@ -125,26 +136,26 @@ async function compare(
         ? {}
         : { dimensions: entry.dimensions }),
     }));
-    expect(
-      costs === '' ? [] : costs.split('\n').map((line) => JSON.parse(line)),
-    ).toStrictEqual(expected);
-    expect(prompt.imageCount).toBe(expected.length);
-    const unsupported = readFileSync(
-      prompt.unsupportedMediaSource.path,
-      'utf8',
-    ).trim();
-    const actualUnsupported: unknown =
-      unsupported === ''
-        ? []
-        : unsupported.split('\n').map((line) => JSON.parse(line));
-    expect(actualUnsupported).toStrictEqual(oracle.unsupportedMedia);
+    expect(costs).toStrictEqual(expected);
+    expect((await nativeImages(prompt)).length).toBe(expected.length);
+    const nativeText = (await nativePromptKeys(prompt)).join('');
+    for (const entry of oracle.unsupportedMedia)
+      expect(nativeText).toContain(
+        entry.mediaType === 'application/pdf'
+          ? 'PDF input is disabled'
+          : (entry.mediaType ?? entry.reason),
+      );
+    expect((await nativePromptKeys(prompt))[1]).toBe(old.promptSegments[1]);
     expect(
       Object.getOwnPropertyDescriptor(prompt, 'imageEntries'),
     ).toBeUndefined();
     expect(
-      Object.getOwnPropertyDescriptor(prompt.projection, 'promptText'),
+      Object.getOwnPropertyDescriptor(
+        prompt.toEstimatorProjection(),
+        'promptText',
+      ),
     ).toBeUndefined();
-    return Buffer.byteLength(texts(prompt)[1]);
+    return Buffer.byteLength((await nativePromptKeys(prompt))[1]);
   } finally {
     await prompt.dispose();
   }
@@ -349,58 +360,48 @@ describe('Responses source ownership', () => {
       'disposed',
     );
   });
-  it('waits for leases on close and rejects reuse after close', async () => {
-    const prompt = await serializeResponsesPromptEnvelope({
-      model,
-      contents: source(pair),
-      context,
-    });
-    const path = prompt.projection.promptSegments[0].source.path;
-    const release = prompt.projection.acquire();
-    const closing = prompt.dispose();
-    expect(existsSync(path)).toBe(true);
-    await release();
-    await closing;
-    expect(existsSync(path)).toBe(false);
-    expect(() => prompt.projection.acquire()).toThrow('disposed');
+  it('rejects native projection reads after close and allows repeated disposal', async () => {
+    const prompt = await nativePrompt(nativeRows(pair), { model, context });
+    await prompt.dispose();
+    await expect(nativePromptKeys(prompt)).rejects.toThrow('closed');
+    expect(() => prompt.toEstimatorProjection()).toThrow('closed');
     await prompt.dispose();
   });
-  it('cleans disk and closes the source on abort and preserves source failure', async () => {
+  it('preserves row-source failure and abort without scratch residue', async () => {
     const before = new Set(readdirSync(getScratchRoot()));
     const controller = new AbortController();
     const error = new Error('source failure');
     let closed = false;
-    async function* failing(): AsyncIterable<IContent> {
-      try {
-        yield pair[0];
-        throw error;
-      } finally {
-        closed = true;
-      }
-    }
-    await expect(
-      serializeResponsesPromptEnvelope({ model, contents: failing(), context }),
-    ).rejects.toBe(error);
+    const rows = {
+      ...nativeRows(pair),
+      async *openReader() {
+        try {
+          yield pair[0];
+          throw error;
+        } finally {
+          closed = true;
+        }
+      },
+    };
+    await expect(nativePrompt(rows, { model, context })).rejects.toBe(error);
     expect(closed).toBe(true);
     controller.abort(error);
     await expect(
-      serializeResponsesPromptEnvelope({
+      nativePrompt(nativeRows(pair), {
         model,
-        contents: source(pair),
         context,
         signal: controller.signal,
       }),
     ).rejects.toBe(error);
-    const leaked = readdirSync(getScratchRoot()).filter(
-      (name) => !before.has(name),
-    );
-    expect(leaked).toStrictEqual([]);
+    expect(
+      readdirSync(getScratchRoot()).filter((name) => !before.has(name)),
+    ).toStrictEqual([]);
   });
 });
 
 async function statefulParity(
   retainedBaselineTokens: number | undefined,
-): Promise<number> {
+): Promise<NonNullable<ReturnType<typeof nativeResponsesAccounting>>> {
   const request = {
     model,
     instructions,
@@ -413,65 +414,76 @@ async function statefulParity(
     incrementalRequest: request,
     fullHistoryRequest: request,
   });
-  const prompt = await serializeResponsesPromptEnvelope({
+  const prompt: NativeResponsesPrompt = await nativePrompt(nativeRows(pair), {
     model,
     instructions,
     tools,
-    contents: source(pair),
     context,
-    stateful: {
-      statefulParentUsed: true,
-      retainedBaselineTokens,
-      incrementalContents: source(pair),
-      fullHistoryContents: source(pair),
+    selection: {
+      skipRows: 0,
+      stateful: {
+        enabled: true,
+        parentId: 'parent',
+        parentRetainedTokens: retainedBaselineTokens,
+      },
     },
   });
   try {
-    expect(prompt.accounting?.statefulParentUsed).toBe(true);
-    if (!prompt.accounting?.incremental || !old.accounting?.incremental)
-      throw new Error('Missing incremental projection');
-    expect<readonly string[] | undefined>(
-      texts(prompt.accounting.incremental),
+    const accounting = nativeResponsesAccounting(prompt);
+    if (accounting === undefined) throw new Error('Missing native accounting');
+    expect(accounting.statefulParentUsed).toBe(true);
+    const factory = createRuntimeTokenizerFactory();
+    const actual = {
+      ...old,
+      finalizedProjection: prompt.toEstimatorProjection(),
+      accounting,
+    };
+    expect(
+      await estimatePromptEnvelope('openai-responses', actual, factory),
     ).toStrictEqual(
-      finalized(old.accounting.incremental.finalizedProjection).promptSegments,
+      await estimatePromptEnvelope('openai-responses', old, factory),
     );
-    const fullSegments =
-      prompt.accounting.fullHistory === undefined
-        ? undefined
-        : texts(prompt.accounting.fullHistory);
-    const oldFull =
-      old.accounting.fullHistory === undefined
-        ? undefined
-        : finalized(old.accounting.fullHistory.finalizedProjection)
-            .promptSegments;
-    expect<readonly string[] | undefined>(fullSegments).toStrictEqual(oldFull);
-    return texts(prompt.accounting.incremental).length;
+    expect(accounting.retainedBaselineTokens).toBe(retainedBaselineTokens);
+    expect(accounting.fullHistory !== undefined).toBe(
+      retainedBaselineTokens === undefined,
+    );
+    expect(accounting.incremental).toBeDefined();
+    return accounting;
   } finally {
     await prompt.dispose();
   }
 }
 
-describe('Responses stateful prompt-key policy', () => {
+describe('Responses native stateful prompt-key policy', () => {
   it('uses input-only incremental keys with observed parent usage', async () => {
-    expect(await statefulParity(123)).toBe(1);
+    expect(await statefulParity(123)).toMatchObject({
+      statefulParentUsed: true,
+      retainedBaselineTokens: 123,
+    });
   });
   it('uses full keys for incremental and full history without observed usage', async () => {
-    expect(await statefulParity(undefined)).toBe(3);
+    expect(await statefulParity(undefined)).toHaveProperty('fullHistory');
   });
-  it('rejects stateful input without observed usage or full history before consuming it', async () => {
+  it('rejects an unadmitted stateful source before consuming it', async () => {
     let pulled = false;
-    async function* guarded(): AsyncIterable<IContent> {
-      pulled = true;
-      yield* pair;
-    }
+    const rows = {
+      ...nativeRows(pair),
+      callerOwned: undefined,
+      async *openReader(): AsyncGenerator<IContent> {
+        pulled = true;
+        yield* pair;
+      },
+    };
     await expect(
-      serializeResponsesPromptEnvelope({
+      nativePrompt(rows, {
         model,
         context,
-        contents: guarded(),
-        stateful: { statefulParentUsed: true, incrementalContents: guarded() },
+        selection: {
+          skipRows: 0,
+          stateful: { enabled: true, parentId: 'parent' },
+        },
       }),
-    ).rejects.toThrow('full-history');
+    ).rejects.toThrow('native request rows');
     expect(pulled).toBe(false);
   });
 });

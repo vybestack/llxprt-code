@@ -2,11 +2,19 @@
 import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'node:fs';
-import * as fsPromises from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { serializeResponsesPromptEnvelope } from './responses-source-serializer.js';
+import { readOwnedSource } from './__tests__/owned-source-read.js';
+import {
+  nativePrompt,
+  nativeRows,
+} from './__tests__/native-responses-fixture.js';
+import {
+  resolveRequestMedia,
+  finishMediaRequest,
+} from '../utils/request-media-resolution.js';
+import { cancellableSerialization } from './responses-serialization-lifecycle.js';
 import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 const context = {
@@ -34,13 +42,9 @@ describe('Responses serializer disk-write lifecycle', () => {
       throw cleanupFailure;
     });
     try {
-      const pending = serializeResponsesPromptEnvelope({
-        model: 'gpt-5.6',
-        context,
-        contents: {
-          async *[Symbol.asyncIterator]() {
-            yield { speaker: 'human', blocks: [] };
-          },
+      const pending = readOwnedSource({
+        async *[Symbol.asyncIterator]() {
+          yield { speaker: 'human', blocks: [] };
         },
       });
       const outcome = await pending.then(
@@ -137,100 +141,80 @@ describe('Responses synchronous disk-write cancellation limit', () => {
   });
 });
 
-describe('Responses stateful source and cleanup errors', () => {
-  it('retains an incremental source failure alongside sealed-base disposal failure', async () => {
-    const before = new Set(fs.readdirSync(getScratchRoot()));
+describe('Responses native source and media cleanup errors', () => {
+  it('retains a source failure alongside media-owner disposal failure', async () => {
     const sourceFailure = new Error('incremental source failed');
-    const cleanupFailure = new Error('sealed projection removal failed');
-    const remove = spyOn(fsPromises, 'rm').mockRejectedValue(cleanupFailure);
-    try {
-      const pending = serializeResponsesPromptEnvelope({
-        model: 'gpt-5.6',
-        context,
-        contents: {
-          async *[Symbol.asyncIterator]() {
-            yield { speaker: 'human', blocks: [] };
-          },
-        },
-        stateful: {
-          statefulParentUsed: true,
-          retainedBaselineTokens: 100,
-          incrementalContents: {
-            async *[Symbol.asyncIterator]() {
-              yield { speaker: 'human', blocks: [] };
-              throw sourceFailure;
-            },
-          },
-        },
-      });
-      const outcome = await pending.then(
-        () => 'resolved',
-        (error: unknown) => error,
-      );
-      expect(outcome).toBeInstanceOf(AggregateError);
-      if (!(outcome instanceof AggregateError))
-        throw new Error('Missing combined failure');
-      expect(outcome.errors).toStrictEqual([sourceFailure, cleanupFailure]);
-      expect(await pending.cleanup).toStrictEqual({
-        status: 'rejected',
-        reason: outcome,
-      });
-    } finally {
-      remove.mockRestore();
-      for (const name of fs
-        .readdirSync(getScratchRoot())
-        .filter((name) => !before.has(name)))
-        fs.rmSync(join(getScratchRoot(), name), {
-          recursive: true,
-          force: true,
-        });
-    }
+    const cleanupFailure = new Error('media owner release failed');
+    const owner = await resolveRequestMedia(
+      { requestId: 'source-cleanup-test' },
+      [],
+      undefined,
+    );
+    owner.registerCleanup(() => {
+      throw cleanupFailure;
+    });
+    const rows = {
+      ...nativeRows([]),
+      count: 1,
+      async *openReader(): AsyncGenerator<IContent> {
+        yield { speaker: 'human', blocks: [] };
+        throw sourceFailure;
+      },
+    };
+    const pending = cancellableSerialization(
+      async () => {
+        try {
+          return await nativePrompt(rows, { model: 'gpt-5.6', context });
+        } catch (error) {
+          return finishMediaRequest(owner, { status: 'failed', error });
+        }
+      },
+      (prompt) => prompt.dispose(),
+    );
+    const outcome = await pending.then(
+      () => 'resolved',
+      (error: unknown) => error,
+    );
+    expect(outcome).toBeInstanceOf(AggregateError);
+    if (!(outcome instanceof AggregateError))
+      throw new Error('Missing combined failure');
+    expect(outcome.errors).toStrictEqual([
+      sourceFailure,
+      new AggregateError([cleanupFailure], 'Failed to release media request'),
+    ]);
+    expect(leafFailures(outcome)).toStrictEqual([
+      sourceFailure,
+      cleanupFailure,
+    ]);
+    expect(await pending.cleanup).toStrictEqual({
+      status: 'rejected',
+      reason: outcome,
+    });
   });
 });
 
-describe('Responses stateful multi-owner disposal', () => {
-  it('reports every failed projection cleanup instead of only the first failure', async () => {
-    const before = new Set(fs.readdirSync(getScratchRoot()));
-    const baseFailure = new Error('base directory removal failed');
-    const incrementalFailure = new Error(
-      'incremental directory removal failed',
+describe('Responses native multi-owner disposal', () => {
+  it('reports every failed request cleanup instead of only the first failure', async () => {
+    const baseFailure = new Error('base owner release failed');
+    const incrementalFailure = new Error('incremental owner release failed');
+    const owner = await resolveRequestMedia(
+      { requestId: 'multi-cleanup-test' },
+      [],
+      undefined,
     );
-    const remove = spyOn(fsPromises, 'rm')
-      .mockRejectedValueOnce(baseFailure)
-      .mockRejectedValueOnce(incrementalFailure);
-    try {
-      const contents: AsyncIterable<IContent> = {
-        async *[Symbol.asyncIterator]() {
-          yield { speaker: 'human', blocks: [] };
-        },
-      };
-      const prompt = await serializeResponsesPromptEnvelope({
-        model: 'gpt-5.6',
-        context,
-        contents,
-        stateful: {
-          statefulParentUsed: true,
-          retainedBaselineTokens: 100,
-          incrementalContents: contents,
-        },
-      });
-      const outcome = await prompt.dispose().then(
-        () => 'resolved',
-        (error: unknown) => error,
-      );
-      expect(outcome).toBeInstanceOf(AggregateError);
-      if (!(outcome instanceof AggregateError))
-        throw new Error('Missing combined cleanup failures');
-      expect(outcome.errors).toStrictEqual([baseFailure, incrementalFailure]);
-    } finally {
-      remove.mockRestore();
-      for (const name of fs
-        .readdirSync(getScratchRoot())
-        .filter((name) => !before.has(name)))
-        fs.rmSync(join(getScratchRoot(), name), {
-          recursive: true,
-          force: true,
-        });
-    }
+    owner.registerCleanup(() => {
+      throw incrementalFailure;
+    });
+    owner.registerCleanup(() => {
+      throw baseFailure;
+    });
+    const outcome = await owner.release().then(
+      () => 'resolved',
+      (error: unknown) => error,
+    );
+    expect(outcome).toBeInstanceOf(AggregateError);
+    if (!(outcome instanceof AggregateError))
+      throw new Error('Missing combined cleanup failures');
+    expect(outcome.errors).toStrictEqual([baseFailure, incrementalFailure]);
   });
 });

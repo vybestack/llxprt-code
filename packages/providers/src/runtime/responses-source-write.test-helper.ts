@@ -1,9 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { spyOn } from 'bun:test';
 import * as fs from 'node:fs';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { serializeResponsesPromptEnvelope } from './responses-source-serializer.js';
+import { readOwnedSource } from './__tests__/owned-source-read.js';
 import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 const fifo = process.argv[2];
@@ -42,17 +41,7 @@ async function* contents(): AsyncIterable<IContent> {
     blocks: [{ type: 'text', text: 'no body after abort' }],
   };
 }
-const pending = serializeResponsesPromptEnvelope({
-  model: 'gpt-5.6',
-  contents: contents(),
-  signal: controller.signal,
-  context: {
-    includeReasoningInContext: false,
-    mediaPdfEnabled: true,
-    outputLimits: parseOutputLimits({}),
-    debug: (): void => {},
-  },
-});
+const pending = readOwnedSource(contents(), controller.signal);
 const outcome = await pending.then(
   () => 'resolved',
   (error: unknown) => (error === reason ? 'aborted' : 'wrong error'),

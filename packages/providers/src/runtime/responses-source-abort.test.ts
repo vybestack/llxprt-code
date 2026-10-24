@@ -6,7 +6,15 @@ import { join } from 'node:path';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { collectContents } from '../utils/collectContents.js';
 import { requestScopedContents } from '../utils/requestScopedBody.js';
-import { serializeResponsesPromptEnvelope } from './responses-source-serializer.js';
+import { readOwnedSource } from './__tests__/owned-source-read.js';
+import {
+  nativePrompt,
+  nativeRows,
+} from './__tests__/native-responses-fixture.js';
+import {
+  cancellableSerialization,
+  withSerializationCleanup,
+} from './responses-serialization-lifecycle.js';
 import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 const context = {
@@ -69,12 +77,7 @@ async function blockedSerialization(failure?: Error): Promise<number> {
       closed = true;
     }
   }
-  const pending = serializeResponsesPromptEnvelope({
-    model: 'gpt-5.6',
-    contents: contents(),
-    context,
-    signal: controller.signal,
-  });
+  const pending = readOwnedSource(contents(), controller.signal);
   const observed = pending.then(
     (prompt) => {
       bodies.push(prompt);
@@ -86,7 +89,7 @@ async function blockedSerialization(failure?: Error): Promise<number> {
   await started.wait;
   const owned = workspace(before);
   try {
-    expect(owned).toHaveLength(2);
+    expect(owned).toHaveLength(1);
     controller.abort(reason);
     expect(await checkpoint(observed)).toBe(reason);
     expect(await checkpoint(pending.cleanup)).toBe('pending');
@@ -195,12 +198,7 @@ describe('Responses external source cleanup failure', () => {
         };
       },
     };
-    const pending = serializeResponsesPromptEnvelope({
-      model: 'gpt-5.6',
-      contents,
-      context,
-      signal: controller.signal,
-    });
+    const pending = readOwnedSource(contents, controller.signal);
     const observed = pending.then(
       () => 'resolved',
       (error: unknown) => error,
@@ -250,12 +248,7 @@ describe('Responses delayed iterator-return cleanup', () => {
         };
       },
     };
-    const pending = serializeResponsesPromptEnvelope({
-      model: 'gpt-5.6',
-      contents,
-      context,
-      signal: controller.signal,
-    });
+    const pending = readOwnedSource(contents, controller.signal);
     const observed = pending.then(
       () => 'resolved',
       (error: unknown) => error,
@@ -273,7 +266,7 @@ describe('Responses delayed iterator-return cleanup', () => {
         'pending',
         'pending',
       ]);
-      expect(workspace(before)).toHaveLength(2);
+      expect(workspace(before)).toHaveLength(1);
     } finally {
       unblockNext.release();
       unblockReturn.release();
@@ -290,25 +283,35 @@ describe('Responses stateful cancellation ownership', () => {
     const blocked = gate();
     const controller = new AbortController();
     const reason = new Error('cancel incremental serialization');
-    async function* base(): AsyncIterable<IContent> {
-      yield row;
-    }
     async function* incremental(): AsyncIterable<IContent> {
       started.release();
       await blocked.wait;
       yield row;
     }
-    const pending = serializeResponsesPromptEnvelope({
+    const basePrompt = await nativePrompt(nativeRows([row]), {
       model: 'gpt-5.6',
-      contents: base(),
       context,
-      signal: controller.signal,
-      stateful: {
-        statefulParentUsed: true,
-        retainedBaselineTokens: 100,
-        incrementalContents: incremental(),
-      },
     });
+    const pending = cancellableSerialization(
+      () =>
+        withSerializationCleanup(
+          async () => {
+            const incrementalRead = readOwnedSource(
+              incremental(),
+              controller.signal,
+            );
+            try {
+              await incrementalRead;
+            } finally {
+              await incrementalRead.cleanup;
+            }
+            return basePrompt;
+          },
+          () => basePrompt.dispose(),
+        ),
+      (prompt) => prompt.dispose(),
+      controller.signal,
+    );
     const observed = pending.then(
       () => 'resolved',
       (error: unknown) => error,
@@ -317,7 +320,7 @@ describe('Responses stateful cancellation ownership', () => {
     controller.abort(reason);
     try {
       expect(await checkpoint(observed)).toBe(reason);
-      expect(workspace(before)).toHaveLength(3);
+      expect(workspace(before)).toHaveLength(1);
       expect(await checkpoint(pending.cleanup)).toBe('pending');
     } finally {
       blocked.release();

@@ -1,15 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { describe, expect, it } from 'bun:test';
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  statSync,
-} from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type {
@@ -19,9 +11,14 @@ import type {
 import type { RuntimePromptEstimateRequest } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import { buildOpenAIResponsesInput } from '../openai-responses/OpenAIResponsesInputBuilder.js';
 import { estimateGpt56Prompt } from '../tokenizers/Gpt56O200kPromptEstimator.js';
-import { estimateGpt56PromptFromSources } from '../tokenizers/gpt56-source-prompt-estimator.js';
+import { createRuntimeTokenizerFactory } from '../composition/runtimeTokenizerFactory.js';
+import {
+  nativeImages,
+  nativePrompt,
+  nativePromptKeys,
+  nativeRows,
+} from './__tests__/native-responses-fixture.js';
 import { projectOpenAIResponsesPromptEnvelope } from './promptEnvelopeProjections.js';
-import { serializeResponsesPromptEnvelope } from './responses-source-serializer.js';
 
 const context = {
   includeReasoningInContext: false,
@@ -58,9 +55,6 @@ function row(index: number, media: readonly MediaBlock[]): IContent {
     speaker: 'human',
     blocks: [{ type: 'text', text: `image ${index} 雪 " \\` }, ...media],
   };
-}
-async function* source(rows: readonly IContent[]): AsyncIterable<IContent> {
-  yield* rows;
 }
 function request(
   finalizedProjection: unknown,
@@ -112,28 +106,24 @@ async function parity(
   const expected = await estimateGpt56Prompt(
     request(old.finalizedProjection, activeProvider),
   );
-  const prompt = await serializeResponsesPromptEnvelope({
+  const prompt = await nativePrompt(nativeRows(rows), {
     model: 'gpt-5.6-sol',
     ...promptKeys,
     context,
-    contents: source(rows),
   });
   try {
-    const actualBytes = prompt.projection.promptSegments.map((s) =>
-      readFileSync(s.source.path),
+    const actualBytes = (await nativePromptKeys(prompt)).map((s) =>
+      Buffer.from(s, 'utf8'),
     );
-    const expectedBytes = strings(old.finalizedProjection).map((s, i) =>
-      Buffer.from(s, i === 0 ? 'utf16le' : 'utf8'),
+    const expectedBytes = strings(old.finalizedProjection).map((s) =>
+      Buffer.from(s, 'utf8'),
     );
     expect(actualBytes).toStrictEqual(expectedBytes);
     const owner = prompt.toEstimatorProjection();
-    const pending = estimateGpt56PromptFromSources(
+    const actual = await owner.estimate(
       request(owner, activeProvider),
-      { workspaceDirectory },
+      createRuntimeTokenizerFactory(),
     );
-    const closing = prompt.dispose();
-    const actual = await pending;
-    await closing;
     expect(actual).toStrictEqual(expected);
     expect(
       Object.getOwnPropertyDescriptor(owner, 'imageEntries'),
@@ -142,7 +132,7 @@ async function parity(
     return actual.count;
   } finally {
     await prompt.dispose();
-    expect(existsSync(prompt.imageCostsSource.path)).toBe(false);
+    await expect(nativePromptKeys(prompt)).rejects.toThrow('closed');
     rmSync(root, { recursive: true, force: true });
   }
 }
@@ -193,33 +183,21 @@ describe('Responses serializer to opt-in GPT56 image estimator', () => {
 describe('Responses large-row source admission', () => {
   it('accepts a valid greater-than-10MiB text row into the estimator without native long-input claims', async () => {
     const size = 10 * 1024 * 1024 + 1;
-    const prompt = await serializeResponsesPromptEnvelope({
-      model: 'gpt-5.6-sol',
-      context,
-      contents: source([
+    const prompt = await nativePrompt(
+      nativeRows([
         {
           speaker: 'human',
           blocks: [{ type: 'text', text: 'a'.repeat(size) }],
         },
       ]),
-    });
+      { model: 'gpt-5.6-sol', context },
+    );
     try {
       expect(
-        statSync(prompt.projection.promptSegments[0].source.path).size,
+        Buffer.byteLength((await nativePromptKeys(prompt))[0]),
       ).toBeGreaterThan(10 * 1024 * 1024);
-      const projection = prompt.toEstimatorProjection();
-      expect(projection.promptSegments).toHaveLength(1);
-      const lease = projection.acquire();
-      try {
-        expect(
-          await lease.countImageTokens({
-            provider: 'openai',
-            model: 'gpt-5.6',
-          }),
-        ).toBe(0);
-      } finally {
-        await lease();
-      }
+      expect(await nativePromptKeys(prompt)).toHaveLength(1);
+      expect(await nativeImages(prompt)).toHaveLength(0);
     } finally {
       await prompt.dispose();
     }
@@ -250,21 +228,47 @@ describe('Responses disk unsupported-media enforcement', () => {
   it.each(['audio/wav', 'application/pdf'])(
     'records the unsupported %s ledger and estimates its text placeholder',
     async (mimeType) => {
-      const prompt = await serializeResponsesPromptEnvelope({
-        model: 'gpt-5.6-sol',
-        context: { ...context, mediaPdfEnabled: false },
-        contents: source([
+      const prompt = await nativePrompt(
+        nativeRows([
           row(0, [
             { type: 'media', mimeType, encoding: 'base64', data: 'JVBERg==' },
           ]),
         ]),
-      });
+        {
+          model: 'gpt-5.6-sol',
+          context: { ...context, mediaPdfEnabled: false },
+        },
+      );
       try {
+        expect((await nativePromptKeys(prompt))[0]).toContain(
+          mimeType === 'application/pdf'
+            ? 'PDF input is disabled'
+            : 'Unsupported audio',
+        );
+        const owner = prompt.toEstimatorProjection();
         expect(
-          readFileSync(prompt.unsupportedMediaSource.path, 'utf8'),
-        ).toContain('unsupported');
-        expect(prompt.toEstimatorProjection().promptSegments).toStrictEqual(
-          prompt.projection.promptSegments,
+          await owner.estimate(request(owner), createRuntimeTokenizerFactory()),
+        ).toStrictEqual(
+          await estimateGpt56Prompt(
+            request(
+              projectOpenAIResponsesPromptEnvelope({
+                model: 'gpt-5.6-sol',
+                input: buildOpenAIResponsesInput(
+                  [
+                    row(0, [
+                      {
+                        type: 'media',
+                        mimeType,
+                        encoding: 'base64',
+                        data: 'JVBERg==',
+                      },
+                    ]),
+                  ],
+                  { ...context, mediaPdfEnabled: false },
+                ),
+              }).finalizedProjection,
+            ),
+          ),
         );
       } finally {
         await prompt.dispose();

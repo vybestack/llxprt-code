@@ -16,7 +16,10 @@ import { buildOpenAIResponsesInput } from '../openai-responses/OpenAIResponsesIn
 import { createRuntimeTokenizerFactory } from '../composition/runtimeTokenizerFactory.js';
 import { withGpt56DiskSources } from '../tokenizers/gpt56-disk-tokenizer-factory.js';
 import { projectOpenAIResponsesPromptEnvelope } from './promptEnvelopeProjections.js';
-import { serializeResponsesPromptEnvelope } from './responses-source-serializer.js';
+import {
+  nativePrompt,
+  nativeRows,
+} from './__tests__/native-responses-fixture.js';
 
 const context = {
   includeReasoningInContext: false,
@@ -106,10 +109,6 @@ const supportedModels = [
   'unregistered-model-x',
 ];
 
-async function* stream(rows: readonly IContent[]): AsyncGenerator<IContent> {
-  yield* rows;
-}
-
 function keys(): { instructions: string; tools: unknown } {
   return { instructions, tools };
 }
@@ -125,11 +124,10 @@ function legacyEstimate(model: string, rows: readonly IContent[]) {
 }
 
 async function sourceEstimate(model: string, rows: readonly IContent[]) {
-  const prompt = await serializeResponsesPromptEnvelope({
+  const prompt = await nativePrompt(nativeRows(rows), {
     model,
     ...keys(),
     context,
-    contents: stream(rows),
   });
   try {
     const projection: PromptEnvelopeProjection = {
@@ -185,15 +183,15 @@ describe('source estimation across tokenizer families', () => {
     );
     expect(arrayFailure).toBeInstanceOf(Error);
     expect(sourceFailure).toBeInstanceOf(Error);
-    expect((sourceFailure as Error).message).toBe(
-      (arrayFailure as Error).message,
-    );
+    if (!(sourceFailure instanceof Error) || !(arrayFailure instanceof Error))
+      throw new Error('Missing estimation failure');
+    expect(sourceFailure.message).toBe(arrayFailure.message);
   });
 
   it('rejects an empty or blank model before any segment is written', async () => {
     for (const model of ['', '   ']) {
       await expect(sourceEstimate(model, textRows)).rejects.toThrow(
-        'Prompt source requires a non-empty model',
+        'non-empty',
       );
       expect(() => legacyEstimate(model, textRows)).toThrow(
         'non-empty string "model"',

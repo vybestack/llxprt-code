@@ -1,18 +1,14 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createHash } from 'node:crypto';
-import {
-  closeSync,
-  openSync,
-  readSync,
-  readFileSync,
-  writeFileSync,
-} from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { deserialize } from 'node:v8';
 import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { settledHeap } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
+import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { serializeResponsesPromptEnvelope } from '../responses-source-serializer.js';
+import { nativePrompt } from './native-responses-fixture.js';
+import { canonicalizePromptValue } from '../promptEnvelopeProjections.js';
 
 const root = process.argv[2];
 const deadline = setTimeout(() => {
@@ -51,48 +47,65 @@ async function sample(): Promise<number> {
   );
 }
 
-async function* contents(): AsyncIterable<IContent> {
-  for (let index = 0; index < 64; index++) {
+const rows: ProviderRequestRows = {
+  callerOwned: true,
+  count: 64,
+  async readAt(index: number): Promise<IContent> {
     if (index % 16 === 0) peakLive = Math.max(peakLive, await sample());
     const row: IContent = deserialize(readFileSync(join(root, `${index}.row`)));
     refs.push(new WeakRef(row));
-    if (retaining) retained.push(row);
-    yield row;
-  }
-}
+    if (retaining) retained[index] = row;
+    return row;
+  },
+  async *openReader(): AsyncGenerator<IContent> {
+    for (let index = 0; index < 64; index++) yield await rows.readAt(index);
+  },
+};
 
-function hashFile(path: string): { bytes: number; sha256: string } {
-  const fd = openSync(path, 'r');
-  const chunk = Buffer.alloc(65536);
+async function hashInput(
+  prompt: Awaited<ReturnType<typeof nativePrompt>>,
+): Promise<{ bytes: number; sha256: string }> {
   const hash = createHash('sha256');
   let bytes = 0;
-  try {
-    for (;;) {
-      const count = readSync(fd, chunk, 0, chunk.length, null);
-      if (count === 0) break;
-      hash.update(chunk.subarray(0, count));
-      bytes += count;
-    }
-  } finally {
-    closeSync(fd);
+  const append = (text: string): void => {
+    hash.update(text);
+    bytes += Buffer.byteLength(text);
+  };
+  append('[');
+  let separator = '';
+  for await (const item of prompt.items()) {
+    append(separator);
+    append(JSON.stringify(canonicalizePromptValue(item, 'input', [])));
+    separator = ',';
   }
+  append(']');
   return { bytes, sha256: hash.digest('hex') };
 }
 
 async function warmup(): Promise<void> {
-  async function* small(): AsyncIterable<IContent> {
-    yield { speaker: 'human', blocks: [{ type: 'text', text: 'warmup' }] };
-  }
-  const owner = await serializeResponsesPromptEnvelope({
-    model: 'gpt-5.6',
-    contents: small(),
-    context: {
-      includeReasoningInContext: false,
-      mediaPdfEnabled: true,
-      outputLimits: parseOutputLimits({}),
-      debug: () => {},
+  const owner = await nativePrompt(
+    {
+      callerOwned: true,
+      count: 1,
+      readAt: () => ({
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'warmup' }],
+      }),
+      async *openReader() {
+        yield { speaker: 'human', blocks: [{ type: 'text', text: 'warmup' }] };
+      },
     },
-  });
+    {
+      model: 'gpt-5.6',
+      context: {
+        includeReasoningInContext: false,
+        mediaPdfEnabled: true,
+        outputLimits: parseOutputLimits({}),
+        debug: () => {},
+      },
+    },
+  );
+  await hashInput(owner);
   await owner.dispose();
   await settledHeap();
   await settledHeap();
@@ -100,9 +113,8 @@ async function warmup(): Promise<void> {
 
 await warmup();
 baseline = await settledHeap();
-const prompt = await serializeResponsesPromptEnvelope({
+const prompt = await nativePrompt(rows, {
   model: 'gpt-5.6',
-  contents: contents(),
   context: {
     includeReasoningInContext: false,
     mediaPdfEnabled: true,
@@ -110,7 +122,7 @@ const prompt = await serializeResponsesPromptEnvelope({
     debug: () => {},
   },
 });
-const actual = hashFile(prompt.projection.promptSegments[0].source.path);
+const actual = await hashInput(prompt);
 await prompt.dispose();
 const finalLive = await sample();
 const retainedHeap = await settledGrowth();
