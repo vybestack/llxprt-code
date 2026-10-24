@@ -88,12 +88,6 @@ export interface RuntimeProviderManager {
   ): void;
   fetchNetwork(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
   bindModelRegistry?(registry: ModelRegistry): void;
-  bindNetworkFetch?(
-    requestFetch: (
-      input: RequestInfo | URL,
-      init?: RequestInit,
-    ) => Promise<Response>,
-  ): void;
   hasActiveProvider(): boolean;
   accumulateSessionTokens(providerName: string, usage: unknown): void;
 }

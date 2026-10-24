@@ -35,6 +35,7 @@ import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/serv
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
+import { OwnedFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import {
   ProviderFileLifecycle,
   ProviderManager,
@@ -196,6 +197,7 @@ export class ChildAgentAssembly {
       targetDir: this.foregroundConfig.getTargetDir(),
       debugMode: false,
       cwd: this.foregroundConfig.getWorkingDir(),
+      proxy: this.foregroundConfig.getProxy(),
       model: this.data.activationProfile.model,
       initialSettings: this.settings.getAllGlobalSettings(),
     });
@@ -224,6 +226,9 @@ export class ChildAgentAssembly {
       this.providers.acquire('files', () =>
         releaseAdoptedFileScope(this.files, scope),
       );
+    const network = new OwnedFetch(this.config.getProxy());
+    this.providers.beforeRelease(() => network.closeAdmissionAndAbort());
+    this.providers.acquire('network', () => network.dispose());
     this.manager = new ProviderManager(
       undefined,
       undefined,
@@ -238,6 +243,7 @@ export class ChildAgentAssembly {
       undefined,
       this.settingsOwner,
     );
+    this.manager.bindNetworkFetch(network.fetch);
     this.providers.acquire('manager', () => this.manager.dispose());
     const keys = this.authority.createProviderKeyStorage();
     this.providers.acquire('manager', () => keys.close());

@@ -38,6 +38,7 @@ import type { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/poli
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import { OwnedFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import {
   createFileOAuthSettingsProvider,
   type CredentialAuthority,
@@ -103,6 +104,9 @@ export abstract class AdoptedSessionAssembly extends ForegroundAgentAssembly {
       this.adoptManager = this.adoptProviderManager;
       return;
     }
+    const network = new OwnedFetch(this.config.getProxy());
+    this.adoptRelease.beforeRelease(() => network.closeAdmissionAndAbort());
+    this.adoptRelease.acquire('network', () => network.dispose());
     const manager = new ProviderManager(
       undefined,
       undefined,
@@ -114,6 +118,7 @@ export abstract class AdoptedSessionAssembly extends ForegroundAgentAssembly {
       undefined,
       this.adoptSelectedSettings,
     );
+    manager.bindNetworkFetch(network.fetch);
     this.adoptRelease.acquire('manager', () => manager.dispose());
     const storage = this.adoptAuthority.createProviderKeyStorage();
     this.adoptRelease.acquire('manager', () => storage.close());

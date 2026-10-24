@@ -10,6 +10,7 @@ import {
   Config,
   createProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core';
+import { OwnedFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import {
@@ -62,6 +63,7 @@ export async function observeFakeProviderRegistration(): Promise<{
         config,
         createProviderRuntimeContext({}),
       );
+      bindFakeNetwork(config, manager, release);
       release.push(() => manager.dispose());
       const keys = credentials.authority.createProviderKeyStorage();
       release.push(() => keys.close());
@@ -102,6 +104,19 @@ export async function observeFakeProviderRegistration(): Promise<{
     if (originalEnv === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
     else process.env.LLXPRT_FAKE_RESPONSES = originalEnv;
   }
+}
+
+function bindFakeNetwork(
+  config: Config,
+  manager: ProviderManager,
+  release: Array<() => void | Promise<void>>,
+): void {
+  const network = new OwnedFetch(config.getProxy());
+  release.push(() => {
+    network.closeAdmissionAndAbort();
+    return network.dispose();
+  });
+  manager.bindNetworkFetch(network.fetch);
 }
 
 function acquireFakeOAuth(

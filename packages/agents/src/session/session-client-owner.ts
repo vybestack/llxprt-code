@@ -279,7 +279,6 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
     this.initializeClientNetwork();
     this.modelRegistry = new ModelRegistry(this.fetch);
     manager.bindModelRegistry?.(this.modelRegistry);
-    manager.bindNetworkFetch?.(this.fetch);
     this.toolCatalog = new SessionToolCatalogOwner(
       config,
       this.readTaskSchemaPolicy,

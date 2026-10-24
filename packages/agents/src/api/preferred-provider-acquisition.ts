@@ -15,6 +15,7 @@ import { releaseAdoptedFileScope } from './adoption-release.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { OwnedFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import type {
   TokenStore,
   IOAuthSettingsProvider,
@@ -90,6 +91,9 @@ export function acquirePreferredProviderManager(
   authority: CredentialAuthority,
   release: AcquisitionRelease,
 ): ProviderManager {
+  const network = new OwnedFetch(config.getProxy());
+  release.beforeRelease(() => network.closeAdmissionAndAbort());
+  release.acquire('network', () => network.dispose());
   const manager = new ProviderManager(
     undefined,
     undefined,
@@ -105,6 +109,7 @@ export function acquirePreferredProviderManager(
     undefined,
     settingsOwner,
   );
+  manager.bindNetworkFetch(network.fetch);
   release.acquire('manager', () => manager.dispose());
   const keys = authority.createProviderKeyStorage();
   release.acquire('manager', () => keys.close());

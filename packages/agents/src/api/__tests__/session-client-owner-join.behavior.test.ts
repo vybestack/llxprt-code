@@ -60,7 +60,6 @@ import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/tas
 import { describe, expect, it } from 'bun:test';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
-import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import { writeFile, access, unlink, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { AgentClient } from '../../core/client.js';
@@ -212,21 +211,14 @@ describe('Session owner cleanup joining', () => {
     if (address === null || typeof address === 'string')
       throw new Error('Expected HTTP address');
     const url = `http://127.0.0.1:${address.port}/joined`;
-    let requestFetch: NetworkFetch | undefined;
     const manager = builtManager;
-    const bind = manager.bindNetworkFetch.bind(manager);
-    manager.bindNetworkFetch = (fetch) => {
-      requestFetch = fetch;
-      bind(fetch);
-    };
     let received: string | undefined;
     class GatedCleanupClient extends AgentClient {
       override async dispose(): Promise<void> {
         entered.release();
         await released.promise;
         try {
-          if (requestFetch === undefined) throw new Error('Missing fetch');
-          received = await (await requestFetch(url)).text();
+          received = await (await owner.operations.fetch(url)).text();
         } finally {
           await super.dispose();
         }
@@ -261,8 +253,9 @@ describe('Session owner cleanup joining', () => {
       released.release();
       await closing;
       expect(received).toBe(new URL(url).pathname);
-      if (requestFetch === undefined) throw new Error('Missing fetch');
-      await expect(requestFetch(url)).rejects.toThrow('Root fetch is closed');
+      await expect(owner.operations.fetch(url)).rejects.toThrow(
+        'Root fetch is closed',
+      );
     } finally {
       released.release();
       await closing.catch(() => undefined);
