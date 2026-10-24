@@ -9,7 +9,7 @@ import { NativeJournalCursor } from './native-journal-cursor.js';
 import { RowOwnership } from '../../../../../core/src/recording/rowOwnership.js';
 import { createRowCounters } from '../../../../../core/src/recording/journalCounters.js';
 import type { HistoryItem } from '../../types.js';
-import type { DisplayJournalEntry } from './journal-page-file.js';
+import type { NativeDisplayEntry as DisplayJournalEntry } from './native-journal-types.js';
 
 function groupPage(
   entry: DisplayJournalEntry,

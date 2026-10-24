@@ -46,10 +46,8 @@ import {
   type IContent,
   type JournalReadCounters,
 } from '@vybestack/llxprt-code-core';
-import { ProjectedJournalCursor } from './projected-journal-cursor.js';
 import { NativeJournalCursor } from './native-journal-cursor.js';
-type JournalCursor = ProjectedJournalCursor | NativeJournalCursor;
-import type { DisplayJournalEntry as JournalEntry } from './journal-page-file.js';
+import type { NativeDisplayEntry as JournalEntry } from './native-journal-types.js';
 import type { HistoryItem } from '../../types.js';
 
 import {
@@ -205,11 +203,6 @@ function compressedBoundaryText(payload: unknown): string {
     : '[compressed]';
 }
 
-/** Every projected row consumes viewport capacity, including summaries. */
-function isDisplayEntry(entry: JournalEntry): boolean {
-  return entry.kind === 'projected' || entry.envelope.type === 'compressed';
-}
-
 interface BackPageCollect {
   added: number;
 }
@@ -221,10 +214,8 @@ function collectBackPage(
 ): BackPageCollect {
   let added = 0;
   for (const entry of entries) {
-    if (isDisplayEntry(entry)) {
-      collected.push(entry);
-      added += 1;
-    }
+    collected.push(entry);
+    added += 1;
   }
   return { added };
 }
@@ -236,10 +227,8 @@ function pushForwardPage(
 ): number {
   let added = 0;
   for (const entry of entries) {
-    if (isDisplayEntry(entry)) {
-      collected.push(entry);
-      added += 1;
-    }
+    collected.push(entry);
+    added += 1;
   }
   return added;
 }
@@ -250,27 +239,17 @@ interface ResumeFloorOffsets {
   firstDisplayOffset: number | null;
 }
 
-function entryToRow(entry: JournalEntry): ScrollbackRow | null {
-  switch (entry.kind) {
-    case 'projected': {
-      const identity = entry.item.rowIdentity;
-      if (!identity) throw new Error('Missing projected identity');
-      return {
-        key: rowIdentityKey(identity),
-        seq: entry.seq,
-        identity,
-        offset: entry.offset,
-        item: entry.item,
-      };
-    }
-    case 'boundary': {
-      if (entry.envelope.type !== 'compressed') return null;
-      return compressedBoundaryRow(entry);
-    }
-    default:
-      // Oversized records are diagnosed by the cursor, never displayed.
-      return null;
-  }
+function entryToRow(entry: JournalEntry): ScrollbackRow {
+  if (entry.kind === 'boundary') return compressedBoundaryRow(entry);
+  const identity = entry.item.rowIdentity;
+  if (!identity) throw new Error('Missing projected identity');
+  return {
+    key: rowIdentityKey(identity),
+    seq: entry.seq,
+    identity,
+    offset: entry.offset,
+    item: entry.item,
+  };
 }
 
 function compressedBoundaryRow(entry: BoundaryEntry): ScrollbackRow {
@@ -326,8 +305,8 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
   private readonly chunkBytes: number | undefined;
   private readonly counters: JournalReadCounters | undefined;
 
-  private cursor: JournalCursor | null = null;
-  private openPromise: Promise<JournalCursor | null> | null = null;
+  private cursor: NativeJournalCursor | null = null;
+  private openPromise: Promise<NativeJournalCursor | null> | null = null;
   private openGeneration = -1;
   private controller = new AbortController();
   private closed = false;
@@ -372,6 +351,8 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
   private resumeFirstDisplayOffset: number | null = null;
 
   constructor(options: ScrollbackPagerOptions) {
+    if (!options.filePath.endsWith('.llxj'))
+      throw new Error('Scrollback requires a .llxj session journal');
     this.filePath = options.filePath;
     this.viewport = options.viewport;
     this.pageRows = options.pageRows;
@@ -528,7 +509,7 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
     const seeded: ScrollbackRow[] = [];
     for (let i = collected.length - 1; i >= 0; i -= 1) {
       const row = entryToRow(collected[i]);
-      if (row !== null) seeded.push(row);
+      seeded.push(row);
     }
     this.pagedRows = seeded;
     this.resumeFirstDisplayOffset = floor.firstDisplayOffset;
@@ -552,7 +533,7 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
    * resumeFromJournal. Null keeps the pre-resume behavior (exhausted read
    * or data start) untouched.
    */
-  private isResumeFloor(cursor: JournalCursor): boolean {
+  private isResumeFloor(cursor: NativeJournalCursor): boolean {
     return (
       cursor.atStart() ||
       (this.resumeFirstDisplayOffset !== null &&
@@ -782,7 +763,7 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
    * boundary ends the walk and everything from it onward is dropped.
    */
   private async collectBack(
-    cursor: JournalCursor,
+    cursor: NativeJournalCursor,
     gen: number,
   ): Promise<{ collected: JournalEntry[]; exhausted: boolean }> {
     const collected: JournalEntry[] = [];
@@ -806,7 +787,7 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
     const rows: ScrollbackRow[] = [];
     for (let i = entries.length - 1; i >= 0; i -= 1) {
       const row = entryToRow(entries[i]);
-      if (row !== null) rows.push(row);
+      rows.push(row);
     }
     this.pagedRows = [...rows, ...this.pagedRows];
   }
@@ -815,7 +796,7 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
     const rows: ScrollbackRow[] = [];
     for (const entry of entries) {
       const row = entryToRow(entry);
-      if (row !== null) rows.push(row);
+      rows.push(row);
     }
     const merged = new Map(this.pagedRows.map((row) => [row.key, row]));
     for (const row of rows) merged.set(row.key, row);
@@ -827,7 +808,7 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
    * open that resolves under a stale generation (or a closed store) is closed
    * immediately and yields null, never state.
    */
-  private async ensureCursor(gen: number): Promise<JournalCursor | null> {
+  private async ensureCursor(gen: number): Promise<NativeJournalCursor | null> {
     if (this.closed || gen !== this.generation) return null;
     if (this.cursor !== null) return this.cursor;
     if (this.openPromise === null || this.openGeneration !== gen) {
@@ -837,11 +818,13 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
         counters: this.counters,
         signal: this.controller.signal,
       };
-      const opening = this.filePath.endsWith('.llxj')
-        ? NativeJournalCursor.open(this.filePath, options, this.pageRows)
-        : ProjectedJournalCursor.open(this.filePath, options);
+      const opening = NativeJournalCursor.open(
+        this.filePath,
+        options,
+        this.pageRows,
+      );
       this.openPromise = opening.then(
-        async (cursor): Promise<JournalCursor | null> => {
+        async (cursor): Promise<NativeJournalCursor | null> => {
           if (this.closed || gen !== this.generation) {
             await cursor.close();
             return null;
@@ -849,7 +832,7 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
           this.cursor = cursor;
           return cursor;
         },
-        (error: unknown): JournalCursor | null => {
+        (error: unknown): NativeJournalCursor | null => {
           if (gen === this.generation && !this.closed) {
             this.error = errorMessage(error);
           }

@@ -37,24 +37,6 @@ export {
   type JournalReadStats,
   type RowCounters,
 } from './journalCounters.js';
-export {
-  JournalCursor,
-  MAX_RECORD_BYTES,
-  type JournalCursorMetrics,
-  type JournalCursorOptions,
-  type JournalEntry,
-  type JournalEnvelopeRef,
-  type JournalPage,
-} from './journalCursor.js';
-export {
-  ReplaceTransactionFold,
-  HISTORY_RECORD_TYPES,
-  REPLACE_RECORD_TYPES,
-  applyReplaceRecord,
-  contentTxId,
-  enterHistoryRecord,
-  type ReplaceRowStore,
-} from './replaceTransaction.js';
 export { SESSION_FILE_ID_PREFIX_LENGTH } from './sessionFileName.js';
 export type { SessionRecordingPort } from './recordingPort.js';
 export {

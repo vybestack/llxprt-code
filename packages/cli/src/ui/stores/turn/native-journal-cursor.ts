@@ -46,6 +46,15 @@ interface LocatedEntry {
   readonly after: Position;
 }
 
+interface ProjectionGroup {
+  readonly first: RowEntry;
+  readonly opener: IContent;
+  readonly from: number;
+  readonly rows: number;
+  readonly calls: number;
+  readonly spanEnd: number | undefined;
+}
+
 export class NativeJournalCursor {
   private start: Position;
   private end: Position;
@@ -54,6 +63,9 @@ export class NativeJournalCursor {
   private firstOffset: number | null = null;
   private boundaryOffset: number | null = null;
   private initialPage: LocatedEntry[] | undefined;
+  private readonly controller = new AbortController();
+  private queue: Promise<void> = Promise.resolve();
+  private closing: Promise<void> | undefined;
   private responseIndex: NativeResponseIndex;
   private group: { readonly start: number; readonly end: number } | undefined;
 
@@ -61,6 +73,12 @@ export class NativeJournalCursor {
     private reader: JournalReader,
     private readonly options: NativeJournalOptions,
   ) {
+    this.options = {
+      ...options,
+      signal: options.signal
+        ? AbortSignal.any([options.signal, this.controller.signal])
+        : this.controller.signal,
+    };
     this.start = { row: this.rows, item: 0 };
     this.end = this.start;
     this.responseIndex = new NativeResponseIndex(reader);
@@ -70,18 +88,21 @@ export class NativeJournalCursor {
     options: NativeJournalOptions,
     pageRows = 16,
   ): Promise<NativeJournalCursor> {
+    options.signal?.throwIfAborted();
     const reader = await openJournalReadOnly(path, options.journal);
     const cursor = new NativeJournalCursor(reader, options);
     try {
+      options.signal?.throwIfAborted();
       const root = rowTreeRootOf(reader.trailer);
       options.counters?.recordDecoded();
       if (root)
         cursor.firstOffset = (await entryAt(reader, root, 0)).recordOffset;
       await cursor.locateClearBoundary();
       await cursor.seed(pageRows);
+      options.signal?.throwIfAborted();
       return cursor;
     } catch (error) {
-      await reader.close();
+      await cursor.close();
       throw error;
     }
   }
@@ -128,7 +149,9 @@ export class NativeJournalCursor {
     this.options.counters?.recordDecoded();
     this.options.counters?.rowDecoded();
     try {
-      return decodeStoredRow(await readStoredRow(this.reader, entry));
+      const stored = await readStoredRow(this.reader, entry);
+      this.options.signal?.throwIfAborted();
+      return decodeStoredRow(stored);
     } finally {
       this.options.counters?.rowReleased();
     }
@@ -252,7 +275,56 @@ export class NativeJournalCursor {
     }
     return end;
   }
-  private async *projectGroup(from: number): AsyncGenerator<LocatedEntry> {
+  private locateItems(
+    group: ProjectionGroup,
+    items: readonly HistoryItem[],
+    firstItem: number,
+    callStart: number,
+  ): LocatedEntry[] {
+    const { first, opener, from, spanEnd } = group;
+    return items.map((item, index) => {
+      const identity = item.rowIdentity;
+      const spanStart = opener.metadata?.chronology?.seq;
+      const projected: HistoryItem = {
+        ...item,
+        ...(item.type === 'tool_group' &&
+        spanStart !== undefined &&
+        spanEnd !== undefined
+          ? { seqSpan: [spanStart, Math.max(spanStart, spanEnd)] }
+          : {}),
+        ...(identity && identity.kind !== 'pending'
+          ? {
+              rowIdentity: {
+                kind: 'journal',
+                offset: first.recordOffset,
+                discriminator: identity.discriminator,
+                ...(callStart > 0 ? { toolOffset: callStart } : {}),
+              },
+            }
+          : {}),
+        ...(item.type === 'tool_group' && group.calls > 16
+          ? {
+              toolPage: {
+                start: callStart,
+                total: group.calls,
+                groupIndex: from,
+              },
+            }
+          : {}),
+      };
+      return {
+        entry: this.displayEntry(first, opener, projected, group.rows),
+        before: { row: from, item: firstItem + index },
+        after: { row: from, item: firstItem + index + 1 },
+      };
+    });
+  }
+  private async *projectGroup(
+    from: number,
+    minimumItem = 0,
+    maximumItem = Number.POSITIVE_INFINITY,
+    tailCount = Number.POSITIVE_INFINITY,
+  ): AsyncGenerator<LocatedEntry> {
     const first = await entryAt(this.reader, this.root(), from);
     const end = await this.groupEnd(from);
     const opener = await this.read(first);
@@ -287,48 +359,65 @@ export class NativeJournalCursor {
           ],
         };
         const items = iContentToHistoryItems([page, ...responses.values()]);
-        for (const item of items) {
-          const identity = item.rowIdentity;
-          const spanStart = opener.metadata?.chronology?.seq;
-          const projected: HistoryItem = {
-            ...item,
-            ...(item.type === 'tool_group' &&
-            spanStart !== undefined &&
-            spanEnd !== undefined
-              ? { seqSpan: [spanStart, Math.max(spanStart, spanEnd)] }
-              : {}),
-            ...(identity && identity.kind !== 'pending'
-              ? {
-                  rowIdentity: {
-                    kind: 'journal',
-                    offset: first.recordOffset,
-                    discriminator: identity.discriminator,
-                    ...(callStart > 0 ? { toolOffset: callStart } : {}),
-                  },
-                }
-              : {}),
-            ...(item.type === 'tool_group' && calls.length > 16
-              ? {
-                  toolPage: {
-                    start: callStart,
-                    total: calls.length,
-                    groupIndex: from,
-                  },
-                }
-              : {}),
-          };
-          const before = { row: from, item: itemIndex++ };
-          const after = { row: from, item: itemIndex };
-          const entry = this.displayEntry(first, opener, projected, end - from);
-          yield { entry, before, after };
+        if (callStart === 0) {
+          const total =
+            items.length + Math.max(0, Math.ceil(calls.length / 16) - 1);
+          minimumItem = Math.max(
+            minimumItem,
+            Math.min(maximumItem, total) - tailCount,
+          );
         }
-        if (calls.length === 0) break;
+        const located = this.locateItems(
+          {
+            first,
+            opener,
+            from,
+            rows: end - from,
+            calls: calls.length,
+            spanEnd,
+          },
+          items,
+          itemIndex,
+          callStart,
+        );
+        yield* located.filter(
+          ({ before }) =>
+            before.item >= minimumItem && before.item < maximumItem,
+        );
+        itemIndex += items.length;
+        if (calls.length === 0 || itemIndex >= maximumItem) break;
+        if (itemIndex < minimumItem) {
+          callStart += (minimumItem - itemIndex) * 16;
+          itemIndex = minimumItem;
+        }
       }
     } finally {
       this.options.counters?.ownership?.release(opener);
     }
   }
-  async pageBack(count: number): Promise<{ entries: DisplayJournalEntry[] }> {
+  private enqueue<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.queue.then(async () => {
+      this.options.signal?.throwIfAborted();
+      return operation();
+    });
+    this.queue = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
+  pageBack(count: number): Promise<{ entries: DisplayJournalEntry[] }> {
+    return this.enqueue(() => this.readBack(count));
+  }
+  pageForward(count: number): Promise<{ entries: DisplayJournalEntry[] }> {
+    return this.enqueue(() => this.readForward(count));
+  }
+  refreshFileEnd(): Promise<void> {
+    return this.enqueue(() => this.refreshReader());
+  }
+  private async readBack(
+    count: number,
+  ): Promise<{ entries: DisplayJournalEntry[] }> {
     this.releasePage();
     if (this.initialPage !== undefined) {
       const page = this.initialPage;
@@ -349,9 +438,12 @@ export class NativeJournalCursor {
           ? position.row
           : await this.groupStart(position.row - 1);
       const tail: LocatedEntry[] = [];
-      for await (const located of this.projectGroup(from)) {
-        if (from === position.row && located.before.item >= position.item)
-          break;
+      for await (const located of this.projectGroup(
+        from,
+        0,
+        from === position.row ? position.item : Number.POSITIVE_INFINITY,
+        count - selected.length,
+      )) {
         tail.push(located);
         if (tail.length > count - selected.length) tail.shift();
       }
@@ -362,17 +454,17 @@ export class NativeJournalCursor {
     this.start = position;
     return this.handoff(selected);
   }
-  async pageForward(
+  private async readForward(
     count: number,
   ): Promise<{ entries: DisplayJournalEntry[] }> {
     this.releasePage();
-    await this.refreshFileEnd();
+    await this.refreshReader();
     const selected: LocatedEntry[] = [];
     let position = this.end;
     while (selected.length < count && position.row < this.rows) {
       const from = position.row;
       let exhausted = true;
-      for await (const located of this.projectGroup(from)) {
+      for await (const located of this.projectGroup(from, position.item)) {
         if (selected.length === count) {
           exhausted = false;
           break;
@@ -390,6 +482,7 @@ export class NativeJournalCursor {
   private handoff(selected: readonly LocatedEntry[]): {
     entries: DisplayJournalEntry[];
   } {
+    this.options.signal?.throwIfAborted();
     for (const located of selected) {
       if (located.entry.kind !== 'projected') continue;
       const item = located.entry.item;
@@ -416,12 +509,25 @@ export class NativeJournalCursor {
     if (head && first) this.positions.set(first, head);
     if (tail && last) this.positions.set(last, tail);
   }
-  async refreshFileEnd(): Promise<void> {
+  private async refreshReader(): Promise<void> {
     this.options.signal?.throwIfAborted();
     const next = await openJournalReadOnly(
       this.reader.path,
       this.options.journal,
     );
+    if (this.options.signal?.aborted === true) {
+      await next.close();
+      this.options.signal.throwIfAborted();
+    }
+    if (
+      (next.trailer?.rootAggregate.rows ?? 0) > this.rows &&
+      this.rows > 0 &&
+      this.end.row === this.rows
+    ) {
+      const tail = await entryAt(this.reader, this.root(), this.rows - 1);
+      if (tail.speaker !== ROW_SPEAKER.human)
+        this.end = { row: await this.groupStart(this.rows - 1), item: 0 };
+    }
     if (next.trailer?.groupTag !== this.reader.trailer?.groupTag)
       this.group = undefined;
     await this.reader.close();
@@ -438,9 +544,8 @@ export class NativeJournalCursor {
       first = await readVersionAt(this.reader, offset);
     }
     const fullPop = first.mutation === MUTATION.pop && first.rows === 0;
-    const cleared =
-      first.mutation === MUTATION.clear || first.mutation === MUTATION.replace;
-    this.boundaryOffset = cleared || fullPop ? first.selfOffset : null;
+    const replaced = first.mutation === MUTATION.replace;
+    this.boundaryOffset = replaced || fullPop ? first.selfOffset : null;
   }
   clearBoundaryOffset(): number | null {
     return this.boundaryOffset;
@@ -468,7 +573,13 @@ export class NativeJournalCursor {
       this.options.counters?.ownership?.release(item);
     this.retained = [];
   }
-  async close(): Promise<void> {
+  close(): Promise<void> {
+    if (this.closing !== undefined) return this.closing;
+    this.controller.abort(new Error('Native journal cursor is closed'));
+    this.closing = this.queue.then(() => this.dispose());
+    return this.closing;
+  }
+  private async dispose(): Promise<void> {
     this.releasePage();
     for (const located of this.initialPage ?? [])
       if (located.entry.kind === 'projected')

@@ -216,6 +216,21 @@ describe('ScrollbackPagerStore @plan:PLAN-20260917-ISSUE854.P02c @requirement:G1
   beforeEach(() => setupPagerFixture());
   afterEach(() => cleanupPagerFixture());
 
+  it('rejects non-native journal paths before opening the pager', () => {
+    expect(() =>
+      createScrollbackPagerStore({
+        filePath: `${fixture.filePath}.jsonl`,
+        viewport,
+        pageRows: 4,
+        settings: {
+          marginViewports: 0,
+          byteFloorBytes: Infinity,
+          purgeDebounceMs: 0,
+        },
+      }),
+    ).toThrow('Scrollback requires a .llxj session journal');
+  });
+
   it('boots with the last page of the journal resident (bounded resume projection)', async () => {
     for (let seq = 1; seq <= 10; seq += 1) {
       await fixture.addUser(seq);
