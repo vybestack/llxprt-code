@@ -14,6 +14,10 @@ import type { AnthropicRequestRepairIndex } from './anthropic-repair-index.js';
 import type { ToolRepairOverlay } from './anthropic-tool-repair.js';
 import { decideAnthropicTool } from './anthropic-tool-decision.js';
 import {
+  firstRepairMessage,
+  repairMessageAt,
+} from './anthropic-message-search.js';
+import {
   AnthropicStreamRepair,
   numericRepairPiece,
 } from './anthropic-stream-repair.js';
@@ -72,30 +76,22 @@ class CallerOwnedAnthropicIndex implements AnthropicRequestRepairIndex {
     }
   }
   async rawResultsAt(at: number): Promise<RepairMessage | undefined> {
-    return this.entries.find(
-      (message) =>
-        message.slot === 'results' && message.start <= at && at <= message.end,
-    );
+    return repairMessageAt(this.entries, at, 'results');
   }
   async rawChainAt(at: number): Promise<RepairMessage | undefined> {
-    return this.entries.find(
-      (message) =>
-        message.slot === 'chain' && message.start <= at && at <= message.end,
-    );
+    return repairMessageAt(this.entries, at, 'chain');
   }
   async *messages(from: number): AsyncGenerator<RepairMessage> {
     if (this.toolFree) {
       yield* this.source.messages(from);
       return;
     }
-    let low = 0;
-    let high = this.entries.length;
-    while (low < high) {
-      const middle = Math.floor((low + high) / 2);
-      if (this.entries[middle].end < from) low = middle + 1;
-      else high = middle;
-    }
-    for (let at = low; at < this.entries.length; at++) yield this.entries[at];
+    for (
+      let at = firstRepairMessage(this.entries, from);
+      at < this.entries.length;
+      at++
+    )
+      yield this.entries[at];
   }
   async decision(
     message: RepairMessage,
