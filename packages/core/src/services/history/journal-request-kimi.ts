@@ -7,7 +7,10 @@ import type { IndexedUnit } from '../../journal/rowTreeQueries.js';
 import { kimiRowCalls } from '../../journal/normalizedRowOccurrences.js';
 import { plannedFromIds } from '../../journal/unitContributions.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
-import type { IndexedOverlayRow } from './journal-indexed-overlay.js';
+import type {
+  IndexedOverlayRow,
+  PendingRequestOverlay,
+} from './journal-indexed-overlay.js';
 import type { JournalTailSource } from './journal-tail-source.js';
 import { planSourceRowOccurrences } from './source-fact-planner.js';
 
@@ -28,7 +31,7 @@ export class JournalRequestKimi {
   static async create(
     snapshot: VersionSnapshot,
     source: JournalTailSource,
-    rows: readonly IndexedOverlayRow[],
+    rows: PendingRequestOverlay,
   ): Promise<JournalRequestKimi> {
     const view = new JournalRequestKimi(snapshot, source);
     view.count = await snapshot.kimiEligibleCount();

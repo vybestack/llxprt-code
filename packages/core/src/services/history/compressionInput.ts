@@ -8,14 +8,17 @@ export interface DensityCallLookup {
 import type { CompressionChronologySelection } from './compressionChronology.js';
 import type { HistoryDumpSource } from './historyDumpSnapshot.js';
 
-export type CompressionIndexedRows = (
-  | Iterable<IContent>
-  | AsyncIterable<IContent>
-) & {
+export interface CompressionRowSelection {
   readonly length: number;
   readRow(index: number): IContent | Promise<IContent>;
   chronologySelection?(start: number): Promise<CompressionChronologySelection>;
-};
+}
+
+export type CompressionIndexedRows = (
+  | Iterable<IContent>
+  | AsyncIterable<IContent>
+) &
+  CompressionRowSelection;
 
 export type CompressionInputRows = CompressionIndexedRows & {
   readonly densityCalls?: DensityCallLookup;

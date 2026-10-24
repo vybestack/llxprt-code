@@ -28,7 +28,7 @@ import {
 } from './IContent.js';
 import { JournalTailSource } from './journal-tail-source.js';
 import {
-  indexedOverlay,
+  PendingRequestOverlay,
   type IndexedOverlayRow,
 } from './journal-indexed-overlay.js';
 import { journalEntryPlans } from './journal-entry-plans.js';
@@ -56,7 +56,7 @@ async function releaseQueryHold(
 
 export interface NativeRequestViewPlan {
   readonly sourceVersion: VersionSnapshot['version'];
-  readonly changedSources: readonly IndexedOverlayRow[];
+  readonly changedSources: PendingRequestOverlay;
 }
 
 export class IndexedJournalRequestSnapshot {
@@ -74,7 +74,7 @@ export class IndexedJournalRequestSnapshot {
   private constructor(
     private readonly snapshot: VersionSnapshot,
     private readonly source: JournalTailSource,
-    private readonly rows: readonly IndexedOverlayRow[],
+    private readonly rows: PendingRequestOverlay,
     readonly count: number,
     readonly pending: {
       readonly inputCount: number;
@@ -103,7 +103,7 @@ export class IndexedJournalRequestSnapshot {
     const release = snapshot.hold();
     try {
       const source = await JournalTailSource.create(snapshot, tail, projection);
-      const overlay = await indexedOverlay(snapshot, source);
+      const overlay = await PendingRequestOverlay.create(snapshot, source);
       const hasAnchor =
         (snapshot.version?.aggregate.firstAnchor ?? 0n) !== 0n ||
         tail.some((row) => row.metadata?.cacheAnchor === true);
@@ -121,7 +121,7 @@ export class IndexedJournalRequestSnapshot {
       return new IndexedJournalRequestSnapshot(
         snapshot,
         source,
-        overlay.rows,
+        overlay,
         overlay.count,
         Object.freeze({
           inputCount: tail.length,
@@ -227,7 +227,7 @@ export class IndexedJournalRequestSnapshot {
     try {
       let next = await extra.next();
       while (index < this.rows.length || next.done !== true) {
-        const row = index < this.rows.length ? this.rows[index] : undefined;
+        const row = index < this.rows.length ? this.rows.at(index) : undefined;
         if (
           row !== undefined &&
           (next.done === true || row.entry.label <= next.value.entry.label)

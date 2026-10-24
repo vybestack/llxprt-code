@@ -42,7 +42,7 @@ export class JournalRequestMistral {
   static async create(
     snapshot: VersionSnapshot,
     source: JournalTailSource,
-    rows: readonly IndexedOverlayRow[],
+    rows: Iterable<IndexedOverlayRow>,
     slot: number,
   ): Promise<JournalRequestMistral> {
     await snapshot.requireMistralSlot(slot);

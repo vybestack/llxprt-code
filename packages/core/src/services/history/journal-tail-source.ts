@@ -144,8 +144,12 @@ export class JournalTailSource implements JournalResponseSource {
     return this.overlay.has(rawId);
   }
 
-  async affectedJournalLabels(): Promise<readonly bigint[]> {
+  async affectedJournalLabels(): Promise<{
+    readonly labels: readonly bigint[];
+    readonly maxRows: number;
+  }> {
     const labels = new Set<bigint>();
+    let maxRows = this.tailRows.length + this.overlay.size;
     if (this.projection?.label !== undefined) {
       const label = this.projection.label;
       labels.add(label);
@@ -153,6 +157,7 @@ export class JournalTailSource implements JournalResponseSource {
       if (entry === undefined)
         throw new JournalFormatError('Projected request row is absent');
       const { rawIds } = await this.snapshot.readIds(entry);
+      maxRows += rawIds.length + 2;
       for (const id of rawIds) {
         if (id === '') continue;
         const fact = await this.base.facts.fact(id);
@@ -169,9 +174,12 @@ export class JournalTailSource implements JournalResponseSource {
       if (target !== undefined && !this.isTail(target.at.label))
         labels.add(target.at.label);
     }
-    return [...labels].sort((left, right) =>
-      left < right ? -1 : Number(left > right),
-    );
+    return {
+      labels: [...labels].sort((left, right) =>
+        left < right ? -1 : Number(left > right),
+      ),
+      maxRows,
+    };
   }
 
   *tailEntries(): Generator<RowEntry> {

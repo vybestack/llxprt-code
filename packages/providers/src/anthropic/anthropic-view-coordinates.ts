@@ -2,8 +2,9 @@
 import type { IndexedJournalRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/indexed-journal-request-snapshot.js';
 import type { RepairMessage } from './anthropic-repair-source.js';
 
-type ChangedRow =
-  IndexedJournalRequestSnapshot['viewPlan']['changedSources'][number];
+type ChangedRow = NonNullable<
+  ReturnType<IndexedJournalRequestSnapshot['viewPlan']['changedSources']['at']>
+>;
 export interface AnthropicSourceChange {
   readonly row: ChangedRow;
   readonly oldStart: number;
@@ -15,7 +16,7 @@ export class AnthropicViewCoordinates {
   constructor(query: IndexedJournalRequestSnapshot, units: number) {
     const end = query.viewPlan.sourceVersion?.nextLabel ?? 1n;
     let delta = 0;
-    this.changes = query.viewPlan.changedSources.flatMap((row) => {
+    this.changes = [...query.viewPlan.changedSources].flatMap((row) => {
       if (row.entry.label >= end) return [];
       const oldStart = row.start - delta;
       delta += row.count - row.oldCount;

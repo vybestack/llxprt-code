@@ -55,10 +55,12 @@ export async function readAnthropicMediaLedger(
     throw new Error('Missing Anthropic unsupported-media facts');
   const ledger: UnsupportedMediaEntry[] = [];
   const changed = query.viewPlan.changedSources;
-  let change = 0;
+  const changes = changed[Symbol.iterator]();
+  let next = changes.next();
   const appendChanged = async (before: number): Promise<void> => {
-    while (change < changed.length && changed[change].start <= before) {
-      const row = changed[change++];
+    while (next.done !== true && next.value.start <= before) {
+      const row = next.value;
+      next = changes.next();
       for (let at = row.start; at < row.start + row.count; at++)
         ledger.push(...unsupported(await query.readAt(at), settings));
     }

@@ -6,7 +6,7 @@ import { normalizedRowLists } from '../../journal/normalizedRowOccurrences.js';
 import type { RowEntry } from '../../journal/rowEntry.js';
 import { plannedFromIds } from '../../journal/unitContributions.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
-import type { IndexedOverlayRow } from './journal-indexed-overlay.js';
+import type { PendingRequestOverlay } from './journal-indexed-overlay.js';
 import type { JournalTailSource } from './journal-tail-source.js';
 import { planSourceRowOccurrences } from './source-fact-planner.js';
 
@@ -39,7 +39,7 @@ export class JournalRequestOccurrences {
 
   private constructor(
     private readonly snapshot: VersionSnapshot,
-    private readonly rows: readonly IndexedOverlayRow[],
+    private readonly rows: PendingRequestOverlay,
     private readonly family: NormalizedFamily,
     private readonly kind: OccurrenceKind,
     private readonly id: string,
@@ -48,7 +48,7 @@ export class JournalRequestOccurrences {
   static async create(
     snapshot: VersionSnapshot,
     source: JournalTailSource,
-    rows: readonly IndexedOverlayRow[],
+    rows: PendingRequestOverlay,
     family: NormalizedFamily,
     kind: OccurrenceKind,
     id: string,
