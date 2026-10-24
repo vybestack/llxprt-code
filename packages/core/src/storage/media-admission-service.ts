@@ -180,7 +180,11 @@ function ownerIdFor(
   mediaIndex: number,
   contentId: string,
 ): string {
-  return historyOwnerIdFor(contentId, context.reservationOwnerScope);
+  return historyOwnerIdFor(
+    contentId,
+    context.reservationOwnerScope ??
+      JSON.stringify(['admission', context.source, context.turnId, mediaIndex]),
+  );
 }
 
 /** Content-derived durable reservation owner. Live history adopts and releases

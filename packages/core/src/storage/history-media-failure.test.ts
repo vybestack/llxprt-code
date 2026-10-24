@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { HistoryMediaOwnership } from './history-media-ownership.js';
 import { LocalMediaStore } from './local-media-store.js';
 import { RowOwnership } from '../recording/rowOwnership.js';
+import { MediaAdmissionService } from './media-admission-service.js';
 import type {
   IContent,
   MediaReferenceBlock,
@@ -62,6 +63,24 @@ describe('bounded media ownership', () => {
     await owner.releaseAll();
     await store.close();
     await rm(directory, { recursive: true, force: true });
+  });
+
+  it('keeps the history reservation when admission is released before replacement rollback', async () => {
+    const reference = await admit(1);
+    const admission = new MediaAdmissionService(store);
+    const context = { turnId: 'rollback', source: 'test' };
+    const rows = await admission.admitContents(
+      [{ speaker: 'human', blocks: [reference] }],
+      context,
+    );
+    await owner.reconcile([], () => rows);
+    await admission.releaseContents(rows, context);
+    const effect = owner.prepareReferenceReplacement([]);
+    await effect.publish();
+    await effect.rollback();
+    expect(await store.hasReservations(reference.contentId)).toBe(true);
+    await owner.releaseAll();
+    expect(await store.hasReservations(reference.contentId)).toBe(false);
   });
 
   describe.each(['addition', 'replacement'])('%s rollback releases', (kind) => {
