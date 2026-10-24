@@ -159,5 +159,3 @@ export {
   type ImportedSessionMediaPackage,
   type ValidatedSessionMediaPackage,
 } from './session-media-package.js';
-
-export { ResumeCursorBoot } from './resumeCursorBoot.js';

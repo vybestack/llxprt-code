@@ -7,7 +7,6 @@ import type { IContent } from '@vybestack/llxprt-code-core';
 import { createScrollbackPagerStore } from './scrollbackPager.js';
 import { streamHistoryItems } from '../../utils/streamHistoryItems.js';
 import type { HistoryItem } from '../../types.js';
-import { ResumeCursorBoot } from '../../../../../core/src/recording/resumeCursorBoot.js';
 
 function callId(index: number): string {
   if (index === 34) return 'missing';
@@ -129,23 +128,21 @@ async function initialJournalProjection(): Promise<{
     return start;
   });
   const initial: HistoryItem[] = [];
-  const boot = await ResumeCursorBoot.open(filePath, source.length, offset);
-  try {
-    for await (const item of streamHistoryItems(
-      boot.streamRows(),
-      undefined,
-      undefined,
-      {
-        sourceFor: (_row, index) => ({
-          kind: 'journal',
-          offset: offsets[index],
-        }),
-      },
-    ))
-      initial.push(item);
-  } finally {
-    await boot.close();
+  async function* fixtureRows(): AsyncGenerator<IContent> {
+    yield* source;
   }
+  for await (const item of streamHistoryItems(
+    fixtureRows(),
+    undefined,
+    undefined,
+    {
+      sourceFor: (_row, index) => ({
+        kind: 'journal',
+        offset: offsets[index],
+      }),
+    },
+  ))
+    initial.push(item);
   return { filePath, initial };
 }
 
