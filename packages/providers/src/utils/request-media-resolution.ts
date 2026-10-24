@@ -150,7 +150,10 @@ export async function resolveRequestMedia(
   throwIfAborted(signal);
   const aggregateBudgetBytes =
     media.aggregateBudgetBytes ?? DEFAULT_REQUEST_MEDIA_BUDGET_BYTES;
-  if (!containsReference(contents)) {
+  if (
+    !containsReference(contents) &&
+    (contents.length !== 0 || media.resolver === undefined)
+  ) {
     assertRequestMediaBudget(
       contents,
       turnIdentity(contents),

@@ -8,7 +8,10 @@ import {
   mediaBlockToAnthropicImage,
   mediaBlockToAnthropicDocument,
 } from './AnthropicHumanMessageConverter.js';
-import { anthropicWireMedia } from './anthropic-measured-media.js';
+import {
+  anthropicWireMedia,
+  anthropicWireMediaTurn,
+} from './anthropic-measured-media.js';
 import type { MediaStage } from './native-anthropic-media-stage.js';
 import type { ImageDimensionBudget } from '@vybestack/llxprt-code-tools/utils/imageDimensionBudget.js';
 import { sanitizeWireBlockImages } from './AnthropicImageSanitizer.js';
@@ -84,8 +87,15 @@ export async function* resolveAnthropicWireMedia(
       if (pending !== undefined)
         throw new Error('The media stage changed the number of rows');
       pending = piece;
+      const turnId =
+        typeof piece === 'string'
+          ? undefined
+          : mediaParts(piece)
+              .map(anthropicWireMediaTurn)
+              .find((turn) => turn !== undefined);
       yield {
         speaker: 'human',
+        metadata: turnId === undefined ? undefined : { turnId },
         blocks:
           typeof piece === 'string'
             ? []

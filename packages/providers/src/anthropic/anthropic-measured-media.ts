@@ -13,6 +13,12 @@ import type {
 
 const references = new WeakMap<MediaBlock, MediaReferenceBlock>();
 const wireMedia = new WeakMap<object, MediaBlock>();
+const mediaTurns = new WeakMap<MediaBlock, string>();
+
+export function anthropicWireMediaTurn(block: object): string | undefined {
+  const media = anthropicWireMedia(block);
+  return media === undefined ? undefined : mediaTurns.get(media);
+}
 
 export function anthropicWireMedia(block: object): MediaBlock | undefined {
   const source = 'source' in block ? block.source : block;
@@ -41,6 +47,8 @@ export function measurableAnthropicRow(row: IContent): IContent {
   return {
     ...row,
     blocks: row.blocks.map((block) => {
+      if (block.type === 'media' && typeof row.metadata?.turnId === 'string')
+        mediaTurns.set(block, row.metadata.turnId);
       if (block.type !== 'media' || block.encoding !== 'reference')
         return block;
       const inline: InlineMediaBlock = {
