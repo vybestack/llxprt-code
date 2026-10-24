@@ -393,6 +393,44 @@ describe('starting a new conversation session', () => {
     });
   }
 
+  it('releases the recorder even when both client and recorder retirement fail', async () => {
+    await withRecordedConversation(async (agent, oldPath) => {
+      const previous = clientOwner(agent).getAgentClient();
+      const disposeClient = previous.dispose.bind(previous);
+      const clientFailure = spyOn(previous, 'dispose').mockImplementationOnce(
+        async () => {
+          await disposeClient();
+          throw new Error('client retirement failed');
+        },
+      );
+      const disposeRecorder = RecordingService.prototype.dispose;
+      const recorderFailure = spyOn(
+        RecordingService.prototype,
+        'dispose',
+      ).mockImplementationOnce(async function (this: SessionRecordingPort) {
+        await disposeRecorder.call(this);
+        throw new Error('recorder retirement failed');
+      });
+      try {
+        await expect(agent.session.startNewSession()).rejects.toMatchObject({
+          errors: [
+            { message: 'client retirement failed' },
+            { message: 'recorder retirement failed' },
+          ],
+        });
+        const lock = await SessionLockManager.acquire(
+          join(oldPath, '..'),
+          await recordingSessionId(oldPath),
+        );
+        await lock.release();
+        await expect(drain(agent.stream('closed'))).rejects.toThrow('closed');
+      } finally {
+        clientFailure.mockRestore();
+        recorderFailure.mockRestore();
+      }
+    });
+  });
+
   it('leaves no prior conversation turns for the next model request', async () => {
     const afterReset = await withRecordedConversation(async (agent) => {
       await agent.session.startNewSession();

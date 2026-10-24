@@ -58,8 +58,14 @@ export async function startNewSessionTransition(
       await integration.subscribeToJournal(history, state.owner);
     }
     retirementStarted = true;
-    await state.retire();
-    await candidate.retire();
+    // Retire the history before detaching its recorder, otherwise detachment
+    // clones all live rows into an unlinked journal that retirement discards.
+    const retirementFailures: unknown[] = [];
+    await captureRollbackFailure(retirementFailures, () => candidate.retire());
+    await captureRollbackFailure(retirementFailures, () => state.retire());
+    if (retirementFailures.length === 1) throw retirementFailures[0];
+    if (retirementFailures.length > 1)
+      throw new AggregateError(retirementFailures, 'Session retirement failed');
     candidate.publish();
     if (ownsConfig) deps.config.adoptSessionId(nextSessionId);
     state.publish(nextSessionId, recording, integration);
