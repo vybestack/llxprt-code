@@ -85,15 +85,49 @@ function writeProjectSkill(workspace: string, name: string): void {
   );
 }
 
+interface InstalledExtension {
+  readonly name: string;
+  readonly skillName: string;
+}
+
+function installUserExtensionWithSkill(
+  dataHome: string,
+  { name: extensionName, skillName }: InstalledExtension,
+): void {
+  const extensionDir = path.join(dataHome, 'extensions', extensionName);
+  const skillDir = path.join(extensionDir, 'skills', skillName);
+  mkdirSync(skillDir, { recursive: true });
+  writeFileSync(
+    path.join(extensionDir, 'llxprt-extension.json'),
+    JSON.stringify({ name: extensionName, version: '1.0.0' }),
+  );
+  writeFileSync(
+    path.join(skillDir, 'SKILL.md'),
+    [
+      '---',
+      `name: ${skillName}`,
+      `description: Description of ${skillName}`,
+      '---',
+      '',
+      'Body.',
+      '',
+    ].join('\n'),
+  );
+}
+
 async function runSkillsList(
   workspace: string,
   userSettings: Record<string, unknown>,
+  installedExtension?: InstalledExtension,
 ): Promise<SkillsListRun> {
   const home = makeTempDir('skills-list-home-');
   const configHome = makeTempDir('skills-list-cfg-');
   const dataHome = makeTempDir('skills-list-data-');
   const cacheHome = makeTempDir('skills-list-cache-');
   const logHome = makeTempDir('skills-list-log-');
+  if (installedExtension !== undefined) {
+    installUserExtensionWithSkill(dataHome, installedExtension);
+  }
   // The `skills` subcommand is only registered when experimental skills are on.
   writeFileSync(
     path.join(configHome, 'settings.json'),
@@ -125,6 +159,11 @@ async function runSkillsList(
   ]);
   return { stdout, stderr, exitCode };
 }
+
+const ALPHA_EXTENSION: InstalledExtension = {
+  name: 'alpha',
+  skillName: 'alpha-skill',
+};
 
 function describeRun(run: SkillsListRun): string {
   return `exit ${run.exitCode}\nstdout:\n${run.stdout}\nstderr:\n${run.stderr}`;
@@ -173,6 +212,30 @@ describe('llxprt skills list (real CLI entry)', () => {
     const run = await runSkillsList(workspace, {});
 
     expect(run.exitCode).toBe(0);
+    expect(run.stdout).toContain('No skills discovered.');
+  }, 120_000);
+
+  it('lists a skill that belongs to an enabled extension', async () => {
+    const workspace = realpathSync(makeTempDir('skills-list-ws-'));
+
+    const run = await runSkillsList(workspace, {}, ALPHA_EXTENSION);
+
+    expect(run.exitCode).toBe(0);
+    expect(run.stdout).toContain('alpha-skill');
+    expect(run.stdout).toContain('[Extension]');
+  }, 120_000);
+
+  it('omits the skills of an extension named in extensions.disabled', async () => {
+    const workspace = realpathSync(makeTempDir('skills-list-ws-'));
+
+    const run = await runSkillsList(
+      workspace,
+      { extensions: { disabled: ['alpha'] } },
+      ALPHA_EXTENSION,
+    );
+
+    expect(run.exitCode).toBe(0);
+    expect(run.stdout).not.toContain('alpha-skill');
     expect(run.stdout).toContain('No skills discovered.');
   }, 120_000);
 });

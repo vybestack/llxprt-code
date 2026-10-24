@@ -68,6 +68,7 @@ export async function handleList(showAll = false) {
   const settings = loadSettings(workspaceDir);
   const extensionEnablementManager = new ExtensionEnablementManager(
     workspaceDir,
+    { disabled: settings.merged.extensions.disabled },
   );
   const extensions = loadExtensions(extensionEnablementManager, workspaceDir);
   const argv = { debug: false } as Partial<CliArgs> as CliArgs;
