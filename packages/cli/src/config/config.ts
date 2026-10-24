@@ -29,6 +29,10 @@ import process from 'node:process';
 import { type CliArgs } from './cliArgParser.js';
 import type { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 import { resolveMcpServers } from './mcpServerConfig.js';
+import {
+  resolveDeclarativeCliConfig,
+  type DeclarativeCliConfig,
+} from './declarativeCliConfig.js';
 import { loadSandboxConfig } from './sandboxConfig.js';
 import {
   loadSettings,
@@ -38,21 +42,13 @@ import {
 
 // @plan:PLAN-20251020-STATELESSPROVIDER3.P04
 import {
-  parseBootstrapArgs,
   prepareRuntimeForProfile,
+  type ParsedBootstrapArgs,
 } from './profileBootstrap.js';
 
-import { resolveApprovalMode } from './approvalModeResolver.js';
-import { buildConfig, resolveProxy } from './configBuilder.js';
-import { loadEnvironment } from './environmentLoader.js';
-import { resolveContextAndEnvironment } from './interactiveContext.js';
-import { resolveIntermediateConfig } from './intermediateConfig.js';
+import { buildConfig } from './configBuilder.js';
 import { finalizeConfig } from './postConfigRuntime.js';
-import {
-  loadAndPrepareProfile,
-  resolveProfileToLoad,
-  type ProfileLoadResult,
-} from './profileResolution.js';
+import type { ProfileLoadResult } from './profileResolution.js';
 import { resolveProviderAndModel } from './providerModelResolver.js';
 
 type ConfigBuildPieces = {
@@ -88,68 +84,35 @@ import type { ContextResolutionResult } from './interactiveContext.js';
 
 // ─── Orchestrator ────────────────────────────────────────────────────────────
 
-/** Steps 1-3: Bootstrap runtime and resolve profile */
-async function bootstrapAndLoadProfile(
-  settings: Settings,
-  argv: CliArgs,
+/** Step 2: Bootstrap the provider runtime for the already-resolved profile */
+async function acquirePreflight(
+  bootstrap: ParsedBootstrapArgs,
   preflight: AgentProfilePreflight | undefined,
   settingsService: SettingsService | undefined,
   authority: CredentialAuthority | undefined,
   contributions: ProviderContributionRegistry | undefined,
   onPreflightReady: ((operation: AgentProfilePreflight) => void) | undefined,
-) {
-  const bootstrapParsed = parseBootstrapArgs();
-  const parsedWithOverrides = {
-    bootstrapArgs: bootstrapParsed.bootstrapArgs,
-    runtimeMetadata: {
-      ...bootstrapParsed.runtimeMetadata,
-      proxy: resolveProxy(argv.proxy),
-    },
-  };
-  const bootstrapArgs = parsedWithOverrides.bootstrapArgs;
+): Promise<AgentProfilePreflight> {
   const runtimeState =
     preflight ??
     (await prepareRuntimeForProfile(
-      parsedWithOverrides,
+      bootstrap,
       authority,
       settingsService,
       undefined,
       contributions,
     ));
   onPreflightReady?.(runtimeState);
-
-  const { profileToLoad, profileExplicitlySpecified } = resolveProfileToLoad({
-    bootstrapArgs,
-    settings,
-    cliProvider: argv.provider,
-  });
-  const profileResult = await loadAndPrepareProfile({
-    bootstrapArgs,
-    settings,
-    argv,
-    profileToLoad,
-    profileExplicitlySpecified,
-  });
-  return { bootstrapArgs, runtimeState, profileResult };
+  return runtimeState;
 }
 
-/** Steps 7-8: Resolve approval mode and provider/model, sync to SettingsService */
-function resolveApprovalAndProvider(
+/** Step 8: Resolve provider/model, sync to SettingsService */
+function resolveProviderModelSelection(
   argv: CliArgs,
   profileMergedSettings: MergedSettings,
-  context: ContextResolutionResult,
   profileResult: ProfileLoadResult,
   runtimeState: AgentProfilePreflight,
 ) {
-  const securitySettings = (profileMergedSettings as Partial<MergedSettings>)
-    .security;
-  const approvalMode = resolveApprovalMode({
-    cliApprovalMode: argv.approvalMode,
-    cliYolo: argv.yolo,
-    disableYoloMode: securitySettings?.disableYoloMode,
-    secureModeEnabled: profileMergedSettings.admin?.secureModeEnabled,
-    trustedFolder: context.trustedFolder,
-  });
   const providerModel = resolveProviderAndModel({
     cliProvider: argv.provider,
     profileProvider: profileResult.profileProvider,
@@ -171,7 +134,7 @@ function resolveApprovalAndProvider(
       providerModel.model,
     );
   }
-  return { approvalMode, providerModel };
+  return providerModel;
 }
 
 function applyStartupMcpProfileOverrides(
@@ -200,42 +163,27 @@ function applyStartupMcpProfileOverrides(
 async function resolveConfigBuildPieces(
   argv: CliArgs,
   settings: Settings,
-  profileMergedSettings: MergedSettings,
-  profileResult: ProfileLoadResult,
+  declarative: DeclarativeCliConfig,
   runtimeState: AgentProfilePreflight,
   cwd: string,
-  extensions: LlxprtExtension[],
-  extensionEnablementManager: ExtensionEnablementManager,
 ): Promise<ConfigBuildPieces> {
-  const context = resolveContextAndEnvironment({
-    argv,
-    profileMergedSettings,
-    originalSettings: settings,
-    cwd,
-    extensions,
-    extensionEnablementManager,
-  });
+  const {
+    context,
+    profileResult,
+    mcpServers,
+    blockedMcpServers,
+    approvalMode,
+    intermediate,
+  } = declarative;
+  const profileMergedSettings = profileResult.profileMergedSettings;
   const memoryContent = '';
   const fileCount = 0;
   const filePaths: string[] = [];
-  const { mcpServers, blockedMcpServers } = resolveMcpServers(
-    profileMergedSettings,
-    context,
-    argv.allowedMcpServerNames,
-  );
-  const { approvalMode, providerModel } = resolveApprovalAndProvider(
+  const providerModel = resolveProviderModelSelection(
     argv,
     profileMergedSettings,
-    context,
     profileResult,
     runtimeState,
-  );
-  const intermediate = await resolveIntermediateConfig(
-    argv,
-    settings,
-    profileMergedSettings,
-    context,
-    approvalMode,
   );
   const sandboxConfig = await loadSandboxConfig(profileMergedSettings, argv);
   const reloadMcpServers = async () => {
@@ -337,28 +285,31 @@ export async function loadCliConfig(
   onProviderSwitchReady?: (switchProvider: ProviderSwitcher) => void,
   onPreflightReady?: (operation: AgentProfilePreflight) => void,
 ): Promise<Config> {
-  loadEnvironment();
-  const { bootstrapArgs, runtimeState, profileResult } =
-    await bootstrapAndLoadProfile(
-      settings,
-      argv,
-      preflight,
-      settingsService,
-      authority,
-      contributions,
-      onPreflightReady,
-    );
+  const declarative = await resolveDeclarativeCliConfig({
+    settings,
+    argv,
+    cwd,
+    extensions,
+    extensionEnablementManager,
+  });
+  const { bootstrap, profileResult } = declarative;
+  const bootstrapArgs = bootstrap.bootstrapArgs;
   const profileMergedSettings = profileResult.profileMergedSettings;
+  const runtimeState = await acquirePreflight(
+    bootstrap,
+    preflight,
+    settingsService,
+    authority,
+    contributions,
+    onPreflightReady,
+  );
 
   const pieces = await resolveConfigBuildPieces(
     argv,
     settings,
-    profileMergedSettings,
-    profileResult,
+    declarative,
     runtimeState,
     cwd,
-    extensions,
-    extensionEnablementManager,
   );
   // The Config must bind to the SAME SettingsService the bootstrap runtime
   // registered — Config construction never adopts ambient state (issue #2300).
