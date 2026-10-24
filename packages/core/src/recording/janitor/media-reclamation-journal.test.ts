@@ -11,7 +11,7 @@ import { HistoryService } from '../../services/history/HistoryService.js';
 import { JournalSession } from '../../services/history/journalSession.js';
 import { HistoryMediaOwnership } from '../../storage/history-media-ownership.js';
 import { LocalMediaStore } from '../../storage/local-media-store.js';
-import { SessionPersistenceService } from '../../storage/SessionPersistenceService.js';
+
 type HistoryBackend = 'journal';
 
 import {
@@ -89,12 +89,7 @@ describe('validated journal media ownership without persisted snapshots', () => 
         mediaStore: store,
       });
       const history = new HistoryService();
-      const persistence = new SessionPersistenceService(
-        { projectRoot: directory(), chatsDir: chatsDir() },
-        'media-turn',
-        { mediaStore: store },
-      );
-      const integration = new RecordingIntegration(recording, persistence);
+      const integration = new RecordingIntegration(recording);
       let file: string;
       try {
         await history.registerMediaOwner(new HistoryMediaOwnership(store));

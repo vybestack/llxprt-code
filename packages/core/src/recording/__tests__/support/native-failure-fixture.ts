@@ -114,7 +114,7 @@ export function useNativeFailureIntegration(): () => NativeFailureFixture {
     });
     const history = new HistoryService({});
     const reports = join(directory(), 'reports');
-    const integration = new RecordingIntegration(recording, undefined, reports);
+    const integration = new RecordingIntegration(recording, reports);
     fixture = {
       history,
       recording,

@@ -765,14 +765,13 @@ function rawResumeContext(
   if (!mediaStore) throw new Error('CLI session media store is unavailable');
   return {
     mediaStore,
-    resumeContext: buildResumeContext(deps, config, persistence, mediaStore),
+    resumeContext: buildResumeContext(deps, config, mediaStore),
   };
 }
 
 function buildResumeContext(
   deps: SlashCommandHandlerDeps,
   config: CliUiRuntime,
-  persistence: CliSessionPersistencePort,
   mediaStore: LocalMediaStore,
 ): ResumeContext {
   return {
@@ -784,7 +783,6 @@ function buildResumeContext(
     workspaceDirs: [...config.directories()],
     mediaStore,
     maxQueueBytes: config.getSessionRecordingQueueByteLimit(),
-    persistenceFactory: (sessionId) => persistence.forRecording(sessionId),
     recordingCallbacks: deps.recordingSwapCallbacks!,
     historyService: requireSessionAgent(
       deps.commandContext,

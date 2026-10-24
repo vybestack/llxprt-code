@@ -52,10 +52,7 @@ export async function startNewSessionTransition(
         mediaStore: deps.mediaStore,
         maxQueueBytes: deps.readRecordingQueueLimit(),
       });
-      integration = new RecordingIntegration(
-        recording,
-        deps.persistence.forRecording(nextSessionId),
-      );
+      integration = new RecordingIntegration(recording);
       const history = candidate.client.getHistoryService();
       if (history === null)
         throw new Error('New session client has no history service');

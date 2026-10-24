@@ -32,10 +32,7 @@ export async function adoptSessionResume(
   discardOnFailure = false,
 ): Promise<void> {
   const client = deps.resolveClient();
-  const integration = new RecordingIntegration(
-    result.recording,
-    deps.persistence.forRecording(result.recording.getSessionId()),
-  );
+  const integration = new RecordingIntegration(result.recording);
   let adoptionAttempted = false;
   let restorePublication: (() => void) | undefined;
   try {

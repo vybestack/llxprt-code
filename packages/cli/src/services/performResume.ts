@@ -39,7 +39,6 @@ import {
   type UnreadableRecording,
   type IContent,
   type SessionRecordingPort,
-  type SessionPersistenceService,
   type LockHandle,
   type SessionMetadata,
   type SessionSummary,
@@ -78,7 +77,6 @@ export interface ResumeContext {
   mediaStore?: LocalMediaStore;
   maxQueueBytes?: number;
   counters?: JournalReadCounters;
-  persistenceFactory?: (sessionId: string) => SessionPersistenceService;
   recordingCallbacks: RecordingSwapCallbacks;
   historyService?: HistoryService | null;
   adoptSessionId?: (sessionId: string) => void;
@@ -230,10 +228,7 @@ async function commitResumeBoot(
   const oldIntegration = callbacks.getCurrentIntegration();
   const oldLock = callbacks.getCurrentLockHandle();
   const oldMetadata = callbacks.getCurrentMetadata();
-  const integration = new RecordingIntegration(
-    result.recording,
-    context.persistenceFactory?.(result.recording.getSessionId()),
-  );
+  const integration = new RecordingIntegration(result.recording);
   let warnings: string[] = [];
   try {
     const publish = async (): Promise<void> => {

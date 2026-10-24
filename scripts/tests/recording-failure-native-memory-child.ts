@@ -78,11 +78,7 @@ const recording = JournalRecordingService.create({
   },
 });
 const history = new HistoryService({ backend: 'journal' });
-const integration = new RecordingIntegration(
-  recording,
-  undefined,
-  join(root, 'reports'),
-);
+const integration = new RecordingIntegration(recording, join(root, 'reports'));
 try {
   await integration.subscribeToJournal(history);
   history.add({

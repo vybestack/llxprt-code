@@ -395,10 +395,7 @@ function activateRecording(
   bootstrapSelection: BootstrapSelection | null,
   sessionPersistence: CliSessionPersistence,
 ): RecordingIntegration {
-  const integration = new RecordingIntegration(
-    recordingService,
-    sessionPersistence.forRecording(recordingService.getSessionId()),
-  );
+  const integration = new RecordingIntegration(recordingService);
   registerRecordingCleanup(
     integration,
     recordingService,

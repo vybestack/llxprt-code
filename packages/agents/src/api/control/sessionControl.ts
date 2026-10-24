@@ -894,10 +894,7 @@ export class SessionControl implements AgentSessionControl {
     );
     // The integration attaches to the journal, which seeds the new recording
     // from the durable history rows; no history array is read here.
-    const integration = new RecordingIntegration(
-      service,
-      this.deps.persistence.forRecording(service.getSessionId()),
-    );
+    const integration = new RecordingIntegration(service);
     try {
       const subscribed = await this.attachHistory(integration);
       await service.flush();

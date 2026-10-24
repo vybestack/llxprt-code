@@ -15,9 +15,9 @@
  */
 
 import type { HistoryService } from '../services/history/HistoryService.js';
-import { isJsonlRecorder } from '../services/history/recorderBackend.js';
+
 import type { SessionRecordingPort } from './recordingPort.js';
-import type { SessionPersistenceService } from '../storage/SessionPersistenceService.js';
+
 import {
   RecordingFailureStore,
   RecordingFailureNotice,
@@ -39,7 +39,6 @@ export class RecordingIntegration {
   private readonly recording: SessionRecordingPort;
   private historySubscription: (() => void) | null = null;
   private disposed = false;
-  private readonly persistence: SessionPersistenceService | undefined;
   private readonly pendingPersistence = new Map<number, Promise<void>>();
   private readonly persistenceFailures: RecordingFailureStore;
   private nextPersistenceGeneration = 0;
@@ -98,11 +97,9 @@ export class RecordingIntegration {
 
   constructor(
     recording: SessionRecordingPort,
-    persistence?: SessionPersistenceService,
     failureReportDirectory?: string,
   ) {
     this.recording = recording;
-    this.persistence = persistence;
     this.persistenceFailures = new RecordingFailureStore(
       failureReportDirectory,
     );
@@ -113,11 +110,6 @@ export class RecordingIntegration {
     const save = (async () => {
       await history.waitForCommit();
       await this.recording.flush();
-      // A journal recorder's file is the durable record; the whole-session JSON
-      // snapshot is only written for the JSONL recorder (#854 G7, W19).
-      const file = this.recording.getFilePath();
-      if (file !== null && isJsonlRecorder(this.recording))
-        await this.persistence?.saveJournal(file);
       return { failed: false };
     })().catch((error: unknown) => {
       const cause =

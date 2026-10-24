@@ -2,10 +2,8 @@
 import { join } from 'node:path';
 import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import { HistoryMediaOwnership } from '@vybestack/llxprt-code-core/storage/history-media-ownership.js';
-import { Storage } from '@vybestack/llxprt-code-settings';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { createRowCounters } from '@vybestack/llxprt-code-core/recording/journalCounters.js';
-import { SessionPersistenceService } from '@vybestack/llxprt-code-core/storage/SessionPersistenceService.js';
 import type { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import {
   withRecordingFailureReport,
@@ -115,16 +113,6 @@ export class MemoryCommand {
       workspaceDirs: [],
       historyService: this.history,
       counters: this.counters.counters,
-      persistenceFactory: (sessionId) => {
-        const storage = new Storage(directory);
-        return new SessionPersistenceService(
-          {
-            projectRoot: storage.getProjectRoot(),
-            chatsDir: storage.getProjectChatsDir(),
-          },
-          sessionId,
-        );
-      },
       recordingCallbacks: {
         getCurrentRecording: () => this.recording,
         getCurrentIntegration: () => this.integration,

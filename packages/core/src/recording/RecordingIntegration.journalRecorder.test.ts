@@ -85,7 +85,7 @@ describe('RecordingIntegration over a journal recorder', () => {
 
   it('does not write the per-turn JSON snapshot for a journal recorder', async () => {
     const saving = persistence();
-    integration = new RecordingIntegration(recorder, saving);
+    integration = new RecordingIntegration(recorder);
     await integration.subscribeToJournal(history);
 
     for (let turn = 0; turn < 4; turn++) {

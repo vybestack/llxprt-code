@@ -17,7 +17,7 @@ import {
   stageRecordedMedia,
 } from './recorded-media-transfer.js';
 import * as fs from 'node:fs';
-import { saveJournalSnapshot } from './journal-persistence-snapshot.js';
+
 import { saveSessionRowSnapshot } from './session-row-snapshot.js';
 import {
   reservePersistenceMedia,
@@ -298,25 +298,6 @@ export class SessionPersistenceService {
           }
         },
         observePendingRow,
-      );
-    } finally {
-      this.finishPreparedSave(undefined);
-    }
-  }
-
-  async saveJournal(journal: string): Promise<void> {
-    await this.acquireTransaction();
-    try {
-      await saveJournalSnapshot(
-        journal,
-        this.sessionFilePath,
-        this.buildSession(
-          ++this.nextGeneration,
-          [],
-          undefined,
-          undefined,
-          new Date().toISOString(),
-        ),
       );
     } finally {
       this.finishPreparedSave(undefined);
