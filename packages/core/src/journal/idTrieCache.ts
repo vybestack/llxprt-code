@@ -17,6 +17,7 @@ export const ID_NODE_CACHE_ENTRY_OVERHEAD = 48;
  * really keeps.
  */
 export interface IdNodeCache {
+  selectRoot(root: number): void;
   get(offset: number): Uint8Array | undefined;
   put(offset: number, kindHeader: Uint8Array, shallow?: boolean): void;
   /** Bytes charged to the entries held now. */
@@ -30,8 +31,17 @@ export class BoundedIdNodeCache implements IdNodeCache {
   private readonly nodes = new Map<number, Uint8Array>();
   private readonly shallowNodes = new Map<number, Uint8Array>();
   private charged = 0;
+  private root: number | undefined;
 
   constructor(readonly capBytes: number = ID_NODE_CACHE_BYTES) {}
+
+  selectRoot(root: number): void {
+    if (this.root === root) return;
+    this.root = root;
+    for (const [offset, node] of this.shallowNodes)
+      this.nodes.set(offset, node);
+    this.shallowNodes.clear();
+  }
 
   get bytes(): number {
     return this.charged;
@@ -54,11 +64,18 @@ export class BoundedIdNodeCache implements IdNodeCache {
   }
 
   put(offset: number, kindHeader: Uint8Array, shallow = false): void {
-    if (this.nodes.has(offset) || this.shallowNodes.has(offset)) return;
-    const cost = kindHeader.length + ID_NODE_CACHE_ENTRY_OVERHEAD;
-    if (cost > this.capBytes) return;
-    (shallow ? this.shallowNodes : this.nodes).set(offset, kindHeader);
-    this.charged += cost;
+    if (this.shallowNodes.has(offset)) return;
+    const existing = this.nodes.get(offset);
+    if (existing !== undefined) {
+      if (!shallow) return;
+      this.nodes.delete(offset);
+      this.shallowNodes.set(offset, existing);
+    } else {
+      const cost = kindHeader.length + ID_NODE_CACHE_ENTRY_OVERHEAD;
+      if (cost > this.capBytes) return;
+      (shallow ? this.shallowNodes : this.nodes).set(offset, kindHeader);
+      this.charged += cost;
+    }
     for (const [previousOffset, previous] of this.shallowNodes) {
       if (this.shallowNodes.size <= 1 + 16 + 16 * 16) break;
       this.shallowNodes.delete(previousOffset);

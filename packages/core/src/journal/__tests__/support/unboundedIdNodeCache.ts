@@ -12,6 +12,7 @@ export class UnboundedIdNodeCache implements IdNodeCache {
   private readonly nodes = new Map<number, Uint8Array>();
   bytes = 0;
   readonly capBytes = Number.POSITIVE_INFINITY;
+  selectRoot = (_root: number): void => undefined;
 
   get entries(): number {
     return this.nodes.size;

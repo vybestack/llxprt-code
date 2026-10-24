@@ -28,8 +28,13 @@ export class IdTrieReader {
 
   /** The node at `offset`: from the cache, or one `pread` (a second for a very large leaf). */
   async readNode(offset: number, depth = 3): Promise<IdTrieNode> {
+    if (depth === 0) this.cache.selectRoot(offset);
     const cached = this.cache.get(offset);
-    if (cached !== undefined) return decodeIdTrieNode(cached);
+    if (cached !== undefined) {
+      const node = decodeIdTrieNode(cached);
+      this.cache.put(offset, cached, depth < 3 && node.kind === 'internal');
+      return node;
+    }
     const head = await this.access.readRecordHead(
       offset,
       'ITNODE',
