@@ -39,10 +39,6 @@ import {
   ReplaceTransactionFold,
   type OpenReplaceTransaction,
 } from './replaceTransaction.js';
-import type {
-  CheckpointSource,
-  DurableFoldCheckpoint,
-} from './durableFoldCheckpoint.js';
 
 export class UnsupportedDurableFoldEvent extends Error {
   constructor(readonly eventType: string) {
@@ -111,19 +107,12 @@ export interface DurableRowFoldOptions {
   readonly projectionPath?: string;
   readonly pinnedJournal?: PinnedFile;
   readonly pinnedProjection?: PinnedFile;
-  /** Standing state that lets a pinned fold scan only the appended tail. */
-  readonly checkpoint?: DurableFoldCheckpoint;
   readonly signal?: AbortSignal;
   /**
    * Leave a transaction that is still open at the watermark un-abandoned, with
    * its rows in the directory, for a caller that folds pending records next.
    */
   readonly keepOpenTransaction?: boolean;
-  /**
-   * Numbers the origin of every row the fold produces. A fold that resumes
-   * from a checkpoint numbers them with the checkpoint's own dictionary, so
-   * pass that one. Without it every row is unowned.
-   */
   readonly origins?: RowOriginDictionary;
 }
 
@@ -521,37 +510,6 @@ async function openProjection(
   return io(await fs.open(options.projectionPath, 'r'));
 }
 
-interface BoundCheckpoint {
-  readonly checkpoint: DurableFoldCheckpoint;
-  readonly source: CheckpointSource;
-}
-
-/** The checkpoint binding for a fold whose journal and prefix are pinned, if any. */
-function bindCheckpoint(
-  options: DurableRowFoldOptions,
-  journal: ResolverFileHandle,
-  boundary: number,
-  projection: ResolverFileHandle | undefined,
-): BoundCheckpoint | null {
-  const { checkpoint, pinnedJournal } = options;
-  if (checkpoint === undefined || pinnedJournal === undefined) return null;
-  let projectionIdentity = 'none';
-  if (boundary > 0 && projection !== undefined) {
-    if (options.pinnedProjection === undefined) return null;
-    projectionIdentity = options.pinnedProjection.identity;
-  }
-  return {
-    checkpoint,
-    source: {
-      journal: pinnedJournal.identity,
-      projection: projectionIdentity,
-      boundary,
-      handle: journal,
-      scratchRoot: options.scratchRoot,
-    },
-  };
-}
-
 function foldParameters(options: DurableRowFoldOptions): {
   readonly boundary: number;
   readonly chunkBytes: number;
@@ -595,26 +553,21 @@ async function buildFold(
   const density = new DurableDensityIndex(options.scratchRoot);
   resources.density = density;
   const projectionBytes = projection ? (await projection.stat()).size : 0;
-  const bound = bindCheckpoint(options, journal, boundary, projection);
-  const origins = bound?.checkpoint.origins ?? options.origins;
-  const resumed =
-    (await bound?.checkpoint.restore(bound.source, options.maxBytes)) ?? null;
-  const directory =
-    resumed?.directory ?? new MutableRowDirectory(options.scratchRoot);
+  const origins = options.origins;
+  const directory = new MutableRowDirectory(options.scratchRoot);
   resources.directory = directory;
-  if (resumed === null)
-    await scanRestoredPrefix(
-      directory,
-      staged,
-      density,
-      journal,
-      projection,
-      boundary,
-      projectionBytes,
-      chunkBytes,
-      origins,
-      options.signal,
-    );
+  await scanRestoredPrefix(
+    directory,
+    staged,
+    density,
+    journal,
+    projection,
+    boundary,
+    projectionBytes,
+    chunkBytes,
+    origins,
+    options.signal,
+  );
   const tx = new ReplaceTransactionFold();
   for await (const line of scanResolverLines(
     journal,
@@ -623,7 +576,7 @@ async function buildFold(
     options.maxBytes,
     false,
     density,
-    resumed?.watermark ?? boundary,
+    boundary,
     options.signal,
   ))
     foldLine(
@@ -635,11 +588,7 @@ async function buildFold(
       'durable',
       origins?.idOf(lineOrigin(line)),
     );
-  // A checkpoint resumes mid-file without the open transaction, so it is only
-  // saved when no transaction is open at the watermark.
   const openTransaction = tx.open;
-  if (resumed?.watermark !== options.maxBytes && openTransaction === null)
-    await bound?.checkpoint.save(bound.source, options.maxBytes, directory);
   if (options.keepOpenTransaction !== true)
     tx.abandon(directoryRowStore(directory));
   const densityMetrics = density.metrics();
@@ -659,7 +608,6 @@ async function buildFold(
 
 /**
  * Scan a durable byte prefix in <=64KiB reads without hydrating history rows.
- * With a checkpoint, only the bytes appended since the last fold are scanned.
  */
 export async function foldDurableRows(
   options: DurableRowFoldOptions,

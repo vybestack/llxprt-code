@@ -6,9 +6,11 @@
 
 import {
   getProjectHash,
-  SessionRecordingService,
+  RecordingIntegration,
   type IContent,
 } from '@vybestack/llxprt-code-core';
+import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { Storage } from '@vybestack/llxprt-code-storage';
 
 const SESSION_BROWSER_RESIZE_SESSION_ID =
@@ -35,7 +37,7 @@ function content(speaker: IContent['speaker'], text: string): IContent {
 export async function seedSessionBrowserResize(
   options: SessionBrowserResizeSeedOptions,
 ): Promise<void> {
-  const recording = await SessionRecordingService.createLocked({
+  const recording = await JournalRecordingService.createLocked({
     sessionId: SESSION_BROWSER_RESIZE_SESSION_ID,
     projectHash: getProjectHash(options.projectRoot),
     chatsDir: options.chatsDir,
@@ -45,12 +47,25 @@ export async function seedSessionBrowserResize(
     model: 'fake-model',
   });
 
+  const history = new HistoryService();
+  const integration = new RecordingIntegration(recording);
   try {
-    recording.recordContent(content('human', 'seed isolated resize session'));
-    recording.recordContent(content('ai', 'isolated resize session ready'));
-    await recording.flush();
+    await integration.subscribeToJournal(history);
+    await history.addBatch([
+      content('human', 'seed isolated resize session'),
+      content('ai', 'isolated resize session ready'),
+    ]);
+    await integration.flushAtTurnBoundary();
   } finally {
-    await recording.dispose();
+    try {
+      await integration.dispose();
+    } finally {
+      try {
+        await history.dispose();
+      } finally {
+        await recording.dispose();
+      }
+    }
   }
 }
 

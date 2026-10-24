@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { mkdtemp, stat } from 'node:fs/promises';
+import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -7,7 +7,6 @@ import {
   type IContent,
   type SessionRecordingPort,
 } from '@vybestack/llxprt-code-core';
-import { isJsonlRecorder } from '@vybestack/llxprt-code-core/services/history/recorderBackend.js';
 import { openJournalReadOnly } from '@vybestack/llxprt-code-core/journal/journalReader.js';
 import {
   iterateRowEntries,
@@ -15,7 +14,6 @@ import {
 } from '@vybestack/llxprt-code-core/journal/rowTreeReader.js';
 import { readStoredRow } from '@vybestack/llxprt-code-core/journal/rowReads.js';
 import { decodeStoredRow } from '@vybestack/llxprt-code-core/services/history/journalRowCodec.js';
-import { foldDurableRows } from '@vybestack/llxprt-code-core/recording/durableRowFold.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { withPublicHistory } from '../../../../agents/src/api/__tests__/helpers/public-history-fixture.js';
@@ -47,26 +45,13 @@ export async function* recordedChatRows(
   await recording.flush();
   const file = recording.getFilePath();
   if (file === null) throw new Error('Missing recording path');
-  if (!isJsonlRecorder(recording)) {
-    const session = await openJournalReadOnly(file);
-    try {
-      const root = rowTreeRootOf(session.trailer);
-      if (root === undefined) return;
-      yield* readRecordedRows(session, root);
-    } finally {
-      await session.close();
-    }
-    return;
-  }
-  const fold = await foldDurableRows({
-    filePath: file,
-    maxBytes: (await stat(file)).size,
-  });
+  const session = await openJournalReadOnly(file);
   try {
-    for (let index = 0; index < fold.length; index++)
-      yield await fold.readRow(index);
+    const root = rowTreeRootOf(session.trailer);
+    if (root === undefined) return;
+    yield* readRecordedRows(session, root);
   } finally {
-    await fold.close();
+    await session.close();
   }
 }
 
