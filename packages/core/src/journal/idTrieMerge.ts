@@ -279,6 +279,99 @@ async function mergeInternal(
   );
 }
 
+function isEntryArray(
+  entries: Iterable<IdEntry> | AsyncIterable<IdEntry>,
+): entries is readonly IdEntry[] {
+  return Array.isArray(entries);
+}
+
+function unionEntries(
+  existing: readonly IdEntry[],
+  updates: readonly IdEntry[],
+): IdEntry[] {
+  const merged: IdEntry[] = [];
+  let current = 0;
+  let pending = 0;
+  while (current < existing.length && pending < updates.length) {
+    const order = compareIdHashes(
+      existing[current].hash,
+      updates[pending].hash,
+    );
+    if (order < 0) merged.push(existing[current++]);
+    else {
+      current += Number(order === 0);
+      merged.push(updates[pending++]);
+    }
+  }
+  merged.push(...existing.slice(current), ...updates.slice(pending));
+  return merged;
+}
+
+async function mergeArrayNode(
+  context: MergeContext,
+  offset: number,
+  depth: number,
+  updates: readonly IdEntry[],
+): Promise<number> {
+  if (updates.length === 0) return offset;
+  if (offset !== 0 && context.reader === undefined)
+    throw new JournalFormatError(
+      'Merging into an existing trie needs a reader',
+    );
+  const node =
+    offset === 0 ? undefined : await context.reader?.readNode(offset);
+  const entries =
+    node?.kind === 'leaf' ? unionEntries(node.entries, updates) : updates;
+  if (node?.kind !== 'internal' && entries.length <= ID_TRIE_LEAF_CAPACITY) {
+    if (node !== undefined && sameFacts(entries, node.entries)) return offset;
+    return context.appender.append(encodeIdTrieNode({ kind: 'leaf', entries }));
+  }
+  if (depth >= ID_TRIE_MAX_DEPTH)
+    throw new JournalFormatError(
+      `More than ${ID_TRIE_LEAF_CAPACITY} distinct hashes share all ${ID_TRIE_MAX_DEPTH} nibbles`,
+    );
+  return mergeArrayChildren(context, offset, depth, entries, node);
+}
+
+async function mergeArrayChildren(
+  context: MergeContext,
+  offset: number,
+  depth: number,
+  entries: readonly IdEntry[],
+  node: Awaited<ReturnType<IdTrieReader['readNode']>> | undefined,
+): Promise<number> {
+  const children: number[] = [];
+  let bitmap = 0;
+  let at = 0;
+  let slot = 0;
+  let changed = false;
+  for (let nibble = 0; nibble < ID_TRIE_FANOUT; nibble++) {
+    const start = at;
+    while (at < entries.length && nibbleAt(entries[at].hash, depth) === nibble)
+      at++;
+    const present =
+      node?.kind === 'internal' && (node.bitmap & (1 << nibble)) !== 0;
+    const previous = present ? node.children[slot++] : 0;
+    if (!present && at === start) continue;
+    const next =
+      at === start
+        ? previous
+        : await mergeArrayNode(
+            context,
+            previous,
+            depth + 1,
+            entries.slice(start, at),
+          );
+    children.push(next);
+    bitmap |= 1 << nibble;
+    changed = changed || next !== previous;
+  }
+  if (node?.kind === 'internal' && !changed) return offset;
+  return context.appender.append(
+    encodeIdTrieNode({ kind: 'internal', bitmap, children }),
+  );
+}
+
 /**
  * Merges `updates`, ascending by hash with unique hashes, into the trie at
  * `root` as part of the current group, and returns the new root. A path copy
@@ -296,9 +389,17 @@ export async function mergeIdTrie(
   root: number,
   updates: Iterable<IdEntry> | AsyncIterable<IdEntry>,
 ): Promise<number> {
+  const context: MergeContext = { appender, reader };
+  if (isEntryArray(updates)) {
+    for (let index = 1; index < updates.length; index++)
+      if (compareIdHashes(updates[index - 1].hash, updates[index].hash) >= 0)
+        throw new JournalFormatError(
+          'Id trie updates must have unique hashes in ascending order',
+        );
+    return mergeArrayNode(context, root, 0, updates);
+  }
   const source = new StreamSource(updates);
   if ((await source.peek()) === undefined) return root;
-  const context: MergeContext = { appender, reader };
   if (root === 0) return buildNode(context, 0, source, undefined);
   return mergeNode(context, root, 0, source);
 }
