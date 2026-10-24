@@ -54,14 +54,13 @@ function freshOf(segments: readonly Segment[]): FreshSegment[] {
   );
 }
 
-/** The rows a group adds, in label order: written fresh, or copied from another journal. */
-function addsOf(
+/** The fresh or copied rows whose id dependencies need refreshing. */
+function factRowsOf(
   segments: readonly Segment[],
 ): Array<FreshSegment | ForeignSegment> {
   return segments.filter(
     (segment): segment is FreshSegment | ForeignSegment =>
-      segment.kind === 'foreign' ||
-      (segment.kind === 'fresh' && segment.role !== 'purge'),
+      segment.kind === 'foreign' || segment.kind === 'fresh',
   );
 }
 
@@ -78,6 +77,7 @@ async function addFacts(
     await applyEntryRow(segment.row.source, facts, ctx, segment.row.entry);
     return true;
   }
+  if (segment.role === 'purge') return true;
   if (segment.role !== 'insert') {
     await applyDraftRow(facts, ctx, segment.label, segment.draft);
     return true;
@@ -112,14 +112,13 @@ async function addFacts(
 async function incrementalFacts(
   ctx: BuildContext,
   plan: GroupPlan,
-  adds: ReadonlyArray<FreshSegment | ForeignSegment>,
-  rewritesRows: boolean,
+  rows: ReadonlyArray<FreshSegment | ForeignSegment>,
   appender: RecordAppender,
 ): Promise<
   { facts: GroupFacts | undefined; affected: ReadonlySet<bigint> } | undefined
 > {
   const affected = new Set<bigint>();
-  if (adds.length === 0 && !rewritesRows && plan.mistralScope === undefined)
+  if (rows.length === 0 && plan.mistralScope === undefined)
     return { facts: undefined, affected };
   if (
     plan.base.rows > 0 &&
@@ -167,10 +166,10 @@ async function incrementalFacts(
     facts.meta.set(MISTRAL_GENERATION_KEY, encodeDecimal(ctx.commitSeq));
   if (
     (facts.mistralSlots !== 0 || facts.kimi) &&
-    adds.some((segment) => segment.role === 'insert')
+    rows.some((segment) => segment.role === 'insert')
   )
     return undefined;
-  for (const segment of adds) {
+  for (const segment of rows) {
     const ids =
       segment.kind === 'fresh'
         ? segment.draft.ids.map((id) => id.rawId)
@@ -308,10 +307,7 @@ export async function buildIncremental(
   const collected = await incrementalFacts(
     ctx,
     plan,
-    addsOf(segments),
-    segments.some(
-      (segment) => segment.kind === 'fresh' && segment.role === 'purge',
-    ),
+    factRowsOf(segments),
     appender,
   );
   if (collected === undefined) return undefined;
