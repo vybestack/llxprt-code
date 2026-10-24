@@ -1051,7 +1051,7 @@ Coders tick their own line in the commit that completes the task. Inventory task
 - [x] T1.12 E9c real capability delivery per platform
 - [x] T1.13 E3 delete three test-only helpers
 - [x] T2.0 A3 transport inventory
-- [ ] T2.1 forwarding proxy fixture and control
+- [x] T2.1 forwarding proxy fixture and control
 - [ ] T2.2 A3 wrapper-created invocations and manager transport
 - [ ] T2.2b A3 load-balancer delegate and provider normalization keep the owner fetch
 - [ ] T2.2c A3 RuntimeProviderManager.fetchNetwork required (contract only)
