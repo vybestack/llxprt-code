@@ -6,7 +6,15 @@ import type {
 import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 import { requireJournalRecorder } from '@vybestack/llxprt-code-core/services/history/recorderBackend.js';
 import { previewOfContent } from '@vybestack/llxprt-code-core/recording/sessionMetaKeys.js';
-import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+import { openJournalReadOnly } from '@vybestack/llxprt-code-core/journal/journalReader.js';
+import { stateReaderOf } from '@vybestack/llxprt-code-core/journal/journalReaderState.js';
+import { sha256KeyHash } from '@vybestack/llxprt-code-core/journal/idKeys.js';
+import {
+  iterateRowEntries,
+  rowTreeRootOf,
+} from '@vybestack/llxprt-code-core/journal/rowTreeReader.js';
+import { readStoredRow } from '@vybestack/llxprt-code-core/journal/rowReads.js';
+import { decodeStoredRow } from '@vybestack/llxprt-code-core/services/history/journalRowCodec.js';
 import {
   readSessionFacts,
   type SessionFacts,
@@ -15,24 +23,27 @@ import {
 export async function readRecordedFacts(
   filePath: string,
 ): Promise<SessionFacts> {
-  const session = await JournalSession.open(filePath);
+  const reader = await openJournalReadOnly(filePath);
   try {
-    const facts = await readSessionFacts((key) => session.store.getState(key));
+    const facts = await readSessionFacts(stateReaderOf(reader, sha256KeyHash));
     if (facts === undefined) throw new Error('Recording has no session facts');
     return facts;
   } finally {
-    await session.close();
+    await reader.close();
   }
 }
 
 export async function readRecordedRows(filePath: string): Promise<IContent[]> {
-  const session = await JournalSession.open(filePath);
+  const reader = await openJournalReadOnly(filePath);
   try {
     const rows: IContent[] = [];
-    for await (const row of session.rows()) rows.push(row.content);
+    const root = rowTreeRootOf(reader.trailer);
+    if (root !== undefined)
+      for await (const entry of iterateRowEntries(reader, root))
+        rows.push(decodeStoredRow(await readStoredRow(reader, entry)));
     return rows;
   } finally {
-    await session.close();
+    await reader.close();
   }
 }
 

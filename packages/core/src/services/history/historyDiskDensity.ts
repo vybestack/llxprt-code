@@ -7,10 +7,8 @@ import type { DensityResultMetadata } from '../../core/compression/types.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 import { invalidateResponsesStatefulChain, type IContent } from './IContent.js';
 import { HistoryDensityRows } from './historyDensityRows.js';
-import type {
-  HistoryIndexedRows,
-  HistoryMutationSnapshot,
-} from './historyMutationSnapshot.js';
+import type { HistoryMutationSnapshot } from './historyMutationSnapshot.js';
+import type { HistoryIndexedRows } from './historyIndexedRows.js';
 import type { HistoryMutationInput } from './historyBatchContracts.js';
 import type { HistoryJournalOp } from './historyStorePort.js';
 import { DensitySpanRows } from './densitySpanRows.js';

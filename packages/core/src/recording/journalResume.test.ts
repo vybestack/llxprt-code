@@ -98,12 +98,11 @@ describe('resuming a session on the journal', () => {
     try {
       expect((await returned.next()).done).toBe(false);
       expect(ownership.snapshot().liveRows).toBe(1);
-      await returned.return?.();
+      await returned.return(undefined);
       expect(ownership.snapshot().liveRows).toBe(0);
       expect((await failed.next()).done).toBe(false);
       expect(ownership.snapshot().liveRows).toBe(1);
       const failure = new Error('resume consumer failed');
-      if (failed.throw === undefined) throw new Error('Missing throw');
       await expect(failed.throw(failure)).rejects.toBe(failure);
       expect(ownership.snapshot().liveRows).toBe(0);
       const texts: string[] = [];
@@ -124,8 +123,8 @@ describe('resuming a session on the journal', () => {
         peakDecodedRows: 1,
       });
     } finally {
-      await returned.return?.();
-      await failed.return?.();
+      await returned.return(undefined);
+      await failed.return(undefined);
       await result.recording.dispose();
     }
   });

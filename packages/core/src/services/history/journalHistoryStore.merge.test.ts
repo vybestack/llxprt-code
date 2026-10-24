@@ -5,7 +5,6 @@ import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
 import type { DetachedHistoryHost } from './detachedHistoryMutation.js';
 import { ChronologyStamper } from './historyChronology.js';
 import type { HistoryBatchRowSource } from './history-batch-values.js';
-import { HistoryJournalStore } from './historyJournalStore.js';
 import type { HistoryMergeRequest } from './historyStorePort.js';
 import type { IContent } from './IContent.js';
 import { JournalHistoryStore } from './journalHistoryStore.js';
@@ -57,10 +56,12 @@ describe('JournalHistoryStore.mergeFrom', () => {
     return store;
   }
 
-  function hostFor(batches: HistoryBatchRowSource[]): DetachedHistoryHost {
+  function hostFor(
+    store: JournalHistoryStore,
+    batches: HistoryBatchRowSource[],
+  ): DetachedHistoryHost {
     return {
-      // The journal path never reads it.
-      journal: new HistoryJournalStore(),
+      journal: store,
       chronology: new ChronologyStamper(() => 0),
       snapshot: () => ({
         tokens: 0,
@@ -82,11 +83,12 @@ describe('JournalHistoryStore.mergeFrom', () => {
 
   function requestOf(
     source: JournalHistoryStore,
+    target: JournalHistoryStore,
     batches: HistoryBatchRowSource[],
   ): HistoryMergeRequest {
     return {
       source,
-      host: hostFor(batches),
+      host: hostFor(target, batches),
       publish: reject,
     };
   }
@@ -100,7 +102,7 @@ describe('JournalHistoryStore.mergeFrom', () => {
     const target = await openStore([row('human', 'base', 1)]);
     const batches: HistoryBatchRowSource[] = [];
 
-    await target.mergeFrom(requestOf(source, batches));
+    await target.mergeFrom(requestOf(source, target, batches));
 
     expect(await shapes(target)).toStrictEqual([
       ['human', 'base', 1],
@@ -116,7 +118,7 @@ describe('JournalHistoryStore.mergeFrom', () => {
     const target = await openStore([row('human', 'base', 1)]);
     const batches: HistoryBatchRowSource[] = [];
 
-    await target.mergeFrom(requestOf(source, batches));
+    await target.mergeFrom(requestOf(source, target, batches));
 
     expect(await shapes(target)).toStrictEqual([['human', 'base', 1]]);
     expect(batches).toHaveLength(0);
@@ -126,7 +128,7 @@ describe('JournalHistoryStore.mergeFrom', () => {
     const source = await openStore([]);
     const target = await openStore([row('human', 'base', 1)]);
 
-    await target.mergeFrom(requestOf(source, []));
+    await target.mergeFrom(requestOf(source, target, []));
 
     expect(await shapes(target)).toStrictEqual([['human', 'base', 1]]);
   });
@@ -136,7 +138,7 @@ describe('JournalHistoryStore.mergeFrom', () => {
       row('ai', 'second', 7),
       row('tool', 'third', 2),
     ]);
-    await target.mergeFrom(requestOf(target, []));
+    await target.mergeFrom(requestOf(target, target, []));
     expect(await shapes(target)).toStrictEqual([
       ['human', 'first', 7],
       ['ai', 'second', 7],

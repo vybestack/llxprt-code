@@ -4,7 +4,7 @@ import type {
   CompressionContext,
   StrategyCompressionResult,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
-import type { HistoryIndexedRows } from '@vybestack/llxprt-code-core/services/history/historyMutationSnapshot.js';
+import type { HistoryIndexedRows } from '@vybestack/llxprt-code-core/services/history/historyIndexedRows.js';
 import { TopDownTruncationStrategy } from '../../TopDownTruncationStrategy.js';
 
 async function collect(

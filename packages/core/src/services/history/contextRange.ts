@@ -23,10 +23,7 @@
  */
 
 import type { IContent } from './IContent.js';
-import {
-  historyRowAt,
-  type HistoryRowSource,
-} from './historyMutationSnapshot.js';
+import { historyRowAt, type HistoryRowSource } from './historyIndexedRows.js';
 import type { DensityResult } from '../../core/compression/types.js';
 import type {
   ContextRange,

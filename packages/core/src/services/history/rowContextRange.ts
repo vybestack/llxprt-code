@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { HistoryRowSource } from './historyMutationSnapshot.js';
+import type { HistoryRowSource } from './historyIndexedRows.js';
 import type { ContextRange, RemovedInteriorSpan } from './historyEventTypes.js';
 import { mergeRemovedInteriorSpans } from './contextRange.js';
 

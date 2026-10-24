@@ -37,17 +37,8 @@ import {
   type SessionRecordingServiceConfig,
   type SessionSummary,
 } from '../../types.js';
-import {
-  type ResumeError,
-  type ResumeRequest,
-  type ResumeResult,
-} from '../../resumeSession.js';
-import {
-  type ForkError,
-  type ForkResult,
-  type SessionTransitionServiceOptions,
-} from '../../SessionTransitionService.js';
-import type { JournalCursor } from '../../journalCursor.js';
+import type { ResumeRequest } from '../../resumeSession.js';
+import { type SessionTransitionServiceOptions } from '../../SessionTransitionService.js';
 import type { IContent } from '../../../services/history/IContent.js';
 
 // ---------------------------------------------------------------------------
@@ -116,59 +107,9 @@ export function callBoundedDiscovery(
   );
 }
 
-// ---------------------------------------------------------------------------
-// Proposed cursor-boot accessors (temporary test-kit copy)
-// ---------------------------------------------------------------------------
-
-export interface ResumeCursorBoot {
-  readonly cursor: JournalCursor;
-  readonly lastSeq: number;
-  streamRows(): AsyncIterable<IContent>;
-}
-
-/** Extract the cursor boot from a ResumeResult; precise red when missing. */
-export function bootOf(
-  result: ResumeResult | ResumeError,
-  label = 'resume',
-): ResumeCursorBoot {
-  if (!result.ok) {
-    throw new Error(`${label} failed: ${result.error}`);
-  }
-  const boot = (result as { boot?: ResumeCursorBoot }).boot;
-  if (boot === undefined) {
-    throw new Error(
-      'P05d red: ResumeResult.boot (cursor boot) does not exist yet',
-    );
-  }
-  return boot;
-}
-
-/** Extract the cursor boot from a ForkResult; precise red when missing. */
-export function forkBootOf(
-  result: ForkResult | ForkError,
-  label = 'fork',
-): ResumeCursorBoot {
-  if (!result.ok) {
-    throw new Error(`${label} failed: ${result.error}`);
-  }
-  if (!('cursor' in result.boot)) {
-    throw new Error(`${label} did not return a cursor boot`);
-  }
-  return result.boot;
-}
-
 /** Assert a result carries no materialized history array (the P05d ban). */
 export function expectNoHistoryField(result: object): void {
   expect('history' in result).toBe(false);
-}
-
-/** Drain a boot's rows oldest-first, as the CLI boot path would. */
-export async function collectRows(boot: ResumeCursorBoot): Promise<IContent[]> {
-  const rows: IContent[] = [];
-  for await (const row of boot.streamRows()) {
-    rows.push(row);
-  }
-  return rows;
 }
 
 // ---------------------------------------------------------------------------

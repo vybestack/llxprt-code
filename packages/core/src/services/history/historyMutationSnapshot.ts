@@ -15,18 +15,6 @@ import type { HistoryReadCursor } from '../../recording/synchronousHistoryCursor
 import { createScratchDirSync } from '../../storage/scratch-root.js';
 import { HistoryRowOrigins } from './historyRowOrigins.js';
 
-export interface HistoryIndexedRows extends Iterable<IContent> {
-  readonly length: number;
-  readRow(index: number): IContent;
-  writeRow?(index: number, row: IContent): void;
-}
-
-export type HistoryRowSource = readonly IContent[] | HistoryIndexedRows;
-
-export function historyRowAt(rows: HistoryRowSource, index: number): IContent {
-  return 'readRow' in rows ? rows.readRow(index) : rows[index];
-}
-
 class HistoryMutationReader implements Generator<IContent, void, unknown> {
   private row: IContent | undefined;
 

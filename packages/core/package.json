@@ -857,6 +857,11 @@
       "bun": "./src/services/history/historyJournalGuards.ts",
       "import": "./dist/src/services/history/historyJournalGuards.js"
     },
+    "./services/history/historyIndexedRows.js": {
+      "types": "./dist/src/services/history/historyIndexedRows.d.ts",
+      "bun": "./src/services/history/historyIndexedRows.ts",
+      "import": "./dist/src/services/history/historyIndexedRows.js"
+    },
     "./services/history/historyMutationSnapshot.js": {
       "types": "./dist/src/services/history/historyMutationSnapshot.d.ts",
       "bun": "./src/services/history/historyMutationSnapshot.ts",

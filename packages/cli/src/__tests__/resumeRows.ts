@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { IContent, ResumeCursorBoot } from '@vybestack/llxprt-code-core';
+import type { IContent, ResumeBootHandle } from '@vybestack/llxprt-code-core';
 
 export async function collectResumeRows(
   rows: AsyncIterable<IContent> | Iterable<IContent>,
@@ -11,7 +11,7 @@ export async function collectResumeRows(
 
 export function displayBoot(
   rows: readonly IContent[],
-): Pick<ResumeCursorBoot, 'streamRows'> {
+): Pick<ResumeBootHandle, 'streamRows'> {
   return {
     async *streamRows() {
       yield* rows;

@@ -2,7 +2,7 @@
 import { spyOn } from 'bun:test';
 import { readdirSync } from 'node:fs';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { HistoryIndexedRows } from '@vybestack/llxprt-code-core/services/history/historyMutationSnapshot.js';
+import type { HistoryIndexedRows } from '@vybestack/llxprt-code-core/services/history/historyIndexedRows.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { DetachedHistoryJournal } from '@vybestack/llxprt-code-core/services/history/detachedHistoryJournal.js';
 import type { RecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';

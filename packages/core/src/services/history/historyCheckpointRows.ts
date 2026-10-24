@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { HistoryIndexedRows } from './historyMutationSnapshot.js';
+import type { HistoryIndexedRows } from './historyIndexedRows.js';
 import type { CompressionInputSnapshot } from './compressionInput.js';
 import type { IContent, MediaReferenceBlock } from './IContent.js';
 

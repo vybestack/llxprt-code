@@ -17,10 +17,8 @@ import type {
   HistoryMediaOwner,
   HistoryOwnedMediaReservation,
 } from './historyBatchContracts.js';
-import type {
-  HistoryMutationSnapshot,
-  HistoryRowSource,
-} from './historyMutationSnapshot.js';
+import type { HistoryMutationSnapshot } from './historyMutationSnapshot.js';
+import type { HistoryRowSource } from './historyIndexedRows.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 
 export async function rollbackMutationEffects(

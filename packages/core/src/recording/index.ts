@@ -102,10 +102,7 @@ export {
 } from './unreadableRecordings.js';
 export {
   resumeSession,
-  resumeJsonlSession,
-  ResumeCursorBoot,
   CONTINUE_LATEST,
-  type JsonlResumeResult,
   type ResumeBootHandle,
   type ResumeRequest,
   type ResumeResult,
@@ -162,5 +159,7 @@ export {
   type ImportedSessionMediaPackage,
   type ValidatedSessionMediaPackage,
 } from './session-media-package.js';
+
+export { ResumeCursorBoot } from './resumeCursorBoot.js';
 
 export { scanResumeMetadata } from './resumeMetadata.js';

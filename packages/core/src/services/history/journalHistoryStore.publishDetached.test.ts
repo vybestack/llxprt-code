@@ -15,7 +15,6 @@ import type {
 } from './detachedHistoryMutation.js';
 import { ChronologyStamper } from './historyChronology.js';
 import type { ContextRange, RemovedInteriorSpan } from './historyEventTypes.js';
-import { HistoryJournalStore } from './historyJournalStore.js';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import { JournalHistoryStore } from './journalHistoryStore.js';
@@ -90,8 +89,7 @@ async function openJournal(
   const startTokens = await estimator.estimateTokensForContents(rows);
   const observed: Observed = { applied: [], ranges: [], batches: [] };
   const host: DetachedHistoryHost = {
-    // The journal path never reads it; the old store's port is a placeholder.
-    journal: new HistoryJournalStore(),
+    journal: store,
     chronology: stamper,
     snapshot: () => ({
       tokens: last(observed.applied)?.tokens ?? startTokens,

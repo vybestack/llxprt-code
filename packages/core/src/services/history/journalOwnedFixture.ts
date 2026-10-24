@@ -4,7 +4,6 @@ import type { RowOwnership } from '../../recording/rowOwnership.js';
 import type { DetachedHistoryHost } from './detachedHistoryMutation.js';
 import { ChronologyStamper } from './historyChronology.js';
 import type { HistoryMediaOwner } from './historyBatchContracts.js';
-import { HistoryJournalStore } from './historyJournalStore.js';
 import type { IContent } from './IContent.js';
 import { JournalHistoryStore } from './journalHistoryStore.js';
 import { JournalSession } from './journalSession.js';
@@ -43,8 +42,7 @@ export async function openOwnedJournal(
   await store.waitForDurable();
   let tokens = 0;
   const host: DetachedHistoryHost = {
-    // The journal path never reads it; the old store's port is a placeholder.
-    journal: new HistoryJournalStore(),
+    journal: store,
     chronology: stamper,
     ...extras,
     snapshot: () => ({ tokens, spans: [], chronology: stamper.snapshot() }),
@@ -75,7 +73,7 @@ export async function openOwnedJournal(
         }
         return origins;
       } finally {
-        snapshot.close();
+        await snapshot.close();
       }
     },
     dispose: () => store.dispose(),

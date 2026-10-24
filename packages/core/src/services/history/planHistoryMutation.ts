@@ -20,11 +20,8 @@ import { historyOriginId } from './historyOriginId.js';
 import type { HistoryMutationInput } from './historyBatchContracts.js';
 import type { DensityResult } from '../../core/compression/types.js';
 import type { DensityReplacementRecordShape } from './historyJournalGuards.js';
-import {
-  historyRowAt,
-  type HistoryRowSource,
-  type HistoryMutationSnapshot,
-} from './historyMutationSnapshot.js';
+import { type HistoryMutationSnapshot } from './historyMutationSnapshot.js';
+import { historyRowAt, type HistoryRowSource } from './historyIndexedRows.js';
 
 const MAX_RETAINED_VALUE_OPS = 64;
 

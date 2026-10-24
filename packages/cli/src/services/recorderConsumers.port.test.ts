@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import type { ResumeCursorBoot } from '@vybestack/llxprt-code-core';
+import type { ResumeBootHandle } from '@vybestack/llxprt-code-core';
 import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
 import { mutateChatHistory } from '../ui/commands/chatHistoryMutation.js';
 import type { RecordingSwapCallbacks } from './performResume.js';
@@ -14,7 +14,7 @@ import { restoreResumeBoot } from './restoreResumeBoot.js';
 export function entryPointsAcceptTheJournalRecorder(
   journal: JournalRecordingService,
   client: Parameters<typeof restoreResumeBoot>[0],
-  boot: ResumeCursorBoot,
+  boot: ResumeBootHandle,
   mutationClient: Parameters<typeof mutateChatHistory>[0],
   ui: Parameters<typeof mutateChatHistory>[1],
   signal: AbortSignal,

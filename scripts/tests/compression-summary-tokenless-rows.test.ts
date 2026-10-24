@@ -22,7 +22,7 @@ import { LoadBalancingProvider } from '../../packages/providers/src/LoadBalancin
 import type { IProvider } from '../../packages/providers/src/IProvider.js';
 import type { IContent } from '../../packages/core/src/services/history/IContent.js';
 import { RowOwnership } from '../../packages/core/src/recording/rowOwnership.js';
-import type { HistoryIndexedRows } from '../../packages/core/src/services/history/historyMutationSnapshot.js';
+import type { HistoryIndexedRows } from '../../packages/core/src/services/history/historyIndexedRows.js';
 import { diskSummaryRequestSelection } from '../../packages/agents/src/compression/middleOutDiskPlan.js';
 import { buildCompressionChatOptions } from '../../packages/agents/src/compression/compressionSystemPrompt.js';
 import { CompressionLoadBalancingProvider } from '../../packages/agents/src/core/CompressionLoadBalancingProvider.js';
