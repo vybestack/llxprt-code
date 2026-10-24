@@ -17,7 +17,7 @@ import {
   snapshotFixture,
   fixtureRows,
   captureStreamingDump,
-} from './dumpcontext-test-stream.js';
+} from './dumpcontext-test-helpers.js';
 
 const actual = { ...(await import('@vybestack/llxprt-code-providers')) };
 void vi.mock('@vybestack/llxprt-code-providers', () => ({

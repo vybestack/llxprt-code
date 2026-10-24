@@ -8,7 +8,7 @@ import { vi, describe, it, expect, beforeEach, type Mock } from 'bun:test';
 import { dumpcontextCommand } from './dumpcontextCommand.js';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import { captureStreamingDump } from './dumpcontext-test-stream.js';
+import { captureStreamingDump } from './dumpcontext-test-helpers.js';
 
 const actual = { ...(await import('@vybestack/llxprt-code-providers')) };
 void vi.mock('@vybestack/llxprt-code-providers', () => ({

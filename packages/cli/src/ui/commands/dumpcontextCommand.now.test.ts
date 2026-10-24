@@ -14,7 +14,7 @@ import {
   snapshotFixture,
   fixtureRows,
   captureStreamingDump,
-} from './dumpcontext-test-stream.js';
+} from './dumpcontext-test-helpers.js';
 
 import {
   createOpenAIDumpHistory,
