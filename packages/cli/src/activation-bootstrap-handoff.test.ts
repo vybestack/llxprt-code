@@ -300,7 +300,7 @@ describe('CLI activation operation handoff', () => {
       loadCliConfig(
         settings.merged,
         [],
-        new ExtensionEnablementManager(directory, []),
+        new ExtensionEnablementManager(directory, { enabledOverride: [] }),
         'handoff-failure',
         argv,
         directory,

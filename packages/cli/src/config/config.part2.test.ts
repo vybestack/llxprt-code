@@ -173,10 +173,9 @@ describe('loadCliConfig chatCompression', () => {
     const config = await loadCliConfig(
       settings,
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
       undefined,
@@ -197,10 +196,9 @@ describe('loadCliConfig chatCompression', () => {
     const config = await loadCliConfig(
       settings,
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
       undefined,
@@ -243,10 +241,9 @@ describe('loadCliConfig useRipgrep', () => {
     const config = await loadCliConfig(
       settings,
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
       undefined,
@@ -268,10 +265,9 @@ describe('loadCliConfig useRipgrep', () => {
     const config = await loadCliConfig(
       settings,
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
       undefined,
@@ -293,10 +289,9 @@ describe('loadCliConfig useRipgrep', () => {
     const config = await loadCliConfig(
       settings,
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
       undefined,
@@ -318,10 +313,9 @@ describe('loadCliConfig useRipgrep', () => {
     const config = await loadCliConfig(
       settings,
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
       undefined,
@@ -359,10 +353,9 @@ describe('screenReader configuration', () => {
     const config = await loadCliConfig(
       settings,
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
       undefined,
@@ -383,10 +376,9 @@ describe('screenReader configuration', () => {
     const config = await loadCliConfig(
       settings,
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
       undefined,
@@ -407,10 +399,9 @@ describe('screenReader configuration', () => {
     const config = await loadCliConfig(
       settings,
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
       undefined,
@@ -429,10 +420,9 @@ describe('screenReader configuration', () => {
     const config = await loadCliConfig(
       settings,
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
       undefined,
@@ -474,10 +464,9 @@ describe('loadCliConfig tool exclusions', () => {
     const config = await loadCliConfig(
       {},
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
       undefined,
@@ -498,10 +487,9 @@ describe('loadCliConfig tool exclusions', () => {
     const config = await loadCliConfig(
       {},
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
       undefined,
@@ -522,10 +510,9 @@ describe('loadCliConfig tool exclusions', () => {
     const config = await loadCliConfig(
       {},
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
       undefined,
@@ -546,10 +533,9 @@ describe('loadCliConfig tool exclusions', () => {
     const config = await loadCliConfig(
       {},
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
       undefined,
@@ -577,10 +563,9 @@ describe('loadCliConfig tool exclusions', () => {
     const config = await loadCliConfig(
       {},
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
       undefined,
@@ -606,10 +591,9 @@ describe('loadCliConfig tool exclusions', () => {
     const config = await loadCliConfig(
       {},
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
       undefined,
@@ -635,10 +619,9 @@ describe('loadCliConfig tool exclusions', () => {
     const config = await loadCliConfig(
       {},
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
       undefined,

@@ -43,10 +43,9 @@ async function buildConfig(
   return loadCliConfig(
     settings,
     [],
-    new ExtensionEnablementManager(
-      ExtensionStorage.getUserExtensionsDir(),
-      argv.extensions,
-    ),
+    new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+      enabledOverride: argv.extensions,
+    }),
     'test-session',
     argv,
     undefined,

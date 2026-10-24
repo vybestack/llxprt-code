@@ -171,10 +171,9 @@ describe('loadCliConfig interactive', () => {
     const config = await loadCliConfig(
       {},
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
       undefined,
@@ -193,10 +192,9 @@ describe('loadCliConfig interactive', () => {
     const config = await loadCliConfig(
       {},
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
       undefined,
@@ -215,10 +213,9 @@ describe('loadCliConfig interactive', () => {
     const config = await loadCliConfig(
       {},
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
       undefined,
@@ -237,10 +234,9 @@ describe('loadCliConfig interactive', () => {
     const config = await loadCliConfig(
       {},
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
       undefined,
@@ -259,10 +255,9 @@ describe('loadCliConfig interactive', () => {
     const config = await loadCliConfig(
       {},
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
       undefined,
@@ -288,10 +283,9 @@ describe('loadCliConfig interactive', () => {
     const config = await loadCliConfig(
       {},
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
       undefined,
@@ -310,10 +304,9 @@ describe('loadCliConfig interactive', () => {
     const config = await loadCliConfig(
       {},
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
       undefined,
@@ -334,10 +327,9 @@ describe('loadCliConfig interactive', () => {
     const config = await loadCliConfig(
       {},
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
       undefined,
@@ -369,10 +361,9 @@ describe('loadCliConfig interactive', () => {
     const config = await loadCliConfig(
       {},
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
       undefined,
@@ -393,10 +384,9 @@ describe('loadCliConfig interactive', () => {
     const config = await loadCliConfig(
       {},
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
       undefined,
@@ -426,10 +416,9 @@ describe('loadCliConfig interactive', () => {
     const config = await loadCliConfig(
       {},
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
       undefined,
@@ -450,10 +439,9 @@ describe('loadCliConfig interactive', () => {
     const config = await loadCliConfig(
       {},
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
       undefined,
@@ -542,7 +530,7 @@ describe('loadCliConfig fileFiltering', () => {
         [],
         new ExtensionEnablementManager(
           ExtensionStorage.getUserExtensionsDir(),
-          argv.extensions,
+          { enabledOverride: argv.extensions },
         ),
         'test-session',
         argv,

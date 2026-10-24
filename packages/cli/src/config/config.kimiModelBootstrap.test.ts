@@ -45,10 +45,9 @@ describe('loadCliConfig provider alias model bootstrap', () => {
     const config = await loadCliConfig(
       {},
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
       undefined,
@@ -66,7 +65,7 @@ describe('loadCliConfig provider alias model bootstrap', () => {
     const argv = await parseArguments({} as Settings);
     const extensions = new ExtensionEnablementManager(
       ExtensionStorage.getUserExtensionsDir(),
-      argv.extensions,
+      { enabledOverride: argv.extensions },
     );
     const firstSettings = new SettingsService();
     const secondSettings = new SettingsService();

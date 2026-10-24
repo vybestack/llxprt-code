@@ -146,7 +146,7 @@ void vi.mock('@vybestack/llxprt-code-core', () => {
 function makeExtMgr(extensions?: string[]) {
   return new ExtensionEnablementManager(
     ExtensionStorage.getUserExtensionsDir(),
-    extensions,
+    { enabledOverride: extensions },
   );
 }
 

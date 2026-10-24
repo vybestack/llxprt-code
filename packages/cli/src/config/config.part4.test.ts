@@ -245,10 +245,9 @@ describe('defaultDisabledTools', () => {
     const { settingsOwner: configSettingsOwner } = await loadConfigFixture(
       settings,
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
     );
@@ -265,10 +264,9 @@ describe('defaultDisabledTools', () => {
     const { settingsOwner: configSettingsOwner } = await loadConfigFixture(
       settings,
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
     );
@@ -287,10 +285,9 @@ describe('defaultDisabledTools', () => {
     const { settingsOwner: configSettingsOwner } = await loadConfigFixture(
       settings,
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
     );
@@ -316,10 +313,9 @@ describe('defaultDisabledTools', () => {
     const { settingsOwner: configSettingsOwner } = await loadConfigFixture(
       settings,
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
     );
@@ -339,10 +335,9 @@ describe('defaultDisabledTools', () => {
     const { settingsOwner: configSettingsOwner } = await loadConfigFixture(
       settings,
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
     );
@@ -360,10 +355,9 @@ describe('defaultDisabledTools', () => {
     const { settingsOwner: configSettingsOwner } = await loadConfigFixture(
       settings,
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
     );
@@ -384,7 +378,7 @@ describe('defaultDisabledTools', () => {
         [],
         new ExtensionEnablementManager(
           ExtensionStorage.getUserExtensionsDir(),
-          argv.extensions,
+          { enabledOverride: argv.extensions },
         ),
         'test-session',
         argv,
@@ -412,10 +406,9 @@ describe('defaultDisabledTools', () => {
     const { settingsOwner: configSettingsOwner } = await loadConfigFixture(
       settings,
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
     );
@@ -479,10 +472,9 @@ describe('loadCliConfig disableYoloMode', () => {
     const { config: config } = await loadConfigFixture(
       settings,
       [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
+      new ExtensionEnablementManager(ExtensionStorage.getUserExtensionsDir(), {
+        enabledOverride: argv.extensions,
+      }),
       'test-session',
       argv,
     );
@@ -501,7 +493,7 @@ describe('loadCliConfig disableYoloMode', () => {
         [],
         new ExtensionEnablementManager(
           ExtensionStorage.getUserExtensionsDir(),
-          argv.extensions,
+          { enabledOverride: argv.extensions },
         ),
         'test-session',
         argv,
@@ -567,7 +559,7 @@ describe('loadCliConfig secureModeEnabled', () => {
         [],
         new ExtensionEnablementManager(
           ExtensionStorage.getUserExtensionsDir(),
-          argv.extensions,
+          { enabledOverride: argv.extensions },
         ),
         'test-session',
         argv,

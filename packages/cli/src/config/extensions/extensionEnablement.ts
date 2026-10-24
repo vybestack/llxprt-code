@@ -125,20 +125,30 @@ function globToRegex(glob: string): RegExp {
   return new RegExp(`^${regexString}$`);
 }
 
+export interface ExtensionSelection {
+  /** From `-e`: when non-empty, only these extensions are enabled. */
+  readonly enabledOverride?: readonly string[];
+  /** From `extensions.disabled` in settings: these extensions are disabled. */
+  readonly disabled?: readonly string[];
+}
+
 export class ExtensionEnablementManager {
   private configFilePath: string;
   private configDir: string;
   // If non-empty, this overrides all other extension configuration and enables
   // only the ones in this list.
   private enabledExtensionNamesOverride: string[];
+  private disabledExtensionNames: string[];
   // Session-only state - in-memory overrides that don't persist to disk
   private sessionState: Map<string, boolean> = new Map();
 
-  constructor(configDir: string, enabledExtensionNames?: string[]) {
+  constructor(configDir: string, selection: ExtensionSelection = {}) {
     this.configDir = configDir;
     this.configFilePath = path.join(configDir, EXTENSION_ENABLEMENT_FILENAME);
     this.enabledExtensionNamesOverride =
-      enabledExtensionNames?.map((name) => name.toLowerCase()) ?? [];
+      selection.enabledOverride?.map((name) => name.toLowerCase()) ?? [];
+    this.disabledExtensionNames =
+      selection.disabled?.map((name) => name.toLowerCase()) ?? [];
   }
 
   validateExtensionOverrides(extensions: LlxprtExtension[]) {
@@ -182,6 +192,10 @@ export class ExtensionEnablementManager {
       return this.enabledExtensionNamesOverride.includes(
         extensionName.toLocaleLowerCase(),
       );
+    }
+
+    if (this.disabledExtensionNames.includes(extensionName.toLowerCase())) {
+      return false;
     }
 
     // Otherwise, we use the configuration settings

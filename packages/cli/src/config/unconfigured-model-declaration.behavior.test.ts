@@ -34,7 +34,9 @@ describe('unconfigured CLI model declaration', () => {
       config = await loadCliConfig(
         {},
         [],
-        new ExtensionEnablementManager(join(directory, 'extensions'), []),
+        new ExtensionEnablementManager(join(directory, 'extensions'), {
+          enabledOverride: [],
+        }),
         'unconfigured-model',
         argv,
         directory,

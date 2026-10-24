@@ -70,7 +70,9 @@ async function loadOwner(
   const config = await loadCliConfig(
     {},
     [],
-    new ExtensionEnablementManager(join(endpoint, 'extensions'), []),
+    new ExtensionEnablementManager(join(endpoint, 'extensions'), {
+      enabledOverride: [],
+    }),
     'same-label-cli',
     argv,
     process.cwd(),

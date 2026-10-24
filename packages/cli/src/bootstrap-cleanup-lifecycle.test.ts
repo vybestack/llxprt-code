@@ -203,7 +203,7 @@ describe('real startup activation owner cleanup', () => {
       const config = await loadCliConfig(
         settings.merged,
         [],
-        new ExtensionEnablementManager(directory, []),
+        new ExtensionEnablementManager(directory, { enabledOverride: [] }),
         'standalone',
         argv,
         directory,
@@ -231,7 +231,7 @@ describe('real startup activation owner cleanup', () => {
       loadCliConfig(
         settings.merged,
         [],
-        new ExtensionEnablementManager(directory, []),
+        new ExtensionEnablementManager(directory, { enabledOverride: [] }),
         'finalization-failure',
         argv,
         directory,
@@ -357,7 +357,7 @@ describe('real startup activation owner cleanup', () => {
       loadCliConfig(
         settings.merged,
         [],
-        new ExtensionEnablementManager(directory, []),
+        new ExtensionEnablementManager(directory, { enabledOverride: [] }),
         'keyfile-failure',
         argv,
         directory,
@@ -429,7 +429,7 @@ describe('real startup activation owner cleanup', () => {
       const config = await loadCliConfig(
         settings.merged,
         [],
-        new ExtensionEnablementManager(directory, []),
+        new ExtensionEnablementManager(directory, { enabledOverride: [] }),
         'borrowed-startup',
         argv,
         directory,
@@ -790,7 +790,7 @@ describe('real startup activation owner cleanup', () => {
     const sibling = await loadCliConfig(
       settings.merged,
       [],
-      new ExtensionEnablementManager(directory, []),
+      new ExtensionEnablementManager(directory, { enabledOverride: [] }),
       'standalone-sibling',
       argv,
       directory,

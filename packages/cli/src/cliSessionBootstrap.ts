@@ -37,7 +37,10 @@ import { promises as fsPromises } from 'fs';
 import { basename } from 'path';
 import type { ParsedCliArgs } from './cliBootstrap.js';
 import { ExtensionStorage, loadExtensions } from './config/extension.js';
-import { ExtensionEnablementManager } from './config/extensions/extensionEnablement.js';
+import {
+  ExtensionEnablementManager,
+  type ExtensionSelection,
+} from './config/extensions/extensionEnablement.js';
 import {
   type BootstrapSelection,
   initializeObservationProducer,
@@ -111,12 +114,12 @@ export async function handleSessionListAndDelete(
  * construction rather than here.
  */
 function loadBootstrapExtensions(
-  selected: ConstructorParameters<typeof ExtensionEnablementManager>[1],
+  selection: ExtensionSelection,
   workspaceRoot: string,
 ) {
   const extensionEnablementManager = new ExtensionEnablementManager(
     ExtensionStorage.getUserExtensionsDir(),
-    selected,
+    selection,
   );
   return {
     extensionEnablementManager,
@@ -134,7 +137,10 @@ export async function bootstrapRuntimeAndConfig(
   registerCleanup(() => preflight.dispose());
   try {
     const { extensionEnablementManager, extensions } = loadBootstrapExtensions(
-      settings.merged.extensions.disabled,
+      {
+        enabledOverride: argv.extensions,
+        disabled: settings.merged.extensions.disabled,
+      },
       workspaceRoot,
     );
     return await loadCliConfig(
