@@ -46,7 +46,10 @@ class CallerOwnedAnthropicIndex implements AnthropicRequestRepairIndex {
       return;
     }
     for await (const message of this.source.messages()) {
-      const previous = this.entries.at(-1);
+      const previous =
+        this.entries.length === 0
+          ? undefined
+          : this.entries[this.entries.length - 1];
       if (
         previous !== undefined &&
         previous.slot === 'results' &&
