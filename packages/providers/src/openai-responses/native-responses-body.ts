@@ -55,6 +55,9 @@ import {
 import type { UnsupportedMediaEntry } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { toEstimationContents } from './openAIResponsesRequestState.js';
 import type { StatefulConversation } from './openAIResponsesStateful.js';
+import { assertRowIndex } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import { findDanglingCalls } from '../runtime/responses-source-input.js';
+import { SyntheticToolResponseHandler } from '../openai/syntheticToolResponses.js';
 import { jsonValueByteLength } from '../utils/progressive-json-body.js';
 
 export interface NativeResponsesSelection {
@@ -392,6 +395,40 @@ function overrideByteLength(
   return bytes;
 }
 
+async function callerOwnedResponsesRows(
+  rows: ProviderRequestRows,
+  signal: AbortSignal | undefined,
+): Promise<ProviderRequestRows> {
+  const dangling = await findDanglingCalls(
+    () => rows.openReader(signal),
+    signal,
+  );
+  const missing = [...dangling.missing];
+  if (missing.length === 0) return rows;
+  const count = rows.count + missing.length;
+  const readAt = (
+    at: number,
+    readerSignal?: AbortSignal,
+  ): IContent | Promise<IContent> => {
+    signal?.throwIfAborted();
+    readerSignal?.throwIfAborted();
+    assertRowIndex(at, count);
+    if (at < rows.count) return rows.readAt(at, readerSignal);
+    const [toolCallId, toolName] = missing[at - rows.count];
+    return SyntheticToolResponseHandler.createSyntheticResponses([
+      { toolCallId, toolName },
+    ])[0];
+  };
+  return {
+    callerOwned: true,
+    count,
+    readAt,
+    async *openReader(readerSignal) {
+      for (let at = 0; at < count; at++) yield await readAt(at, readerSignal);
+    },
+  };
+}
+
 export async function prepareNativeResponsesPrompt(
   options: ResponsesRequest,
   deps: ResponsesExecutorDeps,
@@ -399,19 +436,33 @@ export async function prepareNativeResponsesPrompt(
   reasoningIdTime: number,
   selection: NativeResponsesSelection,
 ): Promise<NativeResponsesPrompt> {
-  const rows = options.requestRows;
+  const supplied = options.requestRows;
   if (
-    rows === undefined ||
-    (rows.native === undefined && rows.callerOwned !== true)
+    supplied === undefined ||
+    (supplied.native === undefined && supplied.callerOwned !== true)
   )
     throw new Error('Native Responses requires native request rows');
+  const rows =
+    supplied.callerOwned === true
+      ? await callerOwnedResponsesRows(supplied, options.invocation.signal)
+      : supplied;
+  const preparedOptions = {
+    ...options,
+    requestRows: rows,
+    contentCount: rows.count,
+  };
   const bytes =
     selection.inputOverride === undefined
-      ? await historyByteLength(options, shell, reasoningIdTime, selection)
+      ? await historyByteLength(
+          preparedOptions,
+          shell,
+          reasoningIdTime,
+          selection,
+        )
       : overrideByteLength(shell.request, selection.inputOverride.value);
   return new NativeResponsesPrompt(
     rows,
-    options,
+    preparedOptions,
     shell,
     responsesInputContext(
       options,

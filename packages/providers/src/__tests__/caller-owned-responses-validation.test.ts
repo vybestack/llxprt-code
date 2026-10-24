@@ -52,6 +52,58 @@ describe('caller-owned Responses selection validation', () => {
         await selection.close();
       }
     });
+    it(`${route.id} retains an unanswered call and emits its cancellation result`, async () => {
+      const selection = await callerOwnedRawProviderSource([
+        human,
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'call_pending',
+              name: 'read',
+              parameters: { path: 'a' },
+            },
+          ],
+        },
+      ]).openProviderRequest();
+      try {
+        const creates = await operationFileCreates(async () => {
+          const request = await sendThroughRoute(
+            route,
+            {
+              id: 'caller-cancellation',
+              description: 'unanswered call',
+              rows: [],
+            },
+            'rows',
+            undefined,
+            selection,
+          );
+          expect(
+            JSON.parse(new TextDecoder().decode(request.bytes)),
+          ).toMatchObject({
+            input: [
+              { role: 'user', content: 'question' },
+              {
+                type: 'function_call',
+                call_id: 'call_pending',
+                name: 'read',
+                arguments: '{"path":"a"}',
+              },
+              {
+                type: 'function_call_output',
+                call_id: 'call_pending',
+                output: 'Tool execution cancelled by user',
+              },
+            ],
+          });
+        }, true);
+        expect(creates).toStrictEqual({ files: [], directories: [] });
+      } finally {
+        await selection.close();
+      }
+    });
     it(`${route.id} refuses PDFs above the aggregate limit without creating files`, async () => {
       const data = Buffer.alloc(25_000_001).toString('base64');
       const selection = await callerOwnedRawProviderSource([
