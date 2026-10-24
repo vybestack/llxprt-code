@@ -770,9 +770,8 @@ export class TokenAccessCoordinator {
         requestMetadata,
       );
     } else {
-      // Use requireAuthenticator to validate the authenticator is wired, but
-      // route all calls through facadeRef so that spies on manager.authenticate
-      // intercept them (preserving the pre-refactor behaviour).
+      // The calls go through facadeRef so the manager's admission and owner
+      // signal apply; requireAuthenticator only validates the wiring.
       this.requireAuthenticator();
 
       const prompt = this.readBucketPrompt();
@@ -796,7 +795,9 @@ export class TokenAccessCoordinator {
         }
       } else {
         const authenticatedBucket = bucketToCheck ?? 'default';
-        await this.facadeRef.authenticate(providerName, authenticatedBucket);
+        await this.facadeRef.authenticate(providerName, authenticatedBucket, {
+          signal,
+        });
         if (authenticatedBucket) {
           this.facadeRef.setSessionBucket(
             providerName,

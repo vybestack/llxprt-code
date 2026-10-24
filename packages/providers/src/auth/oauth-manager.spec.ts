@@ -756,6 +756,7 @@ describe('OAuthManager', () => {
           expect(authenticateSpy).toHaveBeenCalledWith(
             'anthropic',
             'target-bucket',
+            { signal: expect.any(AbortSignal) },
           );
           expect(tokenStore.getToken).toHaveBeenCalledWith(
             'anthropic',

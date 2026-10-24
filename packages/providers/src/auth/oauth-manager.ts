@@ -322,10 +322,14 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     bucket?: string,
     options?: AuthCompletionOptions,
   ): Promise<void> {
-    return this.authFlowOrchestrator.authenticate(
-      providerName,
-      bucket,
-      options,
+    return this.foreground.accept((ownerSignal) =>
+      this.authFlowOrchestrator.authenticate(providerName, bucket, {
+        ...options,
+        signal:
+          options?.signal === undefined
+            ? ownerSignal
+            : AbortSignal.any([ownerSignal, options.signal]),
+      }),
     );
   }
 
@@ -433,17 +437,41 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
   private closing: Promise<void> | undefined;
 
   dispose(): Promise<void> {
-    this.closing ??= this.foreground
-      .dispose(async () => {
+    this.foreground.close();
+    this.closing ??= this.retire();
+    return this.closing;
+  }
+
+  /**
+   * Retires the manager in order: interactive sessions, accepted operations,
+   * authentication flights (their locks released), renewals, then the owned
+   * token store. Every step runs even if an earlier one failed; the steps' own
+   * failures are reported together at the end.
+   */
+  private async retire(): Promise<void> {
+    const failures: unknown[] = [];
+    const steps: Array<() => Promise<void>> = [
+      async () => {
         this.interactiveAuth.unbindHost();
         await this.interactiveAuth.dispose();
-        await this.proactiveRenewalManager.cancelAndJoin();
-      })
-      .finally(() => {
+      },
+      () => this.foreground.join(),
+      () => this.authFlowOrchestrator.dispose(),
+      () => this.proactiveRenewalManager.cancelAndJoin(),
+      async () => {
         if (this.tokenStoreOwnership === 'owned')
           closeOwnedTokenStore(this.tokenStore);
-      });
-    return this.closing;
+      },
+    ];
+    for (const step of steps) {
+      try {
+        await step();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    if (failures.length > 0)
+      throw new AggregateError(failures, 'OAuth retirement failed');
   }
 
   private interactiveRequestPort(): InteractiveAuthRequestPort {
@@ -812,10 +840,13 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     buckets: string[],
     requestMetadata?: OAuthTokenRequestMetadata,
   ): Promise<void> {
-    return this.authFlowOrchestrator.authenticateMultipleBuckets(
-      providerName,
-      buckets,
-      requestMetadata,
+    return this.foreground.accept((ownerSignal) =>
+      this.authFlowOrchestrator.authenticateMultipleBuckets(
+        providerName,
+        buckets,
+        requestMetadata,
+        ownerSignal,
+      ),
     );
   }
 

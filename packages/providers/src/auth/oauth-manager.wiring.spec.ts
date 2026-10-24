@@ -429,13 +429,18 @@ describe('OAuthManager wiring', () => {
     expect(authFlowOrchestrator.authenticate).toHaveBeenCalledWith(
       'claudecode',
       'bucket-a',
-      undefined,
+      { signal: expect.any(AbortSignal) },
     );
 
     await manager.authenticateMultipleBuckets('claudecode', ['bucket-a']);
     expect(
       authFlowOrchestrator.authenticateMultipleBuckets,
-    ).toHaveBeenCalledWith('claudecode', ['bucket-a'], undefined);
+    ).toHaveBeenCalledWith(
+      'claudecode',
+      ['bucket-a'],
+      undefined,
+      expect.any(AbortSignal),
+    );
 
     await expect(manager.getAuthStatus()).resolves.toStrictEqual([
       { provider: 'claudecode', authenticated: true, oauthEnabled: true },

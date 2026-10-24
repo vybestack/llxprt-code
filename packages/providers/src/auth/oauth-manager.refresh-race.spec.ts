@@ -287,7 +287,7 @@ describe('OAuthManager - Token Refresh Race Condition (Issue #1159)', () => {
       { forced: false, cancelled: true },
       { forced: true, cancelled: true },
     ])(
-      'joins real locked refresh and preserves retirement error identity (%j)',
+      'joins real locked refresh, preserves the caller error identity and does not re-report it from dispose (%j)',
       async ({ forced, cancelled }) => {
         const expiredToken = createToken('expired-token', -10);
         await tokenStore.saveToken('test-provider', expiredToken);
@@ -342,11 +342,7 @@ describe('OAuthManager - Token Refresh Race Condition (Issue #1159)', () => {
             ? operationSignal?.reason
             : providerError;
           expect(await pending).toBe(expectedError);
-          const result = await retirement;
-          expect(result).toBeInstanceOf(AggregateError);
-          if (!(result instanceof AggregateError))
-            throw new Error('Expected retirement failure');
-          expect(result.errors).toContain(expectedError);
+          expect(await retirement).toBeUndefined();
           expect(await tokenStore.getToken('test-provider')).toStrictEqual(
             expiredToken,
           );

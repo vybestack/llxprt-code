@@ -103,7 +103,7 @@ for (const forced of [false, true]) {
         expect(signal?.aborted).toBe(true);
         held.release();
         expect(await pending).toBeInstanceOf(Error);
-        expect(await disposing).toBeInstanceOf(AggregateError);
+        expect(await disposing).toBeUndefined();
         expect(
           (await sibling.getOAuthToken('held', 'default'))?.expiry,
         ).toBeGreaterThan(Date.now() / 1000);
@@ -172,7 +172,7 @@ describe('Injected interactive OAuth shutdown', () => {
       await new Promise<void>((resolve) => setImmediate(resolve));
       expect(disposed).toBe(true);
       expect(await childRequest).toMatchObject({ outcomeKind: 'cancelled' });
-      expect(await retirement).toBeInstanceOf(AggregateError);
+      expect(await retirement).toBeUndefined();
       expect(root.getInteractiveAuthSessions()[0]?.waiterCount).toBe(1);
       expect(hostSignal?.aborted).toBe(false);
       held.release();

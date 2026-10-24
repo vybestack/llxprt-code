@@ -113,6 +113,16 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
   // on the heldTokens lock check and timing out.
   private readonly authInFlight: Map<string, AuthFlight> = new Map();
 
+  // Every started flight until its settlement handling is done, including
+  // orphaned and aborted ones that `authInFlight` no longer lists. `dispose`
+  // joins them so the auth locks they hold are released before the owner
+  // closes its token store.
+  private readonly flightSettlements: Set<Promise<void>> = new Set();
+
+  // Failures of the owner's own lock releases. The flight's caller sees each
+  // one in its flight's rejection; disposal reports it once more.
+  private readonly lockReleaseFailures: unknown[] = [];
+
   constructor(
     private readonly tokenStore: TokenStore,
     private readonly providerRegistry: ProviderRegistry,
@@ -229,7 +239,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
       completionSignaled: false,
       attemptId,
     };
-    this.wireFlightSettlement(flightKey, flight);
+    this.flightSettlements.add(this.wireFlightSettlement(flightKey, flight));
     this.authInFlight.set(flightKey, flight);
     try {
       await this.awaitFlightAsParticipant(flight, options?.signal);
@@ -313,8 +323,11 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     this.deleteFlightIfOwned(flightKey, flight);
   }
 
-  private wireFlightSettlement(flightKey: string, flight: AuthFlight): void {
-    void flight.promise
+  private wireFlightSettlement(
+    flightKey: string,
+    flight: AuthFlight,
+  ): Promise<void> {
+    const settlement: Promise<void> = flight.promise
       .then(
         () => oauthUIBridge.settleDialog(flight.attemptId),
         (error: unknown) => {
@@ -333,7 +346,29 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
         if (flight.participants <= 0) {
           this.deleteFlightIfOwned(flightKey, flight);
         }
+      })
+      .finally(() => {
+        this.flightSettlements.delete(settlement);
       });
+    return settlement;
+  }
+
+  /**
+   * Aborts every started flight and waits until each has settled and released
+   * its auth lock. Flight outcomes belong to their callers and are not
+   * reported here; failures of the lock releases themselves are.
+   */
+  async dispose(): Promise<void> {
+    for (const flight of this.authInFlight.values()) {
+      flight.controller.abort(new Error('OAuth manager is disposed'));
+    }
+    await Promise.allSettled([...this.flightSettlements]);
+    if (this.lockReleaseFailures.length > 0) {
+      throw new AggregateError(
+        this.lockReleaseFailures.splice(0),
+        'Auth lock release failed',
+      );
+    }
   }
 
   private deleteFlightIfOwned(flightKey: string, flight: AuthFlight): void {
@@ -371,11 +406,9 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
       bucket,
       AUTH_LOCK_WAIT_MS,
     );
-    // The auth lock wait is bounded but not signal-aware; an aborted caller
-    // must not proceed into credential work even if the lock was acquired.
-    throwIfAborted(signal);
 
     if (lockOutcome !== 'acquired') {
+      throwIfAborted(signal);
       if (lockOutcome === 'timed-out') {
         await this.handleAuthLockTimeout(providerName, bucket);
       }
@@ -383,6 +416,10 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     }
 
     try {
+      // The auth lock wait is bounded but not signal-aware; an aborted caller
+      // must not proceed into credential work even if the lock was acquired,
+      // and the lock it did get is released by the `finally` below.
+      throwIfAborted(signal);
       const earlyReturn = await this.checkDiskTokenUnderLock(
         providerName,
         bucket,
@@ -422,8 +459,20 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
         `Authentication failed for provider ${providerName}: ${String(error)}`,
       );
     } finally {
-      await this.tokenStore.releaseAuthLock(providerName, bucket);
+      await this.releaseAuthLock(providerName, bucket);
       logger.debug(() => `[FLOW] Released auth lock for ${providerName}`);
+    }
+  }
+
+  private async releaseAuthLock(
+    providerName: string,
+    bucket: string | undefined,
+  ): Promise<void> {
+    try {
+      await this.tokenStore.releaseAuthLock(providerName, bucket);
+    } catch (error) {
+      this.lockReleaseFailures.push(error);
+      throw error;
     }
   }
 
@@ -718,6 +767,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     providerName: string,
     buckets: string[],
     requestMetadata?: OAuthTokenRequestMetadata,
+    signal?: AbortSignal,
   ): Promise<void> {
     const { MultiBucketAuthenticator } = await import(
       './MultiBucketAuthenticator.js'
@@ -754,6 +804,7 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
       buckets,
       unauthenticatedBuckets,
       this.readBucketPolicy,
+      signal,
     );
 
     if (result.cancelled) {
@@ -784,8 +835,9 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
     buckets: string[],
     unauthenticatedBuckets: string[],
     readPolicy: () => { readonly prompt?: unknown; readonly delay?: unknown },
+    signal: AbortSignal | undefined,
   ): Promise<MultiBucketAuthResult> {
-    const onAuthBucket = this.buildOnAuthBucketCallback();
+    const onAuthBucket = this.buildOnAuthBucketCallback(signal);
     const onPrompt = this.buildOnPromptCallback(
       providerName,
       unauthenticatedBuckets,
@@ -858,7 +910,9 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
    * Build the onAuthBucket callback for MultiBucketAuthenticator.
    * Includes TOCTOU defense-in-depth re-check before auth (issue 1652).
    */
-  private buildOnAuthBucketCallback(): (
+  private buildOnAuthBucketCallback(
+    signal: AbortSignal | undefined,
+  ): (
     provider: string,
     bucket: string,
     index: number,
@@ -888,8 +942,8 @@ export class AuthFlowOrchestrator implements AuthenticatorInterface {
 
       debugLogger.log(`\n=== Bucket ${index} of ${total}: ${bucket} ===\n`);
       logger.debug(`Authenticating bucket ${index} of ${total}: ${bucket}`);
-      // Route through the facade so test spies on manager.authenticate are intercepted.
-      await this.facadeRef.authenticate(provider, bucket);
+      // Route through the facade so the manager's admission and owner signal apply.
+      await this.facadeRef.authenticate(provider, bucket, { signal });
     };
   }
 
