@@ -15,6 +15,7 @@ import { decodeDecimal, encodeDecimal } from './metaFacts.js';
 import { decodeMistralSlots, MISTRAL_SLOTS_KEY } from './mistralMapping.js';
 import { PinLease, PinnedRead } from './pinLease.js';
 import { RECORD_KIND } from './recordKinds.js';
+import type { RecordAccess } from './recordAccess.js';
 import type { RowEntry } from './rowEntry.js';
 import { repairResponsesPairChanges } from './responsesPairChanges.js';
 import { rowAlgebra } from './rowAlgebra.js';
@@ -113,20 +114,16 @@ function needsFill(
 }
 
 async function* missingEntries(
-  ctx: BuildContext,
-  appender: RecordAppender,
+  access: RecordAccess,
   offset: number,
   slot: number,
   format: FormatSlot,
 ): AsyncGenerator<RowEntry> {
-  const node = await readRowTreeNode(
-    ctx.readGroup(appender.nextOffset),
-    offset,
-  );
+  const node = await readRowTreeNode(access, offset);
   if (node.kind === 'internal') {
     for (const child of node.slots)
       if (needsFill(child.aggregate, slot, format))
-        yield* missingEntries(ctx, appender, child.childOffset, slot, format);
+        yield* missingEntries(access, child.childOffset, slot, format);
   } else {
     for (const entry of node.entries)
       if (entry.stamp[slot].gen !== format.gen || entry.lensRef[slot] === 0)
@@ -363,14 +360,18 @@ async function incrementalFill(
       ? await repairResponsesPairChanges(
           fill,
           built,
-          missingEntries(ctx, appender, built.state.rowRoot, slot, format),
+          missingEntries(
+            ctx.readGroup(appender.nextOffset),
+            built.state.rowRoot,
+            slot,
+            format,
+          ),
         )
       : built;
   const algebra = rowAlgebra(slotKindsOf(built.state.slots));
   async function* replacements(): AsyncGenerator<RowEntry> {
     for await (const entry of missingEntries(
-      ctx,
-      appender,
+      ctx.readGroup(appender.nextOffset),
       next.state.rowRoot,
       slot,
       format,
