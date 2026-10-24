@@ -42,7 +42,6 @@ export const SCRIPTS_TEST_WEIGHTS_SECONDS: Readonly<Record<string, number>> = {
   'scripts/tests/provider-curated-body.test.ts': 96,
   'scripts/tests/addbatch-value-body.test.ts': 92,
   'scripts/tests/chat-default-history-body.test.ts': 85,
-  'scripts/tests/export-summary-body.test.ts': 82,
   'scripts/tests/density-disk-body.test.ts': 81,
   'scripts/tests/middleout-summary-body.test.ts': 77,
   'scripts/tests/detached-rollback-body.test.ts': 74,
