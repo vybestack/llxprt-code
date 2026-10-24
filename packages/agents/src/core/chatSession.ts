@@ -241,7 +241,6 @@ export class ChatSession {
   private readonly systemPromptAssembler?: SystemPromptAssembler;
   /** Serializes per-turn system-prompt resolution against send hand-off. */
   private systemPromptTurnChain: Promise<void> = Promise.resolve();
-  private setHistoryAdmission?: SessionHistoryAdmission;
   private retainedHistoryAdmissions: readonly SessionHistoryAdmission[] = [];
   private historyAdmissionSequence = 0;
   private removeDensityWrapper?: () => void;
@@ -370,7 +369,6 @@ export class ChatSession {
   takeHistoryAdmissions(): readonly SessionHistoryAdmission[] {
     const admissions = this.retainedHistoryAdmissions;
     this.retainedHistoryAdmissions = [];
-    this.setHistoryAdmission = undefined;
     return admissions;
   }
 
@@ -753,7 +751,6 @@ export class ChatSession {
         'Chat history media cleanup was incomplete',
       );
     }
-    this.setHistoryAdmission = undefined;
     await this.conversationManager.clearHistory();
   }
 
@@ -801,10 +798,8 @@ export class ChatSession {
       }
       throw error;
     }
-    const previousOwnership = this.setHistoryAdmission;
-    this.setHistoryAdmission = ownership;
     const releaseFailures = await this.releaseSessionHistoryAdmissions(
-      previousOwnership === undefined ? [] : [previousOwnership],
+      ownership === undefined ? [] : [ownership],
     );
     if (releaseFailures.length > 0) {
       throw new AggregateError(
