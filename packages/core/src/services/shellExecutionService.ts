@@ -21,8 +21,10 @@ import {
 } from './shellOutputUtils.js';
 import {
   SIGKILL_TIMEOUT_MS,
+  awaitOwnedGroupTerminations,
   isKillablePid,
   taskkillTree,
+  terminateOwnedProcessGroup,
 } from './shellProcessKill.js';
 import {
   isIgnorablePtyExitError,
@@ -277,15 +279,21 @@ export class ShellExecutionService {
     }
 
     const isWindows = os.platform() === 'win32';
+    if (!isWindows && activePty.supportsProcessGroupKill) {
+      // The group chain escalates on group liveness and is independent of
+      // this registry entry, which is removed when the leader exits.
+      void terminateOwnedProcessGroup(pid);
+      try {
+        activePty.ptyProcess.kill('SIGTERM');
+      } catch {
+        // PTY may already be terminated.
+      }
+      return;
+    }
+
     if (isWindows) {
       // Windows has no POSIX process groups; walk the descendant tree only.
       taskkillTree(pid);
-    } else if (activePty.supportsProcessGroupKill) {
-      try {
-        process.kill(-pid, 'SIGTERM');
-      } catch {
-        // Process may already be terminated.
-      }
     }
 
     try {
@@ -300,12 +308,6 @@ export class ShellExecutionService {
       }
       if (isWindows) {
         taskkillTree(pid);
-      } else if (activePty.supportsProcessGroupKill) {
-        try {
-          process.kill(-pid, 'SIGKILL');
-        } catch {
-          // Process may already be terminated.
-        }
       }
       try {
         activePty.ptyProcess.kill('SIGKILL');
@@ -345,13 +347,26 @@ export class ShellExecutionService {
   /**
    * Destroys all active PTY processes by sending kill signals and cleaning up
    * resources. Safe to call when no PTYs are active.
+   *
+   * Registry entries and PTY resources are released synchronously. The
+   * returned promise settles after every owned process-group termination in
+   * flight has finished (SIGTERM, then SIGKILL for members that ignore it, or
+   * the bounded reap window expiring). That includes terminations started by
+   * an earlier `terminatePty` or disposal whose registry entry is already
+   * gone, so every caller that is about to exit can wait for descendants to
+   * be gone.
    */
-  static destroyAllPtys(): void {
+  static async destroyAllPtys(): Promise<void> {
+    const isWindows = os.platform() === 'win32';
     for (const [pid, entry] of this.activePtys) {
+      if (!isWindows && entry.supportsProcessGroupKill) {
+        void terminateOwnedProcessGroup(pid);
+      }
       cleanupPtyEntryResources(entry);
       this.activePtys.delete(pid);
     }
     this.lastActivePtyIdRef.value = null;
+    await awaitOwnedGroupTerminations();
   }
 
   /**

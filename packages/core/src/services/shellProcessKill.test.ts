@@ -18,6 +18,7 @@ import {
   isProcessGroupAlive,
   reapProcessGroup,
   taskkillTree,
+  terminateOwnedProcessGroup,
 } from './shellProcessKill.js';
 import { createExitGuard } from './shellExitGuard.js';
 
@@ -457,6 +458,62 @@ describe('ShellProcessKill platform behavior', () => {
           await expect(reapProcessGroup(leaderPid, 2000)).resolves.toBe(true);
         } finally {
           reapGroup(leaderPid);
+        }
+      }, 20000);
+    },
+  );
+
+  describe.skipIf(isWindows)(
+    'terminateOwnedProcessGroup (POSIX, issue #3517)',
+    () => {
+      it('treats non-group-target pids as already terminated without signalling', async () => {
+        const killSpy = vi.spyOn(process, 'kill');
+        try {
+          await expect(terminateOwnedProcessGroup(0)).resolves.toBe(true);
+          await expect(terminateOwnedProcessGroup(1)).resolves.toBe(true);
+          expect(killSpy).not.toHaveBeenCalled();
+        } finally {
+          killSpy.mockRestore();
+        }
+      });
+
+      it('escalates to SIGKILL for a SIGTERM-ignoring member after the group leader has exited', async () => {
+        const dir = fs.mkdtempSync(
+          path.join(os.tmpdir(), 'llxprt-owned-group-'),
+        );
+        const pidFile = path.join(dir, 'child.pid');
+        const leader = spawn(
+          'bash',
+          [
+            '-c',
+            `(trap '' HUP TERM; exec sleep 86413) & echo $! > '${pidFile}'; wait`,
+          ],
+          { detached: true, stdio: 'ignore' },
+        );
+        leader.on('error', () => {});
+        leader.unref();
+        const leaderExited = new Promise<void>((resolve) =>
+          leader.once('exit', () => resolve()),
+        );
+        const leaderPid = observedProcessPid(leader.pid);
+        try {
+          const childPid = Number.parseInt(await waitForMarker(pidFile), 10);
+          expect(isPidAlive(childPid)).toBe(true);
+
+          const first = terminateOwnedProcessGroup(leaderPid);
+          const second = terminateOwnedProcessGroup(leaderPid);
+          // One shared sequence, not two racing ones.
+          expect(second).toBe(first);
+
+          // SIGTERM ends the leader; the member ignores it, so only the
+          // SIGKILL stage can empty the group.
+          await leaderExited;
+          await expect(first).resolves.toBe(true);
+          expect(isProcessGroupAlive(leaderPid)).toBe(false);
+          expect(isPidAlive(childPid)).toBe(false);
+        } finally {
+          reapGroup(leaderPid);
+          fs.rmSync(dir, { recursive: true, force: true });
         }
       }, 20000);
     },

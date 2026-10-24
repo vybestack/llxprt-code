@@ -32,9 +32,10 @@ export interface PtyExecState {
   shellExecutionConfig: ShellExecutionConfig;
   ptyInfo: NonNullable<PtyImplementation>;
   /**
-   * Whether the PTY backend creates a detached process group, enabling
-   * `process.kill(-pid)` to kill the entire tree. node-pty (forkpty → setsid)
-   * does; Bun.Terminal does not (no new session/group).
+   * Whether the PTY child leads a process group of its own, so that
+   * `process.kill(-pid)` reaches the whole tree and only that tree. node-pty
+   * (forkpty → setsid) always does. For bun-pty it is confirmed with the
+   * kernel at spawn (see `ptyLeadsProcessGroup`).
    */
   supportsProcessGroupKill: boolean;
   inactivityAbortController: AbortController;

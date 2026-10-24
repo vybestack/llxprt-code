@@ -18,6 +18,7 @@
 import {
   type CanonicalFinishReason,
   UnauthorizedError,
+  LocalTokenizationError,
   getErrorMessage,
   parseAndFormatApiError,
   type ToolCallRequestInfo,
@@ -505,7 +506,9 @@ export function handleSubmissionError(
       {
         type: MessageType.ERROR,
         text: parseAndFormatApiError(
-          getErrorMessage(error) || 'Unknown error',
+          error instanceof LocalTokenizationError
+            ? error
+            : getErrorMessage(error) || 'Unknown error',
           fallbackModel,
           providerName,
         ),
