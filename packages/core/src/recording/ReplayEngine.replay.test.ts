@@ -8,7 +8,9 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
-import { replaySession, readSessionHeader } from './ReplayEngine.js';
+import { replaySession } from './ReplayEngine.js';
+import { SessionDiscovery } from './SessionDiscovery.js';
+import { JournalRecordingService } from './journalRecordingService.js';
 import {
   assertReplayOk,
   PROJECT_HASH,
@@ -21,6 +23,7 @@ import {
   sessionEventLine,
   writeJsonlFile,
   createValidFile,
+  makeConfig,
 } from './__tests__/replay-test-helpers.js';
 
 describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
@@ -205,12 +208,23 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-001
      */
-    it('returns session metadata from the first line', async () => {
-      const filePath = await createValidFile(chatsDir, (svc) => {
-        svc.recordContent(makeContent('trigger', 'human'));
-      });
+    it('returns session metadata from native journal facts', async () => {
+      const recording = JournalRecordingService.create(
+        makeConfig({ chatsDir }),
+      );
+      let filePath: string | null;
+      try {
+        await (
+          await recording.session()
+        ).append([makeContent('trigger', 'human')]);
+        await recording.flush();
+        filePath = recording.getFilePath();
+      } finally {
+        await recording.dispose();
+      }
+      if (filePath === null) throw new Error('Expected a native recording');
 
-      const header = await readSessionHeader(filePath);
+      const header = await SessionDiscovery.readSessionHeader(filePath);
 
       expect(header).not.toBeNull();
       expect(header!.sessionId).toBe('test-session-00000001');
@@ -224,11 +238,11 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
      * @plan PLAN-20260211-SESSIONRECORDING.P07
      * @requirement REQ-RPL-001
      */
-    it('returns null for file with invalid first line', async () => {
-      const filePath = path.join(chatsDir, 'bad-header.jsonl');
-      await fs.writeFile(filePath, 'THIS IS NOT JSON\n', 'utf-8');
+    it('returns null for a file with invalid native journal bytes', async () => {
+      const filePath = path.join(chatsDir, 'bad-header.llxj');
+      await fs.writeFile(filePath, 'THIS IS NOT A JOURNAL\n', 'utf-8');
 
-      const header = await readSessionHeader(filePath);
+      const header = await SessionDiscovery.readSessionHeader(filePath);
 
       expect(header).toBeNull();
     });

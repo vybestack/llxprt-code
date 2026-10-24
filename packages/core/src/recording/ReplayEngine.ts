@@ -20,13 +20,12 @@ import {
   ReplayMetadataFailure,
   ResolverReplayMetadata,
 } from './resolverReplayMetadata.js';
-import { readBoundedFirstLine } from './boundedHeaderReader.js';
 import { formatReplayDiagnostic } from './replayErrorFormatting.js';
 import {
   invalidateResponsesStatefulChain,
   type IContent,
 } from '../services/history/IContent.js';
-import type { ReplayResult, SessionStartPayload } from './types.js';
+import type { ReplayResult } from './types.js';
 import type { LocalMediaStore } from '../storage/local-media-store.js';
 import type { JournalReadCounters } from './journalCounters.js';
 import { MediaAdmissionService } from '../storage/media-admission-service.js';
@@ -279,19 +278,5 @@ async function verifyReplayMedia(
       error: formatReplayDiagnostic(error),
       warnings: replay.warnings,
     };
-  }
-}
-
-export async function readSessionHeader(
-  filePath: string,
-): Promise<SessionStartPayload | null> {
-  const firstLine = await readBoundedFirstLine(filePath);
-  if (firstLine === null) return null;
-  try {
-    const parsed = JSON.parse(firstLine) as Record<string, unknown>;
-    if (parsed.type !== 'session_start') return null;
-    return parsed.payload as SessionStartPayload;
-  } catch {
-    return null;
   }
 }

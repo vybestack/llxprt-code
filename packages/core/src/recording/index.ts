@@ -71,7 +71,6 @@ export {
 } from './childJournal.js';
 export {
   replaySession,
-  readSessionHeader,
   replaySessionThroughSequence,
   foldCheckpointMetadata,
 } from './ReplayEngine.js';

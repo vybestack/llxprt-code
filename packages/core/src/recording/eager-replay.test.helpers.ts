@@ -32,7 +32,6 @@ import {
   foldCheckpointMetadata,
 } from './replayCheckpointMetadata.js';
 export { foldCheckpointMetadata } from './replayCheckpointMetadata.js';
-import { readBoundedFirstLine } from './boundedHeaderReader.js';
 
 import {
   isRecordWithNonNegativeIntegerPair,
@@ -964,34 +963,6 @@ export async function replaySessionThroughSequence(
       applyBoundedReplayLine(rawLine, maxSequence, expectedProjectHash, acc),
   );
   return replay;
-}
-
-/**
- * Read only the session header (first line) from a JSONL file.
- * Useful for listing sessions without replaying the entire file.
- *
- * Uses the canonical bounded header reader shared with session discovery and
- * the janitor (Item 7).
- *
- * @plan PLAN-20260211-SESSIONRECORDING.P08
- * @requirement REQ-RPL-001
- * @pseudocode replay-engine.md lines 175-198
- *
- * @param filePath - Path to the .jsonl session file
- * @returns The SessionStartPayload from the first line, or null if unreadable
- */
-export async function readSessionHeader(
-  filePath: string,
-): Promise<SessionStartPayload | null> {
-  const firstLine = await readBoundedFirstLine(filePath);
-  if (firstLine === null) return null;
-  try {
-    const parsed = JSON.parse(firstLine) as Record<string, unknown>;
-    if (parsed.type !== 'session_start') return null;
-    return parsed.payload as SessionStartPayload;
-  } catch {
-    return null;
-  }
 }
 
 function foldNewEvent(

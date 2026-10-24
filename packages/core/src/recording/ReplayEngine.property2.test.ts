@@ -9,8 +9,10 @@ import * as fc from 'fast-check';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
-import { replaySession, readSessionHeader } from './ReplayEngine.js';
+import { replaySession } from './ReplayEngine.js';
 import { SessionRecordingService } from './SessionRecordingService.js';
+import { SessionDiscovery } from './SessionDiscovery.js';
+import { JournalRecordingService } from './journalRecordingService.js';
 import {
   assertReplayOk,
   PROJECT_HASH,
@@ -19,6 +21,7 @@ import {
   contentLine,
   writeJsonlFile,
   createValidFile,
+  makeConfig,
 } from './__tests__/replay-test-helpers.js';
 
 describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
@@ -404,15 +407,28 @@ describe('ReplayEngine @plan:PLAN-20260211-SESSIONRECORDING.P07', () => {
             await fs.mkdir(localChatsDir, { recursive: true });
 
             try {
-              const filePath = await createValidFile(
-                localChatsDir,
-                (svc) => {
-                  svc.recordContent(makeContent('trigger', 'human'));
-                },
-                { sessionId, provider, model },
+              const recording = JournalRecordingService.create(
+                makeConfig({
+                  chatsDir: localChatsDir,
+                  sessionId,
+                  provider,
+                  model,
+                }),
               );
+              let filePath: string | null;
+              try {
+                await (
+                  await recording.session()
+                ).append([makeContent('trigger', 'human')]);
+                await recording.flush();
+                filePath = recording.getFilePath();
+              } finally {
+                await recording.dispose();
+              }
+              if (filePath === null)
+                throw new Error('Expected a native recording');
 
-              const header = await readSessionHeader(filePath);
+              const header = await SessionDiscovery.readSessionHeader(filePath);
 
               expect(header).not.toBeNull();
               expect(header!.sessionId).toBe(sessionId);
