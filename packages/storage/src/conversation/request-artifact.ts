@@ -14,6 +14,17 @@ export interface RequestArtifactDescriptor {
   readonly row_count: number;
 }
 
+async function writeNextArtifactRow(
+  iterator: AsyncIterator<unknown>,
+  write: (text: string) => Promise<void>,
+  first: boolean,
+): Promise<boolean> {
+  const next = await iterator.next();
+  if (next.done === true) return false;
+  await write((first ? '' : ',') + JSON.stringify(next.value));
+  return true;
+}
+
 export async function stageRequestArtifact(
   directory: string,
   provider: string,
@@ -46,9 +57,12 @@ export async function stageRequestArtifact(
     const prefix = header.slice(0, -1) + ',"messages":';
     await file.writeFile(prefix);
     await writeContent('[');
-    for await (const row of messages) {
-      await writeContent((rowCount === 0 ? '' : ',') + JSON.stringify(row));
-      rowCount++;
+    const iterator = messages[Symbol.asyncIterator]();
+    try {
+      while (await writeNextArtifactRow(iterator, writeContent, rowCount === 0))
+        rowCount++;
+    } finally {
+      await iterator.return?.();
     }
     await writeContent(']');
     await file.writeFile(
