@@ -138,12 +138,6 @@ export {
   type ForkError,
 } from './SessionTransitionService.js';
 export {
-  HistoryMutationService,
-  computeClearCutIndex,
-  type HistoryMutationResult,
-  type HistoryMutationError,
-} from './HistoryMutationService.js';
-export {
   emptyResult,
   resolveRetentionConfig,
   runSessionCleanup,
