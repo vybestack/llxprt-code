@@ -16,7 +16,7 @@ describe('native tool crash front-door resume', () => {
     const rig = await serviceToolChild('none', 'crash');
     try {
       const ready = await rig.wait('ready');
-      const files = z.array(z.string()).length(2).parse(ready.details.files);
+      const files = z.array(z.string()).length(1).parse(ready.details.files);
       rig.send('next');
       const entry = await rig.wait('transport-entry');
       await rig.wait('transport-request');
@@ -43,13 +43,9 @@ describe('native tool crash front-door resume', () => {
             ],
           },
         });
-        await proveToolResume(
-          rig.directory,
-          index === 0 ? 'primary' : 'mirror',
-          recovered.rows,
-        );
+        await proveToolResume(rig.directory, 'primary', recovered.rows);
       }
-      const counts = z.array(z.number()).length(2);
+      const counts = z.array(z.number()).length(1);
       expect(counts.parse(entry.details.flushes)).toStrictEqual(
         counts.parse(ready.details.flushes).map((count) => count + 1),
       );

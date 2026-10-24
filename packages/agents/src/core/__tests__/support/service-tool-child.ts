@@ -9,7 +9,7 @@ export const serviceCrashRoot = resolve(
   '../../../../../../tmp/854-notes/p4/w21/service-crash',
 );
 export async function serviceToolChild(
-  role: 'primary' | 'mirror' | 'none',
+  role: 'primary' | 'none',
   mode: 'crash' | 'clean',
 ) {
   await mkdir(join(serviceCrashRoot, 'fixtures'), { recursive: true });

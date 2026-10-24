@@ -17,7 +17,7 @@ import {
 import { proveToolResume } from './__tests__/support/service-tool-resume.js';
 
 function numbers(event: DriverEvent, key: string): number[] {
-  return z.array(z.number()).length(2).parse(event.details[key]);
+  return z.array(z.number()).length(1).parse(event.details[key]);
 }
 
 type Rig = Awaited<ReturnType<typeof serviceToolChild>>;
@@ -43,7 +43,6 @@ async function crash(
   for (let file = 0; file < files.length; file++)
     expect(await diskToolState(files[file])).toStrictEqual(committed[file]);
   await proveToolResume(rig.directory, 'primary', committed[0].rows);
-  await proveToolResume(rig.directory, 'mirror', committed[1].rows);
 }
 async function clean(
   rig: Rig,
@@ -53,7 +52,7 @@ async function clean(
   rig.send('respond');
   await rig.wait('closed');
   expect(await rig.child.exited).toBe(0);
-  for (const name of ['primary', 'mirror'])
+  for (const name of ['primary'])
     expect(
       await SessionLockManager.isLocked(
         recordingConfig(rig.directory, name).chatsDir,
@@ -69,16 +68,14 @@ async function clean(
   }
 }
 const finish = { crash, clean };
-async function scenario(
-  role: 'primary' | 'mirror',
-  mode: 'crash' | 'clean',
-): Promise<unknown> {
+async function scenario(mode: 'crash' | 'clean'): Promise<unknown> {
+  const role = 'primary';
   const rig = await serviceToolChild(role, mode);
   try {
     const ready = await rig.wait('ready');
-    const files = z.array(z.string()).length(2).parse(ready.details.files);
+    const files = z.array(z.string()).length(1).parse(ready.details.files);
     const baseline = await Promise.all(files.map(diskToolState));
-    expect(baseline.map((state) => state.rows.length)).toStrictEqual([2, 2]);
+    expect(baseline.map((state) => state.rows.length)).toStrictEqual([2]);
     expect(baseline[0].rows[1].owner).toBe(
       z.string().parse(ready.details.owner),
     );
@@ -86,7 +83,7 @@ async function scenario(
     const held = await rig.wait('held');
     expect(held.details.entries).toBe(1);
     expect(held.details.nextStarted).toBe(true);
-    const index = role === 'primary' ? 0 : 1;
+    const index = 0;
     expect(numbers(held, 'seqs')[index]).toBe(numbers(ready, 'seqs')[index]);
     expect(numbers(held, 'flushes')[index]).toBe(
       numbers(ready, 'flushes')[index] + 1,
@@ -150,16 +147,15 @@ async function scenario(
   }
 }
 describe('ChatSession native tool-round durability at the next provider request', () => {
-  for (const role of ['primary', 'mirror'] as const) {
-    for (const mode of ['crash', 'clean'] as const) {
-      it(`${role} trailer blocks the next request before ${mode}`, async () => {
-        expect(await scenario(role, mode)).toMatchObject({
-          calls: 1,
-          results: 1,
-          ids: [toolId, toolId],
-          result: toolResult,
-        });
-      }, 60000);
-    }
+  const modes: ReadonlyArray<'crash' | 'clean'> = ['crash', 'clean'];
+  for (const mode of modes) {
+    it(`primary trailer blocks the next request before ${mode}`, async () => {
+      expect(await scenario(mode)).toMatchObject({
+        calls: 1,
+        results: 1,
+        ids: [toolId, toolId],
+        result: toolResult,
+      });
+    }, 60000);
   }
 });

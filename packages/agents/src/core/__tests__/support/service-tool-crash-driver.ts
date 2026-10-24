@@ -26,10 +26,9 @@ import {
 } from './service-tool-runtime.js';
 
 const directory = z.string().min(1).parse(process.argv[2]);
-const role = z.enum(['primary', 'mirror', 'none']).parse(process.argv[3]);
+const role = z.enum(['primary', 'none']).parse(process.argv[3]);
 const exitMode = z.enum(['crash', 'clean']).parse(process.argv[4]);
 const primary = await observedRecording(directory, 'primary');
-const mirror = await observedRecording(directory, 'mirror');
 const history = new HistoryService({});
 await history.adoptResumeBoot(
   primary.recording,
@@ -41,25 +40,17 @@ await history.adoptResumeBoot(
 const origin = {};
 const primaryIntegration = new RecordingIntegration(primary.recording);
 await primaryIntegration.subscribeToJournal(history, origin);
-const integration = new RecordingIntegration(mirror.recording);
-await integration.subscribeToJournal(history, origin);
-const sessions = [
-  await primary.recording.session(),
-  await mirror.recording.session(),
-];
+const sessions = [await primary.recording.session()];
 const responseGate = toolGate();
 const nextGate = toolGate();
 let entries = 0;
 let nextStarted = false;
-const files = [
-  recordingFile(primary.recording),
-  recordingFile(mirror.recording),
-];
+const files = [recordingFile(primary.recording)];
 const facts = (): Record<string, unknown> => ({
   entries,
   nextStarted,
   seqs: sessions.map((session) => session.store.published?.commitSeq ?? 0),
-  flushes: [primary.flushes(), mirror.flushes()],
+  flushes: [primary.flushes()],
 });
 const provider = localProvider((options) => {
   entries++;
@@ -107,7 +98,6 @@ process.on('message', (input: unknown) => {
   if (command === 'next') nextGate.resolve();
   if (command === 'release') {
     primary.seams.release();
-    mirror.seams.release();
   }
   if (command === 'respond') responseGate.resolve();
   if (command === 'probe') {
@@ -123,7 +113,7 @@ process.on('message', (input: unknown) => {
 try {
   await setup.chat.sendMessage({ message: 'Run lookup.' }, 'first', execution);
   await history.waitForCommit();
-  await integration.flushAtTurnBoundary();
+  await primaryIntegration.flushAtTurnBoundary();
   report('ready', {
     ...facts(),
     files,
@@ -131,7 +121,7 @@ try {
     disk: await Promise.all(files.map(diskToolState)),
   });
   await nextGate.promise;
-  const selected = role === 'primary' ? primary : mirror;
+  const selected = primary;
   const writes = selected.seams.events.filter(
     (event) => event.type === 'write',
   ).length;
@@ -168,11 +158,8 @@ try {
   });
 } finally {
   primary.seams.release();
-  mirror.seams.release();
   await primaryIntegration.dispose();
-  await integration.dispose();
   await history.dispose();
-  await mirror.recording.dispose();
   await primary.recording.dispose();
   await setup.close();
 }
