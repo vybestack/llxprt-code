@@ -314,12 +314,23 @@ async function checkRollback(
       ),
     ).toStrictEqual(['candidate binding failed', 'candidate cleanup failed']);
     expect(clients[1].disposals).toBe(1);
-    await owner.dispose();
+    const disposal = await owner.dispose().then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    expect(disposal).toBeInstanceOf(AggregateError);
+    if (!(disposal instanceof AggregateError))
+      throw new Error('Missing disposal aggregate');
+    expect(
+      disposal.errors.flatMap((error: unknown) =>
+        error instanceof AggregateError ? error.errors : [error],
+      ),
+    ).toStrictEqual([failure.errors[1]]);
     return clients.map((client) => client.disposals);
   } finally {
     gate.release();
     await pending;
-    await owner.dispose();
+    await owner.dispose().catch(() => undefined);
     await closeEngine();
   }
 }

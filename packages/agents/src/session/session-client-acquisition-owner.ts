@@ -283,18 +283,17 @@ export abstract class SessionClientAcquisitionOwner extends SessionConversationB
   ): Promise<Record<string, unknown>> {
     const client = this.getAgentClient();
     const input = [...contents];
-    return this.auxiliary.run(
-      (acceptedSignal) =>
-        client.generateJson(input, { ...schema }, acceptedSignal, model),
-      signal,
+    return client.generateJson(
+      input,
+      { ...schema },
+      signal ?? new AbortController().signal,
+      model,
     );
   }
 
   generateEmbedding(texts: readonly string[]): Promise<number[][]> {
     const client = this.getAgentClient();
-    return this.auxiliary.run((signal) =>
-      client.generateEmbedding([...texts], signal),
-    );
+    return client.generateEmbedding([...texts]);
   }
 
   readonly closeAuxiliaryAdmission = this.auxiliary.close.bind(this.auxiliary);

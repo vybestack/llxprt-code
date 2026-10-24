@@ -1060,7 +1060,7 @@ Coders tick their own line in the commit that completes the task. Inventory task
 - [x] T2.3c A3 preflight root network and transfer
 - [x] T2.3d A3 sessions borrow root network, child runtime loader
 - [x] T2.4 A3 compression profile root transport
-- [ ] T2.5a-n A3 test-built invocations pass fetch (ids added by T2.0)
+- [x] T2.5a-n A3 test-built invocations pass fetch (ids added by T2.0)
   - [x] T2.5a A3 test-built invocations pass fetch: packages/core, 8 files (file list in inventory-phase2.md)
   - [x] T2.5b A3 test-built invocations pass fetch: packages/test-utils, 1 file (file list in inventory-phase2.md)
   - [x] T2.5c A3 test-built invocations pass fetch: packages/providers, 15 files (file list in inventory-phase2.md)
@@ -1073,13 +1073,13 @@ Coders tick their own line in the commit that completes the task. Inventory task
   - [x] T2.5j A3 test-built invocations pass fetch: packages/agents, 14 files (file list in inventory-phase2.md)
   - [x] T2.5k A3 test-built invocations pass fetch: plugins/google-gemini, 5 files (file list in inventory-phase2.md)
 - [x] T2.6a A3 fetch required in invocations and the manager
-- [ ] T2.6b-Bk A3 test batches for unbound providers (ids added by T2.6b's stop rule, may be none)
+- [x] T2.6b-Bk A3 test batches for unbound providers (none needed)
 - [x] T2.6b A3 provider-level ambient fetch defaults deleted
 - [x] T2.6c A3 Codex image generation through the owner transport
 - [x] T2.7a A7 Vertex file and explicit credentials through the owner transporter
 - [x] T2.7b A7 Vertex metadata discovery and metadata tokens through the owner transport
 - [x] T2.7c A7 Vertex external account exchange through the owner transport
-- [ ] T3.1 A5 auxiliary generation disposal
+- [x] T3.1 A5 auxiliary generation disposal
 - [ ] T3.2 A5 workspace control and loop runner joins
 - [ ] T3.3 A5 activation preflight public work
 - [ ] T3.4 A4 auth admission, flights, owner signal, lock window

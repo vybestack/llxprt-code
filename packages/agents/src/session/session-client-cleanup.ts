@@ -63,6 +63,7 @@ export function rethrowAfterClientCleanup(
 export class OwnedClientLedger {
   private readonly scopes = new Map<AgentClientContract, string>();
   private readonly uses = new Map<AgentClientContract, Set<Promise<void>>>();
+  private readonly releaseFailures: unknown[] = [];
 
   retain(client: AgentClientContract): () => void {
     let release!: () => void;
@@ -96,17 +97,39 @@ export class OwnedClientLedger {
     this.scopes.delete(client);
   }
 
-  settleOwnedClients(): Promise<Array<PromiseSettledResult<void>>> {
-    return Promise.allSettled(
-      [...this.scopes.keys()].map((client) => this.dispose(client)),
+  /**
+   * Settles every client still registered and returns, ahead of those results,
+   * the failures of releases that other callers started and already reported
+   * to their own caller. Each failure is produced by one disposal and enters
+   * exactly one list.
+   */
+  async settleOwnedClients(): Promise<Array<PromiseSettledResult<void>>> {
+    const retained = this.releaseFailures
+      .splice(0)
+      .map((reason): PromiseRejectedResult => ({ status: 'rejected', reason }));
+    const batch = await Promise.allSettled(
+      [...this.scopes.keys()].map((client) => this.disposeEntry(client, false)),
     );
+    return [...retained, ...batch];
   }
 
-  async dispose(client: AgentClientContract): Promise<void> {
+  dispose(client: AgentClientContract): Promise<void> {
+    return this.disposeEntry(client, true);
+  }
+
+  private async disposeEntry(
+    client: AgentClientContract,
+    retainFailure: boolean,
+  ): Promise<void> {
     await this.join(client);
     const scope = this.scopes.get(client);
     if (scope === undefined) return;
-    await disposeClientAndFiles(client, () => this.release(client, scope));
+    try {
+      await disposeClientAndFiles(client, () => this.release(client, scope));
+    } catch (error) {
+      if (retainFailure) this.releaseFailures.push(error);
+      throw error;
+    }
   }
 
   /**

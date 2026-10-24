@@ -1,3 +1,4 @@
+import { AggregateDisposeError } from '../disposeErrors.js';
 import { fixtureAgentResources } from './helpers/agent-resource-capture.js';
 import {
   createCapturedSessionOwner,
@@ -73,7 +74,8 @@ import {
  */
 
 function originalCauses(error: unknown): unknown[] {
-  return error instanceof AggregateError
+  return error instanceof AggregateError ||
+    error instanceof AggregateDisposeError
     ? error.errors.flatMap(originalCauses)
     : [error];
 }
@@ -477,7 +479,13 @@ describe('profile-commit-publication', () => {
           'removeListener',
           onRemove,
         );
-        await agent.dispose();
+        const disposal = await agent.dispose().then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+        expect(
+          disposal === undefined ? [] : originalCauses(disposal),
+        ).toStrictEqual(removalThrows ? [removalError] : []);
         await builtCallerConfig.dispose();
         await builtCallerClose();
       }

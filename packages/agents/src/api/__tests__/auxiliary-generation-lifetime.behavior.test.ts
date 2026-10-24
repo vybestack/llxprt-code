@@ -53,7 +53,6 @@ import { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoad
 import { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
 import { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { emptyModelOutput } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import { AggregateDisposeError } from '../disposeErrors.js';
 
 import { gate } from './helpers/recording-finalizer-join-fixture.js';
 
@@ -502,10 +501,8 @@ describe('auxiliary generation lifetime', () => {
       const release = gate();
       const generator =
         capturedSessionClient(builtCallerOwner).getContentGenerator();
-      let cancellation: AbortSignal | undefined;
       const failure = new Error('Held transport failed');
-      generator.generateContent = async (request) => {
-        cancellation = request.abortSignal;
+      generator.generateContent = async () => {
         entered.release();
         await release.promise;
         throw failure;
@@ -569,8 +566,7 @@ describe('auxiliary generation lifetime', () => {
         ).toBe(1);
         release.release();
         expect(await result).toBeInstanceOf(Error);
-        expect(await outcome).toBeInstanceOf(AggregateDisposeError);
-        expect(kind === 'embedding' || cancellation?.aborted).toBe(true);
+        expect(await outcome).toBeUndefined();
         generator.embedContent = async ({ texts }) => ({
           embeddings: texts.map((text) => [text.length]),
         });

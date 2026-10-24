@@ -514,7 +514,6 @@ export class SessionClientOwner extends SessionClientAcquisitionOwner {
     const toolsClosing = this.toolCatalog.closeAdmission();
     void toolsClosing.catch(() => undefined);
     const auxiliaryClosing = this.closeAuxiliaryAdmission();
-    void auxiliaryClosing.catch(() => undefined);
     if (this.closing !== undefined) return this.closing;
     const bindingClosing = Promise.resolve().then(() =>
       this.releaseMcpBinding?.(),

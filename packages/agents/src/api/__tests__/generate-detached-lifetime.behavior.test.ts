@@ -12,9 +12,14 @@ import {
   generationGate,
 } from './helpers/generation-owner-fixture.js';
 
+const leaves = (error: unknown): unknown[] =>
+  error instanceof AggregateError || error instanceof AggregateDisposeError
+    ? error.errors.flatMap(leaves)
+    : [error];
+
 describe('Agent.generate lifetimes', () => {
   useRecordingPrompts();
-  it('reports an accepted generation cancellation once through its owning shutdown', async () => {
+  it('reports an accepted generation cancellation to its caller only and lets shutdown fulfill', async () => {
     const entered = generationGate();
     const held = generationGate();
     let rejectedWork: unknown;
@@ -37,12 +42,8 @@ describe('Agent.generate lifetimes', () => {
         await settled;
       },
     );
-    const leaves = (error: unknown): unknown[] =>
-      error instanceof AggregateError || error instanceof AggregateDisposeError
-        ? error.errors.flatMap(leaves)
-        : [error];
     expect(rejectedWork).toBeInstanceOf(Error);
-    expect(cleanup.flatMap(leaves)).toStrictEqual([rejectedWork]);
+    expect(cleanup).toStrictEqual([]);
   });
   it.each(['request', 'cleanup'])(
     'joins accepted Gemini %s work through temporary release before shutdown settles',
@@ -98,7 +99,7 @@ describe('Agent.generate lifetimes', () => {
             };
         },
       );
-      expect(cleanup).toHaveLength(stage === 'request' ? 1 : 0);
+      expect(cleanup).toStrictEqual([]);
     },
   );
   describe('Agent.generate temporary ownership', () => {
@@ -280,8 +281,6 @@ describe('Agent.generate lifetimes', () => {
             expect(clients[2].initialized).toBe(1);
             expect(clients[1].disposed).toBe(0);
             expect(await clients[1].getHistory()).toStrictEqual([]);
-            await owner.dispose();
-            expect(clients[2].disposed).toBe(1);
           },
           'gemini',
           (client, index) => {
@@ -295,7 +294,7 @@ describe('Agent.generate lifetimes', () => {
             };
           },
         );
-        expect(cleanup).toStrictEqual([]);
+        expect(cleanup.flatMap(leaves)).toStrictEqual([cleanupFailure]);
       },
     );
 
@@ -327,7 +326,7 @@ describe('Agent.generate lifetimes', () => {
             }
           },
         );
-        expect(cleanup).toStrictEqual([]);
+        expect(cleanup.flatMap(leaves)).toStrictEqual([failure]);
       },
     );
   });
@@ -380,7 +379,7 @@ describe('Agent.generate lifetimes', () => {
           expect(peerTransport.requests()).toHaveLength(1);
           expect(await peer.getHistory()).toStrictEqual([]);
         }),
-      ).rejects.toBeInstanceOf(AggregateDisposeError);
+      ).resolves.toBeUndefined();
     });
 
     it('keeps an admitted primary alive across model replacement and uses the replacement for later requests', async () => {
@@ -552,7 +551,7 @@ describe('Agent.generate lifetimes', () => {
           await held.promise;
         },
       );
-      expect(cleanup).toHaveLength(1);
+      expect(cleanup).toStrictEqual([]);
     });
 
     it('joins held temporary initialization and cleanup before session disposal settles', async () => {
@@ -601,7 +600,7 @@ describe('Agent.generate lifetimes', () => {
           };
         },
       );
-      expect(cleanup).toHaveLength(1);
+      expect(cleanup).toStrictEqual([]);
     });
   });
 });

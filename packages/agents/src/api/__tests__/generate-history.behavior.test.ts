@@ -20,7 +20,6 @@ import {
   HookEventName,
   HookType,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
-import { AggregateDisposeError } from '../disposeErrors.js';
 import type {
   InlineMediaBlock,
   IContent,
@@ -140,14 +139,8 @@ describe('Agent.generate independent history flags', () => {
       () => undefined,
       (error: unknown) => error,
     );
-    if (!(failure instanceof AggregateError))
-      throw new Error('Expected fixture shutdown failure');
-    expect(shutdownFailure).toBeInstanceOf(AggregateDisposeError);
-    expect(failure.errors).toHaveLength(1);
-    const cleanup = failure.errors[0];
-    if (!(cleanup instanceof AggregateError))
-      throw new Error('Expected fixture cleanup aggregate');
-    expect(cleanup.errors).toStrictEqual([shutdownFailure]);
+    expect(shutdownFailure).toBeUndefined();
+    expect(failure).toBeUndefined();
   });
 
   it('preserves response blocks and usage from earlier chunks in the written AI entry', async () => {

@@ -31,16 +31,7 @@ export class AuxiliaryWork {
   close(): Promise<void> {
     if (this.closing !== undefined) return this.closing;
     this.cancellation.abort();
-    this.closing = Promise.allSettled([...this.accepted]).then((results) => {
-      const failures = results.flatMap((result) =>
-        result.status === 'rejected' ? [result.reason] : [],
-      );
-      if (failures.length > 0)
-        throw new AggregateError(
-          failures,
-          'Auxiliary generation cleanup failed',
-        );
-    });
+    this.closing = Promise.allSettled([...this.accepted]).then(() => undefined);
     return this.closing;
   }
 }
