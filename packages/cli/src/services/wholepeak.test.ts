@@ -15,10 +15,15 @@ import { streamHistoryItems } from '../ui/utils/streamHistoryItems.js';
 import {
   MEMORY_PROJECT,
   writeMemoryFixture,
+  wideWorkspaceDirectories,
   type MemoryWorkload,
 } from './__tests__/support/wholememory-fixture.js';
 import type { IContent } from '../../../core/src/services/history/IContent.js';
 import { MemoryCommand } from './__tests__/support/wholememory-command.js';
+import {
+  SESSION_KEYS,
+  decodeDirectoriesFact,
+} from '../../../core/src/recording/sessionMetaKeys.js';
 
 async function observedReader(
   path: string,
@@ -195,6 +200,33 @@ describe('projection failure', () => {
     await expect(consume()).rejects.toThrow('upstream failed');
     expect(ownership.snapshot().peakRows).toBeGreaterThan(0);
     expect(ownership.snapshot().liveRows).toBe(0);
+  });
+});
+
+describe('admitted workspace metadata', () => {
+  it('persists every directory accepted by workspace admission', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'peak-metadata-'));
+    const recording = JournalRecordingService.create({
+      sessionId: 'wholememory',
+      projectHash: MEMORY_PROJECT,
+      chatsDir: directory,
+      workspaceDirs: [],
+      provider: 'test',
+      model: 'test',
+    });
+    try {
+      const directories = await wideWorkspaceDirectories(directory);
+      expect(directories).toHaveLength(513);
+      const session = await recording.session();
+      recording.recordDirectoriesChanged(directories);
+      await expect(recording.flush()).resolves.toBeUndefined();
+      const stored = await session.store.getState(SESSION_KEYS.directories);
+      if (stored === undefined) throw new Error('Missing workspace metadata');
+      expect(decodeDirectoriesFact(stored)).toStrictEqual(directories);
+    } finally {
+      await recording.dispose();
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });
 

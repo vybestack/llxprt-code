@@ -10,6 +10,7 @@ import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media
 import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
 import { encodeContentRow } from '@vybestack/llxprt-code-core/services/history/journalRowCodec.js';
 import type { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+import { WorkspaceContext } from '@vybestack/llxprt-code-core/utils/workspaceContext.js';
 
 export const MEMORY_PROJECT = 'wholememory-project';
 export const MEMORY_PAGE = 16;
@@ -25,6 +26,20 @@ export function fixtureText(index: number): string {
     createHash('sha256').update(`${index}:${part}`).digest('hex'),
   ).join('');
 }
+
+export async function wideWorkspaceDirectories(
+  directory: string,
+): Promise<string[]> {
+  const workspace = new WorkspaceContext(directory);
+  for (let index = 0; index < 512; index++) {
+    const name = createHash('sha256').update(String(index)).digest('hex');
+    const path = join(directory, name);
+    await mkdir(path);
+    workspace.addDirectory(path);
+  }
+  return [...workspace.getDirectories()];
+}
+
 async function appendMemoryFixtureRow(
   session: JournalSession,
   content: IContent,
@@ -103,7 +118,7 @@ export async function writeMemoryFixture(
     }
     if (workload === 'wide-metadata') {
       recording.recordDirectoriesChanged(
-        Array.from({ length: 512 }, (_, index) => `/${fixtureText(index)}`),
+        await wideWorkspaceDirectories(directory),
       );
     }
     await recording.createCheckpoint('memory-checkpoint');

@@ -27,8 +27,8 @@ Full verification happens once, before the PR. Rules that stay: no compatibility
 
 ## Known open items
 
-- `packages/cli/src/services/wholepeak.test.ts`: the wide-metadata fixture builds 512 paths with 4,096-byte filename components that workspace admission rejects; it exceeds the 16 KiB map value ceiling. The fixture needs the widest metadata the product can produce.
-- Two retained-growth trap workers fail admission before reaching their memory predicates.
+- `packages/cli/src/services/wholepeak.test.ts`: the wide-metadata fixture now creates 512 real directories with 64-byte filename components and passes them through `WorkspaceContext`. Admission accepts all of them, plus the invoking directory. Admission has no path-count or aggregate metadata-size bound, so there is no finite widest admitted list. The new persistence regression fails on this valid input at the unchanged 16 KiB keyed-map value ceiling; the continuation case reports a 73,808-byte value. This needs a production fix, not a smaller fixture or a higher ceiling.
+- Retained-growth trap admission is fixed: the wrapper preserves native/caller-owned capabilities and observes native indexed reads. Both trap suites reach and reject the planted retention under the unchanged predicates. The normal worker's verification run completes with zero retained rows and ends 519,718 bytes below baseline, but fails the unchanged late-endpoint gate: 288,161 bytes against 262,144 bytes. The normal path does not construct the changed trap class. No threshold, sampling or warm-up change was made, and no all-green acceptance result is claimed.
 - Source-memory suite: one live row after release (also fails before `143d60a0b`).
 - Three Gemini plugin integration tests in cli need the installed plugin.
 - `issue-2603-release-install.test.ts` copies the repo's gitignored `tmp/` locally and times out; copied Homebrew Node cannot find `libnode`.
