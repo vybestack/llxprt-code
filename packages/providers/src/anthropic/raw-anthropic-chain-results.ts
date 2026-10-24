@@ -22,7 +22,7 @@ const descriptors = new WeakMap<
 >();
 
 async function* chainBlocks(
-  query: AnthropicRepairRows,
+  query: Pick<AnthropicRepairRows, 'readAt'>,
   range: Range,
 ): AsyncGenerator<ContentBlock> {
   for (let at = range.start; at <= range.end; at++)
@@ -30,7 +30,7 @@ async function* chainBlocks(
 }
 
 async function hasMedia(
-  query: AnthropicRepairRows,
+  query: Pick<AnthropicRepairRows, 'readAt'>,
   range: Range,
 ): Promise<boolean> {
   for await (const block of chainBlocks(query, range))
@@ -39,7 +39,7 @@ async function hasMedia(
 }
 
 async function* prefixText(
-  query: AnthropicRepairRows,
+  query: Pick<AnthropicRepairRows, 'readAt'>,
   range: Range,
   options: AnthropicMessageConversionOptions,
 ): AsyncGenerator<string> {
@@ -51,7 +51,7 @@ async function* prefixText(
 }
 
 function resultText(
-  query: AnthropicRepairRows,
+  query: Pick<AnthropicRepairRows, 'readAt'>,
   range: Range,
   options: AnthropicMessageConversionOptions,
   payload: string,
@@ -70,7 +70,7 @@ function resultText(
 }
 
 async function* mediaBytes(
-  query: AnthropicRepairRows,
+  query: Pick<AnthropicRepairRows, 'readAt'>,
   range: Range,
   options: AnthropicMessageConversionOptions,
 ): AsyncGenerator<string> {
@@ -85,8 +85,48 @@ async function* mediaBytes(
   }
 }
 
+export async function rawChainWireResults(
+  query: Pick<AnthropicRepairRows, 'readAt'>,
+  row: IContent,
+  range: Range,
+  options: AnthropicMessageConversionOptions,
+): Promise<readonly AnthropicMessageBlock[]> {
+  let prefix = '';
+  for await (const text of prefixText(query, range, options)) prefix += text;
+  const media: Array<
+    Extract<AnthropicMessageBlock, { type: 'image' | 'document' | 'text' }>
+  > = [];
+  for await (const block of chainBlocks(query, range)) {
+    if (block.type !== 'media') continue;
+    const converted = buildAnthropicToolResultContent(
+      '',
+      [block],
+      options.supportsUrlImages ?? true,
+    );
+    if (typeof converted !== 'string') media.push(...converted.slice(1));
+  }
+  return row.blocks
+    .filter((block) => block.type === 'tool_response')
+    .map((block) => {
+      const payload = buildToolResponsePayload(block, options.config);
+      const result = payload.limitMessage
+        ? `${payload.result}\n${payload.limitMessage}`
+        : payload.result;
+      const text =
+        prefix.trimStart() === ''
+          ? result || '[empty tool result]'
+          : `${prefix.trimStart()}\n${result}`;
+      return {
+        type: 'tool_result',
+        tool_use_id: normalizeToAnthropicToolId(block.callId),
+        content: media.length === 0 ? text : [{ type: 'text', text }, ...media],
+        ...(payload.status === 'error' ? { is_error: true } : {}),
+      };
+    });
+}
+
 export async function rawChainResults(
-  query: AnthropicRepairRows,
+  query: Pick<AnthropicRepairRows, 'readAt'>,
   row: IContent,
   range: Range,
   options: AnthropicMessageConversionOptions,

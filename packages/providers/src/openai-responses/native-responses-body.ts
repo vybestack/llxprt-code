@@ -417,8 +417,24 @@ async function callerOwnedResponsesRows(
     signal,
   );
   const missing = [...dangling.missing];
-  if (missing.length === 0) return rows;
+  const query = await CallerOwnedToolQuery.create(rows);
+  const allowEmpty = (await query.normalizedCount(1, 1, 'call_')) > 0;
+  const originalAt = async (
+    at: number,
+    readerSignal?: AbortSignal,
+  ): Promise<IContent> => {
+    const row = await rows.readAt(at, readerSignal);
+    return allowEmpty || row.speaker !== 'ai'
+      ? row
+      : {
+          ...row,
+          blocks: row.blocks.filter(
+            (block) => block.type !== 'tool_call' || block.id !== '',
+          ),
+        };
+  };
   const count = rows.count + missing.length;
+  const insertion = dangling.lastCallRow + 1;
   const readAt = (
     at: number,
     readerSignal?: AbortSignal,
@@ -426,8 +442,10 @@ async function callerOwnedResponsesRows(
     signal?.throwIfAborted();
     readerSignal?.throwIfAborted();
     assertRowIndex(at, count);
-    if (at < rows.count) return rows.readAt(at, readerSignal);
-    const [toolCallId, toolName] = missing[at - rows.count];
+    if (at < insertion) return originalAt(at, readerSignal);
+    if (at >= insertion + missing.length)
+      return originalAt(at - missing.length, readerSignal);
+    const [toolCallId, toolName] = missing[at - insertion];
     return SyntheticToolResponseHandler.createSyntheticResponses([
       { toolCallId, toolName },
     ])[0];

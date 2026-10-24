@@ -16,13 +16,21 @@ import {
   type AnthropicMessage,
 } from './AnthropicMessageNormalizer.js';
 import type { AnthropicMessageConversionOptions } from './AnthropicMessageConversionOptions.js';
-import { rawChainResults } from './raw-anthropic-chain-results.js';
+import {
+  rawChainResults,
+  rawChainWireResults,
+} from './raw-anthropic-chain-results.js';
+import {
+  tagAnchorMessage,
+  clearAnchorBlockTag,
+} from './AnthropicAnchorCache.js';
 import { unprefixAnthropicToolName } from './schemaConverter.js';
 
 export interface RepairMessage {
   readonly start: number;
   readonly end: number;
   readonly slot: 'results' | 'content' | 'chain';
+  readonly chainResults?: true;
   readonly role: AnthropicMessage['role'];
 }
 export type RepairPiece = string | readonly AnthropicMessageBlock[];
@@ -59,6 +67,8 @@ export type AnthropicRepairRows = Pick<
   'count' | 'normalizedCount' | 'normalizedPosition'
 > &
   Pick<ProviderRequestRows, 'readAt'> & {
+    readonly rawDump?: boolean;
+    rawResultsAt?(at: number): Promise<RepairMessage | undefined>;
     rawChainAt?(
       at: number,
     ): Promise<{ readonly start: number; readonly end: number } | undefined>;
@@ -193,7 +203,12 @@ export class AnthropicRepairSource<
     if (this.query.rawChainAt !== undefined && message.slot === 'chain') {
       for (let at = message.start; at <= message.end; at++) {
         if ((await this.describe(at))?.results === true) {
-          yield { ...message, slot: 'results', role: 'user' };
+          yield {
+            ...message,
+            slot: 'results',
+            role: 'user',
+            chainResults: true,
+          };
           break;
         }
       }
@@ -225,7 +240,7 @@ export class AnthropicRepairSource<
       }
     }
   }
-  private async pieceAt(
+  private async untaggedPieceAt(
     message: RepairMessage,
     at: number,
     redact: boolean,
@@ -236,7 +251,17 @@ export class AnthropicRepairSource<
     if (!this.normalized && message.slot === 'results' && results) {
       const chain = await this.query.rawChainAt?.(at);
       if (chain !== undefined)
-        return rawChainResults(this.query, row, chain, this.options);
+        return this.query.rawDump === true
+          ? rawChainResults(this.query, row, chain, this.options)
+          : rawChainWireResults(
+              {
+                readAt: async (index) =>
+                  (await this.row(index)) ?? { speaker: 'ai', blocks: [] },
+              },
+              row,
+              chain,
+              this.options,
+            );
     }
     const converted = convertContentToMessages(
       [row],
@@ -246,6 +271,33 @@ export class AnthropicRepairSource<
     if (message.slot === 'results')
       return results ? converted[0]?.content : undefined;
     return converted[Number(results)]?.content;
+  }
+  private async pieceAt(
+    message: RepairMessage,
+    at: number,
+    redact: boolean,
+  ): Promise<RepairPiece | undefined> {
+    const piece = await this.untaggedPieceAt(message, at, redact);
+    if (
+      message.slot !== 'results' ||
+      this.query.rawResultsAt === undefined ||
+      piece === undefined ||
+      typeof piece === 'string'
+    )
+      return piece;
+    const blocks = piece.map((block) => {
+      const copy = { ...block };
+      clearAnchorBlockTag(copy);
+      return copy;
+    });
+    const group = await this.query.rawResultsAt(at);
+    if (
+      group !== undefined &&
+      at === group.end &&
+      (await this.resultsAnchored(group.start, group.end))
+    )
+      tagAnchorMessage({ role: 'user', content: blocks });
+    return blocks;
   }
   async *pieces(
     message: RepairMessage,
@@ -275,6 +327,29 @@ export class AnthropicRepairSource<
   ): AsyncGenerator<{ readonly id: string; readonly unit: number }> {
     for (let at = message.start; at <= message.end; at++)
       yield* this.callsAt(at);
+  }
+  async resultsAnchored(from: number, to: number): Promise<boolean> {
+    for (let at = from; at <= to; at++) {
+      const row = await this.row(at);
+      if (row?.speaker === 'tool' && row.metadata?.cacheAnchor === true)
+        return true;
+    }
+    for (let at = from - 1; at >= 0; at--) {
+      const row = await this.row(at);
+      if (row === undefined) continue;
+      return (
+        row.speaker === 'human' &&
+        row.metadata?.cacheAnchor === true &&
+        row.blocks.some((block) => block.type === 'tool_response') &&
+        row.blocks.every(
+          (block) =>
+            block.type === 'tool_response' ||
+            block.type === 'text' ||
+            block.type === 'code',
+        )
+      );
+    }
+    return false;
   }
   async lastThinking(): Promise<number> {
     if (this.index !== undefined) return this.index.lastThinking;

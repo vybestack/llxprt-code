@@ -61,6 +61,7 @@ export interface LazyRepairAtom {
   readonly chain?: boolean;
   readonly role: 'assistant' | 'user';
   readonly repair: boolean;
+  readonly results?: boolean;
   openPieces(redact?: boolean): AsyncGenerator<RepairPiece>;
 }
 interface Run {
@@ -174,6 +175,7 @@ export class AnthropicStreamRepair<
           chain: message.slot === 'chain',
           role: message.role,
           repair: false,
+          results: message.slot === 'results',
           openPieces: (redact = this.redact(message)) =>
             this.tools.kept(message, redact),
         };

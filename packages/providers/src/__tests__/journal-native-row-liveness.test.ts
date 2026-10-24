@@ -10,6 +10,7 @@ import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media
 import { RequestMediaResolver } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
 import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import type { IndexedJournalRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/indexed-journal-request-snapshot.js';
 import { journalSendFixture } from './support/journal-send-fixture.js';
 import { localWireHashSink } from './support/local-wire-hash-sink.js';
 import {
@@ -76,7 +77,24 @@ function watchedSelection(
   selection: ProviderRequestSelection,
   census: NativeRowCensus,
 ): ProviderRequestSelection {
+  const watch = (indexed: IndexedJournalRequestSnapshot): void => {
+    const read = indexed.readAt.bind(indexed);
+    const retain = indexed.retain.bind(indexed);
+    indexed.readAt = async (index, signal): Promise<IContent> => {
+      await census.sample();
+      const row = await read(index, signal);
+      census.track(row);
+      return row;
+    };
+    indexed.retain = (facts): IndexedJournalRequestSnapshot => {
+      const held = retain(facts);
+      watch(held);
+      return held;
+    };
+  };
+  if (selection.native !== undefined) watch(selection.native.indexed);
   return {
+    native: selection.native,
     count: selection.count,
     readAt: async (index, signal) => {
       const row = await selection.readAt(index, signal);
@@ -121,6 +139,8 @@ async function sendWithCensus(route: WireRoute): Promise<Census> {
           ],
         };
     })(),
+    [],
+    { mediaStore: store },
   );
   const census = new NativeRowCensus();
   const sink = await localWireHashSink(route, async () => {

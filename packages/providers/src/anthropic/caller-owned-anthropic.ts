@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { projectAnthropicUnit } from './anthropic-unit-facts.js';
 import { selectLastCacheableBlockIndex } from './AnthropicRequestBuilder.js';
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { RowFormatSettings } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
@@ -44,8 +45,20 @@ class CallerOwnedAnthropicIndex implements AnthropicRequestRepairIndex {
       this.lastThinking = await this.source.lastThinking();
       return;
     }
-    for await (const message of this.source.messages())
-      this.entries.push(message);
+    for await (const message of this.source.messages()) {
+      const previous = this.entries.at(-1);
+      if (
+        previous !== undefined &&
+        previous.slot === 'results' &&
+        message.chainResults === true &&
+        (await this.source.describe(previous.end))?.speaker === 'tool'
+      )
+        this.entries[this.entries.length - 1] = {
+          ...previous,
+          end: message.end,
+        };
+      else this.entries.push(message);
+    }
     this.lastThinking = await this.source.lastThinking();
     for (let at = 0; at < this.entries.length; at++) {
       const message = this.entries[at];
@@ -54,6 +67,12 @@ class CallerOwnedAnthropicIndex implements AnthropicRequestRepairIndex {
       for await (const call of this.source.calls(message))
         await this.decide(message, next, call.id);
     }
+  }
+  async rawResultsAt(at: number): Promise<RepairMessage | undefined> {
+    return this.entries.find(
+      (message) =>
+        message.slot === 'results' && message.start <= at && at <= message.end,
+    );
   }
   async rawChainAt(at: number): Promise<RepairMessage | undefined> {
     return this.entries.find(
@@ -171,10 +190,14 @@ export async function callerOwnedAnthropicEngine(
   policy: RepairPolicy,
   rawDump = false,
 ): Promise<AnthropicStreamRepair<AnthropicRepairRows>> {
-  const toolQuery = await CallerOwnedToolQuery.create(rows);
+  const toolQuery = await CallerOwnedToolQuery.create(rows, (row) =>
+    projectAnthropicUnit(row, settings, false),
+  );
   const query: AnthropicRepairRows = Object.assign(toolQuery, {
     readAt: rows.readAt,
-    ...(rawDump ? { rawChainAt: (at: number) => index.rawChainAt(at) } : {}),
+    rawChainAt: (at: number) => index.rawChainAt(at),
+    rawResultsAt: (at: number) => index.rawResultsAt(at),
+    rawDump,
   });
   const source = new AnthropicRepairSource(
     query,
@@ -201,6 +224,7 @@ export async function callerOwnedAnthropicCache(
   for await (const atom of engine.atoms()) {
     const anchored =
       !atom.repair &&
+      atom.results !== true &&
       (await engine.source.query.readAt(atom.end ?? Math.floor(atom.key / 4)))
         .metadata?.cacheAnchor === true;
     const before = state.run?.role === atom.role ? state.run.blocks : 0;

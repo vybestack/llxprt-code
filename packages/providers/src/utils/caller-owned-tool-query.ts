@@ -17,6 +17,7 @@ export class CallerOwnedToolQuery {
 
   static async create(
     rows: ProviderRequestRows,
+    project: (row: IContent) => IContent | undefined = (row) => row,
   ): Promise<CallerOwnedToolQuery> {
     if (rows.callerOwned !== true)
       throw new Error('Caller-owned tool facts require caller-owned rows');
@@ -24,8 +25,13 @@ export class CallerOwnedToolQuery {
     let leading = true;
     let at = 0;
     for await (const row of rows.openReader()) {
-      leading &&= row.speaker === 'tool';
-      query.observe(row, at, leading);
+      const projected = project(row);
+      if (projected === undefined) {
+        at++;
+        continue;
+      }
+      leading &&= projected.speaker === 'tool';
+      query.observe(projected, at, leading);
       at++;
     }
     return query;

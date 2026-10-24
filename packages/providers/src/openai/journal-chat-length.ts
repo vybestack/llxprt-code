@@ -317,7 +317,12 @@ export async function foldChatUnits(
   let mixed = options.lastThinkingOnly === true ? summary : undefined;
   let state: ChatFoldState = { keptIds: [], removedIds: [] };
   let index = 0;
+  let pendingMedia = false;
   for await (const row of rows) {
+    if (row.speaker !== 'tool' && pendingMedia) {
+      state = { keptIds: [], removedIds: [] };
+      pendingMedia = false;
+    }
     const done = await chatUnit(
       row,
       index++,
@@ -328,6 +333,7 @@ export async function foldChatUnits(
       options.allowOrphans === true,
     );
     state = done.state;
+    pendingMedia ||= done.facts[0].media.length > 0;
     options.onUnit?.(done.facts);
     if (mixed !== undefined)
       mixed = done.thinking

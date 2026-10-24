@@ -16,6 +16,7 @@
  * @requirement:G6
  */
 
+import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
@@ -69,9 +70,7 @@ function makeOptions(
     providerName,
     ephemeralsSnapshot: ephemerals,
   });
-  const stream = (async function* (): AsyncGenerator<IContent> {
-    yield* contents;
-  })();
+  const stream = callerOwnedRawProviderSource(contents);
   return {
     ...createProviderCallOptions({
       providerName,

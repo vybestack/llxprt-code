@@ -24,6 +24,7 @@
  * @requirement:G2
  */
 
+import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -134,14 +135,10 @@ function seededOpLog(seed: number): IContent[] {
 }
 
 /** One-shot stream over an op log (what the facade hands providers today). */
-function opLogStream(rows: readonly IContent[]): AsyncIterable<IContent> {
-  return {
-    async *[Symbol.asyncIterator]() {
-      for (const row of rows) {
-        yield row;
-      }
-    },
-  };
+function opLogStream(
+  rows: readonly IContent[],
+): ReturnType<typeof callerOwnedRawProviderSource> {
+  return callerOwnedRawProviderSource(rows);
 }
 
 function textOf(row: IContent): string {

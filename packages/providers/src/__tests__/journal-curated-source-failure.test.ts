@@ -1,6 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import type {
+  RowFormatRegistration,
+  RowFormatFill,
+} from '@vybestack/llxprt-code-core/journal/rowFormat.js';
+import type { NativeProviderFormat } from '@vybestack/llxprt-code-core/services/history/native-provider-format.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { withCoreSuffixFixture } from '@vybestack/llxprt-code-core/services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
 import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
@@ -38,7 +43,42 @@ describe('committed curated producer faults at the actual provider caller', () =
         });
         const primary = new Error('committed row producer failed');
         let closed = false;
+        const failRead = async (): Promise<never> => {
+          try {
+            throw primary;
+          } finally {
+            closed = true;
+          }
+        };
+        const faultFill = (fill: RowFormatFill): RowFormatFill => ({
+          measure: failRead,
+          finish: () => fill.finish(),
+          close: () => fill.close(),
+        });
+        const native = snapshot.native;
+        if (native === undefined) throw new Error('Missing native fixture');
+        const observed: NativeProviderFormat = {
+          ...native,
+          withFormat: (registration, consume) => {
+            const fault: RowFormatRegistration = {
+              ...registration,
+              measure: failRead,
+              prepare:
+                registration.prepare === undefined
+                  ? undefined
+                  : async (...args) =>
+                      faultFill(await registration.prepare!(...args)),
+              prepareAppend:
+                registration.prepareAppend === undefined
+                  ? undefined
+                  : async (...args) =>
+                      faultFill(await registration.prepareAppend!(...args)),
+            };
+            return native.withFormat(fault, consume);
+          },
+        };
         const selection: ProviderRequestSelection = {
+          native: observed,
           count: snapshot.count,
           readAt: (index, signal) => snapshot.readAt(index, signal),
           openReader: (signal) =>

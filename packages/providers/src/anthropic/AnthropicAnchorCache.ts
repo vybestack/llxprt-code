@@ -43,6 +43,10 @@ export function tagAnchorMessage(message: AnthropicMessage): void {
   Reflect.set(message.content[blockIndex], ANCHOR_CACHE_BLOCK, true);
 }
 
+export function clearAnchorBlockTag(block: object): void {
+  Reflect.deleteProperty(block, ANCHOR_CACHE_BLOCK);
+}
+
 /** Whether the converter tagged this block as the anchor boundary. */
 export function readAnchorBlockTag(block: object): boolean {
   return Reflect.get(block, ANCHOR_CACHE_BLOCK) === true;
