@@ -115,4 +115,36 @@ describe('cold resume format cache', () => {
       }
     },
   );
+  it('keeps complete live caches current when an older pin receives a format fill', async () => {
+    const store = await JournalStore.create(
+      join(directory(), 'pinned.llxj'),
+      storeDeps(),
+    );
+    const registration: RowFormatRegistration = {
+      settings,
+      measure: async () => ({
+        summary: identitySlotSummary('chat'),
+        lens: new Uint8Array(0),
+      }),
+    };
+    try {
+      await store.commit([{ kind: 'append', rows: [draftRow()] }]);
+      const before = await store.snapshot();
+      try {
+        await store.commit([{ kind: 'format', registration }]);
+        const filled = await store.prepareSnapshotFormat(before, registration);
+        await filled.close();
+        const current = await store.snapshot();
+        try {
+          expect(hasNativeRequestFormat(current, registration)).toBe(true);
+        } finally {
+          await current.close();
+        }
+      } finally {
+        await before.close();
+      }
+    } finally {
+      await store.close();
+    }
+  });
 });

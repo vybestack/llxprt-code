@@ -568,7 +568,7 @@ export async function fillRowFormats(
   return { built: advanceFilledThrough(ctx, next), registered: registry };
 }
 
-function advanceFilledThrough(
+export function advanceFilledThrough(
   ctx: BuildContext,
   built: BuiltGroup,
 ): BuiltGroup {

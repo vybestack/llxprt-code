@@ -6,7 +6,11 @@ import type { JournalGroupWriter } from './groupWriter.js';
 import type { RowFormatRegistration } from './rowFormat.js';
 import type { VersionSnapshot } from './versionSnapshot.js';
 import { prepareBuild } from './preparedGroup.js';
-import { fillRowFormats, snapshotOf } from './formatFill.js';
+import {
+  advanceFilledThrough,
+  fillRowFormats,
+  snapshotOf,
+} from './formatFill.js';
 import { LineageChain } from './lineageChain.js';
 import { JournalFormatError } from './errors.js';
 import type { VersionEdit } from './groupEdits.js';
@@ -136,7 +140,7 @@ export async function fillPinnedRequest(
         throw new JournalFormatError(
           'Pinned format lost the published version',
         );
-      return live.built.state;
+      return advanceFilledThrough(context, live.built).state;
     });
     if (measured === undefined)
       throw new JournalFormatError('Pinned format fill produced no snapshot');
