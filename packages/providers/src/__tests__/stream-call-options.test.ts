@@ -9,10 +9,10 @@ import { getTransportAttemptBudget } from '../transportAttemptBudget.js';
 import { ATTEMPT_LIFECYCLE_KEY } from '../logging/attemptLifecycle.js';
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { ProviderNormalizationDisk } from '@vybestack/llxprt-code-core/services/history/provider-normalization-disk.js';
-import {
-  NormalizedProviderRequestSnapshot,
-  type ProviderRequestSelection,
+import { openNativeRowFixture } from '@vybestack/llxprt-code-core/services/history/__tests__/support/native-row-fixture.js';
+import type {
+  ProviderRequestSelection,
+  ProviderRequestSource,
 } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
@@ -177,7 +177,7 @@ async function withIngressFixture<T>(
     root: string,
     config: Config,
     settings: SettingsService,
-    snapshot: NormalizedProviderRequestSnapshot,
+    snapshot: ProviderRequestSelection,
     settingsOwner: SessionSettingsOwner,
   ) => Promise<T>,
 ): Promise<T> {
@@ -187,14 +187,15 @@ async function withIngressFixture<T>(
   settings.set('retrywait', 1);
   const config = createIngressConfig(logging, root);
   const { settingsOwner } = fixtureOwners.adopt(config, settings);
-  const disk = new ProviderNormalizationDisk(root);
-  for (let index = 0; index < 64; index++)
-    disk.append('ordered', ingressRow(index));
-  const snapshot = new NormalizedProviderRequestSnapshot(disk, 0);
+  const snapshot = await openNativeRowFixture(
+    root,
+    Array.from({ length: 64 }, (_, index) => ingressRow(index)),
+    64,
+  );
   try {
     return await action(root, config, settings, snapshot, settingsOwner);
   } finally {
-    snapshot.close();
+    await snapshot.close();
     resetConversationFileWriterForTesting();
     rmSync(root, { recursive: true, force: true });
   }
@@ -274,10 +275,11 @@ async function verifyIngressLog(
 }
 
 function observeIngressRows(
-  snapshot: NormalizedProviderRequestSnapshot,
+  snapshot: ProviderRequestSelection,
   observation: IngressObservation,
 ): ProviderRequestSelection {
   return {
+    native: snapshot.native,
     count: snapshot.count,
     readAt: (index, signal) => snapshot.readAt(index, signal),
     close: () => snapshot.close(),
@@ -385,9 +387,38 @@ async function exerciseWrapperIngress(
       const tools: ProviderToolset = [
         { name: 'inspect', parametersJsonSchema: { type: 'object' } },
       ];
+      const captured: IContent[] = [];
+      const input = rows.openReader();
+      async function readCaptured(index: number): Promise<IContent> {
+        while (captured.length <= index) {
+          const next = await input.next();
+          if (next.done === true) throw new Error('Premature ingress EOF');
+          captured.push(structuredClone(next.value));
+        }
+        return structuredClone(captured[index]);
+      }
+      const admittedSource: ProviderRequestSource = {
+        [Symbol.asyncIterator]: () => rows.openReader(),
+        async openProviderRequest(): Promise<ProviderRequestSelection> {
+          return {
+            callerOwned: true,
+            count: rows.count,
+            readAt: readCaptured,
+            async *openReader(signal) {
+              for (let index = 0; index < rows.count; index++) {
+                signal?.throwIfAborted();
+                yield await readCaptured(index);
+              }
+            },
+            close: async () => {
+              await input.return();
+            },
+          };
+        },
+      };
       const contents: AsyncIterable<IContent> = snapshotBacked
         ? { [Symbol.asyncIterator]: () => rows.openReader() }
-        : rows.openReader();
+        : admittedSource;
       const options = {
         contents,
         requestRows: snapshotBacked ? rows : undefined,
@@ -419,7 +450,7 @@ describe('real provider wrapper disk ingress', () => {
       ingressDigest(),
     );
   });
-  it('stages a one-shot request on disk and reopens it after the first BODY read fails', async () => {
+  it('replays a caller-owned one-shot source after the first BODY read fails', async () => {
     expect(await exerciseWrapperIngress(fixtureOwners, false, false)).toBe(
       ingressDigest(),
     );
@@ -476,6 +507,15 @@ describe('real provider wrapper disk ingress', () => {
         );
         const iterator = wrapper.generateChatCompletion({
           contents: source,
+          requestRows: {
+            callerOwned: true,
+            count: 64,
+            openReader: () => source,
+            readAt: (index) => ingressRow(index),
+            close: async () => {
+              await source.return(undefined);
+            },
+          },
           invocation: captureProviderInvocation(
             {
               config,
@@ -552,7 +592,7 @@ describe('streamed conversation disk artifact', () => {
 });
 
 describe('positional request cancellation', () => {
-  it('invalidates a staged reader immediately on the positional abort signal', async () => {
+  it('invalidates an admitted reader immediately on the positional abort signal', async () => {
     const controller = new AbortController();
     let escaped: AsyncIterable<IContent> | undefined;
     let closed = false;
@@ -576,8 +616,22 @@ describe('positional request cancellation', () => {
         for await (const row of input.contents) yield row;
       },
     };
+    const admittedSource: ProviderRequestSource = {
+      [Symbol.asyncIterator]: () => source,
+      async openProviderRequest() {
+        return {
+          callerOwned: true,
+          count: 2,
+          openReader: () => source,
+          readAt: (index) => ingressRow(index),
+          close: async () => {
+            await source.return(undefined);
+          },
+        };
+      },
+    };
     const result = new RetryOrchestrator(base).generateChatCompletion(
-      source,
+      admittedSource,
       undefined,
       controller.signal,
     );

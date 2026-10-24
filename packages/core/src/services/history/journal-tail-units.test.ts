@@ -3,7 +3,10 @@ import { describe, expect, it } from 'bun:test';
 import { JournalSession } from './journalSession.js';
 import { testJournalSeams } from '../../journal/__tests__/support/journalFixtures.js';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
-import { oldUnits, digest } from './__tests__/support/normalization-oracle.js';
+import {
+  frozenUnits,
+  digest,
+} from './__tests__/support/normalization-oracle.js';
 import {
   call,
   response,
@@ -136,8 +139,8 @@ async function collectRecords(
 describe('journal tail virtual facts and pending origins', () => {
   const directory = useTempDir('journal-tail-');
   for (const input of cases) {
-    it(`matches old output and pending membership for ${input.id}`, async () => {
-      const expected = await oldUnits(input);
+    it(`matches frozen output and pending membership for ${input.id}`, async () => {
+      const expected = frozenUnits(input);
       const session = await JournalSession.create(
         `${directory()}/${input.id}.llxj`,
         { journal: testJournalSeams().dependencies },

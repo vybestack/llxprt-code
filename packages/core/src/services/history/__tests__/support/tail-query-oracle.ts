@@ -10,9 +10,8 @@ import type {
 } from '../../../../journal/idKeys.js';
 import { DebugLogger } from '../../../../debug/index.js';
 import type { IndexedJournalRequestSnapshot } from '../../indexed-journal-request-snapshot.js';
-import { prepareProviderContentSnapshot } from '../../provider-curated-stream.js';
+import { buildProviderContent } from '../../historyProviderPipeline.js';
 import { isCuratedContent } from '../../historyCuration.js';
-import { collectUnits } from './normalization-oracle.js';
 import type { ContentBlock, IContent } from '../../IContent.js';
 
 function rawId(block: ContentBlock): string | undefined {
@@ -118,17 +117,9 @@ export async function oldTailUnits(
   rows: readonly IContent[],
   tail: readonly IContent[],
 ): Promise<readonly IContent[]> {
-  async function* curated(): AsyncGenerator<IContent> {
-    for (const row of rows) if (isCuratedContent(row)) yield row;
-  }
-  const old = await prepareProviderContentSnapshot(
-    curated(),
-    tail,
+  return buildProviderContent(
+    rows.filter(isCuratedContent),
+    [...tail],
     new DebugLogger('tail-query-oracle'),
   );
-  try {
-    return await collectUnits(old.openReader());
-  } finally {
-    old.close();
-  }
 }

@@ -11,7 +11,7 @@ import {
 import { JournalSession } from './journalSession.js';
 import { encodeContentRow } from './journalRowCodec.js';
 import { IndexedJournalRequestSnapshot } from './indexed-journal-request-snapshot.js';
-import { prepareProviderContentSnapshot } from './provider-curated-stream.js';
+import { buildProviderContent } from './historyProviderPipeline.js';
 import { isCuratedContent } from './historyCuration.js';
 import type { IContent } from './IContent.js';
 import type { AnthropicToolOccurrenceFacts } from './journal-anthropic-facts.js';
@@ -83,21 +83,11 @@ function expectedAt(
 
 async function expectedRows(seed: number): Promise<readonly IContent[]> {
   const input = unitCase(seed);
-  async function* curated(): AsyncGenerator<IContent> {
-    for (const row of input.rows) if (isCuratedContent(row)) yield row;
-  }
-  const old = await prepareProviderContentSnapshot(
-    curated(),
-    input.tail,
+  return buildProviderContent(
+    input.rows.filter(isCuratedContent),
+    [...input.tail],
     new DebugLogger('anthropic-native-facts-oracle'),
   );
-  try {
-    const rows: IContent[] = [];
-    for await (const row of old.openReader()) rows.push(row);
-    return rows;
-  } finally {
-    old.close();
-  }
 }
 
 async function verifyCase(

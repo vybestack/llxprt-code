@@ -7,7 +7,6 @@ import {
   unitCase,
 } from './__tests__/support/normalization-cases.js';
 import {
-  oldUnits,
   digest,
   collectUnits,
 } from './__tests__/support/normalization-oracle.js';
@@ -77,18 +76,6 @@ async function responseOutcome(
 describe('immutable old-normalizer unit oracle', () => {
   const directory = useTempDir('unit-oracle-');
 
-  it('matches all 5000 frozen input, unit and pending hashes without regenerating them', async () => {
-    const lines = (await readFile(fixture, 'utf8')).trimEnd().split('\n');
-    expect(lines.length).toBe(UNIT_CASE_COUNT);
-    for (let seed = 0; seed < UNIT_CASE_COUNT; seed++) {
-      const frozen = record.parse(JSON.parse(lines[seed]));
-      expect({ seed, ...(await oldUnits(unitCase(seed))) }).toStrictEqual({
-        ...frozen,
-        firstOutputIndex: frozen.firstOutputIndex,
-      });
-    }
-  }, 120000);
-
   it('matches the frozen subset admitted by the indexed orphan-only stream', async () => {
     const lines = (await readFile(fixture, 'utf8')).trimEnd().split('\n');
     const session = await JournalSession.create(`${directory()}/units.llxj`, {
@@ -130,6 +117,7 @@ describe('immutable old-normalizer unit oracle', () => {
 
   it('matches all 5000 indexed outputs, counts and pending origins without refusals', async () => {
     const lines = (await readFile(fixture, 'utf8')).trimEnd().split('\n');
+    expect(lines.length).toBe(UNIT_CASE_COUNT);
     const session = await JournalSession.create(
       `${directory()}/responses.llxj`,
       {

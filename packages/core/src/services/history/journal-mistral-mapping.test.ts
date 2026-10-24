@@ -8,7 +8,7 @@ import { OffsetAudit } from '../../journal/__tests__/support/offsetAudit.js';
 import { sha256KeyHash, ID_NS, fact0Key } from '../../journal/idKeys.js';
 import { JournalSession } from './journalSession.js';
 import { encodeContentRow } from './journalRowCodec.js';
-import { prepareProviderContentSnapshot } from './provider-curated-stream.js';
+import { buildProviderContent } from './historyProviderPipeline.js';
 import { call, response } from './__tests__/support/normalization-cases.js';
 import type { IContent } from './IContent.js';
 
@@ -43,21 +43,9 @@ async function auditMappings(session: JournalSession): Promise<void> {
 async function reference(
   rows: readonly IContent[],
 ): Promise<ReadonlyMap<string, string>> {
-  async function* source(): AsyncGenerator<IContent> {
-    yield* rows;
-  }
-  const normalized = await prepareProviderContentSnapshot(
-    source(),
-    [],
-    new DebugLogger('mistral-reference'),
+  return mappingForUnits(
+    buildProviderContent([...rows], [], new DebugLogger('mistral-reference')),
   );
-  try {
-    const units: IContent[] = [];
-    for await (const row of normalized.openReader()) units.push(row);
-    return mappingForUnits(units);
-  } finally {
-    normalized.close();
-  }
 }
 
 async function assertMapping(

@@ -8,7 +8,7 @@ import { OffsetAudit } from '../../journal/__tests__/support/offsetAudit.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import { JournalSession } from './journalSession.js';
 import { recordingAcceptsEdits } from './recording-primary-edits.js';
-import { prepareProviderContentSnapshot } from './provider-curated-stream.js';
+import { buildProviderContent } from './historyProviderPipeline.js';
 import {
   call,
   response,
@@ -18,26 +18,17 @@ import { encodeContentRow } from './journalRowCodec.js';
 import type { IContent } from './IContent.js';
 
 async function referenceCount(rows: readonly IContent[]): Promise<number> {
-  async function* source(): AsyncGenerator<IContent> {
-    yield* rows;
-  }
-  const normalized = await prepareProviderContentSnapshot(
-    source(),
+  const units = buildProviderContent(
+    [...rows],
     [],
     new DebugLogger('kimi-eligible-reference'),
   );
-  try {
-    const units: IContent[] = [];
-    for await (const unit of normalized.openReader()) units.push(unit);
-    const mapper = getToolIdStrategy('kimi').createMapper(units);
-    const prefix = 'functions.__ordinal_probe__:';
-    const probe = mapper.resolveToolCallId(call('', '__ordinal_probe__'));
-    if (!probe.startsWith(prefix))
-      throw new Error('Unexpected Kimi counter probe');
-    return Number(probe.slice(prefix.length));
-  } finally {
-    normalized.close();
-  }
+  const mapper = getToolIdStrategy('kimi').createMapper(units);
+  const prefix = 'functions.__ordinal_probe__:';
+  const probe = mapper.resolveToolCallId(call('', '__ordinal_probe__'));
+  if (!probe.startsWith(prefix))
+    throw new Error('Unexpected Kimi counter probe');
+  return Number(probe.slice(prefix.length));
 }
 
 async function inspect(
@@ -171,7 +162,7 @@ describe('native Kimi emitted eligible ordinals', () => {
     }
   });
 
-  it('matches the complete old normalizer on 120 frozen-source cases after replacement and first-row removal', async () => {
+  it('matches independent array normalization on 120 frozen-source cases after replacement and first-row removal', async () => {
     const session = await JournalSession.create(
       `${directory()}/differential.llxj`,
       options,

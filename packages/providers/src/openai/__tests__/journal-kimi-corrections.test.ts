@@ -14,7 +14,7 @@ import {
   response,
   unitCase,
 } from '../../../../core/src/services/history/__tests__/support/normalization-cases.js';
-import { prepareProviderContentSnapshot } from '../../../../core/src/services/history/provider-curated-stream.js';
+import { buildProviderContent } from '../../../../core/src/services/history/historyProviderPipeline.js';
 import { isCuratedContent } from '../../../../core/src/services/history/historyCuration.js';
 import { encodeContentRow } from '../../../../core/src/services/history/journalRowCodec.js';
 import {
@@ -83,48 +83,39 @@ async function conversionFacts(
   session: JournalSession,
   rows: readonly IContent[],
 ): Promise<{ readonly expected: WireFacts; readonly persisted: WireFacts }> {
-  async function* source(): AsyncGenerator<IContent> {
-    yield* rows.filter(isCuratedContent);
-  }
-  const normalized = await prepareProviderContentSnapshot(
-    source(),
+  const units = buildProviderContent(
+    rows.filter(isCuratedContent),
     [],
     new DebugLogger('kimi-wire-oracle'),
   );
+  const actual = await actualConversion(units);
+  const snapshot = await session.store.snapshot();
   try {
-    const units: IContent[] = [];
-    for await (const unit of normalized.openReader()) units.push(unit);
-    const actual = await actualConversion(units);
-    const snapshot = await session.store.snapshot();
-    try {
-      const ids = new Set(
-        units.flatMap((unit) =>
-          unit.blocks.flatMap((block) =>
-            block.type === 'tool_call' ? [block.id] : [],
-          ),
+    const ids = new Set(
+      units.flatMap((unit) =>
+        unit.blocks.flatMap((block) =>
+          block.type === 'tool_call' ? [block.id] : [],
         ),
-      );
-      let written = 0;
-      for (const id of ids)
-        written += (await snapshot.kimiIdFact(id))?.writtenUses ?? 0;
-      const base = Array.from(
-        { length: actual.eligible },
-        (_, ordinal) => 2 * String(ordinal).length,
-      ).reduce((sum, digits) => sum + digits, 0);
-      return {
-        expected: actual,
-        persisted: {
-          eligible: await snapshot.kimiEligibleCount(),
-          unmapped: await snapshot.kimiUnmappedCount(),
-          written,
-          mappedDigits: base + (await snapshot.kimiDigitCorrection()),
-        },
-      };
-    } finally {
-      await snapshot.close();
-    }
+      ),
+    );
+    let written = 0;
+    for (const id of ids)
+      written += (await snapshot.kimiIdFact(id))?.writtenUses ?? 0;
+    const base = Array.from(
+      { length: actual.eligible },
+      (_, ordinal) => 2 * String(ordinal).length,
+    ).reduce((sum, digits) => sum + digits, 0);
+    return {
+      expected: actual,
+      persisted: {
+        eligible: await snapshot.kimiEligibleCount(),
+        unmapped: await snapshot.kimiUnmappedCount(),
+        written,
+        mappedDigits: base + (await snapshot.kimiDigitCorrection()),
+      },
+    };
   } finally {
-    await normalized.close();
+    await snapshot.close();
   }
 }
 

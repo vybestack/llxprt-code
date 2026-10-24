@@ -4,7 +4,7 @@ import { JournalSession } from './journalSession.js';
 import { testJournalSeams } from '../../journal/__tests__/support/journalFixtures.js';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
 import {
-  oldUnits,
+  frozenUnits,
   digest,
   collectUnits,
 } from './__tests__/support/normalization-oracle.js';
@@ -60,8 +60,8 @@ const inputs: readonly UnitCase[] = [
 describe('indexed orphan-only unit stream', () => {
   const directory = useTempDir('journal-orphan-units-');
   for (const input of inputs) {
-    it(`matches the old stream for ${input.id}`, async () => {
-      const expected = await oldUnits(input);
+    it(`matches frozen units for ${input.id}`, async () => {
+      const expected = frozenUnits(input);
       const session = await JournalSession.create(`${directory()}/units.llxj`, {
         journal: testJournalSeams().dependencies,
       });

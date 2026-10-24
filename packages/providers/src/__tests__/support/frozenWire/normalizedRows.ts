@@ -2,7 +2,7 @@
 
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { streamProviderContent } from '@vybestack/llxprt-code-core/services/history/provider-curated-stream.js';
+import { buildProviderContent } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
 
 const logger = new DebugLogger('frozen-wire-corpus');
 
@@ -13,12 +13,5 @@ const logger = new DebugLogger('frozen-wire-corpus');
 export async function normalizedRows(
   rows: readonly IContent[],
 ): Promise<IContent[]> {
-  async function* source(): AsyncGenerator<IContent> {
-    for (const row of structuredClone([...rows])) yield row;
-  }
-  const out: IContent[] = [];
-  for await (const row of streamProviderContent(source(), [], logger)) {
-    out.push(row);
-  }
-  return out;
+  return buildProviderContent(structuredClone([...rows]), [], logger);
 }

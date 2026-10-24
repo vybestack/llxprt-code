@@ -1,7 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
-import { oldUnits, digest } from './__tests__/support/normalization-oracle.js';
+import {
+  frozenUnits,
+  digest,
+} from './__tests__/support/normalization-oracle.js';
 import { unitCase } from './__tests__/support/normalization-cases.js';
 import { withoutFileCreation } from './__tests__/support/without-file-creation.js';
 import type { IContent } from './IContent.js';
@@ -29,7 +32,7 @@ describe('caller-owned provider overrides', () => {
     await withCoreSuffixFixture(1, async (history) => {
       for (let seed = 0; seed < 84; seed++) {
         const input = unitCase(seed);
-        const expected = await oldUnits(input);
+        const expected = frozenUnits(input);
         await withoutFileCreation(async () => {
           const snapshot = await history.prepareCuratedForProviderSnapshot(
             [...input.tail],

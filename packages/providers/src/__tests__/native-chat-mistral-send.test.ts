@@ -7,6 +7,7 @@ import {
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { operationFileCreates } from '../../../agents/src/compression/__tests__/support/operation-file-creates.js';
+import { createRuntimeTokenizerFactory } from '../composition/runtimeTokenizerFactory.js';
 import { journalSendFixture } from './support/journal-send-fixture.js';
 import { normalizedRows } from './support/frozenWire/normalizedRows.js';
 import { localWireHashSink } from './support/local-wire-hash-sink.js';
@@ -186,6 +187,7 @@ describe('native Mistral production HTTP', () => {
         directory: 'tmp/p6/chat-mistral-run-bj/fixtures',
       });
       const sink = await localWireHashSink(route);
+      createRuntimeTokenizerFactory();
       try {
         const provider = route.createProvider();
         const options = buildHistoryCallOptions(

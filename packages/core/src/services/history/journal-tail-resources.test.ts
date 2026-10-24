@@ -5,7 +5,10 @@ import { JournalTailSource } from './journal-tail-source.js';
 import { testJournalSeams } from '../../journal/__tests__/support/journalFixtures.js';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
 import { call, response } from './__tests__/support/normalization-cases.js';
-import { digest, oldUnits } from './__tests__/support/normalization-oracle.js';
+import {
+  digest,
+  frozenUnits,
+} from './__tests__/support/normalization-oracle.js';
 import { streamJournalResponseUnitRecords } from './journal-response-units.js';
 import type { IContent } from './IContent.js';
 
@@ -78,7 +81,7 @@ describe('tail source bounded preparation and ownership', () => {
     const tail: IContent[] = [
       { speaker: 'tool', blocks: [{ ...response('a'), result: payload }] },
     ];
-    const expected = await oldUnits({ id: 'owned', rows, tail });
+    const expected = frozenUnits({ id: 'owned', rows, tail });
     try {
       await session.append(rows);
       const snapshot = await session.store.snapshot();

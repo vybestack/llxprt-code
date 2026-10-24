@@ -4,7 +4,7 @@ import { JournalSession } from './journalSession.js';
 import { testJournalSeams } from '../../journal/__tests__/support/journalFixtures.js';
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
 import {
-  oldUnits,
+  frozenUnits,
   digest,
   collectUnits,
 } from './__tests__/support/normalization-oracle.js';
@@ -114,8 +114,8 @@ const cases: readonly UnitCase[] = [
 describe('indexed reconstructed call units', () => {
   const directory = useTempDir('journal-reconstruction-');
   for (const input of cases) {
-    it(`matches old units for ${input.id}`, async () => {
-      const expected = await oldUnits(input);
+    it(`matches frozen units for ${input.id}`, async () => {
+      const expected = frozenUnits(input);
       const session = await JournalSession.create(
         `${directory()}/${input.id}.llxj`,
         { journal: testJournalSeams().dependencies },

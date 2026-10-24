@@ -10,16 +10,12 @@ import {
   UNIT_CASE_COUNT,
   unitCase,
 } from './__tests__/support/normalization-cases.js';
-import {
-  collectUnits,
-  digest,
-} from './__tests__/support/normalization-oracle.js';
+import { digest } from './__tests__/support/normalization-oracle.js';
 import { assertNormalizedOccurrences } from './__tests__/support/normalized-occurrence-oracle.js';
 import { JournalSession } from './journalSession.js';
 import { encodeContentRow } from './journalRowCodec.js';
 import { isCuratedContent } from './historyCuration.js';
-import { prepareProviderContentSnapshot } from './provider-curated-stream.js';
-import type { IContent } from './IContent.js';
+import { buildProviderContent } from './historyProviderPipeline.js';
 
 const frozenRecord = z.object({
   inputHash: z.string(),
@@ -34,36 +30,28 @@ async function verifyCase(
   const input = unitCase(seed);
   const frozen = frozenRecord.parse(JSON.parse(line));
   expect(digest(input)).toBe(frozen.inputHash);
-  async function* curated(): AsyncGenerator<IContent> {
-    for (const row of input.rows) if (isCuratedContent(row)) yield row;
-  }
-  const old = await prepareProviderContentSnapshot(
-    curated(),
-    input.tail,
+  const units = buildProviderContent(
+    input.rows.filter(isCuratedContent),
+    [...input.tail],
     new DebugLogger('normalized-fact-oracle'),
   );
+  expect(digest(units)).toBe(frozen.outputHash);
+  const rows = [...input.rows.filter(isCuratedContent), ...input.tail];
+  await session.store.commit([
+    {
+      kind: 'replace',
+      rows: rows.map((row) => {
+        const draft = encodeContentRow(row, { owner: 0 });
+        return { ...draft, flags: draft.flags | ROW_FLAG.curated };
+      }),
+    },
+  ]);
+  const snapshot = await session.store.snapshot();
   try {
-    const units = await collectUnits(old.openReader());
-    expect(digest(units)).toBe(frozen.outputHash);
-    const rows = [...input.rows.filter(isCuratedContent), ...input.tail];
-    await session.store.commit([
-      {
-        kind: 'replace',
-        rows: rows.map((row) => {
-          const draft = encodeContentRow(row, { owner: 0 });
-          return { ...draft, flags: draft.flags | ROW_FLAG.curated };
-        }),
-      },
-    ]);
-    const snapshot = await session.store.snapshot();
-    try {
-      expect(snapshot.units).toBe(units.length);
-      await assertNormalizedOccurrences(snapshot, units, rows);
-    } finally {
-      await snapshot.close();
-    }
+    expect(snapshot.units).toBe(units.length);
+    await assertNormalizedOccurrences(snapshot, units, rows);
   } finally {
-    old.close();
+    await snapshot.close();
   }
 }
 

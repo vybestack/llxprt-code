@@ -11,7 +11,7 @@ import { MEDIA_REFERENCE } from './__tests__/support/journalRowShapes.js';
 import {
   digest,
   collectUnits,
-  oldUnits,
+  frozenUnits,
 } from './__tests__/support/normalization-oracle.js';
 import { encodeContentRow } from './journalRowCodec.js';
 import type { IContent } from './IContent.js';
@@ -24,7 +24,7 @@ async function checkNative(
   session: JournalSession,
   rows: readonly IContent[],
 ): Promise<void> {
-  const expected = await oldUnits({ id: 'mutation', rows, tail: [] });
+  const expected = frozenUnits({ id: 'mutation', rows, tail: [] });
   const snapshot = await session.store.snapshot();
   try {
     const units = await collectUnits(streamJournalResponseUnits(snapshot));

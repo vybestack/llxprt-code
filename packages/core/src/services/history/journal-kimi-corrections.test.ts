@@ -6,7 +6,7 @@ import { testJournalSeams } from '../../journal/__tests__/support/journalFixture
 import { useTempDir } from '../../journal/__tests__/support/useTempDir.js';
 import type { VersionSnapshot } from '../../journal/versionSnapshot.js';
 import { JournalSession } from './journalSession.js';
-import { prepareProviderContentSnapshot } from './provider-curated-stream.js';
+import { buildProviderContent } from './historyProviderPipeline.js';
 import {
   call,
   response,
@@ -20,22 +20,13 @@ async function reference(
   rows: readonly IContent[],
   ids: readonly string[],
 ): Promise<readonly string[]> {
-  async function* source(): AsyncGenerator<IContent> {
-    yield* rows.filter(isCuratedContent);
-  }
-  const normalized = await prepareProviderContentSnapshot(
-    source(),
+  const units = buildProviderContent(
+    rows.filter(isCuratedContent),
     [],
     new DebugLogger('kimi-last-reference'),
   );
-  try {
-    const units: IContent[] = [];
-    for await (const unit of normalized.openReader()) units.push(unit);
-    const mapper = getToolIdStrategy('kimi').createMapper(units);
-    return ids.map((id) => mapper.resolveToolCallId(call(id, '__probe__')));
-  } finally {
-    normalized.close();
-  }
+  const mapper = getToolIdStrategy('kimi').createMapper(units);
+  return ids.map((id) => mapper.resolveToolCallId(call(id, '__probe__')));
 }
 
 async function mappings(
@@ -156,7 +147,7 @@ describe('native Kimi emitted mapping corrections', () => {
     }
   });
 
-  it('matches the old mapper on reconstruction, default names, raw prefix collisions and frozen-source families', async () => {
+  it('matches the independent array mapper on reconstruction, default names, raw prefix collisions and frozen-source families', async () => {
     const session = await JournalSession.create(
       `${directory()}/oracle.llxj`,
       options,
