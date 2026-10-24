@@ -14,6 +14,8 @@ import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/cor
 import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
 import { OpenAIResponsesProvider } from '../openai-responses/OpenAIResponsesProvider.js';
 import { closeInOrder } from './support/close-in-order.js';
+import { rawJournalSelection } from './support/journal-send-fixture.js';
+import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 
 function bodyRow(index: number, bytes: number): IContent {
   const text = {
@@ -112,7 +114,10 @@ function response(): Response {
   );
 }
 
-async function captureBody(rows: AsyncIterable<IContent>): Promise<string> {
+async function captureBody(
+  selection: ProviderRequestSelection,
+): Promise<string> {
+  const rows = { [Symbol.asyncIterator]: () => selection.openReader() };
   const settings = new SettingsService();
   settings.setProviderSetting('openai-responses', 'model', 'gpt-5.2');
   const options = createProviderCallOptions({
@@ -149,6 +154,8 @@ async function captureBody(rows: AsyncIterable<IContent>): Promise<string> {
     for await (const _chunk of provider.generateChatCompletion({
       ...options,
       contents: rows,
+      requestRows: selection,
+      contentCount: selection.count,
     })) {
       /* drain local transport */
     }
@@ -192,11 +199,14 @@ describe('semantic purge exact provider BODY BYTES', () => {
             const transaction = await coordinator.begin({ mode: 'remove' });
             if (transaction === undefined)
               throw new Error('Missing purge transaction');
+            const selection = await rawJournalSelection(
+              history,
+              transaction,
+              explicit,
+            );
             let failure: { readonly error: unknown } | undefined;
             try {
-              const actual = await captureBody(
-                transaction.requestRows(explicit),
-              );
+              const actual = await captureBody(selection);
               const expected = JSON.stringify({
                 model: 'gpt-5.2',
                 input: independentInput(size, explicit),
@@ -211,7 +221,7 @@ describe('semantic purge exact provider BODY BYTES', () => {
               failure = { error };
               throw error;
             } finally {
-              await closeInOrder(failure, transaction);
+              await closeInOrder(failure, selection, transaction);
             }
           },
           2048,
