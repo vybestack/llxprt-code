@@ -8,23 +8,7 @@ import { identitySlotSummary } from './summaryComposition.js';
 import type { RowFormatRegistration } from './rowFormat.js';
 import { hasNativeRequestFormat } from '../services/history/native-provider-format.js';
 
-async function storedFacts(store: JournalStore): Promise<Uint8Array[]> {
-  const read = await store.openRead();
-  const facts: Uint8Array[] = [];
-  try {
-    for await (const entry of store.rows()) {
-      facts.push(entry.summary[0]);
-      const head = await read.access.readRecordHead(entry.lensRef[0]);
-      const chunks: Uint8Array[] = [];
-      for await (const chunk of read.access.readRecordBody(head))
-        chunks.push(chunk);
-      facts.push(Buffer.concat(chunks));
-    }
-    return facts;
-  } finally {
-    await read.close();
-  }
-}
+import { storedFacts } from './__tests__/support/stored-format-facts.js';
 
 const settings: RowFormatRegistration['settings'] = {
   formatId: 'openai-chat:plain',

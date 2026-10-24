@@ -7,7 +7,6 @@ import type { RecordAppender } from './groupAppender.js';
 import { KeyedMapBatch, KeyedMapReader } from './keyedMap.js';
 import {
   rowFormatAuxKey,
-  rowFormatKey,
   type RowFormatFill,
   type RowFormatRegistration,
 } from './rowFormat.js';
@@ -17,7 +16,6 @@ export function requireIncrementalFormats(
   registrations: ReadonlyArray<{
     readonly registration: RowFormatRegistration;
   }>,
-  slots: SlotTable | undefined,
 ): void {
   const changed = edits.some(
     (edit) =>
@@ -32,19 +30,7 @@ export function requireIncrementalFormats(
       ].includes(edit.kind),
   );
   if (!changed) return;
-  const anthropic =
-    slots?.formatSlots.filter((format) => format.summaryKind === 'anthropic') ??
-    [];
-  const hasUnattachedAnthropic =
-    anthropic.length > 0 &&
-    !registrations.some(({ registration }) =>
-      anthropic.some(
-        (format) =>
-          rowFormatKey(registration.settings) === format.formatKeyHash,
-      ),
-    );
   if (
-    hasUnattachedAnthropic ||
     registrations.some(
       ({ registration }) => registration.incremental === 'unsupported',
     )
@@ -68,7 +54,7 @@ export function invalidateAnthropicFormats(
       return slot;
     if (slot.gen === 0xffff_ffff)
       throw new JournalFormatError('Format generation overflow');
-    return { ...slot, gen: slot.gen + 1 };
+    return { ...slot, gen: slot.gen + 1, filledThrough: 0 };
   };
   const slots = built.state.slots;
   return {

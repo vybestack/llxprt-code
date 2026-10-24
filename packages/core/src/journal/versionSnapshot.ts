@@ -7,7 +7,11 @@ import {
   DENSITY_FILES_SCOPE,
 } from './density-file-facts.js';
 import { RecencyFacts, RECENCY_INDEX_READY } from './recencyFacts.js';
-import { ACTIVE_FACT_INDEX, NativeFactIndexReader } from './nativeFactIndex.js';
+import {
+  ACTIVE_FACT_INDEX,
+  NATIVE_FACTS_THROUGH,
+  NativeFactIndexReader,
+} from './nativeFactIndex.js';
 import { rowFormatAuxKey } from './rowFormat.js';
 import { rowSummaryRange } from './row-summary-range.js';
 import { decodeSlotSummary, type SlotSummary } from './slotSummary.js';
@@ -166,7 +170,16 @@ export class VersionSnapshot {
       this.version?.roots.metaRoot ?? 0,
       ACTIVE_FACT_INDEX,
     );
-    if (active === undefined || new TextDecoder().decode(active) !== scope)
+    const through = await this.kimi.meta.get(
+      this.version?.roots.metaRoot ?? 0,
+      NATIVE_FACTS_THROUGH,
+    );
+    if (
+      active === undefined ||
+      new TextDecoder().decode(active) !== scope ||
+      through === undefined ||
+      new TextDecoder().decode(through) !== String(this.version?.commitSeq)
+    )
       throw new JournalFormatError('Native fact index settings require a fill');
     return new NativeFactIndexReader(this.facts, scope);
   }

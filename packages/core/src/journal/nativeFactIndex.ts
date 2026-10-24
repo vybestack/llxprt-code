@@ -9,6 +9,7 @@ import type { Version } from './version.js';
 
 export const NATIVE_FACT_NAMESPACE = ID_NS.nativeScalar;
 export const ACTIVE_FACT_INDEX = 'native:scalar-index';
+export const NATIVE_FACTS_THROUGH = 'native:scalar-through';
 const utf8 = new TextEncoder();
 export type NativeFactKey = ReadonlyArray<string | number>;
 

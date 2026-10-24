@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { JournalFormatError } from './errors.js';
+import { decodeDecimal, encodeDecimal } from './metaFacts.js';
+import { maintainNativeFacts } from './native-fact-maintenance.js';
 import type { VersionEdit } from './groupEdits.js';
 import {
   mapReader,
@@ -13,8 +14,8 @@ import { IdTrieReader } from './idTrieReader.js';
 import { KeyedMapBatch, KeyedMapReader } from './keyedMap.js';
 import {
   ACTIVE_FACT_INDEX,
+  NATIVE_FACTS_THROUGH,
   NativeFactIndexWriter,
-  nativeFactVersion,
   type NativeFactIndexRegistration,
 } from './nativeFactIndex.js';
 
@@ -33,42 +34,26 @@ export async function warmNativeFacts(
     ctx.published.roots.metaRoot,
     ACTIVE_FACT_INDEX,
   );
-  return active !== undefined &&
+  const through = await mapReader(ctx, 'meta').get(
+    ctx.published.roots.metaRoot,
+    NATIVE_FACTS_THROUGH,
+  );
+  if (through === undefined) return undefined;
+  return decodeDecimal(through) === BigInt(ctx.published.commitSeq) &&
+    active !== undefined &&
     new TextDecoder().decode(active) === edit.registration.scope
     ? edit.registration
     : undefined;
 }
 
-export async function requireNativeFactWriter(
-  ctx: BuildContext,
-  edits: readonly VersionEdit[],
-  registration: NativeFactIndexRegistration | undefined,
-): Promise<void> {
-  if (registration !== undefined || ctx.published === undefined) return;
-  const changesSource = edits.some(
-    (edit) =>
-      ![
-        'densityFiles',
-        'toolRanking',
-        'setState',
-        'checkpoint',
-        'deleteCheckpoint',
-        'format',
-      ].includes(edit.kind),
-  );
-  if (
-    changesSource &&
-    (await mapReader(ctx, 'meta').get(
-      ctx.published.roots.metaRoot,
-      ACTIVE_FACT_INDEX,
-    )) !== undefined
-  )
-    throw new JournalFormatError(
-      'Active native fact writer must be registered before changing history',
-    );
-}
-function changesSource(edit: VersionEdit): boolean {
+function changesNativeSource(edit: VersionEdit): boolean {
   return ![
+    'chronology',
+    'densityCalls',
+    'recency',
+    'kimi',
+    'mistral',
+    'mistralScope',
     'setState',
     'checkpoint',
     'deleteCheckpoint',
@@ -87,9 +72,9 @@ export async function fillNativeFacts(
   edits: readonly VersionEdit[],
 ): Promise<{ built: BuiltGroup; invalidated: boolean }> {
   const explicit = edits.some((edit) => edit.kind === 'factIndex');
-  const changed = edits.some(changesSource);
+  const changed = edits.some(changesNativeSource);
   if (registration === undefined || (!explicit && !changed))
-    return { built, invalidated: false };
+    return advanceCoverage(ctx, built, appender, changed);
   await appender.drain();
   const batch = new IdFactBatch(
     new IdTrieReader(ctx.readGroup(appender.nextOffset), ctx.idCache),
@@ -101,28 +86,13 @@ export async function fillNativeFacts(
   const writer = new NativeFactIndexWriter(batch, registration.scope);
   const snapshot = snapshotOf(ctx, built, appender);
   try {
-    const previous = await writer.get(['version']);
-    const generation = nativeFactVersion(
-      (previous?.[0] ?? 0) + (previous?.[1] ?? 0) * 0x1_0000_0000 + 1,
+    const { invalidated, rebuilt } = await maintainNativeFacts(
+      ctx,
+      snapshot,
+      writer,
+      registration,
+      edits,
     );
-    let invalidated = false;
-    if (
-      !explicit &&
-      registration.append !== undefined &&
-      ctx.published?.slots.formatSlots.some(
-        (format) => format.summaryKind === 'anthropic',
-      ) === true
-    ) {
-      invalidated = !(await registration.append(
-        snapshot,
-        writer,
-        ctx.published,
-        edits,
-      ));
-    } else {
-      await registration.write(snapshot, writer, generation);
-      await writer.set(['version'], generation);
-    }
     await writer.set(['invalid'], [Number(invalidated)]);
     const committed = await batch.commit(appender);
     await appender.drain();
@@ -135,6 +105,7 @@ export async function fillNativeFacts(
       ),
       built.state.metaRoot,
     );
+    meta.set(NATIVE_FACTS_THROUGH, encodeDecimal(ctx.commitSeq));
     meta.set(
       ACTIVE_FACT_INDEX,
       new TextEncoder().encode(invalidated ? '' : registration.scope),
@@ -145,9 +116,52 @@ export async function fillNativeFacts(
         ...built,
         state: { ...built.state, idRoot: committed.root, metaRoot },
       },
-      invalidated,
+      invalidated:
+        invalidated ||
+        (rebuilt &&
+          ctx.published?.slots.formatSlots.some(
+            (format) => format.summaryKind === 'anthropic',
+          ) === true),
     };
   } finally {
     await snapshot.close();
   }
+}
+
+async function advanceCoverage(
+  ctx: BuildContext,
+  built: BuiltGroup,
+  appender: RecordAppender,
+  changed: boolean,
+): Promise<{ built: BuiltGroup; invalidated: boolean }> {
+  if (changed || ctx.published === undefined)
+    return { built, invalidated: false };
+  const reader = mapReader(ctx, 'meta');
+  const through = await reader.get(
+    ctx.published.roots.metaRoot,
+    NATIVE_FACTS_THROUGH,
+  );
+  if (
+    through === undefined ||
+    decodeDecimal(through) !== BigInt(ctx.published.commitSeq)
+  )
+    return { built, invalidated: false };
+  await appender.drain();
+  const meta = new KeyedMapBatch(
+    new KeyedMapReader(
+      ctx.readGroup(appender.nextOffset),
+      ctx.metaCache,
+      'meta',
+      ctx.hasher,
+    ),
+    built.state.metaRoot,
+  );
+  meta.set(NATIVE_FACTS_THROUGH, encodeDecimal(ctx.commitSeq));
+  return {
+    built: {
+      ...built,
+      state: { ...built.state, metaRoot: await meta.commit(appender) },
+    },
+    invalidated: false,
+  };
 }

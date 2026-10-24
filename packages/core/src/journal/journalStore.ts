@@ -17,7 +17,7 @@ import {
 import { warmDensityFiles, densityFilePolicy } from './density-file-fill.js';
 import type { DensityFilePolicy } from './density-file-facts.js';
 import type { RecencyFactPolicy } from './recencyFacts.js';
-import { requireNativeFactWriter, warmNativeFacts } from './nativeFactFill.js';
+import { warmNativeFacts } from './nativeFactFill.js';
 import type { NativeFactIndexRegistration } from './nativeFactIndex.js';
 import {
   checkpointKey,
@@ -723,15 +723,10 @@ export class JournalStore {
   private async nativeFactRegistration(
     edits: readonly VersionEdit[],
   ): Promise<NativeFactIndexRegistration | undefined> {
-    requireIncrementalFormats(
-      edits,
-      this.rowFormats,
-      this.currentVersion?.slots,
-    );
+    requireIncrementalFormats(edits, this.rowFormats);
     const edit = edits.find((item) => item.kind === 'factIndex');
     const registration =
       edit?.kind === 'factIndex' ? edit.registration : this.factIndex;
-    await requireNativeFactWriter(this.buildContext(), edits, registration);
     return registration;
   }
 

@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { filledVersion } from './filled-version.js';
 import { fillMistralFormat } from './mistralFormatFill.js';
 import {
   finishFormatFill,
@@ -483,9 +484,14 @@ async function fillRegisteredSlot(
   )
     return invalidateAnthropicFormats(built, format.formatKeyHash);
   await appender.drain();
-  return fillSlot(
+  const previous = await filledVersion(ctx, format.filledThrough);
+  const cold =
+    (slot === assigned && pass.cold) ||
+    previous === undefined ||
+    previous.slots.formatSlots[slot].gen !== format.gen;
+  const filled = await fillSlot(
     {
-      ctx,
+      ctx: { ...ctx, published: previous },
       appender,
       snapshot: snapshotOf(ctx, built, appender),
       slot,
@@ -493,8 +499,21 @@ async function fillRegisteredSlot(
       registration,
     },
     built,
-    slot === assigned && pass.cold,
+    cold,
   );
+  return {
+    ...filled,
+    state: {
+      ...filled.state,
+      slots: {
+        ...filled.state.slots,
+        formatSlots: replaceSlot(filled.state.slots.formatSlots, slot, {
+          ...filled.state.slots.formatSlots[slot],
+          filledThrough: ctx.commitSeq,
+        }),
+      },
+    },
+  };
 }
 
 export async function fillRowFormats(
@@ -572,11 +591,15 @@ export function advanceFilledThrough(
   ctx: BuildContext,
   built: BuiltGroup,
 ): BuiltGroup {
-  const advance = (format: FormatSlot, slot: number): FormatSlot =>
-    format.summaryKind !== null &&
-    !needsFill(built.state.rootAggregate, slot, format)
-      ? { ...format, filledThrough: ctx.commitSeq }
-      : format;
+  const advance = (format: FormatSlot, slot: number): FormatSlot => {
+    const current =
+      format.filledThrough === ctx.commitSeq ||
+      format.filledThrough === ctx.published?.commitSeq;
+    if (format.summaryKind === null || !current) return format;
+    return needsFill(built.state.rootAggregate, slot, format)
+      ? format
+      : { ...format, filledThrough: ctx.commitSeq };
+  };
   const formats = built.state.slots.formatSlots;
   return {
     ...built,
