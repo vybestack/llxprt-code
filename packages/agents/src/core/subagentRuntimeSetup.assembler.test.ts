@@ -44,6 +44,10 @@ import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager
 import { createConfigParams } from './chatSession-runtime-helpers.js';
 import type { ChatSession } from './chatSession.js';
 import { createChatObject } from './subagentRuntimeSetup.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 // Capture getCoreSystemPromptAsync calls so we can assert interactionMode,
 // provider, and model on both the creation-time call and the per-turn call.
@@ -202,6 +206,7 @@ describe('Subagent per-turn assembler (issue #3136)', () => {
       prepareProviderInvocation: (name, parameters, signal) =>
         captureProviderInvocation(
           {
+            fetch: requestFetch,
             runtimeId: providerRuntime.runtimeId,
             metadata: providerRuntime.metadata,
             globalSettings: settingsService.getAllGlobalSettings(),

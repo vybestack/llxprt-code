@@ -45,6 +45,10 @@ import type {
   StrategyCompressionResult,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { CompressionProviderResult } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 // ---------------------------------------------------------------------------
 // Temp file helpers
@@ -145,6 +149,8 @@ function buildCompressionHandler(logFile: string): {
         name,
         parameters,
         signal,
+        undefined,
+        requestFetch,
       ),
     state: runtimeState,
     history: historyService,

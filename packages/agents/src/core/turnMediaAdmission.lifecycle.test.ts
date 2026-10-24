@@ -34,6 +34,11 @@ import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ChatSession } from './chatSession.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
+
 const INPUT_PNG =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=';
 const OUTPUT_JPEG =
@@ -264,6 +269,8 @@ async function createFixture(
         name,
         parameters,
         signal,
+        undefined,
+        requestFetch,
       ),
     state: createAgentRuntimeState({
       runtimeId: `turn-media-${behavior}`,

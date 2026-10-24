@@ -45,6 +45,10 @@ import process from 'node:process';
 import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
 import { createChatObject } from './subagentRuntimeSetup.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 const AMBIENT_PROVIDER = 'ambient-provider-alpha';
 const SUBAGENT_PROVIDER = 'subagent-provider-beta';
@@ -167,6 +171,8 @@ describe('System prompt provider — non-foreground subagent (issue #3176, D5)',
           name,
           parameters,
           signal,
+          undefined,
+          requestFetch,
         ),
       state: createAgentRuntimeState({
         runtimeId: 'test.subagent.nonforeground',

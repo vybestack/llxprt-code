@@ -49,6 +49,10 @@ import { ConversationManager } from '../src/core/ConversationManager.js';
 import { createConfigParams } from '../src/core/chatSession-runtime-helpers.js';
 import { ChatSession } from '../src/core/chatSession.js';
 import { TestRuntimeProviderManager } from '../src/test-utils/runtimeProviderManager.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 const ownedRoots: Array<{
   readonly config: Config;
@@ -156,6 +160,8 @@ function buildConversationManager(
         name,
         parameters,
         signal,
+        undefined,
+        requestFetch,
       ),
   });
 
@@ -322,6 +328,8 @@ function buildChatSessionWithLiveProvider(
         name,
         parameters,
         signal,
+        undefined,
+        requestFetch,
       ),
   });
 

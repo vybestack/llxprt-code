@@ -43,6 +43,10 @@ import { ConversationManager } from './ConversationManager.js';
 import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 const GENERATING_MODEL = 'claude-opus-4-8';
 const GENERATING_BASE_URL = 'https://api.anthropic.com';
@@ -91,6 +95,7 @@ function buildConversationManager(
     prepareProviderInvocation: (name, parameters, signal) =>
       captureProviderInvocation(
         {
+          fetch: requestFetch,
           runtimeId: providerRuntime.runtimeId,
           metadata: providerRuntime.metadata,
           globalSettings: settingsService.getAllGlobalSettings(),

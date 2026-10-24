@@ -59,6 +59,10 @@ import {
   waitForConditionOnEventLoop,
   delayRealTime,
 } from '../test-utils/eventLoop.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 const realEnvironmentContextModule = {
   ...(await import('@vybestack/llxprt-code-core/utils/environmentContext.js')),
 };
@@ -195,6 +199,8 @@ describe('subagent.ts', () => {
             name,
             parameters,
             signal,
+            undefined,
+            requestFetch,
           ),
         tools: createToolRegistryViewFromRegistry(toolRegistry),
       });

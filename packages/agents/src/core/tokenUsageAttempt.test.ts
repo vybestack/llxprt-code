@@ -50,6 +50,10 @@ import { createConfigParams } from './chatSession-runtime-helpers.js';
 import type { StreamEvent } from './chatSession.js';
 import { ChatSession } from './chatSession.js';
 import { TokenUsageLogger } from './TokenUsageLogger.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 function makeTempLogPath(): string {
   return path.join(
@@ -122,6 +126,8 @@ describe('Issue #3130 slice 3b — attempt-level token-usage records', () => {
           name,
           parameters,
           signal,
+          undefined,
+          requestFetch,
         ),
       state: runtimeState,
       history: history ?? new HistoryService(),

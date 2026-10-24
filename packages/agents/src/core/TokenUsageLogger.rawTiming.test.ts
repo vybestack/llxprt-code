@@ -34,6 +34,10 @@ import {
   TokenUsageLogger,
   type SerializedTokenUsageRecord,
 } from './TokenUsageLogger.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 function makeTempLogPath(): string {
   return path.join(
@@ -159,6 +163,8 @@ function buildTokenSyncView(
         name,
         parameters,
         signal,
+        undefined,
+        requestFetch,
       ),
     state: runtimeState,
     history: historyService,
