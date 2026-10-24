@@ -69,6 +69,7 @@ describe('admitted request transport normalization', () => {
           ephemeralsSnapshot: {},
           providerDefaults: {},
           configuredHeaders: {},
+          requestFetch: owner.fetch,
         },
       );
       expect(admitted.invocation?.fetch).toBe(owner.fetch);

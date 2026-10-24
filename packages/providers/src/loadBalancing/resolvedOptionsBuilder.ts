@@ -211,6 +211,7 @@ function createDelegateInvocation(
 ): GenerateChatOptions['invocation'] | undefined {
   return createRuntimeInvocationContext({
     runtimeId: options.invocation?.runtimeId,
+    fetch: options.invocation?.fetch,
     sessionId: options.invocation?.sessionId,
     runtimeMetadata: options.invocation?.metadata,
 

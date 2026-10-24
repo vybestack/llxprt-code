@@ -218,12 +218,6 @@ describe('provider request ownership', () => {
       });
 
       it('honors replacement policy on a later request rather than ignoring policy changes', async () => {
-        let provider = create();
-        const fixtureOwner = await fixture(provider);
-        const { options, resume, settings } = fixtureOwner;
-        provider = fixtureOwner.provider;
-        mutateOwner(settings, provider.name);
-        resume.open();
         let transported = '';
         global.fetch = async (_input, init): Promise<Response> => {
           transported = await new Response(init?.body).text();
@@ -232,6 +226,12 @@ describe('provider request ownership', () => {
             { headers: { 'content-type': 'text/event-stream' } },
           );
         };
+        let provider = create();
+        const fixtureOwner = await fixture(provider);
+        const { options, resume, settings } = fixtureOwner;
+        provider = fixtureOwner.provider;
+        mutateOwner(settings, provider.name);
+        resume.open();
         await drain(provider, { ...options, invocation: undefined });
         expect(transported).not.toContain('original tool payload');
       });

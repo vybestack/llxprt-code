@@ -832,6 +832,7 @@ export abstract class BaseProvider implements IProvider {
       ephemeralsSnapshot,
       providerDefaults,
       configuredHeaders: configuredHeaders ?? {},
+      requestFetch: this.requestFetch,
     });
   }
 

@@ -20,6 +20,7 @@ import type {
   NormalizedGenerateChatOptions,
 } from './BaseProvider.js';
 import type { ResolvedAuthToken } from './types/providerRuntime.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import { isAbortSignal } from './utils/abortSignal.js';
 
 interface RuntimeGuardInput {
@@ -54,6 +55,7 @@ interface NormalizationDependencies {
   ephemeralsSnapshot: Readonly<Record<string, unknown>>;
   providerDefaults: Readonly<Record<string, unknown>>;
   configuredHeaders: Readonly<Record<string, string>>;
+  requestFetch: NetworkFetch;
 }
 
 function findResolvedRuntimeGaps(
@@ -197,6 +199,7 @@ function extractLegacySignal(invocation: unknown): AbortSignal | undefined {
 
 interface InvocationNormalizationInput {
   invocation?: RuntimeInvocationContext;
+  requestFetch: NetworkFetch;
   runtimeId?: string;
   runtimeMetadata?: Record<string, unknown>;
   modelParams?: Readonly<Record<string, unknown>>;
@@ -251,6 +254,7 @@ function createNormalizedInvocation(
 
   return createRuntimeInvocationContext({
     runtimeId: input.runtimeId,
+    fetch: input.requestFetch,
     runtimeMetadata: input.runtimeMetadata,
     modelParams: input.modelParams,
     modelParamsProviderName: input.modelParamsProviderName,
@@ -281,6 +285,7 @@ export function normalizeProviderGenerateChatOptions(
   });
   const invocation = createNormalizedInvocation({
     invocation: providedOptions.invocation,
+    requestFetch: deps.requestFetch,
     runtimeId:
       providedOptions.invocation?.runtimeId ??
       (typeof guard.metadata.runtimeId === 'string'
