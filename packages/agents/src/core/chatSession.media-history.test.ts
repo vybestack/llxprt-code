@@ -1,6 +1,5 @@
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
-import { afterEach as closeInvocationRoots } from 'bun:test';
 import { createMediaHistoryChat } from './__tests__/selected-chat-media-fixture.js';
 const retainedInvocationOwners: SessionSettingsOwner[] = [];
 
@@ -42,6 +41,9 @@ import {
   prefixedMediaHistory,
 } from './chatSession.media-history-fixtures.js';
 
+const requestFetch = (): Promise<never> =>
+  Promise.reject(new Error('This test must not make network requests'));
+
 function mediaEncodings(history: readonly IContent[]): readonly string[] {
   return history.flatMap((content) =>
     content.blocks.flatMap((block) =>
@@ -51,7 +53,7 @@ function mediaEncodings(history: readonly IContent[]): readonly string[] {
 }
 
 describe('ChatSession media history boundaries', () => {
-  closeInvocationRoots(async () => {
+  afterEach(async () => {
     for (const owner of retainedInvocationOwners.splice(0))
       await owner.dispose();
   });
@@ -440,6 +442,8 @@ describe('ChatSession media history boundaries', () => {
           name,
           parameters,
           signal,
+          undefined,
+          requestFetch,
         ),
       state,
       history,

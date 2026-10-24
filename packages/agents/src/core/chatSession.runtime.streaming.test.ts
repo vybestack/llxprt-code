@@ -44,6 +44,10 @@ import { waitForCondition } from '../test-utils/eventLoop.js';
 import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
 import { ChatSession } from './chatSession.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 describe('ChatSession runtime streaming and abort behavior', () => {
   let settingsService: SettingsService;
@@ -124,6 +128,7 @@ describe('ChatSession runtime streaming and abort behavior', () => {
       prepareProviderInvocation: (name, parameters, signal) =>
         captureProviderInvocation(
           {
+            fetch: requestFetch,
             runtimeId: hookProviderRuntime.runtimeId,
             metadata: hookProviderRuntime.metadata,
             globalSettings: settingsService.getAllGlobalSettings(),
@@ -237,6 +242,7 @@ describe('ChatSession runtime streaming and abort behavior', () => {
         prepareProviderInvocation: (name, parameters, signal) =>
           captureProviderInvocation(
             {
+              fetch: requestFetch,
               runtimeId: providerRuntime.runtimeId,
               metadata: providerRuntime.metadata,
               globalSettings: settingsService.getAllGlobalSettings(),
@@ -361,6 +367,7 @@ describe('ChatSession runtime streaming and abort behavior', () => {
         prepareProviderInvocation: (name, parameters, signal) =>
           captureProviderInvocation(
             {
+              fetch: requestFetch,
               runtimeId: providerRuntime.runtimeId,
               metadata: providerRuntime.metadata,
               globalSettings: settingsService.getAllGlobalSettings(),

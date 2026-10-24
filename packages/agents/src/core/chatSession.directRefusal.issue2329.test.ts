@@ -41,6 +41,10 @@ import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
 import { ChatSession } from './chatSession.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 /**
  * Extracts visible text from a neutral ModelOutput — the post-P13
@@ -95,6 +99,7 @@ describe('Issue 2329: direct-path refusal preservation @issue:2329', () => {
       prepareProviderInvocation: (name, parameters, signal) =>
         captureProviderInvocation(
           {
+            fetch: requestFetch,
             runtimeId: providerRuntime.runtimeId,
             metadata: providerRuntime.metadata,
             globalSettings: settingsService.getAllGlobalSettings(),

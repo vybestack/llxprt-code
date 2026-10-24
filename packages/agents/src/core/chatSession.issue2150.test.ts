@@ -64,6 +64,10 @@ import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager
 import { createConfigParams } from './chatSession-runtime-helpers.js';
 import type { StreamEvent } from './chatSession.js';
 import { ChatSession } from './chatSession.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 describe('Issue 2150: transient connection error must retry the turn, not break the loop', () => {
   let settingsService: SettingsService;
@@ -100,6 +104,7 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       prepareProviderInvocation: (name, parameters, signal) =>
         captureProviderInvocation(
           {
+            fetch: requestFetch,
             runtimeId: providerRuntime.runtimeId,
             metadata: providerRuntime.metadata,
             globalSettings: settingsService.getAllGlobalSettings(),

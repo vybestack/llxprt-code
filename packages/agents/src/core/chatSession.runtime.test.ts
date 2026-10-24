@@ -41,6 +41,10 @@ import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager
 import { createConfigParams } from './chatSession-runtime-helpers.js';
 import type { ChatSessionConfig } from './chatSession.js';
 import { ChatSession } from './chatSession.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 /**
  * Extracts visible text from a neutral ModelOutput — the post-P13
@@ -137,6 +141,7 @@ describe('ChatSession runtime context', () => {
       prepareProviderInvocation: (name, parameters, signal) =>
         captureProviderInvocation(
           {
+            fetch: requestFetch,
             runtimeId: providerRuntime.runtimeId,
             metadata: providerRuntime.metadata,
             globalSettings: settingsService.getAllGlobalSettings(),
@@ -307,6 +312,7 @@ describe('ChatSession runtime context', () => {
       prepareProviderInvocation: (name, parameters, signal) =>
         captureProviderInvocation(
           {
+            fetch: requestFetch,
             runtimeId: hookRuntime.runtimeId,
             metadata: hookRuntime.metadata,
             globalSettings: settingsService.getAllGlobalSettings(),
@@ -441,6 +447,7 @@ describe('ChatSession runtime context', () => {
       prepareProviderInvocation: (name, parameters, signal) =>
         captureProviderInvocation(
           {
+            fetch: requestFetch,
             runtimeId: hookRuntime.runtimeId,
             metadata: hookRuntime.metadata,
             globalSettings: settingsService.getAllGlobalSettings(),

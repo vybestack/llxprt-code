@@ -32,6 +32,10 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
 import { ChatSession } from './chatSession.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 /**
  * Extracts visible (non-thinking) text from a neutral ModelOutput — the
@@ -121,6 +125,8 @@ describe('Issue 1749: AfterModel hook modified-response text', () => {
           name,
           parameters,
           signal,
+          undefined,
+          requestFetch,
         ),
       state: runtimeState,
       history: new HistoryService(),

@@ -52,6 +52,10 @@ import type {
   SystemPromptAssembler,
 } from './chatSession.js';
 import { ChatSession } from './chatSession.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 /**
  * Test fixture: a ChatSession wired to a stub provider whose
@@ -166,6 +170,7 @@ function buildFixture(
     prepareProviderInvocation: (name, parameters, signal) =>
       captureProviderInvocation(
         {
+          fetch: requestFetch,
           runtimeId: providerRuntime.runtimeId,
           metadata: providerRuntime.metadata,
           globalSettings: settingsService.getAllGlobalSettings(),
@@ -438,6 +443,7 @@ describe('ChatSession per-turn system prompt assembly (issue #3136)', () => {
       prepareProviderInvocation: (name, parameters, signal) =>
         captureProviderInvocation(
           {
+            fetch: requestFetch,
             runtimeId: providerRuntime.runtimeId,
             metadata: providerRuntime.metadata,
             globalSettings: settingsService.getAllGlobalSettings(),

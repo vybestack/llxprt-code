@@ -41,6 +41,10 @@ import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager
 import { installModelToolFixture } from './__tests__/model-tool-fixture.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
 import { ChatSession } from './chatSession.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 const modelTools = installModelToolFixture();
 
@@ -167,6 +171,7 @@ async function send(
     prepareProviderInvocation: (name, parameters, signal) =>
       captureProviderInvocation(
         {
+          fetch: requestFetch,
           runtimeId: runtime.runtimeId,
           metadata: runtime.metadata,
           globalSettings: settingsService.getAllGlobalSettings(),

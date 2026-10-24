@@ -18,6 +18,10 @@ import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime
 
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 export function createConfigParams(
   settingsService: SettingsService,
@@ -43,6 +47,7 @@ export function invocationData(
   settingsService: SettingsService,
 ): ProviderInvocationData {
   return {
+    fetch: requestFetch,
     runtimeId: runtime.runtimeId,
     metadata: runtime.metadata,
     globalSettings: settingsService.getAllGlobalSettings(),

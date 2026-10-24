@@ -29,6 +29,10 @@ import { ChatSession } from './chatSession.js';
  * `.text` getter.
  */
 import { installModelToolFixture } from './__tests__/model-tool-fixture.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 const modelTools = installModelToolFixture();
 
 function extractText(output: {
@@ -77,6 +81,7 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
       prepareProviderInvocation: (name, parameters, signal) =>
         captureProviderInvocation(
           {
+            fetch: requestFetch,
             runtimeId: providerRuntime.runtimeId,
             metadata: providerRuntime.metadata,
             globalSettings: settingsService.getAllGlobalSettings(),

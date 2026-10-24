@@ -45,6 +45,10 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { waitForCondition } from '../test-utils/eventLoop.js';
 import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 function createContentGeneratorStub(): ContentGenerator {
   return {
@@ -141,6 +145,7 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
           prepareProviderInvocation: (name, parameters, signal) =>
             captureProviderInvocation(
               {
+                fetch: requestFetch,
                 runtimeId: localProviderRuntime.runtimeId,
                 metadata: localProviderRuntime.metadata,
                 globalSettings: localSettingsService.getAllGlobalSettings(),
@@ -213,6 +218,7 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
           prepareProviderInvocation: (name, parameters, signal) =>
             captureProviderInvocation(
               {
+                fetch: requestFetch,
                 runtimeId: localProviderRuntime.runtimeId,
                 metadata: localProviderRuntime.metadata,
                 globalSettings: localSettingsService.getAllGlobalSettings(),
@@ -345,6 +351,7 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
           prepareProviderInvocation: (name, parameters, signal) =>
             captureProviderInvocation(
               {
+                fetch: requestFetch,
                 runtimeId: localProviderRuntime.runtimeId,
                 metadata: localProviderRuntime.metadata,
                 globalSettings: localSettingsService.getAllGlobalSettings(),
@@ -497,6 +504,7 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
           prepareProviderInvocation: (name, parameters, signal) =>
             captureProviderInvocation(
               {
+                fetch: requestFetch,
                 runtimeId: localProviderRuntime.runtimeId,
                 metadata: localProviderRuntime.metadata,
                 globalSettings: localSettingsService.getAllGlobalSettings(),
