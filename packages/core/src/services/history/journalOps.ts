@@ -31,11 +31,10 @@ export interface JournalWriteHost {
 export function applyOperation(
   host: JournalWriteHost,
   op: HistoryJournalOp,
-): void {
+): RowDraft | undefined {
   switch (op.kind) {
     case 'content':
-      applyContent(host, op.content, op.tx, op.origin);
-      return;
+      return applyContent(host, op.content, op.tx, op.origin);
     case 'rewind':
       applyRewind(host, op.itemsRemoved);
       return;
@@ -74,13 +73,15 @@ function applyContent(
   content: IContent,
   tx: string | undefined,
   origin: string | undefined,
-): void {
+): RowDraft {
   if (tx !== undefined) {
     throw new Error(
       'Rows of a replace transaction are not implemented in the journal store yet',
     );
   }
-  applyAppendDrafts(host, [encodeAppended(host, content, origin)], origin);
+  const draft = encodeAppended(host, content, origin);
+  applyAppendDrafts(host, [draft], origin);
+  return draft;
 }
 
 /**

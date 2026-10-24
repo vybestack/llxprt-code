@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { decodeStoredRow } from './journalRowCodec.js';
+import { encodeRowDraft, type RowDraft } from '../../journal/rowDraft.js';
 import type { MirrorCheckpoint } from '../../journal/mirrorCheckpoint.js';
 import type { TokenRowSource } from './history-token-tickets.js';
 import { JournalHistoryStoreReads } from './journal-history-store-reads.js';
@@ -128,6 +129,10 @@ export class JournalHistoryStore
   });
 
   private tentativeRows = 0;
+  private tokenDraftSequence = 0;
+  private tokenDraft:
+    | { readonly sequence: number; readonly draft: RowDraft }
+    | undefined;
   private queue: Promise<void>;
   private failure: { readonly error: unknown; reported?: boolean } | undefined;
   private restoreFailed = false;
@@ -313,15 +318,28 @@ export class JournalHistoryStore
   captureTokenRow(): TokenRowSource {
     this.assertUsable();
     const index = this.tentativeRows - 1;
+    const sequence = this.tokenDraft?.sequence;
     const saved = this.exclusive(() => this.session.store.snapshot());
     let closing: Promise<void> | undefined;
     return {
       read: async () => {
         const snapshot = await saved;
+        const available = this.tokenDraft;
+        if (available !== undefined && available.sequence === sequence) {
+          this.tokenDraft = undefined;
+          const { draft } = available;
+          return decodeStoredRow({
+            header: encodeRowDraft(1n, draft).header,
+            rawIds: draft.ids.map((id) => id.rawId),
+            meta: draft.meta,
+            blocks: draft.blocks.map((block) => block.bytes),
+          });
+        }
         const entry = await snapshot.entryAt(index);
         return decodeStoredRow(await snapshot.readRow(entry));
       },
       close: () => {
+        if (this.tokenDraft?.sequence === sequence) this.tokenDraft = undefined;
         closing ??= saved.then((snapshot) => snapshot.close());
         return closing;
       },
@@ -330,7 +348,11 @@ export class JournalHistoryStore
 
   apply(op: HistoryJournalOp): void {
     this.assertUsable();
-    applyOperation(this.writes, op);
+    this.tokenDraft = undefined;
+    const draft = applyOperation(this.writes, op);
+    if (draft !== undefined) {
+      this.tokenDraft = { sequence: ++this.tokenDraftSequence, draft };
+    }
   }
 
   purge(changes: readonly PositionedContent[]): void {
@@ -693,6 +715,7 @@ export class JournalHistoryStore
     beforeClose?: () => Promise<void>,
   ): Promise<void> {
     this.disposed = true;
+    this.tokenDraft = undefined;
     await this.queue;
     await this.startup;
     const failures: unknown[] = [];

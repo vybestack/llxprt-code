@@ -33,6 +33,10 @@ describe('journal token tickets without scratch storage', () => {
           speaker: 'human',
           blocks: [{ type: 'text', text: 'pending read' }],
         });
+        history.add({
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'evict the one-row handoff' }],
+        });
         await entered.promise;
         const disposal = history.dispose();
         const closedWhileReading = disposal.then(() => reading);
