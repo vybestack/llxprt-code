@@ -20,6 +20,10 @@ import { createRuntimeConfigStub } from './testSupport.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { GeminiProvider } from '../gemini/GeminiProvider.js';
 import { createProviderCallOptions } from './testSupport.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 const googleGenAIState = {
   instances: [] as Array<{ options: Record<string, unknown> }>,
@@ -131,6 +135,7 @@ ${TEST_USER_MEMORY}`;
     });
 
     const invocation = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: runtime.runtimeId,
       runtimeMetadata: runtime.metadata,
 
@@ -198,6 +203,7 @@ ${TEST_USER_MEMORY}`;
     });
 
     const invocation1 = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: runtime1.runtimeId,
       runtimeMetadata: runtime1.metadata,
 
@@ -262,6 +268,7 @@ ${TEST_USER_MEMORY}`;
     });
 
     const invocation2 = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: runtime2.runtimeId,
       runtimeMetadata: runtime2.metadata,
 

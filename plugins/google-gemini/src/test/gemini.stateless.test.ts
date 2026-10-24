@@ -13,6 +13,10 @@ import {
   createProviderCallOptions,
   type ProviderCallOptionsInit,
 } from './testSupport.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(async () => 'core-prompt'),
@@ -417,6 +421,7 @@ describe('Gemini provider stateless contract tests', () => {
     ]);
     authMock.useMode(0);
     const invocation = createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: runtime.runtimeId,
       runtimeMetadata: runtime.metadata,
 

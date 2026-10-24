@@ -11,6 +11,10 @@ import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtim
 import type { NormalizedGenerateChatOptions } from '@vybestack/llxprt-code-providers/BaseProvider.js';
 import { buildRequestConfig } from '../gemini/geminiRequestBuilding.js';
 import { extractReasoningConfig } from '../gemini/geminiReasoningConfig.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 interface WarningEntry {
   readonly message: string;
@@ -49,6 +53,7 @@ function createOptions(fixture: GeminiFixture): NormalizedGenerateChatOptions {
     runtimeId: 'gemini-issue3255-test',
   });
   const invocation = createRuntimeInvocationContext({
+    fetch: requestFetch,
     runtimeId: runtime.runtimeId,
     runtimeMetadata: runtime.metadata,
 
