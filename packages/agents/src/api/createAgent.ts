@@ -307,13 +307,9 @@ async function applyActivation(
   return { provider: postProvider, model: postModel };
 }
 
-/** Reads the active model name without throwing when unset. */
+/** Reads the active model name; an unset model is the empty string. */
 function safeActiveModelName(selection: ModelSelectionOperations): string {
-  try {
-    return selection.readModel() ?? '';
-  } catch {
-    return '';
-  }
+  return selection.readModel() ?? '';
 }
 
 export async function cleanupFailedCreatedAgent(

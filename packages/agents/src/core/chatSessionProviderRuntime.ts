@@ -10,6 +10,7 @@ import type { CompletedToolCall } from './coreToolScheduler.js';
  */
 
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import { NoActiveProviderError } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import {
   ANTHROPIC_DEFAULT_BASE_URL,
   ProviderFileLifecycle,
@@ -124,8 +125,11 @@ export function chatResolvedBaseUrl(
 ): string | undefined {
   try {
     return resolveProviderBaseUrl(resolveProvider(), baseUrl);
-  } catch {
-    return undefined;
+  } catch (error) {
+    if (error instanceof NoActiveProviderError) {
+      return undefined;
+    }
+    throw error;
   }
 }
 
@@ -134,8 +138,11 @@ export function tryReadActiveProvider(
 ): IProvider | undefined {
   try {
     return readActive();
-  } catch {
-    return undefined;
+  } catch (error) {
+    if (error instanceof NoActiveProviderError) {
+      return undefined;
+    }
+    throw error;
   }
 }
 

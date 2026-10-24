@@ -981,7 +981,7 @@ Coders tick their own line in the commit that completes the task. Inventory task
 - [x] T1.7 E5 child Config uses parent workspace
 - [x] T1.8 E6 provider alias loading surfaces malformed aliases
 - [x] T1.9a E6 load balancer sub-profile cause
-- [ ] T1.9b E6 absence reads in createAgent and chat runtime
+- [x] T1.9b E6 absence reads in createAgent and chat runtime
 - [ ] T1.9c E6 execution owner keeps the error
 - [ ] T1.9d-inv E6 fake-seam suppression inventory
 - [ ] T1.9d-Bk E6 fake-seam test batches (ids added by T1.9d-inv, may be none)

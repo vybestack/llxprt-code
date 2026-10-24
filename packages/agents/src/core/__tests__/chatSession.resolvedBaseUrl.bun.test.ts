@@ -200,7 +200,7 @@ describe('ChatSession.getResolvedBaseUrl', () => {
    * @plan:PLAN-20260824-ISSUE2231.P01
    * @requirement:REQ-2231-4
    */
-  it('S6: returns undefined when the LB last-selection probe throws, instead of propagating', () => {
+  it('S6: propagates the error thrown by the LB last-selection probe', () => {
     const manager = new TestRuntimeProviderManager();
     const provider = {
       ...createProvider('router'),
@@ -215,8 +215,6 @@ describe('ChatSession.getResolvedBaseUrl', () => {
       baseUrl: 'https://runtime.example/v1',
     });
 
-    const result = chat.getResolvedBaseUrl();
-
-    expect(result).toBeUndefined();
+    expect(() => chat.getResolvedBaseUrl()).toThrow('probe exploded');
   });
 });

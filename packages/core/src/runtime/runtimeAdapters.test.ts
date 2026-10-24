@@ -11,6 +11,7 @@ import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-ow
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { describe, it, expect, vi, afterEach } from 'bun:test';
 import {
+  NoActiveProviderError,
   createProviderAdapterFromManager,
   createToolRegistryViewFromRegistry,
   createTelemetryAdapter,
@@ -98,10 +99,11 @@ describe('createProviderAdapterFromManager', () => {
       expect(adapter.getActiveProvider()).toBe(provider);
     });
 
-    it('throws when the manager has no active provider', () => {
+    it('throws NoActiveProviderError when the manager has no active provider', () => {
       const manager = createManagerDouble({}, undefined);
       const adapter = createProviderAdapterFromManager(manager);
 
+      expect(() => adapter.getActiveProvider()).toThrow(NoActiveProviderError);
       expect(() => adapter.getActiveProvider()).toThrow(
         'AgentRuntimeContext provider adapter requires an active provider.',
       );
@@ -131,10 +133,13 @@ describe('createProviderAdapterFromManager', () => {
       );
     });
 
-    it('getActiveProvider throws a descriptive error', () => {
+    it('getActiveProvider throws a descriptive wiring error, not NoActiveProviderError', () => {
       const adapter = createProviderAdapterFromManager(undefined);
       expect(() => adapter.getActiveProvider()).toThrow(
         'AgentRuntimeContext provider adapter requires a RuntimeProviderManager instance.',
+      );
+      expect(() => adapter.getActiveProvider()).not.toThrow(
+        NoActiveProviderError,
       );
     });
 

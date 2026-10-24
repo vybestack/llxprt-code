@@ -44,6 +44,7 @@ import type {
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import { NoActiveProviderError } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import type {
   ProviderFileBindingStore,
   ProviderRequestCollaborators,
@@ -492,7 +493,7 @@ export class ChatSession {
 
     let provider = this.getActiveProvider();
     if (!provider) {
-      throw new Error('No active provider configured');
+      throw new NoActiveProviderError('No active provider configured');
     }
 
     if (desiredProviderName && provider.name !== desiredProviderName) {
@@ -1020,8 +1021,8 @@ export class ChatSession {
    * Returns undefined when no endpoint is resolvable. Used for error
    * reporting so failures name the actual endpoint (@issue #2231); note that
    * provider resolution follows the same path a send would (including an
-   * enforced active-provider switch), and resolution failures must never
-   * mask the error being reported.
+   * enforced active-provider switch). Only the absence of an active provider
+   * yields undefined; any other resolution failure propagates to the caller.
    */
   getResolvedBaseUrl(): string | undefined {
     return chatResolvedBaseUrl(
