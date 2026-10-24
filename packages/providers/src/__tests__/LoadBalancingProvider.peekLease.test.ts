@@ -8,17 +8,11 @@ const fixtureOwners = installRuntimeTestOwners();
  *
  * Issue #854 (review F1): a load-balancer peek must keep the delegate's
  * request-scoped source alive until the peek owner discharges it. These tests
- * use real source-backed projections (sealed segment files owned by a
- * Gpt56SourceProjection) and an on-demand SDK-body projection, estimate them
- * through the actual envelope estimator after the peek returns, and observe the
- * lease release on disk.
+ * use real native Responses projections and an on-demand SDK-body projection,
+ * estimate them after the peek returns, and verify release fences later reads.
  */
-import { afterAll, beforeEach, describe, expect, it } from 'bun:test';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { beforeEach, describe, expect, it } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
@@ -34,8 +28,8 @@ import {
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import { replayableContents } from '../utils/collectContents.js';
 import { createRuntimeTokenizerFactory } from '../composition/runtimeTokenizerFactory.js';
-import { withGpt56DiskSources } from '../tokenizers/gpt56-disk-tokenizer-factory.js';
-import { serializeResponsesPromptEnvelope } from '../runtime/responses-source-serializer.js';
+import { OpenAIResponsesProvider } from '../openai-responses/OpenAIResponsesProvider.js';
+import { streamCallOptions } from './streamCallOptions.js';
 import { projectAnthropicPromptEnvelope } from '../runtime/promptEnvelopeProjections.js';
 
 /**
@@ -57,16 +51,9 @@ function leasedBodyProjection(
   });
 }
 
-const scratch = mkdtempSync(join(tmpdir(), 'lb-peek-lease-'));
 const factory = createRuntimeTokenizerFactory();
-const sourceFactory = withGpt56DiskSources(factory, scratch);
+const sourceFactory = factory;
 
-const context = {
-  includeReasoningInContext: false,
-  mediaPdfEnabled: true,
-  outputLimits: parseOutputLimits({}),
-  debug: (): void => {},
-};
 const rows: readonly IContent[] = [
   {
     speaker: 'human',
@@ -75,55 +62,49 @@ const rows: readonly IContent[] = [
   { speaker: 'ai', blocks: [{ type: 'text', text: 'answer\n\n  indented' }] },
 ];
 
-async function* stream(items: readonly IContent[]): AsyncGenerator<IContent> {
-  yield* items;
-}
-
 interface SourceDelegate {
   readonly provider: IProvider;
-  /** Directory of the sealed segment files behind each projection handed out. */
-  readonly directories: string[];
+  /** Native projections whose owner must stay readable until release. */
+  readonly projections: PromptEnvelopeProjection[];
   readonly projectionTokens: object[];
   /** Number of delegate projections currently holding their source lease. */
   readonly live: () => number;
 }
 
-/** A delegate whose projections own real on-disk segment files. */
+/** A delegate whose projections own real native Responses requests. */
 function createSourceDelegate(name: string, model: string): SourceDelegate {
-  const directories: string[] = [];
+  const projections: PromptEnvelopeProjection[] = [];
   const projectionTokens: object[] = [];
   let live = 0;
   const provider: IProvider = {
     name,
     async projectPromptEnvelope(): Promise<PromptEnvelopeProjection> {
-      const prompt = await serializeResponsesPromptEnvelope({
-        model,
-        instructions: 'Be exact.',
-        tools: [],
-        context,
-        contents: stream(rows),
-      });
-      const source = prompt.toEstimatorProjection();
-      directories.push(dirname(source.promptSegments[0].source.path));
+      const native = new OpenAIResponsesProvider(
+        'test-key',
+        'https://responses.example.test/v1',
+      );
+      const prepared = await native.projectPromptEnvelope(
+        streamCallOptions({
+          providerName: 'openai-responses',
+          contents: rows,
+          resolved: { model },
+          systemInstruction: 'Be exact.',
+          tools: [],
+        }),
+      );
+      projections.push(prepared);
       const transportToken = Object.freeze({});
       projectionTokens.push(transportToken);
       live++;
       let released = false;
       return {
-        model: prompt.model,
-        protocol: prompt.protocol,
-        method: prompt.method,
-        projectionRevision: prompt.projectionRevision,
-        unsupportedMedia: [],
+        ...prepared,
         transportToken,
-        finalizedProjection: source,
-        legacyEstimate: () =>
-          Promise.reject(new Error('source route must not use legacy path')),
         releaseIfUnsent: async () => {
           if (released) return;
           released = true;
           live--;
-          await prompt.dispose();
+          await prepared.releaseIfUnsent?.();
         },
       };
     },
@@ -135,7 +116,7 @@ function createSourceDelegate(name: string, model: string): SourceDelegate {
     getModels: async () => [],
     getDefaultModel: () => model,
   };
-  return { provider, directories, projectionTokens, live: () => live };
+  return { provider, projections, projectionTokens, live: () => live };
 }
 
 function member(name: string, model: string): ResolvedSubProfile {
@@ -184,8 +165,6 @@ describe('load-balancer peek keeps the delegate source alive (issue #854)', () =
     });
   });
 
-  afterAll(() => rmSync(scratch, { recursive: true, force: true }));
-
   for (const strategy of ['round-robin', 'failover'] as const) {
     it(`${strategy}: estimates a real source projection after the peek returned`, async () => {
       const delegate = createSourceDelegate('prov-a', 'gpt-5.6-sol');
@@ -197,7 +176,15 @@ describe('load-balancer peek keeps the delegate source alive (issue #854)', () =
       });
       if (projection === undefined) throw new Error('expected a projection');
 
-      expect(existsSync(delegate.directories[0])).toBe(true);
+      expect(
+        (
+          await estimatePromptEnvelope(
+            'prov-a',
+            delegate.projections[0],
+            factory,
+          )
+        ).estimatedPromptTokens,
+      ).toBeGreaterThan(0);
       const direct = await estimatePromptEnvelope(
         'prov-a',
         projection,
@@ -207,7 +194,9 @@ describe('load-balancer peek keeps the delegate source alive (issue #854)', () =
       expect(direct.estimatorFamily).toBe('openai-gpt-5.6');
 
       await projection.releaseIfUnsent?.();
-      expect(existsSync(delegate.directories[0])).toBe(false);
+      await expect(
+        estimatePromptEnvelope('prov-a', delegate.projections[0], factory),
+      ).rejects.toThrow('closed');
       expect(delegate.live()).toBe(0);
     });
   }
@@ -252,7 +241,7 @@ describe('load-balancer peek keeps the delegate source alive (issue #854)', () =
     await projection.releaseIfUnsent?.();
     await expect(
       estimatePromptEnvelope('prov-a', projection, sourceFactory),
-    ).rejects.toThrow('tokenization-failed');
+    ).rejects.toThrow('closed');
   });
 
   it('an on-demand SDK body is readable for the legacy estimator until release', async () => {
@@ -322,9 +311,9 @@ describe('load-balancer peek keeps the delegate source alive (issue #854)', () =
     }
 
     expect(chunks).toHaveLength(1);
-    // The peek's directory is gone; the send's own projection (second
-    // directory) is owned by the delegate send and is not part of the peek.
-    expect(existsSync(delegate.directories[0])).toBe(false);
+    await expect(
+      estimatePromptEnvelope('prov-a', delegate.projections[0], factory),
+    ).rejects.toThrow('closed');
     // Discharging again after the send is a no-op.
     await peeked.releaseIfUnsent?.();
   });
@@ -345,7 +334,10 @@ describe('load-balancer peek keeps the delegate source alive (issue #854)', () =
     expect(delegate.live()).toBe(1);
     await second?.releaseIfUnsent?.();
     expect(delegate.live()).toBe(0);
-    expect(delegate.directories.every((dir) => !existsSync(dir))).toBe(true);
+    for (const projection of delegate.projections)
+      await expect(
+        estimatePromptEnvelope('prov-a', projection, factory),
+      ).rejects.toThrow('closed');
   });
 
   it('holds a counting delegate lease until released, then releases it exactly once', async () => {

@@ -56,7 +56,7 @@ import type { UnsupportedMediaEntry } from '@vybestack/llxprt-code-core/runtime/
 import { toEstimationContents } from './openAIResponsesRequestState.js';
 import type { StatefulConversation } from './openAIResponsesStateful.js';
 import { assertRowIndex } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
-import { findDanglingCalls } from '../runtime/responses-source-input.js';
+import { findDanglingCalls } from './responses-dangling-calls.js';
 import { SyntheticToolResponseHandler } from '../openai/syntheticToolResponses.js';
 import { jsonValueByteLength } from '../utils/progressive-json-body.js';
 

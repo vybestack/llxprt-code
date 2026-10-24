@@ -8,7 +8,7 @@ import type { ResponsesRequest } from './responses-request.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
 import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacement.js';
 import { finishMediaRequest } from '../utils/request-media-resolution.js';
-import { findDanglingCalls } from '../runtime/responses-source-input.js';
+import { findDanglingCalls } from './responses-dangling-calls.js';
 import { resolveInvocationEphemerals } from './responses-request-fields.js';
 import { readRequestReasoningIdTime } from '../transportAttemptBudget.js';
 import {

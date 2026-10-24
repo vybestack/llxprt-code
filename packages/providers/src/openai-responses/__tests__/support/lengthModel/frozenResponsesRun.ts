@@ -13,7 +13,7 @@ import {
   type FrozenSettings,
 } from '../../../../__tests__/support/frozenWire/frozenCases.js';
 import type { FrozenFixture } from '../../../../__tests__/support/frozenWire/frozenFixture.js';
-import { findDanglingCalls } from '../../../../runtime/responses-source-input.js';
+import { findDanglingCalls } from '../../../responses-dangling-calls.js';
 import {
   FULL_STATELESS_SEND,
   analyzeResponses,
