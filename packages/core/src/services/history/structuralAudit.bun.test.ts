@@ -356,6 +356,82 @@ describe('no context-retaining collections in the facade surface (P05b3): produc
     ]);
   });
 
+  it('audits the pending-input overlay without hiding retaining members', async () => {
+    const file = path.join(import.meta.dir, 'journal-indexed-overlay.ts');
+    const source = await fs.readFile(file, 'utf8');
+    const insertion =
+      'export class PendingRequestOverlay implements Iterable<IndexedOverlayRow> {';
+    expect(source).toContain(insertion);
+    const mutated =
+      "import type { IContent } from './IContent.js';\n" +
+      source.replace(
+        insertion,
+        insertion +
+          '\n  private retainedRows: IContent[] = [];\n  allRows(): IContent[] { return this.retainedRows; }',
+      );
+    expect(mutated).not.toBe(source);
+    expect(auditSourceText(source, WHITELIST, file)).toStrictEqual([]);
+    expect(
+      auditSourceText(mutated, WHITELIST, file).map((flag) => flag.property),
+    ).toStrictEqual(['retainedRows', 'allRows', 'create']);
+  });
+
+  it('rejects the native pin if the overlay loses its input bound', async () => {
+    const file = path.join(import.meta.dir, 'HistoryServiceCore.ts');
+    const source = await fs.readFile(file, 'utf8');
+    const overlayFile = path.join(
+      import.meta.dir,
+      'journal-indexed-overlay.ts',
+    );
+    const tailFile = path.join(import.meta.dir, 'journal-tail-source.ts');
+    for (const [helperFile, before, after] of [
+      [overlayFile, 'rows.length > maxRows', 'false'],
+      [
+        tailFile,
+        'this.tailRows.length + this.overlay.size',
+        'this.snapshot.rows',
+      ],
+      [tailFile, 'rawIds.length + 2', 'this.snapshot.rows'],
+    ]) {
+      const helper = await fs.readFile(helperFile, 'utf8');
+      const mutated = helper.replace(before, after);
+      expect(mutated).not.toBe(helper);
+      expect(
+        auditSourceText(
+          source,
+          WHITELIST,
+          file,
+          undefined,
+          new Map([[helperFile, mutated]]),
+        ).map((flag) => flag.property),
+      ).toContain('prepareCuratedForProviderSnapshot');
+    }
+  });
+
+  it('rejects a retaining field added to the compression selection contract', async () => {
+    const file = path.join(import.meta.dir, 'HistoryService.ts');
+    const source = await fs.readFile(file, 'utf8');
+    const selectionFile = path.join(import.meta.dir, 'compressionInput.ts');
+    const selection = await fs.readFile(selectionFile, 'utf8');
+    const insertion = 'export interface CompressionRowSelection {';
+    const mutated = selection.replace(
+      insertion,
+      `${insertion}
+  readonly retainedRows: IContent[];`,
+    );
+    expect(mutated).not.toBe(selection);
+    expect(auditSourceText(source, WHITELIST, file)).toStrictEqual([]);
+    expect(
+      auditSourceText(
+        source,
+        WHITELIST,
+        file,
+        undefined,
+        new Map([[selectionFile, mutated]]),
+      ).map((flag) => flag.property),
+    ).toContain('openCompressionInput');
+  });
+
   it('documents a bound for every whitelist entry', () => {
     expect(Object.keys(WHITELIST_BOUNDS).length).toBe(WHITELIST.size);
     for (const [key, bound] of Object.entries(WHITELIST_BOUNDS)) {

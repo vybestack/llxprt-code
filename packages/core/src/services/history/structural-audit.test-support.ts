@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { readFileSync } from 'node:fs';
 import ts from 'typescript';
+import { boundedPendingOverlayRows } from './structural-pending-overlay.test-support.js';
 
 export interface RetainingProperty {
   readonly className: string;
@@ -89,6 +90,7 @@ function nestedPropertiesContainCollection(
   return type.getProperties().some((property) => {
     const declaration = property.valueDeclaration ?? property.declarations?.[0];
     if (declaration === undefined) return false;
+    if (boundedPendingOverlayRows(declaration, checker)) return false;
     if (named && ts.isMethodDeclaration(declaration)) return false;
     if (named && ts.isMethodSignature(declaration)) return false;
     return collectionType(
@@ -642,7 +644,11 @@ function auditSourceNodes(
       }
       for (const member of standingProperties(node)) {
         const property = member.name.getText(source);
-        if (whitelist.has(`${className}.${property}`)) continue;
+        if (
+          whitelist.has(`${className}.${property}`) ||
+          boundedPendingOverlayRows(member, checker)
+        )
+          continue;
         const type = checker.getTypeAtLocation(member);
         if (
           collectionType(type, checker) ||
