@@ -86,8 +86,6 @@ async function seed(
   fixture: ExactReplayFixture,
   rows: IContent[],
 ): Promise<void> {
-  if (!(fixture.recording instanceof JournalRecordingService))
-    throw new Error('Expected journal recorder');
   await (await fixture.recording.session()).append(rows);
   await fixture.recording.flush();
   await fixture.close();
@@ -119,7 +117,6 @@ describe('public native reference-media resume and adoption', () => {
   it('verifies real referenced bytes without a replay reservation and transfers ownership only on adoption', async () => {
     const fixture = new ExactReplayFixture(
       await fixtureDirectory('reference-media'),
-      'journal',
     );
     const media = new LocalMediaStore({
       rootDirectory: join(fixture.directory, 'media'),
@@ -174,7 +171,6 @@ describe('public native reference-media resume and adoption', () => {
     it(`preserves prior rows, accounting, recorder and reservations through ${stage} adoption`, async () => {
       const fixture = new ExactReplayFixture(
         await fixtureDirectory(`reference-${stage}`),
-        'journal',
       );
       const media = new FailableMediaStore({
         rootDirectory: join(fixture.directory, 'media'),

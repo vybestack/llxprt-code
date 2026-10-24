@@ -66,7 +66,6 @@ describe(`fixed generated public replay on ${backend}`, () => {
     it(`preserves generated metadata and flush segments through two resumes, sample ${sample}`, async () => {
       const fixture = new ExactReplayFixture(
         await fixtureDirectory(`${backend}-segments-${sample}`),
-        backend,
       );
       const firstRows = first.map((text, index) => exactRow(text, index + 1));
       const expected = [
@@ -120,7 +119,6 @@ describe(`fixed generated public replay on ${backend}`, () => {
     it(`replaces generated pre-resume membership with summary and post rows, sample ${sample}`, async () => {
       const fixture = new ExactReplayFixture(
         await fixtureDirectory(`${backend}-compression-${sample}`),
-        backend,
       );
       const expected = [
         exactRow('summary', before.length + 1),
@@ -161,7 +159,6 @@ describe(`fixed generated public replay on ${backend}`, () => {
     it(`compresses all ${count} generated rows and continues after resume, sample ${sample}`, async () => {
       const fixture = new ExactReplayFixture(
         await fixtureDirectory(`${backend}-size-${sample}`),
-        backend,
       );
       const expected = [
         exactRow(summary, count + 1),
@@ -200,7 +197,6 @@ describe(`fixed generated public replay on ${backend}`, () => {
     it(`preserves generated minimum-1000-character text byte for byte, sample ${sample}`, async () => {
       const fixture = new ExactReplayFixture(
         await fixtureDirectory(`${backend}-large-${sample}`),
-        backend,
       );
       const expected = [exactRow(text, 1)];
       await writeFile(

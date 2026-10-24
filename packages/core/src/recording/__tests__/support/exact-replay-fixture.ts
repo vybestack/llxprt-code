@@ -19,10 +19,8 @@ import { JournalRecordingService } from '../../journalRecordingService.js';
 import { RecordingIntegration } from '../../RecordingIntegration.js';
 import type { SessionRecordingPort } from '../../recordingPort.js';
 import { resumeSession } from '../../resumeSession.js';
-import { SessionRecordingService } from '../../SessionRecordingService.js';
 import type { SessionMetadata } from '../../types.js';
 
-export type ReplayBackend = 'old' | 'journal';
 export const PROJECT = 'w21-exact-replay';
 
 export async function fixtureDirectory(label: string): Promise<string> {
@@ -106,7 +104,6 @@ export async function expectNativeRows(
   fixture: ExactReplayFixture,
   expected: readonly IContent[],
 ): Promise<void> {
-  if (fixture.backend !== 'journal') return;
   expectWireRows(
     (await diskRows(fixture.path())).map((row) => row.content),
     expected,
@@ -115,15 +112,12 @@ export async function expectNativeRows(
 
 export class ExactReplayFixture {
   readonly history: HistoryService;
-  readonly recording: SessionRecordingPort;
+  readonly recording: JournalRecordingService;
   readonly integration: RecordingIntegration;
   readonly chats: string;
   readonly sessionId: string;
 
-  constructor(
-    readonly directory: string,
-    readonly backend: ReplayBackend,
-  ) {
+  constructor(readonly directory: string) {
     this.chats = join(directory, 'chats');
     this.sessionId = 'exact-replay';
     const config = {
@@ -135,10 +129,7 @@ export class ExactReplayFixture {
       model: 'model-1',
     };
     this.history = new HistoryService({});
-    this.recording =
-      backend === 'journal'
-        ? JournalRecordingService.create(config)
-        : new SessionRecordingService(config);
+    this.recording = JournalRecordingService.create(config);
     this.integration = new RecordingIntegration(this.recording);
   }
 

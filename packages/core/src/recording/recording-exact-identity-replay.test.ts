@@ -6,7 +6,6 @@ import { HistoryService } from '../services/history/HistoryService.js';
 import { JournalRecordingService } from './journalRecordingService.js';
 import { JournalResumeBoot, resumePointOf } from './journalResume.js';
 import { RecordingIntegration } from './RecordingIntegration.js';
-import { SessionRecordingService } from './SessionRecordingService.js';
 
 import type { IContent } from '../services/history/IContent.js';
 import {
@@ -23,7 +22,6 @@ async function expectDistinctNativeRows(
   fixture: ExactReplayFixture,
   expected: readonly IContent[],
 ): Promise<void> {
-  if (fixture.backend !== 'journal') return;
   const disk = await diskRows(fixture.path());
   expectWireRows(
     disk.map((row) => row.content),
@@ -37,21 +35,13 @@ describe('exact replay identity contracts', () => {
   it(`rebuilds distinct equal-text unstamped disk rows without duplication on ${backend}`, async () => {
     const fixture = new ExactReplayFixture(
       await fixtureDirectory(`${backend}-unstamped`),
-      backend,
     );
     const input: IContent[] = Array.from({ length: 2 }, () => ({
       speaker: 'human',
       blocks: [{ type: 'text', text: 'unstamped disk snapshot' }],
     }));
     try {
-      if (fixture.recording instanceof JournalRecordingService)
-        await (
-          await fixture.recording.session()
-        ).append(structuredClone(input));
-      else if (fixture.recording instanceof SessionRecordingService)
-        for (const row of input)
-          fixture.recording.recordContent(structuredClone(row));
-      else throw new Error('Unexpected recorder');
+      await (await fixture.recording.session()).append(structuredClone(input));
       await fixture.recording.flush();
       await fixture.close();
       let expected: IContent[] = [];
@@ -101,7 +91,6 @@ describe('exact replay identity contracts', () => {
   it(`shares resumed chronology across rejected replacement, append and successful rebuild on ${backend}`, async () => {
     const fixture = new ExactReplayFixture(
       await fixtureDirectory(`${backend}-chronology-rollback`),
-      backend,
     );
     try {
       await fixture.integration.subscribeToJournal(fixture.history);
@@ -157,13 +146,11 @@ describe('exact replay identity contracts', () => {
 
   it('filters resumed origins and remaps mirror owners without changing complete row bytes', async () => {
     const directory = await fixtureDirectory('journal-origins');
-    const fixture = new ExactReplayFixture(directory, 'journal');
+    const fixture = new ExactReplayFixture(directory);
     const selected = {};
     const foreign = {};
     const expected = [exactRow('shared', 1), exactRow('selected', 3)];
     try {
-      if (!(fixture.recording instanceof JournalRecordingService))
-        throw new Error('Expected native primary');
       await fixture.history.adoptResumeBoot(
         fixture.recording,
         new JournalResumeBoot(
