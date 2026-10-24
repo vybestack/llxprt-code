@@ -11,7 +11,7 @@ import {
   type DetachedFixture,
 } from '../../packages/core/src/services/history/detached-rollback-test-helpers.js';
 import {
-  mediaParticipant,
+  journalMediaParticipant as mediaParticipant,
   rejectedValue,
 } from '../../packages/core/src/services/history/chronology-rollback-test-helpers.js';
 import { RowOwnership } from '../../packages/core/src/recording/rowOwnership.js';
@@ -26,6 +26,7 @@ import { SessionSettingsOwner } from '../../packages/core/src/session/session-se
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { HistoryService } from '../../packages/core/src/services/history/HistoryService.js';
 import type { ConversationManager } from '../../packages/agents/src/core/ConversationManager.js';
+import { seedClientArrayHistory } from '../../packages/agents/src/core/__tests__/support/client-array-test-helpers.js';
 
 // The probe runs outside the test runner, so it owns its telemetry and tool
 // roots and process exit releases them.
@@ -81,9 +82,7 @@ function submit(
 async function probe(size: number, trap: boolean): Promise<void> {
   await withDetachedFixture(async (fixture) => {
     const { history, recorder, owners } = fixture;
-    for await (const row of detachedRows(size))
-      await recorder.commit('content', { content: row });
-    await history.recalculateTotalTokens();
+    await seedClientArrayHistory(fixture, size);
     const conversation = conversationFor(history);
     forbidArrayRollback(history);
     const ready = gate();
