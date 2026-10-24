@@ -49,7 +49,9 @@ import {
   type EncodedRow,
 } from './rowDraft.js';
 import type { RowDraft } from './rowDraft.js';
-import type { RowEntry } from './rowEntry.js';
+import { ENTRY_FLAG, type RowEntry } from './rowEntry.js';
+import { ROW_FLAG } from './rowRecord.js';
+import { CONTRIBUTION_FLAGS } from './unitContributions.js';
 import { bulkBuildRowTree } from './rowTreeBuilder.js';
 import { readRowIds } from './rowReads.js';
 import { slotKindsOf } from './version.js';
@@ -217,9 +219,25 @@ class RebuildPass {
   }
 
   private note(entry: RowEntry): RowEntry {
-    this.first ??= entry;
-    this.last = entry;
-    return entry;
+    const plain = entry.toolCallBlocks === 0 && entry.responseBlocks === 0;
+    const result = plain
+      ? ({
+          ...entry,
+          flags:
+            (entry.flags & ~CONTRIBUTION_FLAGS) |
+            ((entry.flags & ROW_FLAG.curated) === 0 ? 0 : ENTRY_FLAG.self),
+          reconBlocks: 0,
+          answered: 0,
+          stamp: [
+            { gen: 0, imageGen: 0 },
+            { gen: 0, imageGen: 0 },
+            { gen: 0, imageGen: 0 },
+          ],
+        } satisfies RowEntry)
+      : entry;
+    this.first ??= result;
+    this.last = result;
+    return result;
   }
 }
 
@@ -277,7 +295,11 @@ export async function buildRebuilt(
   const algebra = ctx.algebra(slotKindsOf(plan.base.slots));
   let tree = await bulkBuildRowTree(appender, algebra, pass.entries());
   let roots = await commitRebuiltFacts(finishFacts(facts), appender);
-  if (tree !== undefined) {
+  if (
+    tree !== undefined &&
+    (tree.root.aggregate.toolCallBlocks > 0 ||
+      tree.root.aggregate.responseBlocks > 0)
+  ) {
     tree = await rebuildContributions(
       ctx,
       appender,
