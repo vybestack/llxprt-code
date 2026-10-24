@@ -1,9 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import {
   assertAllZero,
+  getU64,
   getU64Big,
   putU8,
   putU32,
+  putU64,
   putU64Big,
   span,
   viewOf,
@@ -16,9 +18,9 @@ import { SUMMARY_KIND_CODE, type SummaryKind } from './slotSummary.js';
 /** Frozen for format version 3: they size every node (design 2.5 and 8.5). */
 export const FORMAT_SLOTS = 3;
 export const FAMILY_SLOTS = 4;
-export const FORMAT_SLOT_BYTES = 32;
+export const FORMAT_SLOT_BYTES = 40;
 export const FAMILY_SLOT_BYTES = 16;
-export const SLOT_TABLE_BYTES = 160;
+export const SLOT_TABLE_BYTES = 184;
 
 /** Offsets inside one format slot (design 2.7); bytes 29 to 31 are zero. */
 export const FORMAT_SLOT_LAYOUT = {
@@ -29,6 +31,7 @@ export const FORMAT_SLOT_LAYOUT = {
   imageGen: span(24, 4),
   summaryKind: span(28, 1),
   pad: span(29, 3),
+  filledThrough: span(32, 8),
 };
 /** Offsets inside one family slot (design 2.7). */
 export const FAMILY_SLOT_LAYOUT = {
@@ -44,6 +47,7 @@ const FORMAT = {
   imageGen: FORMAT_SLOT_LAYOUT.imageGen.offset,
   summaryKind: FORMAT_SLOT_LAYOUT.summaryKind.offset,
   padStart: FORMAT_SLOT_LAYOUT.pad.offset,
+  filledThrough: FORMAT_SLOT_LAYOUT.filledThrough.offset,
 };
 const FAMILY = {
   familyKeyHash: FAMILY_SLOT_LAYOUT.familyKeyHash.offset,
@@ -72,6 +76,7 @@ export interface FormatSlot {
   readonly imageKeyHash: bigint;
   readonly imageGen: number;
   readonly summaryKind: SummaryKind | null;
+  readonly filledThrough: number;
 }
 
 export interface FamilySlot {
@@ -105,6 +110,12 @@ function encodeFormatSlot(
     slot.imageKeyHash,
   );
   putU32(view, base + FORMAT.imageGen, 'imageGen', slot.imageGen);
+  putU64(
+    view,
+    base + FORMAT.filledThrough,
+    'filledThrough',
+    slot.filledThrough,
+  );
   putU8(
     view,
     base + FORMAT.summaryKind,
@@ -156,7 +167,7 @@ function decodeFormatSlot(
   assertAllZero(
     source,
     base + FORMAT.padStart,
-    base + FORMAT_SLOT_BYTES,
+    base + FORMAT_SLOT_LAYOUT.pad.offset + FORMAT_SLOT_LAYOUT.pad.size,
     'Format slot pad',
   );
   const kindCode = view.getUint8(base + FORMAT.summaryKind);
@@ -174,6 +185,7 @@ function decodeFormatSlot(
     imageKeyHash: getU64Big(view, base + FORMAT.imageKeyHash),
     imageGen: view.getUint32(base + FORMAT.imageGen, true),
     summaryKind,
+    filledThrough: getU64(view, base + FORMAT.filledThrough, 'filledThrough'),
   };
 }
 

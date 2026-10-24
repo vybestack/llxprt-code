@@ -58,6 +58,7 @@ export async function warmRowFormat(
   );
   if (
     slot < 0 ||
+    version.slots.formatSlots[slot].filledThrough < version.commitSeq ||
     needsFill(version.aggregate, slot, version.slots.formatSlots[slot])
   )
     return undefined;
@@ -227,7 +228,12 @@ async function assignedSlots(
   built: BuiltGroup,
   appender: RecordAppender,
   registration: RowFormatRegistration,
-): Promise<{ slots: SlotTable; metaRoot: number; slot: number }> {
+): Promise<{
+  slots: SlotTable;
+  metaRoot: number;
+  slot: number;
+  cold: boolean;
+}> {
   const key = rowFormatKey(registration.settings);
   const reader = new KeyedMapReader(
     ctx.readGroup(appender.nextOffset),
@@ -279,6 +285,7 @@ async function assignedSlots(
         imageKeyHash: 0n,
         imageGen: 1,
         summaryKind: kindOf(registration),
+        filledThrough: 0,
       };
   const batch = new KeyedMapBatch(reader, built.state.metaRoot);
   batch.set(`format:last-used:${selected}`, encodeDecimal(ctx.commitSeq));
@@ -289,6 +296,7 @@ async function assignedSlots(
     },
     metaRoot: await batch.commit(appender),
     slot: selected,
+    cold: !same,
   };
 }
 
@@ -447,6 +455,7 @@ interface FormatPass {
   readonly appender: RecordAppender;
   readonly registry: readonly RegisteredRowFormat[];
   readonly assigned: number;
+  readonly cold: boolean;
   readonly invalidatedAnthropic: boolean;
   readonly activeFactScope: string | undefined;
 }
@@ -466,12 +475,7 @@ async function fillRegisteredSlot(
   const registration = registry.find(
     (item) => item.key === format.formatKeyHash,
   )?.registration;
-  if (registration === undefined && format.summaryKind === 'anthropic')
-    return invalidateAnthropicFormats(built, format.formatKeyHash);
-  if (registration === undefined)
-    throw new JournalFormatError(
-      'Active format measurer must be registered before changing history',
-    );
+  if (registration === undefined) return built;
   if (
     slot !== assigned &&
     registration.nativeFactScope !== undefined &&
@@ -489,7 +493,7 @@ async function fillRegisteredSlot(
       registration,
     },
     built,
-    slot === assigned,
+    slot === assigned && pass.cold,
   );
 }
 
@@ -505,12 +509,14 @@ export async function fillRowFormats(
   let next = built;
   let registry = registered;
   let assigned = -1;
+  let cold = false;
   const edit = edits.find((item) => item.kind === 'format');
   if (edit?.kind === 'format') {
     const registration = captureRowFormat(edit.registration);
     await appender.drain();
     const assignment = await assignedSlots(ctx, next, appender, registration);
     assigned = assignment.slot;
+    cold = assignment.cold;
     next = {
       ...next,
       state: {
@@ -547,16 +553,43 @@ export async function fillRowFormats(
       ].includes(item.kind),
     )
   )
-    return { built: next, registered: registry };
+    return { built: advanceFilledThrough(ctx, next), registered: registry };
   const pass = {
     ctx,
     appender,
     registry,
     assigned,
+    cold,
     invalidatedAnthropic,
     activeFactScope,
   };
   for (let slot = 0; slot < 3; slot++)
     next = await fillRegisteredSlot(pass, next, slot);
-  return { built: next, registered: registry };
+  return { built: advanceFilledThrough(ctx, next), registered: registry };
+}
+
+function advanceFilledThrough(
+  ctx: BuildContext,
+  built: BuiltGroup,
+): BuiltGroup {
+  const advance = (format: FormatSlot, slot: number): FormatSlot =>
+    format.summaryKind !== null &&
+    !needsFill(built.state.rootAggregate, slot, format)
+      ? { ...format, filledThrough: ctx.commitSeq }
+      : format;
+  const formats = built.state.slots.formatSlots;
+  return {
+    ...built,
+    state: {
+      ...built.state,
+      slots: {
+        ...built.state.slots,
+        formatSlots: [
+          advance(formats[0], 0),
+          advance(formats[1], 1),
+          advance(formats[2], 2),
+        ],
+      },
+    },
+  };
 }

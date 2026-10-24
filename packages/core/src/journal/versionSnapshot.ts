@@ -190,6 +190,7 @@ export class VersionSnapshot {
     if (version.rows === 0 || from >= to)
       return identitySlotSummary(format.summaryKind);
     if (
+      format.filledThrough < version.commitSeq ||
       version.aggregate.stamp[slot].gen !== format.gen ||
       version.aggregate.missingBase[slot] !== 0
     )

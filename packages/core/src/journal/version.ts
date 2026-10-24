@@ -91,6 +91,7 @@ const NO_FORMAT_SLOT = {
   imageKeyHash: 0n,
   imageGen: 0,
   summaryKind: null,
+  filledThrough: 0,
 } as const;
 const NO_FAMILY_SLOT = { familyKeyHash: 0n, estimatorRev: 0, gen: 0 } as const;
 

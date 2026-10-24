@@ -112,6 +112,7 @@ export function randomSlotTable(random: SeededRandom): SlotTable {
     formatRev: u32(),
     gen: u32(),
     imageKeyHash: random.bigBits(64),
+    filledThrough: 0,
     imageGen: u32(),
     summaryKind: kinds[random.int(kinds.length)],
   });

@@ -38,9 +38,9 @@ import {
 } from './slotTable.js';
 
 /** The fixed kind header of a trailer: the whole running state. */
-export const TRAILER_HEADER_BYTES = 1544;
+export const TRAILER_HEADER_BYTES = 1568;
 /** 20-byte frame head, the kind header, no body, 4-byte body CRC. */
-export const TRAILER_RECORD_BYTES = 1568;
+export const TRAILER_RECORD_BYTES = 1592;
 
 const SYNC_MARKER_BYTES = 8;
 const GROUP_TAG_LIMIT = 1n << 56n;
@@ -69,8 +69,8 @@ export const TRAILER_LAYOUT = {
   ckptBytes: span(152, 8),
   rootAggregate: span(160, AGGREGATE_BYTES),
   slots: span(1368, SLOT_TABLE_BYTES),
-  durableEnd: span(1528, 8),
-  syncMarker: span(1536, SYNC_MARKER_BYTES),
+  durableEnd: span(1552, 8),
+  syncMarker: span(1560, SYNC_MARKER_BYTES),
 };
 
 /**

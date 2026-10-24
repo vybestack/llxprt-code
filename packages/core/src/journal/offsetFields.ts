@@ -340,6 +340,7 @@ export const RECORD_FIELDS: Record<RecordName, Record<string, FieldDecl>> = {
     imageKeyHash: 'hash',
     imageGen: 'count',
     summaryKind: 'code',
+    filledThrough: 'count',
   } satisfies Record<keyof FormatSlot, FieldDecl>,
   FamilySlot: {
     familyKeyHash: 'hash',

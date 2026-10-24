@@ -6,7 +6,6 @@ import { buildIncremental } from './groupIncremental.js';
 import type { GroupPlan, Segment } from './groupPlanTypes.js';
 import { buildRebuilt } from './groupRebuild.js';
 import type { MutationCode } from './recordKinds.js';
-import { hasActiveSlot } from './version.js';
 
 /**
  * Whether the new row sequence is a path copy of the tree of `plan.base`:
@@ -63,22 +62,6 @@ export async function buildFromSegments(
   mutation: MutationCode,
   appender: RecordAppender,
 ): Promise<BuiltGroup> {
-  const writesRows = segments.some(
-    (segment) =>
-      segment.kind === 'fresh' ||
-      segment.kind === 'stream' ||
-      segment.kind === 'foreign' ||
-      segment.kind === 'foreignStream',
-  );
-  if (
-    writesRows &&
-    hasActiveSlot(plan.base.slots) &&
-    ctx.measureFormats !== true
-  ) {
-    throw new JournalFormatError(
-      'A format slot is active, and filling its summaries is not part of this edit',
-    );
-  }
   if (isPathCopy(plan, segments)) {
     const built = await buildIncremental(
       ctx,

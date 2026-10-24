@@ -56,7 +56,11 @@ export function hasNativeRequestFormat(
   const slot = version.slots.formatSlots.findIndex(
     (format) => format.formatKeyHash === key,
   );
-  if (slot < 0) return false;
+  if (
+    slot < 0 ||
+    version.slots.formatSlots[slot].filledThrough < version.commitSeq
+  )
+    return false;
   return (
     version.rows === 0 ||
     (version.aggregate.stamp[slot].gen ===

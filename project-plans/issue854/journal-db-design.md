@@ -419,11 +419,11 @@ Bits 11 to 15 are zero.
 | padding | 148 | 4 | u8[4] |
 | ckptBytes | 152 | 8 | u64 |
 | rootAggregate | 160 | 1208 | Aggregate |
-| slots | 1368 | 160 | SlotTable |
-| durableEnd | 1528 | 8 | u64 |
-| syncMarker | 1536 | 8 | u8[8] |
+| slots | 1368 | 184 | SlotTable |
+| durableEnd | 1552 | 8 | u64 |
+| syncMarker | 1560 | 8 | u8[8] |
 
-The kind header is 1,544 bytes and the trailer record 1,568. `padding` is zero. `mutation` and `groupTag` share the `u64` at offset 64: the low byte is `mutation`.
+The kind header is 1,568 bytes and the trailer record 1,592. `padding` is zero. `mutation` and `groupTag` share the `u64` at offset 64: the low byte is `mutation`.
 
 #### Mutation codes
 
@@ -502,8 +502,9 @@ Counts are `u32`. Token, byte and character totals are `u64`. The five label fie
 | imageGen | 24 | 4 | u32 |
 | summaryKind | 28 | 1 | u8 |
 | pad | 29 | 3 | u8[3] |
+| filledThrough | 32 | 8 | u64 |
 
-A format slot is 32 bytes. `pad` is zero.
+A format slot is 40 bytes. `pad` is zero.
 
 #### Family slot
 
@@ -1244,7 +1245,9 @@ While streaming, the body stream counts the bytes it hands to the transport. If 
 
 ### 8.5 Slots, format keys and versions
 
-The trailer carries a slot table: `FORMAT_SLOTS = 3` entries of `{formatKeyHash, formatRev, gen, imageKeyHash, imageGen, summaryKind}` and `FAMILY_SLOTS = 4` entries of `{familyKeyHash, estimatorRev, gen}`. Both are frozen for format version 3 because they set the size of the aggregate in every node (2.5). `summaryKind` is the layout (anthropic, chat or responses) of the transfer summaries the slot holds, set from the base key's format id when the slot is assigned (2.5, 2.7). A format slot is not tied to a provider. Three slots hold the three keys a session switches among, and a fourth distinct base key evicts the least recently used one. Four family slots hold the tokenizer families of a load-balanced profile with up to four sub-profiles. Changing either constant is a format bump, which costs nothing because old journals are not resumed (2.1). A load-balanced profile that alternates among more than three base keys (for example four Claude models) refills on every switch. That is the cost of keying on the exact model id, and each refill is one pass over the affected rows.
+The trailer carries a slot table: `FORMAT_SLOTS = 3` entries of `{formatKeyHash, formatRev, gen, imageKeyHash, imageGen, summaryKind, filledThrough}` and `FAMILY_SLOTS = 4` entries of `{familyKeyHash, estimatorRev, gen}`. Both are frozen for format version 3 because they set the size of the aggregate in every node (2.5). `summaryKind` is the layout (anthropic, chat or responses) of the transfer summaries the slot holds, set from the base key's format id when the slot is assigned (2.5, 2.7). A format slot is not tied to a provider. Three slots hold the three keys a session switches among, and a fourth distinct base key evicts the least recently used one. Four family slots hold the tokenizer families of a load-balanced profile with up to four sub-profiles. Changing either constant is a format bump, which costs nothing because old journals are not resumed (2.1). A load-balanced profile that alternates among more than three base keys (for example four Claude models) refills on every switch. That is the cost of keying on the exact model id, and each refill is one pass over the affected rows.
+
+**Cold-resume cache coverage (format version 12).** `filledThrough` is the last commit sequence whose live rows the slot covers. Slots are provider-owned caches of facts derived from rows. Reopening does not reconstruct converter callbacks. Mutations without an attached writer leave missing entries and retain the earlier watermark; registration of the same hash fills only missing entries through the tree's missing counters, then advances the watermark. Complete slots advance over state-only groups without reading rows. A reader must register and fill a slot whose watermark precedes its pinned version. The slot grew by eight bytes, the slot table by 24 bytes, and the file format version advances from 11 to 12. Earlier versions remain refused, with no compatibility reader.
 
 **The base key** is the hash of exactly the inputs that change a row's units or bytes, other than through the image budget:
 - the format id (`openai-chat:<toolFormat>`, `responses`, `anthropic`),

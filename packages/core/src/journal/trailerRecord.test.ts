@@ -45,32 +45,32 @@ function options(trailer: TrailerHeader, offset = SELF_OFFSET) {
 }
 
 describe('trailer sizes', () => {
-  it('is a 1,544-byte kind header in a 1,568-byte record', () => {
+  it('is a 1,568-byte kind header in a 1,592-byte record', () => {
     const trailer = sampleTrailer(1);
 
-    expect(TRAILER_HEADER_BYTES).toBe(1544);
-    expect(TRAILER_RECORD_BYTES).toBe(1568);
+    expect(TRAILER_HEADER_BYTES).toBe(1568);
+    expect(TRAILER_RECORD_BYTES).toBe(1592);
     expect(TRAILER_RECORD_BYTES).toBe(
       FRAME_HEAD_BYTES + TRAILER_HEADER_BYTES + BODY_CRC_BYTES,
     );
-    expect(encodeTrailerHeader(trailer).length).toBe(1544);
-    expect(encodeTrailerRecord(trailer).length).toBe(1568);
+    expect(encodeTrailerHeader(trailer).length).toBe(1568);
+    expect(encodeTrailerRecord(trailer).length).toBe(1592);
   });
 
   it('lays out the fields contiguously with the sizes of design section 2.5', () => {
-    assertContiguous(TRAILER_LAYOUT, 1544);
+    assertContiguous(TRAILER_LAYOUT, 1568);
     expect(TRAILER_LAYOUT.rootAggregate.size).toBe(1208);
-    expect(TRAILER_LAYOUT.slots.size).toBe(160);
+    expect(TRAILER_LAYOUT.slots.size).toBe(184);
     expect(TRAILER_LAYOUT.skip.size).toBe(24);
-    expect(TRAILER_LAYOUT.syncMarker).toStrictEqual({ offset: 1536, size: 8 });
+    expect(TRAILER_LAYOUT.syncMarker).toStrictEqual({ offset: 1560, size: 8 });
   });
 
-  it('adds the slot table and the running fields up to the 1,544 the design states', () => {
+  it('adds the slot table and the running fields up to the 1,568 the design states', () => {
     const beforeAggregate =
       8 + 8 + 8 + 24 + 8 + 8 + 8 + 16 + 4 * 8 + 3 * 8 + 8 + 8;
 
     expect(beforeAggregate).toBe(160);
-    expect(beforeAggregate + 1208 + 160 + 8 + 8).toBe(1544);
+    expect(beforeAggregate + 1208 + 184 + 8 + 8).toBe(1568);
   });
 });
 
@@ -106,11 +106,11 @@ describe('trailer header', () => {
     expect(view.getBigUint64(1368, true)).toBe(
       trailer.slots.formatSlots[0].formatKeyHash,
     );
-    expect(view.getBigUint64(1464, true)).toBe(
+    expect(view.getBigUint64(1488, true)).toBe(
       trailer.slots.familySlots[0].familyKeyHash,
     );
-    expect(view.getBigUint64(1528, true)).toBe(BigInt(trailer.durableEnd));
-    expect(Array.from(bytes.subarray(1536))).toStrictEqual(
+    expect(view.getBigUint64(1552, true)).toBe(BigInt(trailer.durableEnd));
+    expect(Array.from(bytes.subarray(1560))).toStrictEqual(
       Array.from(trailer.syncMarker),
     );
   });
@@ -180,15 +180,15 @@ describe('trailer record', () => {
     expect(record[0]).toBe(RECORD_KIND.TRAILER);
     expect(record[1]).toBe(0);
     expect(view.getUint16(2, true)).toBe(0);
-    expect(view.getUint32(4, true)).toBe(1544);
+    expect(view.getUint32(4, true)).toBe(1568);
     expect(view.getBigUint64(8, true)).toBe(0n);
     expect(view.getUint32(16, true)).toBe(
-      crc32(record.subarray(20, 1564), crc32(record.subarray(0, 16))),
+      crc32(record.subarray(20, 1588), crc32(record.subarray(0, 16))),
     );
-    expect(Array.from(record.subarray(1556, 1564))).toStrictEqual(
+    expect(Array.from(record.subarray(1580, 1588))).toStrictEqual(
       Array.from(trailer.syncMarker),
     );
-    expect(view.getUint32(1564, true)).toBe(0);
+    expect(view.getUint32(1588, true)).toBe(0);
   });
 
   it('round-trips randomized records at their own offset', () => {
@@ -205,7 +205,7 @@ describe('trailer record', () => {
     }
   });
 
-  it('detects every single bit flip anywhere in the 1,568 bytes', () => {
+  it('detects every single bit flip anywhere in the 1,592 bytes', () => {
     const trailer = sampleTrailer(8);
     const record = encodeTrailerRecord(trailer);
 
@@ -267,12 +267,12 @@ describe('trailer record', () => {
     ).toThrow(/syncMarker/);
   });
 
-  it('rejects a record that is not 1,568 bytes', () => {
+  it('rejects a record that is not 1,592 bytes', () => {
     const trailer = sampleTrailer(13);
     const record = encodeTrailerRecord(trailer);
 
     expect(() =>
       decodeTrailerRecord(record.subarray(0, 1503), options(trailer)),
-    ).toThrow(/1568/);
+    ).toThrow(/1592/);
   });
 });
