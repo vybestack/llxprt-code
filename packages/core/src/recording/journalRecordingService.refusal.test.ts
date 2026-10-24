@@ -3,7 +3,10 @@ import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import { describe, expect, it } from 'bun:test';
 import { RetiredJournalError } from '../journal/errors.js';
-import { encodeJournalHeader } from '../journal/fileHeader.js';
+import {
+  encodeJournalHeader,
+  JOURNAL_FORMAT_VERSION,
+} from '../journal/fileHeader.js';
 import { retiredJournalMessage } from '../journal/journalRefusal.js';
 import { testJournalSeams } from '../journal/__tests__/support/journalFixtures.js';
 import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
@@ -56,7 +59,7 @@ describe('opening a retired session file', () => {
   }
 
   for (const [label, name, content] of RETIRED_FILES) {
-    it(`refuses ${label} with the one message and leaves the file as it was`, async () => {
+    it(`refuses ${label} with its format-specific message and leaves the file as it was`, async () => {
       const settings = config();
       await fsp.mkdir(settings.chatsDir, { recursive: true });
       const file = path.join(settings.chatsDir, name);
@@ -70,7 +73,9 @@ describe('opening a retired session file', () => {
 
       expect(failure).toBeInstanceOf(RetiredJournalError);
       expect(failure instanceof Error && failure.message).toBe(
-        retiredJournalMessage(file),
+        content === wrongVersionHeader
+          ? `Session file ${file} was written by an incompatible journal format version (found 2, supported ${JOURNAL_FORMAT_VERSION}) and cannot be resumed. Start a new session.`
+          : retiredJournalMessage(file),
       );
       expect(await fsp.readFile(file)).toStrictEqual(before);
       expect(
