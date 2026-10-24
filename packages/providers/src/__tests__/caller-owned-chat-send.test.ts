@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { BaseProvider } from '../BaseProvider.js';
 import {
   callerOwnedProviderRequest,
   callerOwnedProviderSource,
@@ -79,7 +80,7 @@ describe('caller-owned native provider rows', () => {
         const selection = await callerOwnedProviderRequest(rows);
         async function send(
           requestRows: ProviderRequestSelection,
-          streamed = false,
+          source: 'selection' | 'stream' | 'array' = 'selection',
         ): Promise<void> {
           const options = buildHistoryCallOptions(
             { ...route, baseURL: `http://127.0.0.1:${server.port}/v1` },
@@ -96,20 +97,22 @@ describe('caller-owned native provider rows', () => {
             new SettingsService(),
             requestRows,
           );
-          for await (const chunk of route
-            .createProvider()
-            .generateChatCompletion({
-              ...options,
-              ...(streamed
-                ? {
-                    requestRows: undefined,
-                    contents: callerOwnedProviderSource(rows),
-                  }
-                : {}),
-              metadata: {
-                _retryRequestContext: { reasoningIdTime: 1780000000123 },
-              },
-            }))
+          const provider = route.createProvider();
+          if (!(provider instanceof BaseProvider))
+            throw new Error('Expected a concrete provider');
+          for await (const chunk of provider.generateChatCompletion({
+            ...options,
+            ...(source === 'selection'
+              ? {}
+              : {
+                  requestRows: undefined,
+                  contents:
+                    source === 'array' ? rows : callerOwnedProviderSource(rows),
+                }),
+            metadata: {
+              _retryRequestContext: { reasoningIdTime: 1780000000123 },
+            },
+          }))
             void chunk;
         }
         try {
@@ -126,11 +129,21 @@ describe('caller-owned native provider rows', () => {
           );
           expect(bodies[1]).toContain('Yg==');
           const streamedCreates = await operationFileCreates(
-            () => send(selection, true),
+            () => send(selection, 'stream'),
             true,
           );
           expect(streamedCreates).toStrictEqual({ files: [], directories: [] });
           expect(bodies[2]).toBe(bodies[0]);
+          const arrayCreates = await operationFileCreates(
+            () => send(selection, 'array'),
+            true,
+          );
+          expect(arrayCreates).toStrictEqual({ files: [], directories: [] });
+          expect(bodies).toHaveLength(4);
+          expect(bodies[3]).toBe(bodies[0]);
+          expect(lengths).toStrictEqual(
+            bodies.map((body) => String(Buffer.byteLength(body))),
+          );
         } finally {
           await selection.close();
           await server.stop(true);

@@ -5,7 +5,12 @@ import {
   type ProviderRequestSelection,
   type ProviderRequestRows,
 } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
-import type { GenerateChatOptions, ProviderToolset } from '../IProvider.js';
+import type {
+  GenerateChatOptions,
+  ProviderChatOptions,
+  ProviderToolset,
+} from '../IProvider.js';
+import { callerOwnedProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 import {
   getRequestSignal,
   raceWithAbort,
@@ -20,14 +25,26 @@ export interface RequestRowsScope {
   close(): Promise<void>;
 }
 
+export function admitProviderContents(
+  options: ProviderChatOptions,
+): GenerateChatOptions {
+  const { contents } = options;
+  return {
+    ...options,
+    contents: isAsyncIterableContents(contents)
+      ? contents
+      : callerOwnedProviderSource(contents),
+  };
+}
+
 export function acquireRequestRows(
-  input: GenerateChatOptions | AsyncIterable<IContent>,
+  input: ProviderChatOptions | AsyncIterable<IContent>,
   tools?: ProviderToolset,
   signal?: AbortSignal,
 ): RequestRowsScope {
   const rawOptions = isAsyncIterableContents(input)
     ? { contents: input, tools }
-    : input;
+    : admitProviderContents(input);
   const options =
     signal === undefined ? rawOptions : withRequestSignal(rawOptions, signal);
   const existing = leases.get(options.contents);

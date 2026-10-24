@@ -20,6 +20,7 @@ import {
 import {
   type IProvider,
   type GenerateChatOptions,
+  type ProviderChatOptions,
   type MaterializedGenerateChatOptions,
   type ProviderRuntimeOptions,
   type ProviderToolset,
@@ -28,7 +29,10 @@ import { type IModel } from './IModel.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { firstTruthyString } from './utils/falsyFallback.js';
 import { isAsyncIterableContents } from './utils/collectContents.js';
-import type { RequestRowsScope } from './utils/requestRowsLease.js';
+import {
+  admitProviderContents,
+  type RequestRowsScope,
+} from './utils/requestRowsLease.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import {
@@ -622,7 +626,7 @@ export abstract class BaseProvider implements IProvider {
    * @pseudocode base-provider.md lines 4-15
    */
   generateChatCompletion(
-    options: GenerateChatOptions,
+    options: ProviderChatOptions,
   ): AsyncIterableIterator<IContent>;
   generateChatCompletion(
     contents: AsyncIterable<IContent>,
@@ -638,11 +642,13 @@ export abstract class BaseProvider implements IProvider {
    * normalization stays array-based until P05b4.
    */
   generateChatCompletion(
-    contentsOrOptions: AsyncIterable<IContent> | GenerateChatOptions,
+    contentsOrOptions: AsyncIterable<IContent> | ProviderChatOptions,
     maybeTools?: ProviderToolset,
   ): AsyncIterableIterator<IContent> {
     const normalizedPromise = this.normalizeGenerateChatOptions(
-      contentsOrOptions,
+      isAsyncIterableContents(contentsOrOptions)
+        ? contentsOrOptions
+        : admitProviderContents(contentsOrOptions),
       maybeTools,
     );
 

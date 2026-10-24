@@ -101,6 +101,12 @@ export interface GenerateChatOptions extends ProviderRetryOperations {
   systemPromptAssembler?: SystemPromptAssembler;
 }
 
+/** Arrays supplied at the public entry are already owned by the caller. */
+export interface ProviderChatOptions
+  extends Omit<GenerateChatOptions, 'contents'> {
+  contents: AsyncIterable<IContent> | readonly IContent[];
+}
+
 /**
  * Provider call options once the history stream has been collected
  * request-scoped (issue #854, PLAN-20260917-ISSUE854.P05b3). The wire
