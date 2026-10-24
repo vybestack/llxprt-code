@@ -125,6 +125,20 @@ describe('id trie against a Map oracle', () => {
     return { fixture, oracle };
   }
 
+  it('closes the fixture reader when its writer is closed', async () => {
+    const fixture = await IdTrieFixture.create(
+      path.join(tempDir(), 'close.llxj'),
+    );
+    await fixture.bulk([entryFor(sha256Hash, 'closed', 1)]);
+    const access = fixture.access();
+    await fixture.close();
+    await expect(
+      access.readRecordHead(fixture.root, 'ITNODE'),
+    ).rejects.toMatchObject({
+      code: 'EBADF',
+    });
+  });
+
   it('inserts, updates and looks up random ids, then reads the same after a reopen', async () => {
     const hasher = sha256Hash;
     const { fixture, oracle } = await runRandom(hasher, 1, 3000, 120);

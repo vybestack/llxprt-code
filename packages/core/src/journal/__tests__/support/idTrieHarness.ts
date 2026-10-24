@@ -87,6 +87,7 @@ export class IdTrieFixture {
     readonly file: string,
     private readonly writer: JournalGroupWriter,
     private readonly source: PositionalReader,
+    private readonly handle: fsp.FileHandle,
   ) {}
 
   static async create(
@@ -94,8 +95,18 @@ export class IdTrieFixture {
     dependencies: JournalOpenDependencies = testJournalSeams().dependencies,
   ): Promise<IdTrieFixture> {
     const writer = await createJournal(file, dependencies);
-    const handle = await fsp.open(file, 'r');
-    return new IdTrieFixture(file, writer, createFileHandleReader(handle));
+    try {
+      const handle = await fsp.open(file, 'r');
+      return new IdTrieFixture(
+        file,
+        writer,
+        createFileHandleReader(handle),
+        handle,
+      );
+    } catch (error) {
+      await writer.close();
+      throw error;
+    }
   }
 
   /** A reader over the last acked group, sharing `cache` between calls. */
@@ -160,8 +171,12 @@ export class IdTrieFixture {
     return this.commit((appender) => bulkBuildIdTrie(appender, entries));
   }
 
-  close(): Promise<void> {
-    return this.writer.close();
+  async close(): Promise<void> {
+    try {
+      await this.writer.close();
+    } finally {
+      await this.handle.close();
+    }
   }
 }
 
