@@ -5,11 +5,9 @@
  */
 
 import { describe, expect, it, spyOn } from 'bun:test';
-import { HistoryJournalStore } from '@vybestack/llxprt-code-core/services/history/historyJournalStore.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import { mediaRequestFixture } from './__tests__/support/turn-media-request-test-helpers.js';
 import { sendTurnSource } from './turnSourceRequest.js';
 
@@ -19,7 +17,6 @@ const LARGE = 1200;
 
 interface SendCounts {
   readonly opens: number;
-  readonly captures: number;
   readonly rowsRead: number;
 }
 
@@ -33,20 +30,21 @@ async function countedSend(rows: number): Promise<SendCounts> {
     rows,
     async (history) => {
       const fixture = mediaRequestFixture(history, UNDER_LIMIT);
+      const config = new Config({
+        cwd: process.cwd(),
+        targetDir: process.cwd(),
+        sessionId: 'turn-source-linear',
+        model: 'test-model',
+        debugMode: false,
+        enableHooks: false,
+      });
       const runtime = {
         ...fixture.runtimeContext,
-        providerRuntime: {
-          ...fixture.runtimeContext.providerRuntime,
-          config: { getEnableHooks: () => false },
-        },
-      } as unknown as AgentRuntimeContext;
+        providerRuntime: { ...fixture.runtimeContext.providerRuntime, config },
+      };
       const opens = spyOn(
         HistoryService.prototype,
         'prepareCuratedForProviderSnapshot',
-      );
-      const captures = spyOn(
-        HistoryJournalStore.prototype,
-        'capturePendingFold',
       );
       let rowsRead = 0;
       try {
@@ -61,10 +59,10 @@ async function countedSend(rows: number): Promise<SendCounts> {
           tools: undefined,
           signal: undefined,
           log: () => undefined,
-          buildOptions: (contents) =>
-            ({ contents }) as unknown as RuntimeGenerateChatOptions,
+          buildOptions: (contents) => ({ contents }),
           onPrepared: () => undefined,
           attempt: async (prepared) => {
+            expect(prepared.options.requestRows.native).toBeDefined();
             for await (const row of prepared.options.requestRows.openReader())
               if (row.blocks.length > 0) rowsRead++;
             return { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
@@ -72,12 +70,11 @@ async function countedSend(rows: number): Promise<SendCounts> {
         });
         return {
           opens: opens.mock.calls.length,
-          captures: captures.mock.calls.length,
           rowsRead,
         };
       } finally {
         opens.mockRestore();
-        captures.mockRestore();
+        await config.dispose();
       }
     },
     64,
@@ -85,13 +82,12 @@ async function countedSend(rows: number): Promise<SendCounts> {
 }
 
 describe('non-streaming turn send cost scales linearly with rows', () => {
-  it('opens the same number of snapshots and folds per send at any history size and reads each row once', async () => {
+  it('opens one native snapshot per send at both history sizes and reads each row once', async () => {
     const small = await countedSend(SMALL);
     const large = await countedSend(LARGE);
 
     expect(small.opens).toBe(1);
     expect(large.opens).toBe(small.opens);
-    expect(large.captures).toBe(small.captures);
     expect(small.rowsRead).toBe(SMALL);
     expect(large.rowsRead).toBe(LARGE);
   }, 120_000);
