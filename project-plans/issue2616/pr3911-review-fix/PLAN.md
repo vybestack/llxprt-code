@@ -973,7 +973,7 @@ Coders tick their own line in the commit that completes the task. Inventory task
 
 - [x] T0.1 commit plan, baseline
 - [x] T1.1 D1 remove bun.sh download from install
-- [ ] T1.2 C4 stale CLI boundary subpaths
+- [x] T1.2 C4 stale CLI boundary subpaths
 - [ ] T1.3 A1 extension selection and disabled list
 - [ ] T1.4 A2 skills list without preflight
 - [ ] T1.5 A6 characterize inherited trust join (no production change)

@@ -95,17 +95,7 @@ export const PUBLIC_SUBPATHS_BY_PACKAGE: {
   // providers public barrels / curated subpath entrypoints. Each is a declared
   // package.json `exports` entry with its own barrel index.ts and a documented
   // public API (#2204). They are NOT deep/internal imports.
-  '@vybestack/llxprt-code-providers': [
-    'auth.js',
-    'composition.js',
-    'runtime/ownerSettingsOperations.js',
-    'runtime/providerModelParameters.js',
-    'runtime/providerMutations.js',
-    'runtime/providerReadOperations.js',
-    'runtime/providerStatus.js',
-    'runtime/providerSwitch.js',
-    'runtime/settingsResolver.js',
-  ],
+  '@vybestack/llxprt-code-providers': ['auth.js', 'composition.js'],
   '@vybestack/llxprt-code-core': [],
   '@vybestack/llxprt-code-agents': [],
   '@vybestack/llxprt-code-settings': [

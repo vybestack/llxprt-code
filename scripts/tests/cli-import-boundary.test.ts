@@ -15,9 +15,17 @@
 
 import { beforeAll, describe, expect, it } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
+import { PUBLIC_SUBPATHS_BY_PACKAGE } from '../cli-boundary/config.ts';
 import { asRecord } from './typed-test-helpers.ts';
 import { fileURLToPath } from 'node:url';
 
@@ -1007,3 +1015,34 @@ describe.skipIf(process.env.CI !== 'true' && !bunAvailable())(
     });
   },
 );
+
+describe('PUBLIC_SUBPATHS_BY_PACKAGE', () => {
+  it('lists only subpaths that are declared package exports backed by an existing bun target', () => {
+    const stale: string[] = [];
+    for (const [packageName, subpaths] of Object.entries(
+      PUBLIC_SUBPATHS_BY_PACKAGE,
+    )) {
+      const packageDir = join(
+        REPO_ROOT,
+        'packages',
+        packageName.replace('@vybestack/llxprt-code-', ''),
+      );
+      const manifest = JSON.parse(
+        readFileSync(join(packageDir, 'package.json'), 'utf-8'),
+      ) as { exports: Record<string, { bun?: string }> };
+      for (const subpath of subpaths) {
+        const target = manifest.exports[`./${subpath}`]?.bun;
+        if (target === undefined) {
+          stale.push(
+            `${packageName}/${subpath}: no exports entry with a bun target`,
+          );
+        } else if (!existsSync(join(packageDir, target))) {
+          stale.push(
+            `${packageName}/${subpath}: bun target ${target} does not exist`,
+          );
+        }
+      }
+    }
+    expect(stale).toStrictEqual([]);
+  });
+});
