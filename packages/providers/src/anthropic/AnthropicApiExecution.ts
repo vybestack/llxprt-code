@@ -19,10 +19,6 @@ import {
   withBoundedJsonHttpBody,
   type BoundedJsonHttpBody,
 } from '../utils/boundedJsonBody.js';
-import {
-  withSpooledJsonHttpBody,
-  type WireBodySpool,
-} from '../utils/wire-body-spool.js';
 import type { NativeAnthropicBody } from './native-anthropic-request.js';
 import {
   shouldDumpSDKContext,
@@ -195,22 +191,17 @@ export function createAnthropicApiCall(
 }
 
 /**
- * Create the API call closure for a sealed spool. Every call streams a fresh
- * read of the file and declares its sealed size as the Content-Length; the
- * spool's owner disposes it.
+ * Create the API call closure for a native body. Every call opens a fresh
+ * stream and declares its planned size as the Content-Length; the request
+ * owner disposes it.
  */
 export function createSpooledAnthropicApiCall(
   client: Anthropic,
-  spool: WireBodySpool | NativeAnthropicBody,
+  spool: NativeAnthropicBody,
   streaming: boolean,
   customHeaders: Record<string, string>,
   signal?: AbortSignal,
 ): AnthropicApiCall {
-  if ('accounting' in spool)
-    return async () =>
-      withSpooledJsonHttpBody(spool, (body) =>
-        postMessages(client, body, streaming, customHeaders, signal),
-      );
   return async () => {
     const handle = spool.openStream();
     try {

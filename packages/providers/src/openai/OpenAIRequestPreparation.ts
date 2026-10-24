@@ -15,54 +15,31 @@
  */
 
 import type OpenAI from 'openai';
+import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
 import { type NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { type DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
 import { convertToolsToOpenAI, type OpenAITool } from './schemaConverter.js';
 import { resolveToolFormat } from '../utils/toolFormatDetection.js';
-import {
-  usesToolIdStore,
-  type ChatBodyOptions,
-  type ChatBodyRows,
-} from './OpenAIChatBodyBuilder.js';
-import { writeMessagesSegment } from './OpenAIChatMessagesSegment.js';
-import {
-  createChatContinuation,
-  type ChatContinuation,
-} from './OpenAIChatContinuation.js';
+import type { ChatBodyOptions } from './OpenAIChatBodyBuilder.js';
+import type { ChatContinuation } from './OpenAIChatContinuation.js';
 import { extractModelParamsFromOptions } from './OpenAIClientFactory.js';
 import { sanitizePromptCacheKey } from '../openai-responses/sanitizePromptCacheKey.js';
 import { applyOpenAIChatReasoning } from './openai-chat-reasoning.js';
-import {
-  parseOutputLimits,
-  type OutputLimitConfig,
-} from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
+import { type OutputLimitConfig } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { applyKimiCacheAffinity } from './kimiCacheAffinity.js';
 import {
   conservativeMediaTransportCapabilities,
   type ProviderMediaTransportCapabilities,
 } from '../providerMediaTransportCapabilities.js';
-import { getRequestSignal } from '../utils/abortSignal.js';
-import { StreamedSegment, writeEnvelope } from '../utils/envelope-writer.js';
-import { KeyedRowIndex } from '../utils/keyed-row-index.js';
-import { KeyedRowToolIdStore } from '../utils/keyed-row-tool-id-store.js';
-import { providerRowsOf } from '../utils/providerRows.js';
-import { WireBodySpool } from '../utils/wire-body-spool.js';
-import type { PromptKeySink } from '../runtime/prompt-key-tee-writer.js';
 import { wantsRequestDump } from '../utils/dumpContext.js';
 import type { StreamedDumpBody } from '../utils/dumpSDKContext.js';
-import {
-  createChatEstimatorFiles,
-  type ChatEstimatorFiles,
-  type ChatPromptEstimate,
-} from './OpenAIChatEstimatorFiles.js';
-import { envelopeDumpBody } from '../utils/envelopeDumpBody.js';
+import type { ChatPromptEstimate } from './OpenAIChatEstimatorFiles.js';
 import { prepareNativePlainRequest } from './native-chat-body.js';
 import type { ChatHttpBody } from '../utils/chat-http-body.js';
 
 /**
- * A prepared chat request: the sealed body on scratch disk and the scalars the
- * response path needs. The messages exist only as bytes in the spool.
+ * A prepared chat request: a replayable native body and the scalars the
+ * response path needs.
  */
 export interface RequestContext {
   model: string;
@@ -88,7 +65,7 @@ export interface RequestContext {
    * second spool over the same rows.
    */
   continuation: ChatContinuation;
-  /** Disposes the spool and the files, and closes the tool id index. Idempotent. */
+  /** Releases the body and its request-owned resources. Idempotent. */
   release(): void | Promise<void>;
 }
 
@@ -317,150 +294,6 @@ function prepareToolPayload(
   };
 }
 
-async function callRows(
-  options: NormalizedGenerateChatOptions,
-): Promise<ChatBodyRows> {
-  const rows = await providerRowsOf(options);
-  const signal = getRequestSignal(options);
-  return { rows: () => rows.openReader(signal) };
-}
-
-interface SpooledChatBody {
-  readonly spool: WireBodySpool;
-  readonly messageCount: number;
-  readonly estimate: ChatPromptEstimate | undefined;
-  readonly dump: StreamedDumpBody | undefined;
-  readonly continuation: ChatContinuation;
-}
-
-/** What the prompt files of a request are for. */
-interface ChatFileUse {
-  /** The estimator form is handed to a projection. */
-  readonly estimate: boolean;
-  /** The dump form is written for a request dump. */
-  readonly dump: boolean;
-}
-
-function chatBodyOptions(
-  options: NormalizedGenerateChatOptions,
-  format: ToolFormat,
-  rowInput: ChatRowInput,
-  toolIds: KeyedRowIndex | undefined,
-  files: ChatEstimatorFiles | undefined,
-): ChatBodyOptions {
-  const mediaStage =
-    files === undefined
-      ? rowInput.mediaStage
-      : files.listUnsupportedMedia(rowInput.mediaStage);
-  return {
-    reasoning: options,
-    toolFormat: format,
-    config: parseOutputLimits(options.invocation.ephemerals),
-    ...(toolIds === undefined
-      ? {}
-      : { toolIdStore: new KeyedRowToolIdStore(toolIds) }),
-    ...(mediaStage === undefined ? {} : { mediaStage }),
-  };
-}
-
-function releaseChatBody(
-  spool: WireBodySpool,
-  toolIds: KeyedRowIndex | undefined,
-  files: ChatEstimatorFiles | undefined,
-): void {
-  try {
-    spool.dispose();
-  } finally {
-    try {
-      toolIds?.close();
-    } finally {
-      files?.discard();
-    }
-  }
-}
-
-/**
- * Spools the request body: the envelope's small members are written as
- * `JSON.stringify` would and the messages are converted and written one row
- * at a time. A failure disposes the spool, the tool id index and the prompt
- * files.
- */
-async function spoolChatBody(
-  envelope: OpenAIChatRequestBody,
-  options: NormalizedGenerateChatOptions,
-  format: ToolFormat,
-  rowInput: ChatRowInput,
-  use: ChatFileUse,
-): Promise<SpooledChatBody & { readonly release: () => void }> {
-  const signal = getRequestSignal(options);
-  const spool = WireBodySpool.create('openai-chat', { signal });
-  let toolIds: KeyedRowIndex | undefined;
-  let files: ChatEstimatorFiles | undefined;
-  const release = (): void => releaseChatBody(spool, toolIds, files);
-  try {
-    if (usesToolIdStore(format)) toolIds = KeyedRowIndex.create('tool-ids');
-    if (use.estimate || use.dump) {
-      files = createChatEstimatorFiles(envelope.model, signal, use.dump);
-    }
-    const source = await callRows(options);
-    const bodyOptions = chatBodyOptions(
-      options,
-      format,
-      rowInput,
-      toolIds,
-      files,
-    );
-    let messageCount = 0;
-    const messages = new StreamedSegment(async (sink) => {
-      const write = (estimate: PromptKeySink | undefined): Promise<number> =>
-        writeMessagesSegment(
-          sink,
-          options.systemInstruction,
-          source,
-          bodyOptions,
-          estimate,
-        );
-      if (files === undefined) {
-        messageCount = await write(undefined);
-      } else {
-        await files.writeMessages(async (estimate) => {
-          messageCount = await write(estimate);
-        });
-      }
-    });
-    await writeEnvelope(spool, { ...envelope, messages });
-    spool.seal();
-    await files?.writeTools(envelope.tools);
-    return {
-      spool,
-      messageCount,
-      estimate: use.estimate ? files?.seal() : undefined,
-      dump:
-        use.dump && files !== undefined
-          ? envelopeDumpBody(envelope, files.dumpMessagesFile())
-          : undefined,
-      continuation: createChatContinuation({
-        envelope,
-        systemInstruction: options.systemInstruction,
-        signal,
-        source,
-        body: {
-          reasoning: options,
-          toolFormat: format,
-          config: bodyOptions.config,
-          ...(rowInput.mediaStage === undefined
-            ? {}
-            : { mediaStage: rowInput.mediaStage }),
-        },
-      }),
-      release,
-    };
-  } catch (error) {
-    release();
-    throw error;
-  }
-}
-
 /**
  * Prepare OpenAI API request from normalized options
  * Extracts all the request preparation logic from generateChatCompletionImpl
@@ -527,18 +360,15 @@ export async function prepareRequest(
     dump: wantsRequestDump(ephemeralSettings['dumpcontext']),
   };
   const nativeRows = options.requestRows;
-  const body =
-    nativeRows.native !== undefined || nativeRows.callerOwned === true
-      ? await prepareNativePlainRequest(
-          envelope,
-          nativeRows,
-          options,
-          use,
-          rowInput,
-          detectedFormat,
-          resolvedProviderName,
-        )
-      : await spoolChatBody(envelope, options, detectedFormat, rowInput, use);
+  const body = await prepareNativePlainRequest(
+    envelope,
+    nativeRows,
+    options,
+    use,
+    rowInput,
+    detectedFormat,
+    resolvedProviderName,
+  );
   return {
     model,
     detectedFormat,

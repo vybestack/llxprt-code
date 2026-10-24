@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
-import { readdirSync, readFileSync } from 'node:fs';
+import { readdirSync } from 'node:fs';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
@@ -9,8 +9,12 @@ import {
   type Corpus,
 } from '../__tests__/support/wireBodyCorpus.js';
 import { activeWireBodySpoolCount } from '../utils/wire-body-spool.js';
-import type { ChatBodyOptions, ChatBodyRows } from './OpenAIChatBodyBuilder.js';
-import { createChatContinuation } from './OpenAIChatContinuation.js';
+import type { ChatBodyOptions } from './OpenAIChatBodyBuilder.js';
+import { prepareNativePlainRequest } from './native-chat-body.js';
+import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import { rowsSelection } from '../__tests__/support/wireBodyCapture.js';
+import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import {
   buildContinuationMessages,
   buildMessagesWithReasoning,
@@ -78,12 +82,43 @@ function reasoningOf(settings: Settings): ChatBodyOptions['reasoning'] {
   };
 }
 
-function sourceOf(rows: readonly IContent[]): ChatBodyRows {
-  return {
-    async *rows(): AsyncIterable<IContent> {
-      for (const row of rows) yield structuredClone(row);
-    },
+async function prepareContinuation(
+  rows: readonly IContent[],
+  settings: Settings,
+  requestRows?: ProviderRequestSelection,
+): ReturnType<typeof prepareNativePlainRequest> {
+  const selection =
+    requestRows ??
+    rowsSelection(
+      rows.map((row) => ({
+        ...row,
+        blocks: Array.isArray(row.blocks) ? row.blocks : [],
+      })),
+    );
+  const options: NormalizedGenerateChatOptions = {
+    contents: [],
+    requestRows: selection,
+    contentCount: rows.length,
+    metadata: {},
+    invocation: createRuntimeInvocationContext({
+      runtimeId: 'continuation-test',
+      providerName: 'openai',
+      ephemeralsSnapshot: {
+        'reasoning.stripFromContext': settings.strip,
+        'reasoning.includeInContext': settings.include,
+      },
+    }),
+    resolved: { model: 'golden-model', authToken: 'test-token' },
+    systemInstruction: SYSTEM,
   };
+  return prepareNativePlainRequest(
+    ENVELOPE,
+    selection,
+    options,
+    { estimate: false, dump: false },
+    {},
+    settings.toolFormat,
+  );
 }
 
 /** The array route's continuation request: the bytes before D4. */
@@ -110,18 +145,21 @@ async function continuationBytes(
   rows: readonly IContent[],
   settings: Settings,
 ): Promise<Buffer> {
-  const continuation = createChatContinuation({
-    envelope: ENVELOPE,
-    systemInstruction: SYSTEM,
-    signal: undefined,
-    source: sourceOf(rows),
-    body: { reasoning: reasoningOf(settings), toolFormat: settings.toolFormat },
-  });
-  const body = await continuation.build(TOOL_CALLS);
+  const request = await prepareContinuation(rows, settings);
   try {
-    return readFileSync(body.spool.path);
+    const body = await request.continuation.build(TOOL_CALLS);
+    try {
+      const handle = body.spool.openStream();
+      try {
+        return Buffer.from(await new Response(handle.stream).arrayBuffer());
+      } finally {
+        await handle.dispose();
+      }
+    } finally {
+      await body.release();
+    }
   } finally {
-    await body.release();
+    await request.release();
   }
 }
 
@@ -259,27 +297,52 @@ describe('chat continuation request as a second spool', () => {
     expect(scratchNames()).toStrictEqual(before);
     expect(activeWireBodySpoolCount()).toBe(spools);
 
-    const failing = createChatContinuation({
-      envelope: ENVELOPE,
-      systemInstruction: SYSTEM,
-      signal: undefined,
-      source: {
-        rows: (): AsyncIterable<IContent> => ({
-          [Symbol.asyncIterator]: () => ({
-            next: () => Promise.reject(new Error('rows are gone')),
-          }),
-        }),
+    let fail = false;
+    const source = rowsSelection(
+      seededHistory(3).map((row) => ({
+        ...row,
+        blocks: Array.isArray(row.blocks) ? row.blocks : [],
+      })),
+    );
+    const selected: ProviderRequestSelection = {
+      ...source,
+      readAt(index, signal) {
+        if (fail) throw new Error('rows are gone');
+        return source.readAt(index, signal);
       },
-      body: {
-        reasoning: reasoningOf({
-          toolFormat: 'kimi',
-          strip: 'none',
-          include: false,
-        }),
+      async *openReader(signal) {
+        if (fail) throw new Error('rows are gone');
+        yield* source.openReader(signal);
+      },
+    };
+    const request = await prepareContinuation(
+      seededHistory(3),
+      {
         toolFormat: 'kimi',
+        strip: 'none',
+        include: false,
       },
-    });
-    await expect(failing.build(TOOL_CALLS)).rejects.toThrow('rows are gone');
+      selected,
+    );
+    fail = true;
+    try {
+      const consume = async (): Promise<void> => {
+        const body = await request.continuation.build(TOOL_CALLS);
+        try {
+          const handle = body.spool.openStream();
+          try {
+            await new Response(handle.stream).arrayBuffer();
+          } finally {
+            await handle.dispose();
+          }
+        } finally {
+          await body.release();
+        }
+      };
+      await expect(consume()).rejects.toThrow('rows are gone');
+    } finally {
+      await request.release();
+    }
     expect(scratchNames()).toStrictEqual(before);
     expect(activeWireBodySpoolCount()).toBe(spools);
   });

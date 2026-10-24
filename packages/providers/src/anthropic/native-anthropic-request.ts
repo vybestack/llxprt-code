@@ -53,11 +53,6 @@ import {
   AnthropicRepairIndex,
   anthropicRepairScope,
 } from './anthropic-repair-index.js';
-import {
-  prepareSpooledAnthropicRequest,
-  type SpooledAnthropicRequest,
-  type SpooledRequestOptions,
-} from './AnthropicSpooledRequest.js';
 import type { MediaStage } from './message-table/wire-builder.js';
 import { NativeAnthropicEstimateProjection } from './native-anthropic-estimate.js';
 
@@ -99,9 +94,12 @@ export interface NativeAnthropicRequest {
   readonly recoveredImages: number;
   release(): Promise<void>;
 }
-export type PreparedAnthropicRequest =
-  | SpooledAnthropicRequest
-  | NativeAnthropicRequest;
+export type PreparedAnthropicRequest = NativeAnthropicRequest;
+
+export interface AnthropicRequestOptions {
+  readonly estimate?: boolean;
+  readonly recoveryBudget?: ImageDimensionBudget;
+}
 
 function nativeSettings(
   params: AnthropicPlanParams,
@@ -317,7 +315,7 @@ async function requestFromStored(
   snapshot: VersionSnapshot,
   engine: AnthropicStreamRepair,
   measured: StoredAnthropicRequestPlan,
-  options: SpooledRequestOptions,
+  options: AnthropicRequestOptions,
   mediaStage: MediaStage | undefined,
   spans?: AnthropicSpanPlan,
 ): Promise<NativeAnthropicRequest> {
@@ -362,7 +360,7 @@ async function prepareNativeAnthropicRequest(
   rows: ProviderRequestRows,
   estimate: boolean,
   mediaStage: MediaStage | undefined,
-  options: SpooledRequestOptions,
+  options: AnthropicRequestOptions,
 ): Promise<PreparedAnthropicRequest> {
   const native = rows.native;
   if (native === undefined)
@@ -434,7 +432,7 @@ async function prepareCallerOwnedAnthropic(
   params: AnthropicPlanParams,
   rows: ProviderRequestRows,
   mediaStage: MediaStage | undefined,
-  options: SpooledRequestOptions,
+  options: AnthropicRequestOptions,
 ): Promise<NativeAnthropicRequest> {
   const plan = planAnthropicRequest(params);
   const settings = nativeSettings(params, plan);
@@ -508,7 +506,7 @@ export async function prepareAnthropicRequestRows(
   params: AnthropicPlanParams,
   rows: ProviderRequestRows,
   mediaStage: MediaStage | undefined,
-  options: SpooledRequestOptions = {},
+  options: AnthropicRequestOptions = {},
 ): Promise<PreparedAnthropicRequest> {
   if (rows.native === undefined && rows.callerOwned !== true)
     throw new Error(
@@ -516,15 +514,13 @@ export async function prepareAnthropicRequestRows(
     );
   if (rows.callerOwned === true)
     return prepareCallerOwnedAnthropic(params, rows, mediaStage, options);
-  if (rows.native !== undefined)
-    return prepareNativeAnthropicRequest(
-      params,
-      rows,
-      options.estimate === true,
-      mediaStage,
-      options,
-    );
-  return prepareSpooledAnthropicRequest(params, rows, mediaStage, options);
+  return prepareNativeAnthropicRequest(
+    params,
+    rows,
+    options.estimate === true,
+    mediaStage,
+    options,
+  );
 }
 
 export async function registerAnthropicRequestCleanup(

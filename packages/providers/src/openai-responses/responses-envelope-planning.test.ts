@@ -1,6 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { NativeResponsesPrompt } from './native-responses-body.js';
 import type { PreparedResponsesRequestContext } from './openAIResponsesExecutor.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -13,7 +12,6 @@ import {
   type ResponsesTestDeps,
 } from './responses-request.test-helpers.js';
 import { buildDiskTextResponsesContext } from './responses-disk-text-projection.js';
-import { diskResponsesBodyLength } from './responses-disk-body.js';
 import { executeOpenAIResponsesRequest } from './openAIResponsesExecutor.js';
 import {
   createCodexResponsesWebSocketTransport,
@@ -28,9 +26,7 @@ function bodyLengthOf(
   prepared: PreparedResponsesRequestContext,
 ): Promise<number> {
   const prompt = prepared.sourcePrompt;
-  return prompt instanceof NativeResponsesPrompt
-    ? Promise.resolve(prompt.byteLength)
-    : diskResponsesBodyLength(prepared.request, prompt.toEstimatorProjection());
+  return Promise.resolve(prompt.byteLength);
 }
 
 function rows(textBytes: number): Iterable<IContent> {

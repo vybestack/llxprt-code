@@ -14,7 +14,6 @@ import {
 } from './responses-request.test-helpers.js';
 import { buildDiskTextResponsesContext } from './responses-disk-text-projection.js';
 import { NativeResponsesPrompt } from './native-responses-body.js';
-import { diskResponsesBodyBytes } from './responses-disk-body.js';
 
 const deps: ResponsesTestDeps = {
   providerName: 'openai-responses',
@@ -72,15 +71,7 @@ async function dump(selection: ProviderRequestSelection): Promise<Buffer> {
   const source = prepared.sourcePrompt;
   try {
     const chunks: Uint8Array[] = [];
-    const bytes =
-      source instanceof NativeResponsesPrompt
-        ? source.body(prepared.request, 'dump')
-        : diskResponsesBodyBytes(
-            prepared.request,
-            source.toEstimatorProjection(),
-            undefined,
-            'dump',
-          );
+    const bytes = source.body(prepared.request, 'dump');
     for await (const chunk of bytes) chunks.push(chunk);
     return Buffer.concat(chunks);
   } finally {

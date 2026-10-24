@@ -12,11 +12,9 @@
  * self-contained diagnostics concern with no callers outside the executor.
  */
 
-import { getRequestSignal } from '../utils/abortSignal.js';
 import type { ResponsesRequest } from './responses-request.js';
 import {
   shouldDumpSDKContext,
-  dumpSDKRequestContextBodyBytes,
   dumpSDKRequestContext,
   type RequestDumpMetadata,
   bestEffortDump,
@@ -29,8 +27,6 @@ import type {
   ResponsesExecutorDeps,
 } from './openAIResponsesExecutor.js';
 import type { StreamResponsesParams } from './openAIResponsesHttpStream.js';
-import { diskResponsesBodyBytes } from './responses-disk-body.js';
-import { NativeResponsesPrompt } from './native-responses-body.js';
 import { CODEX_WEBSOCKET_BETA_HEADER } from './openAIResponsesWebSocketTransport.js';
 
 /**
@@ -120,14 +116,7 @@ export async function dumpFinalizedRequest(
   const result = await bestEffortDump(
     'request',
     deps.providerName,
-    () =>
-      dumpRequest(
-        requestContext,
-        deps,
-        baseURLForDump,
-        dumpMetadata,
-        getRequestSignal(options),
-      ),
+    () => dumpRequest(requestContext, deps, baseURLForDump, dumpMetadata),
     deps.logger,
   );
   return { baseId: result?.baseId, dumpMode };
@@ -138,29 +127,13 @@ function dumpRequest(
   deps: ResponsesExecutorDeps,
   baseURL: string,
   metadata: RequestDumpMetadata,
-  signal: AbortSignal | undefined,
 ): ReturnType<typeof dumpSDKRequestContext> {
-  const source = requestContext.sourcePrompt;
-  if (source instanceof NativeResponsesPrompt)
-    return dumpSDKRequestContext(
-      deps.providerName,
-      '/responses',
-      source.dump,
-      baseURL,
-      metadata,
-    );
-  return dumpSDKRequestContextBodyBytes(
+  return dumpSDKRequestContext(
     deps.providerName,
     '/responses',
-    diskResponsesBodyBytes(
-      requestContext.request,
-      source.toEstimatorProjection(),
-      signal,
-      'dump',
-    ),
+    requestContext.sourcePrompt.dump,
     baseURL,
     metadata,
-    signal,
   );
 }
 

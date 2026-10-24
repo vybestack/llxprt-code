@@ -65,12 +65,7 @@ import {
 import type { StreamResponsesParams } from './openAIResponsesHttpStream.js';
 import { streamResponses } from './openAIResponsesStreaming.js';
 import type { resolveMediaCapabilities } from './openAIResponsesRequestState.js';
-import type { ResponsesSourcePrompt } from '../runtime/responses-source-serializer.js';
-import { NativeResponsesPrompt } from './native-responses-body.js';
-import {
-  diskResponsesBodyBytes,
-  diskResponsesBodyLength,
-} from './responses-disk-body.js';
+import type { NativeResponsesPrompt } from './native-responses-body.js';
 
 /**
  * Provider-specific capabilities that the executor needs to do its work.
@@ -151,8 +146,8 @@ export interface PreparedResponsesRequestContext {
   readonly responsesStored: boolean;
   readonly request: OpenAIResponsesRequest;
   readonly mediaRequest: ResolvedMediaRequest;
-  /** The prompt keys on scratch disk; `request` holds empty placeholders. */
-  readonly sourcePrompt: ResponsesSourcePrompt | NativeResponsesPrompt;
+  /** The native prompt body and its pinned request selection. */
+  readonly sourcePrompt: NativeResponsesPrompt;
   /** Whether the stateful plan was enabled when prepared. */
   readonly statefulEnabled: boolean;
   /**
@@ -438,16 +433,6 @@ async function buildStatelessTurn(
   );
 }
 
-function createFrameRequest(
-  request: OpenAIResponsesRequest,
-): OpenAIResponsesRequest {
-  const frame: OpenAIResponsesRequest & { type: 'response.create' } = {
-    ...request,
-    type: 'response.create',
-  };
-  return frame;
-}
-
 /**
  * `retries` counts retries, so `0` still makes the one initial attempt (the
  * same reading RetryOrchestrator applies). A budget of zero attempts would end
@@ -471,7 +456,7 @@ function buildStreamParams(
 ): StreamResponsesParams {
   return {
     ...requestContext,
-    ...responseBodyStreams(requestContext, abortSignal),
+    ...responseBodyStreams(requestContext),
     abortSignal,
     maxStreamingAttempts: streamingAttemptBudget(
       invocationEphemerals['retries'],
@@ -488,7 +473,6 @@ function buildStreamParams(
 
 function responseBodyStreams(
   requestContext: RequestContext,
-  abortSignal?: AbortSignal,
 ): Pick<
   StreamResponsesParams,
   | 'streamRequestBody'
@@ -497,37 +481,11 @@ function responseBodyStreams(
   | 'streamDumpBody'
 > {
   const prompt = requestContext.sourcePrompt;
-  if (prompt instanceof NativeResponsesPrompt)
-    return {
-      streamRequestBody: () => prompt.body(requestContext.request),
-      streamRequestBodyLength: () => Promise.resolve(prompt.byteLength),
-      streamWebSocketFrame: () => prompt.frame(requestContext.request),
-      streamDumpBody: () => prompt.body(requestContext.request, 'dump'),
-    };
-  const source = prompt.toEstimatorProjection();
-  let bodyLength: Promise<number> | undefined;
   return {
-    streamRequestBody: () =>
-      diskResponsesBodyBytes(requestContext.request, source, abortSignal),
-    streamRequestBodyLength: () =>
-      (bodyLength ??= diskResponsesBodyLength(
-        requestContext.request,
-        source,
-        abortSignal,
-      )),
-    streamWebSocketFrame: () =>
-      diskResponsesBodyBytes(
-        createFrameRequest(requestContext.request),
-        source,
-        abortSignal,
-      ),
-    streamDumpBody: () =>
-      diskResponsesBodyBytes(
-        requestContext.request,
-        source,
-        abortSignal,
-        'dump',
-      ),
+    streamRequestBody: () => prompt.body(requestContext.request),
+    streamRequestBodyLength: () => Promise.resolve(prompt.byteLength),
+    streamWebSocketFrame: () => prompt.frame(requestContext.request),
+    streamDumpBody: () => prompt.body(requestContext.request, 'dump'),
   };
 }
 
