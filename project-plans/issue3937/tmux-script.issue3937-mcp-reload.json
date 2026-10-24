@@ -1,0 +1,157 @@
+{
+  "tmux": {
+    "cols": 120,
+    "rows": 50,
+    "historyLimit": 50000,
+    "scrollbackLines": 5000,
+    "initialWaitMs": 4000
+  },
+  "yolo": false,
+  "startCommand": [
+    "bun",
+    "llxprt-src/packages/cli/index.ts",
+    "--profile-load",
+    "gpt-6-luna"
+  ],
+  "macros": {
+    "useSettings": [
+      {
+        "type": "line",
+        "text": "!cp settings.${variant}.json .llxprt/settings.json",
+        "submitKeys": [
+          "Enter"
+        ]
+      },
+      {
+        "type": "wait",
+        "ms": 1500
+      },
+      {
+        "type": "key",
+        "key": "Escape"
+      },
+      {
+        "type": "wait",
+        "ms": 300
+      }
+    ]
+  },
+  "steps": [
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "Type your message",
+      "timeoutMs": 60000
+    },
+    {
+      "type": "line",
+      "text": "/mcp list"
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "No MCP servers configured",
+      "timeoutMs": 15000
+    },
+    {
+      "type": "capture",
+      "label": "01-empty-list"
+    },
+    {
+      "type": "macro",
+      "name": "useSettings",
+      "args": {
+        "variant": "added"
+      }
+    },
+    {
+      "type": "line",
+      "text": "/mcp reload"
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "[READY] alpha - Ready (1 tool)",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "expectCount",
+      "scope": "scrollback",
+      "contains": "not available in this composition",
+      "equals": 0
+    },
+    {
+      "type": "capture",
+      "label": "02-added-reload"
+    },
+    {
+      "type": "macro",
+      "name": "useSettings",
+      "args": {
+        "variant": "renamed"
+      }
+    },
+    {
+      "type": "line",
+      "text": "/mcp reload"
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "contains": "[READY] beta - Ready (1 tool)",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "line",
+      "text": "/mcp list nodesc"
+    },
+    {
+      "type": "waitFor",
+      "scope": "screen",
+      "regex": "mcp list nodesc[\\s\\S]*\\[READY\\] beta",
+      "timeoutMs": 15000
+    },
+    {
+      "type": "capture",
+      "label": "03-renamed-reload-and-list"
+    },
+    {
+      "type": "macro",
+      "name": "useSettings",
+      "args": {
+        "variant": "empty"
+      }
+    },
+    {
+      "type": "line",
+      "text": "/mcp reload"
+    },
+    {
+      "type": "waitFor",
+      "scope": "scrollback",
+      "regex": "\\[READY\\] beta[\\s\\S]*Reloading MCP configuration from disk[\\s\\S]*No MCP servers configured",
+      "timeoutMs": 30000
+    },
+    {
+      "type": "capture",
+      "label": "04-emptied-reload"
+    },
+    {
+      "type": "expectCount",
+      "scope": "scrollback",
+      "contains": "Failed to reload MCP configuration",
+      "equals": 0
+    },
+    {
+      "type": "line",
+      "text": "/quit",
+      "submitKeys": [
+        "Enter"
+      ]
+    },
+    {
+      "type": "waitForExit",
+      "timeoutMs": 20000
+    }
+  ]
+}
