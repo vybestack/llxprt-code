@@ -184,10 +184,14 @@ export class AnthropicSpanPlan {
       if (run[0] <= at) low = mid;
       else high = mid;
     }
-    const run = await this.index.facts.get(['cache-run', low]);
-    if (run === undefined)
-      throw new Error('Missing Anthropic cache run window');
-    return run;
+    const role = Number((await this.base.planAt(at)).header.speaker === 'ai');
+    for (let ordinal = low; ordinal >= 0; ordinal--) {
+      const run = await this.index.facts.get(['cache-run', ordinal]);
+      if (run === undefined)
+        throw new Error('Missing Anthropic cache run window');
+      if (run[2] === role && run[0] <= at && at < run[1]) return run;
+    }
+    throw new Error('Anthropic cache anchor has no matching message run');
   }
   private async *changed(): AsyncGenerator<number> {
     for (const { row } of this.coordinates.changes) {

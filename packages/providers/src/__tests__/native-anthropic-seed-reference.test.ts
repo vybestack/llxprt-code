@@ -126,7 +126,7 @@ describe('independent Anthropic seed reference duplicate result movement', () =>
     'anthropic-cache-1h',
     'anthropic-purge-boundary',
   ]) {
-    for (const seed of [79, 80, 81, 235, 237, 238, 239, 2049]) {
+    for (const seed of [20, 25, 79, 80, 81, 235, 237, 238, 239, 2049]) {
       it(`${id} seed ${seed} preserves frozen provider and independently curated service bytes`, async () => {
         await expect(
           checkNativeSeed(formatById(id), seed),

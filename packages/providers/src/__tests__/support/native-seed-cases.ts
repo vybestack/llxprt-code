@@ -6,7 +6,10 @@ import { HistoryService } from '@vybestack/llxprt-code-core/services/history/His
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
-import { SemanticMediaPurgeStreamCoordinator } from '@vybestack/llxprt-code-core/services/history/semantic-purge-stream.js';
+import {
+  SemanticMediaPurgeStreamCoordinator,
+  type SemanticPurgeStreamTransaction,
+} from '@vybestack/llxprt-code-core/services/history/semantic-purge-stream.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 import { expect } from 'bun:test';
@@ -203,28 +206,57 @@ async function prepareSeedProvider(
   ).openProviderRequest();
 }
 
+async function seedPurgeTransaction(
+  history: HistoryService,
+  input: HistoryCase,
+): Promise<SemanticPurgeStreamTransaction | undefined> {
+  const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {
+    enabled: input.rows.some(
+      (row) => row.metadata?.semanticMediaPurgeBoundary !== undefined,
+    ),
+    explicitCacheWriteRequired: true,
+  });
+  return coordinator.begin({ mode: 'remove' });
+}
+
+async function transactionSeedReference(
+  format: FrozenFormat,
+  settings: FrozenSettings,
+  input: HistoryCase,
+  transaction: SemanticPurgeStreamTransaction | undefined,
+  serviceReference: CaseOutcome,
+  sameBoundary: boolean,
+): Promise<{ serviceReference: CaseOutcome; sameBoundary: boolean }> {
+  if (transaction === undefined) return { serviceReference, sameBoundary };
+  const rows: IContent[] = [];
+  for await (const row of transaction.requestRows(true)) rows.push(row);
+  const serviceRows = eagerProviderOracle({ ...input, rows }).rows;
+  const providerRows =
+    settings.form === 'raw' ? input.rows : await normalizedRows(input.rows);
+  return {
+    serviceReference: referenceSeedOutcome(format, settings, serviceRows),
+    sameBoundary: isDeepStrictEqual(serviceRows, providerRows),
+  };
+}
+
 export async function checkNativeSeed(
   format: FrozenFormat,
   seed: number,
 ): Promise<void> {
-  const {
-    input,
-    settings,
-    expected,
-    serviceReference,
-    excluded,
-    sameBoundary,
-  } = await seedReference(format, seed);
+  const reference = await seedReference(format, seed);
+  const { input, settings, expected, excluded } = reference;
   await withCoreSuffixFixture(
     input.rows.length,
     async (history, ownership, counters) => {
-      const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {
-        enabled: input.rows.some(
-          (row) => row.metadata?.semanticMediaPurgeBoundary !== undefined,
-        ),
-        explicitCacheWriteRequired: true,
-      });
-      const transaction = await coordinator.begin({ mode: 'remove' });
+      const transaction = await seedPurgeTransaction(history, input);
+      const { serviceReference, sameBoundary } = await transactionSeedReference(
+        format,
+        settings,
+        input,
+        transaction,
+        reference.serviceReference,
+        reference.sameBoundary,
+      );
       const open = transaction?.providerSnapshotOpener(true);
       const service = await (open?.([], { ownership }) ??
         history.prepareCuratedForProviderSnapshot([], { ownership }));
