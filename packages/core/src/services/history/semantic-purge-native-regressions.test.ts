@@ -4,6 +4,17 @@ import { withNativePurgeFixture } from './__tests__/support/native-purge-fixture
 import { SemanticMediaPurgeStreamCoordinator } from './semantic-purge-stream.js';
 import { selectNativeSemanticPurge } from './semantic-purge-native.js';
 import type { IContent } from './IContent.js';
+import type { ProviderSnapshotOpener } from './native-purge-provider-request.js';
+
+async function hasKimiFacts(open: ProviderSnapshotOpener): Promise<boolean> {
+  const request = await open([], {});
+  try {
+    if (request.native === undefined) throw new Error('Missing native');
+    return await request.native.withKimi((pin) => pin.hasKimiFacts());
+  } finally {
+    await request.close();
+  }
+}
 
 async function collect(rows: AsyncIterable<IContent>): Promise<IContent[]> {
   const result: IContent[] = [];
@@ -73,15 +84,7 @@ describe('native semantic purge row preservation and facts', () => {
         for (const explicit of [true, false]) {
           const open = transaction.providerSnapshotOpener(explicit);
           if (open === undefined) throw new Error('Missing native opener');
-          const request = await open([], {});
-          try {
-            if (request.native === undefined) throw new Error('Missing native');
-            expect(
-              await request.native.withKimi((pin) => pin.hasKimiFacts()),
-            ).toBe(true);
-          } finally {
-            await request.close();
-          }
+          expect(await hasKimiFacts(open)).toBe(true);
         }
       } finally {
         await transaction.close();
