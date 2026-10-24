@@ -16,11 +16,17 @@ import { sanitizeWireBlockImages } from './AnthropicImageSanitizer.js';
 async function* recoveredPieces(
   pieces: AsyncIterable<AnthropicWirePiece>,
   budget: ImageDimensionBudget | undefined,
+  observeRecovery: ((count: number) => void) | undefined,
 ): AsyncGenerator<AnthropicWirePiece> {
-  for await (const piece of pieces)
-    yield typeof piece === 'string' || budget === undefined
-      ? piece
-      : sanitizeWireBlockImages(piece, budget).block;
+  for await (const piece of pieces) {
+    if (typeof piece === 'string' || budget === undefined) {
+      yield piece;
+      continue;
+    }
+    const recovered = sanitizeWireBlockImages(piece, budget);
+    observeRecovery?.(recovered.replacedCount);
+    yield recovered.block;
+  }
 }
 
 export type AnthropicWirePiece = string | AnthropicMessageBlock;
@@ -64,8 +70,9 @@ export async function* resolveAnthropicWireMedia(
   pieces: AsyncIterable<AnthropicWirePiece>,
   stage: MediaStage | undefined,
   budget?: ImageDimensionBudget,
+  observeRecovery?: (count: number) => void,
 ): AsyncGenerator<AnthropicWirePiece> {
-  const recovered = recoveredPieces(pieces, budget);
+  const recovered = recoveredPieces(pieces, budget, observeRecovery);
   if (stage === undefined) {
     yield* recovered;
     return;

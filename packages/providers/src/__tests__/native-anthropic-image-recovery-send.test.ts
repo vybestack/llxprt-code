@@ -344,7 +344,11 @@ async function verifyRecovery(
   };
   const restore = redirectAnthropic(sink.route.baseURL);
   try {
-    await sendRecovery(route, rowsSelection(fixture.rows), fixture.resolver);
+    await sendRecovery(
+      route,
+      { ...rowsSelection(fixture.rows), callerOwned: true },
+      fixture.resolver,
+    );
     const created = await operationFileCreates(async () => {
       expect(
         await sendRecovery(route, fixture.selection, fixture.resolver),

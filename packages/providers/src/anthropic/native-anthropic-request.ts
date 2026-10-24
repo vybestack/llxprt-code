@@ -7,6 +7,7 @@ import type { UnsupportedMediaEntry } from '@vybestack/llxprt-code-core/runtime/
 import { readAnthropicMediaLedger } from './anthropic-media-ledger.js';
 import { unsupportedMediaOfRow } from '../utils/mediaUtils.js';
 import { createMediaSupportPredicate } from './AnthropicEndpointUtils.js';
+import { resolveAnthropicWireMedia } from './anthropic-wire-media.js';
 import { measurableAnthropicRow } from './anthropic-measured-media.js';
 
 import { IndexedJournalRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/indexed-journal-request-snapshot.js';
@@ -449,14 +450,18 @@ async function prepareCallerOwnedAnthropic(
       )
     : undefined;
   let bytes = 0;
-  for await (const piece of engine.serialize(
-    (value) => value,
-    undefined,
-    cache,
+  let recoveredImages = 0;
+  for await (const piece of resolveAnthropicWireMedia(
+    engine.wirePieces(undefined, cache),
     mediaStage,
     options.recoveryBudget,
+    (count) => {
+      recoveredImages += count;
+    },
   ))
-    bytes += Buffer.byteLength(piece);
+    bytes += Buffer.byteLength(
+      typeof piece === 'string' ? piece : JSON.stringify(piece),
+    );
   const parts = await envelopeParts(envelope);
   const unsupportedMedia: UnsupportedMediaEntry[] = [];
   if (options.estimate === true) {
@@ -485,7 +490,7 @@ async function prepareCallerOwnedAnthropic(
     mediaStage,
     unsupportedMedia,
     options.recoveryBudget,
-    0,
+    recoveredImages,
   );
 }
 
