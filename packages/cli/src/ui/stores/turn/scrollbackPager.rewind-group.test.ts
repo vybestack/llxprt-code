@@ -1,8 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { appendFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+import type { IContent } from '@vybestack/llxprt-code-core';
 import {
   createScrollbackPagerStore,
   type ScrollbackPagerStore,
@@ -12,62 +14,85 @@ let directory: string;
 let file: string;
 const stores: ScrollbackPagerStore[] = [];
 
-function line(seq: number, type: string, payload: unknown): string {
-  return JSON.stringify({ v: 1, seq, ts: '', type, payload }) + '\n';
+type Edit = IContent | { readonly removed: number; readonly cutSeq?: number };
+
+function chronology(seq: number) {
+  return { chronology: { seq, userTurn: seq, step: 0, recordedAt: 0 } };
 }
 
-function chronology(seq: number): object {
-  return { chronology: { seq, userTurn: seq, step: 0, recordedAt: '' } };
+function human(seq: number): IContent {
+  return {
+    speaker: 'human',
+    blocks: [{ type: 'text', text: `row-${seq}` }],
+    metadata: chronology(seq),
+  };
 }
 
-function human(seq: number): string {
-  return line(seq, 'content', {
-    content: {
-      speaker: 'human',
-      blocks: [{ type: 'text', text: `row-${seq}` }],
-      metadata: chronology(seq),
-    },
-  });
+function opener(seq: number, ids: string[]): IContent {
+  return {
+    speaker: 'ai',
+    blocks: ids.map((id) => ({
+      type: 'tool_call',
+      id,
+      name: 'read_file',
+      parameters: {},
+    })),
+    metadata: chronology(seq),
+  };
 }
 
-function opener(seq: number, ids: string[]): string {
-  return line(seq, 'content', {
-    content: {
-      speaker: 'ai',
-      blocks: ids.map((id) => ({
-        type: 'tool_call',
-        id,
-        name: 'read_file',
-        parameters: {},
-      })),
-      metadata: chronology(seq),
-    },
-  });
+function result(seq: number, id: string): IContent {
+  return {
+    speaker: 'tool',
+    blocks: [
+      {
+        type: 'tool_response',
+        callId: id,
+        toolName: 'read_file',
+        result: `result-${id}`,
+      },
+    ],
+    metadata: chronology(seq),
+  };
 }
 
-function result(seq: number, id: string): string {
-  return line(seq, 'content', {
-    content: {
-      speaker: 'tool',
-      blocks: [
-        {
-          type: 'tool_response',
-          callId: id,
-          toolName: 'read_file',
-          result: `result-${id}`,
-        },
-      ],
-      metadata: chronology(seq),
-    },
-  });
+function rewind(_seq: number, removed: number, cutSeq?: number): Edit {
+  return { removed, cutSeq };
 }
 
-function rewind(seq: number, itemsRemoved: number, cutSeq?: number): string {
-  return line(
-    seq,
-    'rewind',
-    cutSeq === undefined ? { itemsRemoved } : { itemsRemoved, cutSeq },
-  );
+async function writeEdits(
+  edits: readonly Edit[],
+  append = false,
+): Promise<void> {
+  const session = await (append
+    ? JournalSession.open(file)
+    : JournalSession.create(file));
+  try {
+    for (const edit of edits) {
+      if ('speaker' in edit) await session.append([edit]);
+      else {
+        const count = session.store.published?.rows ?? 0;
+        const ordinal = edit.cutSeq === undefined ? count - edit.removed : 0;
+        for await (const { entry, content } of session.rows(ordinal)) {
+          if (
+            edit.cutSeq !== undefined &&
+            (content.metadata?.chronology?.seq ?? 0) < edit.cutSeq
+          )
+            continue;
+          await session.store.commit([
+            {
+              kind: 'pop',
+              cutLabel: entry.label,
+              expectedRemoved: edit.removed,
+            },
+          ]);
+          break;
+        }
+      }
+    }
+  } finally {
+    await session.close();
+  }
 }
 
 function open(pageRows: number): ScrollbackPagerStore {
@@ -117,13 +142,17 @@ async function shapesAcrossRestart(): Promise<string[][]> {
   return shapes;
 }
 
-const OPEN_AND_RESULTS =
-  human(1) + opener(2, ['c1', 'c2', 'c3']) + result(3, 'c1') + result(4, 'c2');
+const OPEN_AND_RESULTS: readonly Edit[] = [
+  human(1),
+  opener(2, ['c1', 'c2', 'c3']),
+  result(3, 'c1'),
+  result(4, 'c2'),
+];
 
 describe('production pager rewinds through a projected tool group', () => {
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'pager-rewind-group-'));
-    file = join(directory, 'journal');
+    file = join(directory, 'journal.llxj');
   });
 
   afterEach(async () => {
@@ -132,42 +161,45 @@ describe('production pager rewinds through a projected tool group', () => {
   });
 
   it('keeps the surviving call when the only result is rewound', async () => {
-    await writeFile(
-      file,
-      human(1) + opener(2, ['c1']) + result(3, 'c1') + rewind(4, 1, 3),
-    );
+    await writeEdits([
+      human(1),
+      opener(2, ['c1']),
+      result(3, 'c1'),
+      rewind(4, 1, 3),
+    ]);
     const store = open(10);
     await store.resumeFromJournal();
     expect(shape(store)).toStrictEqual(['row-1', 'tools:c1=open']);
   });
 
   it('keeps answered calls and reopens the one whose result was cut', async () => {
-    await writeFile(file, OPEN_AND_RESULTS + result(5, 'c3') + rewind(6, 1, 5));
+    await writeEdits([...OPEN_AND_RESULTS, result(5, 'c3'), rewind(6, 1, 5)]);
     for (const rows of await shapesAcrossRestart())
       expect(rows).toStrictEqual(['row-1', 'tools:c1=done,c2=done,c3=open']);
   });
 
   it('shows every call unanswered when the cut lands right after the opener', async () => {
-    await writeFile(file, OPEN_AND_RESULTS + rewind(5, 2, 3));
+    await writeEdits([...OPEN_AND_RESULTS, rewind(5, 2, 3)]);
     for (const rows of await shapesAcrossRestart())
       expect(rows).toStrictEqual(['row-1', 'tools:c1=open,c2=open,c3=open']);
   });
 
   it('cuts inside the group by removed-row count when there is no cutSeq', async () => {
-    await writeFile(file, OPEN_AND_RESULTS + rewind(5, 1));
+    await writeEdits([...OPEN_AND_RESULTS, rewind(5, 1)]);
     for (const rows of await shapesAcrossRestart())
       expect(rows).toStrictEqual(['row-1', 'tools:c1=done,c2=open,c3=open']);
   });
 
   it('pages back from a resumed tail through a prefix and a cut group', async () => {
-    let body = '';
-    for (let seq = 1; seq <= 40; seq += 1) body += human(seq);
-    body +=
-      opener(41, ['c1', 'c2']) +
-      result(42, 'c1') +
-      result(43, 'c2') +
-      rewind(44, 1, 43);
-    await writeFile(file, body);
+    const body: Edit[] = [];
+    for (let seq = 1; seq <= 40; seq += 1) body.push(human(seq));
+    body.push(
+      opener(41, ['c1', 'c2']),
+      result(42, 'c1'),
+      result(43, 'c2'),
+      rewind(44, 1, 43),
+    );
+    await writeEdits(body);
     const store = open(5);
     await store.resumeFromJournal();
     const tail = 'tools:c1=done,c2=open';
@@ -183,14 +215,14 @@ describe('production pager rewinds through a projected tool group', () => {
   });
 
   it('applies a cut through a group appended after the pager opened', async () => {
-    await writeFile(file, OPEN_AND_RESULTS);
+    await writeEdits(OPEN_AND_RESULTS);
     const store = open(10);
     await walkToFloor(store);
     expect(shape(store)).toStrictEqual([
       'row-1',
       'tools:c1=done,c2=done,c3=open',
     ]);
-    await appendFile(file, rewind(5, 1, 4) + human(6));
+    await writeEdits([rewind(5, 1, 4), human(6)], true);
     await store.invalidate();
     await walkToFloor(store);
     expect(shape(store)).toStrictEqual([
