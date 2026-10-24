@@ -2,6 +2,7 @@
 import * as path from 'node:path';
 import { describe, expect, it } from 'bun:test';
 import { ID_NS } from './idKeys.js';
+import type { IdFact } from './idFactCodec.js';
 import type { JournalStore } from './journalStore.js';
 import { readValueBody } from './mapEntries.js';
 import { cloneVersion } from './versionCopy.js';
@@ -33,12 +34,24 @@ function current(store: JournalStore) {
   return version;
 }
 
+async function factOf(
+  store: JournalStore,
+  rawId: string,
+): Promise<IdFact | undefined> {
+  const facts = await store.idFacts();
+  try {
+    return await facts.fact(rawId);
+  } finally {
+    await facts.close();
+  }
+}
+
 /** The wire id the fact of `rawId` leads to: its `mappedRef` record, read from the store's own file. */
 async function wireIdOf(
   store: JournalStore,
   rawId: string,
 ): Promise<string | undefined> {
-  const fact = await (await store.idFacts()).fact(rawId);
+  const fact = await factOf(store, rawId);
   if (fact === undefined || fact.mappedRef === 0) return undefined;
   const access = await accessOf(store);
   const head = await access.readRecordHead(fact.mappedRef, 'VALUE', 1024);
@@ -81,9 +94,7 @@ describe('clone with Mistral mapped ids (design 3.3 and 4.8)', () => {
     expect(sourceWire.get(SOURCE_ID)).toBe(mapping.get(SOURCE_ID));
     const snapshot = await snapshotStore(source, ids);
     const sourceRefs = await Promise.all(
-      ids.map(
-        async (id) => (await (await source.idFacts()).fact(id))?.mappedRef,
-      ),
+      ids.map(async (id) => (await factOf(source, id))?.mappedRef),
     );
 
     const result = await cloneVersion(
@@ -100,18 +111,19 @@ describe('clone with Mistral mapped ids (design 3.3 and 4.8)', () => {
       expect(await wireIdOf(clone, id)).toBe(mapping.get(id));
     }
     const cloneRefs = await Promise.all(
-      ids.map(
-        async (id) => (await (await clone.idFacts()).fact(id))?.mappedRef,
-      ),
+      ids.map(async (id) => (await factOf(clone, id))?.mappedRef),
     );
     expect(cloneRefs).not.toStrictEqual(sourceRefs);
-    for (const [id, mapped] of mapping) {
-      const usedBy = await (
-        await clone.idFacts()
-      ).mistralUsedBy(MISTRAL_SLOT, mapped);
-      expect(usedBy && hex(usedBy)).toBe(
-        hex(copyDeps().hasher(ID_NS.fact, UTF8.encode(id))),
-      );
+    const facts = await clone.idFacts();
+    try {
+      for (const [id, mapped] of mapping) {
+        const usedBy = await facts.mistralUsedBy(MISTRAL_SLOT, mapped);
+        expect(usedBy && hex(usedBy)).toBe(
+          hex(copyDeps().hasher(ID_NS.fact, UTF8.encode(id))),
+        );
+      }
+    } finally {
+      await facts.close();
     }
     const cloned = await snapshotStore(clone, ids);
     expect(withoutMappedRefs(cloned.facts)).toStrictEqual(
