@@ -1,8 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { decodeNeutralRowFact } from '../../journal/neutral-row-fact-codec.js';
+import { readNeutralRowFact } from '../../journal/neutral-row-fact-storage.js';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { ID_NS } from '../../journal/idKeys.js';
 import {
   neutralRowFactKey,
   type NeutralRowFactRegistration,
@@ -121,12 +120,11 @@ export async function storedTokenUsageFacts(
   snapshot: VersionSnapshot,
   label: bigint,
 ): Promise<readonly StoredTokenUsageUnit[]> {
-  const bytes = await snapshot.facts.getEntry(
-    ID_NS.neutralRow,
-    neutralRowFactKey(registrationIdentity, label),
-  );
   return decodeTokenUsageFacts(
-    bytes === undefined ? undefined : decodeNeutralRowFact(bytes),
+    await readNeutralRowFact(
+      snapshot.facts,
+      neutralRowFactKey(registrationIdentity, label),
+    ),
   );
 }
 

@@ -1,14 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import {
-  encodeNeutralRowFact,
-  decodeNeutralRowFact,
-} from './neutral-row-fact-codec.js';
+  readNeutralRowFact,
+  writeNeutralRowFact,
+} from './neutral-row-fact-storage.js';
 import type { BuildContext, BuiltGroup } from './groupBuildShared.js';
 import type { RecordAppender } from './groupAppender.js';
 import { snapshotOf } from './formatFill.js';
 import { IdFactBatch } from './idFactBatch.js';
 import { IdTrieReader } from './idTrieReader.js';
-import { ID_NS } from './idKeys.js';
 import { KeyedMapBatch, KeyedMapReader } from './keyedMap.js';
 import { readRowTreeNode } from './rowTreeReader.js';
 import type { RowEntry } from './rowEntry.js';
@@ -92,13 +91,9 @@ export async function fillNeutralRowFacts(
       since,
     )) {
       const key = neutralRowFactKey(registration, entry.label);
-      const previous = await batch.queries.getEntry(ID_NS.neutralRow, key);
-      const value = await registration.measure(
-        snapshot,
-        entry,
-        previous === undefined ? undefined : decodeNeutralRowFact(previous),
-      );
-      await batch.setEntry(ID_NS.neutralRow, key, encodeNeutralRowFact(value));
+      const previous = await readNeutralRowFact(batch.queries, key);
+      const value = await registration.measure(snapshot, entry, previous);
+      await writeNeutralRowFact(batch, key, value);
     }
     const committed = await batch.commit(appender);
     await appender.drain();
