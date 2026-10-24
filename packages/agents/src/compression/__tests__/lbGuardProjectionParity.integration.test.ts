@@ -54,6 +54,7 @@ import {
 } from '../../core/__tests__/chatSession-density-helpers.js';
 import { ChatSession } from '../../core/chatSession.js';
 import { preparePromptEnvelopeAfterEnforcement } from '../../core/promptEnvelopeSendSeam.js';
+import { makeLoadBalancerInvocation } from '../../../../providers/src/__tests__/loadBalancerTestHelpers.js';
 import { computeMarginAdjustedLimit } from '../contextLimitPolicy.js';
 
 const MODEL = 'test-model';
@@ -374,6 +375,7 @@ describe('LB guard projection parity through real pre-send enforcement (issue #3
     const projection = await lb.projectPromptEnvelope({
       contents,
       tools: TOOLSET,
+      invocation: makeLoadBalancerInvocation(),
     });
     expect(projection).toBeDefined();
     const envelopeTokens = await projection!.legacyEstimate();
@@ -381,7 +383,11 @@ describe('LB guard projection parity through real pre-send enforcement (issue #3
     expect(envelopeTokens).toBeGreaterThan(contextLimit);
 
     const chunks = await consume(
-      lb.generateChatCompletion({ contents, tools: TOOLSET }),
+      lb.generateChatCompletion({
+        contents,
+        tools: TOOLSET,
+        invocation: makeLoadBalancerInvocation(),
+      }),
     );
 
     // The guard handed its real estimate and limit to the real callback.
@@ -441,6 +447,7 @@ describe('LB guard projection parity through real pre-send enforcement (issue #3
       for await (const chunk of lb.generateChatCompletion({
         contents,
         tools: TOOLSET,
+        invocation: makeLoadBalancerInvocation(),
       })) {
         chunks.push(chunk);
       }
@@ -505,6 +512,7 @@ describe('LB guard projection parity through real pre-send enforcement (issue #3
       buildOptions: (candidate) => ({
         contents: candidate,
         tools: TOOLSET,
+        invocation: makeLoadBalancerInvocation(),
       }),
       enforce: (candidate, estimate) =>
         handler.enforceProviderContents(
@@ -524,7 +532,11 @@ describe('LB guard projection parity through real pre-send enforcement (issue #3
     expect(reducedTokens).toBeLessThan(contentsOnlyTokens);
 
     const chunks = await consume(
-      lb.generateChatCompletion({ contents: reduced, tools: TOOLSET }),
+      lb.generateChatCompletion({
+        contents: reduced,
+        tools: TOOLSET,
+        invocation: makeLoadBalancerInvocation(),
+      }),
     );
 
     // The ordinary pre-send ladder already brought the envelope under the

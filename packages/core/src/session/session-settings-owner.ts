@@ -32,6 +32,7 @@ import { z } from 'zod';
 import { captureProviderInvocation } from '../runtime/providerRequestContext.js';
 import type { RuntimeInvocationContext } from '../runtime/RuntimeInvocationContext.js';
 import type { AdmittedModelParameters } from '../runtime/admittedModelParameters.js';
+import type { NetworkFetch } from '../utils/fetch.js';
 
 import { EventEmitter } from 'node:events';
 import { CoreEvent, type ModelProfileInfoPayload } from '../utils/events.js';
@@ -404,13 +405,10 @@ export class SessionSettingsOwner {
   prepareProviderInvocation(
     runtimeId: string,
     providerName: string,
-    modelParameters?: AdmittedModelParameters,
-    signal?: AbortSignal,
-    sessionId?: string,
-    requestFetch?: (
-      input: RequestInfo | URL,
-      init?: RequestInit,
-    ) => Promise<Response>,
+    modelParameters: AdmittedModelParameters | undefined,
+    signal: AbortSignal | undefined,
+    sessionId: string | undefined,
+    requestFetch: NetworkFetch,
   ): RuntimeInvocationContext {
     this.assertOpen();
     return captureProviderInvocation(
@@ -418,12 +416,12 @@ export class SessionSettingsOwner {
         runtimeId,
         globalSettings: this.settings.getAllGlobalSettings(),
         providerSettings: this.settings.getProviderSettings(providerName),
+        fetch: requestFetch,
       },
       providerName,
       modelParameters,
       signal,
       sessionId,
-      requestFetch,
     );
   }
 

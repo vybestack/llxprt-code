@@ -22,6 +22,7 @@ import type {
 } from '@vybestack/llxprt-code-providers';
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { resolveLoadBalancerSubProfile } from './loadBalancerProfile.js';
+import { makeLoadBalancerInvocation } from '../../../../providers/src/__tests__/loadBalancerTestHelpers.js';
 import { resolveMemberAuthentication } from '../../../../providers/src/loadBalancing/memberAuthentication.js';
 
 describe('resolveLoadBalancerSubProfile — member auth handling', () => {
@@ -299,11 +300,13 @@ describe('resolveLoadBalancerSubProfile — member auth handling', () => {
           await fs.writeFile(keyfile, value);
           for await (const chunk of selected.generateChatCompletion({
             contents: [],
+            invocation: makeLoadBalancerInvocation(),
           })) {
             observed.push(chunk);
           }
           for await (const chunk of siblingSelected.generateChatCompletion({
             contents: [],
+            invocation: makeLoadBalancerInvocation(),
           })) {
             siblingObserved.push(chunk);
           }

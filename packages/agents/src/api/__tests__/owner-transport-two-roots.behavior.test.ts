@@ -5,11 +5,19 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { OpenAIProvider } from '@vybestack/llxprt-code-providers';
+import {
+  OpenAIProvider,
+  OpenAIVercelProvider,
+  ProviderManager,
+} from '@vybestack/llxprt-code-providers';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { bindProviderAliasIdentity } from '@vybestack/llxprt-code-providers/composition/aliasProviderFactory.js';
 import { buildProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition/runtimePlugins/index.js';
@@ -310,6 +318,95 @@ describe('owner transport per root', () => {
       );
       expect(left.proxy.requestsTo(HOST_A)).toHaveLength(1);
     }, 30_000);
+  });
+
+  it('sends a turn through the Vercel OpenAI client over its own proxy', async () => {
+    const proxy = await startProxy(HOST_A, CANNED_A);
+    const providerContributions = buildProviderContributionRegistry([
+      {
+        specifier: 'memory:vercel-root-network',
+        manifest: {
+          apiVersion: 1,
+          id: 'vercel-root-network',
+          providers: [
+            {
+              providerId: 'vercel-openai',
+              createProvider: (entry) => {
+                const provider = new OpenAIVercelProvider(
+                  'test-key',
+                  `http://${HOST_A}/v1`,
+                );
+                bindProviderAliasIdentity(provider, entry.alias);
+                return provider;
+              },
+              builtinAliases: [
+                {
+                  alias: 'vercel-local',
+                  config: {
+                    baseProvider: 'vercel-openai',
+                    'base-url': `http://${HOST_A}/v1`,
+                    'requires-auth': false,
+                    defaultModel: 'gpt-4o',
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      },
+    ]);
+    const agent = await createAgent({
+      provider: 'vercel-local',
+      model: 'gpt-4o',
+      providerContributions,
+      proxy: proxy.url,
+      workingDir: directory,
+      credentialAuthority: credentials().authority,
+      harness: { includeProcessCwd: false },
+    });
+    cleanups.push(() => agent.dispose());
+
+    expect(await agent.generate('hi')).toContain(`from-${HOST_A}`);
+
+    expect(proxy.requestsTo(HOST_A).map(({ path }) => path)).toContain(
+      '/v1/chat/completions',
+    );
+  }, 30_000);
+
+  it('refuses a request on a manager no root bound', async () => {
+    const settings = new SettingsService();
+    const config = createRuntimeConfigStub(settings);
+    const settingsOwner = new SessionSettingsOwner(settings);
+    cleanups.push(() => settingsOwner.dispose());
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settings,
+      config,
+      undefined,
+      undefined,
+      settingsOwner,
+    );
+
+    const received: string[] = [];
+    const listener = createServer((request, response) => {
+      received.push(request.url ?? '');
+      response.end('ok');
+    });
+    await new Promise<void>((resolve) =>
+      listener.listen(0, '127.0.0.1', () => resolve()),
+    );
+    cleanups.push(
+      () => new Promise<void>((resolve) => listener.close(() => resolve())),
+    );
+    const { port } = listener.address() as AddressInfo;
+
+    expect(() =>
+      manager.fetchNetwork(`http://127.0.0.1:${port}/unbound`),
+    ).toThrow('Provider request requires the owner transport');
+    expect(received).toHaveLength(0);
   });
 
   describe('compression profile', () => {

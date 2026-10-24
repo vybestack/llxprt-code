@@ -33,7 +33,7 @@ import { separateSettings } from '@vybestack/llxprt-code-settings';
 export type { TelemetryContext } from './contracts/TelemetryContext.js';
 
 export interface RuntimeInvocationContext {
-  readonly fetch?: NetworkFetch;
+  readonly fetch: NetworkFetch;
   /** Stable identifier for the invocation/runtime */
   readonly runtimeId: string;
   readonly sessionId?: string;
@@ -73,7 +73,7 @@ export interface RuntimeInvocationContext {
 }
 
 export interface RuntimeInvocationContextInit {
-  fetch?: NetworkFetch;
+  fetch: NetworkFetch;
   providerDefaults?: Readonly<Record<string, unknown>>;
   configuredHeaders?: Readonly<Record<string, string>>;
   runtimeId?: string;

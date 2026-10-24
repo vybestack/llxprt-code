@@ -16,6 +16,7 @@
  * No mocks of the code under test.
  */
 
+import { makeLoadBalancerInvocation } from '../../__tests__/loadBalancerTestHelpers.js';
 import { resolveRuntimeAuthToken } from '../../utils/authToken.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { describe, it, expect, afterEach } from 'bun:test';
@@ -341,6 +342,7 @@ describe('load balancer member OAuth identity (#2643)', () => {
     };
 
     const options: GenerateChatOptions = {
+      invocation: makeLoadBalancerInvocation(),
       contents: [],
       metadata: {},
     };

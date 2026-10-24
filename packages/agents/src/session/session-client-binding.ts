@@ -8,6 +8,7 @@ import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/me
 import { createProviderAdapterFromManager } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -119,10 +120,7 @@ export function bindClientSettings(
   settingsOwner: SessionSettingsOwner,
   runtimeId: string,
   sessionId: string,
-  requestFetch?: (
-    input: RequestInfo | URL,
-    init?: RequestInit,
-  ) => Promise<Response>,
+  requestFetch: NetworkFetch,
 ): void {
   client.bindModelNotifications?.((listener) =>
     settingsOwner.subscribeModelChanges(listener),

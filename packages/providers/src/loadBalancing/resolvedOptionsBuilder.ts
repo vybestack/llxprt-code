@@ -209,11 +209,15 @@ function createDelegateInvocation(
   ephemeralsSnapshot: Record<string, unknown>,
   ctx: OptionsBuildContext,
 ): GenerateChatOptions['invocation'] | undefined {
+  const parent = options.invocation;
+  if (parent === undefined) {
+    throw new Error('Provider request requires the owner transport');
+  }
   return createRuntimeInvocationContext({
-    runtimeId: options.invocation?.runtimeId,
-    fetch: options.invocation?.fetch,
-    sessionId: options.invocation?.sessionId,
-    runtimeMetadata: options.invocation?.metadata,
+    runtimeId: parent.runtimeId,
+    fetch: parent.fetch,
+    sessionId: parent.sessionId,
+    runtimeMetadata: parent.metadata,
 
     modelParams: ctx.memberParameters?.modelParams,
     modelParamsProviderName: ctx.memberParameters?.providerName,

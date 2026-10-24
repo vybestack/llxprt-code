@@ -19,6 +19,7 @@ import {
   type LoadBalancingProviderConfig,
   type ResolvedSubProfile,
 } from '../LoadBalancingProvider.js';
+import { makeLoadBalancerInvocation } from './loadBalancerTestHelpers.js';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
@@ -104,6 +105,7 @@ async function consumeIterator(
 ): Promise<IContent[]> {
   const results: IContent[] = [];
   for await (const chunk of provider.generateChatCompletion({
+    invocation: makeLoadBalancerInvocation(),
     contents,
   } as GenerateChatOptions)) {
     results.push(chunk);

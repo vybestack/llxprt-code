@@ -138,6 +138,7 @@ function buildManagedWrapper(base: RecordingProvider): {
     metadata: runtime.metadata,
     globalSettings: settings.getAllGlobalSettings(),
     providerSettings: settings.getProviderSettings(providerName),
+    fetch: globalThis.fetch,
   }));
   wrapper.setOptionsNormalizer((options) => ({
     ...options,
@@ -252,6 +253,7 @@ describe('LoggingProviderWrapper projection normalization parity (issue #2817)',
       providerSettings: settings.getProviderSettings(plain.name),
       runtimeId: 'plain-runtime',
       metadata: {},
+      fetch: globalThis.fetch,
     }));
     wrapper.setOptionsNormalizer(normalize);
 

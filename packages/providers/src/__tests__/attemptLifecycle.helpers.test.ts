@@ -109,6 +109,7 @@ export function buildStack(
     globalSettings: {},
     providerSettings: {},
     metadata: {},
+    fetch: globalThis.fetch,
   }));
   return Object.assign(wrapper, {
     metrics: wrapperSettings1.telemetry.localMetrics,

@@ -37,6 +37,7 @@ import {
 import { getBaseUrlFromProvider } from '../baseUrlResolver.js';
 import { ProviderCapabilitiesService } from '../providerCapabilitiesService.js';
 import { normalizeRuntimeInputs } from './helper-request-admission.js';
+import { makeLoadBalancerInvocation } from './loadBalancerTestHelpers.js';
 import { ProviderRuntimeNormalizationError } from '../errors.js';
 import { buildRoundRobinResolvedOptions } from '../loadBalancing/resolvedOptionsBuilder.js';
 import { BackendMetricsCollector } from '../loadBalancing/backendMetrics.js';
@@ -697,6 +698,7 @@ describe('extracted provider helper behavior', () => {
   it('carries the member profileId on delegate metadata alongside loadBalancerDelegate (#2643)', () => {
     const settingsService = new SettingsService();
     const options: GenerateChatOptions = {
+      invocation: makeLoadBalancerInvocation(),
       contents: [],
       settings: settingsService,
       runtime: {

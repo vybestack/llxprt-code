@@ -160,6 +160,7 @@ describe('OAuth owner reads before registration', () => {
       { runtimeId: config.getSessionId() },
     );
     release.acquire('manager', () => manager.dispose());
+    manager.bindNetworkFetch(stubbedOwnerFetch);
     const keys = credentials().authority.createProviderKeyStorage();
     release.acquire('manager', () => keys.close());
     manager.bindProviderKeyStorage(keys);

@@ -410,6 +410,9 @@ describe('public provider factory authority', () => {
             credentials().authority,
             settingsOwner,
           );
+          manager.bindNetworkFetch((input, init) =>
+            globalThis.fetch(input, init),
+          );
           manager.registerProvider(
             new GeminiTransport('content-owner-local', wire.endpoint),
           );

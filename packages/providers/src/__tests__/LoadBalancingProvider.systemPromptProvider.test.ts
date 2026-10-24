@@ -25,6 +25,7 @@ import {
   type LoadBalancingProviderConfig,
   type ResolvedSubProfile,
 } from '../LoadBalancingProvider.js';
+import { makeLoadBalancerInvocation } from './loadBalancerTestHelpers.js';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
@@ -131,7 +132,10 @@ async function consume(
   provider: LoadBalancingProvider,
   options: GenerateChatOptions,
 ): Promise<void> {
-  for await (const _ of provider.generateChatCompletion(options)) {
+  for await (const _ of provider.generateChatCompletion({
+    invocation: makeLoadBalancerInvocation(),
+    ...options,
+  })) {
     void _;
   }
 }

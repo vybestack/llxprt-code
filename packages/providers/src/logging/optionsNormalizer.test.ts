@@ -27,6 +27,7 @@ describe('logging request admission from data', () => {
         metadata: { owner: 'data' },
         globalSettings,
         providerSettings,
+        fetch: requestFetch,
       }),
       readRuntimeKind: () => 'subagent',
     });
@@ -69,6 +70,7 @@ describe('logging request admission from data', () => {
           globalSettings: { model: 'owner-model' },
           providerSettings: {},
           metadata: { owner: 'default' },
+          fetch: requestFetch,
         }),
         readRuntimeKind: () => 'cli-interactive',
       },

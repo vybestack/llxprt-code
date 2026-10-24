@@ -494,12 +494,10 @@ export class ProviderManager implements IProviderManager {
                   globalSettings: this.settingsService.getAllGlobalSettings(),
                   providerSettings:
                     this.settingsService.getProviderSettings(name),
+                  fetch: this.fetchNetwork,
                 },
                 name,
                 options.modelParameters,
-                undefined,
-                undefined,
-                this.fetchNetwork,
               ),
           };
         },
@@ -514,10 +512,14 @@ export class ProviderManager implements IProviderManager {
    * @requirement REQ-SP2-001
    * @pseudocode base-provider-call-contract.md lines 3-5
    */
-  private requestFetch: NetworkFetch = globalThis.fetch;
+  private requestFetch: NetworkFetch | undefined;
 
-  readonly fetchNetwork: NetworkFetch = (input, init) =>
-    this.requestFetch(input, init);
+  readonly fetchNetwork: NetworkFetch = (input, init) => {
+    if (this.requestFetch === undefined) {
+      throw new Error('Provider request requires the owner transport');
+    }
+    return this.requestFetch(input, init);
+  };
 
   private modelRegistry?: ModelRegistry;
 

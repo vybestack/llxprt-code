@@ -17,7 +17,7 @@ export interface ProviderInvocationData {
   readonly metadata?: Readonly<Record<string, unknown>>;
   readonly globalSettings: Readonly<Record<string, unknown>>;
   readonly providerSettings: Readonly<Record<string, unknown>>;
-  readonly fetch?: NetworkFetch;
+  readonly fetch: NetworkFetch;
 }
 
 export function captureProviderInvocation(
@@ -26,7 +26,6 @@ export function captureProviderInvocation(
   modelParameters?: AdmittedModelParameters,
   signal?: AbortSignal,
   sessionId?: string,
-  requestFetch?: NetworkFetch,
 ): RuntimeInvocationContext {
   const global = data.globalSettings;
   const active = global['activeProvider'];
@@ -43,7 +42,7 @@ export function captureProviderInvocation(
     providerSettings['base-url'];
   return createRuntimeInvocationContext({
     runtimeId: data.runtimeId,
-    fetch: requestFetch ?? data.fetch,
+    fetch: data.fetch,
     sessionId,
     fallbackRuntimeId: `${providerName}:admission`,
     runtimeMetadata: data.metadata,

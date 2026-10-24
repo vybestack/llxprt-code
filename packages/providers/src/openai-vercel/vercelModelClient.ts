@@ -207,9 +207,7 @@ export async function createOpenAIClient(
 
   const headers = clientConfig.customHeaders;
   const fetchWithCompatibility = shouldForceSystemRole
-    ? createDeveloperRoleToSystemFetch(
-        customFetch ?? options.invocation.fetch ?? fetch,
-      )
+    ? createDeveloperRoleToSystemFetch(customFetch ?? options.invocation.fetch)
     : (customFetch ?? options.invocation.fetch);
 
   // The @ai-sdk/openai factory validates `apiKey` via `loadApiKey`, which throws

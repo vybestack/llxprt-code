@@ -5,6 +5,8 @@
  */
 
 import { afterEach, describe, expect, it } from 'bun:test';
+import { createServer, type IncomingMessage, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { OwnedFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
@@ -37,7 +39,45 @@ function completion(content: string): Response {
   );
 }
 
+const OWNER_TRANSPORT_ERROR = 'Provider request requires the owner transport';
+
+interface LoopbackListener {
+  readonly baseUrl: string;
+  readonly requests: IncomingMessage[];
+  readonly server: Server;
+}
+
+async function startLoopbackListener(): Promise<LoopbackListener> {
+  const requests: IncomingMessage[] = [];
+  const server = createServer((request, response) => {
+    requests.push(request);
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(
+      JSON.stringify({
+        object: 'list',
+        data: [{ id: 'loopback-model', object: 'model' }],
+      }),
+    );
+  });
+  await new Promise<void>((resolve) =>
+    server.listen(0, '127.0.0.1', () => resolve()),
+  );
+  const { port } = server.address() as AddressInfo;
+  return { baseUrl: `http://127.0.0.1:${port}/v1`, requests, server };
+}
+
+function causeChainMessages(error: unknown): string[] {
+  const messages: string[] = [];
+  let current: unknown = error;
+  while (current instanceof Error && messages.length < 10) {
+    messages.push(current.message);
+    current = current.cause;
+  }
+  return messages;
+}
+
 describe('wrapper-created invocations carry the owner transport', () => {
+  const listeners: LoopbackListener[] = [];
   const proxies: LocalForwardProxy[] = [];
   const networks: OwnedFetch[] = [];
   const settingsOwners: SessionSettingsOwner[] = [];
@@ -53,6 +93,9 @@ describe('wrapper-created invocations carry the owner transport', () => {
     for (const proxy of proxies.splice(0)) {
       await proxy.close();
     }
+    for (const listener of listeners.splice(0)) {
+      listener.server.close();
+    }
   });
 
   async function managerThrough(
@@ -65,11 +108,17 @@ describe('wrapper-created invocations carry the owner transport', () => {
     proxies.push(proxy);
     const network = new OwnedFetch(proxy.url);
     networks.push(network);
+    const manager = unboundManager(`http://${host}/v1`);
+    manager.bindNetworkFetch(network.fetch);
+    return { manager, proxy };
+  }
+
+  function unboundManager(baseUrl: string): ProviderManager {
     const settings = new SettingsService();
     settings.set('streaming', 'disabled');
     settings.set('retries', 1);
     settings.setProviderSetting('openai', 'model', 'gpt-4o');
-    settings.setProviderSetting('openai', 'base-url', `http://${host}/v1`);
+    settings.setProviderSetting('openai', 'base-url', baseUrl);
     const config = createRuntimeConfigStub(settings);
     const settingsOwner = new SessionSettingsOwner(settings);
     settingsOwner.bindTelemetry(config);
@@ -85,10 +134,9 @@ describe('wrapper-created invocations carry the owner transport', () => {
       undefined,
       settingsOwner,
     );
-    manager.bindNetworkFetch(network.fetch);
     manager.registerProvider(new OpenAIProvider('test-key'));
     manager.setActiveProvider('openai');
-    return { manager, proxy };
+    return manager;
   }
 
   async function complete(manager: ProviderManager): Promise<string> {
@@ -131,5 +179,33 @@ describe('wrapper-created invocations carry the owner transport', () => {
     expect(right.proxy.requests.map((request) => request.host)).toStrictEqual([
       MODEL_B,
     ]);
+  });
+
+  it('rejects a request on a manager no root bound, and records nothing at the listener', async () => {
+    const listener = await startLoopbackListener();
+    listeners.push(listener);
+    const manager = unboundManager(listener.baseUrl);
+
+    const failure = await complete(manager).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+
+    expect(causeChainMessages(failure)).toContain(OWNER_TRANSPORT_ERROR);
+    expect(listener.requests).toHaveLength(0);
+  });
+
+  it('lists the fallback models on a manager no root bound, and records nothing at the listener', async () => {
+    const listener = await startLoopbackListener();
+    listeners.push(listener);
+    const manager = unboundManager(listener.baseUrl);
+    const provider = manager.getActiveProvider();
+    if (provider === undefined) throw new Error('No active provider');
+
+    const models = await provider.getModels();
+
+    expect(models.length).toBeGreaterThan(0);
+    expect(models.map(({ id }) => id)).not.toContain('loopback-model');
+    expect(listener.requests).toHaveLength(0);
   });
 });

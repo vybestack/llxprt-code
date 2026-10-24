@@ -13,7 +13,11 @@ import {
   LoadBalancingProvider,
   type LoadBalancingProviderConfig,
 } from '../LoadBalancingProvider.js';
-import { makeMockProvider, drain } from './loadBalancerTestHelpers.js';
+import {
+  makeMockProvider,
+  drain,
+  makeLoadBalancerInvocation,
+} from './loadBalancerTestHelpers.js';
 import type { IProvider } from '../IProvider.js';
 
 function resolveActiveModelProvider(
@@ -103,6 +107,7 @@ describe('LoadBalancingProvider active-model stats (issue #2193)', () => {
       try {
         await drain(
           provider.generateChatCompletion({
+            invocation: makeLoadBalancerInvocation(),
             contents: [{ role: 'user', parts: [{ text: 'one' }] }],
           }),
         );
@@ -137,6 +142,7 @@ describe('LoadBalancingProvider active-model stats (issue #2193)', () => {
         // First request → 'fast' (gemini-flash)
         await drain(
           provider.generateChatCompletion({
+            invocation: makeLoadBalancerInvocation(),
             contents: [{ role: 'user', parts: [{ text: 'one' }] }],
           }),
         );
@@ -147,6 +153,7 @@ describe('LoadBalancingProvider active-model stats (issue #2193)', () => {
         // Second request → 'smart' (gpt-4)
         await drain(
           provider.generateChatCompletion({
+            invocation: makeLoadBalancerInvocation(),
             contents: [{ role: 'user', parts: [{ text: 'two' }] }],
           }),
         );
@@ -182,6 +189,7 @@ describe('LoadBalancingProvider active-model stats (issue #2193)', () => {
       try {
         await drain(
           provider.generateChatCompletion({
+            invocation: makeLoadBalancerInvocation(),
             contents: [{ role: 'user', parts: [{ text: 'one' }] }],
           }),
         );
@@ -212,6 +220,7 @@ describe('LoadBalancingProvider active-model stats (issue #2193)', () => {
       try {
         await drain(
           provider.generateChatCompletion({
+            invocation: makeLoadBalancerInvocation(),
             contents: [{ role: 'user', parts: [{ text: 'one' }] }],
           }),
         );
