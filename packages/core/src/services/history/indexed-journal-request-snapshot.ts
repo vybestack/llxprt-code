@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { estimateTokens } from '../../utils/toolOutputLimiter.js';
+import { HistoryReaderScope } from './historyReaderScope.js';
 import {
   measureRequestRow,
   type RequestRowMeasurement,
@@ -75,6 +76,10 @@ export interface NativeRequestViewPlan {
 export class IndexedJournalRequestSnapshot {
   readonly viewPlan: NativeRequestViewPlan;
   private closed = false;
+  private closing: Promise<void> | undefined;
+  private readonly tokenReaders = new HistoryReaderScope(
+    'Indexed journal request snapshot is closed',
+  );
   private readonly overlayMeasurements = new Map<
     string,
     RequestRowMeasurement
@@ -375,10 +380,18 @@ export class IndexedJournalRequestSnapshot {
     }
   }
 
-  async *openTokenUsageReader(
+  openTokenUsageReader(
     countTokens: TokenCountFn = estimateTokens,
     signal?: AbortSignal,
-  ): AsyncGenerator<TokenUsageRowFact> {
+  ): AsyncGenerator<TokenUsageRowFact, void, unknown> {
+    this.requireOpen();
+    return this.tokenReaders.open(this.tokenUsageFacts(countTokens, signal));
+  }
+
+  private async *tokenUsageFacts(
+    countTokens: TokenCountFn,
+    signal?: AbortSignal,
+  ): AsyncGenerator<TokenUsageRowFact, void, unknown> {
     this.requireOpen();
     const release = this.snapshot.hold();
     try {
@@ -746,9 +759,18 @@ export class IndexedJournalRequestSnapshot {
   }
 
   close(): void | Promise<void> {
-    if (this.closed) return;
+    if (this.closing !== undefined) return this.closing;
     this.closed = true;
     this.lastOccurrences = undefined;
-    return this.release();
+    this.closing = this.retireTokenReaders();
+    return this.closing;
+  }
+
+  private async retireTokenReaders(): Promise<void> {
+    try {
+      await this.tokenReaders.close();
+    } finally {
+      await this.release();
+    }
   }
 }

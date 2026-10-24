@@ -94,4 +94,25 @@ describe('neutral token usage row facts', () => {
       await session.close();
     }
   });
+
+  it('releases a paused token fact reader when its request selection closes', async () => {
+    const session = await JournalSession.createUnlinked();
+    try {
+      await session.append([row]);
+      const snapshot = await session.store.snapshot();
+      const selected = await IndexedJournalRequestSnapshot.create(snapshot);
+      const reader = selected.openTokenUsageReader();
+      try {
+        expect((await reader.next()).done).toBe(false);
+        await selected.close();
+        await snapshot.close();
+        expect(await session.store.compact()).toBe('swapped');
+      } finally {
+        await reader.return(undefined);
+        await selected.close();
+      }
+    } finally {
+      await session.close();
+    }
+  });
 });
