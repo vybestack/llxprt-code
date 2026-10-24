@@ -2,7 +2,7 @@
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import {
-  RequestShapeSessionMemory,
+  RequestShapeTracker,
   type TokenCountFn,
 } from '../../tokenUsageRequestShape.js';
 
@@ -88,22 +88,18 @@ export function seedTool(): IContent {
     ],
   };
 }
-export function shapeState(memory: {
-  measurementCount: number;
-  sentCallIdCount: number;
-  get: (key: string) => unknown;
-}) {
-  const keys = [
-    'blocks:tr:prior-call',
-    ...Array.from({ length: 64 }, (_, index) => `row-${index}:2`),
-    'replacement:2',
-    'pending-0:1',
-    'pending-1:1',
-  ];
+export function retainedShapeEntries(memory: object): number {
+  return Object.values(memory).reduce((total: number, value: unknown) => {
+    if (value instanceof Map || value instanceof Set) return total + value.size;
+    if (Array.isArray(value)) return total + value.length;
+    return total;
+  }, 0);
+}
+
+export function shapeState(memory: RequestShapeTracker) {
   return {
-    measurementCount: memory.measurementCount,
-    sentCallIdCount: memory.sentCallIdCount,
-    entries: keys.map((key) => [key, memory.get(key) ?? null]),
+    retainedEntries: retainedShapeEntries(memory),
+    fingerprint: memory.snapshot().fingerprint,
   };
 }
 
@@ -136,7 +132,7 @@ export function arrayShapeOracle(
   mode: ShapeCase,
   tokenizer: string,
 ): ShapeObservation[] {
-  const memory = new RequestShapeSessionMemory(shapeCapacity(mode));
+  const memory = new RequestShapeTracker();
   const { counts, countTokens } = countingTokenizer(tokenizer);
   const observe = (send: number, shape: unknown): ShapeObservation => ({
     tokenizer,

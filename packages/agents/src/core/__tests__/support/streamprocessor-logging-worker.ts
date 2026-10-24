@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { retainedShapeEntries } from './token-usage-source-fixture.js';
 import { createHash } from 'node:crypto';
 import {
   mkdirSync,
@@ -339,9 +340,11 @@ function collectFacts(
           .map((line) => JSON.parse(line))
       : [],
     directory: readdirSync(root),
-    shapeMeasurements: (
-      input.chat?.getTokenUsageLogger() ?? setup.compression.tokenUsageLogger
-    )?.getShapeMemory().measurementCount,
+    shapeMeasurements: retainedShapeEntries(
+      (input.chat?.getTokenUsageLogger() ?? setup.compression.tokenUsageLogger)
+        ?.getShapeMemory()
+        .snapshot() ?? {},
+    ),
   };
 }
 async function run(

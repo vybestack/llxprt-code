@@ -149,7 +149,7 @@ describe('source shape context prerequisite', () => {
       [],
       undefined,
     );
-    expect(logger.getShapeMemory().measurementCount).toBe(0);
+    expect(shapeState(logger.getShapeMemory()).retainedEntries).toBe(0);
     expect(existsSync(file)).toBe(false);
   });
 });

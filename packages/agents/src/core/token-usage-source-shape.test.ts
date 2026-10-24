@@ -3,13 +3,12 @@ import { describe, expect, it } from 'bun:test';
 
 import { inMemoryRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { ProviderRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
-import { RequestShapeSessionMemory } from './tokenUsageRequestShape.js';
+import { RequestShapeTracker } from './tokenUsageRequestShape.js';
 import {
   shapeCases,
   shapeRow,
   shapePending,
   shapeHead,
-  shapeCapacity,
   shapeState,
   seedTool,
   arrayShapeOracle,
@@ -33,7 +32,7 @@ async function snapshot(
   };
 }
 async function parity(mode: ShapeCase, tokenizer: string) {
-  const memory = new RequestShapeSessionMemory(shapeCapacity(mode));
+  const memory = new RequestShapeTracker();
   const observations: unknown[] = [];
   const { counts, countTokens } = countingTokenizer(tokenizer);
   memory.recordRequestShape({

@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { RequestShapeSessionMemory } from './tokenUsageRequestShape.js';
+import { RequestShapeTracker } from './tokenUsageRequestShape.js';
 import { BoundedToolCallNames } from './tokenUsageToolCallNames.js';
 import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import { openNativeRowFixture } from '@vybestack/llxprt-code-core/services/history/__tests__/support/native-row-fixture.js';
@@ -59,7 +59,7 @@ const mixedHistory: IContent[] = [
 ];
 
 async function sourceShape(
-  memory: RequestShapeSessionMemory,
+  memory: RequestShapeTracker,
   history: readonly IContent[],
 ) {
   const rows = await openNativeRowFixture(root(), history, history.length);
@@ -77,8 +77,8 @@ async function sourceShape(
 
 describe('source request shape admits tool and media rows', () => {
   it('produces the array route records, buckets and session state across two sends', async () => {
-    const arrayMemory = new RequestShapeSessionMemory(64);
-    const sourceMemory = new RequestShapeSessionMemory(64);
+    const arrayMemory = new RequestShapeTracker();
+    const sourceMemory = new RequestShapeTracker();
     for (let send = 0; send < 2; send++) {
       const expected = arrayMemory.recordRequestShape({
         requestContents: mixedHistory,
@@ -91,7 +91,7 @@ describe('source request shape admits tool and media rows', () => {
       expect(shapeState(sourceMemory)).toStrictEqual(shapeState(arrayMemory));
     }
     const names = (
-      await sourceShape(new RequestShapeSessionMemory(64), mixedHistory)
+      await sourceShape(new RequestShapeTracker(), mixedHistory)
     ).toolCalls.map((entry) => [entry.callId, entry.toolName]);
     expect(names).toStrictEqual([
       ['a', 'read_file'],
@@ -110,15 +110,15 @@ describe('source request shape admits tool and media rows', () => {
       result('y', '', 'yy'),
       result('x', '', 'xx'),
     ];
-    const expected = new RequestShapeSessionMemory(8).recordRequestShape({
+    const expected = new RequestShapeTracker().recordRequestShape({
       requestContents: history,
       tools: [],
       instructionsText: undefined,
       countTokens: fallbackCount,
     });
-    expect(
-      await sourceShape(new RequestShapeSessionMemory(8), history),
-    ).toStrictEqual(expect.objectContaining({ toolCalls: expected.toolCalls }));
+    expect(await sourceShape(new RequestShapeTracker(), history)).toStrictEqual(
+      expect.objectContaining({ toolCalls: expected.toolCalls }),
+    );
   });
 });
 

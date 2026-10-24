@@ -160,7 +160,7 @@ function assertSourceLogging(facts: Facts, mode: string): void {
   } else {
     expect(facts.chunkRecords).toBe(mode === 'conversation' ? 3 : 0);
   }
-  if (mode === 'shape') expect(facts.shapeMeasurements).toBe(1);
+  if (mode === 'shape') expect(facts.shapeMeasurements).toBe(0);
   expect(facts.liveOriginalRows).toBe(0);
   expect(facts.liveReadRows).toBe(0);
   assertOwners(facts);

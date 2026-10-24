@@ -7,9 +7,10 @@ import { nativeRequestFixture } from './__tests__/support/native-request-fixture
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
-import { RequestShapeSessionMemory } from './tokenUsageRequestShape.js';
+import { RequestShapeTracker } from './tokenUsageRequestShape.js';
 import {
   fallbackCount,
+  retainedShapeEntries,
   sourceTextUnit,
   shapePending,
 } from './__tests__/support/token-usage-source-fixture.js';
@@ -199,7 +200,7 @@ function receipt(
   large: boolean,
   baseline: number,
   after: number,
-  memory: RequestShapeSessionMemory,
+  memory: RequestShapeTracker,
   facts: Census,
   control: WeakRef<object>,
 ) {
@@ -219,7 +220,7 @@ function receipt(
     retainedReaders: facts.retainedReaders.length,
     retainedRows: facts.retainedRows.length,
     retainedSerialized: facts.retainedSerialized.length,
-    measurementCount: memory.measurementCount,
+    measurementCount: retainedShapeEntries(memory),
     samples: facts.samples.map((sample) => ({
       ...sample,
       overhead: sample.bytes - baseline - sample.activeTextBytes,
@@ -237,7 +238,7 @@ async function warmSourcePath(
   const ownership = new RowOwnership();
   const snapshot = await makeSnapshot(large, facts, ownership);
   try {
-    const memory = new RequestShapeSessionMemory(128);
+    const memory = new RequestShapeTracker();
     for (let send = 0; send < 2; send++)
       await memory.recordSourceRequestShape({
         requestRows: snapshot,
@@ -257,7 +258,7 @@ async function measure(
 ) {
   const facts = census(trap);
   const control = new WeakRef(Object.freeze({ control: true }));
-  const memory = new RequestShapeSessionMemory(128);
+  const memory = new RequestShapeTracker();
   await warmSourcePath(large, estimate);
   const baseline = await settled();
   const ownership = new RowOwnership();
@@ -294,7 +295,7 @@ async function measure(
     expect(result.controlLive).toBe(false);
     expect(result.liveOriginals).toBe(0);
     expect(result.liveReadRows).toBe(0);
-    expect(result.measurementCount).toBe(65);
+    expect(result.measurementCount).toBe(0);
     expect(result.delta).toBeLessThan(1_048_576);
     expect(result.liveReaders).toBe(0);
     expect(result.retainedSerialized).toBe(0);
@@ -317,7 +318,7 @@ describe('bounded disk shape release', () => {
   ])(
     'releases readers and row serialization below strict 1 MiB, $tokenizer / large=$large',
     async ({ large, tokenizer, estimate }) => {
-      const warm = new RequestShapeSessionMemory();
+      const warm = new RequestShapeTracker();
       warm.recordRequestShape({
         requestContents: [memoryRow(0, false)],
         tools: [],
@@ -329,7 +330,7 @@ describe('bounded disk shape release', () => {
       // retention rather than that one-time allocation.
       if (large) estimate(memoryRow(63, true).blocks.map(blockText).join(''));
       expect((await measure(large, tokenizer, estimate)).measurementCount).toBe(
-        65,
+        0,
       );
     },
     120000,

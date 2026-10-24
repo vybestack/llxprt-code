@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'bun:test';
 import { nativeRequestFixture } from './__tests__/support/native-request-fixture.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { RequestShapeSessionMemory } from './tokenUsageRequestShape.js';
+import { RequestShapeTracker } from './tokenUsageRequestShape.js';
 import {
   fallbackCount,
   seedTool,
@@ -17,17 +17,17 @@ function failureMessage(failure: string): string {
 }
 describe('source shape transactional session state', () => {
   it.each(['counter', 'abort-row', 'abort-finish', 'disk'])(
-    'preserves cache FIFO, fingerprint and sent ids after %s failure',
+    'preserves sequence and fingerprint after %s failure',
     async (failure) => {
-      const memory = new RequestShapeSessionMemory(8);
+      const memory = new RequestShapeTracker();
       const baseline = memory.recordRequestShape({
         requestContents: [seedTool()],
         tools: [],
         instructionsText: undefined,
         countTokens: fallbackCount,
       });
-      const before = { state: shapeState(memory) };
-      expect(before.state).toMatchObject({ measurementCount: 1 });
+      const before = { state: shapeState(memory), cursor: memory.snapshot() };
+      expect(before.state).toMatchObject({ retainedEntries: 0 });
       const rows = await nativeRequestFixture(
         {
           async *[Symbol.asyncIterator](): AsyncGenerator<
@@ -56,7 +56,11 @@ describe('source shape transactional session state', () => {
       try {
         await expect(
           memory.recordSourceRequestShape({
-            requestRows: rows,
+            requestRows: {
+              count: rows.count,
+              readAt: (index, signal) => rows.readAt(index, signal),
+              openReader: (signal) => rows.openReader(signal),
+            },
             tools: [],
             instructionsText: 'finish',
             countTokens,
@@ -65,6 +69,7 @@ describe('source shape transactional session state', () => {
         ).rejects.toThrow(failureMessage(failure));
         const currentState: unknown = shapeState(memory);
         expect(currentState).toStrictEqual(before.state);
+        expect(memory.snapshot()).toStrictEqual(before.cursor);
         const probe = memory.recordRequestShape({
           requestContents: [seedTool()],
           tools: [],

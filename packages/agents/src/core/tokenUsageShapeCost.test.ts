@@ -18,10 +18,11 @@ import type { HistoryService } from '@vybestack/llxprt-code-core/services/histor
  * pin the behaviour that made it cheap without being flaky under CI load.
  */
 
+import { nativeRequestFixture } from './__tests__/support/native-request-fixture.js';
 import { describe, it, expect } from 'bun:test';
 import {
   computeRequestShape,
-  RequestShapeSessionMemory,
+  RequestShapeTracker,
   FINGERPRINT_PREFIX_CHAR_BUDGET,
 } from './tokenUsageRequestShape.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -111,7 +112,7 @@ function facadeCallback0(): void {
     tools: undefined,
     instructionsText: 'instructions',
     countTokens: tokenizer.count,
-    previouslySentCallIds: new Set<string>(),
+    lastSendSequence: 0n,
   });
 
   // 3 contents + 1 tool result + 1 instructions block = 5.
@@ -131,7 +132,7 @@ function facadeCallback1(): void {
     tools: undefined,
     instructionsText: undefined,
     countTokens: tokenizer.count,
-    previouslySentCallIds: new Set<string>(),
+    lastSendSequence: 0n,
   });
 
   // Content pass + tool-result pass over the same body, and nothing more.
@@ -152,7 +153,7 @@ function facadeCallback2(): void {
       tools: undefined,
       instructionsText: undefined,
       countTokens: (t: string) => t.length,
-      previouslySentCallIds: new Set<string>(),
+      lastSendSequence: 0n,
     }).prefixFingerprint;
 
   expect(shape([...head, identified(textTurn(9999), 'extra')])).toBe(
@@ -168,14 +169,14 @@ function facadeCallback3(): void {
     tools: undefined,
     instructionsText: 'system prompt A',
     countTokens: (t: string) => t.length,
-    previouslySentCallIds: new Set<string>(),
+    lastSendSequence: 0n,
   }).prefixFingerprint;
   const changed = computeRequestShape({
     requestContents: [textTurn(1)],
     tools: undefined,
     instructionsText: 'system prompt B',
     countTokens: (t: string) => t.length,
-    previouslySentCallIds: new Set<string>(),
+    lastSendSequence: 0n,
   }).prefixFingerprint;
 
   expect(changed).not.toBe(base);
@@ -202,35 +203,41 @@ function facadeCallback4(): void {
   expect(retried.metadata?.promptId).toBe('p-1');
 }
 
-function facadeCallback5(): void {
-  // The whole point: a big tool result that rides along for many turns must
-  // not be re-tokenized every send. Earlier this was linear per send and
-  // quadratic per session (935ms per send by turn 20).
-  const memory = new RequestShapeSessionMemory();
+async function facadeCallback5(): Promise<void> {
+  const memory = new RequestShapeTracker();
   const contents: IContent[] = [
     identified(toolTurn('call-1', BIG_BODY), 'content-1'),
   ];
   const tokenizer = new CountingTokenizer();
-
-  for (let send = 0; send < 5; send += 1) {
-    memory.recordRequestShape({
-      // A fresh object each time, exactly as the history pipeline produces.
-      requestContents: contents.map((c) => ({ ...c, blocks: [...c.blocks] })),
-      tools: undefined,
-      instructionsText: undefined,
-      countTokens: tokenizer.count,
-    });
+  const rows = await nativeRequestFixture(
+    {
+      async *[Symbol.asyncIterator]() {
+        yield* contents;
+      },
+    },
+    [],
+    {},
+    { tokenUsageCountTokens: tokenizer.count },
+  );
+  try {
+    for (let send = 0; send < 5; send += 1) {
+      await memory.recordSourceRequestShape({
+        requestRows: rows,
+        tools: undefined,
+        instructionsText: undefined,
+        countTokens: tokenizer.count,
+      });
+    }
+    expect(tokenizer.totalChars).toBeLessThanOrEqual(BIG_BODY.length * 2 + 64);
+  } finally {
+    await rows.close();
   }
-
-  // Send 1 measures it. Sends 2-5 must not tokenize the body again, so the
-  // recorded volume stays at one send's worth rather than five.
-  expect(tokenizer.totalChars).toBeLessThanOrEqual(BIG_BODY.length * 2 + 64);
 }
 
 function facadeCallback6(): void {
   // Caching must not silently drop the bucket: a cache hit has to contribute
   // the same tokens a fresh measurement would.
-  const memory = new RequestShapeSessionMemory();
+  const memory = new RequestShapeTracker();
   const build = (): IContent[] => [
     identified(toolTurn('call-1', BIG_BODY), 'content-1'),
   ];
@@ -255,49 +262,54 @@ async function facadeCallback7(): Promise<void> {
   // buckets cover the same provider-ready contents.
   const history = await createShapeHistory();
 
-  const requestContents = await Array.fromAsync(
-    history.getCuratedForProviderStream([]),
-  );
-  const matchingToolResponse = requestContents
-    .flatMap((content) => content.blocks)
-    .find(
-      (block) => block.type === 'tool_response' && block.callId === 'call-1',
+  try {
+    const requestContents = await Array.fromAsync(
+      history.getCuratedForProviderStream([]),
     );
-  const baselineRequestContents = requestContents.filter(
-    (content) =>
-      !content.blocks.some(
+    const matchingToolResponse = requestContents
+      .flatMap((content) => content.blocks)
+      .find(
         (block) => block.type === 'tool_response' && block.callId === 'call-1',
-      ),
-  );
+      );
+    const baselineRequestContents = requestContents.filter(
+      (content) =>
+        !content.blocks.some(
+          (block) =>
+            block.type === 'tool_response' && block.callId === 'call-1',
+        ),
+    );
 
-  expect(matchingToolResponse).toMatchObject({
-    type: 'tool_response',
-    callId: 'call-1',
-    result: 'FILE BODY',
-  });
-  // Guard the premise: unchanged history is not an injected synthetic turn.
-  const toolTurnIsSynthetic = requestContents.some(
-    (c) => c.speaker === 'tool' && c.metadata?.synthetic === true,
-  );
-  expect(toolTurnIsSynthetic).toBe(false);
-
-  const measure = (contents: IContent[]) =>
-    computeRequestShape({
-      requestContents: contents,
-      tools: undefined,
-      instructionsText: undefined,
-      countTokens: (t: string) => t.length,
-      previouslySentCallIds: new Set<string>(),
+    expect(matchingToolResponse).toMatchObject({
+      type: 'tool_response',
+      callId: 'call-1',
+      result: 'FILE BODY',
     });
-  const shape = measure(requestContents);
-  const baselineShape = measure(baselineRequestContents);
-  const measuredToolResponse = shape.toolCalls.find(
-    (toolCall) => toolCall.callId === 'call-1',
-  );
+    // Guard the premise: unchanged history is not an injected synthetic turn.
+    const toolTurnIsSynthetic = requestContents.some(
+      (c) => c.speaker === 'tool' && c.metadata?.synthetic === true,
+    );
+    expect(toolTurnIsSynthetic).toBe(false);
 
-  expect(measuredToolResponse?.resultTokens).toBeGreaterThan(0);
-  expect(shape.historyTokens).toBeGreaterThan(baselineShape.historyTokens);
-  expect(shape.injectedTokens).toBe(0);
+    const measure = (contents: IContent[]) =>
+      computeRequestShape({
+        requestContents: contents,
+        tools: undefined,
+        instructionsText: undefined,
+        countTokens: (t: string) => t.length,
+        lastSendSequence: 0n,
+      });
+    const shape = measure(requestContents);
+    const baselineShape = measure(baselineRequestContents);
+    const measuredToolResponse = shape.toolCalls.find(
+      (toolCall) => toolCall.callId === 'call-1',
+    );
+
+    expect(measuredToolResponse?.resultTokens).toBeGreaterThan(0);
+    expect(shape.historyTokens).toBeGreaterThan(baselineShape.historyTokens);
+    expect(shape.injectedTokens).toBe(0);
+  } finally {
+    await history.dispose();
+  }
 }
 
 async function createShapeHistory(): Promise<HistoryService> {

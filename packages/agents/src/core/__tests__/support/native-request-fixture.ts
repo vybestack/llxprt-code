@@ -1,7 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { JournalHistoryStore } from '@vybestack/llxprt-code-core/services/history/journalHistoryStore.js';
-import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+import {
+  JournalSession,
+  type JournalSessionOptions,
+} from '@vybestack/llxprt-code-core/services/history/journalSession.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderCuratedStreamOptions } from '@vybestack/llxprt-code-core/services/history/provider-request-options.js';
 import type { ProviderRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
@@ -10,8 +13,11 @@ export async function nativeRequestFixture(
   rows: AsyncIterable<IContent>,
   tail: readonly IContent[] = [],
   options: ProviderCuratedStreamOptions = {},
+  sessionOptions: JournalSessionOptions = {},
 ): Promise<ProviderRequestSnapshot> {
-  const store = new JournalHistoryStore(await JournalSession.createUnlinked());
+  const store = new JournalHistoryStore(
+    await JournalSession.createUnlinked(sessionOptions),
+  );
   try {
     await store.replaceStreamed(rows);
     const snapshot = await store.prepareCurated({
