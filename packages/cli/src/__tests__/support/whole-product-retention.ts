@@ -2,6 +2,18 @@
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core';
 
+async function* observedReader(
+  source: AsyncGenerator<IContent>,
+  observe: (row: IContent, first: boolean) => void,
+): AsyncGenerator<IContent> {
+  let first = true;
+  for await (const row of source) {
+    observe(row, first);
+    first = false;
+    yield row;
+  }
+}
+
 export function observeWholeProductRetention(
   trap: boolean,
   allRows = false,
@@ -37,20 +49,11 @@ export function observeWholeProductRetention(
         warm.push(new WeakRef(row));
       }
     };
-    const observedReader = async function* (
-      source: AsyncGenerator<IContent>,
-    ): AsyncGenerator<IContent> {
-      let first = true;
-      for await (const row of source) {
-        observe(row, first);
-        first = false;
-        yield row;
-      }
-    };
     if (rows !== undefined) {
       const indexedOpen = rows.openReader.bind(rows);
       const read = rows.readAt.bind(rows);
-      rows.openReader = (signal) => observedReader(indexedOpen(signal));
+      rows.openReader = (signal) =>
+        observedReader(indexedOpen(signal), observe);
       rows.readAt = async (index, signal): Promise<IContent> => {
         const row = await read(index, signal);
         observe(row, true);
@@ -70,7 +73,9 @@ export function observeWholeProductRetention(
         released = true;
       },
       openReader: (signal) =>
-        rows === undefined ? observedReader(open(signal)) : open(signal),
+        rows === undefined
+          ? observedReader(open(signal), observe)
+          : open(signal),
     };
   };
   return {
