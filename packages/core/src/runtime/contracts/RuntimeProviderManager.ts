@@ -23,6 +23,7 @@ import type { RuntimeTokenizerFactory } from './RuntimeTokenizerFactory.js';
 import type { RuntimeProvider } from './RuntimeProvider.js';
 import type { RuntimeModel } from './RuntimeModel.js';
 import type { Config } from '../../config/config.js';
+import type { NetworkFetch } from '../../utils/fetch.js';
 import type {
   ProviderRuntimeContext,
   RuntimeSettingsState,
@@ -86,7 +87,7 @@ export interface RuntimeProviderManager {
     settingsService: RuntimeSettingsState,
     config: Config | undefined,
   ): void;
-  fetchNetwork(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
+  readonly fetchNetwork: NetworkFetch;
   bindModelRegistry?(registry: ModelRegistry): void;
   hasActiveProvider(): boolean;
   accumulateSessionTokens(providerName: string, usage: unknown): void;

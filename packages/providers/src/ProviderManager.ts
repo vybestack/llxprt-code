@@ -514,11 +514,11 @@ export class ProviderManager implements IProviderManager {
    */
   private requestFetch: NetworkFetch | undefined;
 
-  readonly fetchNetwork: NetworkFetch = (input, init) => {
+  readonly fetchNetwork: NetworkFetch = (input, init, options) => {
     if (this.requestFetch === undefined) {
       throw new Error('Provider request requires the owner transport');
     }
-    return this.requestFetch(input, init);
+    return this.requestFetch(input, init, options);
   };
 
   private modelRegistry?: ModelRegistry;
