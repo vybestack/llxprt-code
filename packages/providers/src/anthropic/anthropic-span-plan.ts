@@ -95,10 +95,12 @@ export class AnthropicSpanPlan {
       const window = await facts.get(['cache-purge-window', ordinal]);
       if (window === undefined)
         throw new Error('Missing Anthropic purge cache window');
-      await add(
-        this.coordinates.forward(window[0]),
-        this.coordinates.forward(window[1] - 1) + 1,
-      );
+      const start = this.coordinates.forward(window[0]);
+      const end = this.coordinates.forward(window[1] - 1) + 1;
+      if (await this.hasImage(start, end)) {
+        await add(start, end);
+        break;
+      }
     }
     const firstAnchor = await this.firstCacheAnchor(anchors[0]);
     if (firstAnchor !== undefined) {
@@ -118,6 +120,16 @@ export class AnthropicSpanPlan {
       for (let at = row.start; at < row.start + row.count; at++)
         await this.addChangedCacheWindow(at, runs[0], add);
     this.windows.sort((left, right) => left.start - right.start);
+  }
+  private async hasImage(from: number, to: number): Promise<boolean> {
+    for await (const message of this.source.messages(from, to))
+      for await (const piece of this.source.pieces(message, false))
+        if (
+          typeof piece !== 'string' &&
+          piece.some((block) => block.type === 'image')
+        )
+          return true;
+    return false;
   }
   private async addChangedCacheWindow(
     at: number,
