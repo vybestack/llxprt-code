@@ -40,7 +40,8 @@ import type {
   GenerateChatOptions,
   IProvider,
 } from '@vybestack/llxprt-code-providers/IProvider.js';
-import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
+import { createSessionRecorder } from '@vybestack/llxprt-code-core/recording/sessionRecorderFactory.js';
+import type { SessionRecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
 import { collectHistoryFixture } from './__tests__/support/collect-history-test-fixture.js';
 const INPUT_PNG =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=';
@@ -60,7 +61,7 @@ interface TurnMediaFixture {
   readonly store: LocalMediaStore;
   readonly rootDirectory: string;
   readonly providerStarted: Promise<void>;
-  readonly recording: SessionRecordingService | undefined;
+  readonly recording: SessionRecordingPort | undefined;
 }
 
 class ReleaseReportingStore extends LocalMediaStore {
@@ -253,7 +254,7 @@ async function createFixture(
   const { provider, providerStarted } = createFixtureProvider(behavior);
   const recording =
     options.purgeFailure === true
-      ? new SessionRecordingService({
+      ? createSessionRecorder({
           sessionId: `turn-media-${behavior}`,
           projectHash: 'turn-media-project',
           chatsDir: join(directory, 'chats'),
@@ -262,11 +263,6 @@ async function createFixture(
           model: 'turn-media-model',
         })
       : undefined;
-  if (recording !== undefined) {
-    recording.recordSemanticMediaPurgeRows = async () => {
-      throw new Error('semantic purge persistence failed');
-    };
-  }
   const setup = createChatSessionRuntime({ provider });
   if (recording !== undefined) {
     setup.settingsService.set('media.semantic-purge', 'remove');
@@ -625,12 +621,8 @@ function registerMediaCase10(directory: () => string): void {
           'purge-failure',
           {
             transcriptPath: () => recording.getFilePath() ?? undefined,
-            persistSemanticMediaPurge: async (candidate, frontier) => {
-              await recording.recordSemanticMediaPurgeRows(
-                candidate.streamRows(),
-                frontier,
-                { requireLiveFold: true },
-              );
+            persistSemanticMediaPurge: async () => {
+              throw new Error('semantic purge persistence failed');
             },
           },
         ),

@@ -137,7 +137,7 @@ describe('stored native Chat estimates through production preparation', () => {
     });
     const history = new HistoryService({ recording });
     try {
-      await suffixSeeder(recording, history)(rows);
+      await suffixSeeder(history)(rows);
       await consume(history, counter);
     } finally {
       await history.dispose();

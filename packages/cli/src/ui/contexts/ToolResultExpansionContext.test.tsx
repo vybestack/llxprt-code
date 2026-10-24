@@ -1,3 +1,4 @@
+import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -18,7 +19,8 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
-  SessionRecordingService,
+  createSessionRecorder,
+  type SessionRecordingPort,
   type IContent,
 } from '@vybestack/llxprt-code-core';
 import { act } from 'react';
@@ -107,12 +109,12 @@ function TestHarness({
 
 describe('ToolResultExpansionProvider — load on expand, purge on append (#3428)', () => {
   let tempDir: string;
-  let service: SessionRecordingService;
+  let service: SessionRecordingPort;
   let turnStore: ReturnType<typeof createTurnStore>;
 
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), '3428-provider-'));
-    service = new SessionRecordingService({
+    service = createSessionRecorder({
       sessionId: 'test-session-3428-provider',
       projectHash: 'testhash',
       chatsDir: tempDir,
@@ -132,7 +134,7 @@ describe('ToolResultExpansionProvider — load on expand, purge on append (#3428
     const body = `FULL-start\n${'x'.repeat(300 * KIB)}\nFULL-end`;
     const capped = boundResultDisplayForRetention(body);
     expect(capped.wasCapped).toBe(true);
-    service.recordContent(toolResponseContent('call-1', body));
+    await recordRowsForTest(service, [toolResponseContent('call-1', body)]);
     await service.flush();
     const transcriptPath = service.getFilePath() as string;
 
@@ -170,7 +172,7 @@ describe('ToolResultExpansionProvider — load on expand, purge on append (#3428
 
   it('does not fetch while height constraints are enabled', async () => {
     const body = 'small body';
-    service.recordContent(toolResponseContent('call-2', body));
+    await recordRowsForTest(service, [toolResponseContent('call-2', body)]);
     await service.flush();
     const transcriptPath = service.getFilePath() as string;
 
@@ -193,7 +195,7 @@ describe('ToolResultExpansionProvider — load on expand, purge on append (#3428
     const body = 'REEXPAND-start\n' + 'z'.repeat(100 * KIB) + '\nREEXPAND-end';
     const capped = boundResultDisplayForRetention(body);
     expect(capped.wasCapped).toBe(true);
-    service.recordContent(toolResponseContent('call-3', body));
+    await recordRowsForTest(service, [toolResponseContent('call-3', body)]);
     await service.flush();
     const transcriptPath = service.getFilePath() as string;
 
@@ -244,7 +246,9 @@ ${'f'.repeat(100 * KIB)}
 FAILRETRY-end`;
     const capped = boundResultDisplayForRetention(body);
     expect(capped.wasCapped).toBe(true);
-    service.recordContent(toolResponseContent('call-fail-retry', body));
+    await recordRowsForTest(service, [
+      toolResponseContent('call-fail-retry', body),
+    ]);
     await service.flush();
     const realTranscriptPath = service.getFilePath() as string;
 

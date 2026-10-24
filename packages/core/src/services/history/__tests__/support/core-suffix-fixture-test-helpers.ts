@@ -61,7 +61,7 @@ export function createCoreSuffixFixtureGraph(
     ownership,
     mutationOwnership,
     counters,
-    seed: suffixSeeder(recording, service),
+    seed: suffixSeeder(service),
   };
 }
 

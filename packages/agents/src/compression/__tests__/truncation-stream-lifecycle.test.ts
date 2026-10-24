@@ -1,8 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import type { RecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
+import type { SessionRecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
-import { requireJsonlRecorder } from '@vybestack/llxprt-code-core/services/history/recorderBackend.js';
 import {
   rowIndex,
   withSuffixFixture,
@@ -29,6 +28,19 @@ import {
 } from './truncation-stream-helpers.js';
 
 class FaultHistory extends TruncationStreamHistory {
+  constructor(
+    options?: ConstructorParameters<typeof TruncationStreamHistory>[0],
+  ) {
+    super(options);
+    this.setTokenizerFactory({
+      ...exactTokenizer(),
+      getTokenizer: () => ({
+        countTokens: async () => 0,
+        fallbackPolicy: 'deny',
+      }),
+    });
+  }
+
   readonly failure = new Error('injected curated producer failure');
   private readonly source = checkpointSourceFault(this, () => this.failure, 21);
 
@@ -83,7 +95,7 @@ async function longCandidate(size: number): Promise<number> {
 
 async function producerFailure(size: number): Promise<number> {
   let created: FaultHistory | undefined;
-  let recording: RecordingPort | undefined;
+  let recording: SessionRecordingPort | undefined;
   return withCoreSuffixFixture(
     size,
     async (history, reader) => {
@@ -116,10 +128,7 @@ async function producerFailure(size: number): Promise<number> {
     truncationRow,
     undefined,
     (options) => {
-      recording =
-        options.recording === undefined
-          ? undefined
-          : requireJsonlRecorder(options.recording);
+      recording = options.recording;
       created = new FaultHistory(options);
       return created;
     },
@@ -145,8 +154,9 @@ describe('pinned strategy cursor lifecycle', () => {
   it('keeps queued caller membership outside the pinned compression and flushes it afterwards', async () => {
     await withRollbackFixture(async (history, recorder) => {
       const handler = truncationHandler(history);
-      for (let index = 0; index < 512; index++)
-        history.add(truncationRow(index, 64));
+      await history.addBatch(
+        Array.from({ length: 512 }, (_, index) => truncationRow(index, 64)),
+      );
       await history.waitForTokenUpdates();
       await recorder.flush();
       let append = true;

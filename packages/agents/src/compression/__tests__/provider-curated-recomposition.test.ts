@@ -65,7 +65,7 @@ describe('invoked provider-source reopening', () => {
               recording,
               ownership: undefined,
               counters: undefined,
-              seed: suffixSeeder(recording, service),
+              seed: suffixSeeder(service),
             };
           },
           async (history) => {

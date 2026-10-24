@@ -1,5 +1,4 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
 import type { SessionRecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -7,7 +6,6 @@ import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test
 import { createRecorderForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 import { expect, spyOn } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
-import { appendFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { exactTokenizer } from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
@@ -78,7 +76,7 @@ export type PendingFixture = {
     release: ReturnType<typeof pendingGate>,
   ) => Promise<void>;
 };
-type NativeWriter = Awaited<ReturnType<typeof pausedWriter>> | undefined;
+type NativeWriter = Awaited<ReturnType<typeof pausedWriter>>;
 
 function pendingRecording(
   root: string,
@@ -88,22 +86,13 @@ function pendingRecording(
   pause(): void;
   release(): void;
   fail(history: HistoryService, rows: number): void;
-  restore(): void;
 } {
-  const writer = pendingGate();
-  let paused = false;
   let remaining: number | undefined;
   const failure = new Error('injected journal admission failure');
   const recorder = createRecorderForTest({
     sessionId: 'pending-window',
     projectHash: 'pending-window',
     chatsDir: root,
-    io: {
-      appendFile: async (file, data, encoding): Promise<void> => {
-        if (paused) await writer.promise;
-        await appendFile(file, data, encoding);
-      },
-    },
   });
   const admit = (): void => {
     if (remaining === 0) {
@@ -112,34 +101,19 @@ function pendingRecording(
     }
     if (remaining !== undefined) remaining--;
   };
-  const enqueue =
-    recorder instanceof SessionRecordingService
-      ? recorder.enqueue.bind(recorder)
-      : undefined;
-  const admission =
-    recorder instanceof SessionRecordingService && enqueue !== undefined
-      ? spyOn(recorder, 'enqueue').mockImplementation((type, payload) => {
-          admit();
-          return enqueue(type, payload);
-        })
-      : undefined;
   recorder.recordSessionMetadata('pending-window fixture');
   return {
     recorder,
     pause: () => {
-      paused = true;
-      native?.arm();
+      native.arm();
     },
     release: () => {
-      writer.resolve();
-      native?.release();
+      native.release();
     },
     fail: (history, rows) => {
       remaining = rows;
-      if (native !== undefined)
-        history.setTokenizerFactory(exactTokenizer(admit));
+      history.setTokenizerFactory(exactTokenizer(admit));
     },
-    restore: () => admission?.mockRestore(),
   };
 }
 
@@ -149,12 +123,9 @@ function pendingHistory(
   owners: RowOwnership,
   reads: PendingFixture['reads'],
 ): PendingDiskHistory {
-  const opener =
-    native === undefined
-      ? undefined
-      : spyOn(JournalSession, 'createUnlinked').mockResolvedValue(
-          native.session,
-        );
+  const opener = spyOn(JournalSession, 'createUnlinked').mockResolvedValue(
+    native.session,
+  );
   try {
     return new PendingDiskHistory({
       recording: recorder,
@@ -162,7 +133,7 @@ function pendingHistory(
       attachmentCounters: { ...reads.counters, ownership: owners },
     });
   } finally {
-    opener?.mockRestore();
+    opener.mockRestore();
   }
 }
 
@@ -174,27 +145,12 @@ function* pendingSeed(size: number, bytes: number): Generator<IContent> {
 }
 async function seedPendingHistory(
   history: PendingDiskHistory,
-  recorder: SessionRecordingPort,
   size: number,
   bytes: number,
 ): Promise<void> {
-  if (recorder instanceof SessionRecordingService) {
-    for (let index = 0; index < size; index++)
-      await recorder.commit('content', { content: middleoutRow(index, bytes) });
-    await recorder.flush();
-    await history.detachedValues.transform(
-      async (source, sink) => {
-        for await (const row of source.streamRows())
-          if (row.blocks.length > 0) await sink.appendValue(row);
-      },
-      undefined,
-      { publishTokens: true },
-    );
-  } else {
-    await history.detachedValues.replace(pendingSeed(size, bytes), undefined, {
-      publishTokens: true,
-    });
-  }
+  await history.detachedValues.replace(pendingSeed(size, bytes), undefined, {
+    publishTokens: true,
+  });
 }
 
 async function assertPendingCommitted(
@@ -204,7 +160,6 @@ async function assertPendingCommitted(
 ): Promise<void> {
   await history.waitForCommit();
   await recorder.flush();
-  if (native === undefined) return;
   const path = recorder.getFilePath();
   if (path === null) throw new Error('Missing pending-window mirror');
   const published = await compressionValueDigest(
@@ -253,7 +208,7 @@ export async function withPendingFixture<T>(
   const assertCommitted = (): Promise<void> =>
     assertPendingCommitted(history, recorder, native);
   try {
-    await seedPendingHistory(history, recorder, size, bytes);
+    await seedPendingHistory(history, size, bytes);
     await assertCommitted();
     history.setCacheAnchorSeq(1);
     history.setBaseTokenOffset(37);
@@ -282,7 +237,6 @@ export async function withPendingFixture<T>(
     });
   } finally {
     control.release();
-    control.restore();
     await history.dispose();
     await recorder.dispose();
     await media.close();

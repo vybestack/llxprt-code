@@ -37,7 +37,7 @@ function realGraph(root: string): {
     recording,
     ownership,
     counters,
-    seed: suffixSeeder(recording, service),
+    seed: suffixSeeder(service),
   };
 }
 

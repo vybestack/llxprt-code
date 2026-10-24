@@ -2,11 +2,11 @@
 import { spyOn } from 'bun:test';
 import { readdirSync } from 'node:fs';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { HistoryIndexedRows } from '@vybestack/llxprt-code-core/services/history/historyIndexedRows.js';
+import type { HistoryCheckpoint } from '@vybestack/llxprt-code-core/services/history/historyCheckpointRows.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { DetachedHistoryJournal } from '@vybestack/llxprt-code-core/services/history/detachedHistoryJournal.js';
-import type { RecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
-import { JournalResolver } from '@vybestack/llxprt-code-core/recording/journalResolver.js';
+import { JournalDumpSnapshot } from '@vybestack/llxprt-code-core/services/history/journalDumpSnapshot.js';
+import type { SessionRecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
+import { nativeFileRows } from './support/native-file-rows.js';
 import { detachedDigest } from '@vybestack/llxprt-code-core/services/history/detached-rollback-test-helpers.js';
 import { expectedRange } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-test-helpers.js';
 import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
@@ -21,28 +21,30 @@ export function checkpointSourceFault(
   );
   let closed = 0;
   history.detachedValues.withCheckpoint = async <T>(
-    execute: (checkpoint: HistoryIndexedRows) => Promise<T>,
+    execute: (checkpoint: HistoryCheckpoint) => Promise<T>,
     signal?: AbortSignal,
   ): Promise<T> => {
     const restore: Array<() => void> = [];
     try {
       return await withCheckpoint(async (checkpoint) => {
-        if (!(checkpoint instanceof DetachedHistoryJournal))
-          throw new Error('Expected real disk checkpoint');
-        const rows = checkpoint[Symbol.iterator].bind(checkpoint);
-        const close = checkpoint.close.bind(checkpoint);
-        const cursor = spyOn(checkpoint, Symbol.iterator).mockImplementation(
-          function* (): Generator<IContent, void, unknown> {
-            let index = 0;
-            for (const row of { [Symbol.iterator]: rows }) {
-              const error = failure();
-              if (++index === ordinal && error !== undefined) throw error;
-              yield row;
-            }
+        if (
+          !('compressionInput' in checkpoint) ||
+          !(checkpoint.compressionInput?.rows instanceof JournalDumpSnapshot)
+        )
+          throw new Error('Expected real native checkpoint');
+        const source = checkpoint.compressionInput.rows;
+        const read = source.readRow.bind(source);
+        const close = source.close.bind(source);
+        let visited = 0;
+        const cursor = spyOn(source, 'readRow').mockImplementation(
+          async (position) => {
+            const error = failure();
+            if (++visited === ordinal && error !== undefined) throw error;
+            return read(position);
           },
         );
-        const lifetime = spyOn(checkpoint, 'close').mockImplementation(() => {
-          close();
+        const lifetime = spyOn(source, 'close').mockImplementation(async () => {
+          await close();
           closed++;
         });
         restore.push(
@@ -101,7 +103,7 @@ type Digest = Awaited<ReturnType<typeof detachedDigest>>;
 
 export async function checkpointState(
   history: HistoryService,
-  recording: RecordingPort | undefined,
+  recording: SessionRecordingPort | undefined,
 ): Promise<{
   live: Digest;
   durable: Digest;
@@ -112,22 +114,14 @@ export async function checkpointState(
 }> {
   const path = recording?.getFilePath();
   if (path === undefined || path === null) throw new Error('Missing journal');
-  const resolver = await JournalResolver.open(path);
-  try {
-    const rows = async function* (): AsyncGenerator<IContent, void, unknown> {
-      for await (const entry of resolver.resolve()) yield entry.content;
-    };
-    return {
-      live: await detachedDigest(history.streamRawHistory()),
-      durable: await detachedDigest(rows()),
-      tokens: history.getTotalTokens(),
-      base: history.getBaseTokenOffset(),
-      anchor: history.getCacheAnchorSeq(),
-      range: history.getContextRange(),
-    };
-  } finally {
-    await resolver.close();
-  }
+  return {
+    live: await detachedDigest(history.streamRawHistory()),
+    durable: await detachedDigest(nativeFileRows(path)),
+    tokens: history.getTotalTokens(),
+    base: history.getBaseTokenOffset(),
+    anchor: history.getCacheAnchorSeq(),
+    range: history.getContextRange(),
+  };
 }
 
 export async function expectedCheckpointState(

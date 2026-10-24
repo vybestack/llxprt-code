@@ -155,7 +155,7 @@ export async function withNativeFallbackFixture(
     await history.waitForCommit();
     await action({
       history,
-      seed: suffixSeeder(recording, history),
+      seed: suffixSeeder(history),
       owners,
       writerPaused: writer.paused,
       pauseWriter: () => writer.arm(),

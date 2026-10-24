@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createHash } from 'node:crypto';
-import { JournalResolver } from '@vybestack/llxprt-code-core/recording/journalResolver.js';
-import type { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
+import type { SessionRecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
+import { nativeFileRows } from './support/native-file-rows.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import {
@@ -71,17 +71,9 @@ export async function compressionValueDigest(
 }
 
 export async function compressionDurableValueDigest(
-  recorder: SessionRecordingService,
+  recorder: SessionRecordingPort,
 ): Promise<Awaited<ReturnType<typeof compressionValueDigest>>> {
   const path = recorder.getFilePath();
   if (path === null) throw new Error('Missing durable journal');
-  const resolver = await JournalResolver.open(path);
-  try {
-    async function* rows(): AsyncGenerator<IContent, void, unknown> {
-      for await (const entry of resolver.resolve()) yield entry.content;
-    }
-    return await compressionValueDigest(rows());
-  } finally {
-    await resolver.close();
-  }
+  return compressionValueDigest(nativeFileRows(path));
 }

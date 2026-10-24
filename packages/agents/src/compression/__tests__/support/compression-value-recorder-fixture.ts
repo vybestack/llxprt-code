@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { expect, spyOn } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
-import { appendFile, open } from 'node:fs/promises';
+import { open } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { exactTokenizer } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-test-helpers.js';
@@ -9,7 +9,6 @@ import { JournalSession } from '@vybestack/llxprt-code-core/services/history/jou
 import type { HistoryServiceJournalOptions } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { SessionRecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
-import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { createRowCounters } from '@vybestack/llxprt-code-core/recording/journalCounters.js';
 import { createRecorderForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
@@ -111,14 +110,13 @@ async function nativeWriter(
 
 function recordedHistory(
   recorder: SessionRecordingPort,
-  session: JournalSession | undefined,
+  session: JournalSession,
   owners: RowOwnership,
   create: CreateHistory,
 ): ValueCompressionHistory {
-  const opener =
-    session === undefined
-      ? undefined
-      : spyOn(JournalSession, 'createUnlinked').mockResolvedValue(session);
+  const opener = spyOn(JournalSession, 'createUnlinked').mockResolvedValue(
+    session,
+  );
   try {
     return create({
       recording: recorder,
@@ -129,7 +127,7 @@ function recordedHistory(
       },
     });
   } finally {
-    opener?.mockRestore();
+    opener.mockRestore();
   }
 }
 
@@ -154,11 +152,7 @@ async function durableValue(
 ): ReturnType<typeof compressionValueDigest> {
   await history.waitForCommit();
   await recorder.flush();
-  if (recorder instanceof SessionRecordingService)
-    return compressionDurableValueDigest(recorder);
-  const path = recorder.getFilePath();
-  if (path === null) throw new Error('Missing native value mirror');
-  const committed = await compressionValueDigest(nativeFileRows(path));
+  const committed = await compressionDurableValueDigest(recorder);
   expect(
     await compressionValueDigest(nativeFileRows(join(root, 'primary.llxj'))),
   ).toStrictEqual(committed);
@@ -179,34 +173,11 @@ export async function withCompressionValueRecorder<T>(
     sessionId: 'compression-value',
     projectHash: 'compression-value',
     chatsDir: root,
-    io: {
-      appendFile: async (file, data, encoding): Promise<void> => {
-        if (String(data).includes('"type":"content"')) await writer.wait();
-        await appendFile(file, data, encoding);
-      },
-    },
   });
-  const session =
-    recorder instanceof SessionRecordingService
-      ? undefined
-      : await nativeWriter(root, writer.wait);
+  const session = await nativeWriter(root, writer.wait);
   const history = recordedHistory(recorder, session, owners, createHistory);
-  const enqueue =
-    recorder instanceof SessionRecordingService
-      ? recorder.enqueue.bind(recorder)
-      : undefined;
-  const admission =
-    recorder instanceof SessionRecordingService && enqueue !== undefined
-      ? spyOn(recorder, 'enqueue').mockImplementation((type, payload) => {
-          writer.admit();
-          return enqueue(type, payload);
-        })
-      : undefined;
   try {
-    await suffixSeeder(
-      recorder,
-      history,
-    )(
+    await suffixSeeder(history)(
       (function* () {
         for (let index = 0; index < size; index++) yield makeRow(index);
       })(),
@@ -222,14 +193,12 @@ export async function withCompressionValueRecorder<T>(
       release: writer.release,
       failAdmissionAfter: (successes) => {
         writer.failAfter(successes);
-        if (!(recorder instanceof SessionRecordingService))
-          failNativeAdmission(history, writer.admit);
+        failNativeAdmission(history, writer.admit);
       },
       durable: () => durableValue(root, history, recorder),
     });
   } finally {
     writer.release();
-    admission?.mockRestore();
     await history.dispose();
     await recorder.dispose();
     rmSync(root, { recursive: true, force: true });

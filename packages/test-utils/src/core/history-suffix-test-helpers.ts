@@ -5,8 +5,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRowCounters } from '@vybestack/llxprt-code-core/recording/journalCounters.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
-import type { SessionRecordingPort } from '@vybestack/llxprt-code-core/recording/recordingPort.js';
-import { isJsonlRecorder } from '@vybestack/llxprt-code-core/services/history/recorderBackend.js';
 import { createRecorderForTest } from './recorder-for-test.js';
 import {
   HistoryService,
@@ -68,49 +66,30 @@ function writeHistoricalRow(service: object, row: IContent): void {
   journal.apply({ kind: 'content', content: row });
 }
 
-/**
- * How a fixture's rows reach its history, by the kind of recorder it was given.
- * The old backend reads a history out of the recorder's file, so the rows are
- * committed to the recorder before the first read. The journal backend writes
- * the recorder as a mirror of the history, so the rows are added to the
- * history and the recorder follows. Every journal operation is its own durable
- * commit, so runs of ordinary rows go in as batches (one commit each, and no
- * more than a batch in memory). Historical zero-block rows bypass admission
- * through the real store, just as legacy fixtures write the recorder directly.
- * Both `add` and `addBatch` reject new zero-block turns.
- */
-export function suffixSeeder(
-  recording: SessionRecordingPort,
-  service: {
-    add(row: IContent): void;
-    addBatch(rows: readonly IContent[]): Promise<void>;
-    waitForCommit(): Promise<void>;
-  },
-): (rows: Iterable<IContent>) => Promise<void> {
-  if (!isJsonlRecorder(recording)) {
-    return async (rows) => {
-      let run: IContent[] = [];
-      const flush = async (): Promise<void> => {
-        if (run.length === 0) return;
-        const batch = run;
-        run = [];
-        await service.addBatch(batch);
-      };
-      for (const row of rows) {
-        if (row.blocks.length === 0) {
-          await flush();
-          writeHistoricalRow(service, row);
-          continue;
-        }
-        run.push(row);
-        if (run.length === SEED_BATCH_ROWS) await flush();
-      }
-      await flush();
-      await service.waitForCommit();
-    };
-  }
+export function suffixSeeder(service: {
+  add(row: IContent): void;
+  addBatch(rows: readonly IContent[]): Promise<void>;
+  waitForCommit(): Promise<void>;
+}): (rows: Iterable<IContent>) => Promise<void> {
   return async (rows) => {
-    for (const row of rows) await recording.commit('content', { content: row });
+    let run: IContent[] = [];
+    const flush = async (): Promise<void> => {
+      if (run.length === 0) return;
+      const batch = run;
+      run = [];
+      await service.addBatch(batch);
+    };
+    for (const row of rows) {
+      if (row.blocks.length === 0) {
+        await flush();
+        writeHistoricalRow(service, row);
+        continue;
+      }
+      run.push(row);
+      if (run.length === SEED_BATCH_ROWS) await flush();
+    }
+    await flush();
+    await service.waitForCommit();
   };
 }
 
@@ -186,7 +165,7 @@ export async function withSuffixFixture<T>(
         recording,
         ownership,
         counters,
-        seed: suffixSeeder(recording, service),
+        seed: suffixSeeder(service),
       };
     },
     action,

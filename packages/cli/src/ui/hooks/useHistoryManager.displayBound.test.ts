@@ -16,17 +16,24 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import { renderHook } from '../../__tests__/render.js';
 import { act } from 'react';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { SessionRecordingService } from '@vybestack/llxprt-code-core';
+import {
+  createSessionRecorder,
+  type SessionRecordingPort,
+} from '@vybestack/llxprt-code-core';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
+import {
+  collectJournalFileRowsForAssertions,
+  collectRowsForAssertions,
+} from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
+import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 import { useHistory } from './useHistoryManager.js';
 import { createTurnStore } from '../stores/turn/turnStore.js';
 
 const created: string[] = [];
-const services: SessionRecordingService[] = [];
+const services: SessionRecordingPort[] = [];
 
 const LARGE_TEXT = 'a very long assistant response. '.repeat(400_000 / 32);
 
@@ -81,7 +88,7 @@ describe('UI history display bound preserves content elsewhere', () => {
   it('writes the full text to the session transcript', async () => {
     const chatsDir = mkdtempSync(path.join(tmpdir(), 'llxprt-display-bound-'));
     created.push(chatsDir);
-    const recording = new SessionRecordingService({
+    const recording = createSessionRecorder({
       sessionId: 'display-bound',
       projectHash: 'project',
       chatsDir,
@@ -92,25 +99,23 @@ describe('UI history display bound preserves content elsewhere', () => {
     });
     services.push(recording);
 
-    recording.recordContent({
-      speaker: 'ai',
-      blocks: [{ type: 'text', text: LARGE_TEXT }],
-    });
+    await recordRowsForTest(recording, [
+      {
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: LARGE_TEXT }],
+      },
+    ]);
     await recording.flush();
 
-    const filePath = recording.getFilePath() as string;
-    const records = readFileSync(filePath, 'utf-8')
-      .split('\n')
-      .filter((line) => line.length > 0)
-      .map((line) => JSON.parse(line) as { type: string; payload: unknown });
-    const contentTexts = records
-      .filter((record) => record.type === 'content')
-      .map(
-        (record) =>
-          (record.payload as { content: { blocks: Array<{ text: string }> } })
-            .content.blocks[0].text,
-      );
-
-    expect(contentTexts).toStrictEqual([LARGE_TEXT]);
+    const filePath = recording.getFilePath();
+    if (filePath === null) throw new Error('Missing native transcript');
+    await collectJournalFileRowsForAssertions(filePath, (rows) => {
+      const contentTexts = rows.map((row) => {
+        const block = row.blocks[0];
+        if (block.type !== 'text') throw new Error('Expected recorded text');
+        return block.text;
+      });
+      expect(contentTexts).toStrictEqual([LARGE_TEXT]);
+    });
   });
 });

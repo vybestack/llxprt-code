@@ -13,7 +13,6 @@ import {
 } from './support/fallback-recording-fault.js';
 import { FallbackPublicationOwner } from './support/fallback-publication-owner.js';
 import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
-import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
 import {
   createRowCounters,
   type RowCounters,
@@ -91,7 +90,7 @@ export async function withFallbackFixture(
     model: 'test',
   });
   recorder.recordSessionMetadata('provider fallback fixture');
-  const fault = await fallbackRecordingFault(root, recorder);
+  const fault = await fallbackRecordingFault(root);
   const reads = createRowCounters();
   const owners = new RowOwnership();
   const history = fault.attach(
@@ -135,9 +134,7 @@ export async function withFallbackFixture(
       owners,
       before,
       failCompensation: async () => {
-        if (recorder instanceof SessionRecordingService)
-          fault.failAdmissionAfter(0);
-        else owner.rejectNext(fault.failure);
+        owner.rejectNext(fault.failure);
       },
       pausePublication: async (ready, release) => {
         owner.rejectNext(new Error('paused provider publication rejected'), {
@@ -149,7 +146,6 @@ export async function withFallbackFixture(
     });
     await assertFallbackCommitted(history, recorder, root);
   } finally {
-    fault.restore();
     await history.dispose();
     await recorder.dispose();
     await media.close();

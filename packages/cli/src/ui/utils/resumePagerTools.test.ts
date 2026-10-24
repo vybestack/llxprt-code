@@ -1,16 +1,17 @@
+import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { SessionRecordingService } from '@vybestack/llxprt-code-core';
+import { createSessionRecorder } from '@vybestack/llxprt-code-core';
 import { createScrollbackPagerStore } from '../stores/turn/scrollbackPager.js';
 import { ToolCallStatus } from '../types.js';
 
 describe('resume cursor tool projection', () => {
   it('displays the paired response when a tool group is paged from the journal', async () => {
     const root = await mkdtemp(join(tmpdir(), 'resume-pager-tools-'));
-    const recording = new SessionRecordingService({
+    const recording = createSessionRecorder({
       chatsDir: root,
       sessionId: 'tools',
       projectHash: 'project',
@@ -19,28 +20,32 @@ describe('resume cursor tool projection', () => {
       workspaceDirs: [],
     });
     try {
-      recording.recordContent({
-        speaker: 'ai',
-        blocks: [
-          {
-            type: 'tool_call',
-            id: 'read-1',
-            name: 'read_file',
-            parameters: { path: 'example.ts' },
-          },
-        ],
-      });
-      recording.recordContent({
-        speaker: 'tool',
-        blocks: [
-          {
-            type: 'tool_response',
-            callId: 'read-1',
-            toolName: 'read_file',
-            result: 'file body',
-          },
-        ],
-      });
+      await recordRowsForTest(recording, [
+        {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'read-1',
+              name: 'read_file',
+              parameters: { path: 'example.ts' },
+            },
+          ],
+        },
+      ]);
+      await recordRowsForTest(recording, [
+        {
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: 'read-1',
+              toolName: 'read_file',
+              result: 'file body',
+            },
+          ],
+        },
+      ]);
       await recording.flush();
       const filePath = recording.getFilePath();
       if (filePath === null) throw new Error('Missing test journal');

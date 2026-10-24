@@ -1,3 +1,4 @@
+import { recordRowsForTest } from '@vybestack/llxprt-code-test-utils/core/recorder-for-test.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -8,7 +9,7 @@
  * Render behavior for capped tool results (issue #3428 section D): the capped
  * hint line, transcript-backed expansion when height constraints lift
  * (ctrl-s), and the capped preview returning after a scroll-forward purge.
- * Bodies come from the real SessionRecordingService on disk; assertions are
+ * Bodies come from the real journal recorder on disk; assertions are
  * on rendered frames only.
  */
 
@@ -17,7 +18,8 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
-  SessionRecordingService,
+  createSessionRecorder,
+  type SessionRecordingPort,
   type IContent,
 } from '@vybestack/llxprt-code-core';
 import { act } from 'react';
@@ -93,11 +95,11 @@ function renderCappedToolMessage(cappedText: string, originalLength: number) {
 
 describe('<ToolMessage /> capped-result expansion (issue #3428)', () => {
   let tempDir: string;
-  let service: SessionRecordingService;
+  let service: SessionRecordingPort;
 
   beforeEach(async () => {
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), '3428-render-'));
-    service = new SessionRecordingService({
+    service = createSessionRecorder({
       sessionId: 'test-session-3428-render',
       projectHash: 'testhash',
       chatsDir: tempDir,
@@ -183,7 +185,9 @@ describe('<ToolMessage /> capped-result expansion (issue #3428)', () => {
   }
 
   it('loads the full body from the transcript when constraints lift (ctrl-s)', async () => {
-    service.recordContent(toolResponseContent('call-capped', FULL_BODY));
+    await recordRowsForTest(service, [
+      toolResponseContent('call-capped', FULL_BODY),
+    ]);
     await service.flush();
     const transcriptPath = service.getFilePath() as string;
     const capped = boundResultDisplayForRetention(FULL_BODY);
@@ -207,7 +211,9 @@ describe('<ToolMessage /> capped-result expansion (issue #3428)', () => {
   });
 
   it('returns to the capped preview after a scroll-forward append purges the expansion', async () => {
-    service.recordContent(toolResponseContent('call-capped', FULL_BODY));
+    await recordRowsForTest(service, [
+      toolResponseContent('call-capped', FULL_BODY),
+    ]);
     await service.flush();
     const transcriptPath = service.getFilePath() as string;
     const capped = boundResultDisplayForRetention(FULL_BODY);

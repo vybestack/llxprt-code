@@ -507,6 +507,12 @@ function registerSearch5(): void {
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
+        expect(result.current.sessions).toHaveLength(3);
+        expect(
+          result.current.sessions.every(
+            (session) => session.previewState === 'loaded',
+          ),
+        ).toBe(true);
       });
 
       for (const char of 'targetprovider') {
