@@ -107,64 +107,6 @@ export async function bindCreatedSessionClient(
   return client;
 }
 
-export async function createOwnedSessionRoots(
-  config: Config,
-  settings: SettingsService,
-  settingsOwner: SessionSettingsOwner,
-  providerManager: RuntimeProviderManager,
-  oauthManager: OAuthManager,
-  contentGeneratorFactory: RuntimeContentGeneratorFactory<ContentGenerator>,
-  tokenizerFactory: RuntimeTokenizerFactory,
-  providerFileLifecycle: ProviderFileLifecycle,
-  media: SessionMediaOwner,
-  factory: AgentClientFactory | undefined,
-  options: McpAssemblyOptions,
-  policy: RuntimePolicyOwner,
-  registration: Parameters<SessionClientOwner['bindMcpRuntime']>[1],
-  forceConfirmations: boolean,
-  imageOperation: AgentConfig['imageOperation'],
-): Promise<readonly [McpRuntimeOwner, SessionClientOwner]> {
-  const mcp = await assembleOwnedMcpRuntime(
-    config,
-    policy.session.messageBus,
-    options,
-    policy,
-    settingsOwner,
-  );
-  try {
-    return [
-      mcp,
-      await bindCreatedSessionClient(
-        config,
-        settings,
-        settingsOwner,
-        providerManager,
-        oauthManager,
-        contentGeneratorFactory,
-        tokenizerFactory,
-        providerFileLifecycle,
-        media,
-        factory,
-        mcp,
-        registration,
-        forceConfirmations,
-        imageOperation,
-        undefined,
-      ),
-    ];
-  } catch (error) {
-    try {
-      await mcp.dispose();
-    } catch (cleanupError) {
-      throw new AggregateError(
-        [error, cleanupError],
-        'Session root creation failed',
-      );
-    }
-    throw error;
-  }
-}
-
 export function registerProvidersOntoManager(
   isolatedManager: RuntimeProviderManager,
   settingsService: RuntimeSettingsState,

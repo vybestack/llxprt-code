@@ -126,71 +126,6 @@ import {
 } from './policyComposition.js';
 import { prepareImageConstruction } from './session-image-assembly.js';
 
-/**
- * Extra teardown context for {@link cleanupFailedRuntimeBootstrap} beyond the
- * isolated runtime handle.
- */
-export interface FailedBootstrapTeardown {
-  /**
-   * The fully built Agent facade, when the failure happened AFTER finalize
-   * (e.g. session-start). Its idempotent dispose() is the complete teardown —
-   * isolated handle, agent-owned Config, hooks — and replaces piecemeal
-   * cleanup.
-   */
-  readonly facade?: Agent;
-  /**
-   * The agent-owned Config to dispose when no facade exists yet. Disposed
-   * AFTER the isolated handle (children before parents): initialize() started
-   * MCP discovery, the extension loader, LSP and the AgentClient on it, and
-   * only Config.dispose() releases those — except the LSP service, which
-   * Config.dispose() does NOT stop and which cleanupFailedRuntimeBootstrap
-   * shuts down explicitly after the dispose. Caller-owned Configs (fromConfig
-   * adopts one) are never passed here.
-   */
-  readonly ownedConfig?: Config;
-}
-
-/**
- * Cleans up a failed agent bootstrap and surfaces the ORIGINAL error. When
- * cleanup also fails, every error surfaces through an AggregateError so
- * neither is swallowed.
- */
-export async function cleanupFailedRuntimeBootstrap(
-  closeRuntime: () => void | Promise<void>,
-  primaryError: unknown,
-  source: string,
-  teardown: FailedBootstrapTeardown = {},
-): Promise<never> {
-  const cleanupErrors: unknown[] = [];
-  if (teardown.facade !== undefined) {
-    try {
-      await teardown.facade.dispose();
-    } catch (cleanupError) {
-      cleanupErrors.push(cleanupError);
-    }
-  } else {
-    try {
-      await closeRuntime();
-    } catch (cleanupError) {
-      cleanupErrors.push(cleanupError);
-    }
-    if (teardown.ownedConfig !== undefined) {
-      try {
-        await teardown.ownedConfig.dispose();
-      } catch (cleanupError) {
-        cleanupErrors.push(cleanupError);
-      }
-    }
-  }
-  if (cleanupErrors.length > 0) {
-    throw new AggregateError(
-      [primaryError, ...cleanupErrors],
-      `${source} bootstrap failed and isolated runtime cleanup also failed`,
-    );
-  }
-  throw primaryError;
-}
-
 export async function disposeIsolatedMediaRuntime(
   closeRuntime: () => void | Promise<void>,
   closeConfig: () => Promise<void>,
@@ -206,20 +141,6 @@ export async function disposeIsolatedMediaRuntime(
   if (failures.length === 1) throw failures[0];
   if (failures.length > 1)
     throw new AggregateError(failures, 'Isolated media runtime cleanup failed');
-}
-
-export function closeIsolatedSessionRuntime(
-  closeRuntime: () => void | Promise<void>,
-  closeConfig: () => Promise<void>,
-  closeMedia: () => Promise<void>,
-  closeClient: () => Promise<void>,
-): Promise<void> {
-  return disposeIsolatedMediaRuntime(
-    closeRuntime,
-    closeConfig,
-    closeMedia,
-    closeClient,
-  );
 }
 
 export class PreferredAgentAssembly extends ForegroundAgentAssembly {

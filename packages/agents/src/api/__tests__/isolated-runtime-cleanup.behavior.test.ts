@@ -6,11 +6,7 @@
 
 import { describe, expect, it } from 'bun:test';
 import { deferred } from './helpers/shell-owner-gate.js';
-import {
-  cleanupFailedRuntimeBootstrap,
-  closeIsolatedSessionRuntime,
-  disposeIsolatedMediaRuntime,
-} from '../agentRuntimeAssembly.js';
+import { disposeIsolatedMediaRuntime } from '../agentRuntimeAssembly.js';
 
 describe('isolated runtime cleanup with explicit close operations', () => {
   it('joins client cleanup before runtime/config cleanup and media cleanup last', async () => {
@@ -21,7 +17,7 @@ describe('isolated runtime cleanup with explicit close operations', () => {
     let runtimeClosed = false;
     let configClosed = false;
     let mediaClosed = false;
-    const closing = closeIsolatedSessionRuntime(
+    const closing = disposeIsolatedMediaRuntime(
       async () => {
         expect(clientClosed).toBe(true);
         await runtime.promise;
@@ -90,37 +86,5 @@ describe('isolated runtime cleanup with explicit close operations', () => {
     );
     await expect(closing).rejects.toBe(failure);
     expect(remainingClosed).toBe(2);
-  });
-
-  it('surfaces the primary bootstrap failure after joining the runtime close', async () => {
-    const primary = new Error('bootstrap failed');
-    const runtime = deferred<void>();
-    let closed = false;
-    const failing = cleanupFailedRuntimeBootstrap(
-      async () => {
-        await runtime.promise;
-        closed = true;
-      },
-      primary,
-      'explicit bootstrap',
-    );
-    runtime.resolve();
-    await expect(failing).rejects.toBe(primary);
-    expect(closed).toBe(true);
-  });
-
-  it('joins bootstrap and runtime-close failures without losing either', async () => {
-    const primary = new Error('bootstrap failed');
-    const cleanup = new Error('close failed');
-    const failure = await cleanupFailedRuntimeBootstrap(
-      async () => {
-        throw cleanup;
-      },
-      primary,
-      'explicit bootstrap',
-    ).catch((error: unknown) => error);
-    expect(failure).toBeInstanceOf(AggregateError);
-    if (!(failure instanceof AggregateError)) throw failure;
-    expect(failure.errors).toStrictEqual([primary, cleanup]);
   });
 });
