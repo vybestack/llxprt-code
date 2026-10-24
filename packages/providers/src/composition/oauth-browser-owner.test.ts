@@ -32,6 +32,7 @@ import { NodeFileSystem } from './IFileSystem.js';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { BrowserLaunchOptions } from '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js';
 import type { LocalOAuthCallbackOptions } from '../auth/local-oauth-callback.js';
@@ -59,6 +60,8 @@ type Construction =
   | 'adopted'
   | 'adopted-live';
 const originalFetch = globalThis.fetch;
+const stubbedOwnerFetch: NetworkFetch = (input, init) =>
+  globalThis.fetch(input, init);
 describe('OAuth owner reads before registration', () => {
   const credentials = useOwnedCredentials();
   const retiring: Array<() => void | Promise<void>> = [];
@@ -210,6 +213,7 @@ describe('OAuth owner reads before registration', () => {
     ).acquireManager(undefined, owner, files, credentials().authority, release);
     if (!(manager instanceof ProviderManager))
       throw new Error('Expected concrete isolated manager');
+    manager.bindNetworkFetch(stubbedOwnerFetch);
     return acquirePreferredOAuth(
       undefined,
       policy.session.messageBus,
@@ -241,6 +245,9 @@ describe('OAuth owner reads before registration', () => {
       settingsB,
       configB.getSessionId(),
     ).acquireManager(undefined, owner, files, credentials().authority, release);
+    if (!(manager instanceof ProviderManager))
+      throw new Error('Expected concrete adopted manager');
+    manager.bindNetworkFetch(stubbedOwnerFetch);
     new AdoptedProviderFixture(
       configB,
       settingsB,
