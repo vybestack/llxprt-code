@@ -15,6 +15,7 @@ import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtim
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { streamCallOptions } from './streamCallOptions.js';
+import { journalSendFixture } from './support/journal-send-fixture.js';
 import type {
   IContent,
   MediaReferenceBlock,
@@ -158,10 +159,13 @@ function callOptions(
   contents: IContent[],
   resolver: RequestMediaResolver,
   budget: number,
+  store?: LocalMediaStore,
   signal?: AbortSignal,
 ): {
   provider: IProvider;
   options: ReturnType<typeof streamCallOptions>;
+  contents: IContent[];
+  store?: LocalMediaStore;
 } {
   const settings = new SettingsService();
   settings.setProviderSetting(provider.name, 'model', providerCase.model);
@@ -188,6 +192,8 @@ function callOptions(
     ...(signal === undefined ? {} : { signal }),
   });
   return {
+    contents,
+    store,
     provider: bindProviderMedia(provider, resolver, budget),
     options: streamCallOptions({
       providerName: provider.name,
@@ -209,10 +215,26 @@ async function drain(
   _provider: IProvider,
   prepared: ReturnType<typeof callOptions>,
 ): Promise<void> {
-  for await (const _content of prepared.provider.generateChatCompletion(
-    prepared.options,
-  )) {
-    // Drain the real provider parser.
+  const fixture =
+    prepared.store === undefined
+      ? undefined
+      : await journalSendFixture(prepared.contents, [], {
+          mediaStore: prepared.store,
+        });
+  try {
+    for await (const _content of prepared.provider.generateChatCompletion({
+      ...prepared.options,
+      ...(fixture === undefined
+        ? {}
+        : {
+            requestRows: fixture.selection,
+            contentCount: fixture.selection.count,
+          }),
+    })) {
+      // Drain the real provider parser.
+    }
+  } finally {
+    await fixture?.close();
   }
 }
 
@@ -283,6 +305,7 @@ function registerBehavior1(
           history([first, second]),
           resolver,
           first.normalizedBase64Length + second.normalizedBase64Length,
+          store,
         ),
       );
 
@@ -387,6 +410,7 @@ function registerBehavior3(tempDirectory: () => string): void {
           history([reference]),
           resolver,
           reference.normalizedBase64Length,
+          store,
           controller.signal,
         ),
       );
