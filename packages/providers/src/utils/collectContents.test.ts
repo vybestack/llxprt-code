@@ -15,7 +15,13 @@
 
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { collectContents, isAsyncIterableContents } from './collectContents.js';
+import {
+  collectContents,
+  isAsyncIterableContents,
+  replayableContents,
+} from './collectContents.js';
+import { acquireRequestRows } from './requestRowsLease.js';
+import { providerRowsOf } from './providerRows.js';
 
 function textContent(text: string): IContent {
   return { speaker: 'human', blocks: [{ type: 'text', text }] };
@@ -59,5 +65,24 @@ describe('isAsyncIterableContents', () => {
     const options = { contents: [textContent('x')] };
     expect(isAsyncIterableContents(options)).toBe(false);
     expect(isAsyncIterableContents([textContent('x')])).toBe(false);
+  });
+});
+
+describe('replayable caller-owned contents', () => {
+  it('admits repeatable rows without copying or changing caller values', async () => {
+    const input = [textContent('one'), textContent('two')];
+    const source = replayableContents(input);
+    const scope = acquireRequestRows({ contents: source });
+    try {
+      const rows = await providerRowsOf(scope.options);
+      expect(rows.callerOwned).toBe(true);
+      expect(rows.count).toBe(2);
+      expect(rows.readAt(0)).toBe(input[0]);
+      expect(rows.readAt(1)).toBe(input[1]);
+      expect(await collectContents(source)).toStrictEqual(input);
+      expect(await collectContents(source)).toStrictEqual(input);
+    } finally {
+      await scope.close();
+    }
   });
 });

@@ -114,6 +114,22 @@ describe('providerRowsOf with a request selection', () => {
 });
 
 describe('providerRowsOf with an admitted caller-owned source', () => {
+  it('admits a bare caller array without copying rows or adding metadata', async () => {
+    const input = rowsOf(2);
+    const scope = acquireRequestRows({ contents: input });
+    try {
+      const rows = await providerRowsOf(scope.options);
+      expect(rows.callerOwned).toBe(true);
+      expect(rows.count).toBe(input.length);
+      expect(rows.readAt(0)).toBe(input[0]);
+      expect(rows.readAt(1)).toBe(input[1]);
+      expect(await read(rows)).toStrictEqual(['row 0', 'row 1']);
+      expect(input[0].metadata).toBeUndefined();
+    } finally {
+      await scope.close();
+    }
+  });
+
   it('serves repeatable passes and random access without copying caller rows', async () => {
     const input = rowsOf(40);
     const scope = acquireRequestRows({

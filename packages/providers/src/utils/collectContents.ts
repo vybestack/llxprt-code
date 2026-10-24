@@ -17,6 +17,7 @@
  */
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 
 /**
  * Drain a provider-facing history stream into an ordered array.
@@ -53,11 +54,5 @@ export function isAsyncIterableContents(
 export function replayableContents(
   contents: readonly IContent[],
 ): AsyncIterable<IContent> {
-  return {
-    async *[Symbol.asyncIterator]() {
-      for (const content of contents) {
-        yield content;
-      }
-    },
-  };
+  return callerOwnedRawProviderSource(contents);
 }

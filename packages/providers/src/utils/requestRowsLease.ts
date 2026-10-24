@@ -10,7 +10,7 @@ import type {
   ProviderChatOptions,
   ProviderToolset,
 } from '../IProvider.js';
-import { callerOwnedProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
+import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 import {
   getRequestSignal,
   raceWithAbort,
@@ -33,7 +33,7 @@ export function admitProviderContents(
     ...options,
     contents: isAsyncIterableContents(contents)
       ? contents
-      : callerOwnedProviderSource(contents),
+      : callerOwnedRawProviderSource(contents),
   };
 }
 
