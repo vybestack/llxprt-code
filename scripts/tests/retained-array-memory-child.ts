@@ -10,7 +10,7 @@ import {
   type DetachedFixture,
 } from '../../packages/core/src/services/history/detached-rollback-test-helpers.js';
 import {
-  mediaParticipant,
+  journalMediaParticipant as mediaParticipant,
   rejectedValue,
 } from '../../packages/core/src/services/history/chronology-rollback-test-helpers.js';
 import { RowOwnership } from '../../packages/core/src/recording/rowOwnership.js';
@@ -18,6 +18,7 @@ import { gate } from '../../packages/agents/src/core/__tests__/support/conversat
 import {
   clientArrayRows,
   forbidClientArrayRollback,
+  seedClientArrayHistory,
 } from '../../packages/agents/src/core/__tests__/support/client-array-test-helpers.js';
 import { withRetainedClient } from '../../packages/agents/src/core/__tests__/support/retained-array-test-helpers.js';
 import type { AgentClientContract } from '../../packages/core/src/core/clientContract.js';
@@ -64,9 +65,7 @@ async function probe(size: number, trap: boolean): Promise<void> {
   await withDetachedFixture((fixture) =>
     withRetainedClient(fixture, async ({ client }) => {
       const { history, recorder, owners } = fixture;
-      for await (const row of detachedRows(size))
-        await recorder.commit('content', { content: row });
-      await history.recalculateTotalTokens();
+      await seedClientArrayHistory(fixture, size);
       forbidClientArrayRollback(fixture);
       const ready = gate();
       const release = gate();
