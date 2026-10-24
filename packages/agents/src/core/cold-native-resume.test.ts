@@ -62,7 +62,25 @@ describe('cold native resume', () => {
         )
       ).store;
       try {
-        await resumed.commit([{ kind: 'append', rows: rows.slice(size) }]);
+        await resumed.commit([
+          { kind: 'append', rows: rows.slice(size, size + 1) },
+        ]);
+        await resumed.commit([
+          {
+            kind: 'setState',
+            key: 'resume-marker',
+            value: new Uint8Array([1]),
+          },
+        ]);
+        await resumed.commit([{ kind: 'append', rows: rows.slice(size + 1) }]);
+        const pending = await resumed.snapshot();
+        try {
+          await expect(
+            pending.nativeFacts(registration.nativeFacts.scope),
+          ).rejects.toThrow('require a fill');
+        } finally {
+          await pending.close();
+        }
         let measured = 0;
         const counted = {
           ...registration,

@@ -2,7 +2,7 @@
 import type { RecordAppender } from './groupAppender.js';
 import type { BuildContext } from './groupBuild.js';
 import type { PlanContext } from './groupPlanTypes.js';
-import type { JournalGroupWriter } from './groupWriter.js';
+import type { JournalGroupWriter, TrailerState } from './groupWriter.js';
 import type { RowFormatRegistration } from './rowFormat.js';
 import type { VersionSnapshot } from './versionSnapshot.js';
 import { prepareBuild } from './preparedGroup.js';
@@ -128,19 +128,7 @@ export async function fillPinnedRequest(
         release,
         writer.reader,
       );
-      const live = await prepareBuild(
-        context,
-        planning,
-        [{ kind: 'append', rows: [] }],
-        appender,
-        appender,
-        async () => undefined,
-      );
-      if (live.built === undefined)
-        throw new JournalFormatError(
-          'Pinned format lost the published version',
-        );
-      return advanceFilledThrough(context, live.built).state;
+      return publishLiveCoverage(context, planning, appender);
     });
     if (measured === undefined)
       throw new JournalFormatError('Pinned format fill produced no snapshot');
@@ -181,4 +169,29 @@ export function pinnedRequestPreparation(host: {
       host.installed();
       return measured;
     });
+}
+
+async function publishLiveCoverage(
+  ctx: BuildContext,
+  plan: PlanContext,
+  appender: RecordAppender,
+): Promise<TrailerState> {
+  const live = await prepareBuild(
+    ctx,
+    plan,
+    [{ kind: 'append', rows: [] }],
+    appender,
+    appender,
+    async () => undefined,
+  );
+  if (live.built === undefined)
+    throw new JournalFormatError('Pinned format lost the published version');
+  const covered = await fillNativeFacts(
+    ctx,
+    live.built,
+    appender,
+    undefined,
+    [],
+  );
+  return advanceFilledThrough(ctx, covered.built).state;
 }

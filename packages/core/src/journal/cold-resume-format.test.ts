@@ -99,6 +99,45 @@ describe('cold resume format cache', () => {
       }
     },
   );
+  it('keeps live native facts current after preparing an older pin', async () => {
+    const store = await JournalStore.create(
+      join(directory(), 'native-pin.llxj'),
+      storeDeps(),
+    );
+    const nativeFacts = {
+      scope: 'native-pin',
+      write: async (
+        snapshot: import('./versionSnapshot.js').VersionSnapshot,
+        writer: import('./nativeFactIndex.js').NativeFactIndexWriter,
+      ): Promise<void> => {
+        await writer.set(['rows'], [snapshot.rows]);
+      },
+    };
+    try {
+      await store.commit([
+        { kind: 'append', rows: [draftRow()] },
+        { kind: 'factIndex', registration: nativeFacts },
+      ]);
+      const before = await store.snapshot();
+      try {
+        await store.commit([{ kind: 'append', rows: [draftRow()] }]);
+        const prepared = await store.prepareSnapshotFacts(before, nativeFacts);
+        await prepared.close();
+        const current = await store.snapshot();
+        try {
+          expect(
+            await (await current.nativeFacts(nativeFacts.scope)).get(['rows']),
+          ).toStrictEqual([2]);
+        } finally {
+          await current.close();
+        }
+      } finally {
+        await before.close();
+      }
+    } finally {
+      await store.close();
+    }
+  });
   it('keeps complete live caches current when an older pin receives a format fill', async () => {
     const store = await JournalStore.create(
       join(directory(), 'pinned.llxj'),
