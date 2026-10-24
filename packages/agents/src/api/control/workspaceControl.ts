@@ -139,16 +139,7 @@ export class WorkspaceControl implements AgentWorkspaceControl {
   }
 
   private async joinAccepted(): Promise<void> {
-    const results = await Promise.allSettled([...this.acceptedWork]);
-    const failures = results.flatMap((result) =>
-      result.status === 'rejected' ? [result.reason] : [],
-    );
-    if (failures.length === 1) throw failures[0];
-    if (failures.length > 1)
-      throw new AggregateError(
-        failures,
-        'Workspace checkpoint facade cleanup failed',
-      );
+    await Promise.allSettled([...this.acceptedWork]);
   }
 
   getCoreIgnorePatterns(): string[] {

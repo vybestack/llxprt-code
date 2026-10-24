@@ -571,12 +571,10 @@ export class WorkspaceFilesystemOwner {
   }
   private async performDisposal(): Promise<void> {
     const failures: unknown[] = [];
-    const joined = await Promise.allSettled([
+    await Promise.allSettled([
       ...this.accepted,
       ...(this.replacing ? [this.replacing] : []),
     ]);
-    for (const result of joined)
-      if (result.status === 'rejected') failures.push(result.reason);
     try {
       await this.release(this.fileSystem);
     } catch (error) {

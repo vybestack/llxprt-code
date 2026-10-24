@@ -130,7 +130,7 @@ describe('workspace search facade lifetime', () => {
     }
   }, 30000);
 
-  it('collects held search and initialization failures without closing borrowed services', async () => {
+  it('joins held search and initialization failures without reporting them and without closing borrowed services', async () => {
     await setup();
     const release = gate();
     const searchFailure = new Error('Search failed');
@@ -157,14 +157,17 @@ describe('workspace search facade lifetime', () => {
     );
     try {
       release.release();
-      await work;
-      const error = await outcome;
-      expect(error).toBeInstanceOf(AggregateError);
-      if (!(error instanceof AggregateError))
-        throw new Error('Missing search cleanup failures');
-      expect(new Set(error.errors)).toStrictEqual(
-        new Set([searchFailure, initFailure]),
-      );
+      const callerOutcomes = await work;
+      expect(callerOutcomes.map((result) => result.status)).toStrictEqual([
+        'rejected',
+        'rejected',
+      ]);
+      expect(
+        callerOutcomes.flatMap((result) =>
+          result.status === 'rejected' ? [result.reason] : [],
+        ),
+      ).toStrictEqual([searchFailure, initFailure]);
+      expect(await outcome).toBeUndefined();
       expect(
         (
           await operations.workspaceSearch.search(

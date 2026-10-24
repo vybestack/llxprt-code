@@ -141,11 +141,7 @@ describe('standalone loop execution lifetime', () => {
       expect(events.length).toBeGreaterThan(0);
       release.release();
       expect(await next).toBe(failure);
-      const error = await outcome;
-      expect(error).toBeInstanceOf(AggregateError);
-      if (!(error instanceof AggregateError))
-        throw new Error('Missing cleanup failures');
-      expect(error.errors).toContain(failure);
+      expect(await outcome).toBeUndefined();
       expect(cancelled).toBe(true);
       expect(built.dispose()).toBe(closing);
     } finally {

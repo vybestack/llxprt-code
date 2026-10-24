@@ -12,7 +12,7 @@ import type {
 interface AcceptedRun {
   readonly iterator: AsyncGenerator<AgenticLoopEvent>;
   readonly controller: AbortController;
-  readonly settled: Promise<PromiseSettledResult<void>>;
+  readonly settled: Promise<void>;
 }
 
 export class LoopRunLifetime implements AgenticLoopRunner {
@@ -37,8 +37,8 @@ export class LoopRunLifetime implements AgenticLoopRunner {
     this.assertOpen();
     const controller = new AbortController();
     const combined = AbortSignal.any([signal, controller.signal]);
-    let settle!: (result: PromiseSettledResult<void>) => void;
-    const settled = new Promise<PromiseSettledResult<void>>((resolve) => {
+    let settle!: () => void;
+    const settled = new Promise<void>((resolve) => {
       settle = resolve;
     });
     const iterator = this.iterate(
@@ -57,18 +57,15 @@ export class LoopRunLifetime implements AgenticLoopRunner {
     signal: AbortSignal,
     promptId: string | undefined,
     readAccepted: () => AcceptedRun,
-    settle: (result: PromiseSettledResult<void>) => void,
+    settle: () => void,
   ): AsyncGenerator<AgenticLoopEvent> {
     this.assertOpen();
     const accepted = readAccepted();
     this.active.add(accepted);
     try {
       yield* this.execute(message, signal, promptId);
-    } catch (reason) {
-      settle({ status: 'rejected', reason });
-      throw reason;
     } finally {
-      settle({ status: 'fulfilled', value: undefined });
+      settle();
       this.active.delete(accepted);
     }
   }
@@ -82,17 +79,14 @@ export class LoopRunLifetime implements AgenticLoopRunner {
       runs.map((run) => run.iterator.return(undefined)),
     );
     this.closing = (async () => {
-      const retirement = await returns;
-      const work = await Promise.all(runs.map((run) => run.settled));
-      const resources = await Promise.allSettled([
+      await returns;
+      await Promise.all(runs.map((run) => run.settled));
+      const [resources] = await Promise.allSettled([
         Promise.resolve().then(this.release),
       ]);
-      const failures = [...retirement, ...work, ...resources].flatMap(
-        (result) => (result.status === 'rejected' ? [result.reason] : []),
-      );
-      if (failures.length > 0)
+      if (resources.status === 'rejected')
         throw new AggregateError(
-          failures,
+          [resources.reason],
           'Agentic loop runner cleanup failed',
         );
     })();

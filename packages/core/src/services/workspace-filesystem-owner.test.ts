@@ -394,7 +394,7 @@ describe('workspace filesystem authority @issue:2615', () => {
     expect(await readFile(marker, 'utf8')).toBe('released');
   });
 
-  it('reports failed admitted work during disposal even when the release succeeds', async () => {
+  it('waits for failed admitted work without re-reporting the caller rejection', async () => {
     const { target } = workspace();
     const file = path.join(target, 'accepted.txt');
     await writeFile(file, 'accepted');
@@ -414,18 +414,49 @@ describe('workspace filesystem authority @issue:2615', () => {
     });
     const accepted = owner.files.readTextFile(file).catch((e: unknown) => e);
     await service.entered.promise;
+    let finished = false;
+    const closing = owner.dispose().then(() => {
+      finished = true;
+    });
+    await new Promise<void>((resolve) => setTimeout(resolve, 20));
+    expect(finished).toBe(false);
+    service.release.resolve();
+    expect(await accepted).toBe(failure);
+    await closing;
+    expect(released).toBe(1);
+  });
+
+  it('reports only the release failure when admitted work also failed for its caller', async () => {
+    const { target } = workspace();
+    const file = path.join(target, 'accepted.txt');
+    await writeFile(file, 'accepted');
+    const readFailure = new Error('held read failed');
+    const releaseFailure = new Error('release failed');
+    const service = new FailingHeldFilesystem(readFailure);
+    const owner = new WorkspaceFilesystemOwner({
+      targetDir: target,
+      isTrusted: () => true,
+      fileSystem: {
+        service,
+        ownership: 'workspace',
+        release: async () => {
+          throw releaseFailure;
+        },
+      },
+    });
+    const accepted = owner.files.readTextFile(file).catch((e: unknown) => e);
+    await service.entered.promise;
     const closing = owner.dispose().then(
       () => undefined,
       (error: unknown) => error,
     );
     service.release.resolve();
-    expect(await accepted).toBe(failure);
+    expect(await accepted).toBe(readFailure);
     const reported = await closing;
     expect(reported).toBeInstanceOf(AggregateError);
     if (!(reported instanceof AggregateError))
       throw new Error('Disposal did not reject');
-    expect(reported.errors).toStrictEqual([failure]);
-    expect(released).toBe(1);
+    expect(reported.errors).toStrictEqual([releaseFailure]);
   });
 
   it('reports a release failure and still completes disposal', async () => {

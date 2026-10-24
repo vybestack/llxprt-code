@@ -228,6 +228,30 @@ describe('workspace profile and subagent definitions', () => {
       read.restore();
     }
   });
+  it('waits for a read that rejects for its caller without re-reporting it', async () => {
+    const read = gateReadFile(
+      (file) => path.basename(String(file)) === 'missing-held.json',
+    );
+    try {
+      const accepted = owner.profileReads.loadProfile('missing-held').then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      await read.entered;
+      let finished = false;
+      const disposal = owner.dispose().then(() => {
+        finished = true;
+      });
+      await new Promise<void>((resolve) => setTimeout(resolve, 20));
+      expect(finished).toBe(false);
+      read.release();
+      expect(await accepted).toBeInstanceOf(Error);
+      await disposal;
+      expect(finished).toBe(true);
+    } finally {
+      read.restore();
+    }
+  });
   it('shares physical files while isolating workspace contribution catalogues', async () => {
     const workspace = owner.forkContributions();
     try {

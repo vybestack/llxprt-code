@@ -629,7 +629,7 @@ Red runs for all three tasks confine the environment to the test command, so the
 
 #### T3.2 A5 part 2: workspace control and loop runner joins
 
-- Scope: `packages/agents/src/api/control/workspaceControl.ts`, `packages/agents/src/api/loop-run-lifetime.ts`, their behavior tests.
+- Scope: `packages/agents/src/api/control/workspaceControl.ts`, `packages/agents/src/api/loop-run-lifetime.ts`, their behavior tests. Scope extended by the orchestrator to `packages/core/src/services/workspace-definition-owner.ts` (`drain`), `packages/core/src/services/workspace-filesystem-owner.ts` (`performDisposal`) and their tests, because every public workspace route re-reported caller rejections through them.
 - Test first: (a) a workspace operation that rejects for its caller (real filesystem error, for example reading a missing file) is in flight when `agent.dispose()` runs; dispose fulfills and the caller saw the rejection once. (b) A loop run is active, `dispose` aborts it; dispose fulfills, the run ends with the abort once, and a failing `release` step is still reported by dispose. Both fail before.
 - Steps: A5 design decision.
 - Verify: focused tests; agents typecheck; eslint and prettier; agents suite (background).
@@ -1080,7 +1080,7 @@ Coders tick their own line in the commit that completes the task. Inventory task
 - [x] T2.7b A7 Vertex metadata discovery and metadata tokens through the owner transport
 - [x] T2.7c A7 Vertex external account exchange through the owner transport
 - [x] T3.1 A5 auxiliary generation disposal
-- [ ] T3.2 A5 workspace control and loop runner joins
+- [x] T3.2 A5 workspace control and loop runner joins
 - [ ] T3.3 A5 activation preflight public work
 - [ ] T3.4 A4 auth admission, flights, owner signal, lock window
 - [ ] T3.5 A4 retained interactive handlers, Claude Code cancellation, close order
