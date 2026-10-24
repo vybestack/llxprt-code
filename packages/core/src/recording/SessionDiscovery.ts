@@ -24,14 +24,11 @@
  * for the resume flow.
  */
 
-import { readBoundedFirstLine } from './boundedHeaderReader.js';
 import type { JournalReadCounters } from './journalCounters.js';
-import { MetadataJsonProjection } from './metadataJsonProjection.js';
 import {
   resumeSessionIndexOutOfRangeMessage,
   resumeSessionNotFoundMessage,
 } from './resumeNotFoundMessages.js';
-import { INVALID_SESSION_START_MESSAGE } from './sessionStartHeader.js';
 import {
   SESSION_TITLE_MAX_LENGTH,
   type ContinueResolution,
@@ -81,73 +78,6 @@ export interface BoundedContinueTargets {
   skippedCount: number;
   recordingErrors: readonly string[];
   unreadableRecordings: readonly UnreadableRecording[];
-}
-
-type FirstLineResult =
-  | { readonly ok: true; readonly payload: object }
-  | { readonly ok: false; readonly reason: string };
-
-/**
- * Read and parse the first line of a recording with the canonical bounded
- * header reader, saying why when it is not a `session_start` event. The
- * payload is returned unvalidated; {@link isSessionStartHeader} is the
- * contract for a usable header.
- *
- * This is the single shared reader used by session discovery, resume, and the
- * session-recording janitor.  It handles UTF-8 BOM and first-line headers of
- * any size up to a documented maximum, classifying no-newline/malformed huge
- * files as unreadable without whole-file buffering.
- */
-async function readSessionStartLine(
-  filePath: string,
-  counters?: JournalReadCounters,
-): Promise<FirstLineResult> {
-  const firstLine = await readBoundedFirstLine(filePath);
-  if (firstLine === null || firstLine.trim() === '') {
-    return { ok: false, reason: 'Empty file or unreadable first line' };
-  }
-  let parsed: unknown;
-  try {
-    const projection = new MetadataJsonProjection();
-    projection.push(firstLine);
-    parsed = projection.finish();
-  } catch {
-    return {
-      ok: false,
-      reason:
-        'Missing or corrupt session_start event: first line is not valid JSON',
-    };
-  }
-  counters?.recordDecoded();
-  if (
-    typeof parsed !== 'object' ||
-    parsed === null ||
-    Reflect.get(parsed, 'type') !== 'session_start'
-  ) {
-    return {
-      ok: false,
-      reason:
-        'Missing or corrupt session_start event: first line is not a session_start event',
-    };
-  }
-  const payload: unknown = Reflect.get(parsed, 'payload');
-  if (typeof payload !== 'object' || payload === null) {
-    return { ok: false, reason: INVALID_SESSION_START_MESSAGE };
-  }
-  return { ok: true, payload };
-}
-
-/**
- * The first line's `session_start` payload, unvalidated, or null when the
- * first line is not a session_start event. Used by the session-recording
- * janitor, which applies its own retention rules to the fields.
- */
-export async function readFirstLineFromFile(
-  filePath: string,
-  counters?: JournalReadCounters,
-): Promise<SessionStartPayload | null> {
-  const result = await readSessionStartLine(filePath, counters);
-  return result.ok ? (result.payload as SessionStartPayload) : null;
 }
 
 interface SessionScan {
@@ -380,8 +310,7 @@ export class SessionDiscovery {
   }
 
   /**
-   * Read only the session header (first line) from a JSONL file.
-   * Delegates to the existing readSessionHeader in ReplayEngine.
+   * Read the session facts from a native journal without reading its rows.
    *
    * @pseudocode resume-flow.md header reading
    */

@@ -37,7 +37,7 @@ export {
 } from './retentionPolicy.js';
 
 export {
-  readSessionJsonlHeader,
+  readSessionHeaderInfo,
   type SessionHeaderInfo,
 } from './sessionHeaderReader.js';
 
