@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { JournalResolver, type SurvivorInterval } from './journalResolver.js';
+import { JournalResolver } from './journalResolver.js';
+import type { SurvivorInterval } from './resolverIntervalIndex.js';
 import { replaySession } from './eager-replay.test.helpers.js';
 import { createRowCounters } from './journalCounters.js';
 import {

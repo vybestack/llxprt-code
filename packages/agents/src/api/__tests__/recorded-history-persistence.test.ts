@@ -67,8 +67,8 @@ describe('journal history persistence', () => {
         const coordinator = new SemanticMediaPurgeStreamCoordinator(history, {
           enabled: true,
           explicitCacheWriteRequired: false,
-          persist: async (source, frontier) => {
-            await persistSemanticMediaPurge(recording, source, frontier);
+          persist: async () => {
+            await persistSemanticMediaPurge(recording);
             if (cancel && ++writes === 1) controller.abort(cancelled);
           },
         });
@@ -86,7 +86,7 @@ describe('journal history persistence', () => {
             (error: unknown) => error,
           );
           expect(outcome).toBe(cancel ? cancelled : undefined);
-          if (cancel) await restoreRecordedHistory(recording, [image]);
+          if (cancel) await restoreRecordedHistory(recording);
           await history.waitForCommit();
           await recording.flush();
           await collectJournalFileRowsForAssertions(path, (rows) => {

@@ -48,8 +48,6 @@ import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clien
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { HistoryAttachmentError } from '@vybestack/llxprt-code-core/services/history/attachHistoryJournal.js';
-import type { SemanticMediaPurgeFrontier } from '@vybestack/llxprt-code-core/services/history/semantic-media-purge.js';
-import type { SemanticPurgeRowSource } from '@vybestack/llxprt-code-core/services/history/semantic-purge-disk-rows.js';
 import { basename } from 'node:path';
 import type { PreparedSessionClient } from '../../session/session-new-client.js';
 import type {
@@ -922,11 +920,8 @@ export class SessionControl implements AgentSessionControl {
     }
   }
 
-  async persistSemanticMediaPurge(
-    candidate: SemanticPurgeRowSource,
-    frontier: SemanticMediaPurgeFrontier,
-  ): Promise<void> {
-    return persistPurge(this.requireRecording(), candidate, frontier);
+  async persistSemanticMediaPurge(): Promise<void> {
+    return persistPurge(this.requireRecording());
   }
 
   /**

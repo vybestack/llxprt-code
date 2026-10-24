@@ -41,8 +41,8 @@ import type {
   ResolverFileHandle,
   ResolverIo,
   ResolverStats,
-  SurvivorInterval,
 } from './journalResolver.js';
+import type { SurvivorInterval } from './resolverIntervalIndex.js';
 import type { SessionEventType } from './types.js';
 import type {
   ChronologyMarker,

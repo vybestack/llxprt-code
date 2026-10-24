@@ -62,7 +62,6 @@ export {
   createLockedSessionRecorder,
   createSessionRecorder,
 } from './sessionRecorderFactory.js';
-export { requireJsonlRecorder } from '../services/history/recorderBackend.js';
 export { allocateChildSessionId } from './childSessionIds.js';
 export {
   createChildSessionJournal,

@@ -1,25 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
-import { z } from 'zod';
-import { isJsonlRecorder } from '@vybestack/llxprt-code-core/services/history/recorderBackend.js';
 import { accountingRow } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { chatCommand } from './chatCommand.js';
 import {
   recordedChatRows,
   withChatMutationFixture,
 } from './chat-mutation-test-helpers.js';
-
-async function assertJsonlCut(path: string, removed: number): Promise<void> {
-  const schema = z.object({ payload: z.object({ itemsRemoved: z.number() }) });
-  const cuts = (await readFile(path, 'utf8'))
-    .split('\n')
-    .filter((line) => line.includes('"type":"rewind"'))
-    .map((line) => schema.parse(JSON.parse(line)).payload.itemsRemoved)
-    .filter((itemsRemoved) => itemsRemoved > 0);
-  expect(cuts).toStrictEqual([removed]);
-}
 
 for (const size of [512, 8192]) {
   for (const name of ['clear', 'restore']) {
@@ -52,8 +39,6 @@ for (const size of [512, 8192]) {
             expect(reader.snapshot().peakRows).toBeLessThanOrEqual(440);
             const path = recording.getFilePath();
             if (path === null) throw new Error('Missing recording path');
-            if (isJsonlRecorder(recording))
-              await assertJsonlCut(path, size - expectedCount);
             const durable = createHash('sha256');
             const durableExpected = createHash('sha256');
             let durableCount = 0;

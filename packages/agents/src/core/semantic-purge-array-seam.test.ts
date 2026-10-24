@@ -122,8 +122,8 @@ async function verifyProduction(size: number): Promise<number> {
         history,
         ownership,
         mode: () => 'remove',
-        persist: async (rows, frontier) => {
-          await persistPurgeFixture(recording, rows, frontier);
+        persist: async () => {
+          await persistPurgeFixture(recording);
           writes++;
         },
       });

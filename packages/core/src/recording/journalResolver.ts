@@ -15,7 +15,10 @@ import {
   ReplaceTransactionFold,
 } from './replaceTransaction.js';
 import { DurableDensityIndex } from './durableDensityIndex.js';
-import { ResolverIntervalIndex } from './resolverIntervalIndex.js';
+import {
+  ResolverIntervalIndex,
+  type SurvivorInterval,
+} from './resolverIntervalIndex.js';
 import { field, validSeq, validRow, chronology } from './resolverProjection.js';
 import {
   scanResolverLines,
@@ -69,12 +72,6 @@ export interface ResolvedEntry {
   readonly length: number;
   readonly rowIndex: number;
   readonly content: IContent;
-}
-export interface SurvivorInterval {
-  readonly fromSeq: number;
-  readonly toSeq: number;
-  readonly firstOffset: number;
-  readonly rowCount: number;
 }
 export interface JournalResolverStats {
   readonly intervals: AsyncIterable<SurvivorInterval>;

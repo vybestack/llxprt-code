@@ -15,11 +15,6 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { JournalRecordingService } from '@vybestack/llxprt-code-core/recording/journalRecordingService.js';
 
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { isJsonlRecorder } from '@vybestack/llxprt-code-core/services/history/recorderBackend.js';
-import type { SemanticMediaPurgeFrontier } from '@vybestack/llxprt-code-core/services/history/semantic-media-purge.js';
-import type { SemanticPurgeRowSource } from '@vybestack/llxprt-code-core/services/history/semantic-purge-disk-rows.js';
-
 export function requireActiveRecording(
   recording: SessionRecordingPort | null,
 ): SessionRecordingPort {
@@ -73,16 +68,7 @@ export class AgentSessionPersistence {
 }
 export async function persistSemanticMediaPurge(
   recording: SessionRecordingPort,
-  candidate: SemanticPurgeRowSource,
-  frontier: SemanticMediaPurgeFrontier,
 ): Promise<void> {
-  if (isJsonlRecorder(recording)) {
-    await recording.recordSemanticMediaPurgeRows(
-      candidate.streamRows(),
-      frontier,
-      { requireLiveFold: true },
-    );
-  }
   await recording.flush();
   if (!recording.isActive()) {
     throw new Error('Semantic media purge recording did not remain active');
@@ -91,11 +77,7 @@ export async function persistSemanticMediaPurge(
 
 export async function restoreRecordedHistory(
   recording: SessionRecordingPort,
-  removedHistory: readonly IContent[],
 ): Promise<void> {
-  if (isJsonlRecorder(recording)) {
-    for (const content of removedHistory) recording.recordContent(content);
-  }
   await recording.flush();
   if (!recording.isActive()) {
     throw new Error('Recording failed during history rollback');

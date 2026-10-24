@@ -1,8 +1,14 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { SurvivorInterval } from './journalResolver.js';
 import { getScratchRoot, removeScratchDir } from '../storage/scratch-root.js';
+
+export interface SurvivorInterval {
+  readonly fromSeq: number;
+  readonly toSeq: number;
+  readonly firstOffset: number;
+  readonly rowCount: number;
+}
 
 interface IndexedInterval extends SurvivorInterval {
   readonly purge: boolean;

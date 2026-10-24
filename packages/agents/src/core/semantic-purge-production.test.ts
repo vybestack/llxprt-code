@@ -59,7 +59,7 @@ function verifyTaggedRow(row: IContent, identity: object): void {
 
 async function persistCheckedRows(
   rows: SemanticPurgeRowSource,
-  frontier: SemanticMediaPurgeFrontier,
+  _frontier: SemanticMediaPurgeFrontier,
   size: number,
   recording: SessionRecordingPort | undefined,
 ): Promise<void> {
@@ -69,7 +69,7 @@ async function persistCheckedRows(
     count++;
   }
   expect(count).toBe(size);
-  await persistPurgeFixture(recording, rows, frontier);
+  await persistPurgeFixture(recording);
 }
 
 async function verifyProduction(size: number): Promise<number> {

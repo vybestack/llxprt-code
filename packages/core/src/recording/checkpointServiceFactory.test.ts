@@ -4,11 +4,10 @@ import * as path from 'node:path';
 import { useTempDir } from '../journal/__tests__/support/useTempDir.js';
 
 import type { IContent } from '../services/history/IContent.js';
-import { requireJsonlRecorder } from '../services/history/recorderBackend.js';
+import { requireJournalRecorder } from '../services/history/recorderBackend.js';
 
 import { createCheckpointService } from './checkpointServiceFactory.js';
 import { JournalCheckpointService } from './journalCheckpointService.js';
-import { JournalRecordingService } from './journalRecordingService.js';
 import type { SessionRecordingPort } from './recordingPort.js';
 import { deleteSessionById } from './sessionManagement.js';
 import { createLockedSessionRecorder } from './sessionRecorderFactory.js';
@@ -23,12 +22,7 @@ async function recordRows(
   recorder: SessionRecordingPort,
   rows: readonly IContent[],
 ): Promise<void> {
-  if (recorder instanceof JournalRecordingService) {
-    await (await recorder.session()).append(rows);
-    return;
-  }
-  const jsonl = requireJsonlRecorder(recorder);
-  for (const item of rows) jsonl.recordContent(item);
+  await (await requireJournalRecorder(recorder).session()).append(rows);
 }
 
 function fileOf(recorder: SessionRecordingPort): string {
