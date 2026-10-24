@@ -1,9 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'bun:test';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { ProjectedJournalCursor } from './projected-journal-cursor.js';
+import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+import type { IContent } from '@vybestack/llxprt-code-core';
+import { NativeJournalCursor } from './native-journal-cursor.js';
 import { RowOwnership } from '../../../../../core/src/recording/rowOwnership.js';
 import { createRowCounters } from '../../../../../core/src/recording/journalCounters.js';
 import type { HistoryItem } from '../../types.js';
@@ -22,13 +24,10 @@ describe('disk paging ownership', () => {
     const directory = await mkdtemp(
       join(tmpdir(), 'toolpaging-recovery-bounds-'),
     );
-    const file = join(directory, 'journal');
+    const file = join(directory, 'journal.llxj');
     const bound = { rows: 440, serializedBytes: 8 * 1024 * 1024 };
-    const line = (content: unknown, seq: number): string =>
-      JSON.stringify({ v: 1, seq, type: 'content', payload: { content } }) +
-      '\n';
     try {
-      const opener = {
+      const opener: IContent = {
         speaker: 'ai',
         blocks: Array.from({ length: 8192 }, (_, index) => ({
           type: 'tool_call',
@@ -37,10 +36,14 @@ describe('disk paging ownership', () => {
           parameters: {},
         })),
       };
-      await writeFile(file, line(opener, 1));
+      const session = await JournalSession.create(file);
+      try {
+        await session.append([opener]);
+      } finally {
+        await session.close();
+      }
       const ownership = new RowOwnership();
-      const cursor = await ProjectedJournalCursor.open(file, {
-        temporaryRoot: directory,
+      const cursor = await NativeJournalCursor.open(file, {
         counters: { ...createRowCounters().counters, ownership },
       });
       const retained: HistoryItem[] = [];

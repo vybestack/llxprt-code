@@ -3,7 +3,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+import {
+  writeNativeEdits,
+  type NativePagerEdit as Edit,
+} from './native-pager-test-fixture.js';
 import type { IContent } from '@vybestack/llxprt-code-core';
 import {
   createScrollbackPagerStore,
@@ -13,8 +16,6 @@ import {
 let directory: string;
 let file: string;
 const stores: ScrollbackPagerStore[] = [];
-
-type Edit = IContent | { readonly removed: number; readonly cutSeq?: number };
 
 function chronology(seq: number) {
   return { chronology: { seq, userTurn: seq, step: 0, recordedAt: 0 } };
@@ -58,41 +59,6 @@ function result(seq: number, id: string): IContent {
 
 function rewind(_seq: number, removed: number, cutSeq?: number): Edit {
   return { removed, cutSeq };
-}
-
-async function writeEdits(
-  edits: readonly Edit[],
-  append = false,
-): Promise<void> {
-  const session = await (append
-    ? JournalSession.open(file)
-    : JournalSession.create(file));
-  try {
-    for (const edit of edits) {
-      if ('speaker' in edit) await session.append([edit]);
-      else {
-        const count = session.store.published?.rows ?? 0;
-        const ordinal = edit.cutSeq === undefined ? count - edit.removed : 0;
-        for await (const { entry, content } of session.rows(ordinal)) {
-          if (
-            edit.cutSeq !== undefined &&
-            (content.metadata?.chronology?.seq ?? 0) < edit.cutSeq
-          )
-            continue;
-          await session.store.commit([
-            {
-              kind: 'pop',
-              cutLabel: entry.label,
-              expectedRemoved: edit.removed,
-            },
-          ]);
-          break;
-        }
-      }
-    }
-  } finally {
-    await session.close();
-  }
 }
 
 function open(pageRows: number): ScrollbackPagerStore {
@@ -161,7 +127,7 @@ describe('production pager rewinds through a projected tool group', () => {
   });
 
   it('keeps the surviving call when the only result is rewound', async () => {
-    await writeEdits([
+    await writeNativeEdits(file, [
       human(1),
       opener(2, ['c1']),
       result(3, 'c1'),
@@ -173,19 +139,23 @@ describe('production pager rewinds through a projected tool group', () => {
   });
 
   it('keeps answered calls and reopens the one whose result was cut', async () => {
-    await writeEdits([...OPEN_AND_RESULTS, result(5, 'c3'), rewind(6, 1, 5)]);
+    await writeNativeEdits(file, [
+      ...OPEN_AND_RESULTS,
+      result(5, 'c3'),
+      rewind(6, 1, 5),
+    ]);
     for (const rows of await shapesAcrossRestart())
       expect(rows).toStrictEqual(['row-1', 'tools:c1=done,c2=done,c3=open']);
   });
 
   it('shows every call unanswered when the cut lands right after the opener', async () => {
-    await writeEdits([...OPEN_AND_RESULTS, rewind(5, 2, 3)]);
+    await writeNativeEdits(file, [...OPEN_AND_RESULTS, rewind(5, 2, 3)]);
     for (const rows of await shapesAcrossRestart())
       expect(rows).toStrictEqual(['row-1', 'tools:c1=open,c2=open,c3=open']);
   });
 
   it('cuts inside the group by removed-row count when there is no cutSeq', async () => {
-    await writeEdits([...OPEN_AND_RESULTS, rewind(5, 1)]);
+    await writeNativeEdits(file, [...OPEN_AND_RESULTS, rewind(5, 1)]);
     for (const rows of await shapesAcrossRestart())
       expect(rows).toStrictEqual(['row-1', 'tools:c1=done,c2=open,c3=open']);
   });
@@ -199,7 +169,7 @@ describe('production pager rewinds through a projected tool group', () => {
       result(43, 'c2'),
       rewind(44, 1, 43),
     );
-    await writeEdits(body);
+    await writeNativeEdits(file, body);
     const store = open(5);
     await store.resumeFromJournal();
     const tail = 'tools:c1=done,c2=open';
@@ -215,14 +185,14 @@ describe('production pager rewinds through a projected tool group', () => {
   });
 
   it('applies a cut through a group appended after the pager opened', async () => {
-    await writeEdits(OPEN_AND_RESULTS);
+    await writeNativeEdits(file, OPEN_AND_RESULTS);
     const store = open(10);
     await walkToFloor(store);
     expect(shape(store)).toStrictEqual([
       'row-1',
       'tools:c1=done,c2=done,c3=open',
     ]);
-    await writeEdits([rewind(5, 1, 4), human(6)], true);
+    await writeNativeEdits(file, [rewind(5, 1, 4), human(6)], true);
     await store.invalidate();
     await walkToFloor(store);
     expect(shape(store)).toStrictEqual([

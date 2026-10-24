@@ -26,10 +26,15 @@ import {
 import type { HistoryItem } from '../../types.js';
 import { iContentToHistoryItems } from '../../utils/iContentToHistoryItems.js';
 import { rowIdentityKey } from '../../utils/rowIdentity.js';
-import type { DisplayJournalEntry } from './journal-page-file.js';
-import type { ProjectedJournalOptions } from './projected-journal-source.js';
+import type {
+  NativeDisplayEntry as DisplayJournalEntry,
+  NativeJournalOptions,
+} from './native-journal-types.js';
 import { entryByLabel } from '@vybestack/llxprt-code-core/journal/rowTreeQueries.js';
 import { NativeResponseIndex } from './native-response-index.js';
+import { readVersionAt } from '@vybestack/llxprt-code-core/journal/trailerAccess.js';
+import { versionOf } from '@vybestack/llxprt-code-core/journal/version.js';
+import { MUTATION } from '@vybestack/llxprt-code-core/journal/recordKinds.js';
 
 interface Position {
   readonly row: number;
@@ -47,13 +52,14 @@ export class NativeJournalCursor {
   private readonly positions = new Map<string, LocatedEntry>();
   private retained: HistoryItem[] = [];
   private firstOffset: number | null = null;
+  private boundaryOffset: number | null = null;
   private initialPage: LocatedEntry[] | undefined;
   private responseIndex: NativeResponseIndex;
   private group: { readonly start: number; readonly end: number } | undefined;
 
   private constructor(
     private reader: JournalReader,
-    private readonly options: ProjectedJournalOptions,
+    private readonly options: NativeJournalOptions,
   ) {
     this.start = { row: this.rows, item: 0 };
     this.end = this.start;
@@ -61,16 +67,17 @@ export class NativeJournalCursor {
   }
   static async open(
     path: string,
-    options: ProjectedJournalOptions,
+    options: NativeJournalOptions,
     pageRows = 16,
   ): Promise<NativeJournalCursor> {
-    const reader = await openJournalReadOnly(path);
+    const reader = await openJournalReadOnly(path, options.journal);
     const cursor = new NativeJournalCursor(reader, options);
     try {
       const root = rowTreeRootOf(reader.trailer);
       options.counters?.recordDecoded();
       if (root)
         cursor.firstOffset = (await entryAt(reader, root, 0)).recordOffset;
+      await cursor.locateClearBoundary();
       await cursor.seed(pageRows);
       return cursor;
     } catch (error) {
@@ -411,15 +418,32 @@ export class NativeJournalCursor {
   }
   async refreshFileEnd(): Promise<void> {
     this.options.signal?.throwIfAborted();
-    const next = await openJournalReadOnly(this.reader.path);
+    const next = await openJournalReadOnly(
+      this.reader.path,
+      this.options.journal,
+    );
     if (next.trailer?.groupTag !== this.reader.trailer?.groupTag)
       this.group = undefined;
     await this.reader.close();
     this.reader = next;
     this.responseIndex = new NativeResponseIndex(next);
   }
+  private async locateClearBoundary(): Promise<void> {
+    const trailer = this.reader.trailer;
+    if (trailer === undefined) return;
+    let first = versionOf(trailer);
+    while (first.parent !== 0) {
+      const offset =
+        [...first.skip].reverse().find((value) => value !== 0) ?? first.parent;
+      first = await readVersionAt(this.reader, offset);
+    }
+    const fullPop = first.mutation === MUTATION.pop && first.rows === 0;
+    const cleared =
+      first.mutation === MUTATION.clear || first.mutation === MUTATION.replace;
+    this.boundaryOffset = cleared || fullPop ? first.selfOffset : null;
+  }
   clearBoundaryOffset(): number | null {
-    return null;
+    return this.boundaryOffset;
   }
   firstDisplayOffset(): number | null {
     return this.firstOffset;
