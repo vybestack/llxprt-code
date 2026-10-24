@@ -339,7 +339,7 @@ export class ProviderManager implements IProviderManager {
       if (baseProvider instanceof BaseProvider)
         baseProvider = baseProvider.bindOwnerAuthentication(
           this.settingsService,
-          () => this.requestFetch,
+          () => this.fetchNetwork,
           this.providerKeyStorage,
         );
       this.syncProviderRuntime(baseProvider);
@@ -455,6 +455,7 @@ export class ProviderManager implements IProviderManager {
       metadata: callMetadata,
       globalSettings: this.settingsService.getAllGlobalSettings(),
       providerSettings: this.settingsService.getProviderSettings(providerName),
+      fetch: this.fetchNetwork,
     };
   }
 
@@ -498,7 +499,7 @@ export class ProviderManager implements IProviderManager {
                 options.modelParameters,
                 undefined,
                 undefined,
-                this.requestFetch,
+                this.fetchNetwork,
               ),
           };
         },
@@ -532,7 +533,7 @@ export class ProviderManager implements IProviderManager {
     if (provider instanceof BaseProvider)
       provider = provider.bindOwnerAuthentication(
         this.settingsService,
-        () => this.requestFetch,
+        () => this.fetchNetwork,
         this.providerKeyStorage,
       );
     this.syncProviderRuntime(provider);

@@ -10,12 +10,14 @@ import {
   type RuntimeInvocationContext,
 } from './RuntimeInvocationContext.js';
 import type { AdmittedModelParameters } from './admittedModelParameters.js';
+import type { NetworkFetch } from '../utils/fetch.js';
 
 export interface ProviderInvocationData {
   readonly runtimeId?: string;
   readonly metadata?: Readonly<Record<string, unknown>>;
   readonly globalSettings: Readonly<Record<string, unknown>>;
   readonly providerSettings: Readonly<Record<string, unknown>>;
+  readonly fetch?: NetworkFetch;
 }
 
 export function captureProviderInvocation(
@@ -24,10 +26,7 @@ export function captureProviderInvocation(
   modelParameters?: AdmittedModelParameters,
   signal?: AbortSignal,
   sessionId?: string,
-  requestFetch?: (
-    input: RequestInfo | URL,
-    init?: RequestInit,
-  ) => Promise<Response>,
+  requestFetch?: NetworkFetch,
 ): RuntimeInvocationContext {
   const global = data.globalSettings;
   const active = global['activeProvider'];
@@ -44,7 +43,7 @@ export function captureProviderInvocation(
     providerSettings['base-url'];
   return createRuntimeInvocationContext({
     runtimeId: data.runtimeId,
-    fetch: requestFetch,
+    fetch: requestFetch ?? data.fetch,
     sessionId,
     fallbackRuntimeId: `${providerName}:admission`,
     runtimeMetadata: data.metadata,
