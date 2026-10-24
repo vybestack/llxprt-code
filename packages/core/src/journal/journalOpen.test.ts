@@ -3,7 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import { JournalCorruptionError, RetiredJournalError } from './errors.js';
-import { encodeJournalHeader } from './fileHeader.js';
+import { encodeJournalHeader, JOURNAL_FORMAT_VERSION } from './fileHeader.js';
 import { JOURNAL_HEADER_BYTES } from './fileHeader.js';
 import { openJournalReadOnly } from './journalReader.js';
 import { retiredJournalMessage } from './journalRefusal.js';
@@ -133,7 +133,9 @@ describe('refusing journals that are not current', () => {
       for (const failure of [owner, reader]) {
         expect(failure).toBeInstanceOf(RetiredJournalError);
         expect(failure instanceof Error && failure.message).toBe(
-          retiredJournalMessage(file),
+          label === 'a file of an older format version'
+            ? `Session file ${file} was written by an incompatible journal format version (found 2, supported ${JOURNAL_FORMAT_VERSION}) and cannot be resumed. Start a new session.`
+            : retiredJournalMessage(file),
         );
       }
       expect(await fsp.readFile(file)).toStrictEqual(before);

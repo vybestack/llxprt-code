@@ -148,6 +148,7 @@ describe('HistoryService local-media ownership lifecycle', () => {
     return new MediaAdmissionService(store).admitContents(contents, {
       turnId: 'test-turn',
       source: 'user-input',
+      reservationOwnerScope: 'history',
     });
   }
 
@@ -175,6 +176,7 @@ describe('HistoryService local-media ownership lifecycle', () => {
     const admissionContext = {
       turnId: 'test-turn',
       source: 'user-input',
+      reservationOwnerScope: 'history',
     };
     const service = new HistoryService();
     services.push(service);

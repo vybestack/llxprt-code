@@ -15,7 +15,7 @@ import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core
  * limitations under the License.
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { afterEach, describe, it, expect, beforeEach } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import { replaceRowAt } from './__tests__/support/row-replacement.js';
 import type {
@@ -27,6 +27,18 @@ import type {
 import type { DensityResult } from '../../core/compression/types.js';
 
 // ---------------------------------------------------------------------------
+const services: HistoryService[] = [];
+
+function createHistoryService(): HistoryService {
+  const service = new HistoryService();
+  services.push(service);
+  return service;
+}
+
+afterEach(async () => {
+  for (const service of services.splice(0)) await service.dispose();
+});
+
 // Test helpers (data builders — NOT mocks)
 // ---------------------------------------------------------------------------
 
@@ -93,7 +105,7 @@ describe('HistoryService chronology - AC1: seq starts at 1 and increments', () =
   let service: HistoryService;
 
   beforeEach(() => {
-    service = new HistoryService();
+    service = createHistoryService();
   });
 
   it('stamps the first added item with seq 1', async () => {
@@ -170,7 +182,7 @@ describe('HistoryService chronology - AC2: seq never reused after clear()', () =
   let service: HistoryService;
 
   beforeEach(() => {
-    service = new HistoryService();
+    service = createHistoryService();
   });
 
   it('continues seq from the previous maximum after clear()', async () => {
@@ -219,7 +231,7 @@ describe('HistoryService chronology - AC3: userTurn increments on human only', (
   let service: HistoryService;
 
   beforeEach(() => {
-    service = new HistoryService();
+    service = createHistoryService();
   });
 
   it('increments userTurn on human and shares it with ai/tool of the same turn', async () => {
@@ -274,7 +286,7 @@ describe('HistoryService chronology - AC4: step increments within turn, resets o
   let service: HistoryService;
 
   beforeEach(() => {
-    service = new HistoryService();
+    service = createHistoryService();
   });
 
   it('assigns step 1 to the human, increments across the turn, resets on next human', async () => {
@@ -329,7 +341,7 @@ describe('HistoryService chronology - AC5: recordedAt populated', () => {
   let service: HistoryService;
 
   beforeEach(() => {
-    service = new HistoryService();
+    service = createHistoryService();
   });
 
   it('populates recordedAt with a finite number within the insertion time bracket', async () => {
@@ -415,7 +427,7 @@ describe('HistoryService chronology - AC8: validateAndFix preserves INV-1', () =
   let service: HistoryService;
 
   beforeEach(() => {
-    service = new HistoryService();
+    service = createHistoryService();
   });
 
   it('stamps every synthetic tool message inserted by validateAndFix', async () => {
@@ -468,7 +480,7 @@ describe('HistoryService chronology - AC9: applyDensityResult inherits marker', 
   let service: HistoryService;
 
   beforeEach(() => {
-    service = new HistoryService();
+    service = createHistoryService();
   });
 
   it('inherits the replaced item marker on density replacement and keeps INV-1', async () => {
@@ -549,7 +561,7 @@ describe('HistoryService chronology - AC11: a replaced row preserves its marker'
   let service: HistoryService;
 
   beforeEach(() => {
-    service = new HistoryService();
+    service = createHistoryService();
   });
 
   it('stamps every entry installed through replaceAll', async () => {
@@ -679,7 +691,7 @@ describe('HistoryService chronology - AC25: getChronologyTrace', () => {
   let service: HistoryService;
 
   beforeEach(() => {
-    service = new HistoryService();
+    service = createHistoryService();
   });
 
   it('returns one ordered entry per history item with marker fields', async () => {
