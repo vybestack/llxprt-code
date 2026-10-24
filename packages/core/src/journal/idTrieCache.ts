@@ -18,16 +18,17 @@ export const ID_NODE_CACHE_ENTRY_OVERHEAD = 48;
  */
 export interface IdNodeCache {
   get(offset: number): Uint8Array | undefined;
-  put(offset: number, kindHeader: Uint8Array): void;
+  put(offset: number, kindHeader: Uint8Array, shallow?: boolean): void;
   /** Bytes charged to the entries held now. */
   readonly bytes: number;
   readonly entries: number;
   readonly capBytes: number;
 }
 
-/** A least-recently-used cache that evicts until the charged bytes fit the cap. */
+/** Evicts deeper nodes first so cold fact scans retain their shared shallow paths. */
 export class BoundedIdNodeCache implements IdNodeCache {
   private readonly nodes = new Map<number, Uint8Array>();
+  private readonly shallowNodes = new Map<number, Uint8Array>();
   private charged = 0;
 
   constructor(readonly capBytes: number = ID_NODE_CACHE_BYTES) {}
@@ -37,31 +38,40 @@ export class BoundedIdNodeCache implements IdNodeCache {
   }
 
   get entries(): number {
-    return this.nodes.size;
+    return this.nodes.size + this.shallowNodes.size;
   }
 
   get(offset: number): Uint8Array | undefined {
-    const node = this.nodes.get(offset);
+    const nodes = this.shallowNodes.has(offset)
+      ? this.shallowNodes
+      : this.nodes;
+    const node = nodes.get(offset);
     if (node === undefined) return undefined;
     // Map iterates in insertion order, so re-inserting makes this the newest.
-    this.nodes.delete(offset);
-    this.nodes.set(offset, node);
+    nodes.delete(offset);
+    nodes.set(offset, node);
     return node;
   }
 
-  put(offset: number, kindHeader: Uint8Array): void {
-    if (this.nodes.has(offset)) return;
+  put(offset: number, kindHeader: Uint8Array, shallow = false): void {
+    if (this.nodes.has(offset) || this.shallowNodes.has(offset)) return;
     const cost = kindHeader.length + ID_NODE_CACHE_ENTRY_OVERHEAD;
     if (cost > this.capBytes) return;
-    this.nodes.set(offset, kindHeader);
+    (shallow ? this.shallowNodes : this.nodes).set(offset, kindHeader);
     this.charged += cost;
-    this.evictToCap();
+    for (const [previousOffset, previous] of this.shallowNodes) {
+      if (this.shallowNodes.size <= 1 + 16 + 16 * 16) break;
+      this.shallowNodes.delete(previousOffset);
+      this.charged -= previous.length + ID_NODE_CACHE_ENTRY_OVERHEAD;
+    }
+    this.evictToCap(this.nodes);
+    this.evictToCap(this.shallowNodes);
   }
 
-  private evictToCap(): void {
-    for (const [offset, node] of this.nodes) {
+  private evictToCap(nodes: Map<number, Uint8Array>): void {
+    for (const [offset, node] of nodes) {
       if (this.charged <= this.capBytes) return;
-      this.nodes.delete(offset);
+      nodes.delete(offset);
       this.charged -= node.length + ID_NODE_CACHE_ENTRY_OVERHEAD;
     }
   }
