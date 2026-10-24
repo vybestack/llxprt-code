@@ -11,6 +11,42 @@ import {
 import { SeededRandom } from './__tests__/support/seededRandom.js';
 
 describe('row tree positional read cost', () => {
+  it('reuses immutable tree bytes across repeated pinned lookups', async () => {
+    const random = new SeededRandom(1);
+    const entries = Array.from({ length: 8 }, (_, index) =>
+      syntheticEntry(random, index, NO_KINDS),
+    );
+    const record = encodeRowTreeNode({ kind: 'leaf', entries });
+    const frame = encodeBodylessFrame(record.kind, record.kindHeader);
+    const bytes = new Uint8Array(64 * 1024);
+    bytes.set(frame);
+    bytes.set(frame, 32 * 1024);
+    let readBytes = 0;
+    const access = createRecordAccess(
+      'pinned-read-cost',
+      {
+        async readAt(position, length): Promise<Uint8Array> {
+          readBytes += length;
+          return bytes.slice(position, position + length);
+        },
+      },
+      { selfOffset: 0, durableEnd: bytes.length },
+      true,
+    );
+
+    for (let lookup = 0; lookup < 16; lookup++) {
+      expect(await readRowTreeNode(access, 0)).toStrictEqual({
+        kind: 'leaf',
+        entries,
+      });
+    }
+    expect(readBytes).toBeLessThanOrEqual(16 * 1024);
+    const firstReadBytes = readBytes;
+    await readRowTreeNode(access, 32 * 1024);
+    await readRowTreeNode(access, 0);
+    expect(readBytes).toBe(firstReadBytes * 3);
+  });
+
   it.each([1, 8])(
     'reads a %i-entry node with one descriptor read',
     async (count) => {

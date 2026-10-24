@@ -27,11 +27,26 @@ export function rowTreeRootOf(
   return { offset: trailer.rowRoot, rows: trailer.rootAggregate.rows };
 }
 
+interface CachedNode {
+  readonly offset: number;
+  readonly node: RowTreeNode;
+}
+
+const readPaths = new WeakMap<RecordAccess, Map<number, CachedNode>>();
+
 /** Reads and decodes the `RTNODE` at `offset`; the frame CRC is checked by the access. */
 export async function readRowTreeNode(
   access: RecordAccess,
   offset: number,
 ): Promise<RowTreeNode> {
+  let path = readPaths.get(access);
+  if (path === undefined) {
+    path = new Map();
+    readPaths.set(access, path);
+  }
+  for (const cached of path.values()) {
+    if (cached.offset === offset) return cached.node;
+  }
   const head = await access.readRecordHead(
     offset,
     'RTNODE',
@@ -42,7 +57,9 @@ export async function readRowTreeNode(
       `Record at offset ${offset} is not a row tree node (kind ${head.kind}, body ${head.bodyLen})`,
     );
   }
-  return decodeRowTreeNode(head.kindHeader);
+  const node = decodeRowTreeNode(head.kindHeader);
+  path.set(node.kind === 'leaf' ? 0 : node.level, { offset, node });
+  return node;
 }
 
 function rowsOf(node: RowTreeNode): number {
