@@ -6,7 +6,10 @@
 import { describe, expect, it } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
+import {
+  registerCommandOwnerProvider,
+  useCommandOwners,
+} from '../../__tests__/command-owner-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
 import { createAgentProviderCommand } from '../../__tests__/provider-command-test-owner.js';
@@ -74,6 +77,7 @@ describe('registered provider command ownership', () => {
   it('switches and records on the registered owner despite decoy invocation owners', async () => {
     const left = await owner('left');
     const right = await owner('right');
+    registerCommandOwnerProvider(left, 'openai');
     const leftCommand = await registered(left);
     await registered(right);
     await Promise.all([
@@ -130,6 +134,7 @@ describe('registered provider command ownership', () => {
     refreshes.length = 0;
     const left = await owner('alias-left');
     const right = await owner('alias-right');
+    registerCommandOwnerProvider(right, 'openai');
     await right.setProvider('openai');
     const result = await execute(
       await registered(left, 'left'),
@@ -165,6 +170,7 @@ describe('registered provider command ownership', () => {
   it('does not reroute a retired owner command to a surviving invocation owner', async () => {
     const left = await owner('retired');
     const right = await owner('surviving');
+    registerCommandOwnerProvider(right, 'openai');
     const leftCommand = await registered(left);
     const rightCommand = await registered(right);
     await left.dispose();

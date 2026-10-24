@@ -5,7 +5,10 @@
  */
 import { describe, expect, it } from 'bun:test';
 import { renderHook } from '../../__tests__/render.js';
-import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
+import {
+  registerCommandOwnerProvider,
+  useCommandOwners,
+} from '../../__tests__/command-owner-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
 import { BuiltinCommandLoader } from '../../__tests__/builtin-loader-fixture.js';
@@ -40,6 +43,7 @@ describe('provider registration ownership', () => {
   it('uses captured provider operations and replaces them without consulting context authority', async () => {
     const owner = await makeOwner('provider-hook-owner');
     const peer = await makeOwner('provider-hook-peer');
+    registerCommandOwnerProvider(peer, 'openai');
     await peer.setProvider('openai');
     const context = createMockCommandContext();
     const hook = renderHook(

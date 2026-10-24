@@ -10,6 +10,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { type Agent, type AgentConfig } from '@vybestack/llxprt-code-agents';
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
+import { FakeProvider } from '@vybestack/llxprt-code-providers';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import {
   captureAgentCreation as createAgent,
@@ -24,6 +25,25 @@ export function commandOwnerManager(owner: Agent): RuntimeProviderManager {
 
 export function commandOwnerClient(owner: Agent): AgentClientContract {
   return fixtureAgentResources(owner).publishedClient(owner);
+}
+
+/**
+ * Registers one more FakeProvider named `name` on the owner's provider
+ * manager, replaying the fake-response fixture the owner was created with, so
+ * switching to `name` is a real provider switch the way production performs
+ * it for a registered provider.
+ */
+export function registerCommandOwnerProvider(owner: Agent, name: string): void {
+  const resources = fixtureAgentResources(owner);
+  const fixturePath = process.env.LLXPRT_FAKE_RESPONSES;
+  if (fixturePath === undefined)
+    throw new Error('Command owners require LLXPRT_FAKE_RESPONSES');
+  const provider = new FakeProvider(
+    fixturePath,
+    resources.config.getTargetDir(),
+  );
+  provider.name = name;
+  resources.manager.registerProvider(provider);
 }
 
 export function useCommandOwners(): (
