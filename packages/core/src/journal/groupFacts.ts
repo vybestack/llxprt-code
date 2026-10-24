@@ -255,13 +255,16 @@ export async function applyEntryRow(
   facts: GroupFacts,
   deps: FactDeps,
   entry: RowEntry,
+  known?: RowIds,
 ): Promise<void> {
+  const row = known ?? (await readRowIds(access, entry));
   if (deps.contextSpanPolicy !== undefined)
     await applyContextSpan(
       facts.ids,
-      deps.contextSpanPolicy((await readStoredMetadata(access, entry)).meta),
+      deps.contextSpanPolicy(
+        (await readStoredMetadata(access, entry, row)).meta,
+      ),
     );
-  const row = await readRowIds(access, entry);
   await applyStoredRecency(
     access,
     facts.ids,

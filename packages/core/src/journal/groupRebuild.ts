@@ -1,7 +1,4 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { applyContextSpan } from './contextSpanFacts.js';
-import { readStoredMetadata } from './rowRangeReads.js';
-import { applyStoredRecency } from './recencyFacts.js';
 import { EMPTY_AGGREGATE } from './aggregateComposition.js';
 import { rebuildContributions } from './contributionRebuild.js';
 import { JournalFormatError } from './errors.js';
@@ -26,7 +23,6 @@ import type { SourceRow } from './groupEdits.js';
 import {
   NO_FACT_ROOTS,
   applyDraftRow,
-  applyRowIds,
   applyEntryRow,
   rangeEntries,
   finishFacts,
@@ -183,22 +179,8 @@ class RebuildPass {
 
   /** Copies the row's record and applies its facts from the header and id piece, read once. */
   private async foreign(row: SourceRow): Promise<RowEntry> {
-    if (this.ctx.contextSpanPolicy !== undefined)
-      await applyContextSpan(
-        this.facts.ids,
-        this.ctx.contextSpanPolicy(
-          (await readStoredMetadata(row.source, row.entry)).meta,
-        ),
-      );
     const ids = await readRowIds(row.source, row.entry);
-    await applyStoredRecency(
-      row.source,
-      this.facts.ids,
-      this.ctx.recencyFactPolicy,
-      row.entry,
-      ids,
-    );
-    await applyRowIds(this.facts, this.ctx, ids);
+    await applyEntryRow(row.source, this.facts, this.ctx, row.entry, ids);
     return this.note(await copyForeignRow(this.appender, row, ids));
   }
 

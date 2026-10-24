@@ -23,7 +23,8 @@ export async function copyForeignRow(
 ): Promise<RowEntry> {
   const { source, entry } = row;
   const read = ids ?? (await readRowIds(source, entry));
-  const head = await readSourceHead(source, entry.recordOffset, 'ROW');
+  const head =
+    read.head ?? (await readSourceHead(source, entry.recordOffset, 'ROW'));
   const written = await appendSourceRecord(source, appender, head, 'ROW');
   if (written.bytes !== entry.recordLength) {
     throw new JournalFormatError(

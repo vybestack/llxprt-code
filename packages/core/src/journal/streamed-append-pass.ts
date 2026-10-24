@@ -128,9 +128,10 @@ export class StreamedAppendPass {
           throw new JournalFormatError(
             'Rows adopted at the end must have ascending labels above the live rows',
           );
-        await this.observe((await readRowIds(row.source, row.entry)).rawIds);
-        await applyEntryRow(row.source, this.facts, this.ctx, row.entry);
-        entry = await copyForeignRow(this.appender, row);
+        const ids = await readRowIds(row.source, row.entry);
+        await this.observe(ids.rawIds);
+        await applyEntryRow(row.source, this.facts, this.ctx, row.entry, ids);
+        entry = await copyForeignRow(this.appender, row, ids);
       }
       await this.facts.meta.spillWhenFull(this.appender, this.ctx.readGroup);
       previous = entry.label;

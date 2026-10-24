@@ -115,7 +115,7 @@ export async function applyStoredRecency(
         policy,
         entry.label,
         block,
-        await readStoredBlock(access, entry, block),
+        await readStoredBlock(access, entry, block, row),
       );
   }
 }
