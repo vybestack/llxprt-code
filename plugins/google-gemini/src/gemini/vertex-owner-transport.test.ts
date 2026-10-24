@@ -303,3 +303,246 @@ describe('Vertex credentials through the owner transport', () => {
     expect(a.requests).toHaveLength(0);
   });
 });
+
+const NO_ADC_FOUND =
+  'Could not load the default credentials. Browse to https://cloud.google.com/docs/authentication/getting-started for more information.';
+const INSTANCE_URL = 'computeMetadata/v1/instance';
+const TOKEN_QUERY =
+  'scopes=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloud-platform';
+
+function metadataEnvironment(
+  root: string,
+  overrides: Partial<GoogleCredentialEnvironment> = {},
+): GoogleCredentialEnvironment {
+  return environment({
+    metadataHost: `metadata-${root}.invalid`,
+    metadataDetection: 'ping-only',
+    ...overrides,
+  });
+}
+
+async function waitForRequestCount(
+  transport: OwnerTransport,
+  kind: TransportKind,
+  count: number,
+): Promise<void> {
+  const deadline = Date.now() + 10_000;
+  while (requestsOf(transport, kind).length < count) {
+    if (Date.now() > deadline) {
+      throw new Error(`No ${String(count)} ${kind} requests were recorded`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
+function failureOf(promise: Promise<unknown>): Promise<unknown> {
+  return promise.then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+}
+
+function withResponder(
+  transport: OwnerTransport,
+  respond: (request: Request) => Promise<Response> | undefined,
+): OwnerTransport['fetch'] {
+  return (input, init) => {
+    const request = new Request(input, init);
+    return respond(request) ?? transport.fetch(request);
+  };
+}
+
+describe('Vertex metadata credentials through the owner transport', () => {
+  it('discovers the metadata server and fetches the token on each root', async () => {
+    const a = await transportFor('a');
+    const b = await transportFor('b');
+    await Promise.all([
+      generate(a, { credentialEnvironment: metadataEnvironment('a') }),
+      generate(b, { credentialEnvironment: metadataEnvironment('b') }),
+    ]);
+    for (const [transport, root] of [
+      [a, 'a'],
+      [b, 'b'],
+    ] as const) {
+      const metadata = requestsOf(transport, 'metadata');
+      expect(metadata.map((request) => [request.method, request.url])).toEqual([
+        ['GET', `http://metadata-${root}.invalid/${INSTANCE_URL}`],
+        [
+          'GET',
+          `http://metadata-${root}.invalid/${INSTANCE_URL}/service-accounts/default/token?${TOKEN_QUERY}`,
+        ],
+      ]);
+      expect(metadata[0].headers['metadata-flavor']).toBe('Google');
+      expect(metadata[1].headers['metadata-flavor']).toBe('Google');
+      expect(modelRequest(transport).headers['authorization']).toBe(
+        `Bearer meta-${root}`,
+      );
+      expect(
+        transport.requests.filter((request) =>
+          /169\.254\.169\.254|metadata\.google\.internal/.test(request.url),
+        ),
+      ).toHaveLength(0);
+    }
+  });
+
+  it('ends a held discovery when its owner closes with the owner abort, not the missing-credentials error', async () => {
+    const a = await transportFor('a');
+    const b = await transportFor('b');
+    a.hold('metadata');
+    const first = failureOf(
+      generate(a, { credentialEnvironment: metadataEnvironment('a') }),
+    );
+    await a.waitForRequest('metadata');
+    const second = generate(b, {
+      credentialEnvironment: metadataEnvironment('b'),
+    });
+    await a.close();
+    const failure = await first;
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toContain('Owner transport is closed');
+    expect((failure as Error).message).not.toContain(NO_ADC_FOUND);
+    await second;
+    expect(requestsOf(a, 'metadata')).toHaveLength(1);
+    expect(requestsOf(a, 'model')).toHaveLength(0);
+    expect(modelRequest(b).headers['authorization']).toBe('Bearer meta-b');
+  });
+
+  it('ends a held metadata token request when its owner closes', async () => {
+    const a = await transportFor('a');
+    const b = await transportFor('b');
+    const first = failureOf(
+      generate(a, { credentialEnvironment: metadataEnvironment('a') }),
+    );
+    await a.waitForRequest('metadata');
+    a.hold('metadata');
+    await waitForRequestCount(a, 'metadata', 2);
+    const second = generate(b, {
+      credentialEnvironment: metadataEnvironment('b'),
+    });
+    await a.close();
+    const failure = await first;
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toContain('Owner transport is closed');
+    await second;
+    expect(requestsOf(a, 'model')).toHaveLength(0);
+    expect(modelRequest(b).headers['authorization']).toBe('Bearer meta-b');
+  });
+
+  it('treats detection "none" as absent without any request', async () => {
+    const a = await transportFor('a');
+    const b = await transportFor('b');
+    const failures = await Promise.all([
+      failureOf(
+        generate(a, {
+          credentialEnvironment: metadataEnvironment('a', {
+            metadataDetection: 'none',
+          }),
+        }),
+      ),
+      failureOf(
+        generate(b, {
+          credentialEnvironment: metadataEnvironment('b', {
+            metadataDetection: 'none',
+          }),
+        }),
+      ),
+    ]);
+    for (const failure of failures) {
+      expect((failure as Error).message).toBe(NO_ADC_FOUND);
+    }
+    expect(a.requests).toHaveLength(0);
+    expect(b.requests).toHaveLength(0);
+  });
+
+  it('rejects an unknown detection value before any request', async () => {
+    const a = await transportFor('a');
+    const failure = await failureOf(
+      generate(a, {
+        credentialEnvironment: metadataEnvironment('a', {
+          metadataDetection: 'sometimes',
+        }),
+      }),
+    );
+    expect(failure).toBeInstanceOf(RangeError);
+    expect((failure as Error).message).toContain('`sometimes`');
+    expect(a.requests).toHaveLength(0);
+  });
+
+  it('skips discovery when detection is "assume-present"', async () => {
+    const a = await transportFor('a');
+    await generate(a, {
+      credentialEnvironment: metadataEnvironment('a', {
+        metadataDetection: 'assume-present',
+      }),
+    });
+    const metadata = requestsOf(a, 'metadata');
+    expect(metadata).toHaveLength(1);
+    expect(metadata[0].url).toBe(
+      `http://metadata-a.invalid/${INSTANCE_URL}/service-accounts/default/token?${TOKEN_QUERY}`,
+    );
+    expect(modelRequest(a).headers['authorization']).toBe('Bearer meta-a');
+  });
+
+  it('reports a 404 discovery as absent and keeps the response as the cause', async () => {
+    const a = await transportFor('a');
+    const failure = await failureOf(
+      createGeminiApiClient({
+        vertexai: true,
+        project: 'project',
+        location: 'us-central1',
+        fetch: withResponder(a, (request) =>
+          new URL(request.url).pathname === `/${INSTANCE_URL}`
+            ? Promise.resolve(
+                new Response('missing', {
+                  status: 404,
+                  headers: { 'metadata-flavor': 'Google' },
+                }),
+              )
+            : undefined,
+        ),
+        credentialEnvironment: metadataEnvironment('a'),
+      }).then((client) => client.models.generateContent(PARAMS)),
+    );
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toBe(NO_ADC_FOUND);
+    expect(((failure as Error).cause as { status?: number }).status).toBe(404);
+    expect(a.requests).toHaveLength(0);
+  });
+
+  it('races the default hosts, aborts the slower one and requests the token from the primary', async () => {
+    const a = await transportFor('a');
+    let primaryDiscoveryAborted = false;
+    let primaryHeld = false;
+    const fetchWithSlowPrimary = withResponder(a, (request) => {
+      const url = new URL(request.url);
+      if (url.hostname !== '169.254.169.254' || primaryHeld) {
+        return undefined;
+      }
+      primaryHeld = true;
+      return new Promise<Response>((_resolve, reject) => {
+        request.signal.addEventListener(
+          'abort',
+          () => {
+            primaryDiscoveryAborted = true;
+            reject(request.signal.reason);
+          },
+          { once: true },
+        );
+      });
+    });
+    await createGeminiApiClient({
+      vertexai: true,
+      project: 'project',
+      location: 'us-central1',
+      fetch: fetchWithSlowPrimary,
+      credentialEnvironment: environment({ metadataDetection: 'ping-only' }),
+    }).then((client) => client.models.generateContent(PARAMS));
+    expect(primaryDiscoveryAborted).toBe(true);
+    const metadata = requestsOf(a, 'metadata');
+    expect(metadata.map((request) => request.url)).toEqual([
+      `http://metadata.google.internal./${INSTANCE_URL}`,
+      `http://169.254.169.254/${INSTANCE_URL}/service-accounts/default/token?${TOKEN_QUERY}`,
+    ]);
+    expect(modelRequest(a).headers['authorization']).toBe('Bearer meta-a');
+  });
+});

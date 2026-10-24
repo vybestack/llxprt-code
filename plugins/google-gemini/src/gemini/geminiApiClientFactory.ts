@@ -86,8 +86,8 @@ export async function createGeminiApiClient(
     throw new Error('Vertex AI requires explicit project and location');
   }
   const baseURL = toAiSdkBaseUrl(options.httpOptions?.baseUrl);
-  let selectedCredential: Promise<AuthClient | undefined> | undefined;
-  const credentialClient = (): Promise<AuthClient | undefined> => {
+  let selectedCredential: Promise<AuthClient> | undefined;
+  const credentialClient = (): Promise<AuthClient> => {
     const { credentialEnvironment } = options;
     if (credentialEnvironment === undefined) {
       throw new Error('Vertex AI requires a Google credential environment');
@@ -115,12 +115,10 @@ export async function createGeminiApiClient(
         location: options.location,
         baseURL: options.httpOptions?.baseUrl,
         headers: withQuotaProjectHeader(
-          authClient?.quotaProjectId,
+          authClient.quotaProjectId,
           options.httpOptions?.headers,
         ),
-        ...(authClient !== undefined
-          ? { googleAuthOptions: { authClient } }
-          : {}),
+        googleAuthOptions: { authClient },
         fetch: transport,
       }).languageModel(params.model);
     }
