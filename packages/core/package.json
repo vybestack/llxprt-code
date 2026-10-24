@@ -991,6 +991,91 @@
       "types": "./dist/src/recording/sessionMetaKeys.d.ts",
       "bun": "./src/recording/sessionMetaKeys.ts",
       "import": "./dist/src/recording/sessionMetaKeys.js"
+    },
+    "./services/history/historyMutationEffects.js": {
+      "types": "./dist/src/services/history/historyMutationEffects.d.ts",
+      "bun": "./src/services/history/historyMutationEffects.ts",
+      "import": "./dist/src/services/history/historyMutationEffects.js"
+    },
+    "./services/history/caller-owned-provider-request.js": {
+      "types": "./dist/src/services/history/caller-owned-provider-request.d.ts",
+      "bun": "./src/services/history/caller-owned-provider-request.ts",
+      "import": "./dist/src/services/history/caller-owned-provider-request.js"
+    },
+    "./services/history/native-provider-format.js": {
+      "types": "./dist/src/services/history/native-provider-format.d.ts",
+      "bun": "./src/services/history/native-provider-format.ts",
+      "import": "./dist/src/services/history/native-provider-format.js"
+    },
+    "./journal/errors.js": {
+      "types": "./dist/src/journal/errors.d.ts",
+      "bun": "./src/journal/errors.ts",
+      "import": "./dist/src/journal/errors.js"
+    },
+    "./journal/slotSummary.js": {
+      "types": "./dist/src/journal/slotSummary.d.ts",
+      "bun": "./src/journal/slotSummary.ts",
+      "import": "./dist/src/journal/slotSummary.js"
+    },
+    "./journal/summaryComposition.js": {
+      "types": "./dist/src/journal/summaryComposition.d.ts",
+      "bun": "./src/journal/summaryComposition.ts",
+      "import": "./dist/src/journal/summaryComposition.js"
+    },
+    "./journal/unitContributions.js": {
+      "types": "./dist/src/journal/unitContributions.d.ts",
+      "bun": "./src/journal/unitContributions.ts",
+      "import": "./dist/src/journal/unitContributions.js"
+    },
+    "./services/history/indexed-journal-request-snapshot.js": {
+      "types": "./dist/src/services/history/indexed-journal-request-snapshot.d.ts",
+      "bun": "./src/services/history/indexed-journal-request-snapshot.ts",
+      "import": "./dist/src/services/history/indexed-journal-request-snapshot.js"
+    },
+    "./journal/rowRecord.js": {
+      "types": "./dist/src/journal/rowRecord.d.ts",
+      "bun": "./src/journal/rowRecord.ts",
+      "import": "./dist/src/journal/rowRecord.js"
+    },
+    "./journal/rowFormat.js": {
+      "types": "./dist/src/journal/rowFormat.d.ts",
+      "bun": "./src/journal/rowFormat.ts",
+      "import": "./dist/src/journal/rowFormat.js"
+    },
+    "./services/history/journal-request-mistral.js": {
+      "types": "./dist/src/services/history/journal-request-mistral.d.ts",
+      "bun": "./src/services/history/journal-request-mistral.ts",
+      "import": "./dist/src/services/history/journal-request-mistral.js"
+    },
+    "./services/history/journal-entry-plans.js": {
+      "types": "./dist/src/services/history/journal-entry-plans.d.ts",
+      "bun": "./src/services/history/journal-entry-plans.ts",
+      "import": "./dist/src/services/history/journal-entry-plans.js"
+    },
+    "./services/history/journal-tail-source.js": {
+      "types": "./dist/src/services/history/journal-tail-source.d.ts",
+      "bun": "./src/services/history/journal-tail-source.ts",
+      "import": "./dist/src/services/history/journal-tail-source.js"
+    },
+    "./services/history/historyReaderScope.js": {
+      "types": "./dist/src/services/history/historyReaderScope.d.ts",
+      "bun": "./src/services/history/historyReaderScope.ts",
+      "import": "./dist/src/services/history/historyReaderScope.js"
+    },
+    "./services/history/token-usage-measurement.js": {
+      "types": "./dist/src/services/history/token-usage-measurement.d.ts",
+      "bun": "./src/services/history/token-usage-measurement.ts",
+      "import": "./dist/src/services/history/token-usage-measurement.js"
+    },
+    "./services/history/densityRecencyFacts.js": {
+      "types": "./dist/src/services/history/densityRecencyFacts.d.ts",
+      "bun": "./src/services/history/densityRecencyFacts.ts",
+      "import": "./dist/src/services/history/densityRecencyFacts.js"
+    },
+    "./journal/tool-ranking-tree.js": {
+      "types": "./dist/src/journal/tool-ranking-tree.d.ts",
+      "bun": "./src/journal/tool-ranking-tree.ts",
+      "import": "./dist/src/journal/tool-ranking-tree.js"
     }
   },
   "scripts": {
