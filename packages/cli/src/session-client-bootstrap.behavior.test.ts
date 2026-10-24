@@ -182,6 +182,7 @@ describe.each(['journal'] as const)(
     const eventSchema = z.object({
       type: z.string(),
       reason: z.string().optional(),
+      error: z.unknown().optional(),
     });
     const resultSchema = z.object({
       headless: z.boolean(),
@@ -249,6 +250,9 @@ describe.each(['journal'] as const)(
     function expectStopped(
       events: ReadonlyArray<z.infer<typeof eventSchema>>,
     ): void {
+      expect(events.filter((event) => event.type === 'error')).toStrictEqual(
+        [],
+      );
       expect(events.filter((event) => event.type === 'done')).toStrictEqual([
         expect.objectContaining({ reason: 'stop' }),
       ]);

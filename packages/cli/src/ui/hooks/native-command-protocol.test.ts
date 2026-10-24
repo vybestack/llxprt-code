@@ -10,7 +10,9 @@ import {
   decodeSessionFact,
   SESSION_KEYS,
 } from '@vybestack/llxprt-code-core/recording/sessionMetaKeys.js';
-import { JournalSession } from '@vybestack/llxprt-code-core/services/history/journalSession.js';
+import { openJournalReadOnly } from '@vybestack/llxprt-code-core/journal/journalReader.js';
+import { stateReaderOf } from '@vybestack/llxprt-code-core/journal/journalReaderState.js';
+import { sha256KeyHash } from '@vybestack/llxprt-code-core/journal/idKeys.js';
 import { streamRecordedRows } from '../../__tests__/journal-recording.js';
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
@@ -202,10 +204,11 @@ describe('native CLI command protocol', () => {
       const child = await recording(agent);
       expect(child).not.toBe(source);
       expect(await durable(child)).toStrictEqual({ ...initial });
-      const journal = await JournalSession.open(child);
+      const journal = await openJournalReadOnly(child);
       try {
-        const id = await journal.store.getState(SESSION_KEYS.id);
-        const start = await journal.store.getState(SESSION_KEYS.start);
+        const readState = stateReaderOf(journal, sha256KeyHash);
+        const id = await readState(SESSION_KEYS.id);
+        const start = await readState(SESSION_KEYS.start);
         if (id === undefined || start === undefined)
           throw new Error('Missing native identity facts');
         expect({ sessionId: decodeSessionFact(id) }).toStrictEqual({
@@ -214,7 +217,7 @@ describe('native CLI command protocol', () => {
         expect(decodeSessionFact(start)).toMatchObject({
           projectHash: getProjectHash(root),
         });
-        const fork = await journal.store.getState(SESSION_KEYS.fork);
+        const fork = await readState(SESSION_KEYS.fork);
         if (fork === undefined) throw new Error('Missing checkpoint ancestry');
         expect(decodeSessionFact(fork)).toMatchObject({
           parentSessionId: 'cli-native-source',
