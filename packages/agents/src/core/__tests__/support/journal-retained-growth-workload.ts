@@ -61,17 +61,36 @@ class RetainingHistory extends HistoryService {
     );
     const retained = this.retained;
     const retaining = () => this.retaining;
+    const indexed = snapshot.native?.indexed;
+    if (indexed !== undefined) {
+      const readAt = indexed.readAt.bind(indexed);
+      const openReader = indexed.openReader.bind(indexed);
+      indexed.readAt = async (index, signal): Promise<IContent> => {
+        const row = await readAt(index, signal);
+        if (retaining()) retained.push(row);
+        return row;
+      };
+      indexed.openReader = (signal) => retainRows(openReader(signal));
+    }
+    async function* retainRows(
+      source: AsyncGenerator<IContent>,
+    ): AsyncGenerator<IContent> {
+      for await (const row of source) {
+        if (retaining()) retained.push(row);
+        yield row;
+      }
+    }
     return {
+      ...(snapshot.native === undefined ? {} : { native: snapshot.native }),
+      ...(snapshot.callerOwned === true ? { callerOwned: true } : {}),
       count: snapshot.count,
       pending: snapshot.pending,
       isPending: (index) => snapshot.isPending(index),
       readAt: (index, signal) => snapshot.readAt(index, signal),
-      async *openReader(signal): AsyncGenerator<IContent, void, unknown> {
-        for await (const row of snapshot.openReader(signal)) {
-          if (retaining()) retained.push(row);
-          yield row;
-        }
-      },
+      openReader: (signal) =>
+        indexed === undefined
+          ? retainRows(snapshot.openReader(signal))
+          : snapshot.openReader(signal),
       close: () => snapshot.close(),
     };
   }
