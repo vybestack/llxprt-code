@@ -4,7 +4,15 @@ import * as path from 'node:path';
 import type { VersionEdit } from '../journal/groupEdits.js';
 import type { LocalMediaStore } from '../storage/local-media-store.js';
 import { sha256KeyHash } from '../journal/idKeys.js';
-import type { JournalStore } from '../journal/journalStore.js';
+import {
+  checkpointKey,
+  parseCheckpointEntry,
+} from '../journal/checkpointDescriptor.js';
+import { BoundedIdNodeCache } from '../journal/idTrieCache.js';
+import { openJournalReadOnly } from '../journal/journalReader.js';
+import { KeyedMapReader } from '../journal/keyedMap.js';
+import type { RecordAccess } from '../journal/recordAccess.js';
+import { versionOf, type Version } from '../journal/version.js';
 import { resolveJournalDependencies } from '../journal/journalWriterOpen.js';
 import { cloneCheckpoint } from '../journal/versionCopy.js';
 import {
@@ -94,46 +102,56 @@ function childFactEdits(
   ];
 }
 
+interface SourceRead {
+  readonly access: RecordAccess;
+  readonly version: Version | undefined;
+}
+
 async function cloneIntoChild(
-  source: JournalStore,
+  read: SourceRead,
   request: JournalForkRequest,
   childPath: string,
   allocated: () => void,
 ): Promise<SessionForkedPayload> {
   const { target } = request;
-  const read = await source.openRead();
-  try {
-    const descriptor = await source.checkpoint(target.checkpointId);
-    if (descriptor === undefined || read.version === undefined) {
-      throw new LiveCheckpointError(target);
-    }
-    const journal = await resolveJournalDependencies(request.journal?.journal);
-    await cloneCheckpoint(
-      read.access,
-      read.version,
-      target.checkpointId,
-      childPath,
-      {
-        journal: {
-          ...journal,
-          open: async (target, flags) => {
-            const handle = await journal.open(target, flags);
-            allocated();
-            return handle;
-          },
+  if (read.version === undefined) throw new LiveCheckpointError(target);
+  const state = new KeyedMapReader(
+    read.access,
+    new BoundedIdNodeCache(),
+    'state',
+    sha256KeyHash,
+  );
+  const stored = await state.get(
+    read.version.roots.stateRoot,
+    checkpointKey(target.checkpointId),
+  );
+  const descriptor =
+    stored === undefined ? undefined : parseCheckpointEntry(stored);
+  if (descriptor === undefined) throw new LiveCheckpointError(target);
+  const journal = await resolveJournalDependencies(request.journal?.journal);
+  await cloneCheckpoint(
+    read.access,
+    read.version,
+    target.checkpointId,
+    childPath,
+    {
+      journal: {
+        ...journal,
+        open: async (target, flags) => {
+          const handle = await journal.open(target, flags);
+          allocated();
+          return handle;
         },
-        hasher: sha256KeyHash,
       },
-    );
-    return {
-      parentSessionId: target.source.sessionId,
-      parentSequence: descriptor.commitSeq,
-      checkpointId: target.checkpointId,
-      checkpointName: descriptor.name,
-    };
-  } finally {
-    await read.close();
-  }
+      hasher: sha256KeyHash,
+    },
+  );
+  return {
+    parentSessionId: target.source.sessionId,
+    parentSequence: descriptor.commitSeq,
+    checkpointId: target.checkpointId,
+    checkpointName: descriptor.name,
+  };
 }
 
 class LiveCheckpointError extends Error {
@@ -163,23 +181,29 @@ async function describeChild(
   }
 }
 
-async function withSourceStore<T>(
+async function withSourceRead<T>(
   request: JournalForkRequest,
-  action: (store: JournalStore) => Promise<T>,
+  action: (read: SourceRead) => Promise<T>,
 ): Promise<T> {
   const { activeSource, target } = request;
   if (activeSource?.getSessionId() === target.source.sessionId) {
     await activeSource.flush();
-    return action((await activeSource.session()).store);
+    const read = await (await activeSource.session()).store.openRead();
+    try {
+      return await action(read);
+    } finally {
+      await read.close();
+    }
   }
-  const session = await JournalSession.open(
-    target.source.filePath,
-    request.journal,
-  );
+  const reader = await openJournalReadOnly(target.source.filePath);
   try {
-    return await action(session.store);
+    return await action({
+      access: reader,
+      version:
+        reader.trailer === undefined ? undefined : versionOf(reader.trailer),
+    });
   } finally {
-    await session.close();
+    await reader.close();
   }
 }
 
@@ -232,8 +256,8 @@ async function createChild(
   let created = false;
   try {
     lock = await SessionLockManager.acquire(chatsDir, metadata.sessionId);
-    const fork = await withSourceStore(request, (store) =>
-      cloneIntoChild(store, request, childPath, () => {
+    const fork = await withSourceRead(request, (read) =>
+      cloneIntoChild(read, request, childPath, () => {
         created = true;
       }),
     );
