@@ -1,5 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { StreamJsonString, quotedChunks } from './streamJsonString.js';
+import { StreamJsonValue } from './streamJsonValue.js';
+import { prettyJsonBytes } from './prettyJsonBytes.js';
 function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {
   return (
     typeof value === 'object' && value !== null && Symbol.asyncIterator in value
@@ -64,6 +66,14 @@ async function* emitJson(
   depth: number,
   ancestors: WeakSet<object>,
 ): AsyncGenerator<string> {
+  if (value instanceof StreamJsonValue) {
+    const decoder = new TextDecoder();
+    for await (const chunk of prettyJsonBytes(value.bytes(), depth))
+      yield decoder.decode(chunk, { stream: true });
+    const tail = decoder.decode();
+    if (tail !== '') yield tail;
+    return;
+  }
   if (value instanceof StreamJsonString) {
     yield* quotedChunks(value);
     return;

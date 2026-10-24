@@ -70,7 +70,7 @@ import {
 } from './hookEnvelopeHelpers.js';
 import { canonicalizeToolName } from './toolGovernance.js';
 import { isTerminalRetryError } from './turnAbortHelpers.js';
-import { replayableContents } from '@vybestack/llxprt-code-providers/utils/collectContents.js';
+import { callerOwnedRawProviderSource } from '@vybestack/llxprt-code-core/services/history/caller-owned-provider-request.js';
 import {
   ensureResponseText,
   extractResponseText,
@@ -514,7 +514,7 @@ export class DirectMessageProcessor {
       runtimeContext.config?.getTargetDir(),
     ).generateChatCompletion({
       // Retry boundaries can reopen the provider-facing history.
-      contents: replayableContents(contentsForApi),
+      contents: callerOwnedRawProviderSource(contentsForApi),
       tools: effectiveToolsFromConfig,
       invocation: this.runtimeContext.prepareProviderInvocation(
         provider.name,

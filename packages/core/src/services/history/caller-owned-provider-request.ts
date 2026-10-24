@@ -7,6 +7,7 @@ import type { JournalResponsePlan } from './journal-response-plan.js';
 import { HistoryReaderScope } from './historyReaderScope.js';
 import {
   assertRowIndex,
+  inMemoryRequestSelection,
   type ProviderRequestSnapshot,
   type ProviderRequestSource,
 } from './provider-request-snapshot.js';
@@ -79,6 +80,20 @@ export function callerOwnedProviderSource(
       } finally {
         await snapshot.close();
       }
+    },
+  };
+}
+
+export function callerOwnedRawProviderSource(
+  rows: readonly IContent[],
+): ProviderRequestSource {
+  return {
+    openProviderRequest: async () => ({
+      ...inMemoryRequestSelection(rows),
+      callerOwned: true,
+    }),
+    async *[Symbol.asyncIterator]() {
+      yield* rows;
     },
   };
 }

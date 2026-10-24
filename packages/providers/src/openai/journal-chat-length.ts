@@ -95,6 +95,7 @@ function factsOf(
   settings: RowFormatSettings,
   previous: readonly string[],
   mapper?: StreamingToolIdMapper,
+  allowOrphans = false,
 ): {
   facts: ChatUnitLengthFacts;
   lastIds: readonly string[];
@@ -133,7 +134,9 @@ function factsOf(
   let lastIds = previous;
   const facts = messages.map((message) => {
     const dropped =
-      message.role === 'tool' && !lastIds.includes(message.tool_call_id);
+      message.role === 'tool' &&
+      !allowOrphans &&
+      !lastIds.includes(message.tool_call_id);
     if (!dropped) {
       if (message.role === 'assistant' && message.tool_calls !== undefined)
         lastIds = message.tool_calls.map((call) => call.id);
@@ -231,6 +234,7 @@ async function chatUnit(
   state: ChatFoldState,
   count: ChatUnitTokenMeasurer | undefined,
   rowIds: NativeRowIds | undefined,
+  allowOrphans: boolean,
 ): Promise<{
   readonly unit: SlotSummary;
   readonly thinking: boolean;
@@ -239,9 +243,16 @@ async function chatUnit(
 }> {
   const ids = await rowIds?.(row, index);
   const hasThinking = row.blocks.some((block) => block.type === 'thinking');
-  const kept = factsOf(row, false, settings, state.keptIds, ids?.());
+  const kept = factsOf(
+    row,
+    false,
+    settings,
+    state.keptIds,
+    ids?.(),
+    allowOrphans,
+  );
   const removed = hasThinking
-    ? factsOf(row, true, settings, state.removedIds, ids?.())
+    ? factsOf(row, true, settings, state.removedIds, ids?.(), allowOrphans)
     : kept;
   const omitted =
     hasThinking && settings.chat?.includeInContext !== false
@@ -251,6 +262,7 @@ async function chatUnit(
           { ...settings, chat: { ...settings.chat, includeInContext: false } },
           state.keptIds,
           ids?.(),
+          allowOrphans,
         )
       : kept;
   const keptTokens = await count?.(kept.messages);
@@ -277,6 +289,7 @@ async function chatUnit(
 }
 
 export interface ChatFoldOptions {
+  readonly allowOrphans?: boolean;
   readonly count?: ChatUnitTokenMeasurer;
   readonly rowIds?: NativeRowIds;
   /** Sees each unit's length facts; a request fold keeps none of them. */
@@ -312,6 +325,7 @@ export async function foldChatUnits(
       state,
       options.count,
       options.rowIds,
+      options.allowOrphans === true,
     );
     state = done.state;
     options.onUnit?.(done.facts);

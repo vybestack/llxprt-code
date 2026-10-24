@@ -150,31 +150,41 @@ export async function callerOwnedAnthropicEngine(
   const query = Object.assign(await CallerOwnedToolQuery.create(rows), {
     readAt: rows.readAt,
   });
-  const source = new AnthropicRepairSource(query, settings);
+  const source = new AnthropicRepairSource(
+    query,
+    settings,
+    undefined,
+    undefined,
+    false,
+  );
   const index = new CallerOwnedAnthropicIndex(source);
   await index.prepare();
   return AnthropicStreamRepair.fromSource(
-    new AnthropicRepairSource(query, settings, index),
+    new AnthropicRepairSource(query, settings, index, undefined, false),
     index,
     policy,
   );
 }
 
 export async function callerOwnedAnthropicCache(
-  engine: Pick<AnthropicStreamRepair, 'atoms'>,
+  engine: Pick<AnthropicStreamRepair<AnthropicRepairRows>, 'atoms' | 'source'>,
   settings: RowFormatSettings,
   ttl: '5m' | '1h',
 ): Promise<AnthropicCachePlan> {
   let state: AnthropicCacheState = {};
   for await (const atom of engine.atoms()) {
+    const anchored =
+      !atom.repair &&
+      (await engine.source.query.readAt(atom.end ?? Math.floor(atom.key / 4)))
+        .metadata?.cacheAnchor === true;
+    const before = state.run?.role === atom.role ? state.run.blocks : 0;
     state = beginAnthropicCacheAtom(state, atom.role, atom.chain);
-    const before = state.run?.blocks ?? 0;
     for await (const piece of atom.openPieces())
       state = addAnthropicCachePiece(
         state,
-        numericRepairPiece(piece, atom.role),
+        numericRepairPiece(piece, atom.role, anchored),
       );
-    state = finishAnthropicCacheAtom(state, false, before);
+    state = finishAnthropicCacheAtom(state, anchored, before);
   }
   return anthropicCachePlan(state, settings, ttl);
 }

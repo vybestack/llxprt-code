@@ -141,6 +141,7 @@ function initialNativeChatBody(
         strip,
         plan.lastThinking,
         captured.rowIds,
+        captured.allowOrphans,
       );
       yield nativeDumpLiteral(']');
       yield nativeDumpLiteral(tail, captured.diagnostic.tail);
@@ -150,6 +151,7 @@ function initialNativeChatBody(
 }
 
 interface CapturedNativeChatPlan {
+  readonly allowOrphans?: boolean;
   readonly rowIds?: NativeRowIds;
   readonly releaseMapping?: () => void | Promise<void>;
   readonly plan: StoredChatMessagePlan;
@@ -176,6 +178,7 @@ function reasoningStrip(options: NormalizedGenerateChatOptions): unknown {
 /** What a request's chat plan is made from, and what keeps its ids readable. */
 interface PlannedNativeChat {
   readonly plan: StoredChatMessagePlan;
+  readonly allowOrphans?: boolean;
   readonly rowIds?: NativeRowIds;
   readonly releaseMapping?: () => void | Promise<void>;
 }
@@ -290,6 +293,7 @@ async function planStreamedChat(
   rowIds: NativeRowIds | undefined,
   rowInput: ChatRowInput,
   count?: ChatUnitTokenMeasurer,
+  allowOrphans = false,
 ): Promise<StoredChatMessagePlan> {
   const source = rows.openReader(signal);
   const fold = await foldChatUnits(
@@ -298,6 +302,7 @@ async function planStreamedChat(
     {
       rowIds,
       count,
+      allowOrphans,
       lastThinkingOnly: selected === 2,
     },
   );
@@ -431,6 +436,7 @@ function continuationNativeChatBody(
         strip,
         stripped.lastThinking,
         captured.rowIds,
+        captured.allowOrphans,
       );
       for (const message of messages) {
         yield nativeDumpLiteral(',');
@@ -588,6 +594,16 @@ async function callerOwnedPlanning(
     rows,
     settings.chat?.toolFormat ?? 'openai',
   );
+  let allowOrphans = true;
+  for await (const row of rows.openReader(signal)) {
+    if (
+      row.speaker === 'ai' &&
+      row.blocks.some((block) => block.type === 'tool_call')
+    ) {
+      allowOrphans = false;
+      break;
+    }
+  }
   const plan = (
     captured: RowFormatSettings,
     selected: 0 | 1 | 2,
@@ -603,11 +619,13 @@ async function callerOwnedPlanning(
       rowIds,
       rowInput,
       count,
+      allowOrphans,
     );
   return {
     planner: async (selected, system) => ({
       plan: await plan(settings, selected, system),
       rowIds,
+      allowOrphans,
     }),
     bodySettings: settings,
     streamedPlan: (captured, count) =>

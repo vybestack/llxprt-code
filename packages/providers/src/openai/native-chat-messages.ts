@@ -7,7 +7,6 @@ import type {
   MediaBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RowFormatSettings } from '@vybestack/llxprt-code-core/journal/rowFormat.js';
-import { JournalFormatError } from '@vybestack/llxprt-code-core/journal/errors.js';
 import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-tools';
 import {
   nativeDumpLiteral,
@@ -74,6 +73,38 @@ function* mediaMessage(
   yield nativeDumpLiteral(']}');
 }
 
+async function* indexedMediaMessage(
+  readAt: (index: number) => Promise<IContent>,
+  from: number,
+  to: number,
+  video: boolean,
+): AsyncGenerator<NativeDumpPiece> {
+  yield nativeDumpLiteral(',{"role":"user","content":[');
+  yield* nativeDumpValue({
+    type: 'text',
+    text: video ? '[Media from tool response]' : '[Images from tool response]',
+  });
+  for (let index = from; index <= to; index++) {
+    const row = await readAt(index);
+    const media: MediaBlock[] = [];
+    processToolResponses(
+      row,
+      'openai',
+      (response) => response.callId,
+      buildToolResponseContent,
+      undefined,
+      media,
+    );
+    for (const block of media) {
+      const part = convertBlockToPart(block);
+      if (part === null) continue;
+      yield nativeDumpLiteral(',');
+      yield* nativeDumpValue(part);
+    }
+  }
+  yield nativeDumpLiteral(']}');
+}
+
 function nextCallIds(
   message: OpenAI.Chat.ChatCompletionMessageParam,
   previous: readonly string[],
@@ -89,18 +120,25 @@ export async function* nativeChatPieces(
   strip: unknown,
   lastThinking: number,
   rowIds?: NativeRowIds,
+  allowOrphans = false,
+  mediaAt?: (index: number) => Promise<IContent>,
 ): AsyncGenerator<NativeDumpPiece> {
   let lastIds: readonly string[] = [];
   let pending: MediaBlock[] = [];
+  let mediaStart = -1;
+  let mediaEnd = -1;
+  let video = false;
   let index = 0;
   for await (const source of rows) {
-    if (pending.length !== 0) {
-      if (source.speaker === 'tool')
-        throw new JournalFormatError(
-          'Native normalized Chat has consecutive tool-media units',
-        );
-      yield* mediaMessage(pending);
+    if (
+      (pending.length !== 0 || mediaStart >= 0) &&
+      source.speaker !== 'tool'
+    ) {
+      if (mediaAt === undefined) yield* mediaMessage(pending);
+      else yield* indexedMediaMessage(mediaAt, mediaStart, mediaEnd, video);
       pending = [];
+      mediaStart = -1;
+      video = false;
       lastIds = [];
     }
     const at = index++;
@@ -108,10 +146,18 @@ export async function* nativeChatPieces(
     const row = remove ? removeThinkingFromContent(source) : source;
     const mapper = (await rowIds?.(row, at))?.();
     const messages = messagesOf(row, settings, pending, mapper);
+    if (mediaAt !== undefined && pending.length !== 0) {
+      if (mediaStart < 0) mediaStart = at;
+      mediaEnd = at;
+      video ||= pending.some((block) => classifyMediaBlock(block) === 'video');
+      pending = [];
+    }
     for (const message of messages) {
       if (
         message === null ||
-        (message.role === 'tool' && !lastIds.includes(message.tool_call_id))
+        (message.role === 'tool' &&
+          !allowOrphans &&
+          !lastIds.includes(message.tool_call_id))
       )
         continue;
       lastIds = nextCallIds(message, lastIds);
@@ -119,7 +165,9 @@ export async function* nativeChatPieces(
       yield* nativeDumpValue(message);
     }
   }
-  if (pending.length !== 0) yield* mediaMessage(pending);
+  if (mediaAt !== undefined && mediaStart >= 0)
+    yield* indexedMediaMessage(mediaAt, mediaStart, mediaEnd, video);
+  else if (pending.length !== 0) yield* mediaMessage(pending);
 }
 
 export async function* nativeChatMessages(

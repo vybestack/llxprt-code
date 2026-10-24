@@ -17,6 +17,11 @@ import type {
   IProvider,
 } from '@vybestack/llxprt-code-providers';
 import { DirectMessageProcessor } from './DirectMessageProcessor.js';
+import {
+  acquireRequestRows,
+  stagedRequestRows,
+} from '@vybestack/llxprt-code-providers/utils/requestRowsLease.js';
+import { operationFileCreates } from '../compression/__tests__/support/operation-file-creates.js';
 
 async function rows(source: AsyncIterable<IContent>): Promise<number> {
   let count = 0;
@@ -35,8 +40,16 @@ const provider: IProvider = {
       throw new Error('Agent must use the options contract');
     if (Array.isArray(input.contents))
       throw new Error('Provider requires streamed contents');
-    const first = await rows(input.contents);
-    const second = await rows(input.contents);
+    const lease = acquireRequestRows(input);
+    let first: number;
+    let second: number;
+    try {
+      const selection = await stagedRequestRows(lease.options.contents);
+      first = await rows(selection.openReader());
+      second = await rows(selection.openReader());
+    } finally {
+      await lease.close();
+    }
     const declaredSelection = input.tools?.length === 0 ? 'empty' : 'selected';
     const selection = input.tools === undefined ? 'omitted' : declaredSelection;
     yield {
@@ -103,6 +116,14 @@ describe('direct-message flat tools and replayable contents', () => {
         { message: 'inspect', config: { tools: [] } },
         'critical-direct',
       );
+      const creates = await operationFileCreates(async () => {
+        const guarded = await processor.generateDirectMessage(
+          { message: 'inspect', config: { tools: [] } },
+          'critical-direct-guarded',
+        );
+        expect(guarded.content.blocks).toStrictEqual(response.content.blocks);
+      }, true);
+      expect(creates).toStrictEqual({ files: [], directories: [] });
       const text = response.content.blocks
         .filter((block) => block.type === 'text')
         .map((block) => block.text)

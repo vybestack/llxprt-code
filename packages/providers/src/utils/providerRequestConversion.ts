@@ -8,7 +8,7 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { OutputLimitConfig } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { HistoryDumpSource } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { AnthropicConversationConversionOptions as AnthropicMessageConversionOptions } from '../anthropic/AnthropicMessageNormalizer.js';
-import { buildOpenAIDumpStream } from '../openai/openAIDumpStream.js';
+import { nativeChatDump } from '../openai/native-chat-dump.js';
 import { buildAnthropicDumpStream } from '../anthropic/anthropicDumpStream.js';
 import type { ReasoningMessageOptions } from '../openai/OpenAIRequestBuilder.js';
 
@@ -90,11 +90,7 @@ export function buildProviderDumpBodyStream(params: {
   if (family === 'openai') {
     return withModel(
       {
-        messages: buildOpenAIDumpStream(
-          params.history,
-          openAIDumpOptions(params.policy),
-          params.config,
-        ),
+        messages: nativeChatDump(params.history, params.policy, params.config),
       },
       params.model,
     );

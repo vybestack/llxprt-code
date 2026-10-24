@@ -4,7 +4,11 @@ import type {
   DensityCallLookup,
 } from './compressionInput.js';
 import { DensityCallFacts } from '../../journal/densityCallFacts.js';
-import { ROW_BLOCK_TYPE } from '../../journal/rowRecord.js';
+import {
+  ROW_BLOCK_TYPE,
+  ROW_SPEAKER,
+  ROW_FLAG,
+} from '../../journal/rowRecord.js';
 import { snapshotReferences } from './journalMediaReferences.js';
 import { JournalFormatError } from '../../journal/errors.js';
 import { decodeStoredBlock } from './journalRowCodec.js';
@@ -80,6 +84,29 @@ export class JournalDumpSnapshot implements HistoryDumpSnapshot {
   get rawLength(): number {
     this.readers.requireOpen();
     return this.snapshot.rows;
+  }
+
+  rawChatFacts(): Promise<{
+    readonly lastThinking: number;
+    readonly hasCalls: boolean;
+  }> {
+    return this.readers.read(async () => {
+      let hasCalls = false;
+      for await (const entry of this.snapshot.entries()) {
+        if (
+          entry.speaker === ROW_SPEAKER.ai &&
+          (entry.flags & ROW_FLAG.hasToolCall) !== 0
+        ) {
+          hasCalls = true;
+          break;
+        }
+      }
+      const label = this.snapshot.version?.aggregate.lastThinking ?? 0n;
+      return {
+        hasCalls,
+        lastThinking: label === 0n ? -1 : await this.snapshot.rowsBelow(label),
+      };
+    });
   }
 
   readRawRow(index: number): Promise<IContent> {

@@ -11,6 +11,11 @@ import { captureHistoryDumpValues } from './dumpSnapshotValues.js';
 
 export interface HistoryDumpSource {
   rows(): AsyncIterable<IContent>;
+  rawChatFacts?(): Promise<{
+    readonly lastThinking: number;
+    readonly hasCalls: boolean;
+  }>;
+  readRawRow?(index: number): Promise<IContent>;
   compressionSpan?(
     selection: CompressionChronologySelection,
     hasFrontier: boolean,

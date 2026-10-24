@@ -5,6 +5,10 @@ import {
 } from './caller-owned-anthropic.js';
 import type { UnsupportedMediaEntry } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { readAnthropicMediaLedger } from './anthropic-media-ledger.js';
+import { unsupportedMediaOfRow } from '../utils/mediaUtils.js';
+import { createMediaSupportPredicate } from './AnthropicEndpointUtils.js';
+import { measurableAnthropicRow } from './anthropic-measured-media.js';
+
 import { IndexedJournalRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/indexed-journal-request-snapshot.js';
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { VersionSnapshot } from '@vybestack/llxprt-code-core/journal/versionSnapshot.js';
@@ -454,6 +458,14 @@ async function prepareCallerOwnedAnthropic(
   ))
     bytes += Buffer.byteLength(piece);
   const parts = await envelopeParts(envelope);
+  const unsupportedMedia: UnsupportedMediaEntry[] = [];
+  if (options.estimate === true) {
+    const supports = createMediaSupportPredicate(settings.endpoint);
+    for await (const row of rows.openReader(getRequestSignal(params.options)))
+      unsupportedMedia.push(
+        ...unsupportedMediaOfRow(measurableAnthropicRow(row), supports),
+      );
+  }
   return requestFromEngine(
     params,
     plan,
@@ -471,7 +483,7 @@ async function prepareCallerOwnedAnthropic(
     },
     options.estimate === true,
     mediaStage,
-    [],
+    unsupportedMedia,
     options.recoveryBudget,
     0,
   );

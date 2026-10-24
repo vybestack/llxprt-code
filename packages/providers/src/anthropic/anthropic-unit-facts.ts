@@ -105,6 +105,7 @@ function chainLength(
 export function projectAnthropicUnit(
   row: IContent,
   settings: RowFormatSettings,
+  normalized = true,
 ): IContent | undefined {
   if (
     [
@@ -122,6 +123,7 @@ export function projectAnthropicUnit(
       'Anthropic numeric facts require explicit cache-off settings',
     );
   if (
+    normalized &&
     row.speaker === 'ai' &&
     row.blocks.some((block) => block.type === 'tool_response')
   )

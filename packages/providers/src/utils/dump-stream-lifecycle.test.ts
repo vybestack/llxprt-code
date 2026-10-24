@@ -95,7 +95,7 @@ describe('provider iterator cleanup', () => {
           ),
         ).rejects.toThrow('read failure');
         expect(closed).toBe(true);
-        expect(watch.directories.length).toBeGreaterThan(0);
+        expect(watch.directories.length === 0).toBe(providerName === 'openai');
         expect(watch.directories.filter(fs.existsSync)).toStrictEqual([]);
       } finally {
         watch.restore();
@@ -144,7 +144,7 @@ describe('provider nested iterator cleanup', () => {
         await advanceToMedia(iterator);
         await iterator.return(undefined);
         expect(closed).toBe(true);
-        expect(watch.directories.length).toBeGreaterThan(0);
+        expect(watch.directories.length === 0).toBe(providerName === 'openai');
         expect(watch.directories.filter(fs.existsSync)).toStrictEqual([]);
       } finally {
         await iterator.return(undefined);
