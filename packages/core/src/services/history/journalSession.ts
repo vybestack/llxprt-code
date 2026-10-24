@@ -131,7 +131,10 @@ export class JournalSession {
           densityRecencyFactPolicy.revision
       )
         await store.commit([{ kind: 'recency' }]);
-      if ((await store.getMeta(NEUTRAL_ROW_FACTS_READY)) === undefined)
+      if (
+        options.eagerTokenUsageFacts === true &&
+        (await store.getMeta(NEUTRAL_ROW_FACTS_READY)) === undefined
+      )
         await store.commit([{ kind: 'append', rows: [] }]);
       return new JournalSession(store, true);
     } catch (error) {
