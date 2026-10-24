@@ -39,6 +39,7 @@ export interface BuildContext extends FactDeps {
 
 /** What the store keeps after the group is acked, and nothing before. */
 export interface BuiltGroup {
+  readonly changedRows?: Iterable<RowEntry>;
   readonly state: TrailerState;
   readonly spine: RightSpine | undefined;
   readonly chainBase: LineageChain;

@@ -3,6 +3,8 @@ import { describe, expect, it } from 'bun:test';
 import { JournalSession } from './journalSession.js';
 import { IndexedJournalRequestSnapshot } from './indexed-journal-request-snapshot.js';
 import type { IContent } from './IContent.js';
+import { call, response } from './__tests__/support/normalization-cases.js';
+import { measureRequestRow } from './token-usage-measurement.js';
 
 const row: IContent = {
   speaker: 'human',
@@ -90,6 +92,42 @@ describe('neutral token usage row facts', () => {
         await selected.close();
         await snapshot.close();
       }
+    } finally {
+      await session.close();
+    }
+  });
+
+  it('refreshes stored call measurements when a response is appended', async () => {
+    const countTokens = (text: string): number => text.length;
+    const session = await JournalSession.createUnlinked({
+      tokenUsageCountTokens: countTokens,
+    });
+    async function verifyMeasurements(): Promise<void> {
+      const snapshot = await session.store.snapshot();
+      const selected = await IndexedJournalRequestSnapshot.create(snapshot);
+      try {
+        const expected = [];
+        for await (const content of selected.openReader())
+          expected.push(measureRequestRow(content, countTokens));
+        const actual = [];
+        for await (const fact of selected.openTokenUsageReader())
+          actual.push(fact.measurement);
+        expect(actual).toStrictEqual(expected);
+      } finally {
+        await selected.close();
+        await snapshot.close();
+      }
+    }
+    try {
+      await session.append(
+        Array.from({ length: 40 }, (_, index) => ({
+          speaker: 'ai',
+          blocks: [call(`id-${index}`)],
+        })),
+      );
+      await verifyMeasurements();
+      await session.append([{ speaker: 'tool', blocks: [response('id-0')] }]);
+      await verifyMeasurements();
     } finally {
       await session.close();
     }

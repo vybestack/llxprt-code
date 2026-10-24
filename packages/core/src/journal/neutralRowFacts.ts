@@ -84,12 +84,11 @@ export async function fillNeutralRowFacts(
   );
   const snapshot = snapshotOf(ctx, built, appender);
   try {
-    for await (const entry of changedEntries(
-      ctx,
-      appender,
-      built.state.rowRoot,
-      since,
-    )) {
+    const entries =
+      since > 0 && built.changedRows !== undefined
+        ? built.changedRows
+        : changedEntries(ctx, appender, built.state.rowRoot, since);
+    for await (const entry of entries) {
       const key = neutralRowFactKey(registration, entry.label);
       const previous = await readNeutralRowFact(batch.queries, key);
       const value = await registration.measure(snapshot, entry, previous);
