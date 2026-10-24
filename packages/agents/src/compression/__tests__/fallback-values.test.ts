@@ -181,12 +181,14 @@ async function pending(size: number, rollback: boolean): Promise<number> {
         }),
       ]);
       await sample('writer-paused');
-      expect(owners.snapshot().liveRows).toBeGreaterThan(0);
+      expect(owners.snapshot().liveRows).toBe(0);
       fixture.releaseWriter();
       await finalization.acknowledged;
       await sample('acknowledged');
       expect(owners.snapshot().liveRows).toBe(0);
-      expect(await detachedDurableDigest(recorder)).toStrictEqual(selected);
+      expect(await detachedDigest(fixture.primaryRows())).toStrictEqual(
+        selected,
+      );
       finalization.release();
       expect(await operation).toBe(rollback ? failure : undefined);
       await sample(rollback ? 'rollback' : 'complete');
