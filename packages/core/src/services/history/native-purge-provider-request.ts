@@ -14,6 +14,7 @@ import { callerOwnedProviderRequest } from './caller-owned-provider-request.js';
 
 export function prepareJournalProviderRequest(
   store: Pick<HistoryStorePort, 'streamRows' | 'waitForCommit'> & {
+    prepareTokenUsageFacts(): Promise<void>;
     settledSnapshot(settle: () => Promise<void>): Promise<VersionSnapshot>;
     nativePreparation: {
       readonly format: PrepareNativeRequestFormat;
@@ -38,6 +39,7 @@ export function prepareJournalProviderRequest(
         );
       return override.prepareProviderSnapshot(request.tail, request.options);
     }
+    await store.prepareTokenUsageFacts();
     return JournalProviderRequestSnapshot.create(
       await store.settledSnapshot(() => Promise.resolve()),
       request.tail,

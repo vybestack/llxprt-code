@@ -114,6 +114,14 @@ export class JournalHistoryStore
     () => this.session.store.mediaPins.mediaStore,
   );
 
+  prepareTokenUsageFacts = (): Promise<void> =>
+    this.exclusive(async () => {
+      if (this.session.store.enableNeutralRowFacts())
+        await this.commitStep(this.tentativeRows, async () => [
+          { kind: 'append', rows: [] },
+        ]);
+    });
+
   pinnedRequestResources = () =>
     nativeFormat.nativeRequestResources(this.session.store);
 

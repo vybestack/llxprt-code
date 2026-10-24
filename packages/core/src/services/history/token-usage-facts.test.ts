@@ -29,6 +29,7 @@ describe('neutral token usage row facts', () => {
   it('measures a carried row once and streams its stored measurement across sends', async () => {
     let calls = 0;
     const session = await JournalSession.createUnlinked({
+      eagerTokenUsageFacts: true,
       tokenUsageCountTokens: (text) => {
         calls++;
         return text.length;
@@ -68,6 +69,7 @@ describe('neutral token usage row facts', () => {
   it('stores and compacts measurements larger than one trie value without retokenizing', async () => {
     let calls = 0;
     const session = await JournalSession.createUnlinked({
+      eagerTokenUsageFacts: true,
       tokenUsageCountTokens: (text) => {
         calls++;
         return text.length;
@@ -100,6 +102,7 @@ describe('neutral token usage row facts', () => {
   it('refreshes stored call measurements when a response is appended', async () => {
     const countTokens = (text: string): number => text.length;
     const session = await JournalSession.createUnlinked({
+      eagerTokenUsageFacts: true,
       tokenUsageCountTokens: countTokens,
     });
     async function verifyMeasurements(): Promise<void> {

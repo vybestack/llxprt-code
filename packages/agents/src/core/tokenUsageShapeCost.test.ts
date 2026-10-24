@@ -217,7 +217,7 @@ async function facadeCallback5(): Promise<void> {
     },
     [],
     {},
-    { tokenUsageCountTokens: tokenizer.count },
+    { eagerTokenUsageFacts: true, tokenUsageCountTokens: tokenizer.count },
   );
   try {
     for (let send = 0; send < 5; send += 1) {

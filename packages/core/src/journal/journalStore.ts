@@ -104,6 +104,7 @@ export interface JournalStoreDependencies {
   readonly recencyFactPolicy?: RecencyFactPolicy;
   readonly contextSpanPolicy?: ContextSpanPolicy;
   readonly neutralRowFacts?: NeutralRowFactRegistration;
+  readonly eagerNeutralRowFacts?: boolean;
   /** The aggregate algebra of the row tree for a slot table. */
   readonly algebra: (kinds: SlotKinds) => RowTreeAlgebra;
   /** One capped cache each for the id trie, the meta map and the state map. */
@@ -198,6 +199,7 @@ export class JournalStore {
   private compacting: Promise<SwapOutcome> | undefined;
   private compactionFailure: { readonly error: unknown } | undefined;
   private readonly fileOperations: FileOperations;
+  private neutralRowFactsEnabled: boolean;
 
   private constructor(
     readonly path: string,
@@ -207,6 +209,7 @@ export class JournalStore {
     private readonly unlinked = false,
     private readonly releaseNamedWriter?: () => void,
   ) {
+    this.neutralRowFactsEnabled = deps.eagerNeutralRowFacts ?? false;
     this.fileOperations =
       deps.fileOperations ?? realFileOperations(deps.journal.open);
     this.idCache = this.makeCache();
@@ -286,6 +289,7 @@ export class JournalStore {
     clone.rowFormats = this.rowFormats;
     clone.factIndex = this.factIndex;
     clone.densityFiles = this.densityFiles;
+    clone.neutralRowFactsEnabled = this.neutralRowFactsEnabled;
     return clone;
   }
 
@@ -447,7 +451,7 @@ export class JournalStore {
   /** A meta map entry of the published version. */
   getMeta(key: string): Promise<Uint8Array | undefined> {
     return this.whilePinned(() =>
-      mapReader(this.readContext(), 'meta').get(
+      mapReader(this.buildContext(), 'meta').get(
         this.currentVersion?.roots.metaRoot ?? 0,
         key,
       ),
@@ -460,7 +464,7 @@ export class JournalStore {
   }
 
   private getStateUnpinned(key: string): Promise<Uint8Array | undefined> {
-    return mapReader(this.readContext(), 'state').get(
+    return mapReader(this.buildContext(), 'state').get(
       this.currentVersion?.roots.stateRoot ?? 0,
       key,
     );
@@ -590,9 +594,7 @@ export class JournalStore {
   }
 
   private makeCache(): IdNodeCache {
-    return (
-      this.deps.createCache ?? ((): IdNodeCache => new BoundedIdNodeCache())
-    )();
+    return this.deps.createCache?.() ?? new BoundedIdNodeCache();
   }
 
   private async afterCommit(): Promise<void> {
@@ -905,8 +907,11 @@ export class JournalStore {
     };
   }
 
-  private readContext(): BuildContext {
-    return this.buildContext();
+  enableNeutralRowFacts(): boolean {
+    if (this.neutralRowFactsEnabled || this.deps.neutralRowFacts === undefined)
+      return false;
+    this.neutralRowFactsEnabled = true;
+    return true;
   }
 
   private buildContext(): BuildContext {
@@ -922,6 +927,7 @@ export class JournalStore {
       recencyFactPolicy: this.deps.recencyFactPolicy,
       contextSpanPolicy: this.deps.contextSpanPolicy,
       neutralRowFacts: this.deps.neutralRowFacts,
+      deferNeutralRowFacts: !this.neutralRowFactsEnabled,
       idCache: this.idCache,
       metaCache: this.metaCache,
       stateCache: this.stateCache,

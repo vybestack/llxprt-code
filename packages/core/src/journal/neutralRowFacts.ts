@@ -70,6 +70,15 @@ export async function fillNeutralRowFacts(
     built.state.metaRoot,
     NEUTRAL_ROW_FACTS_READY,
   );
+  if (ctx.deferNeutralRowFacts === true) {
+    if (ready === undefined || ready.length === 0) return built;
+    const meta = new KeyedMapBatch(metaReader, built.state.metaRoot);
+    meta.set(NEUTRAL_ROW_FACTS_READY, new Uint8Array());
+    return {
+      ...built,
+      state: { ...built.state, metaRoot: await meta.commit(appender) },
+    };
+  }
   const revision = `${registration.kind}:${registration.revision}`;
   const since =
     new TextDecoder().decode(ready) === revision

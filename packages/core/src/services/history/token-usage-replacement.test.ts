@@ -61,6 +61,7 @@ describe('token usage after response replacement', () => {
   for (const result of ['a longer replacement result', 'x']) {
     it(`refreshes a distant call after a purge changes its response to ${JSON.stringify(result)}`, async () => {
       const session = await JournalSession.createUnlinked({
+        eagerTokenUsageFacts: true,
         tokenUsageCountTokens: countTokens,
       });
       try {
@@ -89,6 +90,7 @@ describe('token usage after response replacement', () => {
 
   it('refreshes the reconstructed call when compression replaces the response', async () => {
     const session = await JournalSession.createUnlinked({
+      eagerTokenUsageFacts: true,
       tokenUsageCountTokens: countTokens,
     });
     try {
@@ -125,6 +127,7 @@ describe('token usage after response replacement', () => {
 
   it('refreshes both the stripped self and the call using a replaced human response', async () => {
     const session = await JournalSession.createUnlinked({
+      eagerTokenUsageFacts: true,
       tokenUsageCountTokens: countTokens,
     });
     try {

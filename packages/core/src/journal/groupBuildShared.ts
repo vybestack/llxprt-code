@@ -22,6 +22,7 @@ import type { slotKindsOf, Version } from './version.js';
 export interface BuildContext extends FactDeps {
   readonly sortedLabels: LabelSorter;
   readonly neutralRowFacts?: NeutralRowFactRegistration;
+  readonly deferNeutralRowFacts?: boolean;
   readonly measureFormats?: boolean;
   readonly access: RecordAccess | undefined;
   /** Reads the file up to `writtenEnd`, which reaches records the current group has written and drained. */

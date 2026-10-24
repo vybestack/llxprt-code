@@ -40,6 +40,7 @@ import {
 export interface JournalSessionOptions {
   readonly journal?: Partial<JournalOpenDependencies>;
   readonly tokenUsageCountTokens?: (text: string) => number;
+  readonly eagerTokenUsageFacts?: boolean;
   readonly planOccurrences?: OccurrencePlanner;
   /** Where the bare store's nameless file is created; the system temp directory by default. */
   readonly unlinkedDirectory?: string;
@@ -62,6 +63,7 @@ async function storeDependencies(
     planOccurrences: options.planOccurrences ?? planSourceRowOccurrences,
     recencyFactPolicy: densityRecencyFactPolicy,
     contextSpanPolicy: journalContextSpan,
+    eagerNeutralRowFacts: options.eagerTokenUsageFacts,
     neutralRowFacts: tokenUsageFactRegistration(
       options.tokenUsageCountTokens ?? estimateTokens,
     ),

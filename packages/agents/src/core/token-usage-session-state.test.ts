@@ -69,6 +69,7 @@ describe('journal token usage session state', () => {
   it('uses the stored count of a carried row on every send', async () => {
     let measured = 0;
     const session = await JournalSession.createUnlinked({
+      eagerTokenUsageFacts: true,
       tokenUsageCountTokens: (text) => {
         measured++;
         return text.length;
@@ -96,6 +97,7 @@ describe('journal token usage session state', () => {
 
   it('carries a pending result after it is appended to the journal', async () => {
     const session = await JournalSession.createUnlinked({
+      eagerTokenUsageFacts: true,
       tokenUsageCountTokens: (text) => text.length,
     });
     const logger = new TokenUsageLogger(true, undefined);
