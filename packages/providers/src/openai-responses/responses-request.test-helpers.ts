@@ -13,6 +13,10 @@ import {
   captureResponsesRequest,
   type ResponsesRequest,
 } from './responses-request.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = (input, init) =>
+  globalThis.fetch(input, init);
 
 export interface ResponsesTestDeps extends ResponsesExecutorDeps {
   readonly requestBaseURL: string;
@@ -40,6 +44,7 @@ export function buildNormalizedOptions(
     runtimeId: 'test-runtime',
   });
   const invocation = createRuntimeInvocationContext({
+    fetch: requestFetch,
     runtimeId: runtime.runtimeId,
     sessionId: 'test-session',
     runtimeMetadata: runtime.metadata,

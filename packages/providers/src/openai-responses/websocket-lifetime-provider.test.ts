@@ -26,6 +26,10 @@ import {
   frame,
   userTextsOf,
 } from './__tests__/openAIResponsesWebSocketTransport.test-helpers.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = (input, init) =>
+  globalThis.fetch(input, init);
 
 const BASE_URL = 'https://chatgpt.com/backend-api/codex';
 const RENEWAL_MS = 55 * 60 * 1000;
@@ -72,6 +76,7 @@ function runTurn(
   settings.set('reasoning.includeInResponse', false);
   const invocation = captureProviderInvocation(
     {
+      fetch: requestFetch,
       runtimeId: runtime.runtimeId,
       metadata: runtime.metadata,
       globalSettings: settings.getAllGlobalSettings(),

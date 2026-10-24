@@ -36,6 +36,10 @@ import { createOpenAIClient } from './vercelModelClient.js';
 import type { ProviderClientConfig } from './vercelModelClient.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { ResolvedAuthToken } from '../types/providerRuntime.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 class RecordingLogger {
   readonly messages: string[] = [];
@@ -55,6 +59,7 @@ function buildOptions(
 ): NormalizedGenerateChatOptions {
   return {
     invocation: createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: 'local-auth',
       providerName: 'openaivercel',
       ephemeralsSnapshot: {},

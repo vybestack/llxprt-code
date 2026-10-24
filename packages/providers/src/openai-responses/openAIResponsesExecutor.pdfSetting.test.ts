@@ -12,6 +12,10 @@ import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runt
 import { captureResponsesRequest } from './responses-request.js';
 import { isResponsesPdfEnabled } from './openAIResponsesExecutor.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 function buildOptions(
   setting?: boolean,
@@ -25,6 +29,7 @@ function buildOptions(
     runtimeId: 'pdf-owner',
   });
   const invocation = createRuntimeInvocationContext({
+    fetch: requestFetch,
     runtimeId: runtime.runtimeId,
     runtimeMetadata: runtime.metadata,
 

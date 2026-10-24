@@ -18,6 +18,10 @@ import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runt
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { userTextsOf } from './__tests__/openAIResponsesWebSocketTransport.test-helpers.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = (input, init) =>
+  globalThis.fetch(input, init);
 
 const CODEX_BASE_URL = 'https://chatgpt.com/backend-api/codex';
 const TEST_RUNTIME_ID = 'codex-ws-fallback-test-runtime';
@@ -86,6 +90,7 @@ function buildOptions(
     runtimeId: TEST_RUNTIME_ID,
   });
   const invocation = createRuntimeInvocationContext({
+    fetch: requestFetch,
     runtimeId: runtime.runtimeId,
     runtimeMetadata: runtime.metadata,
 

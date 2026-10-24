@@ -17,12 +17,17 @@ import type {
   BaseProvider,
   NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = () =>
+  Promise.reject(new Error('This test must not make network requests'));
 
 function makeOptions(
   ephemerals: Record<string, unknown>,
 ): NormalizedGenerateChatOptions {
   return {
     invocation: createRuntimeInvocationContext({
+      fetch: requestFetch,
       runtimeId: 'params-test',
       providerName: 'openaivercel',
       ephemeralsSnapshot: ephemerals,

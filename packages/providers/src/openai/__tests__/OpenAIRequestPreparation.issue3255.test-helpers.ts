@@ -19,6 +19,10 @@ import type { NormalizedGenerateChatOptions } from '../../BaseProvider.js';
 import { loadProviderAliasEntries } from '../../composition/providerAliases.js';
 import { computeModelDefaults } from '../../model-defaults.js';
 import { prepareRequest } from '../OpenAIRequestPreparation.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
+
+const requestFetch: NetworkFetch = (input, init) =>
+  globalThis.fetch(input, init);
 
 const PROVIDER = 'openai';
 /**
@@ -106,6 +110,7 @@ function createInvocation(
   }
 
   const invocation = createRuntimeInvocationContext({
+    fetch: requestFetch,
     runtimeId: 'issue3255-test',
 
     providerName,
