@@ -4,6 +4,7 @@ import {
   type AgentClientContract,
   type IContent,
   type SessionRecordingPort,
+  type LocalMediaStore,
 } from '@vybestack/llxprt-code-core';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { readRecordedRows } from '../../__tests__/journal-recording.js';
@@ -17,6 +18,11 @@ import { createMockCommandContext } from '../../__tests__/mockCommandContext.js'
 import type { HistoryItem } from '../types.js';
 import { chatCommand } from './chatCommand.js';
 import type { CommandContext } from './types.js';
+import { expect, spyOn } from 'bun:test';
+import {
+  NativeHistoryPrefixOwner,
+  type NativeHistoryPrefix,
+} from '@vybestack/llxprt-code-core/services/history/native-history-prefix.js';
 
 export function row(index: number): IContent {
   return {
@@ -40,7 +46,50 @@ export async function runCommand(
 ): Promise<unknown> {
   const command = chatCommand.subCommands?.find((item) => item.name === name);
   if (command?.action === undefined) throw new Error('Missing chat command');
-  return command.action(context, args);
+  const withPrefix = NativeHistoryPrefixOwner.prototype.withPrefix;
+  const failure: { observed?: { error: unknown } } = {};
+  const observation = spyOn(
+    NativeHistoryPrefixOwner.prototype,
+    'withPrefix',
+  ).mockImplementation(async function <T>(
+    this: NativeHistoryPrefixOwner,
+    turns: number,
+    fromEnd: boolean,
+    store: LocalMediaStore | undefined,
+    execute: (prefix: NativeHistoryPrefix) => Promise<T>,
+    signal?: AbortSignal,
+  ): Promise<T> {
+    try {
+      return await withPrefix.bind(this)(
+        turns,
+        fromEnd,
+        store,
+        execute,
+        signal,
+      );
+    } catch (error) {
+      failure.observed = { error };
+      throw error;
+    }
+  });
+  try {
+    const result = await command.action(context, args);
+    if (failure.observed !== undefined) {
+      const error = failure.observed.error;
+      const detail = error instanceof Error ? error.message : String(error);
+      expect(result).toStrictEqual({
+        type: 'message',
+        messageType: 'error',
+        content: `Failed to ${name} history: ${detail}`,
+      });
+      // Preserve the owner's error identity and aggregate assertions while
+      // checking that the command reports the failure to the UI.
+      throw error;
+    }
+    return result;
+  } finally {
+    observation.mockRestore();
+  }
 }
 
 export interface LiveCLI {

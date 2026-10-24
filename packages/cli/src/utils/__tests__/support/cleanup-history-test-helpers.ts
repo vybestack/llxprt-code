@@ -197,6 +197,7 @@ export async function withCleanupHistory<T>(
         if (client.mediaStore === undefined)
           throw new Error('Agent client has no media store');
         await client.mediaStore.admit(mediaInput);
+        const priorHistory = client.getHistoryService();
         client.storeHistoryServiceForReuse(service);
         try {
           if (active) await client.startChat([]);
@@ -218,6 +219,7 @@ export async function withCleanupHistory<T>(
           service.resume.resolve();
           service.releaseExternal();
           await cleanup();
+          if (priorHistory !== service) await priorHistory?.dispose();
         }
       },
       bytes,

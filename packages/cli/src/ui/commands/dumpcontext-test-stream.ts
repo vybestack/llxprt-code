@@ -9,6 +9,7 @@ import type {
   dumpRequestContextStream,
 } from '@vybestack/llxprt-code-providers';
 import { streamPrettyJson } from '@vybestack/llxprt-code-providers';
+import { inMemoryRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 
 interface FixtureHistory {
   streamRawHistory(): AsyncIterable<IContent>;
@@ -24,11 +25,13 @@ export async function* fixtureRows(
 export async function snapshotFixture(
   this: FixtureHistory,
 ): Promise<HistoryDumpSnapshot> {
-  const rows = (): AsyncIterable<IContent> => this.streamRawHistory();
+  const rows: IContent[] = [];
+  for await (const row of this.streamRawHistory()) rows.push(row);
   const trace = this.getChronologyTrace();
   return {
+    callerOwnedRows: { ...inMemoryRequestSelection(rows), callerOwned: true },
     async *rows(): AsyncIterable<IContent> {
-      yield* rows();
+      yield* rows;
     },
     async *chronology(): AsyncIterable<ChronologyTraceEntry> {
       yield* trace;
