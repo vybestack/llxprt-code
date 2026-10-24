@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { decodeStoredRow } from './journalRowCodec.js';
+import type { MirrorCheckpoint } from '../../journal/mirrorCheckpoint.js';
 import type { TokenRowSource } from './history-token-tickets.js';
 import { JournalHistoryStoreReads } from './journal-history-store-reads.js';
 import { JournalRowMutations } from './journal-row-mutations.js';
@@ -606,7 +607,15 @@ export class JournalHistoryStore
     this.assertUsable();
     return this.publication.capture(
       this,
-      this.queue.then(() => this.session.store.snapshot()),
+      this.exclusive(async () => {
+        const snapshot = await this.session.store.snapshot();
+        try {
+          return { snapshot, mirrors: await this.mirrors.checkpoint() };
+        } catch (error) {
+          await snapshot.close();
+          throw error;
+        }
+      }),
     );
   }
 
@@ -631,7 +640,8 @@ export class JournalHistoryStore
     if (!(mark instanceof JournalCompensationMark) || mark.store !== this) {
       throw new Error('The compensation mark was not captured by this store');
     }
-    const saved = await mark.saved;
+    const captured = await mark.captured;
+    const saved = captured.snapshot;
     await this.queue;
     if (this.failure !== undefined) {
       if (this.failure.error !== held) throw this.failure.error;
@@ -642,7 +652,7 @@ export class JournalHistoryStore
     if (unchanged) {
       this.tentativeRows = saved.rows;
     } else {
-      await this.restoreTo(saved);
+      await this.restoreTo(saved, captured.mirrors);
     }
     this.publication.compensated(mark);
   }
@@ -761,10 +771,11 @@ export class JournalHistoryStore
   private enqueueTurn(
     rowsAfter: number | undefined,
     build: EditBuilder,
+    mirrors?: MirrorCheckpoint,
   ): Promise<CommitAck | undefined> {
     if (rowsAfter !== undefined) this.tentativeRows = rowsAfter;
     this.publication.accepted();
-    const turn = this.queue.then(() => this.runStep(rowsAfter, build));
+    const turn = this.queue.then(() => this.runStep(rowsAfter, build, mirrors));
     this.queue = turn.then(() => undefined);
     return turn;
   }
@@ -795,11 +806,14 @@ export class JournalHistoryStore
   }
 
   /** Puts the version of `saved` back as the current one (design 4.5) and waits for its ack. */
-  private async restoreTo(saved: VersionSnapshot): Promise<void> {
+  private async restoreTo(
+    saved: VersionSnapshot,
+    mirrors?: MirrorCheckpoint,
+  ): Promise<void> {
     const edit = this.session.store.restorationOf(saved);
     try {
       await this.requireAck(
-        this.enqueueTurn(saved.rows, () => Promise.resolve([edit])),
+        this.enqueueTurn(saved.rows, () => Promise.resolve([edit]), mirrors),
       );
     } catch (error) {
       this.restoreFailed = true;
@@ -810,10 +824,11 @@ export class JournalHistoryStore
   private async runStep(
     rowsAfter: number | undefined,
     build: EditBuilder,
+    mirrors?: MirrorCheckpoint,
   ): Promise<CommitAck | undefined> {
     if (this.failure !== undefined) return undefined;
     try {
-      return await this.commitStep(rowsAfter, build);
+      return await this.commitStep(rowsAfter, build, mirrors);
     } catch (error) {
       this.failure = { error };
       this.owners.invalidate();
@@ -825,13 +840,14 @@ export class JournalHistoryStore
   private async commitStep(
     rowsAfter: number | undefined,
     build: EditBuilder,
+    mirrors?: MirrorCheckpoint,
   ): Promise<CommitAck> {
     const snapshot = await this.session.store.snapshot();
     try {
       const edits = await build(snapshot);
       const owners = this.owners;
       const prepared = await this.topology.prepare(edits);
-      const group = await this.mirrors.commit(prepared);
+      const group = await this.mirrors.commit(prepared, mirrors);
       if (owners !== this.owners) this.owners.invalidate();
       try {
         if (rowsAfter === undefined) {

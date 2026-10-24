@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { INHERIT_OWNER, type VersionEdit } from '../../journal/groupEdits.js';
+import type { MirrorCheckpoint } from '../../journal/mirrorCheckpoint.js';
 import { mapRowStream } from '../../journal/mapped-row-stream.js';
 import type { GroupPreparation } from '../../journal/preparedGroup.js';
 
@@ -35,12 +36,21 @@ export function preparedDetachedEdit(
 export type EditBuilder = (snapshot: VersionSnapshot) => Promise<VersionEdit[]>;
 
 /** What a compensation puts back: the version the queue had reached when the mark was captured. */
+export interface JournalCheckpointVersions {
+  readonly snapshot: VersionSnapshot;
+  readonly mirrors: MirrorCheckpoint;
+}
+
 export class JournalCompensationMark implements HistoryCompensationMark {
   constructor(
     readonly store: JournalHistoryStore,
-    readonly saved: Promise<VersionSnapshot>,
+    readonly captured: Promise<JournalCheckpointVersions>,
     readonly mutationSequence: number,
   ) {}
+
+  get saved(): Promise<VersionSnapshot> {
+    return this.captured.then(({ snapshot }) => snapshot);
+  }
 }
 
 /**
@@ -55,7 +65,7 @@ export class JournalPublication {
 
   capture(
     store: JournalHistoryStore,
-    saved: Promise<VersionSnapshot>,
+    saved: Promise<JournalCheckpointVersions>,
   ): JournalCompensationMark {
     const mark = new JournalCompensationMark(store, saved, this.current);
     this.compensation.add(mark);
@@ -63,7 +73,20 @@ export class JournalPublication {
   }
 
   async release(mark: JournalCompensationMark): Promise<void> {
-    if (this.compensation.delete(mark)) await (await mark.saved).close();
+    if (!this.compensation.delete(mark)) return;
+    const saved = await mark.captured;
+    const results = await Promise.allSettled([
+      saved.snapshot.close(),
+      saved.mirrors.close(),
+    ]);
+    const failures = results.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
+    if (failures.length > 0)
+      throw new AggregateError(
+        failures,
+        'Compensation checkpoint cleanup failed',
+      );
   }
 
   async close(): Promise<void> {

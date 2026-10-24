@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { VersionEdit } from '../../journal/groupEdits.js';
+import type { MirrorCheckpoint } from '../../journal/mirrorCheckpoint.js';
 import type {
   CommittedGroup,
   JournalStore,
@@ -60,9 +61,16 @@ export class JournalMirrors {
     return this.fanout.mirrors;
   }
 
-  async commit(edits: readonly VersionEdit[]): Promise<CommittedGroup> {
+  checkpoint(): Promise<MirrorCheckpoint> {
+    return this.fanout.checkpoint();
+  }
+
+  async commit(
+    edits: readonly VersionEdit[],
+    checkpoint?: MirrorCheckpoint,
+  ): Promise<CommittedGroup> {
     await this.materializeRecorders();
-    return this.fanout.commitDetailed(edits);
+    return this.fanout.commitDetailed(edits, checkpoint);
   }
 
   isOnlyRecorder(recorder: JournalRecordingService): boolean {

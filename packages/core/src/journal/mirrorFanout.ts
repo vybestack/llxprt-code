@@ -1,5 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { VersionEdit } from './groupEdits.js';
+import { MirrorCheckpoint } from './mirrorCheckpoint.js';
+import type { VersionSnapshot } from './versionSnapshot.js';
 import { deltaOf, type GroupDelta } from './groupDelta.js';
 import type { CommitAck } from './groupWriter.js';
 import type { CommittedGroup, JournalStore } from './journalStore.js';
@@ -84,7 +86,14 @@ export class MirrorFanout {
   }
 
   /** Like {@link commit}, and returns the group with the versions before and after it. */
-  commitDetailed(edits: readonly VersionEdit[]): Promise<CommittedGroup> {
+  checkpoint(): Promise<MirrorCheckpoint> {
+    return this.serial(() => MirrorCheckpoint.capture(this.links));
+  }
+
+  commitDetailed(
+    edits: readonly VersionEdit[],
+    checkpoint?: MirrorCheckpoint,
+  ): Promise<CommittedGroup> {
     return this.serial(async () => {
       // The group holds its own pin from the ack; the mirrors take theirs
       // before the caller can close it, and release it once they have read
@@ -93,7 +102,13 @@ export class MirrorFanout {
       if (this.links.length === 0 || group.unchanged === true) return group;
       const delta = deltaOf(group, group.resolvedEdits ?? edits);
       const release = group.read.hold();
-      const applied = this.links.map((link) => this.deliver(link, delta));
+      const applied = this.links.map((link) =>
+        this.deliver(
+          link,
+          delta,
+          checkpoint?.versions.get(link.store)?.retain(),
+        ),
+      );
       this.readReleases = Promise.all([
         this.readReleases,
         Promise.all(applied).then(release),
@@ -229,14 +244,25 @@ export class MirrorFanout {
   }
 
   /** Applies `delta` to the mirror; settles when it is applied or has failed (the failure is kept on the link). */
-  private deliver(link: MirrorLink, delta: GroupDelta): Promise<void> {
+  private deliver(
+    link: MirrorLink,
+    delta: GroupDelta,
+    saved?: VersionSnapshot,
+  ): Promise<void> {
     link.queue = link.queue.then(async () => {
-      if (link.failure !== undefined) return;
       try {
-        const edits = await mirrorEdits(delta, link);
-        if (edits.length === 0) return;
-        await link.store.commit([...edits, identityEdit(delta.identity)]);
-        link.recorded = delta.identity;
+        try {
+          if (link.failure !== undefined) return;
+          const edits =
+            saved === undefined
+              ? await mirrorEdits(delta, link)
+              : [link.store.restorationOf(saved)];
+          if (edits.length === 0) return;
+          await link.store.commit([...edits, identityEdit(delta.identity)]);
+          link.recorded = delta.identity;
+        } finally {
+          await saved?.close();
+        }
       } catch (error) {
         link.failure = { error, reported: false };
       }
