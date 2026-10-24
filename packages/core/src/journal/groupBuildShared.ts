@@ -93,7 +93,10 @@ export async function commitState(
   const root = ctx.published?.roots.stateRoot ?? 0;
   if (plan.stateSets.size === 0) return root;
   const batch = new KeyedMapBatch(mapReader(ctx, 'state'), root);
-  for (const [key, value] of plan.stateSets) batch.set(key, value);
+  for (const [key, { value, storage }] of plan.stateSets) {
+    if (storage === 'body') batch.setBody(key, value);
+    else batch.set(key, value);
+  }
   return batch.commit(appender);
 }
 

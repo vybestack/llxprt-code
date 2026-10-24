@@ -25,9 +25,12 @@ Full verification happens once, before the PR. Rules that stay: no compatibility
 | 6 | Branch cleanup | Working plans, proof receipts and recovery notes removed (`cbf9cc137`); this file, `journal-db-design.md` and `DELETION-PLAN.md` stay |
 | 7 | Ship | Full test inventory per workspace, lint, typecheck, format, build, lunahigh smoke; PR; CI green |
 
+## Metadata persistence fix (2026-10-24)
+
+The admitted-workspace regression is fixed. Session facts use an explicit `VALUE` body write behind the existing eight-byte map reference. Ordinary map values still have the 16 KiB ceiling. Large reads fill one result in bounded chunks and do not cache or duplicate it. The record layout and journal version are unchanged, and original small map-value session facts still resume. Tests persist, compact, close, reopen and discover identical directory lists at 1, 513 and 8,193 real admitted directories, then replace the list with a small value. Admission has no finite maximum, so the largest case is a stress case rather than an invented product limit. `wholepeak.test.ts` passes all six tests with its original assertions and limits.
+
 ## Known open items
 
-- `packages/cli/src/services/wholepeak.test.ts`: the wide-metadata fixture now creates 512 real directories with 64-byte filename components and passes them through `WorkspaceContext`. Admission accepts all of them, plus the invoking directory. Admission has no path-count or aggregate metadata-size bound, so there is no finite widest admitted list. The new persistence regression fails on this valid input at the unchanged 16 KiB keyed-map value ceiling; the continuation case reports a 73,808-byte value. This needs a production fix, not a smaller fixture or a higher ceiling.
 - Retained-growth trap admission is fixed: the wrapper preserves native/caller-owned capabilities and observes native indexed reads. Both trap suites reach and reject the planted retention under the unchanged predicates. The normal worker's verification run completes with zero retained rows and ends 519,718 bytes below baseline, but fails the unchanged late-endpoint gate: 288,161 bytes against 262,144 bytes. The normal path does not construct the changed trap class. No threshold, sampling or warm-up change was made, and no all-green acceptance result is claimed.
 - Source-memory suite: one live row after release (also fails before `143d60a0b`).
 - Three Gemini plugin integration tests in cli need the installed plugin.

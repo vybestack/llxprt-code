@@ -241,6 +241,7 @@ class PreparedBuilder {
     value: Uint8Array,
     appender: RecordAppender,
     kind: MapKind = 'meta',
+    storage?: 'body',
   ): Promise<void> {
     if (
       !this.started &&
@@ -260,6 +261,7 @@ class PreparedBuilder {
         kind,
         key,
         value,
+        storage,
       ),
     };
   }
@@ -307,7 +309,13 @@ export async function prepareBuild(
     });
     for (const edit of edits) {
       if (edit.kind === 'setState')
-        await builder.retain(edit.key, edit.value, writes.appender, 'state');
+        await builder.retain(
+          edit.key,
+          edit.value,
+          writes.appender,
+          'state',
+          edit.storage,
+        );
     }
   } catch (error) {
     const failure = writes.failure();

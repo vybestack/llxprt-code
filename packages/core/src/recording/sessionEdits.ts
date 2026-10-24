@@ -14,7 +14,12 @@ import { encodeSessionFact } from './sessionMetaKeys.js';
  */
 
 export function sessionFactEdit(key: string, value: unknown): VersionEdit {
-  return { kind: 'setState', key, value: encodeSessionFact(value) };
+  return {
+    kind: 'setState',
+    key,
+    value: encodeSessionFact(value),
+    storage: 'body',
+  };
 }
 
 export function createCheckpointEdit(id: string, name: string): VersionEdit {

@@ -186,16 +186,15 @@ function applyCheckpoint(
     throw new JournalFormatError('A checkpoint needs a committed version');
   }
   const liveBytes = published.aggregate.liveBytes;
-  plan.stateSets.set(
-    checkpointKey(edit.id),
-    encodeCheckpointDescriptor({
+  plan.stateSets.set(checkpointKey(edit.id), {
+    value: encodeCheckpointDescriptor({
       name: edit.name,
       trailerOffset: published.selfOffset,
       commitSeq: published.commitSeq,
       createdAtMs: edit.createdAtMs,
       liveBytes,
     }),
-  );
+  });
   plan.ckptDelta += liveBytes;
 }
 
@@ -205,7 +204,7 @@ async function applyDeleteCheckpoint(
   id: string,
 ): Promise<void> {
   const key = checkpointKey(id);
-  const held = plan.stateSets.get(key) ?? (await ctx.readState(key));
+  const held = plan.stateSets.get(key)?.value ?? (await ctx.readState(key));
   const descriptor =
     held === undefined ? undefined : parseCheckpointEntry(held);
   if (descriptor === undefined) {
@@ -213,7 +212,7 @@ async function applyDeleteCheckpoint(
       `There is no checkpoint ${JSON.stringify(id)}`,
     );
   }
-  plan.stateSets.set(key, CHECKPOINT_TOMBSTONE);
+  plan.stateSets.set(key, { value: CHECKPOINT_TOMBSTONE });
   plan.ckptDelta -= descriptor.liveBytes;
 }
 
@@ -280,7 +279,10 @@ async function applyEdit(
       await applyRestore(ctx, plan, edit.saved);
       break;
     case 'setState':
-      plan.stateSets.set(edit.key, edit.value);
+      plan.stateSets.set(edit.key, {
+        value: edit.value,
+        storage: edit.storage,
+      });
       break;
     case 'checkpoint':
       applyCheckpoint(ctx, plan, edit);

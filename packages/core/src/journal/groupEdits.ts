@@ -112,6 +112,7 @@ export type VersionEdit =
       readonly kind: 'setState';
       readonly key: string;
       readonly value: Uint8Array;
+      readonly storage?: 'body';
     }
   /**
    * Design 4.4: every live row below `retainFromLabel` is replaced by the

@@ -127,6 +127,7 @@ export class KeyedMapReader {
     const cached = this.cache.get(offset);
     if (cached !== undefined) return cached.slice();
     const value = await this.readValue(this.access, offset, encodeKey(key));
+    if (value.length > MAP_VALUE_MAX_BYTES) return value;
     this.cache.put(offset, value);
     return value.slice();
   }
@@ -147,12 +148,17 @@ export class KeyedMapReader {
         `Value at offset ${offset} belongs to another key than ${JSON.stringify(new TextDecoder().decode(key))}`,
       );
     }
-    const chunks: Uint8Array[] = [];
-    for await (const chunk of access.readRecordBody(head, undefined, 'VALUE')) {
-      chunks.push(chunk);
+    const value = new Uint8Array(head.bodyLen);
+    let at = 0;
+    for await (const chunk of access.readRecordBody(
+      head,
+      MAP_VALUE_MAX_BYTES,
+      'VALUE',
+    )) {
+      value.set(chunk, at);
+      at += chunk.length;
     }
-    const value = Buffer.concat(chunks);
-    return new Uint8Array(value);
+    return value;
   }
 }
 
@@ -195,13 +201,17 @@ export class KeyedMapBatch {
 
   set(key: string, value: Uint8Array): void {
     assertValue(value);
+    this.setBody(key, value.slice());
+  }
+
+  setBody(key: string, value: Uint8Array): void {
     const keyBytes = encodeKey(key);
     const hash = this.reader.hashOf(key);
     const id = Buffer.from(hash).toString('hex');
     const previous = this.pending.get(id);
     if (previous !== undefined)
       this.pendingBytes -= previous.key.length + previous.value.length + 512;
-    this.pending.set(id, { hash, key: keyBytes, value: value.slice() });
+    this.pending.set(id, { hash, key: keyBytes, value });
     this.pendingBytes += keyBytes.length + value.length + 512;
   }
 

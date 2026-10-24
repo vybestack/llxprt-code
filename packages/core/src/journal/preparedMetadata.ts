@@ -25,6 +25,7 @@ export async function retainMapValue(
   kind: MapKind,
   key: string,
   value: Uint8Array,
+  storage?: 'body',
 ): Promise<BuiltGroup> {
   await appender.drain();
   const rootKey = kind === 'meta' ? 'metaRoot' : 'stateRoot';
@@ -35,7 +36,8 @@ export async function retainMapValue(
     ctx.hasher,
   );
   const batch = new KeyedMapBatch(reader, built.state[rootKey]);
-  batch.set(key, value);
+  if (storage === 'body') batch.setBody(key, value);
+  else batch.set(key, value);
   return {
     ...built,
     state: { ...built.state, [rootKey]: await batch.commit(appender) },

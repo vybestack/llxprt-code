@@ -4,7 +4,7 @@ import type { FrameHead } from './frame.js';
 import type { IdNodeCache } from './idTrieCache.js';
 import type { IdEntry } from './idTrieNode.js';
 import { IdTrieReader } from './idTrieReader.js';
-import { decodeMapRef } from './keyedMap.js';
+import { decodeMapRef, MAP_VALUE_MAX_BYTES } from './keyedMap.js';
 import type { RecordAccess } from './recordAccess.js';
 import { RECORD_KIND } from './recordKinds.js';
 
@@ -66,9 +66,15 @@ export async function readValueBody(
   access: RecordAccess,
   head: FrameHead,
 ): Promise<Uint8Array> {
-  const chunks: Uint8Array[] = [];
-  for await (const chunk of access.readRecordBody(head, undefined, 'VALUE')) {
-    chunks.push(chunk);
+  const value = new Uint8Array(head.bodyLen);
+  let at = 0;
+  for await (const chunk of access.readRecordBody(
+    head,
+    MAP_VALUE_MAX_BYTES,
+    'VALUE',
+  )) {
+    value.set(chunk, at);
+    at += chunk.length;
   }
-  return new Uint8Array(Buffer.concat(chunks));
+  return value;
 }

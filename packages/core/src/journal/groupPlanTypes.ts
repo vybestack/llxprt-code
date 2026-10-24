@@ -111,7 +111,10 @@ export interface GroupPlan {
   /** The lineage the new trailer joins; undefined makes its own `commitSeq` the id. */
   lineageId: bigint | undefined;
   nextLabel: bigint;
-  stateSets: Map<string, Uint8Array>;
+  stateSets: Map<
+    string,
+    { readonly value: Uint8Array; readonly storage?: 'body' }
+  >;
   ckptDelta: number;
   args: MutationArgs | undefined;
   rebuilt: boolean;
