@@ -1,5 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { collectJournalFileRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
+import { openJournalReadOnly } from '../../journal/journalReader.js';
+import { readStoredRow } from '../../journal/rowReads.js';
+import {
+  iterateRowEntries,
+  rowTreeRootOf,
+} from '../../journal/rowTreeReader.js';
+import { decodeStoredRow } from './journalRowCodec.js';
 import type { SessionRecordingPort } from '../../recording/recordingPort.js';
 import type { RuntimeTokenizerFactory } from '../../runtime/contracts/RuntimeTokenizerFactory.js';
 import type { HistoryService } from './HistoryService.js';
@@ -25,11 +31,19 @@ export async function durableRowsOf(
   await recorder.flush();
   const filePath = recorder.getFilePath();
   if (filePath === null) throw new Error('Missing durable journal');
-  const result: IContent[] = [];
-  await collectJournalFileRowsForAssertions(filePath, (rows) => {
-    result.push(...rows);
-  });
-  return result;
+  const reader = await openJournalReadOnly(filePath);
+  try {
+    const result: IContent[] = [];
+    const root = rowTreeRootOf(reader.trailer);
+    if (root !== undefined) {
+      for await (const entry of iterateRowEntries(reader, root)) {
+        result.push(decodeStoredRow(await readStoredRow(reader, entry)));
+      }
+    }
+    return result;
+  } finally {
+    await reader.close();
+  }
 }
 
 export function rollbackRow(index: number, bytes = 0): IContent {
