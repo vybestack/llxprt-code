@@ -53,7 +53,7 @@ async function observeDeferred(
       history,
       rollback ? failure : undefined,
     );
-    fixture.pauseWriter();
+    fixture.pauseWriter(size);
     try {
       const operation = rejectedValue(
         admitDeferredHistorySource(
@@ -77,7 +77,7 @@ async function observeDeferred(
       expect(probes.rows.length).toBe(size);
       expect(probes.markers.length).toBe(size);
       await sample('writer-paused');
-      expect(owners.snapshot().liveRows).toBeGreaterThan(0);
+      expect(owners.snapshot().liveRows).toBe(0);
       fixture.releaseWriter();
       await finalization.acknowledged;
       await sample('acknowledged');
@@ -86,7 +86,9 @@ async function observeDeferred(
       expect(await detachedDigest(history.streamRawHistory())).toStrictEqual(
         expected,
       );
-      expect(await detachedDurableDigest(recorder)).toStrictEqual(expected);
+      expect(await detachedDigest(fixture.primaryRows())).toStrictEqual(
+        expected,
+      );
       expect(history.getContextRange()).toStrictEqual(expectedRange(size));
       expect(history.getTotalTokens()).toBe(size);
       finalization.release();
@@ -131,9 +133,7 @@ describe('deferred history uses disk value transform', () => {
   for (const size of [512, 8192]) {
     for (const rollback of [false, true]) {
       it(`bounds the complete streamed input and publication at ${size}, rollback=${rollback}`, async () => {
-        await expect(
-          expectBoundedDeferred(size, rollback),
-        ).resolves.toBeUndefined();
+        expect(await expectBoundedDeferred(size, rollback)).toBeUndefined();
       }, 120_000);
     }
   }
