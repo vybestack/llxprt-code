@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent } from './IContent.js';
-import type { ProviderCuratedStreamOptions } from './provider-curated-stream.js';
+import type { ProviderCuratedStreamOptions } from './provider-request-options.js';
 import { CallerOwnedRequestSource } from './caller-owned-request-source.js';
 import { streamResponsePlans } from './journal-response-units.js';
 import type { JournalResponsePlan } from './journal-response-plan.js';

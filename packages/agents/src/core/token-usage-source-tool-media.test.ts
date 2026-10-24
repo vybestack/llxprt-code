@@ -4,7 +4,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { RequestShapeSessionMemory } from './tokenUsageRequestShape.js';
 import { BoundedToolCallNames } from './tokenUsageToolCallNames.js';
 import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
-import { BoundarySnapshotDisk } from './boundary-snapshot-disk.js';
+import { openNativeRowFixture } from '@vybestack/llxprt-code-core/services/history/__tests__/support/native-row-fixture.js';
 import {
   fallbackCount,
   shapeState,
@@ -62,22 +62,16 @@ async function sourceShape(
   memory: RequestShapeSessionMemory,
   history: readonly IContent[],
 ) {
-  const disk = new BoundarySnapshotDisk(root());
-  await disk.capture('after', {
-    count: history.length,
-    async *openReader(): AsyncGenerator<IContent, void, unknown> {
-      for (const row of history) yield row;
-    },
-  });
+  const rows = await openNativeRowFixture(root(), history, history.length);
   try {
     return await memory.recordSourceRequestShape({
-      requestRows: disk.selection('after'),
+      requestRows: rows,
       tools: [{ name: 'read_file' }],
       instructionsText: 'system',
       countTokens: fallbackCount,
     });
   } finally {
-    disk.close();
+    await rows.close();
   }
 }
 

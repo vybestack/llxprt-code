@@ -26,6 +26,7 @@ describe('source prepared transactional cleanup failure', () => {
     const failed = new Error('preflight synchronous failure');
     const cleanupFailed = new Error('source close failure');
     const source = requestSelection({
+      native: fixture.source.native,
       count: fixture.source.count,
       openReader: (signal) => fixture.source.openReader(signal),
       readAt: (index, signal) => fixture.source.readAt(index, signal),

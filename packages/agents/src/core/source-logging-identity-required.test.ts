@@ -2,9 +2,8 @@
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import { prepareProviderContentSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-curated-stream.js';
-import { BoundarySnapshotDisk } from './boundary-snapshot-disk.js';
+import { openNativeProviderFixture } from '@vybestack/llxprt-code-core/services/history/__tests__/support/native-provider-fixture.js';
+import { openNativeRowFixture } from '@vybestack/llxprt-code-core/services/history/__tests__/support/native-row-fixture.js';
 import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import { createSafeJsonReplacer } from './turnJsonUtils.js';
 import { stageRequestArtifactFixture } from './__tests__/support/request-artifact-fixture.js';
@@ -12,41 +11,51 @@ import { stageRequestArtifactFixture } from './__tests__/support/request-artifac
 const root = sourceRootSetup();
 
 async function capture(shared: boolean, withinRow: boolean) {
-  const disk = new BoundarySnapshotDisk(root());
   const hash = createHash('sha256');
   const replacer = createSafeJsonReplacer();
   const block = { type: 'text' as const, text: 'same text 雪 😀' };
   hash.update('[');
   try {
-    await disk.capture('after', {
-      count: 64,
-      async *openReader(): AsyncGenerator<IContent, void, unknown> {
-        for (let index = 0; index < 64; index++) {
-          const selected = shared ? block : { ...block };
-          const row: IContent = {
-            speaker: index % 2 === 0 ? 'human' : 'ai',
-            blocks: withinRow
-              ? [selected, shared ? selected : { ...block }]
-              : [selected],
-          };
-          if (index > 0) hash.update(',');
-          hash.update(JSON.stringify(row, replacer));
-          yield row;
-        }
+    const rows = await openNativeRowFixture(
+      root(),
+      {
+        async *[Symbol.asyncIterator](): AsyncGenerator<
+          IContent,
+          void,
+          unknown
+        > {
+          for (let index = 0; index < 64; index++) {
+            const selected = shared ? block : { ...block };
+            const row: IContent = {
+              speaker: index % 2 === 0 ? 'human' : 'ai',
+              blocks: withinRow
+                ? [selected, shared ? selected : { ...block }]
+                : [selected],
+            };
+            if (index > 0) hash.update(',');
+            hash.update(JSON.stringify(row, replacer));
+            yield row;
+          }
+        },
       },
-    });
-    hash.update(']');
-    const staged = await stageRequestArtifactFixture(root(), {
-      [Symbol.asyncIterator]: () => disk.selection('after').openReader(),
-    });
-    return {
-      legacySha256: hash.digest('hex'),
-      diskSha256: staged.content_sha256,
-      contentChars: staged.content_chars,
-      rowCount: staged.row_count,
-    };
+      64,
+    );
+    try {
+      hash.update(']');
+      const staged = await stageRequestArtifactFixture(root(), {
+        [Symbol.asyncIterator]: () => rows.openReader(),
+      });
+      return {
+        legacySha256: hash.digest('hex'),
+        diskSha256: staged.content_sha256,
+        contentChars: staged.content_chars,
+        rowCount: staged.row_count,
+      };
+    } finally {
+      await rows.close();
+    }
   } finally {
-    disk.close();
+    hash.destroy();
   }
 }
 
@@ -56,7 +65,8 @@ async function comparison(withinRow: boolean) {
   return { shared, independent };
 }
 async function normalized() {
-  const snapshot = await prepareProviderContentSnapshot(
+  const snapshot = await openNativeProviderFixture(
+    root(),
     {
       async *[Symbol.asyncIterator](): AsyncGenerator<IContent, void, unknown> {
         for (let index = 0; index < 64; index++)
@@ -66,9 +76,7 @@ async function normalized() {
           };
       },
     },
-    [],
-    new DebugLogger('source-logging-identity'),
-    { root: root() },
+    64,
   );
   const hash = createHash('sha256');
   const replacer = createSafeJsonReplacer();
@@ -85,7 +93,7 @@ async function normalized() {
     });
     return { requestWideSha256: hash.digest('hex'), ...staged };
   } finally {
-    snapshot.close();
+    await snapshot.close();
   }
 }
 

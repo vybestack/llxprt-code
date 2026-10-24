@@ -31,7 +31,7 @@ import {
   type ProviderRequestRows,
   type ProviderRequestSnapshot,
 } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
-import type { ProviderCuratedStreamOptions } from '@vybestack/llxprt-code-core/services/history/provider-curated-stream.js';
+import type { ProviderCuratedStreamOptions } from '@vybestack/llxprt-code-core/services/history/provider-request-options.js';
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import type { ProviderRequestCollaborators } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';

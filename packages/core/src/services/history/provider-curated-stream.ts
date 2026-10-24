@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { setImmediate } from 'node:timers/promises';
 import type { DebugLogger } from '../../debug/index.js';
-import type { RowOwnership } from '../../recording/rowOwnership.js';
+import type { ProviderCuratedStreamOptions } from './provider-request-options.js';
 import type { IContent, ToolCallBlock, ToolResponseBlock } from './IContent.js';
 import { sanitizeProviderContentForSerialization } from './historyCloneUtils.js';
 import { HistoryToolNormalization } from './historyToolNormalization.js';
@@ -41,12 +41,6 @@ class RowPacer {
     }
     this.signal?.throwIfAborted();
   }
-}
-
-export interface ProviderCuratedStreamOptions {
-  readonly signal?: AbortSignal;
-  readonly root?: string;
-  readonly ownership?: RowOwnership;
 }
 
 function recordBlocks(disk: ProviderNormalizationDisk, row: IContent): void {

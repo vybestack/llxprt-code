@@ -862,6 +862,21 @@
       "bun": "./src/services/history/historyMutationSnapshot.ts",
       "import": "./dist/src/services/history/historyMutationSnapshot.js"
     },
+    "./services/history/provider-request-options.js": {
+      "types": "./dist/src/services/history/provider-request-options.d.ts",
+      "bun": "./src/services/history/provider-request-options.ts",
+      "import": "./dist/src/services/history/provider-request-options.js"
+    },
+    "./services/history/__tests__/support/native-row-fixture.js": {
+      "types": "./dist/src/services/history/__tests__/support/native-row-fixture.d.ts",
+      "bun": "./src/services/history/__tests__/support/native-row-fixture.ts",
+      "import": "./dist/src/services/history/__tests__/support/native-row-fixture.js"
+    },
+    "./services/history/__tests__/support/native-provider-fixture.js": {
+      "types": "./dist/src/services/history/__tests__/support/native-provider-fixture.d.ts",
+      "bun": "./src/services/history/__tests__/support/native-provider-fixture.ts",
+      "import": "./dist/src/services/history/__tests__/support/native-provider-fixture.js"
+    },
     "./services/history/provider-curated-stream.js": {
       "types": "./dist/src/services/history/provider-curated-stream.d.ts",
       "bun": "./src/services/history/provider-curated-stream.ts",

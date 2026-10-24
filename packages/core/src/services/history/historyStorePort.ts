@@ -16,7 +16,7 @@
 
 import type { NativeDensityPolicy } from './nativeDensityPolicy.js';
 import type { DebugLogger } from '../../debug/index.js';
-import type { ProviderCuratedStreamOptions } from './provider-curated-stream.js';
+import type { ProviderCuratedStreamOptions } from './provider-request-options.js';
 import type { ProviderRequestSnapshot } from './provider-request-snapshot.js';
 
 export interface HistoryPrepareCuratedRequest {

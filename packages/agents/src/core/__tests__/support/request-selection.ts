@@ -12,6 +12,8 @@ export function requestSelection(
   rows: ProviderRequestRows & { close?: () => void | Promise<void> },
 ): ProviderRequestSelection {
   return Object.freeze({
+    ...(rows.native === undefined ? {} : { native: rows.native }),
+    ...(rows.callerOwned === true ? { callerOwned: true } : {}),
     count: rows.count,
     openReader: (signal?: AbortSignal) => rows.openReader(signal),
     readAt: (index: number, signal?: AbortSignal) => rows.readAt(index, signal),

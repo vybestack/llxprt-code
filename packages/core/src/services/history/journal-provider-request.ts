@@ -10,7 +10,7 @@ import { HistoryReaderScope } from './historyReaderScope.js';
 import { IndexedJournalRequestSnapshot } from './indexed-journal-request-snapshot.js';
 import { historyMutationFailure } from './historyMutationEffects.js';
 import type { ProviderRequestSnapshot } from './provider-request-snapshot.js';
-import type { ProviderCuratedStreamOptions } from './provider-curated-stream.js';
+import type { ProviderCuratedStreamOptions } from './provider-request-options.js';
 import type { RowFormatRegistration } from '../../journal/rowFormat.js';
 import {
   hasNativeRequestFormat,

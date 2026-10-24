@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { inMemoryRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
@@ -125,24 +126,26 @@ async function independentEstimate(
   large: boolean,
   systemText = instructions,
 ): Promise<number> {
+  const rows = Array.from(
+    { length: count },
+    (_, index): IContent => ({
+      speaker: 'human',
+      blocks: [
+        { type: 'text', text: rowText(index, large && index === count - 1) },
+      ],
+    }),
+  );
   const contents: AsyncIterable<IContent> = {
     async *[Symbol.asyncIterator]() {
-      for (let index = 0; index < count; index++)
-        yield {
-          speaker: 'human',
-          blocks: [
-            {
-              type: 'text',
-              text: rowText(index, large && index === count - 1),
-            },
-          ],
-        };
+      yield* rows;
     },
   };
   const prepared = await prepareAtSendSeam(
     setup.provider,
     {
       contents,
+      requestRows: { ...inMemoryRequestSelection(rows), callerOwned: true },
+      contentCount: rows.length,
       invocation: setup.invocation,
       systemInstruction: systemText,
     },

@@ -11,7 +11,7 @@ import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contra
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
-import { BoundarySnapshotDisk } from '../../boundary-snapshot-disk.js';
+import { openNativeProviderFixture } from '@vybestack/llxprt-code-core/services/history/__tests__/support/native-provider-fixture.js';
 import type { PromptEnvelopeSource } from '../../promptEnvelopeSendSeam.js';
 
 export function sourceRootSetup(): () => string {
@@ -30,26 +30,28 @@ export function rowText(index: number, large = false): string {
 }
 
 export async function diskSource(root: string, count = 64, large = false) {
-  const disk = new BoundarySnapshotDisk(root);
-  await disk.capture('after', {
-    count,
-    async *openReader(): AsyncGenerator<IContent> {
-      for (let index = 0; index < count; index++)
-        yield {
-          speaker: 'human',
-          blocks: [
-            {
-              type: 'text',
-              text: rowText(index, large && index === count - 1),
-            },
-          ],
-        };
+  const rows = await openNativeProviderFixture(
+    root,
+    {
+      async *[Symbol.asyncIterator](): AsyncGenerator<IContent> {
+        for (let index = 0; index < count; index++)
+          yield {
+            speaker: 'human',
+            blocks: [
+              {
+                type: 'text',
+                text: rowText(index, large && index === count - 1),
+              },
+            ],
+          };
+      },
     },
-  });
-  const rows = disk.selection('after');
+    count,
+  );
   const references: Array<WeakRef<IContent>> = [];
   const state = { closed: 0, opened: 0, pulled: 0, active: 0 };
   const source: PromptEnvelopeSource = {
+    native: rows.native,
     count: rows.count,
     readAt: (index: number, signal?: AbortSignal) => rows.readAt(index, signal),
     async *openReader(
@@ -67,9 +69,9 @@ export async function diskSource(root: string, count = 64, large = false) {
         state.active--;
       }
     },
-    close(): void {
+    async close(): Promise<void> {
       state.closed++;
-      disk.close();
+      await rows.close();
     },
   };
   return { source, state, references };

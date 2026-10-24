@@ -54,7 +54,7 @@ export function prepareJournalProviderRequest(
 }
 import type { NativeSemanticPurgeCandidate } from './semantic-purge-native.js';
 import type { IContent } from './IContent.js';
-import type { ProviderCuratedStreamOptions } from './provider-curated-stream.js';
+import type { ProviderCuratedStreamOptions } from './provider-request-options.js';
 import type { ProviderRequestSnapshot } from './provider-request-snapshot.js';
 import { JournalProviderRequestSnapshot } from './journal-provider-request.js';
 import type {

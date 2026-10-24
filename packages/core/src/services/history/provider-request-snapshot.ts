@@ -90,7 +90,7 @@ export function inMemoryRequestSelection(
 }
 
 export function providerRequestRows(
-  snapshot: ProviderRequestSnapshot,
+  snapshot: ProviderRequestRows,
 ): ProviderRequestRows {
   return Object.freeze({
     ...(snapshot.native === undefined ? {} : { native: snapshot.native }),

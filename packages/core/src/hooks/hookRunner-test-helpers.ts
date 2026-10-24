@@ -22,12 +22,9 @@ import {
 } from './types.js';
 import { escapeShellArg, getShellConfiguration } from '../utils/shell-utils.js';
 import type { IContent } from '../services/history/IContent.js';
-import { ProviderNormalizationDisk } from '../services/history/provider-normalization-disk.js';
-import {
-  NormalizedProviderRequestSnapshot,
-  providerRequestRows,
-} from '../services/history/provider-request-snapshot.js';
-import type { NormalizedProviderRequestSnapshot as RequestSnapshot } from '../services/history/provider-request-snapshot.js';
+import { openNativeRowFixture } from '../services/history/__tests__/support/native-row-fixture.js';
+import { providerRequestRows } from '../services/history/provider-request-snapshot.js';
+import type { ProviderRequestSelection as RequestSnapshot } from '../services/history/provider-request-snapshot.js';
 import { RowOwnership } from '../recording/rowOwnership.js';
 import type { RowOwnership as RowOwners } from '../recording/rowOwnership.js';
 import type { HookModelRowsInput } from './hookModelInputStream.js';
@@ -117,19 +114,12 @@ export async function fixture(
   ) => Promise<void>,
 ): Promise<void> {
   const root = mkdtempSync(join(realpathSync(tmpdir()), 'hook-source-'));
-  const disk = new ProviderNormalizationDisk(root);
   const owners = new RowOwnership();
-  for (const row of rows) disk.append('ordered', row);
-  const snapshot = new NormalizedProviderRequestSnapshot(
-    disk,
-    0,
-    undefined,
-    owners,
-  );
+  const snapshot = await openNativeRowFixture(root, rows, rows.length, owners);
   try {
     await action(snapshot, owners, root);
   } finally {
-    snapshot.close();
+    await snapshot.close();
   }
 }
 

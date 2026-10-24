@@ -27,7 +27,7 @@ import { CompressionOperationQueue } from './historyCompressionQueue.js';
 import { historyOriginId } from './historyOriginId.js';
 import { type IContent } from './IContent.js';
 import type { NativeDensityPolicy } from './nativeDensityPolicy.js';
-import type { ProviderCuratedStreamOptions } from './provider-curated-stream.js';
+import type { ProviderCuratedStreamOptions } from './provider-request-options.js';
 import type { ProviderRequestSnapshot } from './provider-request-snapshot.js';
 // @plan:PLAN-20260603-ISSUE1584.P05 RuntimeTokenizerFactory used for injection path
 import { randomUUID } from 'crypto';

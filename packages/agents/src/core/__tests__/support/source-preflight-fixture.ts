@@ -15,19 +15,23 @@ import { ExportResultCode, type ExportResult } from '@opentelemetry/core';
 import { prepareAtSendSeam } from '../../promptEnvelopeSendSeam.js';
 import { diskTextRow } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
 import { requestSelection } from './request-selection.js';
-import { BoundarySnapshotDisk } from '../../boundary-snapshot-disk.js';
+import { inMemoryRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import { openNativeProviderFixture } from '@vybestack/llxprt-code-core/services/history/__tests__/support/native-provider-fixture.js';
 
 export async function preflightDisk(root: string, large: boolean) {
-  const disk = new BoundarySnapshotDisk(root);
-  await disk.capture('after', {
-    count: 64,
-    async *openReader(): AsyncGenerator<IContent> {
-      for (let index = 0; index < 64; index++) yield diskTextRow(index, large);
+  const rows = await openNativeProviderFixture(
+    root,
+    {
+      async *[Symbol.asyncIterator](): AsyncGenerator<IContent> {
+        for (let index = 0; index < 64; index++)
+          yield diskTextRow(index, large);
+      },
     },
-  });
-  const rows = disk.selection('after');
+    64,
+  );
   const state = { closed: 0, active: 0 };
   const source = requestSelection({
+    native: rows.native,
     count: 64,
     readAt: (index: number, signal?: AbortSignal) => rows.readAt(index, signal),
     async *openReader(signal?: AbortSignal): AsyncGenerator<IContent> {
@@ -38,9 +42,9 @@ export async function preflightDisk(root: string, large: boolean) {
         state.active--;
       }
     },
-    close(): void {
+    async close(): Promise<void> {
       state.closed++;
-      disk.close();
+      await rows.close();
     },
   });
   return { source, state };
@@ -157,6 +161,8 @@ export async function preflightOracle(
           yield* contents;
         },
       },
+      requestRows: { ...inMemoryRequestSelection(contents), callerOwned: true },
+      contentCount: contents.length,
       invocation: setup.invocation,
       systemInstruction: preflightInstructions,
     },
